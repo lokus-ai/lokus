@@ -1,0 +1,11 @@
+{
+  "name": "Solarized Light",
+  "tokens": {
+    "--app-bg": "#fdf6e3",
+    "--app-text": "#657b83",
+    "--app-panel": "#eee8d5",
+    "--app-border": "#93a1a1",
+    "--app-muted": "#839496",
+    "--accent": "#268bd2"
+  }
+}

@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light dark;
+  --radius: 8px;
+
+  /* The new variable for the top bar */
+  --app-titlebar: 30 41 59; /* slate-800 */
+
+  --bg: 15 23 42;          /* slate-900 */
+  --panel: 30 41 59;       /* slate-800 */
+  --border: 51 65 85;      /* slate-700 */
+  --text: 241 245 249;     /* slate-100 */
+  --muted: 148 163 184;    /* slate-400 */
+  --accent: 139 92 246;    /* violet-500 */
+  --accent-fg: 255 255 255;
+}
+
+:root[data-theme="light"] {
+  --app-titlebar: 226 232 240; /* slate-200 */
+  --bg: 248 250 252;       /* slate-50 */
+  --panel: 241 245 249;    /* slate-100 */
+  --border: 203 213 225;   /* slate-300 */
+  --text: 17 24 39;        /* slate-900 */
+  --muted: 71 85 105;      /* slate-600 */
+  --accent: 99 102 241;    /* indigo-500 */
+  --accent-fg: 255 255 255;
+}
+
+:root[data-theme="dark"] {
+  --app-titlebar: 30 41 59; /* slate-800 */
+  --bg: 15 23 42;          /* slate-900 */
+  --panel: 30 41 59;       /* slate-800 */
+  --border: 51 65 85;      /* slate-700 */
+  --text: 226 232 240;     /* slate-200 */
+  --muted: 148 163 184;    /* slate-400 */
+  --accent: 139 92 246;    /* violet-500 */
+  --accent-fg: 255 255 255;
+}
+
+::selection { background: rgb(var(--accent) / 0.25); }
+::-webkit-scrollbar { height: 10px; width: 10px; }
+::-webkit-scrollbar-thumb { background: rgb(var(--border)); border-radius: 8px; }

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://schema.tauri.app/config/2.0.0/capabilities.json",
+  "identifier": "fs-home-scope",
+  "description": "Filesystem permissions and HOME scope for the main window.",
+  "windows": ["main"],
+  "permissions": [
+    "fs:default",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$HOME" },
+        { "path": "$HOME/**/*" }
+      ]
+    }
+  ]
+}

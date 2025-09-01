@@ -1,0 +1,18 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capabilities for all Lokus windows",
+  "windows": ["main", "ws-*", "prefs"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "opener:default",
+    "core:window:default",
+    "fs:default",
+    "fs:allow-app-write",
+    "fs:allow-app-write-recursive",
+    "fs:allow-app-read-recursive",
+    "fs:allow-app-meta-recursive",
+    { "identifier": "fs:scope", "allow": [{ "path": "$APPDATA" }, { "path": "$APPDATA/**/*" }] }
+  ]
+}

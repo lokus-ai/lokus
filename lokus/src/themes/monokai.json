@@ -1,0 +1,11 @@
+{
+  "name": "Monokai",
+  "tokens": {
+    "--app-bg": "#272822",
+    "--app-text": "#F8F8F2",
+    "--app-panel": "#3E3D32",
+    "--app-border": "#75715E",
+    "--app-muted": "#999",
+    "--accent": "#FD971F"
+  }
+}
