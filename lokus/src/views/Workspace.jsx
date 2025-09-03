@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { register, unregisterAll } from "@tauri-apps/plugin-global-shortcut";
-import { save } from "@tauri-apps/plugin-dialog";
+import { save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 
 const MAX_OPEN_TABS = 10;
@@ -206,7 +207,7 @@ function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges }) {
           <div
             key={tab.path}
             onClick={() => onTabClick(tab.path)}
-            className={`h-full flex items-center px-3 text-sm border-b-2 transition-colors cursor-pointer ${
+            className={`group h-full flex items-center px-3 text-sm border-b-2 transition-colors cursor-pointer ${
               activeTab === tab.path
                 ? 'border-app-accent text-app-text'
                 : 'border-transparent text-app-muted hover:text-app-text'
@@ -214,18 +215,17 @@ function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges }) {
           >
             <span>{tab.name.replace(/\.md$/, "")}</span>
             <div className="w-4 h-4 ml-2 flex items-center justify-center">
-              {isUnsaved ? (
-                <div className="w-2 h-2 rounded-full bg-app-text"></div>
-              ) : (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onTabClose(tab.path);
-                  }}
-                  className="p-0.5 rounded hover:bg-app-bg"
-                >
-                  <Icon path="M6 18L18 6M6 6l12 12" className="w-3.5 h-3.5" />
-                </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTabClose(tab.path);
+                }}
+                className={`p-0.5 rounded hover:bg-app-bg ${isUnsaved ? 'invisible group-hover:visible' : 'invisible group-hover:visible'}`}
+              >
+                <Icon path="M6 18L18 6M6 6l12 12" className="w-3.5 h-3.5" />
+              </button>
+              {isUnsaved && (
+                <div className="w-2 h-2 rounded-full bg-app-text group-hover:hidden"></div>
               )}
             </div>
           </div>
@@ -253,25 +253,29 @@ export default function Workspace({ initialPath = "" }) {
   
   const [editorContent, setEditorContent] = useState("");
   const [editorTitle, setEditorTitle] = useState("");
-  const editorContentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
+  const activeFileRef = useRef(activeFile);
+
+  useEffect(() => {
+    activeFileRef.current = activeFile;
+  }, [activeFile]);
 
   // Load session state on initial mount
   useEffect(() => {
     invoke("load_session_state").then(session => {
-      if (session) {
-        setExpandedFolders(new Set(session.expanded_folders));
-        const fetchTabNames = async () => {
-          const tabsWithNames = await Promise.all(session.open_tabs.map(async (p) => {
-            const name = p.split('/').pop();
-            return { path: p, name };
-          }));
-          setOpenTabs(tabsWithNames);
-          if (tabsWithNames.length > 0) {
-            setActiveFile(tabsWithNames[0].path);
-          }
-        };
-        fetchTabNames();
+      if (session && session.open_tabs) {
+        setExpandedFolders(new Set(session.expanded_folders || []));
+        
+        const tabsWithNames = session.open_tabs.map(p => ({
+          path: p,
+          name: p.split('/').pop()
+        }));
+        
+        setOpenTabs(tabsWithNames);
+        
+        if (tabsWithNames.length > 0) {
+          setActiveFile(tabsWithNames[0].path);
+        }
       }
     });
   }, []);
@@ -367,45 +371,18 @@ export default function Workspace({ initialPath = "" }) {
     setActiveFile(path);
   };
 
-  const handleTabClose = (path) => {
-    const tabIndex = openTabs.findIndex(t => t.path === path);
-    const newTabs = openTabs.filter(t => t.path !== path);
-    setOpenTabs(newTabs);
-    setUnsavedChanges(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(path);
-      return newSet;
-    });
-
-    if (activeFile === path) {
-      if (newTabs.length === 0) {
-        setActiveFile(null);
-      } else {
-        const newActiveIndex = Math.max(0, tabIndex - 1);
-        setActiveFile(newTabs[newActiveIndex].path);
-      }
-    }
-  };
-
-  const handleEditorInput = (newContent) => {
-    setEditorContent(newContent);
-    if (activeFile) {
-      setUnsavedChanges(prev => new Set(prev).add(activeFile));
-    }
-  };
-
-  const handleSave = async () => {
-    if (!activeFile) return;
-    let path_to_save = activeFile;
+  const handleSave = useCallback(async () => {
+    if (!activeFileRef.current) return;
+    let path_to_save = activeFileRef.current;
     let needsStateUpdate = false;
 
     try {
-      const currentTab = openTabs.find(t => t.path === activeFile);
+      const currentTab = openTabs.find(t => t.path === activeFileRef.current);
       const currentName = currentTab.name.replace(/\.md$/, "");
 
       if (editorTitle !== currentName && editorTitle.trim() !== "") {
         const newFileName = `${editorTitle.trim()}.md`;
-        const newPath = await invoke("rename_file", { path: activeFile, newName: newFileName });
+        const newPath = await invoke("rename_file", { path: activeFileRef.current, newName: newFileName });
         path_to_save = newPath;
         needsStateUpdate = true;
       }
@@ -413,19 +390,62 @@ export default function Workspace({ initialPath = "" }) {
       await invoke("write_file_content", { path: path_to_save, content: editorContent });
       setUnsavedChanges(prev => {
         const newSet = new Set(prev);
-        newSet.delete(activeFile); // Old path
-        newSet.delete(path_to_save); // New path
+        newSet.delete(activeFileRef.current);
+        newSet.delete(path_to_save);
         return newSet;
       });
 
       if (needsStateUpdate) {
         const newName = path_to_save.split("/").pop();
-        setOpenTabs(tabs => tabs.map(t => t.path === activeFile ? { path: path_to_save, name: newName } : t));
+        setOpenTabs(tabs => tabs.map(t => t.path === activeFileRef.current ? { path: path_to_save, name: newName } : t));
         setActiveFile(path_to_save);
         handleRefreshFiles();
       }
     } catch (error) {
       console.error("Failed to save file:", error);
+    }
+  }, [editorContent, editorTitle, openTabs]);
+
+  const handleTabClose = useCallback(async (path) => {
+    const closeTab = () => {
+      setOpenTabs(prevTabs => {
+        const tabIndex = prevTabs.findIndex(t => t.path === path);
+        const newTabs = prevTabs.filter(t => t.path !== path);
+        
+        if (activeFileRef.current === path) {
+          if (newTabs.length === 0) {
+            setActiveFile(null);
+          } else {
+            const newActiveIndex = Math.max(0, tabIndex - 1);
+            setActiveFile(newTabs[newActiveIndex].path);
+          }
+        }
+        return newTabs;
+      });
+      setUnsavedChanges(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(path);
+        return newSet;
+      });
+    };
+
+    if (unsavedChanges.has(path)) {
+      const confirmed = await confirm("You have unsaved changes. Close without saving?", {
+        title: "Unsaved Changes",
+        type: "warning",
+      });
+      if (confirmed) {
+        closeTab();
+      }
+    } else {
+      closeTab();
+    }
+  }, [unsavedChanges]);
+
+  const handleEditorChange = (newContent) => {
+    setEditorContent(newContent);
+    if (activeFile) {
+      setUnsavedChanges(prev => new Set(prev).add(activeFile));
     }
   };
 
@@ -456,11 +476,20 @@ export default function Workspace({ initialPath = "" }) {
   };
 
   useEffect(() => {
-    register("CommandOrControl+S", handleSave);
+    const registerShortcuts = async () => {
+      await unregisterAll();
+      await register("CommandOrControl+S", handleSave);
+      await register("CommandOrControl+W", () => {
+        if (activeFileRef.current) {
+          handleTabClose(activeFileRef.current);
+        }
+      });
+    };
+    registerShortcuts().catch(console.error);
     return () => {
       unregisterAll();
     };
-  }, [handleSave, activeFile, editorContent, editorTitle, openTabs]);
+  }, [handleSave, handleTabClose]);
 
   const cols = (() => {
     const mainContent = `minmax(0,1fr)`;
@@ -474,7 +503,7 @@ export default function Workspace({ initialPath = "" }) {
       <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: cols }}>
         <aside className="flex flex-col items-center gap-2 py-2 border-r border-app-border">
           <button onClick={() => setShowLeft(v => !v)} className={`p-2 rounded-md transition-colors ${showLeft ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:bg-app-bg'}`}>
-            <Icon path="M3.75 5.25h16.5m-1.5 4.5h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5" />
+            <Icon path="M3.75 5.25h16.5m-1.5 4.5h16.5m-1.5 4.5h16.5m-1.5 4.5h16.5" />
           </button>
         </aside>
         <div className="bg-app-border/20 w-px" />
@@ -525,11 +554,10 @@ export default function Workspace({ initialPath = "" }) {
                     className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
                   />
                   <div 
-                    ref={editorContentRef}
                     className="min-h-full leading-relaxed outline-none whitespace-pre-wrap text-base" 
                     contentEditable 
                     dangerouslySetInnerHTML={{ __html: editorContent }}
-                    onInput={(e) => handleEditorInput(e.currentTarget.innerHTML)}
+                    onInput={(e) => handleEditorChange(e.currentTarget.innerHTML)}
                     suppressContentEditableWarning
                   />
                 </>
