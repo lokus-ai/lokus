@@ -1,40 +1,95 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
   applyTokens,
+  applyInitialTheme,
   readGlobalVisuals,
-  setGlobalActiveTheme, // Use the master function
+  setGlobalActiveTheme,
+  setGlobalVisuals,
+  broadcastTheme,
 } from "../core/theme/manager.js";
 
 const ThemeCtx = createContext(null);
 
 export function ThemeProvider({ children }) {
-  // This provider now only needs to worry about listening for changes.
-  // The manager handles all the logic.
+  const [theme, setTheme] = useState(null);
+  const [mode, setMode] = useState("system");
+  const [accent, setAccent] = useState("violet");
 
+  // Load initial theme from config
   useEffect(() => {
-    // Listen for theme changes broadcast from any window and apply them.
-    const sub = listen("theme:apply", (e) => {
+    async function loadInitial() {
+      const visuals = await readGlobalVisuals();
+      setTheme(visuals.theme);
+      setMode(visuals.mode || "system");
+      setAccent(visuals.accent || "violet");
+      await applyInitialTheme();
+    }
+    loadInitial();
+  }, []);
+
+  // Listen for theme changes from other windows
+  useEffect(() => {
+    const unlistenPromise = listen("theme:apply", (e) => {
       const p = (e.payload || {});
       if (p.tokens) {
         applyTokens(p.tokens);
       }
+      if (p.visuals) {
+        setTheme(p.visuals.theme);
+        setMode(p.visuals.mode);
+        setAccent(p.visuals.accent);
+      }
     });
-    return () => { sub.then((un) => un()); };
+    return () => {
+      unlistenPromise.then(unlisten => unlisten());
+    };
   }, []);
 
-  // The context value doesn't need to expose much anymore.
-  // Components should use the specific manager functions.
-  const value = useMemo(() => ({
-    // You could add mode/accent logic back here if needed,
-    // but for themes, the manager is the source of truth.
-  }), []);
+  // Apply the data-theme attribute to the root element
+  useEffect(() => {
+    console.log("Current mode:", mode);
+    if (mode === "system") {
+      document.documentElement.removeAttribute("data-theme");
+    } else {
+      document.documentElement.setAttribute("data-theme", mode);
+    }
+  }, [mode]);
+
+  const handleSetTheme = useCallback(async (newTheme) => {
+    console.log("Setting theme:", newTheme);
+    setTheme(newTheme);
+    await setGlobalActiveTheme(newTheme);
+    const visuals = await readGlobalVisuals();
+    await broadcastTheme({ visuals });
+  }, []);
+
+  const handleSetMode = useCallback(async (newMode) => {
+    setMode(newMode);
+    await setGlobalVisuals({ mode: newMode });
+  }, []);
+
+  const handleSetAccent = useCallback(async (newAccent) => {
+    setAccent(newAccent);
+    await setGlobalVisuals({ accent: newAccent });
+  }, []);
+
+  const value = {
+    theme,
+    setTheme: handleSetTheme,
+    mode,
+    setMode: handleSetMode,
+    accent,
+    setAccent: handleSetAccent,
+  };
 
   return <ThemeCtx.Provider value={value}>{children}</ThemeCtx.Provider>;
 }
 
 export function useTheme() {
-  const ctx = useContext(ThemeCtx);
-  if (!ctx) throw new Error("useTheme must be used within <ThemeProvider>");
-  return ctx;
+  const context = useContext(ThemeCtx);
+  if (!context) {
+    throw new Error("useTheme must be used within a ThemeProvider");
+  }
+  return context;
 }

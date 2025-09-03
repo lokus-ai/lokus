@@ -1,18 +1,30 @@
 {
-  "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capabilities for all Lokus windows",
-  "windows": ["main", "ws-*", "prefs"],
+  "description": "Permissions for the main application functionality",
+  "windows": ["main", "prefs", "ws-lokus-workspace"],
   "permissions": [
-    "core:default",
-    "dialog:default",
-    "opener:default",
-    "core:window:default",
-    "fs:default",
-    "fs:allow-app-write",
-    "fs:allow-app-write-recursive",
-    "fs:allow-app-read-recursive",
-    "fs:allow-app-meta-recursive",
-    { "identifier": "fs:scope", "allow": [{ "path": "$APPDATA" }, { "path": "$APPDATA/**/*" }] }
+    "core:path:allow-resolve-directory",
+    "core:path:allow-join",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:event:allow-emit",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister-all",
+    "dialog:allow-save",
+    "dialog:allow-open",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$DOCUMENT/**" },
+        { "path": "$APP/**" }
+      ]
+    },
+    "fs:allow-read-file",
+    "fs:allow-write-file",
+    "fs:allow-read-dir",
+    "fs:allow-create",
+    "fs:allow-remove",
+    "fs:allow-rename",
+    "fs:allow-exists"
   ]
 }

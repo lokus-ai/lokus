@@ -3,7 +3,6 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { homeDir } from "@tauri-apps/api/path";
 import { invoke } from "@tauri-apps/api/core";
 import { readRecents, addRecent, shortenPath } from "../lib/recents.js";
-import { applyInitialTheme } from "../core/theme/manager.js";
 
 // --- Reusable Icon Component ---
 const Icon = ({ path, className = "w-5 h-5" }) => (
@@ -13,8 +12,6 @@ const Icon = ({ path, className = "w-5 h-5" }) => (
 );
 
 // --- Main Launcher Component ---
-
-// CORRECTED: The invoke call now uses the correct argument name, `workspacePath`.
 async function openWorkspace(path) {
   await invoke("open_workspace_window", { workspacePath: path });
 }
@@ -23,7 +20,7 @@ export default function Launcher() {
   const [recents, setRecents] = useState([]);
 
   useEffect(() => {
-    applyInitialTheme();
+    // The ThemeProvider now handles initial theme loading.
     setRecents(readRecents());
   }, []);
 
@@ -37,7 +34,7 @@ export default function Launcher() {
   };
 
   const onRecent = async (path) => {
-    addRecent(path); // Bumps it to the top of the list
+    addRecent(path);
     setRecents(readRecents());
     await openWorkspace(path);
   };
@@ -45,8 +42,6 @@ export default function Launcher() {
   return (
     <div className="h-screen bg-app-bg text-app-text flex items-center justify-center p-8 transition-colors duration-300">
       <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8">
-        
-        {/* Left Column: Recents */}
         <div className="flex flex-col">
           <h2 className="text-sm font-semibold text-app-muted px-3">Recently Opened</h2>
           <div className="mt-3 bg-app-panel/50 border border-app-border rounded-lg p-2 space-y-1 flex-1">
@@ -70,8 +65,6 @@ export default function Launcher() {
             )}
           </div>
         </div>
-
-        {/* Right Column: Actions */}
         <div className="flex flex-col justify-center">
           <div className="text-center md:text-left">
             <h1 className="text-6xl font-bold tracking-tighter">Lokus</h1>
@@ -100,7 +93,6 @@ export default function Launcher() {
             </button>
           </div>
         </div>
-
       </div>
     </div>
   );

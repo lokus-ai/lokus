@@ -119,6 +119,12 @@ export async function setGlobalActiveTheme(id) {
   await broadcastTheme({ tokens: tokensToApply });
 }
 
+export async function setGlobalVisuals(visuals) {
+  const current = await readGlobalVisuals();
+  await writeJson(await getGlobalConfigPath(), { ...current, ...visuals });
+  await broadcastTheme({ visuals });
+}
+
 export async function loadThemeForWorkspace(workspacePath) {
   const wsCfgPath = await join(workspacePath, WS_CONFIG_REL);
   const wsCfg = await readJson(wsCfgPath);
