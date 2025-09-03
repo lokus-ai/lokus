@@ -9,36 +9,13 @@ use windows::open_workspace_window;
 use tauri::Manager;
 use tauri_plugin_store::{StoreBuilder, JsonValue};
 use std::path::PathBuf;
-use std::collections::HashMap;
-
-#[derive(serde::Serialize, serde::Deserialize)]
-struct SessionState {
-    open_tabs: Vec<String>,
-    expanded_folders: Vec<String>,
-}
 
 #[tauri::command]
 fn save_last_workspace(app: tauri::AppHandle, path: String) {
-    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
+    let mut store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
     let _ = store.reload();
     let _ = store.set("last_workspace_path".to_string(), JsonValue::String(path));
     let _ = store.save();
-}
-
-#[tauri::command]
-fn save_session_state(app: tauri::AppHandle, open_tabs: Vec<String>, expanded_folders: Vec<String>) {
-    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
-    let _ = store.reload();
-    let session = SessionState { open_tabs, expanded_folders };
-    let _ = store.set("session_state".to_string(), serde_json::to_value(session).unwrap());
-    let _ = store.save();
-}
-
-#[tauri::command]
-fn load_session_state(app: tauri::AppHandle) -> Option<SessionState> {
-    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
-    let _ = store.reload();
-    store.get("session_state").and_then(|value| serde_json::from_value(value.clone()).ok())
 }
 
 fn main() {
@@ -51,8 +28,6 @@ fn main() {
     .invoke_handler(tauri::generate_handler![
       open_workspace_window,
       save_last_workspace,
-      save_session_state,
-      load_session_state,
       theme::theme_broadcast,
       handlers::files::read_workspace_files,
       handlers::files::create_file_in_workspace,
@@ -66,7 +41,7 @@ fn main() {
       menu::init(&app.handle())?;
       
       let app_handle = app.handle().clone();
-      let store = StoreBuilder::new(app.handle(), PathBuf::from(".settings.dat")).build().unwrap();
+      let mut store = StoreBuilder::new(app.handle(), PathBuf::from(".settings.dat")).build().unwrap();
       let _ = store.reload();
 
       if let Some(path) = store.get("last_workspace_path") {
