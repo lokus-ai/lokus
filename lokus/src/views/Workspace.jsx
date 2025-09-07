@@ -2,9 +2,9 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { register, unregisterAll } from "@tauri-apps/plugin-global-shortcut";
-import { save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { save as saveDialog, confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
+import Editor from "../editor";
 
 const MAX_OPEN_TABS = 10;
 
@@ -371,41 +371,6 @@ export default function Workspace({ initialPath = "" }) {
     setActiveFile(path);
   };
 
-  const handleSave = useCallback(async () => {
-    if (!activeFileRef.current) return;
-    let path_to_save = activeFileRef.current;
-    let needsStateUpdate = false;
-
-    try {
-      const currentTab = openTabs.find(t => t.path === activeFileRef.current);
-      const currentName = currentTab.name.replace(/\.md$/, "");
-
-      if (editorTitle !== currentName && editorTitle.trim() !== "") {
-        const newFileName = `${editorTitle.trim()}.md`;
-        const newPath = await invoke("rename_file", { path: activeFileRef.current, newName: newFileName });
-        path_to_save = newPath;
-        needsStateUpdate = true;
-      }
-
-      await invoke("write_file_content", { path: path_to_save, content: editorContent });
-      setUnsavedChanges(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(activeFileRef.current);
-        newSet.delete(path_to_save);
-        return newSet;
-      });
-
-      if (needsStateUpdate) {
-        const newName = path_to_save.split("/").pop();
-        setOpenTabs(tabs => tabs.map(t => t.path === activeFileRef.current ? { path: path_to_save, name: newName } : t));
-        setActiveFile(path_to_save);
-        handleRefreshFiles();
-      }
-    } catch (error) {
-      console.error("Failed to save file:", error);
-    }
-  }, [editorContent, editorTitle, openTabs]);
-
   const handleTabClose = useCallback(async (path) => {
     const closeTab = () => {
       setOpenTabs(prevTabs => {
@@ -442,12 +407,47 @@ export default function Workspace({ initialPath = "" }) {
     }
   }, [unsavedChanges]);
 
-  const handleEditorChange = (newContent) => {
+  const handleEditorChange = useCallback((newContent) => {
     setEditorContent(newContent);
-    if (activeFile) {
-      setUnsavedChanges(prev => new Set(prev).add(activeFile));
+    if (activeFileRef.current) {
+      setUnsavedChanges(prev => new Set(prev).add(activeFileRef.current));
     }
-  };
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    if (!activeFileRef.current) return;
+    let path_to_save = activeFileRef.current;
+    let needsStateUpdate = false;
+
+    try {
+      const currentTab = openTabs.find(t => t.path === activeFileRef.current);
+      const currentName = currentTab.name.replace(/\.md$/, "");
+
+      if (editorTitle !== currentName && editorTitle.trim() !== "") {
+        const newFileName = `${editorTitle.trim()}.md`;
+        const newPath = await invoke("rename_file", { path: activeFileRef.current, newName: newFileName });
+        path_to_save = newPath;
+        needsStateUpdate = true;
+      }
+
+      await invoke("write_file_content", { path: path_to_save, content: editorContent });
+      setUnsavedChanges(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(activeFileRef.current);
+        newSet.delete(path_to_save);
+        return newSet;
+      });
+
+      if (needsStateUpdate) {
+        const newName = path_to_save.split("/").pop();
+        setOpenTabs(tabs => tabs.map(t => t.path === activeFileRef.current ? { path: path_to_save, name: newName } : t));
+        setActiveFile(path_to_save);
+        handleRefreshFiles();
+      }
+    } catch (error) {
+      console.error("Failed to save file:", error);
+    }
+  }, [editorContent, editorTitle, openTabs]);
 
   const handleCreateFile = async () => {
     try {
@@ -553,12 +553,9 @@ export default function Workspace({ initialPath = "" }) {
                     onChange={(e) => setEditorTitle(e.target.value)}
                     className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
                   />
-                  <div 
-                    className="min-h-full leading-relaxed outline-none whitespace-pre-wrap text-base" 
-                    contentEditable 
-                    dangerouslySetInnerHTML={{ __html: editorContent }}
-                    onInput={(e) => handleEditorChange(e.currentTarget.innerHTML)}
-                    suppressContentEditableWarning
+                  <Editor
+                    content={editorContent}
+                    onContentChange={handleEditorChange}
                   />
                 </>
               ) : (

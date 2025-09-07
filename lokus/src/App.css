@@ -1,7 +1,10 @@
-    /* src/index.css */
-    @tailwind base;
-    @tailwind components;
-    @tailwind utilities;
+@import "tippy.js/dist/tippy.css";
+@import "./editor/styles/editor.css";
+
+/* src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 .logo.vite:hover {
   filter: drop-shadow(0 0 2em #747bff);
@@ -84,5 +87,3 @@ button {
 #greet-input {
   margin-right: 5px;
 }
-
-

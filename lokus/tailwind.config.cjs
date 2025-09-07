@@ -17,7 +17,41 @@ module.exports = {
         md: "8px",
         lg: "10px",
       },
+      typography: ({ theme }) => ({
+        DEFAULT: {
+          css: {
+            color: "rgb(var(--app-text))",
+            h1: {
+              color: "rgb(var(--app-text))",
+            },
+            h2: {
+              color: "rgb(var(--app-text))",
+            },
+            h3: {
+              color: "rgb(var(--app-text))",
+            },
+            h4: {
+              color: "rgb(var(--app-text))",
+            },
+            h5: {
+              color: "rgb(var(--app-text))",
+            },
+            h6: {
+              color: "rgb(var(--app-text))",
+            },
+            strong: {
+              color: "rgb(var(--app-text))",
+            },
+            code: {
+              color: "rgb(var(--app-text))",
+            },
+            blockquote: {
+              color: "rgb(var(--app-muted))",
+            },
+          },
+        },
+      }),
     },
   },
-  plugins: [],
+  plugins: [require("@tailwindcss/typography")],
 };

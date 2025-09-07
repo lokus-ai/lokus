@@ -1,0 +1,18 @@
+/* Give a remote feeling to the document */
+.ProseMirror {
+    padding: 1rem;
+    border-radius: 0.5rem;
+    min-height: 100%;
+}
+
+.ProseMirror:focus {
+    outline: none;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    color: #adb5bd;
+    pointer-events: none;
+    height: 0;
+}
