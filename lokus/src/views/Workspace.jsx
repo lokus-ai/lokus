@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { register, unregisterAll } from "@tauri-apps/plugin-global-shortcut";
-import { save as saveDialog, confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
+import { DraggableTab } from "./DraggableTab";
+import { Menu, FilePlus2, FolderPlus, Search } from "lucide-react";
 import Editor from "../editor";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuLabel,
+} from "../components/ui/context-menu.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -84,7 +93,7 @@ function NewFolderInput({ onConfirm, level }) {
 }
 
 // --- File Entry Component ---
-function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder }) {
+function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh }) {
   const { attributes, listeners, setNodeRef: draggableRef, isDragging } = useDraggable({
     id: entry.path,
     data: { type: "file-entry", entry },
@@ -112,18 +121,69 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
   const dropTargetClasses = isDropTarget ? 'bg-app-accent/30 ring-2 ring-app-accent' : '';
   const draggingClasses = isDragging ? 'opacity-50' : '';
 
+  const onRename = async () => {
+    const newName = window.prompt("Rename to:", entry.name);
+    if (!newName || newName.trim() === entry.name) return;
+    try {
+      await invoke("rename_file", { path: entry.path, newName: newName.trim() });
+      onRefresh && onRefresh();
+    } catch (e) {
+      console.error("Failed to rename:", e);
+    }
+  };
+
+  const onCreateFileHere = async () => {
+    try {
+      const base = entry.is_directory ? entry.path : entry.path.split("/").slice(0, -1).join("/");
+      const name = "Untitled.md";
+      await invoke("write_file_content", { path: `${base}/${name}`, content: "" });
+      onRefresh && onRefresh();
+    } catch (e) { console.error(e); }
+  };
+
+  const onCreateFolderHere = async () => {
+    const name = window.prompt("New folder name:");
+    if (!name) return;
+    try {
+      const base = entry.is_directory ? entry.path : entry.path.split("/").slice(0, -1).join("/");
+      await invoke("create_folder_in_workspace", { workspacePath: base, name });
+      onRefresh && onRefresh();
+    } catch (e) { console.error(e); }
+  };
+
   return (
     <li style={{ paddingLeft: `${level * 1.25}rem` }}>
       <div ref={droppableRef} className="rounded">
         <div ref={draggableRef} className="flex items-center">
-          <button {...listeners} {...attributes} onClick={handleClick} className={`${baseClasses} ${stateClasses} ${dropTargetClasses} ${draggingClasses}`}>
-            {entry.is_directory ? (
-              <Icon path={isExpanded ? "M19.5 8.25l-7.5 7.5-7.5-7.5" : "M8.25 4.5l7.5 7.5-7.5 7.5"} className="w-4 h-4 flex-shrink-0" />
-            ) : (
-              <Icon path="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" className="w-4 h-4 flex-shrink-0" />
-            )}
-            <span className="truncate">{entry.name}</span>
-          </button>
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+              <button {...listeners} {...attributes} onClick={handleClick} className={`${baseClasses} ${stateClasses} ${dropTargetClasses} ${draggingClasses}`}>
+                {entry.is_directory ? (
+                  <Icon path={isExpanded ? "M19.5 8.25l-7.5 7.5-7.5-7.5" : "M8.25 4.5l7.5 7.5-7.5 7.5"} className="w-4 h-4 flex-shrink-0" />
+                ) : (
+                  <Icon path="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" className="w-4 h-4 flex-shrink-0" />
+                )}
+                <span className="truncate">{entry.name}</span>
+              </button>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuLabel>{entry.is_directory ? "Folder" : "File"}</ContextMenuLabel>
+              <ContextMenuItem onClick={() => onFileClick(entry)}>Open</ContextMenuItem>
+              <ContextMenuItem onClick={onRename}>Rename</ContextMenuItem>
+              <ContextMenuSeparator />
+              {entry.is_directory ? (
+                <>
+                  <ContextMenuItem onClick={onCreateFileHere}>New File</ContextMenuItem>
+                  <ContextMenuItem onClick={onCreateFolderHere}>New Folder</ContextMenuItem>
+                </>
+              ) : (
+                <>
+                  <ContextMenuItem onClick={onCreateFileHere}>New File Here</ContextMenuItem>
+                  <ContextMenuItem onClick={onCreateFolderHere}>New Folder Here</ContextMenuItem>
+                </>
+              )}
+            </ContextMenuContent>
+          </ContextMenu>
         </div>
       </div>
       {isExpanded && (
@@ -137,6 +197,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
               activeFile={activeFile}
               expandedFolders={expandedFolders}
               toggleFolder={toggleFolder}
+              onRefresh={onRefresh}
             />
           ))}
         </ul>
@@ -190,6 +251,7 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
             activeFile={activeFile}
             expandedFolders={expandedFolders}
             toggleFolder={toggleFolder}
+            onRefresh={onRefresh}
           />
         ))}
       </ul>
@@ -198,49 +260,49 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
 }
 
 // --- Tab Bar Component ---
-function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges }) {
+function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDragEnd, onNewTab }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 10,
+      },
+    })
+  );
+
   return (
-    <div className="h-12 shrink-0 flex items-center border-b border-app-border px-2 gap-2">
-      {tabs.map(tab => {
-        const isUnsaved = unsavedChanges.has(tab.path);
-        return (
-          <div
-            key={tab.path}
-            onClick={() => onTabClick(tab.path)}
-            className={`group h-full flex items-center px-3 text-sm border-b-2 transition-colors cursor-pointer ${
-              activeTab === tab.path
-                ? 'border-app-accent text-app-text'
-                : 'border-transparent text-app-muted hover:text-app-text'
-            }`}
-          >
-            <span>{tab.name.replace(/\.md$/, "")}</span>
-            <div className="w-4 h-4 ml-2 flex items-center justify-center">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTabClose(tab.path);
-                }}
-                className={`p-0.5 rounded hover:bg-app-bg ${isUnsaved ? 'invisible group-hover:visible' : 'invisible group-hover:visible'}`}
-              >
-                <Icon path="M6 18L18 6M6 6l12 12" className="w-3.5 h-3.5" />
-              </button>
-              {isUnsaved && (
-                <div className="w-2 h-2 rounded-full bg-app-text group-hover:hidden"></div>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
+    <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+      <div className="h-12 shrink-0 flex items-center border-b border-app-border px-2">
+        <div className="flex-1 flex items-center overflow-x-auto no-scrollbar">
+          {tabs.map(tab => (
+            <DraggableTab
+              key={tab.path}
+              tab={tab}
+              isActive={activeTab === tab.path}
+              isUnsaved={unsavedChanges.has(tab.path)}
+              onTabClick={onTabClick}
+              onTabClose={onTabClose}
+            />
+          ))}
+        </div>
+        <button
+          onClick={onNewTab}
+          title="New file"
+          className="ml-2 h-8 w-8 grid place-items-center rounded-md text-app-muted hover:text-app-text hover:bg-app-bg border border-transparent"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+            <path d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+        </button>
+      </div>
+    </DndContext>
   );
 }
 
 // --- Main Workspace Component ---
 export default function Workspace({ initialPath = "" }) {
   const [path, setPath] = useState(initialPath);
-  const { leftW, rightW, startLeftDrag, startRightDrag } = useDragColumns({});
+  const { leftW, startLeftDrag } = useDragColumns({});
   const [showLeft, setShowLeft] = useState(true);
-  const [showRight, setShowRight] = useState(true);
   const [refreshId, setRefreshId] = useState(0);
 
   const [fileTree, setFileTree] = useState([]);
@@ -253,12 +315,18 @@ export default function Workspace({ initialPath = "" }) {
   
   const [editorContent, setEditorContent] = useState("");
   const [editorTitle, setEditorTitle] = useState("");
-  const saveTimeoutRef = useRef(null);
-  const activeFileRef = useRef(activeFile);
-
-  useEffect(() => {
-    activeFileRef.current = activeFile;
-  }, [activeFile]);
+  const [savedContent, setSavedContent] = useState("");
+  
+  // --- Refs for stable callbacks ---
+  const stateRef = useRef({});
+  stateRef.current = {
+    activeFile,
+    openTabs,
+    unsavedChanges,
+    editorContent,
+    editorTitle,
+    savedContent,
+  };
 
   // Load session state on initial mount
   useEffect(() => {
@@ -282,12 +350,12 @@ export default function Workspace({ initialPath = "" }) {
 
   // Save session state on change (debounced)
   useEffect(() => {
-    clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = setTimeout(() => {
+    const saveTimeout = setTimeout(() => {
       const tabPaths = openTabs.map(t => t.path);
       const folderPaths = Array.from(expandedFolders);
       invoke("save_session_state", { openTabs: tabPaths, expandedFolders: folderPaths });
     }, 500);
+    return () => clearTimeout(saveTimeout);
   }, [openTabs, expandedFolders]);
 
   // Fetch file tree
@@ -321,6 +389,7 @@ export default function Workspace({ initialPath = "" }) {
           .then(content => {
             setEditorContent(content);
             setEditorTitle(activeTab.name.replace(/\.md$/, ""));
+            setSavedContent(content);
           })
           .catch(console.error);
       }
@@ -377,7 +446,7 @@ export default function Workspace({ initialPath = "" }) {
         const tabIndex = prevTabs.findIndex(t => t.path === path);
         const newTabs = prevTabs.filter(t => t.path !== path);
         
-        if (activeFileRef.current === path) {
+        if (stateRef.current.activeFile === path) {
           if (newTabs.length === 0) {
             setActiveFile(null);
           } else {
@@ -394,7 +463,7 @@ export default function Workspace({ initialPath = "" }) {
       });
     };
 
-    if (unsavedChanges.has(path)) {
+    if (stateRef.current.unsavedChanges.has(path)) {
       const confirmed = await confirm("You have unsaved changes. Close without saving?", {
         title: "Unsaved Changes",
         type: "warning",
@@ -405,49 +474,59 @@ export default function Workspace({ initialPath = "" }) {
     } else {
       closeTab();
     }
-  }, [unsavedChanges]);
+  }, []);
 
   const handleEditorChange = useCallback((newContent) => {
     setEditorContent(newContent);
-    if (activeFileRef.current) {
-      setUnsavedChanges(prev => new Set(prev).add(activeFileRef.current));
-    }
+    if (!stateRef.current.activeFile) return;
+    setUnsavedChanges(prev => {
+      const next = new Set(prev);
+      if (newContent !== stateRef.current.savedContent) {
+        next.add(stateRef.current.activeFile);
+      } else {
+        next.delete(stateRef.current.activeFile);
+      }
+      return next;
+    });
   }, []);
 
   const handleSave = useCallback(async () => {
-    if (!activeFileRef.current) return;
-    let path_to_save = activeFileRef.current;
+    const { activeFile, openTabs, editorContent, editorTitle } = stateRef.current;
+    if (!activeFile) return;
+    
+    let path_to_save = activeFile;
     let needsStateUpdate = false;
 
     try {
-      const currentTab = openTabs.find(t => t.path === activeFileRef.current);
+      const currentTab = openTabs.find(t => t.path === activeFile);
       const currentName = currentTab.name.replace(/\.md$/, "");
 
       if (editorTitle !== currentName && editorTitle.trim() !== "") {
         const newFileName = `${editorTitle.trim()}.md`;
-        const newPath = await invoke("rename_file", { path: activeFileRef.current, newName: newFileName });
+        const newPath = await invoke("rename_file", { path: activeFile, newName: newFileName });
         path_to_save = newPath;
         needsStateUpdate = true;
       }
 
       await invoke("write_file_content", { path: path_to_save, content: editorContent });
+      setSavedContent(editorContent);
       setUnsavedChanges(prev => {
         const newSet = new Set(prev);
-        newSet.delete(activeFileRef.current);
+        newSet.delete(activeFile);
         newSet.delete(path_to_save);
         return newSet;
       });
 
       if (needsStateUpdate) {
         const newName = path_to_save.split("/").pop();
-        setOpenTabs(tabs => tabs.map(t => t.path === activeFileRef.current ? { path: path_to_save, name: newName } : t));
+        setOpenTabs(tabs => tabs.map(t => t.path === activeFile ? { path: path_to_save, name: newName } : t));
         setActiveFile(path_to_save);
         handleRefreshFiles();
       }
     } catch (error) {
       console.error("Failed to save file:", error);
     }
-  }, [editorContent, editorTitle, openTabs]);
+  }, []);
 
   const handleCreateFile = async () => {
     try {
@@ -475,35 +554,51 @@ export default function Workspace({ initialPath = "" }) {
     setIsCreatingFolder(false);
   };
 
-  useEffect(() => {
-    const registerShortcuts = async () => {
-      await unregisterAll();
-      await register("CommandOrControl+S", handleSave);
-      await register("CommandOrControl+W", () => {
-        if (activeFileRef.current) {
-          handleTabClose(activeFileRef.current);
-        }
+  const handleTabDragEnd = (event) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setOpenTabs((tabs) => {
+        const oldIndex = tabs.findIndex((t) => t.path === active.id);
+        const newIndex = tabs.findIndex((t) => t.path === over.id);
+        if (oldIndex === -1 || newIndex === -1) return tabs;
+        const newTabs = Array.from(tabs);
+        const [removed] = newTabs.splice(oldIndex, 1);
+        newTabs.splice(newIndex, 0, removed);
+        return newTabs;
       });
-    };
-    registerShortcuts().catch(console.error);
+    }
+  };
+
+  useEffect(() => {
+    const unlistenSave = listen("lokus:save-file", handleSave);
+    const unlistenClose = listen("lokus:close-tab", () => {
+      if (stateRef.current.activeFile) {
+        handleTabClose(stateRef.current.activeFile);
+      }
+    });
+
     return () => {
-      unregisterAll();
+      unlistenSave.then(f => f());
+      unlistenClose.then(f => f());
     };
   }, [handleSave, handleTabClose]);
 
   const cols = (() => {
     const mainContent = `minmax(0,1fr)`;
     const leftPanel = showLeft ? `${leftW}px 1px ` : "";
-    const rightPanel = showRight ? ` 1px ${rightW}px` : "";
-    return `48px 1px ${leftPanel}${mainContent}${rightPanel}`;
+    return `48px 1px ${leftPanel}${mainContent}`;
   })();
 
   return (
     <div className="h-screen bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300">
       <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: cols }}>
         <aside className="flex flex-col items-center gap-2 py-2 border-r border-app-border">
-          <button onClick={() => setShowLeft(v => !v)} className={`p-2 rounded-md transition-colors ${showLeft ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:bg-app-bg'}`}>
-            <Icon path="M3.75 5.25h16.5m-1.5 4.5h16.5m-1.5 4.5h16.5m-1.5 4.5h16.5" />
+          <button
+            onClick={() => setShowLeft(v => !v)}
+            title={showLeft ? "Hide sidebar" : "Show sidebar"}
+            className={`p-2 rounded-md transition-colors ${showLeft ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:bg-app-bg'}`}
+          >
+            <Menu className="w-5 h-5" />
           </button>
         </aside>
         <div className="bg-app-border/20 w-px" />
@@ -520,18 +615,28 @@ export default function Workspace({ initialPath = "" }) {
                 </button>
               </div>
             </div>
-            <div className="p-2 flex-1 overflow-y-auto">
-              <FileTreeView 
-                entries={fileTree}
-                onFileClick={handleFileOpen} 
-                activeFile={activeFile}
-                onRefresh={handleRefreshFiles}
-                expandedFolders={expandedFolders}
-                toggleFolder={toggleFolder}
-                isCreating={isCreatingFolder}
-                onCreateConfirm={handleConfirmCreateFolder}
-              />
-            </div>
+            <ContextMenu>
+              <ContextMenuTrigger asChild>
+                <div className="p-2 flex-1 overflow-y-auto">
+                  <FileTreeView 
+                    entries={fileTree}
+                    onFileClick={handleFileOpen} 
+                    activeFile={activeFile}
+                    onRefresh={handleRefreshFiles}
+                    expandedFolders={expandedFolders}
+                    toggleFolder={toggleFolder}
+                    isCreating={isCreatingFolder}
+                    onCreateConfirm={handleConfirmCreateFolder}
+                  />
+                </div>
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem onClick={handleCreateFile}>New File</ContextMenuItem>
+                <ContextMenuItem onClick={handleCreateFolder}>New Folder</ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem onClick={handleRefreshFiles}>Refresh</ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
           </aside>
         )}
         {showLeft && <div onMouseDown={startLeftDrag} className="cursor-col-resize bg-app-border/20 hover:bg-app-accent/50 transition-colors duration-300 w-px" />}
@@ -542,36 +647,88 @@ export default function Workspace({ initialPath = "" }) {
             onTabClick={handleTabClick}
             onTabClose={handleTabClose}
             unsavedChanges={unsavedChanges}
+            onDragEnd={handleTabDragEnd}
+            onNewTab={handleCreateFile}
           />
           <div className="flex-1 p-8 md:p-12 overflow-y-auto">
             <div className="max-w-4xl mx-auto">
               {activeFile ? (
-                <>
-                  <input
-                    type="text"
-                    value={editorTitle}
-                    onChange={(e) => setEditorTitle(e.target.value)}
-                    className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
-                  />
-                  <Editor
-                    content={editorContent}
-                    onContentChange={handleEditorChange}
-                  />
-                </>
+                <ContextMenu>
+                  <ContextMenuTrigger asChild>
+                    <div>
+                      <input
+                        type="text"
+                        value={editorTitle}
+                        onChange={(e) => setEditorTitle(e.target.value)}
+                        className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
+                      />
+                      <Editor
+                        content={editorContent}
+                        onContentChange={handleEditorChange}
+                      />
+                    </div>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent>
+                    <ContextMenuItem onClick={handleSave}>Save</ContextMenuItem>
+                    <ContextMenuItem onClick={() => stateRef.current.activeFile && handleTabClose(stateRef.current.activeFile)}>
+                      Close Tab
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem onClick={() => document.execCommand && document.execCommand('selectAll')}>Select All</ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
               ) : (
-                <div className="text-center text-app-muted">Select a file to begin editing or create a new one.</div>
+                <div className="mx-auto max-w-2xl text-center">
+                  <div className="rounded-lg border border-app-border bg-app-panel/50 p-8">
+                    <h1 className="text-2xl font-semibold">Welcome to Lokus</h1>
+                    <p className="mt-2 text-app-muted">Create your first note or add a folder to get started.</p>
+
+                    <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                      <button
+                        onClick={handleCreateFile}
+                        className="inline-flex items-center gap-2 rounded-md border border-app-border bg-app-bg px-4 py-2 text-sm hover:bg-app-panel transition-colors"
+                      >
+                        <FilePlus2 className="w-4 h-4" />
+                        New note
+                      </button>
+                      <button
+                        onClick={handleCreateFolder}
+                        className="inline-flex items-center gap-2 rounded-md border border-app-border bg-app-bg px-4 py-2 text-sm hover:bg-app-panel transition-colors"
+                      >
+                        <FolderPlus className="w-4 h-4" />
+                        New folder
+                      </button>
+                      <button
+                        onClick={handleRefreshFiles}
+                        className="inline-flex items-center gap-2 rounded-md border border-app-border bg-app-bg px-4 py-2 text-sm hover:bg-app-panel transition-colors"
+                      >
+                        <Search className="w-4 h-4" />
+                        Refresh files
+                      </button>
+                    </div>
+
+                    <div className="mt-6 text-left text-sm text-app-muted">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="rounded-md bg-app-bg/50 border border-app-border p-3">
+                          <div className="font-medium text-app-text mb-1">Tips</div>
+                          <ul className="list-disc list-inside space-y-1">
+                            <li>Press <span className="font-mono">Cmd/Ctrl + S</span> to save.</li>
+                            <li>Rename a note by editing its title.</li>
+                            <li>Drag files into folders to move them.</li>
+                          </ul>
+                        </div>
+                        <div className="rounded-md bg-app-bg/50 border border-app-border p-3">
+                          <div className="font-medium text-app-text mb-1">Recent activity</div>
+                          <p>No recent notes yet.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           </div>
         </main>
-        {showRight && <div onMouseDown={startRightDrag} className="cursor-col-resize bg-app-border/20 hover:bg-app-accent/50 transition-colors duration-300 w-px" />}
-        {showRight && (
-          <aside className="overflow-y-auto flex flex-col">
-            <div className="h-12 shrink-0 px-4 flex items-center gap-2 border-b border-l border-app-border">
-              <span className="font-semibold text-sm">Inspector</span>
-            </div>
-          </aside>
-        )}
       </div>
     </div>
   );

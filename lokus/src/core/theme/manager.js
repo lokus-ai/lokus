@@ -7,15 +7,16 @@ const APP_DIR = "Lokus";
 const GLOBAL_CONFIG = "config.json";
 const THEMES_DIRNAME = "themes";
 const WS_CONFIG_REL = ".lokus/config.json";
-const THEME_TOKEN_KEYS = ["--app-bg", "--app-text", "--app-panel", "--app-border", "--app-muted", "--app-accent"];
-const BUILT_IN_THEME_TOKENS = { "--app-bg": "15 23 42", "--app-text": "241 245 249", "--app-panel": "30 41 59", "--app-border": "51 65 85", "--app-muted": "148 163 184", "--app-accent": "139 92 246" };
+// These must match CSS variables defined in src/styles/globals.css and tailwind.config.cjs
+const THEME_TOKEN_KEYS = ["--bg", "--text", "--panel", "--border", "--muted", "--accent"];
+const BUILT_IN_THEME_TOKENS = { "--bg": "15 23 42", "--text": "241 245 249", "--panel": "30 41 59", "--border": "51 65 85", "--muted": "148 163 184", "--accent": "139 92 246" };
 
 // NEW: High-quality, professional default themes
 const DEFAULT_THEMES = ["dracula", "nord", "one-dark-pro"];
 const DEFAULT_THEME_CONTENT = {
-  "dracula": `{"name": "Dracula", "tokens": {"--app-bg": "#282a36", "--app-text": "#f8f8f2", "--app-panel": "#21222c", "--app-border": "#44475a", "--app-muted": "#6272a4", "--app-accent": "#bd93f9"}}`,
-  "nord": `{"name": "Nord", "tokens": {"--app-bg": "#2E3440", "--app-text": "#ECEFF4", "--app-panel": "#3B4252", "--app-border": "#4C566A", "--app-muted": "#D8DEE9", "--app-accent": "#88C0D0"}}`,
-  "one-dark-pro": `{"name": "One Dark Pro", "tokens": {"--app-bg": "#282c34", "--app-text": "#abb2bf", "--app-panel": "#21252b", "--app-border": "#3a3f4b", "--app-muted": "#5c6370", "--app-accent": "#61afef"}}`
+  "dracula": `{"name": "Dracula", "tokens": {"--bg": "#282a36", "--text": "#f8f8f2", "--panel": "#21222c", "--border": "#44475a", "--muted": "#6272a4", "--accent": "#bd93f9"}}`,
+  "nord": `{"name": "Nord", "tokens": {"--bg": "#2E3440", "--text": "#ECEFF4", "--panel": "#3B4252", "--border": "#4C566A", "--muted": "#D8DEE9", "--accent": "#88C0D0"}}`,
+  "one-dark-pro": `{"name": "One Dark Pro", "tokens": {"--bg": "#282c34", "--text": "#abb2bf", "--panel": "#21252b", "--border": "#3a3f4b", "--muted": "#5c6370", "--accent": "#61afef"}}`
 };
 
 // --- File System & JSON Helpers ---
@@ -112,7 +113,11 @@ export async function readGlobalVisuals() {
 }
 
 export async function setGlobalActiveTheme(id) {
-  await writeJson(await getGlobalConfigPath(), { ...(await readGlobalVisuals()), theme: id });
+  try {
+    await writeJson(await getGlobalConfigPath(), { ...(await readGlobalVisuals()), theme: id });
+  } catch (e) {
+    console.warn('[theme] failed to persist active theme, applying in-memory only:', e);
+  }
   const manifest = await loadThemeManifestById(id);
   const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
   applyTokens(tokensToApply);
@@ -121,7 +126,24 @@ export async function setGlobalActiveTheme(id) {
 
 export async function setGlobalVisuals(visuals) {
   const current = await readGlobalVisuals();
-  await writeJson(await getGlobalConfigPath(), { ...current, ...visuals });
+  const next = { ...current, ...visuals };
+  await writeJson(await getGlobalConfigPath(), next);
+  // Apply mode/accent locally for immediate feedback even without ThemeProvider
+  try {
+    if (Object.prototype.hasOwnProperty.call(visuals, 'mode')) {
+      const mode = visuals.mode;
+      if (!mode || mode === 'system') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', mode);
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(visuals, 'accent') && visuals.accent) {
+      applyTokens({ "--accent": visuals.accent });
+    }
+  } catch (e) {
+    console.warn('[theme] failed to apply visuals locally:', e);
+  }
   await broadcastTheme({ visuals });
 }
 
@@ -139,8 +161,21 @@ export async function loadThemeForWorkspace(workspacePath) {
 }
 
 export async function applyInitialTheme() {
-  const { theme } = await readGlobalVisuals();
+  const { theme, mode, accent } = await readGlobalVisuals();
   const manifest = await loadThemeManifestById(theme);
   const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
   applyTokens(tokensToApply);
+  // Also apply saved mode/accent on boot
+  try {
+    if (mode && mode !== 'system') {
+      document.documentElement.setAttribute('data-theme', mode);
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    if (accent) {
+      applyTokens({ "--accent": accent });
+    }
+  } catch (e) {
+    console.warn('[theme] failed to apply initial visuals:', e);
+  }
 }

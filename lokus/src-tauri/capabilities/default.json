@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "Permissions for the main application functionality",
-  "windows": ["main", "prefs", "ws-lokus-workspace"],
+  "windows": ["*"],
   "permissions": [
     "core:path:allow-resolve-directory",
     "core:path:allow-join",
@@ -12,6 +12,7 @@
     "global-shortcut:allow-unregister-all",
     "dialog:allow-save",
     "dialog:allow-open",
+    "dialog:allow-confirm",
     {
       "identifier": "fs:scope",
       "allow": [
@@ -21,10 +22,13 @@
     },
     "fs:allow-read-file",
     "fs:allow-write-file",
+    "fs:allow-write-text-file",
     "fs:allow-read-dir",
     "fs:allow-create",
     "fs:allow-remove",
     "fs:allow-rename",
-    "fs:allow-exists"
+    "fs:allow-exists",
+    "fs:allow-appdata-write",
+    "fs:allow-appdata-write-recursive"
   ]
 }

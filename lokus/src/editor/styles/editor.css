@@ -3,6 +3,7 @@
     padding: 1rem;
     border-radius: 0.5rem;
     min-height: 100%;
+    white-space: pre-wrap;
 }
 
 .ProseMirror:focus {
@@ -15,4 +16,11 @@
     color: #adb5bd;
     pointer-events: none;
     height: 0;
+}
+
+/* Ensure the editor area fills available space, with limited space
+   after the last line similar to VS Code's scrollBeyondLastLine false. */
+.tiptap-area {
+    min-height: 60vh; /* grows with viewport */
+    padding-bottom: 4rem; /* ~2-3 lines of cushion */
 }

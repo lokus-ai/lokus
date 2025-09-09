@@ -9,7 +9,8 @@ use windows::open_workspace_window;
 use tauri::Manager;
 use tauri_plugin_store::{StoreBuilder, JsonValue};
 use std::path::PathBuf;
-use std::collections::HashMap;
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
+use tauri::{Emitter, Listener};
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct SessionState {
@@ -73,8 +74,12 @@ fn main() {
         if let Some(path_str) = path.as_str() {
           let main_window = app.get_webview_window("main").unwrap();
           main_window.hide().unwrap();
-          open_workspace_window(app_handle, path_str.to_string());
+          let _ = open_workspace_window(app_handle, path_str.to_string());
         }
+      } else {
+        // If no workspace is open, explicitly show the main window
+        let main_window = app.get_webview_window("main").unwrap();
+        main_window.show().unwrap();
       }
 
       Ok(())

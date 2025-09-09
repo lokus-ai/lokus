@@ -47,7 +47,8 @@ pub fn open_preferences_window(app: AppHandle) -> Result<(), String> {
     focus(&win);
     return Ok(());
   }
-  let url = WebviewUrl::App("index.html".into());
+  // Pass a query param so the frontend can render the Preferences view immediately
+  let url = WebviewUrl::App("index.html?view=prefs".into());
   let _win = WebviewWindowBuilder::new(&app, label, url)
     .title("Preferences")
     .inner_size(760.0, 560.0)
