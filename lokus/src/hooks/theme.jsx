@@ -30,20 +30,31 @@ export function ThemeProvider({ children }) {
 
   // Listen for theme changes from other windows
   useEffect(() => {
-    const unlistenPromise = listen("theme:apply", (e) => {
-      const p = (e.payload || {});
-      if (p.tokens) {
-        applyTokens(p.tokens);
-      }
-      if (p.visuals) {
-        setTheme(p.visuals.theme);
-        setMode(p.visuals.mode);
-        setAccent(p.visuals.accent);
-      }
-    });
-    return () => {
-      unlistenPromise.then(unlisten => unlisten());
-    };
+    let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
+    if (isTauri) {
+      const unlistenPromise = listen("theme:apply", (e) => {
+        const p = (e.payload || {});
+        if (p.tokens) applyTokens(p.tokens);
+        if (p.visuals) {
+          setTheme(p.visuals.theme);
+          setMode(p.visuals.mode);
+          setAccent(p.visuals.accent);
+        }
+      });
+      return () => { unlistenPromise.then(unlisten => unlisten()); };
+    } else {
+      const onDom = (e) => {
+        const p = (e.detail || {});
+        if (p.tokens) applyTokens(p.tokens);
+        if (p.visuals) {
+          setTheme(p.visuals.theme);
+          setMode(p.visuals.mode);
+          setAccent(p.visuals.accent);
+        }
+      };
+      window.addEventListener('theme:apply', onDom);
+      return () => window.removeEventListener('theme:apply', onDom);
+    }
   }, []);
 
   // Apply the data-theme attribute to the root element

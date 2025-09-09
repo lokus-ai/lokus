@@ -5,7 +5,7 @@ mod menu;
 mod theme;
 mod handlers;
 
-use windows::open_workspace_window;
+use windows::{open_workspace_window, open_preferences_window};
 use tauri::Manager;
 use tauri_plugin_store::{StoreBuilder, JsonValue};
 use std::path::PathBuf;
@@ -51,6 +51,7 @@ fn main() {
     .plugin(tauri_plugin_global_shortcut::Builder::new().build())
     .invoke_handler(tauri::generate_handler![
       open_workspace_window,
+      open_preferences_window,
       save_last_workspace,
       save_session_state,
       load_session_state,

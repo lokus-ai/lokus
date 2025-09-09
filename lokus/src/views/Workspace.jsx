@@ -14,6 +14,7 @@ import {
   ContextMenuSeparator,
   ContextMenuLabel,
 } from "../components/ui/context-menu.jsx";
+import { getActiveShortcuts, formatAccelerator } from "../core/shortcuts/registry.js";
 
 const MAX_OPEN_TABS = 10;
 
@@ -93,7 +94,7 @@ function NewFolderInput({ onConfirm, level }) {
 }
 
 // --- File Entry Component ---
-function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh }) {
+function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap }) {
   const { attributes, listeners, setNodeRef: draggableRef, isDragging } = useDraggable({
     id: entry.path,
     data: { type: "file-entry", entry },
@@ -173,13 +174,25 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
               <ContextMenuSeparator />
               {entry.is_directory ? (
                 <>
-                  <ContextMenuItem onClick={onCreateFileHere}>New File</ContextMenuItem>
-                  <ContextMenuItem onClick={onCreateFolderHere}>New Folder</ContextMenuItem>
+                  <ContextMenuItem onClick={onCreateFileHere}>
+                    New File
+                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-file'])}</span>
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={onCreateFolderHere}>
+                    New Folder
+                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-folder'])}</span>
+                  </ContextMenuItem>
                 </>
               ) : (
                 <>
-                  <ContextMenuItem onClick={onCreateFileHere}>New File Here</ContextMenuItem>
-                  <ContextMenuItem onClick={onCreateFolderHere}>New Folder Here</ContextMenuItem>
+                  <ContextMenuItem onClick={onCreateFileHere}>
+                    New File Here
+                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-file'])}</span>
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={onCreateFolderHere}>
+                    New Folder Here
+                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-folder'])}</span>
+                  </ContextMenuItem>
                 </>
               )}
             </ContextMenuContent>
@@ -198,6 +211,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
               expandedFolders={expandedFolders}
               toggleFolder={toggleFolder}
               onRefresh={onRefresh}
+              keymap={keymap}
             />
           ))}
         </ul>
@@ -207,7 +221,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 }
 
 // --- File Tree View Component ---
-function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm }) {
+function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm, keymap }) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -252,6 +266,7 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
             expandedFolders={expandedFolders}
             toggleFolder={toggleFolder}
             onRefresh={onRefresh}
+            keymap={keymap}
           />
         ))}
       </ul>
@@ -308,6 +323,7 @@ export default function Workspace({ initialPath = "" }) {
   const [fileTree, setFileTree] = useState([]);
   const [expandedFolders, setExpandedFolders] = useState(new Set());
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [keymap, setKeymap] = useState({});
   
   const [openTabs, setOpenTabs] = useState([]);
   const [activeFile, setActiveFile] = useState(null);
@@ -346,6 +362,23 @@ export default function Workspace({ initialPath = "" }) {
         }
       }
     });
+  }, []);
+
+  // Load shortcuts map for hints and keep it fresh
+  useEffect(() => {
+    getActiveShortcuts().then(setKeymap).catch(console.error);
+    let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
+    if (isTauri) {
+      const sub = listen('shortcuts:updated', async () => {
+        const m = await getActiveShortcuts();
+        setKeymap(m);
+      });
+      return () => { sub.then((un) => un()); };
+    } else {
+      const onDom = async () => { setKeymap(await getActiveShortcuts()); };
+      window.addEventListener('shortcuts:updated', onDom);
+      return () => window.removeEventListener('shortcuts:updated', onDom);
+    }
   }, []);
 
   // Save session state on change (debounced)
@@ -570,16 +603,24 @@ export default function Workspace({ initialPath = "" }) {
   };
 
   useEffect(() => {
-    const unlistenSave = listen("lokus:save-file", handleSave);
-    const unlistenClose = listen("lokus:close-tab", () => {
+    let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
+    const addDom = (name, fn) => { const h = () => fn(); window.addEventListener(name, h); return () => window.removeEventListener(name, h); };
+    const unlistenSave = isTauri ? listen("lokus:save-file", handleSave) : Promise.resolve(addDom('lokus:save-file', handleSave));
+    const unlistenClose = isTauri ? listen("lokus:close-tab", () => {
       if (stateRef.current.activeFile) {
         handleTabClose(stateRef.current.activeFile);
       }
-    });
+    }) : Promise.resolve(addDom('lokus:close-tab', () => { if (stateRef.current.activeFile) handleTabClose(stateRef.current.activeFile); }));
+    const unlistenNewFile = isTauri ? listen("lokus:new-file", handleCreateFile) : Promise.resolve(addDom('lokus:new-file', handleCreateFile));
+    const unlistenNewFolder = isTauri ? listen("lokus:new-folder", () => setIsCreatingFolder(true)) : Promise.resolve(addDom('lokus:new-folder', () => setIsCreatingFolder(true)));
+    const unlistenToggleSidebar = isTauri ? listen("lokus:toggle-sidebar", () => setShowLeft(v => !v)) : Promise.resolve(addDom('lokus:toggle-sidebar', () => setShowLeft(v => !v)));
 
     return () => {
-      unlistenSave.then(f => f());
-      unlistenClose.then(f => f());
+      unlistenSave.then(f => { if (typeof f === 'function') f(); });
+      unlistenClose.then(f => { if (typeof f === 'function') f(); });
+      unlistenNewFile.then(f => { if (typeof f === 'function') f(); });
+      unlistenNewFolder.then(f => { if (typeof f === 'function') f(); });
+      unlistenToggleSidebar.then(f => { if (typeof f === 'function') f(); });
     };
   }, [handleSave, handleTabClose]);
 
@@ -590,8 +631,8 @@ export default function Workspace({ initialPath = "" }) {
   })();
 
   return (
-    <div className="h-screen bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300">
-      <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: cols }}>
+    <div className="h-screen bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden">
+      <div className="flex-1 min-h-0 grid overflow-hidden" style={{ gridTemplateColumns: cols }}>
         <aside className="flex flex-col items-center gap-2 py-2 border-r border-app-border">
           <button
             onClick={() => setShowLeft(v => !v)}
@@ -627,12 +668,19 @@ export default function Workspace({ initialPath = "" }) {
                     toggleFolder={toggleFolder}
                     isCreating={isCreatingFolder}
                     onCreateConfirm={handleConfirmCreateFolder}
+                    keymap={keymap}
                   />
                 </div>
               </ContextMenuTrigger>
               <ContextMenuContent>
-                <ContextMenuItem onClick={handleCreateFile}>New File</ContextMenuItem>
-                <ContextMenuItem onClick={handleCreateFolder}>New Folder</ContextMenuItem>
+                <ContextMenuItem onClick={handleCreateFile}>
+                  New File
+                  <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-file'])}</span>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={handleCreateFolder}>
+                  New Folder
+                  <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-folder'])}</span>
+                </ContextMenuItem>
                 <ContextMenuSeparator />
                 <ContextMenuItem onClick={handleRefreshFiles}>Refresh</ContextMenuItem>
               </ContextMenuContent>
@@ -640,7 +688,7 @@ export default function Workspace({ initialPath = "" }) {
           </aside>
         )}
         {showLeft && <div onMouseDown={startLeftDrag} className="cursor-col-resize bg-app-border/20 hover:bg-app-accent/50 transition-colors duration-300 w-px" />}
-        <main className="min-w-0 flex flex-col bg-app-bg">
+        <main className="min-w-0 min-h-0 flex flex-col bg-app-bg">
           <TabBar 
             tabs={openTabs}
             activeTab={activeFile}
@@ -669,9 +717,13 @@ export default function Workspace({ initialPath = "" }) {
                     </div>
                   </ContextMenuTrigger>
                   <ContextMenuContent>
-                    <ContextMenuItem onClick={handleSave}>Save</ContextMenuItem>
+                    <ContextMenuItem onClick={handleSave}>
+                      Save
+                      <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['save-file'])}</span>
+                    </ContextMenuItem>
                     <ContextMenuItem onClick={() => stateRef.current.activeFile && handleTabClose(stateRef.current.activeFile)}>
                       Close Tab
+                      <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['close-tab'])}</span>
                     </ContextMenuItem>
                     <ContextMenuSeparator />
                     <ContextMenuItem onClick={() => document.execCommand && document.execCommand('selectAll')}>Select All</ContextMenuItem>

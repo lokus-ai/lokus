@@ -4,13 +4,13 @@ import Workspace from "./views/Workspace";
 import Preferences from "./views/Preferences";
 import { usePreferenceActivation } from "./hooks/usePreferenceActivation";
 import { useWorkspaceActivation } from "./hooks/useWorkspaceActivation";
-import { register, unregisterAll } from "@tauri-apps/plugin-global-shortcut";
+import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/shortcuts/registry.js";
 // Guard window access in non-Tauri environments
 import { emit } from "@tauri-apps/api/event";
 
 function App() {
   // Use the hooks' values directly (no setter param expected)
-  const { isPrefsOpen, setPrefsOpen } = usePreferenceActivation();
+  const { isPrefsWindow } = usePreferenceActivation();
   const activePath = useWorkspaceActivation();
 
   useEffect(() => {
@@ -24,31 +24,22 @@ function App() {
         );
         if (!isTauri) return;
 
-        // Access current window lazily via global provided by Tauri v2
-        // Avoid importing plugin-window alpha API to reduce coupling
-        const { getCurrent } = await import("@tauri-apps/api/window");
-        const currentWindow = getCurrent();
-
         const registerAppShortcuts = async () => {
-          await unregisterAll();
-          await register("CommandOrControl+S", () => emit("lokus:save-file"));
-          await register("CommandOrControl+W", () => emit("lokus:close-tab"));
+          await registerGlobalShortcuts();
         };
 
-        const unlistenFocus = await currentWindow.listen("tauri://focus", () => {
-          if (isSubscribed) registerAppShortcuts();
-        });
-        const unlistenBlur = await currentWindow.listen("tauri://blur", () => {
-          if (isSubscribed) unregisterAll();
-        });
+        const onFocus = () => { if (isSubscribed) registerAppShortcuts(); };
+        const onBlur = () => { if (isSubscribed) unregisterGlobalShortcuts(); };
+        window.addEventListener('focus', onFocus);
+        window.addEventListener('blur', onBlur);
 
-        if (await currentWindow.isFocused()) {
+        if (document.hasFocus()) {
           registerAppShortcuts();
         }
         
         return () => {
-          unlistenFocus();
-          unlistenBlur();
+          window.removeEventListener('focus', onFocus);
+          window.removeEventListener('blur', onBlur);
         };
       } catch (e) {
         console.error("Failed to initialize shortcuts:", e);
@@ -59,15 +50,15 @@ function App() {
 
     return () => {
       isSubscribed = false;
-      unregisterAll();
+      unregisterGlobalShortcuts();
       unlistenPromise.then(unlisten => {
         if (typeof unlisten === 'function') unlisten();
       });
     };
   }, []);
 
-  if (isPrefsOpen) {
-    return <Preferences onClose={() => setPrefsOpen(false)} />;
+  if (isPrefsWindow) {
+    return <Preferences />;
   }
 
   if (activePath) {

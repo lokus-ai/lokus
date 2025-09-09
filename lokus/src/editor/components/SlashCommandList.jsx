@@ -38,16 +38,25 @@ const SlashCommandList = forwardRef((props, ref) => {
 
   useImperativeHandle(ref, () => ({
     onKeyDown: ({ event }) => {
-      // Let the Command component handle navigation, but stop the event from propagating to the editor
-      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      // We manage selection ourselves because the command menu doesn't own focus
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const idx = allItems.findIndex(i => i.title === value);
+        if (idx !== -1) {
+          const next = event.key === "ArrowDown"
+            ? (idx + 1) % allItems.length
+            : (idx - 1 + allItems.length) % allItems.length;
+          setValue(allItems[next].title);
+        } else if (allItems.length) {
+          setValue(allItems[0].title);
+        }
         return true;
       }
-      
       if (event.key === "Enter") {
-        // The onSelect handler on CommandItem will be triggered by the component itself
+        event.preventDefault();
+        selectItem(value);
         return true;
       }
-
       return false;
     },
   }));
@@ -85,7 +94,8 @@ const SlashCommandList = forwardRef((props, ref) => {
                   key={item.title}
                   value={item.title}
                   onSelect={selectItem}
-                  className={`data-[selected=true]:bg-app-accent data-[selected=true]:text-app-accent-fg`}
+                  aria-selected={value === item.title}
+                  className={`${value===item.title ? 'bg-app-accent text-app-accent-fg' : ''}`}
                 >
                   <div className="flex items-center justify-center w-7 h-7 bg-app-bg rounded-md mr-3">
                     {item.icon}

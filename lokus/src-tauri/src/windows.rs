@@ -41,6 +41,7 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
   Ok(())
 }
 
+#[tauri::command]
 pub fn open_preferences_window(app: AppHandle) -> Result<(), String> {
   let label = "prefs";
   if let Some(win) = app.get_webview_window(label) {

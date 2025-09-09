@@ -9,8 +9,10 @@ import {
   TextQuote,
   Code,
   CodeXml,
+  ListTodo,
+  Table2,
 } from "lucide-react";
-import tippy from "tippy.js";
+import tippy from "tippy.js/dist/tippy.esm.js";
 
 import SlashCommandList from "../components/SlashCommandList";
 
@@ -24,6 +26,22 @@ const commandItems = [
         icon: <Heading1 size={18} />,
         command: ({ editor, range }) => {
           editor.chain().focus().deleteRange(range).setNode("heading", { level: 1 }).run();
+        },
+      },
+      {
+        title: "Task List",
+        description: "Track tasks with checkboxes.",
+        icon: <ListTodo size={18} />,
+        command: ({ editor, range }) => {
+          editor.chain().focus().deleteRange(range).toggleTaskList().run();
+        },
+      },
+      {
+        title: "Table",
+        description: "Insert a 3×3 table.",
+        icon: <Table2 size={18} />,
+        command: ({ editor, range }) => {
+          editor.chain().focus().deleteRange(range).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
         },
       },
       {

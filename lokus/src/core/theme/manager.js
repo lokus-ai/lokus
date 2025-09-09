@@ -1,6 +1,5 @@
-import { appDataDir, join } from "@tauri-apps/api/path";
-import { readTextFile, writeTextFile, mkdir, exists, readDir } from "@tauri-apps/plugin-fs";
 import { emit } from "@tauri-apps/api/event";
+import { readConfig, updateConfig } from "../config/store.js";
 
 // --- Constants ---
 const APP_DIR = "Lokus";
@@ -20,14 +19,19 @@ const DEFAULT_THEME_CONTENT = {
 };
 
 // --- File System & JSON Helpers ---
-async function ensureDir(p) { if (!(await exists(p))) await mkdir(p, { recursive: true }); }
-async function readJson(p) { try { return JSON.parse(await readTextFile(p)); } catch { return null; } }
-async function writeJson(p, data) { await writeTextFile(p, JSON.stringify(data, null, 2)); }
-
-// --- Path Helpers ---
-export async function getGlobalDir() { const d = await join(await appDataDir(), APP_DIR); await ensureDir(d); return d; }
-export async function getGlobalConfigPath() { return await join(await getGlobalDir(), GLOBAL_CONFIG); }
-export async function getGlobalThemesDir() { const t = await join(await getGlobalDir(), THEMES_DIRNAME); await ensureDir(t); return t; }
+// Browser-safe helpers now handled by config store; theme files optional
+let isTauri = false; try { isTauri = !!(window && (window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__)); } catch {}
+let join, exists, readDir, readTextFile, writeTextFile, appDataDir, mkdir;
+if (isTauri) {
+  ({ join, appDataDir } = await import("@tauri-apps/api/path"));
+  ({ exists, readDir, readTextFile, writeTextFile, mkdir } = await import("@tauri-apps/plugin-fs"));
+}
+async function ensureDir(p) { if (!isTauri) return; if (!(await exists(p))) await mkdir(p, { recursive: true }); }
+async function readJson(p) { if (!isTauri) return null; try { return JSON.parse(await readTextFile(p)); } catch { return null; } }
+async function writeJson(p, data) { if (!isTauri) return; await writeTextFile(p, JSON.stringify(data, null, 2)); }
+export async function getGlobalDir() { if (!isTauri) return APP_DIR; const d = await join(await appDataDir(), APP_DIR); await ensureDir(d); return d; }
+export async function getGlobalConfigPath() { if (!isTauri) return GLOBAL_CONFIG; return await join(await getGlobalDir(), GLOBAL_CONFIG); }
+export async function getGlobalThemesDir() { if (!isTauri) return THEMES_DIRNAME; const t = await join(await getGlobalDir(), THEMES_DIRNAME); await ensureDir(t); return t; }
 
 // --- Core Theme Logic ---
 function normalize(val) {
@@ -55,10 +59,14 @@ export function applyTokens(tokens) {
 
 export async function broadcastTheme(payload) {
   try { await emit("theme:apply", payload); }
-  catch (e) { console.error("[theme] broadcast failed:", e); }
+  catch (_) {
+    // Browser fallback: dispatch DOM event
+    try { window.dispatchEvent(new CustomEvent('theme:apply', { detail: payload })); } catch {}
+  }
 }
 
 export async function installDefaultThemes() {
+  if (!isTauri) return; // no-op in browser
   const themesDir = await getGlobalThemesDir();
   for (const themeId of DEFAULT_THEMES) {
     const themeJsonPath = await join(themesDir, `${themeId}.json`);
@@ -91,7 +99,7 @@ export async function listAvailableThemes() {
       themeMap.set(themeId, { id: themeId, name: manifest.name });
     } catch { themeMap.set(themeId, { id: themeId, name: themeId }); }
   }
-  try {
+  if (isTauri) try {
     const themesDir = await getGlobalThemesDir();
     if (await exists(themesDir)) {
       for (const file of await readDir(themesDir)) {
@@ -108,16 +116,12 @@ export async function listAvailableThemes() {
 
 // --- Public API ---
 export async function readGlobalVisuals() {
-  const cfg = await readJson(await getGlobalConfigPath()) || {};
+  const cfg = await readConfig();
   return { mode: cfg.mode || null, accent: cfg.accent || null, theme: cfg.theme || null };
 }
 
 export async function setGlobalActiveTheme(id) {
-  try {
-    await writeJson(await getGlobalConfigPath(), { ...(await readGlobalVisuals()), theme: id });
-  } catch (e) {
-    console.warn('[theme] failed to persist active theme, applying in-memory only:', e);
-  }
+  try { await updateConfig({ theme: id }); } catch (e) { console.warn('[theme] persist failed:', e); }
   const manifest = await loadThemeManifestById(id);
   const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
   applyTokens(tokensToApply);
@@ -127,7 +131,7 @@ export async function setGlobalActiveTheme(id) {
 export async function setGlobalVisuals(visuals) {
   const current = await readGlobalVisuals();
   const next = { ...current, ...visuals };
-  await writeJson(await getGlobalConfigPath(), next);
+  try { await updateConfig(next); } catch {}
   // Apply mode/accent locally for immediate feedback even without ThemeProvider
   try {
     if (Object.prototype.hasOwnProperty.call(visuals, 'mode')) {
@@ -148,8 +152,11 @@ export async function setGlobalVisuals(visuals) {
 }
 
 export async function loadThemeForWorkspace(workspacePath) {
-  const wsCfgPath = await join(workspacePath, WS_CONFIG_REL);
-  const wsCfg = await readJson(wsCfgPath);
+  let wsCfg = null;
+  if (isTauri) {
+    const wsCfgPath = await join(workspacePath, WS_CONFIG_REL);
+    wsCfg = await readJson(wsCfgPath);
+  }
   let id = wsCfg?.theme;
   if (!id || id === "inherit") {
     const globalCfg = await readGlobalVisuals();

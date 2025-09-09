@@ -23,12 +23,13 @@ export function useWorkspaceActivation() {
     }
 
     // Strategy 2: Listen for subsequent activation events.
-    const unlistenPromise = listen("workspace:activate", (event) => {
-      const p = event.payload;
-      if (typeof p === 'string' && p) {
-        setPath(p);
-      }
-    });
+    let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
+    const unlistenPromise = isTauri
+      ? listen("workspace:activate", (event) => {
+          const p = event.payload;
+          if (typeof p === 'string' && p) setPath(p);
+        })
+      : Promise.resolve(() => {});
 
     return () => {
       unlistenPromise.then(unlisten => unlisten());
