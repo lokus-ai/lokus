@@ -1,5 +1,6 @@
 import { Extension } from '@tiptap/core';
-import suggestion from '@tiptap/suggestion';
+import * as suggestionMod from '@tiptap/suggestion';
+const suggestion = suggestionMod.default ?? suggestionMod;
 import slashCommand from './slash-command.jsx';
 
 const SlashCommand = Extension.create({

@@ -1,11 +1,25 @@
 // Tauri + Browser-safe config store
 let isTauri = false;
-try { isTauri = !!(window && (window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__)); } catch {}
+try {
+  const w = typeof window !== 'undefined' ? window : undefined;
+  isTauri = !!(
+    w && (
+      (w.__TAURI_INTERNALS__ && typeof w.__TAURI_INTERNALS__.invoke === 'function') ||
+      w.__TAURI_METADATA__ ||
+      (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.includes('Tauri'))
+    )
+  );
+} catch {}
 
 let appDataDir, join, readTextFile, writeTextFile, mkdir, exists;
 if (isTauri) {
-  ({ appDataDir, join } = await import("@tauri-apps/api/path"));
-  ({ readTextFile, writeTextFile, mkdir, exists } = await import("@tauri-apps/plugin-fs"));
+  try {
+    ({ appDataDir, join } = await import("@tauri-apps/api/path"));
+    ({ readTextFile, writeTextFile, mkdir, exists } = await import("@tauri-apps/plugin-fs"));
+  } catch (e) {
+    console.warn('[config] Tauri APIs unavailable, falling back to browser storage:', e);
+    isTauri = false;
+  }
 }
 
 const APP_DIR = "Lokus";

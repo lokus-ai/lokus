@@ -20,11 +20,25 @@ const DEFAULT_THEME_CONTENT = {
 
 // --- File System & JSON Helpers ---
 // Browser-safe helpers now handled by config store; theme files optional
-let isTauri = false; try { isTauri = !!(window && (window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__)); } catch {}
+let isTauri = false; try {
+  const w = typeof window !== 'undefined' ? window : undefined;
+  isTauri = !!(
+    w && (
+      (w.__TAURI_INTERNALS__ && typeof w.__TAURI_INTERNALS__.invoke === 'function') ||
+      w.__TAURI_METADATA__ ||
+      (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.includes('Tauri'))
+    )
+  );
+} catch {}
 let join, exists, readDir, readTextFile, writeTextFile, appDataDir, mkdir;
 if (isTauri) {
-  ({ join, appDataDir } = await import("@tauri-apps/api/path"));
-  ({ exists, readDir, readTextFile, writeTextFile, mkdir } = await import("@tauri-apps/plugin-fs"));
+  try {
+    ({ join, appDataDir } = await import("@tauri-apps/api/path"));
+    ({ exists, readDir, readTextFile, writeTextFile, mkdir } = await import("@tauri-apps/plugin-fs"));
+  } catch (e) {
+    console.warn('[theme] Tauri APIs unavailable, disabling FS features:', e);
+    isTauri = false;
+  }
 }
 async function ensureDir(p) { if (!isTauri) return; if (!(await exists(p))) await mkdir(p, { recursive: true }); }
 async function readJson(p) { if (!isTauri) return null; try { return JSON.parse(await readTextFile(p)); } catch { return null; } }

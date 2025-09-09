@@ -1,86 +1,65 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Placeholder from "@tiptap/extension-placeholder";
+import * as StarterKitExt from "@tiptap/starter-kit";
+import * as PlaceholderExt from "@tiptap/extension-placeholder";
 import SlashCommand from "../lib/SlashCommand.js";
+import TableBubbleMenu from "./TableBubbleMenu.jsx";
+import * as LinkExt from "@tiptap/extension-link";
+import * as TaskListExt from "@tiptap/extension-task-list";
+import * as TaskItemExt from "@tiptap/extension-task-item";
+import * as ImageExt from "@tiptap/extension-image";
+import * as TableExt from "@tiptap/extension-table";
+import * as TableRowExt from "@tiptap/extension-table-row";
+import * as TableHeaderExt from "@tiptap/extension-table-header";
+import * as TableCellExt from "@tiptap/extension-table-cell";
 
 import "../styles/editor.css";
 
 const Editor = ({ content, onContentChange }) => {
-  const isSettingRef = useRef(false);
   const [extensions, setExtensions] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      // Load markdown preferences
-      let prefs = { links: true, taskList: true, tables: true, images: true };
-      try {
-        const { readConfig } = await import("../../core/config/store.js");
-        const cfg = await readConfig();
-        if (cfg.markdown) prefs = { ...prefs, ...cfg.markdown };
-      } catch {}
+    const pick = (ns, named) => ns?.default ?? ns?.[named] ?? null;
+    const StarterKit = pick(StarterKitExt, 'StarterKit');
+    const Placeholder = pick(PlaceholderExt, 'Placeholder');
+    const Link = pick(LinkExt, 'Link');
+    const TaskList = pick(TaskListExt, 'TaskList');
+    const TaskItem = pick(TaskItemExt, 'TaskItem');
+    const Image = pick(ImageExt, 'Image');
+    const Table = pick(TableExt, 'Table');
+    const TableRow = pick(TableRowExt, 'TableRow');
+    const TableHeader = pick(TableHeaderExt, 'TableHeader');
+    const TableCell = pick(TableCellExt, 'TableCell');
 
-      const exts = [StarterKit];
-      // Dynamic import helpers to avoid ESM default pitfalls
-      const safe = async (path) => {
-        try {
-          const m = await import(path);
-          return m.default ?? m;
-        } catch (e) {
-          console.warn("Failed to load extension:", path, e);
-          return null;
-        }
-      };
-
-      if (prefs.links) {
-        const Link = await safe("@tiptap/extension-link");
-        if (Link) exts.push(Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true }));
-      }
-      if (prefs.taskList) {
-        const TaskList = await safe("@tiptap/extension-task-list");
-        const TaskItem = await safe("@tiptap/extension-task-item");
-        if (TaskList && TaskItem) { exts.push(TaskList, TaskItem); }
-      }
-      if (prefs.images) {
-        const Image = await safe("@tiptap/extension-image");
-        if (Image) exts.push(Image);
-      }
-      if (prefs.tables) {
-        const Table = await safe("@tiptap/extension-table");
-        const TableRow = await safe("@tiptap/extension-table-row");
-        const TableHeader = await safe("@tiptap/extension-table-header");
-        const TableCell = await safe("@tiptap/extension-table-cell");
-        if (Table && TableRow && TableHeader && TableCell) {
-          exts.push(Table.configure({ resizable: true }), TableRow, TableHeader, TableCell);
-        }
-      }
-
-      exts.push(Placeholder.configure({ placeholder: "Press '/' for commands..." }));
-      exts.push(SlashCommand);
-
-      if (!cancelled) setExtensions(exts);
+    const exts = [StarterKit];
+    if (Link) exts.push(Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true }));
+    if (TaskList && TaskItem) exts.push(TaskList, TaskItem);
+    if (Image) exts.push(Image);
+    if (Table && TableRow && TableHeader && TableCell) {
+      exts.push(Table.configure({ resizable: true }), TableRow, TableHeader, TableCell);
     }
-    load();
-    return () => { cancelled = true; };
+    exts.push(Placeholder.configure({ placeholder: "Press '/' for commands..." }));
+    exts.push(SlashCommand);
+    setExtensions(exts);
+    setLoading(false);
   }, []);
 
+  if (loading || !extensions) {
+    return <div className="m-5 text-app-muted">Loading editor…</div>;
+  }
+
+  return <Tiptap extensions={extensions} content={content} onContentChange={onContentChange} />;
+};
+
+function Tiptap({ extensions, content, onContentChange }) {
+  const isSettingRef = useRef(false);
   const editor = useEditor({
-    extensions: [
-      ...(extensions || [StarterKit, Placeholder.configure({ placeholder: "Press '/' for commands..." }), SlashCommand]),
-    ],
-    editorProps: {
-      attributes: {
-        class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl m-5 focus:outline-none tiptap-area pb-16 smooth-type",
-      },
-    },
-    content: content,
+    extensions,
+    editorProps: { attributes: { class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl m-5 focus:outline-none tiptap-area pb-16 smooth-type" } },
+    content,
     onUpdate: ({ editor }) => {
-      if (isSettingRef.current) {
-        // Ignore updates triggered by programmatic setContent
-        isSettingRef.current = false;
-        return;
-      }
+      if (isSettingRef.current) { isSettingRef.current = false; return; }
       onContentChange(editor.getHTML());
     },
   }, [extensions]);
@@ -92,7 +71,41 @@ const Editor = ({ content, onContentChange }) => {
     }
   }, [content, editor]);
 
-  return <EditorContent editor={editor} />;
-};
+  const showDebug = useMemo(() => {
+    try { const p = new URLSearchParams(window.location.search); if (p.get('dev') === '1') return true; } catch {}
+    try { return !!import.meta?.env?.DEV; } catch { return false; }
+  }, []);
+
+  async function waitForCommand(cmd, { interval = 100, timeout = 5000 } = {}) {
+    const start = Date.now();
+    for (;;) {
+      if (editor?.commands?.[cmd]) return true;
+      if (Date.now() - start >= timeout) return false;
+      await new Promise(r => setTimeout(r, interval));
+    }
+  }
+  const insertTestTable = async () => {
+    if (editor?.commands?.insertTable) {
+      editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+      return;
+    }
+    // Fallback: insert HTML table content, which works as long as table nodes are in the schema
+    const body = Array.from({ length: 3 }).map(() => `<tr><td> </td><td> </td><td> </td></tr>`).join('');
+    const html = `<table><thead><tr><th>Header 1</th><th>Header 2</th><th>Header 3</th></tr></thead><tbody>${body}</tbody></table>`;
+    editor.chain().focus().insertContent(html).run();
+  };
+
+  return (
+    <>
+      {editor && showDebug && (
+        <div className="m-5 mb-0 flex gap-2">
+          <button type="button" onClick={insertTestTable} className="px-2 py-1 text-sm rounded border bg-app-panel border-app-border hover:bg-app-accent/10">Insert Test Table</button>
+        </div>
+      )}
+      {editor && <TableBubbleMenu editor={editor} />}
+      <EditorContent editor={editor} />
+    </>
+  );
+}
 
 export default Editor;

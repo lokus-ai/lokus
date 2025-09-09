@@ -19,8 +19,9 @@ function App() {
       try {
         // Skip if not running inside Tauri (e.g., vite preview)
         const isTauri = typeof window !== 'undefined' && (
-          // v2
-          (window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__)
+          (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function') ||
+          window.__TAURI_METADATA__ ||
+          (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.includes('Tauri'))
         );
         if (!isTauri) return;
 

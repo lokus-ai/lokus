@@ -30,7 +30,14 @@ export function ThemeProvider({ children }) {
 
   // Listen for theme changes from other windows
   useEffect(() => {
-    let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
+    let isTauri = false; try {
+      const w = window;
+      isTauri = !!(
+        (w.__TAURI_INTERNALS__ && typeof w.__TAURI_INTERNALS__.invoke === 'function') ||
+        w.__TAURI_METADATA__ ||
+        (navigator?.userAgent || '').includes('Tauri')
+      );
+    } catch {}
     if (isTauri) {
       const unlistenPromise = listen("theme:apply", (e) => {
         const p = (e.payload || {});

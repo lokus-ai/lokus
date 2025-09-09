@@ -46,6 +46,53 @@
     padding-bottom: 4rem; /* ~2-3 lines of cushion */
 }
 
+/* Tables */
+.tableWrapper {
+    overflow-x: auto;
+}
+.tableWrapper table,
+.ProseMirror table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
+    margin: 0;
+    overflow: hidden;
+}
+.tableWrapper td,
+.tableWrapper th,
+.ProseMirror td,
+.ProseMirror th {
+    min-width: 1em;
+    border: 1.5px solid rgb(var(--border));
+    padding: 6px 8px;
+    vertical-align: top;
+    box-sizing: border-box;
+    position: relative;
+    background: rgb(var(--bg));
+}
+.tableWrapper .selectedCell::after,
+.ProseMirror .selectedCell::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; top: 0; bottom: 0;
+    background: rgb(var(--accent) / 0.15);
+    pointer-events: none;
+}
+.tableWrapper .column-resize-handle,
+.ProseMirror .column-resize-handle {
+    position: absolute;
+    right: -2px;
+    top: 0;
+    bottom: -2px;
+    width: 4px;
+    background-color: rgb(var(--accent));
+    opacity: 0.25;
+    pointer-events: none;
+}
+.resize-cursor {
+    cursor: col-resize;
+}
+
 /* Stylish Task List checkboxes */
 ul[data-type="taskList"] {
     list-style: none;
@@ -54,15 +101,24 @@ ul[data-type="taskList"] {
 }
 ul[data-type="taskList"] li {
     display: flex;
-    align-items: flex-start;
+    align-items: center; /* keep text aligned with checkbox */
     gap: 0.5rem;
     margin: 0.25rem 0;
 }
 ul[data-type="taskList"] li > label {
-    display: flex;
+    display: inline-flex; /* don't stretch across the row */
     align-items: center;
+    flex: 0 0 auto; /* keep label (checkbox) at its intrinsic size */
     gap: 0.5rem;
     user-select: none;
+}
+/* Ensure the text/content sits on the same row and wraps nicely */
+ul[data-type="taskList"] li > div {
+    flex: 1 1 auto;
+    min-width: 0; /* allow wrapping instead of forcing new line */
+}
+ul[data-type="taskList"] li > div > p {
+    margin: 0; /* remove default paragraph margin that pushes text downward */
 }
 ul[data-type="taskList"] li > label > input[type="checkbox"] {
     appearance: none;

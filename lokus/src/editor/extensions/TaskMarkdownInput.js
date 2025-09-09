@@ -10,6 +10,7 @@ export const TaskMarkdownInput = Extension.create({
         find: /^\s*\[( |x|X)\]\s$/,
         handler: ({ chain, range, match, editor }) => {
           const checked = /[xX]/.test(match[1] || '')
+          if (!editor?.commands?.toggleTaskList) return false
           chain().deleteRange(range).toggleTaskList().run()
           if (checked) editor.commands.updateAttributes('taskItem', { checked: true })
         },
@@ -19,4 +20,3 @@ export const TaskMarkdownInput = Extension.create({
 })
 
 export default TaskMarkdownInput
-

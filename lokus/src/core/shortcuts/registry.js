@@ -2,7 +2,16 @@ import { register, unregisterAll } from "@tauri-apps/plugin-global-shortcut";
 import { emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { readConfig, updateConfig } from "../config/store.js";
-let isTauri = false; try { isTauri = !!(window && (window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__)); } catch {}
+let isTauri = false; try {
+  const w = typeof window !== 'undefined' ? window : undefined;
+  isTauri = !!(
+    w && (
+      (w.__TAURI_INTERNALS__ && typeof w.__TAURI_INTERNALS__.invoke === 'function') ||
+      w.__TAURI_METADATA__ ||
+      (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.includes('Tauri'))
+    )
+  );
+} catch {}
 
 // Action catalog: add here as you grow
 export const ACTIONS = [
