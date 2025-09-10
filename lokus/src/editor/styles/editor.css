@@ -93,6 +93,43 @@
     cursor: col-resize;
 }
 
+/* Images: responsive, nice default */
+.ProseMirror img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.375rem;
+    display: inline-block;
+}
+
+/* Math (works with or without KaTeX) */
+.math-inline {
+    padding: 0 0.15rem;
+    border-radius: 0.25rem;
+    background: rgb(var(--panel));
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+.math-block {
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    background: rgb(var(--panel));
+    margin: 0.5rem 0;
+}
+
+/* Wiki links */
+/* Force wiki links to be visibly blue inside the editor, regardless of prose styles */
+.wiki-link,
+.ProseMirror a.wiki-link {
+    color: rgb(var(--accent, 59 130 246)) !important; /* fallback to blue-500 */
+    text-decoration: underline;
+}
+.wiki-link:hover,
+.ProseMirror a.wiki-link:hover { text-decoration: underline; }
+.wiki-image {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.375rem;
+}
+
 /* Stylish Task List checkboxes */
 ul[data-type="taskList"] {
     list-style: none;

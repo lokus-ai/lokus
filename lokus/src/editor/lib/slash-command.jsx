@@ -11,6 +11,10 @@ import {
   CodeXml,
   ListTodo,
   Table2,
+  Image as ImageIcon,
+  Superscript as SupIcon,
+  Subscript as SubIcon,
+  Sigma,
 } from "lucide-react";
 import tippy from "tippy.js/dist/tippy.esm.js";
 
@@ -178,6 +182,20 @@ const commandItems = [
         },
       },
       {
+        title: "Image",
+        description: "Insert an image by URL.",
+        icon: <ImageIcon size={18} />,
+        command: ({ editor, range }) => {
+          const url = window.prompt('Image URL');
+          if (!url) return;
+          if (editor?.commands?.setImage) {
+            editor.chain().focus().deleteRange(range).setImage({ src: url }).run();
+          } else {
+            editor.chain().focus().deleteRange(range).insertContent(`<img src="${url}" alt="" />`).run();
+          }
+        },
+      },
+      {
         title: "Heading 2",
         description: "Medium section heading.",
         icon: <Heading2 size={18} />,
@@ -220,6 +238,36 @@ const commandItems = [
     ],
   },
   {
+    group: "Formatting",
+    commands: [
+      {
+        title: "Superscript",
+        description: "Raise text (x^2).",
+        icon: <SupIcon size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.toggleSuperscript) {
+            editor.chain().focus().deleteRange(range).toggleSuperscript().run();
+          } else {
+            // Fallback: wrap selection in <sup>
+            editor.chain().focus().deleteRange(range).insertContent('<sup></sup>').run();
+          }
+        },
+      },
+      {
+        title: "Subscript",
+        description: "Lower text (H₂O).",
+        icon: <SubIcon size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.toggleSubscript) {
+            editor.chain().focus().deleteRange(range).toggleSubscript().run();
+          } else {
+            editor.chain().focus().deleteRange(range).insertContent('<sub></sub>').run();
+          }
+        },
+      },
+    ],
+  },
+  {
     group: "Code",
     commands: [
       {
@@ -236,6 +284,39 @@ const commandItems = [
         icon: <CodeXml size={18} />,
         command: ({ editor, range }) => {
           editor.chain().focus().deleteRange(range).toggleCodeBlock().run();
+        },
+      },
+    ],
+  },
+  {
+    group: "Math",
+    commands: [
+      {
+        title: "Inline Math",
+        description: "Insert $…$ (TeX).",
+        icon: <Sigma size={18} />,
+        command: ({ editor, range }) => {
+          const src = window.prompt('Inline math (TeX)', 'x^2')
+          if (src == null) return
+          if (editor?.commands?.setMathInline) {
+            editor.chain().focus().deleteRange(range).setMathInline(src).run()
+          } else {
+            editor.chain().focus().deleteRange(range).insertContent(`$${src}$`).run()
+          }
+        },
+      },
+      {
+        title: "Block Math",
+        description: "Insert $$…$$ (TeX).",
+        icon: <Sigma size={18} />,
+        command: ({ editor, range }) => {
+          const src = window.prompt('Block math (TeX)', 'E=mc^2')
+          if (src == null) return
+          if (editor?.commands?.setMathBlock) {
+            editor.chain().focus().deleteRange(range).setMathBlock(src).run()
+          } else {
+            editor.chain().focus().deleteRange(range).insertContent(`$$${src}$$`).run()
+          }
         },
       },
     ],

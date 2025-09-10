@@ -394,6 +394,7 @@ export default function Workspace({ initialPath = "" }) {
   // Fetch file tree
   useEffect(() => {
     if (path) {
+      try { window.__LOKUS_WORKSPACE_PATH__ = path; } catch {}
       invoke("read_workspace_files", { workspacePath: path })
         .then(files => {
           const filterIgnored = (entries) => {
@@ -407,7 +408,18 @@ export default function Workspace({ initialPath = "" }) {
                 return entry;
               });
           };
-          setFileTree(filterIgnored(files));
+          const tree = filterIgnored(files);
+          setFileTree(tree);
+          // Build flat index for wiki suggestions
+          const flat = [];
+          const walk = (arr) => {
+            for (const e of arr) {
+              if (e.is_directory) { if (e.children) walk(e.children); }
+              else flat.push({ title: e.name, path: e.path });
+            }
+          };
+          walk(tree);
+          try { window.__LOKUS_FILE_INDEX__ = flat; } catch {}
         })
         .catch(console.error);
     }
@@ -416,6 +428,7 @@ export default function Workspace({ initialPath = "" }) {
   // Fetch content for active file
   useEffect(() => {
     if (activeFile) {
+      try { window.__LOKUS_ACTIVE_FILE__ = activeFile; } catch {}
       const activeTab = openTabs.find(tab => tab.path === activeFile);
       if (activeTab) {
         invoke("read_file_content", { path: activeFile })
@@ -439,6 +452,31 @@ export default function Workspace({ initialPath = "" }) {
       invoke("save_last_workspace", { path: newPath });
     });
     return () => { sub.then((un) => un()); };
+  }, []);
+
+  // Open file events from editor (wiki link clicks)
+  useEffect(() => {
+    const openPath = (p) => {
+      if (!p) return;
+      setOpenTabs(prevTabs => {
+        const name = p.split('/').pop();
+        const newTabs = prevTabs.filter(t => t.path !== p);
+        newTabs.unshift({ path: p, name });
+        if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
+        return newTabs;
+      });
+      setActiveFile(p);
+    };
+
+    let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
+    if (isTauri) {
+      const un = listen('lokus:open-file', (e) => openPath(String(e.payload || '')));
+      return () => { un.then(u => u()); };
+    } else {
+      const onDom = (e) => openPath(String(e.detail || ''));
+      window.addEventListener('lokus:open-file', onDom);
+      return () => window.removeEventListener('lokus:open-file', onDom);
+    }
   }, []);
 
   const handleRefreshFiles = () => setRefreshId(id => id + 1);
