@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discussions
+    url: https://github.com/YOUR_USERNAME/lokus/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: 📚 Documentation
+    url: https://github.com/YOUR_USERNAME/lokus/wiki
+    about: Check our documentation and guides
+  - name: 💡 Ideas & Feedback
+    url: https://github.com/YOUR_USERNAME/lokus/discussions/categories/ideas
+    about: Share ideas and provide feedback on existing features

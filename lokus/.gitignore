@@ -1,14 +1,15 @@
 # Dependencies
 node_modules/
 */node_modules/
-../node_modules/
 
-# Package files
-package-lock.json
+# Package files (don't ignore our own package files)
 yarn.lock
 pnpm-lock.yaml
-../package-lock.json
-../package.json
+
+# Environment variables
+.env
+.env.*
+!.env.example
 
 # Build outputs
 dist/
