@@ -481,6 +481,47 @@ export default function Workspace({ initialPath = "" }) {
     }
   }, []);
 
+  // Tab navigation shortcuts (Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W)
+  useEffect(() => {
+    const handleNextTab = () => {
+      if (openTabs.length <= 1) return;
+      const currentIndex = openTabs.findIndex(tab => tab.path === activeFile);
+      const nextIndex = (currentIndex + 1) % openTabs.length;
+      setActiveFile(openTabs[nextIndex].path);
+    };
+
+    const handlePrevTab = () => {
+      if (openTabs.length <= 1) return;
+      const currentIndex = openTabs.findIndex(tab => tab.path === activeFile);
+      const prevIndex = currentIndex === 0 ? openTabs.length - 1 : currentIndex - 1;
+      setActiveFile(openTabs[prevIndex].path);
+    };
+
+
+    let isTauri = false; 
+    try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
+    
+    if (isTauri) {
+      const nextTabSub = listen('lokus:next-tab', handleNextTab);
+      const prevTabSub = listen('lokus:prev-tab', handlePrevTab);
+      return () => {
+        nextTabSub.then(u => u());
+        prevTabSub.then(u => u());
+      };
+    } else {
+      const onNextTab = () => handleNextTab();
+      const onPrevTab = () => handlePrevTab();
+      
+      window.addEventListener('lokus:next-tab', onNextTab);
+      window.addEventListener('lokus:prev-tab', onPrevTab);
+      
+      return () => {
+        window.removeEventListener('lokus:next-tab', onNextTab);
+        window.removeEventListener('lokus:prev-tab', onPrevTab);
+      };
+    }
+  }, [openTabs, activeFile]);
+
   const handleRefreshFiles = () => setRefreshId(id => id + 1);
 
   const toggleFolder = (folderPath) => {
@@ -626,6 +667,43 @@ export default function Workspace({ initialPath = "" }) {
     }
     setIsCreatingFolder(false);
   };
+
+  const handleTabClose = useCallback(async (tabPath) => {
+    const hasUnsavedChanges = unsavedChanges.has(tabPath);
+    
+    if (hasUnsavedChanges) {
+      const shouldClose = await confirm("You have unsaved changes. Close anyway?", {
+        title: "Unsaved Changes",
+        kind: "warning",
+      });
+      if (!shouldClose) return;
+    }
+
+    setOpenTabs(prevTabs => {
+      const newTabs = prevTabs.filter(tab => tab.path !== tabPath);
+      
+      // If we're closing the active tab, switch to another tab
+      if (tabPath === activeFile) {
+        const currentIndex = prevTabs.findIndex(tab => tab.path === tabPath);
+        if (newTabs.length > 0) {
+          // Switch to the next tab, or previous if this was the last tab
+          const nextIndex = currentIndex < newTabs.length ? currentIndex : newTabs.length - 1;
+          setActiveFile(newTabs[nextIndex].path);
+        } else {
+          setActiveFile(null);
+        }
+      }
+      
+      return newTabs;
+    });
+
+    // Remove from unsaved changes
+    setUnsavedChanges(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(tabPath);
+      return newSet;
+    });
+  }, [unsavedChanges, activeFile]);
 
   const handleTabDragEnd = (event) => {
     const { active, over } = event;
