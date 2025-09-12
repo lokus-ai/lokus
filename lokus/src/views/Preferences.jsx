@@ -3,6 +3,7 @@ import { setGlobalActiveTheme, listAvailableThemes, readGlobalVisuals } from "..
 import { useTheme } from "../hooks/theme.jsx";
 import AccentPicker from "../components/AccentPicker.jsx";
 import { listActions, getActiveShortcuts, setShortcut, resetShortcuts } from "../core/shortcuts/registry.js";
+import { readConfig, updateConfig } from "../core/config/store.js";
 import { formatAccelerator } from "../core/shortcuts/registry.js";
 import { Search, Pencil, RotateCcw } from "lucide-react";
 
@@ -16,6 +17,8 @@ export default function Preferences() {
   const [editing, setEditing] = useState(null);
   const [query, setQuery] = useState("");
   const [md, setMd] = useState({ links: true, taskList: true, tables: true, images: true });
+  const [headingAltMarker, setHeadingAltMarker] = useState('^');
+  const [headingAltEnabled, setHeadingAltEnabled] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -28,6 +31,13 @@ export default function Preferences() {
         const { readConfig } = await import("../core/config/store.js");
         const cfg = await readConfig();
         if (cfg.markdown) setMd({ ...md, ...cfg.markdown });
+      } catch {}
+      // load markdown shortcut prefs
+      try {
+        const cfg = await readConfig();
+        const hs = cfg.markdownShortcuts?.headingAlt || {};
+        if (hs.marker) setHeadingAltMarker(hs.marker);
+        if (typeof hs.enabled === 'boolean') setHeadingAltEnabled(hs.enabled);
       } catch {}
     }
     loadData().catch(console.error);
@@ -192,6 +202,38 @@ export default function Preferences() {
                   </div>
                   <input type="checkbox" checked={md.images} onChange={e => setMdPref('images', e.target.checked)} />
                 </label>
+              </div>
+              <div className="border-t border-app-border pt-4">
+                <div className="text-sm text-app-muted mb-2">Alternate Shortcuts</div>
+                <div className="flex items-center gap-3 mb-2">
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={headingAltEnabled} onChange={e => setHeadingAltEnabled(e.target.checked)} />
+                    Enable alternate heading marker
+                  </label>
+                  <input className="px-2 py-1 w-20 rounded border border-app-border bg-app-panel" maxLength={1} value={headingAltMarker} onChange={e => setHeadingAltMarker(e.target.value.slice(0,1))} placeholder="^" />
+                  <button
+                    className="px-2 py-1 rounded border border-app-border bg-app-panel hover:bg-app-bg"
+                    onClick={async () => {
+                      const invalid = ['$', '[', '!']
+                      const marker = (headingAltMarker || '').trim()
+                      if (!marker || invalid.includes(marker)) {
+                        alert('Choose a single character that is not $, [ or !')
+                        return
+                      }
+                      const cfg = await readConfig();
+                      const next = {
+                        ...(cfg || {}),
+                        markdownShortcuts: {
+                          ...(cfg?.markdownShortcuts || {}),
+                          headingAlt: { enabled: headingAltEnabled, marker }
+                        }
+                      }
+                      await updateConfig(next)
+                      alert('Saved. Reopen notes to apply.')
+                    }}
+                  >Save</button>
+                </div>
+                <div className="text-xs text-app-muted">Example: ^^^ + space → Heading 3. We block $, [ and ! to avoid math/wiki conflicts.</div>
               </div>
               <div className="text-xs text-app-muted">Note: some changes may require reopening the editor to take effect.</div>
             </div>

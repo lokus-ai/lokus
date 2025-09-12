@@ -4,7 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, Share2 } from "lucide-react";
+// import GraphView from "./GraphView.jsx"; // Temporarily disabled
 import Editor from "../editor";
 import {
   ContextMenu,
@@ -332,6 +333,7 @@ export default function Workspace({ initialPath = "" }) {
   const [editorContent, setEditorContent] = useState("");
   const [editorTitle, setEditorTitle] = useState("");
   const [savedContent, setSavedContent] = useState("");
+  const [showGraph, setShowGraph] = useState(false);
   
   // --- Refs for stable callbacks ---
   const stateRef = useRef({});
@@ -679,6 +681,13 @@ export default function Workspace({ initialPath = "" }) {
           >
             <Menu className="w-5 h-5" />
           </button>
+          <button
+            disabled
+            title="Graph view coming soon"
+            className="p-2 rounded-md text-app-muted/50 cursor-not-allowed opacity-50"
+          >
+            <Share2 className="w-5 h-5" />
+          </button>
         </aside>
         <div className="bg-app-border/20 w-px" />
         {showLeft && (
@@ -727,6 +736,9 @@ export default function Workspace({ initialPath = "" }) {
         )}
         {showLeft && <div onMouseDown={startLeftDrag} className="cursor-col-resize bg-app-border/20 hover:bg-app-accent/50 transition-colors duration-300 w-px" />}
         <main className="min-w-0 min-h-0 flex flex-col bg-app-bg">
+          <div className="px-4 py-2 border-b border-app-border flex items-center justify-end">
+            <button disabled title="Graph view coming soon" className="px-2 py-1 text-xs rounded border border-app-border bg-app-panel/50 text-app-muted/50 cursor-not-allowed opacity-50">Graph</button>
+          </div>
           <TabBar 
             tabs={openTabs}
             activeTab={activeFile}
@@ -738,7 +750,15 @@ export default function Workspace({ initialPath = "" }) {
           />
           <div className="flex-1 p-8 md:p-12 overflow-y-auto">
             <div className="max-w-4xl mx-auto">
-              {activeFile ? (
+              {activeFile === '__graph__' ? (
+                <div className="flex items-center justify-center h-64 text-center">
+                  <div>
+                    <div className="text-4xl mb-4 text-app-muted/50">📊</div>
+                    <h2 className="text-xl font-medium text-app-text mb-2">Graph View Coming Soon</h2>
+                    <p className="text-app-muted">The graph view is temporarily disabled while we improve it.</p>
+                  </div>
+                </div>
+              ) : activeFile ? (
                 <ContextMenu>
                   <ContextMenuTrigger asChild>
                     <div>

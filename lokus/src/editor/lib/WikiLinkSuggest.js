@@ -71,22 +71,24 @@ const WikiLinkSuggest = Extension.create({
         },
         command: ({ editor, range, props }) => {
           // Range covers second '[' and query; include previous '[' as well
-          const from = Math.max(range.from - 1, 1)
-          const to = range.to
+          const from = Math.max((range?.from ?? editor.state.selection.from) - 1, 1)
+          const to = range?.to ?? editor.state.selection.to
           // Store the full path for resolution, but show the short title.
           const raw = `${props.path || props.title}|${props.title}`
           dbg('command select', { raw, from, to })
-          editor.chain().focus().deleteRange({ from, to }).run()
+          try { editor.chain().focus().deleteRange({ from, to }).run() } catch (e) { dbg('deleteRange error', e) }
           // Insert our wiki node directly
           editor.commands.setWikiLink(raw, { embed: false })
           // Remove trailing ]] if present right after the cursor
           editor.commands.command(({ state, tr, dispatch }) => {
-            const { from: pos } = state.selection
-            const next = state.doc.textBetween(pos, pos + 2)
-            if (next === ']]') {
-              tr.delete(pos, pos + 2)
-              dispatch(tr)
-            }
+            try {
+              const { from: pos } = state.selection
+              const next = state.doc.textBetween(Math.max(0, pos), Math.min(state.doc.content.size, pos + 2))
+              if (next === ']]') {
+                tr.delete(pos, pos + 2)
+                dispatch(tr)
+              }
+            } catch (e) { dbg('cleanup error', e) }
             return true
           })
         },
@@ -104,8 +106,8 @@ const WikiLinkSuggest = Extension.create({
               dbg('onStart', { range: props.range, query: props.query })
               // Auto-pair closing ']]' and keep cursor inside on start
               try {
-                const pos = props.range.to
-                const next = props.editor.state.doc.textBetween(pos, pos + 2)
+                const pos = Math.max(0, Math.min(props.editor.state.doc.content.size, (props.range?.to ?? props.editor.state.selection.to)))
+                const next = props.editor.state.doc.textBetween(pos, Math.min(props.editor.state.doc.content.size, pos + 2))
                 if (next !== ']]') {
                   props.editor.chain().focus().insertContent(']]').setTextSelection(pos).run()
                 } else {

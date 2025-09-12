@@ -17,6 +17,7 @@ import * as TableCellExt from "@tiptap/extension-table-cell";
 import MathExt from "../extensions/Math.js";
 import WikiLink from "../extensions/WikiLink.js";
 import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
+import HeadingAltInput from "../extensions/HeadingAltInput.js";
 
 import "../styles/editor.css";
 
@@ -53,13 +54,27 @@ const Editor = ({ content, onContentChange }) => {
     else if (MathExt) exts.push(MathExt)
 
     // Obsidian‑style wikilinks and image embeds
-    exts.push(WikiLink)
-    exts.push(WikiLinkSuggest)
+    exts.push(WikiLink);
+    exts.push(WikiLinkSuggest);
 
-    exts.push(Placeholder.configure({ placeholder: "Press '/' for commands..." }));
-    exts.push(SlashCommand);
-    setExtensions(exts);
-    setLoading(false);
+    // Load markdown shortcut prefs to optionally add an alternate heading marker
+    (async () => {
+      try {
+        const { readConfig } = await import('../../core/config/store.js')
+        const cfg = (await readConfig()) || {}
+        const hs = cfg.markdownShortcuts?.headingAlt
+        const invalid = ['$', '[', '!'] // avoid conflicts with math / wikilinks
+        if (hs?.enabled && hs.marker && !invalid.includes(hs.marker)) {
+          exts.push(HeadingAltInput({ marker: hs.marker }))
+        }
+      } catch (e) {
+        console.warn('[editor] failed to load markdownShortcuts:', e)
+      }
+      exts.push(Placeholder.configure({ placeholder: "Press '/' for commands..." }));
+      exts.push(SlashCommand);
+      setExtensions(exts);
+      setLoading(false);
+    })()
   }, []);
 
   if (loading || !extensions) {
