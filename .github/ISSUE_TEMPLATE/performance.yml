@@ -1,0 +1,97 @@
+name: ⚡ Performance Issue
+description: Report performance problems or suggest performance improvements
+title: "[PERF]: "
+labels: ["performance", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping us improve Lokus performance! ⚡
+
+  - type: dropdown
+    id: performance-type
+    attributes:
+      label: Performance Issue Type
+      description: What type of performance issue are you experiencing?
+      options:
+        - Slow startup time
+        - Slow file loading
+        - Laggy typing/editing
+        - Memory usage/leaks
+        - CPU usage
+        - Large file handling
+        - Search performance
+        - Rendering performance
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the performance issue in detail
+      placeholder: What exactly is slow? When does it happen? How long does it take?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this performance issue?
+      placeholder: |
+        1. Open Lokus
+        2. Load a large file (>1MB)
+        3. Start typing...
+        4. Notice lag after 30 seconds
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Performance
+      description: What performance did you expect?
+      placeholder: Should load instantly, typing should be smooth, etc.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Performance
+      description: What actually happened? Include timing if possible.
+      placeholder: Takes 5 seconds to load, typing has 500ms delay, etc.
+    validations:
+      required: true
+
+  - type: textarea
+    id: system-info
+    attributes:
+      label: System Information
+      description: Please provide your system details
+      placeholder: |
+        - OS: [e.g. macOS 13.0, Windows 11, Ubuntu 22.04]
+        - RAM: [e.g. 16GB]
+        - CPU: [e.g. Intel i7, M1 Pro]
+        - Lokus version: [e.g. 1.0.0]
+        - File size being processed: [e.g. 50MB markdown file]
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other context about the performance issue
+      placeholder: Screenshots, profiling data, or anything else that might help
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our Code of Conduct
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

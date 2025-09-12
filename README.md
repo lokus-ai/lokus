@@ -2,8 +2,8 @@
 
 > A modern, highly customizable markdown editor inspired by Obsidian, built with Tauri and React.
 
-[![Tests](https://github.com/YOUR_USERNAME/lokus/workflows/Tests/badge.svg)](https://github.com/YOUR_USERNAME/lokus/actions)
-[![Build](https://github.com/YOUR_USERNAME/lokus/workflows/Build/badge.svg)](https://github.com/YOUR_USERNAME/lokus/actions)
+[![Tests](https://github.com/CodeWithInferno/Lokus/workflows/Tests/badge.svg)](https://github.com/CodeWithInferno/Lokus/actions)
+[![Build](https://github.com/CodeWithInferno/Lokus/workflows/Build/badge.svg)](https://github.com/CodeWithInferno/Lokus/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 
@@ -34,13 +34,12 @@
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/YOUR_USERNAME/lokus.git
-   cd lokus
+   git clone https://github.com/CodeWithInferno/Lokus.git
+   cd Lokus
    ```
 
 2. **Install dependencies**
    ```bash
-   cd lokus
    npm install
    ```
 
@@ -170,9 +169,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/YOUR_USERNAME/lokus/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/YOUR_USERNAME/lokus/discussions)
-- **Documentation**: [Wiki](https://github.com/YOUR_USERNAME/lokus/wiki)
+- **Issues**: [GitHub Issues](https://github.com/CodeWithInferno/Lokus/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/CodeWithInferno/Lokus/discussions)
+- **Documentation**: [Wiki](https://github.com/CodeWithInferno/Lokus/wiki)
 
 ---
 
