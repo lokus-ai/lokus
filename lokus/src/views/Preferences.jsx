@@ -6,6 +6,7 @@ import { listActions, getActiveShortcuts, setShortcut, resetShortcuts } from "..
 import { readConfig, updateConfig } from "../core/config/store.js";
 import { formatAccelerator } from "../core/shortcuts/registry.js";
 import { Search, Pencil, RotateCcw } from "lucide-react";
+import liveEditorSettings from "../core/editor/live-settings.js";
 
 export default function Preferences() {
   const [themes, setThemes] = useState([]);
@@ -19,6 +20,46 @@ export default function Preferences() {
   const [md, setMd] = useState({ links: true, taskList: true, tables: true, images: true });
   const [headingAltMarker, setHeadingAltMarker] = useState('^');
   const [headingAltEnabled, setHeadingAltEnabled] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(''); // For showing save feedback
+  const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
+  
+  // Subscribe to live settings changes
+  useEffect(() => {
+    const unsubscribe = liveEditorSettings.onSettingsChange(() => {
+      setLiveSettings(liveEditorSettings.getAllSettings());
+    });
+    return unsubscribe;
+  }, []);
+  
+  // Enhanced Editor Preferences
+  const [editorSettings, setEditorSettings] = useState({
+    font: {
+      family: 'ui-sans-serif',
+      size: 16,
+      lineHeight: 1.7,
+      letterSpacing: 0.003
+    },
+    typography: {
+      h1Size: 2.0,
+      h2Size: 1.6,
+      h3Size: 1.3,
+      headingColor: 'inherit',
+      codeBlockTheme: 'default',
+      linkColor: 'rgb(var(--accent))'
+    },
+    behavior: {
+      autoPairBrackets: true,
+      smartQuotes: false,
+      autoIndent: true,
+      wordWrap: true,
+      showLineNumbers: false
+    },
+    appearance: {
+      showMarkdown: false,
+      focusMode: false,
+      typewriterMode: false
+    }
+  });
 
   useEffect(() => {
     async function loadData() {
@@ -31,6 +72,16 @@ export default function Preferences() {
         const { readConfig } = await import("../core/config/store.js");
         const cfg = await readConfig();
         if (cfg.markdown) setMd({ ...md, ...cfg.markdown });
+        
+        // Load editor settings
+        if (cfg.editor) {
+          setEditorSettings(prev => ({
+            font: { ...prev.font, ...cfg.editor.font },
+            typography: { ...prev.typography, ...cfg.editor.typography },
+            behavior: { ...prev.behavior, ...cfg.editor.behavior },
+            appearance: { ...prev.appearance, ...cfg.editor.appearance }
+          }));
+        }
       } catch {}
       // load markdown shortcut prefs
       try {
@@ -93,6 +144,60 @@ export default function Preferences() {
     setGlobalActiveTheme(themeId).catch(console.error);
   };
 
+  // Editor Settings Helpers
+  const updateEditorSetting = (category, key, value) => {
+    setEditorSettings(prev => ({
+      ...prev,
+      [category]: { ...prev[category], [key]: value }
+    }));
+  };
+
+  const saveEditorSettings = async () => {
+    try {
+      setSaveStatus('saving');
+      const { updateConfig } = await import("../core/config/store.js");
+      await updateConfig({ editor: editorSettings });
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus(''), 3000);
+    } catch (e) {
+      console.error('Failed to save editor settings:', e);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus(''), 3000);
+    }
+  };
+
+  const resetEditorSettings = () => {
+    const defaultSettings = {
+      font: {
+        family: 'ui-sans-serif',
+        size: 16,
+        lineHeight: 1.7,
+        letterSpacing: 0.003
+      },
+      typography: {
+        h1Size: 2.0,
+        h2Size: 1.6,
+        h3Size: 1.3,
+        headingColor: 'inherit',
+        codeBlockTheme: 'default',
+        linkColor: 'rgb(var(--accent))'
+      },
+      behavior: {
+        autoPairBrackets: true,
+        smartQuotes: false,
+        autoIndent: true,
+        wordWrap: true,
+        showLineNumbers: false
+      },
+      appearance: {
+        showMarkdown: false,
+        focusMode: false,
+        typewriterMode: false
+      }
+    };
+    setEditorSettings(defaultSettings);
+  };
+
   return (
     <div className="h-screen bg-app-bg text-app-text flex flex-col">
       <header className="h-12 px-4 flex items-center border-b border-app-border bg-app-panel">
@@ -104,7 +209,8 @@ export default function Preferences() {
         <aside className="bg-app-panel/50 p-3">
           {[
             "General",
-            "Appearance",
+            "Appearance", 
+            "Editor",
             "Markdown",
             "Shortcuts",
           ].map((name) => (
@@ -166,6 +272,139 @@ export default function Preferences() {
             </div>
           )}
 
+          {section === "Editor" && (
+            <div className="space-y-6 max-w-xl">
+              <div className="text-sm text-app-muted mb-4">
+                ✨ <strong>Real-time preview!</strong> Changes apply instantly to your editor.
+              </div>
+              
+              {/* Font Settings - Real-time */}
+              <section>
+                <h2 className="text-sm uppercase tracking-wide text-app-muted mb-4">Font</h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Font Family</label>
+                    <select
+                      className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none"
+                      value={liveEditorSettings.getSetting('fontFamily')}
+                      onChange={(e) => liveEditorSettings.updateSetting('fontFamily', e.target.value)}
+                    >
+                      <option value="ui-sans-serif">System UI</option>
+                      <option value="ui-serif">System Serif</option>
+                      <option value="ui-monospace">System Monospace</option>
+                      <option value="Inter">Inter</option>
+                      <option value="Roboto">Roboto</option>
+                      <option value="'Helvetica Neue', Helvetica">Helvetica</option>
+                      <option value="Georgia, serif">Georgia</option>
+                      <option value="'Times New Roman', serif">Times New Roman</option>
+                      <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Font Size</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range"
+                        min="12"
+                        max="24"
+                        step="1"
+                        className="flex-1"
+                        value={liveEditorSettings.getSetting('fontSize')}
+                        onChange={(e) => liveEditorSettings.updateSetting('fontSize', parseInt(e.target.value))}
+                      />
+                      <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('fontSize')}px</span>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Line Height</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range"
+                        min="1.2"
+                        max="2.5"
+                        step="0.1"
+                        className="flex-1"
+                        value={liveEditorSettings.getSetting('lineHeight')}
+                        onChange={(e) => liveEditorSettings.updateSetting('lineHeight', parseFloat(e.target.value))}
+                      />
+                      <span className="text-sm text-app-muted w-8">{liveEditorSettings.getSetting('lineHeight')}</span>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Letter Spacing</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range"
+                        min="-0.05"
+                        max="0.1"
+                        step="0.005"
+                        className="flex-1"
+                        value={liveEditorSettings.getSetting('letterSpacing')}
+                        onChange={(e) => liveEditorSettings.updateSetting('letterSpacing', parseFloat(e.target.value))}
+                      />
+                      <span className="text-sm text-app-muted w-12">{liveEditorSettings.getSetting('letterSpacing')}em</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Typography Settings - Real-time */}
+              <section>
+                <h2 className="text-sm uppercase tracking-wide text-app-muted mb-4">Headings</h2>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">H1 Size</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range"
+                        min="1.5"
+                        max="3.0"
+                        step="0.1"
+                        className="flex-1"
+                        value={liveEditorSettings.getSetting('h1Size')}
+                        onChange={(e) => liveEditorSettings.updateSetting('h1Size', parseFloat(e.target.value))}
+                      />
+                      <span className="text-sm text-app-muted w-8">{liveEditorSettings.getSetting('h1Size')}em</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">H2 Size</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range"
+                        min="1.2"
+                        max="2.5"
+                        step="0.1"
+                        className="flex-1"
+                        value={liveEditorSettings.getSetting('h2Size')}
+                        onChange={(e) => liveEditorSettings.updateSetting('h2Size', parseFloat(e.target.value))}
+                      />
+                      <span className="text-sm text-app-muted w-8">{liveEditorSettings.getSetting('h2Size')}em</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">H3 Size</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range"
+                        min="1.0"
+                        max="2.0"
+                        step="0.1"
+                        className="flex-1"
+                        value={liveEditorSettings.getSetting('h3Size')}
+                        onChange={(e) => liveEditorSettings.updateSetting('h3Size', parseFloat(e.target.value))}
+                      />
+                      <span className="text-sm text-app-muted w-8">{liveEditorSettings.getSetting('h3Size')}em</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+
           {section === "General" && (
             <div className="text-app-muted">General settings coming soon.</div>
           )}
@@ -212,28 +451,58 @@ export default function Preferences() {
                   </label>
                   <input className="px-2 py-1 w-20 rounded border border-app-border bg-app-panel" maxLength={1} value={headingAltMarker} onChange={e => setHeadingAltMarker(e.target.value.slice(0,1))} placeholder="^" />
                   <button
-                    className="px-2 py-1 rounded border border-app-border bg-app-panel hover:bg-app-bg"
+                    className={`px-2 py-1 rounded border border-app-border transition-colors ${
+                      saveStatus.includes('markdown') 
+                        ? saveStatus === 'markdown-success' 
+                          ? 'bg-green-600 text-white border-green-600'
+                          : saveStatus === 'markdown-error'
+                          ? 'bg-red-600 text-white border-red-600'
+                          : 'bg-app-muted text-app-bg cursor-wait'
+                        : 'bg-app-panel hover:bg-app-bg'
+                    }`}
                     onClick={async () => {
                       const invalid = ['$', '[', '!']
                       const marker = (headingAltMarker || '').trim()
                       if (!marker || invalid.includes(marker)) {
-                        alert('Choose a single character that is not $, [ or !')
+                        setSaveStatus('markdown-invalid')
+                        setTimeout(() => setSaveStatus(''), 3000)
                         return
                       }
-                      const cfg = await readConfig();
-                      const next = {
-                        ...(cfg || {}),
-                        markdownShortcuts: {
-                          ...(cfg?.markdownShortcuts || {}),
-                          headingAlt: { enabled: headingAltEnabled, marker }
+                      try {
+                        setSaveStatus('markdown-saving')
+                        const cfg = await readConfig();
+                        const next = {
+                          ...(cfg || {}),
+                          markdownShortcuts: {
+                            ...(cfg?.markdownShortcuts || {}),
+                            headingAlt: { enabled: headingAltEnabled, marker }
+                          }
                         }
+                        await updateConfig(next)
+                        setSaveStatus('markdown-success')
+                        setTimeout(() => setSaveStatus(''), 3000)
+                      } catch (e) {
+                        console.error('Failed to save markdown settings:', e)
+                        setSaveStatus('markdown-error')
+                        setTimeout(() => setSaveStatus(''), 3000)
                       }
-                      await updateConfig(next)
-                      alert('Saved. Reopen notes to apply.')
                     }}
-                  >Save</button>
+                    disabled={saveStatus.includes('markdown-saving')}
+                  >
+                    {saveStatus === 'markdown-saving' ? 'Saving...' : saveStatus === 'markdown-success' ? 'Saved!' : saveStatus === 'markdown-error' ? 'Failed' : 'Save'}
+                  </button>
                 </div>
-                <div className="text-xs text-app-muted">Example: ^^^ + space → Heading 3. We block $, [ and ! to avoid math/wiki conflicts.</div>
+                <div className="text-xs text-app-muted">
+                  {saveStatus === 'markdown-invalid' ? (
+                    <span className="text-red-600">Choose a single character that is not $, [ or !</span>
+                  ) : saveStatus === 'markdown-success' ? (
+                    <span className="text-green-600">Saved! Reopen notes to apply changes.</span>
+                  ) : saveStatus === 'markdown-error' ? (
+                    <span className="text-red-600">Failed to save. Please try again.</span>
+                  ) : (
+                    'Example: ^^^ + space → Heading 3. We block $, [ and ! to avoid math/wiki conflicts.'
+                  )}
+                </div>
               </div>
               <div className="text-xs text-app-muted">Note: some changes may require reopening the editor to take effect.</div>
             </div>

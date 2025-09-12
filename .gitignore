@@ -1,21 +1,19 @@
 # Dependencies
 node_modules/
 */node_modules/
-../node_modules/
+lokus/node_modules/
 
 # Package files
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
-../package-lock.json
-../package.json
 
 # Build outputs
 dist/
 dist-ssr/
 build/
 target/
-src-tauri/target/
+lokus/src-tauri/target/
 
 # Logs
 logs/
@@ -44,8 +42,8 @@ coverage/
 .env.production.local
 
 # Tauri
-src-tauri/target/
-src-tauri/Cargo.lock
+lokus/src-tauri/target/
+lokus/src-tauri/Cargo.lock
 
 # Editor directories and files
 .vscode/*
@@ -68,9 +66,13 @@ Thumbs.db
 test-results/
 playwright-report/
 coverage/
+lokus/test-results/
+lokus/playwright-report/
+lokus/coverage/
 
 # Temporary files
 *.tmp
 *.temp
 /tmp/
 temp/
+test.md

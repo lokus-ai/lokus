@@ -55,10 +55,25 @@ const WikiLinkSuggest = Extension.create({
         char: '[',
         allowSpaces: true,
         startOfLine: false,
-        // Be permissive so dropdown always opens on '[' then we adjust UI in onStart
+        // Only allow after double bracket [[ and not in any kind of list context
         allow: ({ state, range }) => {
-          dbg('allow: true', { from: range.from })
-          return true
+          const textBefore = state.doc.textBetween(Math.max(0, range.from - 3), range.from)
+          const isAfterDoubleBracket = textBefore.endsWith('[')
+          
+          // Check broader context to detect lists and task items
+          const lineContext = state.doc.textBetween(Math.max(0, range.from - 50), range.from)
+          
+          // Match various list patterns
+          const isInList = (
+            /[-*+]\s*\[/.test(lineContext) ||  // Task list pattern
+            /^\s*[-*+]\s/.test(lineContext) ||  // Bullet list start
+            /^\s*\d+\.\s/.test(lineContext) ||  // Numbered list start  
+            /\n\s*[-*+]\s*[^\n]*\[/.test(lineContext) // Bullet with bracket anywhere on line
+          )
+          
+          const shouldAllow = isAfterDoubleBracket && !isInList
+          dbg('allow check', { textBefore, lineContext, isAfterDoubleBracket, isInList, shouldAllow, from: range.from })
+          return shouldAllow
         },
         items: ({ query }) => {
           const idx = getIndex()
@@ -104,14 +119,20 @@ const WikiLinkSuggest = Extension.create({
           return {
             onStart: (props) => {
               dbg('onStart', { range: props.range, query: props.query })
-              // Auto-pair closing ']]' and keep cursor inside on start
+              // Only auto-pair if this is actually a wiki link (after [[)
               try {
-                const pos = Math.max(0, Math.min(props.editor.state.doc.content.size, (props.range?.to ?? props.editor.state.selection.to)))
-                const next = props.editor.state.doc.textBetween(pos, Math.min(props.editor.state.doc.content.size, pos + 2))
-                if (next !== ']]') {
-                  props.editor.chain().focus().insertContent(']]').setTextSelection(pos).run()
-                } else {
-                  props.editor.chain().focus().setTextSelection(pos).run()
+                const range = props.range
+                const textBefore = props.editor.state.doc.textBetween(Math.max(0, range.from - 2), range.from)
+                const isWikiLink = textBefore.endsWith('[')
+                
+                if (isWikiLink) {
+                  const pos = Math.max(0, Math.min(props.editor.state.doc.content.size, (props.range?.to ?? props.editor.state.selection.to)))
+                  const next = props.editor.state.doc.textBetween(pos, Math.min(props.editor.state.doc.content.size, pos + 2))
+                  if (next !== ']]') {
+                    props.editor.chain().focus().insertContent(']]').setTextSelection(pos).run()
+                  } else {
+                    props.editor.chain().focus().setTextSelection(pos).run()
+                  }
                 }
               } catch {}
               component = new ReactRenderer(WikiLinkList, { props, editor: props.editor })

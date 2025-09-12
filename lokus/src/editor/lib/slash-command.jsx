@@ -15,6 +15,9 @@ import {
   Superscript as SupIcon,
   Subscript as SubIcon,
   Sigma,
+  Strikethrough,
+  Highlighter,
+  Minus,
 } from "lucide-react";
 import tippy from "tippy.js/dist/tippy.esm.js";
 
@@ -265,6 +268,42 @@ const commandItems = [
           }
         },
       },
+      {
+        title: "Strikethrough",
+        description: "Cross out text (~~text~~).",
+        icon: <Strikethrough size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.toggleStrike) {
+            editor.chain().focus().deleteRange(range).toggleStrike().run();
+          } else {
+            editor.chain().focus().deleteRange(range).insertContent('<s></s>').run();
+          }
+        },
+      },
+      {
+        title: "Highlight",
+        description: "Highlight text (==text==).",
+        icon: <Highlighter size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.toggleHighlight) {
+            editor.chain().focus().deleteRange(range).toggleHighlight().run();
+          } else {
+            editor.chain().focus().deleteRange(range).insertContent('<mark></mark>').run();
+          }
+        },
+      },
+      {
+        title: "Horizontal Rule",
+        description: "Insert a horizontal divider.",
+        icon: <Minus size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setHorizontalRule) {
+            editor.chain().focus().deleteRange(range).setHorizontalRule().run();
+          } else {
+            editor.chain().focus().deleteRange(range).insertContent('<hr />').run();
+          }
+        },
+      },
     ],
   },
   {
@@ -293,29 +332,31 @@ const commandItems = [
     commands: [
       {
         title: "Inline Math",
-        description: "Insert $…$ (TeX).",
+        description: "Insert $x^2$ (LaTeX).",
         icon: <Sigma size={18} />,
         command: ({ editor, range }) => {
-          const src = window.prompt('Inline math (TeX)', 'x^2')
-          if (src == null) return
-          if (editor?.commands?.setMathInline) {
-            editor.chain().focus().deleteRange(range).setMathInline(src).run()
-          } else {
-            editor.chain().focus().deleteRange(range).insertContent(`$${src}$`).run()
+          const src = window.prompt('Enter LaTeX formula:', 'E = mc^2')
+          if (src != null && src.trim()) {
+            if (editor?.commands?.setMathInline) {
+              editor.chain().focus().deleteRange(range).setMathInline(src.trim()).run()
+            } else {
+              editor.chain().focus().deleteRange(range).insertContent(`$${src.trim()}$`).run()
+            }
           }
         },
       },
       {
         title: "Block Math",
-        description: "Insert $$…$$ (TeX).",
+        description: "Insert $$E=mc^2$$ (LaTeX).",
         icon: <Sigma size={18} />,
         command: ({ editor, range }) => {
-          const src = window.prompt('Block math (TeX)', 'E=mc^2')
-          if (src == null) return
-          if (editor?.commands?.setMathBlock) {
-            editor.chain().focus().deleteRange(range).setMathBlock(src).run()
-          } else {
-            editor.chain().focus().deleteRange(range).insertContent(`$$${src}$$`).run()
+          const src = window.prompt('Enter LaTeX formula:', '\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}')
+          if (src != null && src.trim()) {
+            if (editor?.commands?.setMathBlock) {
+              editor.chain().focus().deleteRange(range).setMathBlock(src.trim()).run()
+            } else {
+              editor.chain().focus().deleteRange(range).insertContent(`$$${src.trim()}$$`).run()
+            }
           }
         },
       },

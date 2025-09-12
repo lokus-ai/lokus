@@ -14,16 +14,25 @@ import * as TableExt from "@tiptap/extension-table";
 import * as TableRowExt from "@tiptap/extension-table-row";
 import * as TableHeaderExt from "@tiptap/extension-table-header";
 import * as TableCellExt from "@tiptap/extension-table-cell";
+import * as StrikeExt from "@tiptap/extension-strike";
+import * as HighlightExt from "@tiptap/extension-highlight";
+import * as HorizontalRuleExt from "@tiptap/extension-horizontal-rule";
+import { InputRule } from "@tiptap/core";
 import MathExt from "../extensions/Math.js";
 import WikiLink from "../extensions/WikiLink.js";
 import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
 import HeadingAltInput from "../extensions/HeadingAltInput.js";
+import liveEditorSettings from "../../core/editor/live-settings.js";
+import MarkdownIt from "markdown-it";
+import markdownItMark from "markdown-it-mark";
+import markdownItStrikethrough from "markdown-it-strikethrough-alt";
 
 import "../styles/editor.css";
 
 const Editor = ({ content, onContentChange }) => {
   const [extensions, setExtensions] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [editorSettings, setEditorSettings] = useState(null);
 
   useEffect(() => {
     const pick = (ns, named) => ns?.default ?? ns?.[named] ?? null;
@@ -39,16 +48,96 @@ const Editor = ({ content, onContentChange }) => {
     const TableRow = pick(TableRowExt, 'TableRow');
     const TableHeader = pick(TableHeaderExt, 'TableHeader');
     const TableCell = pick(TableCellExt, 'TableCell');
+    const Strike = pick(StrikeExt, 'Strike');
+    const Highlight = pick(HighlightExt, 'Highlight');
+    const HorizontalRule = pick(HorizontalRuleExt, 'HorizontalRule');
 
     const exts = [StarterKit];
     if (Link) exts.push(Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true }));
     if (TaskList && TaskItem) exts.push(TaskList, TaskItem);
-    if (Image) exts.push(Image);
-    if (Superscript) exts.push(Superscript);
-    if (Subscript) exts.push(Subscript);
+    if (Image) {
+      exts.push(Image.configure({
+        inline: true,
+        allowBase64: true,
+        HTMLAttributes: {
+          class: 'editor-image',
+        },
+        addInputRules() {
+          return [
+            new InputRule({
+              find: /!\[([^\]]*)\]\(([^)]+)\)$/,
+              handler: ({ state, range, match, chain }) => {
+                const alt = match[1];
+                const src = match[2];
+                // Handle both local paths and web URLs
+                const resolvedSrc = src.startsWith('http') ? src : src;
+                chain().deleteRange(range).insertContent({
+                  type: 'image',
+                  attrs: { src: resolvedSrc, alt: alt || '' }
+                }).run();
+              },
+            }),
+          ];
+        },
+      }));
+    }
+    // Superscript and subscript with input rules for H^2^O and H~2~O syntax
+    if (Superscript) {
+      exts.push(Superscript.extend({
+        addInputRules() {
+          return [
+            new InputRule({
+              find: /\^([^^\s]+)\^$/,
+              handler: ({ state, range, match, chain }) => {
+                const text = match[1];
+                chain().deleteRange(range).insertContent(`<sup>${text}</sup>`).run();
+              },
+            }),
+          ];
+        },
+      }));
+    }
+    
+    if (Subscript) {
+      exts.push(Subscript.extend({
+        addInputRules() {
+          return [
+            new InputRule({
+              find: /~([^~\s]+)~$/,
+              handler: ({ state, range, match, chain }) => {
+                const text = match[1];
+                chain().deleteRange(range).insertContent(`<sub>${text}</sub>`).run();
+              },
+            }),
+          ];
+        },
+      }));
+    }
     if (Table && TableRow && TableHeader && TableCell) {
       exts.push(Table.configure({ resizable: true }), TableRow, TableHeader, TableCell);
     }
+    
+    // Additional formatting extensions
+    if (Strike) {
+      exts.push(Strike.extend({
+        addInputRules() {
+          return [
+            new InputRule({
+              find: /~~([^~]+)~~$/,
+              handler: ({ state, range, match, chain }) => {
+                const text = match[1];
+                chain().deleteRange(range).toggleStrike().insertContent(text).toggleStrike().run();
+              },
+            }),
+          ];
+        },
+      }));
+    }
+    if (Highlight) exts.push(Highlight.configure({ multicolor: true }));
+    if (HorizontalRule) exts.push(HorizontalRule);
+    
+    // Code blocks (basic, StarterKit includes CodeBlock extension)
+    
     // Math (inline + block) – local extension
     if (Array.isArray(MathExt)) exts.push(...MathExt)
     else if (MathExt) exts.push(MathExt)
@@ -57,19 +146,70 @@ const Editor = ({ content, onContentChange }) => {
     exts.push(WikiLink);
     exts.push(WikiLinkSuggest);
 
-    // Load markdown shortcut prefs to optionally add an alternate heading marker
+    // Load markdown shortcut prefs and editor settings
     (async () => {
       try {
         const { readConfig } = await import('../../core/config/store.js')
         const cfg = (await readConfig()) || {}
+        
+        // Load markdown shortcuts
         const hs = cfg.markdownShortcuts?.headingAlt
         const invalid = ['$', '[', '!'] // avoid conflicts with math / wikilinks
         if (hs?.enabled && hs.marker && !invalid.includes(hs.marker)) {
           exts.push(HeadingAltInput({ marker: hs.marker }))
         }
+        
+        // Load editor settings
+        const defaultEditorSettings = {
+          font: {
+            family: 'ui-sans-serif',
+            size: 16,
+            lineHeight: 1.7,
+            letterSpacing: 0.003
+          },
+          typography: {
+            h1Size: 2.0,
+            h2Size: 1.6,
+            h3Size: 1.3,
+            headingColor: 'inherit',
+            codeBlockTheme: 'default',
+            linkColor: 'rgb(var(--accent))'
+          },
+          behavior: {
+            autoPairBrackets: true,
+            smartQuotes: false,
+            autoIndent: true,
+            wordWrap: true,
+            showLineNumbers: false
+          },
+          appearance: {
+            showMarkdown: false,
+            focusMode: false,
+            typewriterMode: false
+          }
+        };
+        
+        const editorConfig = cfg.editor || {};
+        const mergedSettings = {
+          font: { ...defaultEditorSettings.font, ...editorConfig.font },
+          typography: { ...defaultEditorSettings.typography, ...editorConfig.typography },
+          behavior: { ...defaultEditorSettings.behavior, ...editorConfig.behavior },
+          appearance: { ...defaultEditorSettings.appearance, ...editorConfig.appearance }
+        };
+        
+        setEditorSettings(mergedSettings);
+        
       } catch (e) {
-        console.warn('[editor] failed to load markdownShortcuts:', e)
+        console.warn('[editor] failed to load configuration:', e)
+        // Use defaults if loading fails
+        setEditorSettings({
+          font: { family: 'ui-sans-serif', size: 16, lineHeight: 1.7, letterSpacing: 0.003 },
+          typography: { h1Size: 2.0, h2Size: 1.6, h3Size: 1.3, headingColor: 'inherit', codeBlockTheme: 'default', linkColor: 'rgb(var(--accent))' },
+          behavior: { autoPairBrackets: true, smartQuotes: false, autoIndent: true, wordWrap: true, showLineNumbers: false },
+          appearance: { showMarkdown: false, focusMode: false, typewriterMode: false }
+        });
       }
+      
       exts.push(Placeholder.configure({ placeholder: "Press '/' for commands..." }));
       exts.push(SlashCommand);
       setExtensions(exts);
@@ -77,15 +217,25 @@ const Editor = ({ content, onContentChange }) => {
     })()
   }, []);
 
-  if (loading || !extensions) {
+  if (loading || !extensions || !editorSettings) {
     return <div className="m-5 text-app-muted">Loading editor…</div>;
   }
 
-  return <Tiptap extensions={extensions} content={content} onContentChange={onContentChange} />;
+  return <Tiptap extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} />;
 };
 
-function Tiptap({ extensions, content, onContentChange }) {
+function Tiptap({ extensions, content, onContentChange, editorSettings }) {
   const isSettingRef = useRef(false);
+  
+  // Subscribe to live settings changes for real-time updates
+  const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
+  
+  useEffect(() => {
+    const unsubscribe = liveEditorSettings.onSettingsChange((key, value, allSettings) => {
+      setLiveSettings(allSettings);
+    });
+    return unsubscribe;
+  }, []);
   const editor = useEditor({
     extensions,
     editorProps: {
@@ -110,6 +260,90 @@ function Tiptap({ extensions, content, onContentChange }) {
           })();
           return true;
         },
+      },
+      handlePaste: (view, event) => {
+        const clipboardData = event.clipboardData;
+        if (!clipboardData) return false;
+        
+        const text = clipboardData.getData('text/plain');
+        if (!text) return false;
+        
+        // More specific markdown detection - only trigger for content that really looks like markdown
+        const hasHeadings = /^#{1,6}\s/m.test(text);
+        const hasCodeBlocks = /```[\s\S]*?```/.test(text);
+        const hasBoldItalic = /(\*\*[^*]+\*\*|\*[^*]+\*|__[^_]+__|_[^_]+_)/.test(text);
+        const hasLists = /^\s*[-*+]\s/m.test(text) || /^\s*\d+\.\s/m.test(text);
+        const hasTaskLists = /^\s*- \[[x\s]\]/m.test(text);
+        const hasBlockquotes = /^>\s/m.test(text);
+        const hasStrikethrough = /~~[^~]+~~/.test(text);
+        const hasHighlights = /==[^=]+==/.test(text);
+        const hasWikiLinks = /\[\[[^\]]+\]\]/.test(text);
+        const hasMath = /\$\$[\s\S]*?\$\$|\$[^$\s][^$]*[^$\s]\$/.test(text);
+        
+        const markdownFeatures = [hasHeadings, hasCodeBlocks, hasBoldItalic, hasLists, hasTaskLists, hasBlockquotes, hasStrikethrough, hasHighlights, hasWikiLinks].filter(Boolean).length;
+        
+        // Don't process as markdown if it has math - let TipTap handle it
+        if (hasMath) {
+          return false; // Let TipTap's normal paste handling work
+        }
+        
+        // Only process as markdown if we detect multiple markdown features or specific complex ones
+        if (markdownFeatures >= 2 || hasCodeBlocks || hasTaskLists || hasWikiLinks) {
+          event.preventDefault();
+          
+          // Delay the paste handling to ensure editor is available
+          setTimeout(() => {
+            const currentEditor = view.dom.closest('.ProseMirror')?.editor || editor;
+            if (!currentEditor?.commands?.insertContent) {
+              // Fallback - insert as plain text directly into view
+              const { state, dispatch } = view;
+              const { from, to } = state.selection;
+              const transaction = state.tr.replaceWith(from, to, state.schema.text(text));
+              dispatch(transaction);
+              return;
+            }
+            
+            try {
+              // Initialize markdown parser with plugins
+              const md = new MarkdownIt({
+                html: true,
+                linkify: true,
+                typographer: true,
+              })
+                .use(markdownItMark)         // ==highlight==
+                .use(markdownItStrikethrough); // ~~strikethrough~~
+              
+              // Convert markdown to HTML
+              let html = md.render(text);
+              
+              // Handle different link types properly
+              
+              // Convert wiki image embeds ![[image]] first (before regular images)
+              html = html.replace(/!\[\[([^\]]+)\]\]/g, '<span data-type="wiki-link" data-embed="true" href="$1">$1</span>');
+              
+              // Ensure regular markdown images are properly formatted
+              html = html.replace(/<p>!\[([^\]]*)\]\(([^)]+)\)<\/p>/g, '<img src="$2" alt="$1" class="editor-image" />');
+              html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="editor-image" />');
+              
+              // Convert wiki links [[page]] (but not if already processed as images)
+              html = html.replace(/(?<!data-type="wiki-link"[^>]*>\s*)\[\[([^\]]+)\]\]/g, '<span data-type="wiki-link" href="$1">$1</span>');
+              
+              // Regular links [text](url) should work normally with the Link extension
+              
+              // Insert the converted HTML
+              currentEditor.commands.insertContent(html);
+              
+            } catch (error) {
+              console.warn('Failed to parse markdown on paste:', error);
+              // Fallback to plain text
+              currentEditor.commands.insertContent(text);
+            }
+          }, 0);
+          
+          return true;
+        }
+        
+        return false; // Let TipTap handle regular pastes normally
       },
     },
     content,

@@ -3,17 +3,39 @@ import { Node, mergeAttributes, InputRule } from '@tiptap/core'
 function getKatex() {
   try {
     const k = (typeof globalThis !== 'undefined' ? globalThis : window)?.katex
-    if (!k) return null
-    return typeof k.renderToString === 'function' ? k.renderToString : null
-  } catch { return null }
+    if (!k) {
+      console.warn('KaTeX not found on globalThis/window')
+      return null
+    }
+    if (typeof k.renderToString !== 'function') {
+      console.warn('KaTeX renderToString not available')
+      return null
+    }
+    return k.renderToString
+  } catch (error) { 
+    console.warn('Error accessing KaTeX:', error)
+    return null 
+  }
 }
 
 function renderMathHTML(src, displayMode) {
   try {
     const render = getKatex()
-    if (render) return render(src, { throwOnError: false, displayMode })
-  } catch {}
-  // Fallback: show TeX source with delimiters
+    if (render) {
+      const rendered = render(src, { 
+        throwOnError: false, 
+        displayMode,
+        errorColor: '#cc0000',
+        macros: {
+          "\\f": "#1f(#2)"
+        }
+      })
+      return rendered
+    }
+  } catch (error) {
+    console.warn('KaTeX render error:', error, 'for source:', src)
+  }
+  // Fallback: show TeX source with delimiters  
   return displayMode ? `$$${src}$$` : `$${src}$`
 }
 
@@ -51,7 +73,16 @@ export const MathInline = Node.create({
   addInputRules() {
     return [
       new InputRule({
-        find: /\$(.+?)\$$/, // $...$
+        find: /\$([^$\s][^$]*[^$\s])\$\s*$/,  // $...$ but not $$ and not empty
+        handler: ({ state, range, match, chain }) => {
+          const src = match[1].trim()
+          if (src) {
+            chain().deleteRange(range).insertContent({ type: this.name, attrs: { src } }).run()
+          }
+        },
+      }),
+      new InputRule({
+        find: /\$([^$\s])\$\s*$/,  // Single character math like $x$
         handler: ({ state, range, match, chain }) => {
           const src = match[1]
           chain().deleteRange(range).insertContent({ type: this.name, attrs: { src } }).run()
@@ -91,10 +122,12 @@ export const MathBlock = Node.create({
   addInputRules() {
     return [
       new InputRule({
-        find: /^\$\$(.+)\$\$$/, // $$...$$ on a line
+        find: /^\$\$\s*([\s\S]*?)\s*\$\$\s*$/m, // $$...$$ anywhere on line
         handler: ({ range, match, chain }) => {
-          const src = match[1]
-          chain().deleteRange(range).insertContent({ type: this.name, attrs: { src } }).run()
+          const src = match[1].trim()
+          if (src) {
+            chain().deleteRange(range).insertContent({ type: this.name, attrs: { src } }).run()
+          }
         },
       }),
     ]
