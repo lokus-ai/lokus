@@ -16,12 +16,20 @@ let isTauri = false; try {
 // Action catalog: add here as you grow
 export const ACTIONS = [
   { id: "save-file",        name: "Save File",           event: "lokus:save-file",        default: "CommandOrControl+S" },
-  { id: "close-tab",        name: "Close Tab",           event: "lokus:close-tab",        default: "CommandOrControl+W" },
   { id: "new-file",         name: "New File",            event: "lokus:new-file",         default: "CommandOrControl+N" },
   { id: "new-folder",       name: "New Folder",          event: "lokus:new-folder",       default: "CommandOrControl+Shift+N" },
   { id: "toggle-sidebar",   name: "Toggle Sidebar",       event: "lokus:toggle-sidebar",   default: "CommandOrControl+B" },
   { id: "open-preferences", name: "Open Preferences",     event: "preferences:open",       default: "CommandOrControl+," },
   { id: "find",             name: "Find in Note",        event: "lokus:find",            default: "CommandOrControl+F" },
+  { id: "next-tab",         name: "Next Tab",            event: "lokus:next-tab",         default: "CommandOrControl+Tab" },
+  { id: "prev-tab",         name: "Previous Tab",        event: "lokus:prev-tab",         default: "CommandOrControl+Shift+Tab" },
+  { id: "close-tab",        name: "Close Current Tab",   event: "lokus:close-tab",        default: "CommandOrControl+W" },
+  { id: "select-all",       name: "Select All",          event: "lokus:select-all",       default: "CommandOrControl+A" },
+  { id: "copy",             name: "Copy",                event: "lokus:copy",             default: "CommandOrControl+C" },
+  { id: "cut",              name: "Cut",                 event: "lokus:cut",              default: "CommandOrControl+X" },
+  { id: "paste",            name: "Paste",               event: "lokus:paste",            default: "CommandOrControl+V" },
+  { id: "undo",             name: "Undo",                event: "lokus:undo",             default: "CommandOrControl+Z" },
+  { id: "redo",             name: "Redo",                event: "lokus:redo",             default: "CommandOrControl+Shift+Z" },
 ];
 
 export function listActions() { return ACTIONS.map(a => ({ id: a.id, name: a.name })); }
