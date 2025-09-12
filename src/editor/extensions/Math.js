@@ -53,9 +53,40 @@ export const MathInline = Node.create({
   },
   renderHTML({ HTMLAttributes }) {
     const { src = '' } = HTMLAttributes
-    const html = renderMathHTML(src, false)
-    // Leaf node: return actual HTML/text content, not a content hole (0)
-    return ['span', mergeAttributes(HTMLAttributes, { 'data-type': 'math-inline', class: 'math-inline', 'data-src': src }), html]
+    return ['span', mergeAttributes(HTMLAttributes, { 
+      'data-type': 'math-inline', 
+      class: 'math-inline', 
+      'data-src': src 
+    }), src]
+  },
+  addNodeView() {
+    return ({ node }) => {
+      const dom = document.createElement('span')
+      dom.className = 'math-inline'
+      dom.setAttribute('data-type', 'math-inline')
+      dom.setAttribute('data-src', node.attrs.src)
+      
+      const renderMath = () => {
+        const html = renderMathHTML(node.attrs.src, false)
+        dom.innerHTML = html
+      }
+      
+      // Try to render immediately, but also listen for KaTeX load
+      renderMath()
+      
+      // If KaTeX is still loading, try again in a bit
+      if (!getKatex()) {
+        const checkKatex = setInterval(() => {
+          if (getKatex()) {
+            renderMath()
+            clearInterval(checkKatex)
+          }
+        }, 100)
+        setTimeout(() => clearInterval(checkKatex), 5000) // Stop trying after 5s
+      }
+      
+      return { dom }
+    }
   },
   addCommands() {
     return {
@@ -102,9 +133,40 @@ export const MathBlock = Node.create({
   parseHTML() { return [{ tag: 'div[data-type="math-block"]' }] },
   renderHTML({ HTMLAttributes }) {
     const { src = '' } = HTMLAttributes
-    const html = renderMathHTML(src, true)
-    // Leaf node: return rendered HTML/text content directly
-    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'math-block', class: 'math-block', 'data-src': src }), html]
+    return ['div', mergeAttributes(HTMLAttributes, { 
+      'data-type': 'math-block', 
+      class: 'math-block', 
+      'data-src': src 
+    }), src]
+  },
+  addNodeView() {
+    return ({ node }) => {
+      const dom = document.createElement('div')
+      dom.className = 'math-block'
+      dom.setAttribute('data-type', 'math-block')
+      dom.setAttribute('data-src', node.attrs.src)
+      
+      const renderMath = () => {
+        const html = renderMathHTML(node.attrs.src, true)
+        dom.innerHTML = html
+      }
+      
+      // Try to render immediately, but also listen for KaTeX load
+      renderMath()
+      
+      // If KaTeX is still loading, try again in a bit
+      if (!getKatex()) {
+        const checkKatex = setInterval(() => {
+          if (getKatex()) {
+            renderMath()
+            clearInterval(checkKatex)
+          }
+        }, 100)
+        setTimeout(() => clearInterval(checkKatex), 5000) // Stop trying after 5s
+      }
+      
+      return { dom }
+    }
   },
   addCommands() {
     return {
