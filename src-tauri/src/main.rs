@@ -5,6 +5,8 @@ mod menu;
 mod theme;
 mod handlers;
 mod clipboard;
+mod tasks;
+mod search;
 
 use windows::{open_workspace_window, open_preferences_window};
 use tauri::Manager;
@@ -73,7 +75,20 @@ fn main() {
       clipboard::clipboard_write_html,
       clipboard::clipboard_read_html,
       clipboard::clipboard_has_text,
-      clipboard::clipboard_clear
+      clipboard::clipboard_clear,
+      tasks::create_task,
+      tasks::get_all_tasks,
+      tasks::get_task,
+      tasks::update_task,
+      tasks::delete_task,
+      tasks::get_tasks_by_status,
+      tasks::get_tasks_by_note,
+      tasks::bulk_update_task_status,
+      tasks::extract_tasks_from_content,
+      search::search_in_files,
+      search::search_in_file,
+      search::get_file_content_with_lines,
+      search::build_search_index
     ])
     .setup(|app| {
       menu::init(&app.handle())?;
