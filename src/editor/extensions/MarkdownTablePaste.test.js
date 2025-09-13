@@ -29,7 +29,7 @@ describe('MarkdownTablePaste Extension', () => {
 
     it('should return ProseMirror plugins array', () => {
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       
       expect(Array.isArray(plugins)).toBe(true);
       expect(plugins).toHaveLength(1);
@@ -54,7 +54,7 @@ describe('MarkdownTablePaste Extension', () => {
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
@@ -77,7 +77,7 @@ Cell 1 | Cell 2`;
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
@@ -98,7 +98,7 @@ Cell 1 | Cell 2`;
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
@@ -120,7 +120,7 @@ Cell 1 | Cell 2`;
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
@@ -141,7 +141,7 @@ Cell 1 | Cell 2`;
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
@@ -162,7 +162,7 @@ Cell 1 | Cell 2`;
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
@@ -183,7 +183,7 @@ Cell 1 | Cell 2`;
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
@@ -203,7 +203,7 @@ Cell 1 | Cell 2`;
         };
 
         const extension = MarkdownTablePaste;
-        const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+        const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
         const handlePaste = plugins[0].props.handlePaste;
 
         const result = handlePaste(mockView, mockClipboardEvent);
@@ -224,7 +224,7 @@ Cell 1 | Cell 2`;
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
@@ -247,7 +247,7 @@ Cell 1 | Cell 2`;
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
@@ -269,7 +269,7 @@ Cell 1 | Cell 2`;
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
@@ -297,7 +297,7 @@ Cell 1 | Cell 2`;
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: errorEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: errorEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
@@ -319,7 +319,7 @@ Cell 1 | Cell 2`;
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
@@ -350,7 +350,7 @@ Cell 1 | Cell 2`;
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: trackedEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: trackedEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
@@ -382,7 +382,7 @@ Cell 1 | Cell 2`;
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: trackedEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: trackedEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
@@ -409,7 +409,7 @@ Cell 1 | Cell 2`;
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
@@ -430,7 +430,7 @@ Cell 1 | Cell 2`;
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
@@ -452,7 +452,7 @@ Cell 1 | Cell 2`;
       };
 
       const extension = MarkdownTablePaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);

@@ -53,8 +53,8 @@ describe('MarkdownPaste Extension', () => {
       const extension = MarkdownPaste;
       
       // Simulate extension creation
-      if (extension.onCreate) {
-        extension.onCreate();
+      if (extension.config.onCreate) {
+        extension.config.onCreate();
         expect(consoleSpy).toHaveBeenCalledWith('[MarkdownPaste] Extension created successfully');
       }
       
@@ -115,12 +115,12 @@ describe('MarkdownPaste Extension', () => {
   });
 
   describe('Markdown Conversion', () => {
-    it('should configure MarkdownIt with correct plugins', () => {
+    it('should configure MarkdownIt with correct plugins', async () => {
       const MarkdownItConstructor = vi.mocked(await import('markdown-it')).default;
       
       // Create extension and get plugins
       const extension = MarkdownPaste;
-      const plugins = extension.addProseMirrorPlugins ? extension.addProseMirrorPlugins.call({ editor: mockEditor }) : [];
+      const plugins = extension.config.addProseMirrorPlugins ? extension.config.addProseMirrorPlugins.call({ editor: mockEditor }) : [];
       
       expect(plugins).toHaveLength(1);
       expect(plugins[0]).toBeDefined();
@@ -176,7 +176,7 @@ describe('MarkdownPaste Extension', () => {
       });
 
       const extension = MarkdownPaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const plugin = plugins[0];
       const handlePaste = plugin.props.handlePaste;
 
@@ -194,7 +194,7 @@ describe('MarkdownPaste Extension', () => {
       });
 
       const extension = MarkdownPaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const plugin = plugins[0];
       const handlePaste = plugin.props.handlePaste;
 
@@ -212,7 +212,7 @@ describe('MarkdownPaste Extension', () => {
       });
 
       const extension = MarkdownPaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const plugin = plugins[0];
       const handlePaste = plugin.props.handlePaste;
 
@@ -228,7 +228,7 @@ describe('MarkdownPaste Extension', () => {
       };
 
       const extension = MarkdownPaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const plugin = plugins[0];
       const handlePaste = plugin.props.handlePaste;
 
@@ -256,7 +256,7 @@ describe('MarkdownPaste Extension', () => {
       };
 
       const extension = MarkdownPaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       const plugin = plugins[0];
       const handlePaste = plugin.props.handlePaste;
 
@@ -268,7 +268,7 @@ describe('MarkdownPaste Extension', () => {
 
     it('should preserve whitespace in content insertion', () => {
       const extension = MarkdownPaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       
       // The extension should configure insertContent with preserveWhitespace: 'full'
       expect(plugins[0]).toBeDefined();
@@ -280,7 +280,7 @@ describe('MarkdownPaste Extension', () => {
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       
       const extension = MarkdownPaste;
-      const plugins = extension.addProseMirrorPlugins.call({ editor: mockEditor });
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
       
       expect(consoleSpy).toHaveBeenCalledWith('[MarkdownPaste] Adding ProseMirror plugin');
       
