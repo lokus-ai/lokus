@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, Share2 } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, Share2, LayoutGrid } from "lucide-react";
 // import GraphView from "./GraphView.jsx"; // Temporarily disabled
 import Editor from "../editor";
 import FileContextMenu from "../components/FileContextMenu.jsx";
@@ -19,6 +19,7 @@ import { getActiveShortcuts, formatAccelerator } from "../core/shortcuts/registr
 import CommandPalette from "../components/CommandPalette.jsx";
 import InFileSearch from "../components/InFileSearch.jsx";
 import SearchPanel from "../components/SearchPanel.jsx";
+import KanbanBoard from "../components/KanbanBoard.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -395,6 +396,7 @@ export default function Workspace({ initialPath = "" }) {
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showInFileSearch, setShowInFileSearch] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  const [showKanban, setShowKanban] = useState(false);
   
   // --- Refs for stable callbacks ---
   const stateRef = useRef({});
@@ -599,6 +601,40 @@ export default function Workspace({ initialPath = "" }) {
   };
 
   const handleFileOpen = (file) => {
+    // Handle search result format with line numbers
+    if (file.path && file.lineNumber !== undefined) {
+      const filePath = file.path;
+      const fileName = filePath.split('/').pop();
+      
+      setOpenTabs(prevTabs => {
+        const newTabs = prevTabs.filter(t => t.path !== filePath);
+        newTabs.unshift({ path: filePath, name: fileName });
+        if (newTabs.length > MAX_OPEN_TABS) {
+          newTabs.pop();
+        }
+        return newTabs;
+      });
+      setActiveFile(filePath);
+      
+      // Jump to line after editor loads
+      setTimeout(() => {
+        if (editorRef.current && file.lineNumber) {
+          try {
+            const doc = editorRef.current.state.doc;
+            const linePos = doc.line(file.lineNumber).from + (file.column || 0);
+            const selection = editorRef.current.state.selection.constructor.create(doc, linePos, linePos);
+            const tr = editorRef.current.state.tr.setSelection(selection);
+            editorRef.current.view.dispatch(tr);
+            editorRef.current.commands.scrollIntoView();
+          } catch (error) {
+            console.error('Error jumping to line:', error);
+          }
+        }
+      }, 100);
+      return;
+    }
+    
+    // Handle regular file format
     if (file.is_directory) return;
 
     setOpenTabs(prevTabs => {
@@ -792,6 +828,13 @@ export default function Workspace({ initialPath = "" }) {
             <Menu className="w-5 h-5" />
           </button>
           <button
+            onClick={() => setShowKanban(v => !v)}
+            title={showKanban ? "Hide kanban board" : "Show kanban board"}
+            className={`p-2 rounded-md transition-colors ${showKanban ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:bg-app-bg hover:text-app-text'}`}
+          >
+            <LayoutGrid className="w-5 h-5" />
+          </button>
+          <button
             disabled
             title="Graph view coming soon"
             className="p-2 rounded-md text-app-muted/50 cursor-not-allowed opacity-50"
@@ -803,45 +846,71 @@ export default function Workspace({ initialPath = "" }) {
         {showLeft && (
           <aside className="overflow-y-auto flex flex-col">
             <div className="h-12 shrink-0 px-4 flex items-center justify-between gap-2 border-b border-app-border">
-              <span className="font-semibold text-sm">Files</span>
-              <div className="flex items-center">
-                <button onClick={handleCreateFile} title="New File" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
-                  <Icon path="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" className="w-4 h-4" />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowKanban(false)}
+                  title="Files view"
+                  className={`px-2 py-1 text-xs rounded transition-colors ${!showKanban ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:text-app-text hover:bg-app-bg'}`}
+                >
+                  Files
                 </button>
-                <button onClick={handleCreateFolder} title="New Folder" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
-                  <Icon path="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" className="w-4 h-4" />
+                <button
+                  onClick={() => setShowKanban(true)}
+                  title="Kanban view"
+                  className={`px-2 py-1 text-xs rounded transition-colors ${showKanban ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:text-app-text hover:bg-app-bg'}`}
+                >
+                  Tasks
                 </button>
               </div>
-            </div>
-            <ContextMenu>
-              <ContextMenuTrigger asChild>
-                <div className="p-2 flex-1 overflow-y-auto">
-                  <FileTreeView 
-                    entries={fileTree}
-                    onFileClick={handleFileOpen} 
-                    activeFile={activeFile}
-                    onRefresh={handleRefreshFiles}
-                    expandedFolders={expandedFolders}
-                    toggleFolder={toggleFolder}
-                    isCreating={isCreatingFolder}
-                    onCreateConfirm={handleConfirmCreateFolder}
-                    keymap={keymap}
-                  />
+              {!showKanban && (
+                <div className="flex items-center">
+                  <button onClick={handleCreateFile} title="New File" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
+                    <Icon path="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" className="w-4 h-4" />
+                  </button>
+                  <button onClick={handleCreateFolder} title="New Folder" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
+                    <Icon path="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" className="w-4 h-4" />
+                  </button>
                 </div>
-              </ContextMenuTrigger>
-              <ContextMenuContent>
-                <ContextMenuItem onClick={handleCreateFile}>
-                  New File
-                  <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-file'])}</span>
-                </ContextMenuItem>
-                <ContextMenuItem onClick={handleCreateFolder}>
-                  New Folder
-                  <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-folder'])}</span>
-                </ContextMenuItem>
-                <ContextMenuSeparator />
-                <ContextMenuItem onClick={handleRefreshFiles}>Refresh</ContextMenuItem>
-              </ContextMenuContent>
-            </ContextMenu>
+              )}
+            </div>
+            {showKanban ? (
+              <div className="flex-1 overflow-hidden">
+                <KanbanBoard 
+                  workspacePath={path}
+                  onFileOpen={handleFileOpen}
+                />
+              </div>
+            ) : (
+              <ContextMenu>
+                <ContextMenuTrigger asChild>
+                  <div className="p-2 flex-1 overflow-y-auto">
+                    <FileTreeView 
+                      entries={fileTree}
+                      onFileClick={handleFileOpen} 
+                      activeFile={activeFile}
+                      onRefresh={handleRefreshFiles}
+                      expandedFolders={expandedFolders}
+                      toggleFolder={toggleFolder}
+                      isCreating={isCreatingFolder}
+                      onCreateConfirm={handleConfirmCreateFolder}
+                      keymap={keymap}
+                    />
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem onClick={handleCreateFile}>
+                    New File
+                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-file'])}</span>
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={handleCreateFolder}>
+                    New Folder
+                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-folder'])}</span>
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onClick={handleRefreshFiles}>Refresh</ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
+            )}
           </aside>
         )}
         {showLeft && <div onMouseDown={startLeftDrag} className="cursor-col-resize bg-app-border/20 hover:bg-app-accent/50 transition-colors duration-300 w-px" />}
