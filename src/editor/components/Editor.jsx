@@ -23,6 +23,8 @@ import MathExt from "../extensions/Math.js";
 import WikiLink from "../extensions/WikiLink.js";
 import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
 import HeadingAltInput from "../extensions/HeadingAltInput.js";
+import MarkdownPaste from "../extensions/MarkdownPaste.js";
+import MarkdownTablePaste from "../extensions/MarkdownTablePaste.js";
 import liveEditorSettings from "../../core/editor/live-settings.js";
 import MarkdownIt from "markdown-it";
 import markdownItMark from "markdown-it-mark";
@@ -146,6 +148,10 @@ const Editor = ({ content, onContentChange }) => {
     // Obsidian‑style wikilinks and image embeds
     exts.push(WikiLink);
     exts.push(WikiLinkSuggest);
+    
+    // Markdown paste functionality
+    exts.push(MarkdownPaste);
+    exts.push(MarkdownTablePaste);
 
     // Load markdown shortcut prefs and editor settings
     (async () => {
