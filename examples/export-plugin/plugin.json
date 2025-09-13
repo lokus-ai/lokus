@@ -1,0 +1,70 @@
+{
+  "id": "export-plugin",
+  "name": "Document Export Plugin",
+  "version": "1.0.0",
+  "description": "Export documents to various formats including PDF, HTML, Markdown, and plain text",
+  "author": "Lokus Team",
+  "license": "MIT",
+  "main": "index.js",
+  "lokusVersion": "^1.0.0",
+  "keywords": ["export", "pdf", "html", "markdown", "file-operations"],
+  "categories": ["Other"],
+  "permissions": [
+    "read_files",
+    "write_files",
+    "modify_ui"
+  ],
+  "activationEvents": ["onStartup"],
+  "contributes": {
+    "commands": [
+      {
+        "command": "export.to-pdf",
+        "title": "Export to PDF",
+        "shortcut": "Ctrl+Shift+P"
+      },
+      {
+        "command": "export.to-html",
+        "title": "Export to HTML"
+      },
+      {
+        "command": "export.to-markdown",
+        "title": "Export to Markdown"
+      },
+      {
+        "command": "export.to-text",
+        "title": "Export to Plain Text"
+      },
+      {
+        "command": "export.show-panel",
+        "title": "Show Export Panel"
+      }
+    ]
+  },
+  "configuration": {
+    "defaultExportPath": {
+      "type": "string",
+      "default": "",
+      "description": "Default directory for exports (empty for current directory)"
+    },
+    "includeMetadata": {
+      "type": "boolean",
+      "default": true,
+      "description": "Include document metadata in exports"
+    },
+    "pdfMargins": {
+      "type": "string",
+      "default": "1in",
+      "description": "PDF margin size (CSS format like '1in' or '2.5cm')"
+    },
+    "htmlTheme": {
+      "type": "string", 
+      "default": "github",
+      "description": "HTML export theme (github, minimal, elegant)"
+    },
+    "openAfterExport": {
+      "type": "boolean",
+      "default": false,
+      "description": "Automatically open exported files"
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "id": "code-snippets-plugin",
+  "name": "Code Snippets Plugin",
+  "version": "1.0.0",
+  "description": "Customizable code snippets with slash commands and text expansion functionality",
+  "author": "Lokus Team",
+  "license": "MIT",
+  "main": "index.js",
+  "lokusVersion": "^1.0.0",
+  "keywords": ["snippets", "code", "productivity", "text-expansion"],
+  "categories": ["Snippet"],
+  "permissions": [
+    "read_files",
+    "write_files",
+    "modify_ui"
+  ],
+  "activationEvents": ["onStartup"],
+  "contributes": {
+    "commands": [
+      {
+        "command": "code-snippets.insert",
+        "title": "Insert Code Snippet",
+        "shortcut": "Ctrl+Shift+S"
+      },
+      {
+        "command": "code-snippets.manage",
+        "title": "Manage Code Snippets"
+      },
+      {
+        "command": "code-snippets.create",
+        "title": "Create New Snippet"
+      }
+    ]
+  },
+  "configuration": {
+    "enableTextExpansion": {
+      "type": "boolean",
+      "default": true,
+      "description": "Automatically expand snippet triggers as you type"
+    },
+    "expansionTrigger": {
+      "type": "string",
+      "default": "::",
+      "description": "Characters that trigger snippet expansion"
+    },
+    "showPreview": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show snippet preview in slash command menu"
+    },
+    "autoIndent": {
+      "type": "boolean",
+      "default": true,
+      "description": "Automatically indent snippets to match cursor position"
+    }
+  }
+}
