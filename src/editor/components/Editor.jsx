@@ -26,9 +26,6 @@ import HeadingAltInput from "../extensions/HeadingAltInput.js";
 import MarkdownPaste from "../extensions/MarkdownPaste.js";
 import MarkdownTablePaste from "../extensions/MarkdownTablePaste.js";
 import liveEditorSettings from "../../core/editor/live-settings.js";
-import MarkdownIt from "markdown-it";
-import markdownItMark from "markdown-it-mark";
-import markdownItStrikethrough from "markdown-it-strikethrough-alt";
 
 import "../styles/editor.css";
 
@@ -278,90 +275,6 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
           })();
           return true;
         },
-      },
-      handlePaste: (view, event) => {
-        const clipboardData = event.clipboardData;
-        if (!clipboardData) return false;
-        
-        const text = clipboardData.getData('text/plain');
-        if (!text) return false;
-        
-        // More specific markdown detection - only trigger for content that really looks like markdown
-        const hasHeadings = /^#{1,6}\s/m.test(text);
-        const hasCodeBlocks = /```[\s\S]*?```/.test(text);
-        const hasBoldItalic = /(\*\*[^*]+\*\*|\*[^*]+\*|__[^_]+__|_[^_]+_)/.test(text);
-        const hasLists = /^\s*[-*+]\s/m.test(text) || /^\s*\d+\.\s/m.test(text);
-        const hasTaskLists = /^\s*- \[[x\s]\]/m.test(text);
-        const hasBlockquotes = /^>\s/m.test(text);
-        const hasStrikethrough = /~~[^~]+~~/.test(text);
-        const hasHighlights = /==[^=]+==/.test(text);
-        const hasWikiLinks = /\[\[[^\]]+\]\]/.test(text);
-        const hasMath = /\$\$[\s\S]*?\$\$|\$[^$\s][^$]*[^$\s]\$/.test(text);
-        
-        const markdownFeatures = [hasHeadings, hasCodeBlocks, hasBoldItalic, hasLists, hasTaskLists, hasBlockquotes, hasStrikethrough, hasHighlights, hasWikiLinks].filter(Boolean).length;
-        
-        // Don't process as markdown if it has math - let TipTap handle it
-        if (hasMath) {
-          return false; // Let TipTap's normal paste handling work
-        }
-        
-        // Only process as markdown if we detect multiple markdown features or specific complex ones
-        if (markdownFeatures >= 2 || hasCodeBlocks || hasTaskLists || hasWikiLinks) {
-          event.preventDefault();
-          
-          // Delay the paste handling to ensure editor is available
-          setTimeout(() => {
-            const currentEditor = view.dom.closest('.ProseMirror')?.editor || editor;
-            if (!currentEditor?.commands?.insertContent) {
-              // Fallback - insert as plain text directly into view
-              const { state, dispatch } = view;
-              const { from, to } = state.selection;
-              const transaction = state.tr.replaceWith(from, to, state.schema.text(text));
-              dispatch(transaction);
-              return;
-            }
-            
-            try {
-              // Initialize markdown parser with plugins
-              const md = new MarkdownIt({
-                html: true,
-                linkify: true,
-                typographer: true,
-              })
-                .use(markdownItMark)         // ==highlight==
-                .use(markdownItStrikethrough); // ~~strikethrough~~
-              
-              // Convert markdown to HTML
-              let html = md.render(text);
-              
-              // Handle different link types properly
-              
-              // Convert wiki image embeds ![[image]] first (before regular images)
-              html = html.replace(/!\[\[([^\]]+)\]\]/g, '<span data-type="wiki-link" data-embed="true" href="$1">$1</span>');
-              
-              // Ensure regular markdown images are properly formatted
-              html = html.replace(/<p>!\[([^\]]*)\]\(([^)]+)\)<\/p>/g, '<img src="$2" alt="$1" class="editor-image" />');
-              html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="editor-image" />');
-              
-              // Convert wiki links [[page]] (but not if already processed as images)
-              html = html.replace(/(?<!data-type="wiki-link"[^>]*>\s*)\[\[([^\]]+)\]\]/g, '<span data-type="wiki-link" href="$1">$1</span>');
-              
-              // Regular links [text](url) should work normally with the Link extension
-              
-              // Insert the converted HTML
-              currentEditor.commands.insertContent(html);
-              
-            } catch (error) {
-              console.warn('Failed to parse markdown on paste:', error);
-              // Fallback to plain text
-              currentEditor.commands.insertContent(text);
-            }
-          }, 0);
-          
-          return true;
-        }
-        
-        return false; // Let TipTap handle regular pastes normally
       },
     },
     content,
