@@ -1,0 +1,161 @@
+/* Fluid UX Enhancements */
+
+/* Smooth transitions for all interactive elements */
+* {
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, 
+              box-shadow 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+}
+
+/* Editor smooth typing experience */
+.tiptap-area {
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+/* Context menu animations */
+[data-testid="context-menu-content"],
+[role="menu"] {
+  animation: slideInFromTop 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: var(--radix-context-menu-content-transform-origin);
+}
+
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Command palette smooth reveal */
+[data-testid="command-dialog"] {
+  animation: fadeInScale 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Hover states with subtle elevation */
+button:hover,
+[role="menuitem"]:hover,
+[data-testid="command-item"]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.1);
+}
+
+/* Focus states with smooth ring animation */
+button:focus-visible,
+input:focus-visible,
+[role="menuitem"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent), 0 0 0 4px rgba(var(--accent-rgb), 0.2);
+  animation: focusRing 0.2s ease;
+}
+
+@keyframes focusRing {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent), 0 0 0 0 rgba(var(--accent-rgb), 0.2);
+  }
+  100% {
+    box-shadow: 0 0 0 2px var(--accent), 0 0 0 4px rgba(var(--accent-rgb), 0.2);
+  }
+}
+
+/* Smooth scrolling */
+* {
+  scroll-behavior: smooth;
+}
+
+/* File tree smooth interactions */
+.file-tree-item:hover {
+  background-color: rgba(var(--accent-rgb), 0.08);
+  transform: translateX(2px);
+}
+
+/* Loading states with subtle pulse */
+.loading-pulse {
+  animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Smooth sidebar transitions */
+.sidebar {
+  transition: width 0.3s cubic-bezier(0.4, 0.0, 0.2, 1),
+              transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+/* Editor content smooth resize */
+.editor-content {
+  transition: width 0.3s cubic-bezier(0.4, 0.0, 0.2, 1),
+              margin 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+/* Micro-interactions for buttons */
+button:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Tab switching animations */
+.tab-content {
+  animation: slideInFromRight 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Status indicators with smooth color transitions */
+.status-indicator {
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Enhanced focus indicators for accessibility */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Smooth markdown rendering transitions */
+.prose h1, .prose h2, .prose h3 {
+  transition: color 0.2s ease;
+}
+
+/* Code block smooth highlighting */
+.hljs {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}

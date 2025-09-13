@@ -4,6 +4,7 @@ mod windows;
 mod menu;
 mod theme;
 mod handlers;
+mod clipboard;
 
 use windows::{open_workspace_window, open_preferences_window};
 use tauri::Manager;
@@ -49,6 +50,7 @@ fn main() {
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+    .plugin(tauri_plugin_clipboard_manager::init())
     .invoke_handler(tauri::generate_handler![
       open_workspace_window,
       open_preferences_window,
@@ -62,7 +64,16 @@ fn main() {
       handlers::files::read_file_content,
       handlers::files::write_file_content,
       handlers::files::rename_file,
-      handlers::files::move_file
+      handlers::files::move_file,
+      handlers::files::delete_file,
+      handlers::files::reveal_in_finder,
+      handlers::files::open_terminal,
+      clipboard::clipboard_write_text,
+      clipboard::clipboard_read_text,
+      clipboard::clipboard_write_html,
+      clipboard::clipboard_read_html,
+      clipboard::clipboard_has_text,
+      clipboard::clipboard_clear
     ])
     .setup(|app| {
       menu::init(&app.handle())?;

@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import * as StarterKitExt from "@tiptap/starter-kit";
 import * as PlaceholderExt from "@tiptap/extension-placeholder";
 import SlashCommand from "../lib/SlashCommand.js";
 import TableBubbleMenu from "./TableBubbleMenu.jsx";
+import EditorContextMenu from "../../components/EditorContextMenu.jsx";
 import * as LinkExt from "@tiptap/extension-link";
 import * as TaskListExt from "@tiptap/extension-task-list";
 import * as TaskItemExt from "@tiptap/extension-task-item";
@@ -236,8 +237,19 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
     });
     return unsubscribe;
   }, []);
+  
+  // Memoize callbacks for performance
+  const handleEditorUpdate = useCallback(({ editor }) => {
+    if (isSettingRef.current) { 
+      isSettingRef.current = false; 
+      return; 
+    }
+    onContentChange(editor.getHTML());
+  }, [onContentChange]);
+  
   const editor = useEditor({
     extensions,
+    shouldRerenderOnTransaction: false,
     editorProps: {
       attributes: { class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl m-5 focus:outline-none tiptap-area pb-16 smooth-type" },
       handleDOMEvents: {
@@ -347,11 +359,8 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
       },
     },
     content,
-    onUpdate: ({ editor }) => {
-      if (isSettingRef.current) { isSettingRef.current = false; return; }
-      onContentChange(editor.getHTML());
-    },
-  }, [extensions]);
+    onUpdate: handleEditorUpdate,
+  }, [extensions, handleEditorUpdate]);
 
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
@@ -384,6 +393,79 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
     editor.chain().focus().insertContent(html).run();
   };
 
+  const handleEditorAction = (action, data) => {
+    if (!editor) return;
+
+    switch (action) {
+      case 'cut':
+        document.execCommand('cut');
+        break;
+      case 'copy':
+        document.execCommand('copy');
+        break;
+      case 'paste':
+        document.execCommand('paste');
+        break;
+      case 'selectAll':
+        editor.commands.selectAll();
+        break;
+      case 'undo':
+        editor.commands.undo();
+        break;
+      case 'redo':
+        editor.commands.redo();
+        break;
+      case 'find':
+        // TODO: Implement find functionality
+        console.log('Find in editor');
+        break;
+      case 'findAndReplace':
+        // TODO: Implement find and replace
+        console.log('Find and replace in editor');
+        break;
+      case 'commandPalette':
+        // Dispatch event to open command palette
+        try {
+          window.dispatchEvent(new CustomEvent('lokus:command-palette'));
+        } catch (e) {
+          console.log('Command palette action');
+        }
+        break;
+      case 'insertTable':
+        insertTestTable();
+        break;
+      case 'insertCodeBlock':
+        editor.commands.setCodeBlock();
+        break;
+      case 'insertLink':
+        const url = window.prompt('Enter URL:');
+        if (url) {
+          editor.commands.setLink({ href: url });
+        }
+        break;
+      case 'insertImage':
+        const imageUrl = window.prompt('Enter image URL:');
+        if (imageUrl) {
+          editor.commands.setImage({ src: imageUrl });
+        }
+        break;
+      case 'exportMarkdown':
+        // TODO: Implement markdown export
+        console.log('Export as markdown');
+        break;
+      case 'exportHTML':
+        // TODO: Implement HTML export  
+        console.log('Export as HTML');
+        break;
+      case 'importFile':
+        // TODO: Implement file import
+        console.log('Import file');
+        break;
+      default:
+        console.log('Unhandled editor action:', action);
+    }
+  };
+
   return (
     <>
       {editor && showDebug && (
@@ -392,7 +474,14 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
         </div>
       )}
       {editor && <TableBubbleMenu editor={editor} />}
-      <EditorContent editor={editor} />
+      <EditorContextMenu 
+        onAction={handleEditorAction}
+        hasSelection={editor?.state?.selection && !editor.state.selection.empty}
+        canUndo={editor?.can().undo()}
+        canRedo={editor?.can().redo()}
+      >
+        <EditorContent editor={editor} />
+      </EditorContextMenu>
     </>
   );
 }
