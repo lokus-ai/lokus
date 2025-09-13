@@ -26,6 +26,7 @@ import HeadingAltInput from "../extensions/HeadingAltInput.js";
 import MarkdownPaste from "../extensions/MarkdownPaste.js";
 import MarkdownTablePaste from "../extensions/MarkdownTablePaste.js";
 import SmartTask from "../extensions/SmartTask.js";
+import SimpleTask from "../extensions/SimpleTask.js";
 import liveEditorSettings from "../../core/editor/live-settings.js";
 import MarkdownIt from "markdown-it";
 import markdownItMark from "markdown-it-mark";
@@ -154,8 +155,8 @@ const Editor = ({ content, onContentChange }) => {
     exts.push(MarkdownPaste);
     exts.push(MarkdownTablePaste);
     
-    // Smart task management
-    exts.push(SmartTask);
+    // Simple task management with unique patterns
+    exts.push(SimpleTask);
 
     // Load markdown shortcut prefs and editor settings
     (async () => {
@@ -167,7 +168,7 @@ const Editor = ({ content, onContentChange }) => {
         const hs = cfg.markdownShortcuts?.headingAlt
         const invalid = ['$', '[', '!'] // avoid conflicts with math / wikilinks
         if (hs?.enabled && hs.marker && !invalid.includes(hs.marker)) {
-          exts.push(HeadingAltInput({ marker: hs.marker }))
+          // exts.push(HeadingAltInput({ marker: hs.marker })) // Temporarily disabled
         }
         
         // Load editor settings

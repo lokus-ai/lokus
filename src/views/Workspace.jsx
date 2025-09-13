@@ -945,24 +945,25 @@ export default function Workspace({ initialPath = "" }) {
             onDragEnd={handleTabDragEnd}
             onNewTab={handleCreateFile}
           />
-          <div className="flex-1 p-8 md:p-12 overflow-y-auto">
-            <div className="max-w-4xl mx-auto">
-              {activeFile === '__graph__' ? (
-                <div className="flex items-center justify-center h-64 text-center">
-                  <div>
-                    <div className="text-4xl mb-4 text-app-muted/50">📊</div>
-                    <h2 className="text-xl font-medium text-app-text mb-2">Graph View Coming Soon</h2>
-                    <p className="text-app-muted">The graph view is temporarily disabled while we improve it.</p>
+          {activeFile === '__kanban__' ? (
+            <div className="flex-1 bg-app-panel overflow-hidden">
+              <FullKanban 
+                workspacePath={path}
+                onFileOpen={handleFileOpen}
+              />
+            </div>
+          ) : (
+            <div className="flex-1 p-8 md:p-12 overflow-y-auto">
+              <div className="max-w-4xl mx-auto">
+                {activeFile === '__graph__' ? (
+                  <div className="flex items-center justify-center h-64 text-center">
+                    <div>
+                      <div className="text-4xl mb-4 text-app-muted/50">📊</div>
+                      <h2 className="text-xl font-medium text-app-text mb-2">Graph View Coming Soon</h2>
+                      <p className="text-app-muted">The graph view is temporarily disabled while we improve it.</p>
+                    </div>
                   </div>
-                </div>
-              ) : activeFile === '__kanban__' ? (
-                <div className="h-full -m-8 md:-m-12">
-                  <FullKanban 
-                    workspacePath={path}
-                    onFileOpen={handleFileOpen}
-                  />
-                </div>
-              ) : activeFile ? (
+                ) : activeFile ? (
                 <ContextMenu>
                   <ContextMenuTrigger asChild>
                     <div>
@@ -1041,8 +1042,9 @@ export default function Workspace({ initialPath = "" }) {
                   </div>
                 </div>
               )}
+              </div>
             </div>
-          </div>
+          )}
         </main>
       </div>
       
