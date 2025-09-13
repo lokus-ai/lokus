@@ -1,0 +1,62 @@
+{
+  "id": "custom-theme-plugin",
+  "name": "Custom Theme Plugin",
+  "version": "1.0.0",
+  "description": "Demonstrates how to add custom themes and CSS injection capabilities to Lokus",
+  "author": "Lokus Team",
+  "license": "MIT",
+  "main": "index.js",
+  "lokusVersion": "^1.0.0",
+  "keywords": ["theme", "customization", "css", "styling"],
+  "categories": ["Theme"],
+  "permissions": [
+    "modify_ui"
+  ],
+  "activationEvents": ["onStartup"],
+  "contributes": {
+    "commands": [
+      {
+        "command": "custom-theme.apply-nord",
+        "title": "Apply Nord Theme"
+      },
+      {
+        "command": "custom-theme.apply-dracula",
+        "title": "Apply Dracula Theme"
+      },
+      {
+        "command": "custom-theme.apply-monokai",
+        "title": "Apply Monokai Theme"
+      },
+      {
+        "command": "custom-theme.reset-theme",
+        "title": "Reset to Default Theme"
+      },
+      {
+        "command": "custom-theme.toggle-theme-panel",
+        "title": "Toggle Theme Panel"
+      }
+    ]
+  },
+  "configuration": {
+    "autoSwitchTheme": {
+      "type": "boolean",
+      "default": false,
+      "description": "Automatically switch theme based on system dark/light mode"
+    },
+    "customCSS": {
+      "type": "string",
+      "default": "",
+      "description": "Custom CSS to inject into the editor"
+    },
+    "enableAnimations": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable smooth transitions when switching themes"
+    },
+    "persistThemeChoice": {
+      "type": "boolean",
+      "default": true,
+      "description": "Remember theme choice between sessions"
+    }
+  }
+}
