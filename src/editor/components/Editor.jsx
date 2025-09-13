@@ -25,6 +25,7 @@ import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
 import HeadingAltInput from "../extensions/HeadingAltInput.js";
 import MarkdownPaste from "../extensions/MarkdownPaste.js";
 import MarkdownTablePaste from "../extensions/MarkdownTablePaste.js";
+import SmartTask from "../extensions/SmartTask.js";
 import liveEditorSettings from "../../core/editor/live-settings.js";
 import MarkdownIt from "markdown-it";
 import markdownItMark from "markdown-it-mark";
@@ -152,6 +153,9 @@ const Editor = ({ content, onContentChange }) => {
     // Markdown paste functionality
     exts.push(MarkdownPaste);
     exts.push(MarkdownTablePaste);
+    
+    // Smart task management
+    exts.push(SmartTask);
 
     // Load markdown shortcut prefs and editor settings
     (async () => {
