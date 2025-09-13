@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, Share2 } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, Share2, FolderMinus } from "lucide-react";
 // import GraphView from "./GraphView.jsx"; // Temporarily disabled
 import Editor from "../editor";
 import FileContextMenu from "../components/FileContextMenu.jsx";
@@ -593,6 +593,10 @@ export default function Workspace({ initialPath = "" }) {
     });
   };
 
+  const closeAllFolders = () => {
+    setExpandedFolders(new Set());
+  };
+
   const handleFileOpen = (file) => {
     if (file.is_directory) return;
 
@@ -908,6 +912,14 @@ export default function Workspace({ initialPath = "" }) {
                       >
                         <FolderPlus className="w-4 h-4" />
                         New folder
+                      </button>
+                      <button
+                        onClick={closeAllFolders}
+                        className="inline-flex items-center gap-2 rounded-md border border-app-border bg-app-bg px-4 py-2 text-sm hover:bg-app-panel transition-colors"
+                        title="Close all folders"
+                      >
+                        <FolderMinus className="w-4 h-4" />
+                        Close all
                       </button>
                       <button
                         onClick={handleRefreshFiles}
