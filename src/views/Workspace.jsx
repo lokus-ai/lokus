@@ -806,6 +806,9 @@ export default function Workspace({ initialPath = "" }) {
                 <button onClick={handleCreateFolder} title="New Folder" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
                   <Icon path="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" className="w-4 h-4" />
                 </button>
+                <button onClick={closeAllFolders} title="Close all folders" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
+                  <FolderMinus className="w-4 h-4" />
+                </button>
               </div>
             </div>
             <ContextMenu>
@@ -912,14 +915,6 @@ export default function Workspace({ initialPath = "" }) {
                       >
                         <FolderPlus className="w-4 h-4" />
                         New folder
-                      </button>
-                      <button
-                        onClick={closeAllFolders}
-                        className="inline-flex items-center gap-2 rounded-md border border-app-border bg-app-bg px-4 py-2 text-sm hover:bg-app-panel transition-colors"
-                        title="Close all folders"
-                      >
-                        <FolderMinus className="w-4 h-4" />
-                        Close all
                       </button>
                       <button
                         onClick={handleRefreshFiles}
