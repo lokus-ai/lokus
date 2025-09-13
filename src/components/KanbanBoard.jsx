@@ -7,7 +7,8 @@ import { Plus, X, MoreHorizontal } from 'lucide-react'
 const TASK_COLUMNS = {
   todo: { id: 'todo', title: 'Todo', status: 'todo' },
   'in-progress': { id: 'in-progress', title: 'In Progress', status: 'in-progress' },
-  'needs-info': { id: 'needs-info', title: 'Needs Info', status: 'needs-info' },
+  urgent: { id: 'urgent', title: 'Urgent', status: 'urgent' },
+  question: { id: 'question', title: 'Question', status: 'question' },
   completed: { id: 'completed', title: 'Completed', status: 'completed' }
 }
 
@@ -16,7 +17,7 @@ const STATUS_COLORS = {
   todo: 'bg-gray-100 border-gray-300 text-gray-700',
   'in-progress': 'bg-blue-100 border-blue-300 text-blue-700',
   urgent: 'bg-red-100 border-red-300 text-red-700',
-  'needs-info': 'bg-yellow-100 border-yellow-300 text-yellow-700',
+  question: 'bg-yellow-100 border-yellow-300 text-yellow-700',
   completed: 'bg-green-100 border-green-300 text-green-700',
   cancelled: 'bg-gray-100 border-gray-300 text-gray-500 line-through',
   delegated: 'bg-purple-100 border-purple-300 text-purple-700'

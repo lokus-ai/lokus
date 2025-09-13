@@ -19,7 +19,8 @@ import { getActiveShortcuts, formatAccelerator } from "../core/shortcuts/registr
 import CommandPalette from "../components/CommandPalette.jsx";
 import InFileSearch from "../components/InFileSearch.jsx";
 import SearchPanel from "../components/SearchPanel.jsx";
-import KanbanBoard from "../components/KanbanBoard.jsx";
+import MiniKanban from "../components/MiniKanban.jsx";
+import FullKanban from "../components/FullKanban.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -378,6 +379,7 @@ export default function Workspace({ initialPath = "" }) {
   const [path, setPath] = useState(initialPath);
   const { leftW, startLeftDrag } = useDragColumns({});
   const [showLeft, setShowLeft] = useState(true);
+  const [showMiniKanban, setShowMiniKanban] = useState(false);
   const [refreshId, setRefreshId] = useState(0);
 
   const [fileTree, setFileTree] = useState([]);
@@ -648,6 +650,22 @@ export default function Workspace({ initialPath = "" }) {
     setActiveFile(file.path);
   };
 
+  const handleOpenFullKanban = () => {
+    const kanbanPath = '__kanban__';
+    const kanbanName = 'Task Board';
+    
+    setOpenTabs(prevTabs => {
+      const newTabs = prevTabs.filter(t => t.path !== kanbanPath);
+      newTabs.unshift({ path: kanbanPath, name: kanbanName });
+      if (newTabs.length > MAX_OPEN_TABS) {
+        newTabs.pop();
+      }
+      return newTabs;
+    });
+    setActiveFile(kanbanPath);
+    setShowKanban(false); // Close mini kanban when opening full
+  };
+
   const handleTabClick = (path) => {
     setActiveFile(path);
   };
@@ -875,9 +893,9 @@ export default function Workspace({ initialPath = "" }) {
             </div>
             {showKanban ? (
               <div className="flex-1 overflow-hidden">
-                <KanbanBoard 
+                <MiniKanban 
                   workspacePath={path}
-                  onFileOpen={handleFileOpen}
+                  onOpenFull={handleOpenFullKanban}
                 />
               </div>
             ) : (
@@ -936,6 +954,13 @@ export default function Workspace({ initialPath = "" }) {
                     <h2 className="text-xl font-medium text-app-text mb-2">Graph View Coming Soon</h2>
                     <p className="text-app-muted">The graph view is temporarily disabled while we improve it.</p>
                   </div>
+                </div>
+              ) : activeFile === '__kanban__' ? (
+                <div className="h-full -m-8 md:-m-12">
+                  <FullKanban 
+                    workspacePath={path}
+                    onFileOpen={handleFileOpen}
+                  />
                 </div>
               ) : activeFile ? (
                 <ContextMenu>
