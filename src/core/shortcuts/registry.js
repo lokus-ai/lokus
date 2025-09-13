@@ -21,6 +21,7 @@ export const ACTIONS = [
   { id: "toggle-sidebar",   name: "Toggle Sidebar",       event: "lokus:toggle-sidebar",   default: "CommandOrControl+B" },
   { id: "open-preferences", name: "Open Preferences",     event: "preferences:open",       default: "CommandOrControl+," },
   { id: "find",             name: "Find in Note",        event: "lokus:find",            default: "CommandOrControl+F" },
+  { id: "global-search",    name: "Global Search",       event: "lokus:global-search",   default: "CommandOrControl+Shift+F" },
   { id: "command-palette",  name: "Command Palette",     event: "lokus:command-palette",  default: "CommandOrControl+K" },
   { id: "next-tab",         name: "Next Tab",            event: "lokus:next-tab",         default: "CommandOrControl+Tab" },
   { id: "prev-tab",         name: "Previous Tab",        event: "lokus:prev-tab",         default: "CommandOrControl+Shift+Tab" },
