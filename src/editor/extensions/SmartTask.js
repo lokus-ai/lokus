@@ -54,16 +54,16 @@ export const SmartTask = Extension.create({
   
   addInputRules() {
     return [
-      // Enhanced input rule for all task states: [ ], [x], [/], [!], [?], [-], [>]
+      // Enhanced input rule for task states in list items: [!] text
       new InputRule({
-        find: /^\s*\[([x X/!?\->]|\s)\]\s$/,
+        find: /\[([xX\/!\?\->\s])\]\s$/,
         handler: ({ chain, range, match, editor }) => {
           const symbol = match[1]
           const taskConfig = TASK_STATES[symbol]
           
           if (!taskConfig || !editor?.commands?.toggleTaskList) return false
           
-          // Create task list item
+          // Convert current list to task list
           chain().deleteRange(range).toggleTaskList().run()
           
           // Set the appropriate attributes based on the symbol
