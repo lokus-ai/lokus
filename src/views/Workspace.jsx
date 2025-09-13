@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, Share2, LayoutGrid } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, Share2, LayoutGrid, FolderMinus } from "lucide-react";
 // import GraphView from "./GraphView.jsx"; // Temporarily disabled
 import Editor from "../editor";
 import FileContextMenu from "../components/FileContextMenu.jsx";
@@ -602,6 +602,10 @@ export default function Workspace({ initialPath = "" }) {
     });
   };
 
+  const closeAllFolders = () => {
+    setExpandedFolders(new Set());
+  };
+
   const handleFileOpen = (file) => {
     // Handle search result format with line numbers
     if (file.path && file.lineNumber !== undefined) {
@@ -878,6 +882,9 @@ export default function Workspace({ initialPath = "" }) {
                   className={`px-2 py-1 text-xs rounded transition-colors ${showKanban ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:text-app-text hover:bg-app-bg'}`}
                 >
                   Tasks
+                </button>
+                <button onClick={closeAllFolders} title="Close all folders" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
+                  <FolderMinus className="w-4 h-4" />
                 </button>
               </div>
               {!showKanban && (

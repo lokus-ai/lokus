@@ -31,8 +31,8 @@ const MarkdownPaste = Extension.create({
               text: text?.substring(0, 100) 
             })
 
-            // Only process plain text that looks like markdown
-            if (text && !html && isMarkdownContent(text)) {
+            // Process text that looks like markdown (prioritize plain text, but also handle rich text sources)
+            if (text && isMarkdownContent(text)) {
               console.log('[MarkdownPaste] Converting markdown content...')
               
               try {
@@ -89,6 +89,9 @@ function isMarkdownContent(text) {
     /^[-*+]\s+/m,           // - lists
     /^\d+\.\s+/m,           // 1. numbered lists
     /^\|.+\|/m,             // | table |
+    /\[[^\]]*\]\([^)]*\)/,  // [link](url)
+    /```[\s\S]*?```/,       // ```code blocks```
+    /^\s*- \[[x\s]\]/m,     // - [x] task lists
   ]
 
   return markdownPatterns.some(pattern => pattern.test(text))
