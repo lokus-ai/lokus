@@ -18,9 +18,13 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     .item(&PredefinedMenuItem::quit(app, None)?)
     .build()?;
 
-  // Basic Edit menu for standard shortcuts
+  // Edit menu with native clipboard shortcuts
   let edit_menu = SubmenuBuilder::new(app, "Edit")
-    .undo().redo().separator().cut().copy().paste().select_all()
+    .undo().redo()
+    .separator()
+    .cut().copy().paste()
+    .separator()
+    .select_all()
     .build()?;
 
   // File menu with explicit accelerators to ensure reliability on macOS/Windows

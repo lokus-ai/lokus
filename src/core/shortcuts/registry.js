@@ -21,15 +21,10 @@ export const ACTIONS = [
   { id: "toggle-sidebar",   name: "Toggle Sidebar",       event: "lokus:toggle-sidebar",   default: "CommandOrControl+B" },
   { id: "open-preferences", name: "Open Preferences",     event: "preferences:open",       default: "CommandOrControl+," },
   { id: "find",             name: "Find in Note",        event: "lokus:find",            default: "CommandOrControl+F" },
+  { id: "command-palette",  name: "Command Palette",     event: "lokus:command-palette",  default: "CommandOrControl+K" },
   { id: "next-tab",         name: "Next Tab",            event: "lokus:next-tab",         default: "CommandOrControl+Tab" },
   { id: "prev-tab",         name: "Previous Tab",        event: "lokus:prev-tab",         default: "CommandOrControl+Shift+Tab" },
   { id: "close-tab",        name: "Close Current Tab",   event: "lokus:close-tab",        default: "CommandOrControl+W" },
-  { id: "select-all",       name: "Select All",          event: "lokus:select-all",       default: "CommandOrControl+A" },
-  { id: "copy",             name: "Copy",                event: "lokus:copy",             default: "CommandOrControl+C" },
-  { id: "cut",              name: "Cut",                 event: "lokus:cut",              default: "CommandOrControl+X" },
-  { id: "paste",            name: "Paste",               event: "lokus:paste",            default: "CommandOrControl+V" },
-  { id: "undo",             name: "Undo",                event: "lokus:undo",             default: "CommandOrControl+Z" },
-  { id: "redo",             name: "Redo",                event: "lokus:redo",             default: "CommandOrControl+Shift+Z" },
 ];
 
 export function listActions() { return ACTIONS.map(a => ({ id: a.id, name: a.name })); }

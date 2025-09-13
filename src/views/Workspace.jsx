@@ -7,15 +7,16 @@ import { DraggableTab } from "./DraggableTab";
 import { Menu, FilePlus2, FolderPlus, Search, Share2 } from "lucide-react";
 // import GraphView from "./GraphView.jsx"; // Temporarily disabled
 import Editor from "../editor";
+import FileContextMenu from "../components/FileContextMenu.jsx";
 import {
   ContextMenu,
   ContextMenuTrigger,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
-  ContextMenuLabel,
 } from "../components/ui/context-menu.jsx";
 import { getActiveShortcuts, formatAccelerator } from "../core/shortcuts/registry.js";
+import CommandPalette from "../components/CommandPalette.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -153,51 +154,106 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
     } catch (e) { console.error(e); }
   };
 
+  const handleFileContextAction = async (action, data) => {
+    const { file } = data;
+    
+    switch (action) {
+      case 'open':
+        onFileClick(file);
+        break;
+      case 'openToSide':
+        // TODO: Implement open to side functionality
+        console.log('Open to side:', file.path);
+        break;
+      case 'openWith':
+        // TODO: Implement open with functionality
+        console.log('Open with:', file.path);
+        break;
+      case 'revealInFinder':
+        try {
+          await invoke('reveal_in_finder', { path: file.path });
+        } catch (e) {
+          console.error('Failed to reveal in finder:', e);
+        }
+        break;
+      case 'openInTerminal':
+        try {
+          const terminalPath = file.is_directory ? file.path : file.path.split("/").slice(0, -1).join("/");
+          await invoke('open_terminal', { path: terminalPath });
+        } catch (e) {
+          console.error('Failed to open terminal:', e);
+        }
+        break;
+      case 'cut':
+        // TODO: Implement cut functionality
+        console.log('Cut:', file.path);
+        break;
+      case 'copy':
+        // TODO: Implement copy functionality
+        console.log('Copy:', file.path);
+        break;
+      case 'copyPath':
+        try {
+          await navigator.clipboard.writeText(file.path);
+        } catch (e) {
+          console.error('Failed to copy path:', e);
+        }
+        break;
+      case 'copyRelativePath':
+        try {
+          // TODO: Calculate relative path from workspace root
+          const relativePath = file.path; // Simplified for now
+          await navigator.clipboard.writeText(relativePath);
+        } catch (e) {
+          console.error('Failed to copy relative path:', e);
+        }
+        break;
+      case 'rename':
+        onRename();
+        break;
+      case 'delete':
+        try {
+          const confirmed = await confirm(`Are you sure you want to delete "${file.name}"?`);
+          if (confirmed) {
+            await invoke('delete_file', { path: file.path });
+            onRefresh && onRefresh();
+          }
+        } catch (e) {
+          console.error('Failed to delete:', e);
+        }
+        break;
+      case 'selectForCompare':
+        // TODO: Implement select for compare
+        console.log('Select for compare:', file.path);
+        break;
+      case 'shareEmail':
+      case 'shareSlack':
+      case 'shareTeams':
+        // TODO: Implement sharing functionality
+        console.log('Share:', action, file.path);
+        break;
+      default:
+        console.log('Unhandled action:', action, file.path);
+    }
+  };
+
   return (
     <li style={{ paddingLeft: `${level * 1.25}rem` }}>
       <div ref={droppableRef} className="rounded">
         <div ref={draggableRef} className="flex items-center">
-          <ContextMenu>
-            <ContextMenuTrigger asChild>
-              <button {...listeners} {...attributes} onClick={handleClick} className={`${baseClasses} ${stateClasses} ${dropTargetClasses} ${draggingClasses}`}>
-                {entry.is_directory ? (
-                  <Icon path={isExpanded ? "M19.5 8.25l-7.5 7.5-7.5-7.5" : "M8.25 4.5l7.5 7.5-7.5 7.5"} className="w-4 h-4 flex-shrink-0" />
-                ) : (
-                  <Icon path="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" className="w-4 h-4 flex-shrink-0" />
-                )}
-                <span className="truncate">{entry.name}</span>
-              </button>
-            </ContextMenuTrigger>
-            <ContextMenuContent>
-              <ContextMenuLabel>{entry.is_directory ? "Folder" : "File"}</ContextMenuLabel>
-              <ContextMenuItem onClick={() => onFileClick(entry)}>Open</ContextMenuItem>
-              <ContextMenuItem onClick={onRename}>Rename</ContextMenuItem>
-              <ContextMenuSeparator />
+          <FileContextMenu 
+            file={{ ...entry, type: entry.is_directory ? 'folder' : 'file' }} 
+            onAction={handleFileContextAction}
+          >
+            <button {...listeners} {...attributes} onClick={handleClick} className={`${baseClasses} ${stateClasses} ${dropTargetClasses} ${draggingClasses}`}>
               {entry.is_directory ? (
-                <>
-                  <ContextMenuItem onClick={onCreateFileHere}>
-                    New File
-                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-file'])}</span>
-                  </ContextMenuItem>
-                  <ContextMenuItem onClick={onCreateFolderHere}>
-                    New Folder
-                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-folder'])}</span>
-                  </ContextMenuItem>
-                </>
+                <Icon path={isExpanded ? "M19.5 8.25l-7.5 7.5-7.5-7.5" : "M8.25 4.5l7.5 7.5-7.5 7.5"} className="w-4 h-4 flex-shrink-0" />
               ) : (
-                <>
-                  <ContextMenuItem onClick={onCreateFileHere}>
-                    New File Here
-                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-file'])}</span>
-                  </ContextMenuItem>
-                  <ContextMenuItem onClick={onCreateFolderHere}>
-                    New Folder Here
-                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-folder'])}</span>
-                  </ContextMenuItem>
-                </>
+                <Icon path="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" className="w-4 h-4 flex-shrink-0" />
               )}
-            </ContextMenuContent>
-          </ContextMenu>
+              <span className="truncate">{entry.name}</span>
+            </button>
+          </FileContextMenu>
         </div>
       </div>
       {isExpanded && (
@@ -334,6 +390,7 @@ export default function Workspace({ initialPath = "" }) {
   const [editorTitle, setEditorTitle] = useState("");
   const [savedContent, setSavedContent] = useState("");
   const [showGraph, setShowGraph] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
   
   // --- Refs for stable callbacks ---
   const stateRef = useRef({});
@@ -668,42 +725,6 @@ export default function Workspace({ initialPath = "" }) {
     setIsCreatingFolder(false);
   };
 
-  const handleTabClose = useCallback(async (tabPath) => {
-    const hasUnsavedChanges = unsavedChanges.has(tabPath);
-    
-    if (hasUnsavedChanges) {
-      const shouldClose = await confirm("You have unsaved changes. Close anyway?", {
-        title: "Unsaved Changes",
-        kind: "warning",
-      });
-      if (!shouldClose) return;
-    }
-
-    setOpenTabs(prevTabs => {
-      const newTabs = prevTabs.filter(tab => tab.path !== tabPath);
-      
-      // If we're closing the active tab, switch to another tab
-      if (tabPath === activeFile) {
-        const currentIndex = prevTabs.findIndex(tab => tab.path === tabPath);
-        if (newTabs.length > 0) {
-          // Switch to the next tab, or previous if this was the last tab
-          const nextIndex = currentIndex < newTabs.length ? currentIndex : newTabs.length - 1;
-          setActiveFile(newTabs[nextIndex].path);
-        } else {
-          setActiveFile(null);
-        }
-      }
-      
-      return newTabs;
-    });
-
-    // Remove from unsaved changes
-    setUnsavedChanges(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(tabPath);
-      return newSet;
-    });
-  }, [unsavedChanges, activeFile]);
 
   const handleTabDragEnd = (event) => {
     const { active, over } = event;
@@ -732,6 +753,7 @@ export default function Workspace({ initialPath = "" }) {
     const unlistenNewFile = isTauri ? listen("lokus:new-file", handleCreateFile) : Promise.resolve(addDom('lokus:new-file', handleCreateFile));
     const unlistenNewFolder = isTauri ? listen("lokus:new-folder", () => setIsCreatingFolder(true)) : Promise.resolve(addDom('lokus:new-folder', () => setIsCreatingFolder(true)));
     const unlistenToggleSidebar = isTauri ? listen("lokus:toggle-sidebar", () => setShowLeft(v => !v)) : Promise.resolve(addDom('lokus:toggle-sidebar', () => setShowLeft(v => !v)));
+    const unlistenCommandPalette = isTauri ? listen("lokus:command-palette", () => setShowCommandPalette(true)) : Promise.resolve(addDom('lokus:command-palette', () => setShowCommandPalette(true)));
 
     return () => {
       unlistenSave.then(f => { if (typeof f === 'function') f(); });
@@ -739,6 +761,7 @@ export default function Workspace({ initialPath = "" }) {
       unlistenNewFile.then(f => { if (typeof f === 'function') f(); });
       unlistenNewFolder.then(f => { if (typeof f === 'function') f(); });
       unlistenToggleSidebar.then(f => { if (typeof f === 'function') f(); });
+      unlistenCommandPalette.then(f => { if (typeof f === 'function') f(); });
     };
   }, [handleSave, handleTabClose]);
 
@@ -918,6 +941,33 @@ export default function Workspace({ initialPath = "" }) {
           </div>
         </main>
       </div>
+      
+      <CommandPalette
+        open={showCommandPalette}
+        setOpen={setShowCommandPalette}
+        fileTree={fileTree}
+        openFiles={openTabs}
+        onFileOpen={handleFileOpen}
+        onCreateFile={handleCreateFile}
+        onCreateFolder={() => setIsCreatingFolder(true)}
+        onSave={handleSave}
+        onOpenPreferences={() => {
+          const openPreferences = () => {
+            (async () => {
+              try {
+                const { emit } = await import('@tauri-apps/api/event');
+                await emit('preferences:open');
+              } catch {
+                try { window.dispatchEvent(new CustomEvent('preferences:open')); } catch {}
+              }
+            })();
+          };
+          openPreferences();
+        }}
+        onToggleSidebar={() => setShowLeft(v => !v)}
+        onCloseTab={handleTabClose}
+        activeFile={activeFile}
+      />
     </div>
   );
 }
