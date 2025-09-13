@@ -5,6 +5,7 @@ mod menu;
 mod theme;
 mod handlers;
 mod clipboard;
+mod search;
 
 use windows::{open_workspace_window, open_preferences_window};
 use tauri::Manager;
@@ -73,7 +74,11 @@ fn main() {
       clipboard::clipboard_write_html,
       clipboard::clipboard_read_html,
       clipboard::clipboard_has_text,
-      clipboard::clipboard_clear
+      clipboard::clipboard_clear,
+      search::search_in_files,
+      search::search_in_file,
+      search::get_file_content_with_lines,
+      search::build_search_index
     ])
     .setup(|app| {
       menu::init(&app.handle())?;
