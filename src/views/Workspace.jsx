@@ -17,6 +17,8 @@ import {
 } from "../components/ui/context-menu.jsx";
 import { getActiveShortcuts, formatAccelerator } from "../core/shortcuts/registry.js";
 import CommandPalette from "../components/CommandPalette.jsx";
+import InFileSearch from "../components/InFileSearch.jsx";
+import SearchPanel from "../components/SearchPanel.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -391,9 +393,12 @@ export default function Workspace({ initialPath = "" }) {
   const [savedContent, setSavedContent] = useState("");
   const [showGraph, setShowGraph] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showInFileSearch, setShowInFileSearch] = useState(false);
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   
   // --- Refs for stable callbacks ---
   const stateRef = useRef({});
+  const editorRef = useRef(null);
   stateRef.current = {
     activeFile,
     openTabs,
@@ -754,6 +759,8 @@ export default function Workspace({ initialPath = "" }) {
     const unlistenNewFolder = isTauri ? listen("lokus:new-folder", () => setIsCreatingFolder(true)) : Promise.resolve(addDom('lokus:new-folder', () => setIsCreatingFolder(true)));
     const unlistenToggleSidebar = isTauri ? listen("lokus:toggle-sidebar", () => setShowLeft(v => !v)) : Promise.resolve(addDom('lokus:toggle-sidebar', () => setShowLeft(v => !v)));
     const unlistenCommandPalette = isTauri ? listen("lokus:command-palette", () => setShowCommandPalette(true)) : Promise.resolve(addDom('lokus:command-palette', () => setShowCommandPalette(true)));
+    const unlistenInFileSearch = isTauri ? listen("lokus:in-file-search", () => setShowInFileSearch(true)) : Promise.resolve(addDom('lokus:in-file-search', () => setShowInFileSearch(true)));
+    const unlistenGlobalSearch = isTauri ? listen("lokus:global-search", () => setShowGlobalSearch(true)) : Promise.resolve(addDom('lokus:global-search', () => setShowGlobalSearch(true)));
 
     return () => {
       unlistenSave.then(f => { if (typeof f === 'function') f(); });
@@ -762,6 +769,8 @@ export default function Workspace({ initialPath = "" }) {
       unlistenNewFolder.then(f => { if (typeof f === 'function') f(); });
       unlistenToggleSidebar.then(f => { if (typeof f === 'function') f(); });
       unlistenCommandPalette.then(f => { if (typeof f === 'function') f(); });
+      unlistenInFileSearch.then(f => { if (typeof f === 'function') f(); });
+      unlistenGlobalSearch.then(f => { if (typeof f === 'function') f(); });
     };
   }, [handleSave, handleTabClose]);
 
@@ -870,6 +879,7 @@ export default function Workspace({ initialPath = "" }) {
                         className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
                       />
                       <Editor
+                        ref={editorRef}
                         content={editorContent}
                         onContentChange={handleEditorChange}
                       />
@@ -967,6 +977,19 @@ export default function Workspace({ initialPath = "" }) {
         onToggleSidebar={() => setShowLeft(v => !v)}
         onCloseTab={handleTabClose}
         activeFile={activeFile}
+      />
+      
+      <InFileSearch
+        editor={editorRef.current}
+        isVisible={showInFileSearch}
+        onClose={() => setShowInFileSearch(false)}
+      />
+      
+      <SearchPanel
+        isOpen={showGlobalSearch}
+        onClose={() => setShowGlobalSearch(false)}
+        onFileOpen={handleFileOpen}
+        workspacePath={path}
       />
     </div>
   );
