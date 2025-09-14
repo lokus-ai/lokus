@@ -106,11 +106,20 @@
   border-radius: 8px;
 }
 
-/* Full kanban specific styles */
+/* Professional kanban design */
 .full-kanban {
   min-height: 100vh;
-  background: transparent;
+  background: rgb(var(--bg));
   padding: 0;
+}
+
+.kanban-header {
+  background: rgb(var(--panel));
+  border-bottom: 1px solid rgb(var(--border));
+  padding: 1.5rem 2rem;
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 
 .kanban-columns-container {
@@ -118,75 +127,177 @@
   gap: 1.5rem;
   padding: 2rem;
   overflow-x: auto;
-  min-height: calc(100vh - 120px);
+  min-height: calc(100vh - 140px);
+  background: rgb(var(--bg));
 }
 
 .kanban-columns-container::-webkit-scrollbar {
-  height: 6px;
+  height: 8px;
 }
 
 .kanban-columns-container::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgb(var(--panel));
+  border-radius: 4px;
 }
 
 .kanban-columns-container::-webkit-scrollbar-thumb {
-  background: var(--app-border);
-  border-radius: 3px;
+  background: rgb(var(--border));
+  border-radius: 4px;
 }
 
 .kanban-columns-container::-webkit-scrollbar-thumb:hover {
-  background: var(--app-accent);
-}
-
-.kanban-header {
-  background: transparent;
-  border-bottom: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  padding: 1.5rem 2rem;
+  background: rgb(var(--accent));
 }
 
 .kanban-column {
-  flex: 0 0 320px;
-  background: transparent;
+  flex: 0 0 340px;
+  background: rgb(var(--panel));
   border-radius: 12px;
-  border: none;
-  box-shadow: none;
-  backdrop-filter: none;
-  padding: 0.75rem;
+  border: 1px solid rgb(var(--border));
+  padding: 1rem;
+  max-height: calc(100vh - 180px);
+  display: flex;
+  flex-direction: column;
 }
 
 .kanban-column-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin: -1rem -1rem 1rem -1rem;
+  background: rgb(var(--panel-secondary));
+  border-radius: 12px 12px 0 0;
+  border-bottom: 1px solid rgb(var(--border));
   position: sticky;
   top: 0;
-  background: var(--app-panel);
-  border-radius: 12px 12px 0 0;
   z-index: 10;
-  backdrop-filter: blur(10px);
-  padding: 1rem;
-  margin-bottom: 0.75rem;
 }
 
-.task-card-full {
-  background: var(--app-bg);
-  border: 1px solid var(--app-border);
+.kanban-column-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.kanban-column-count {
+  background: rgb(var(--border));
+  color: rgb(var(--text-secondary));
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+.kanban-column-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.task-card-professional {
+  background: rgb(var(--bg));
+  border: 1px solid rgb(var(--border));
   border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
   transition: all 0.2s ease;
   cursor: grab;
-  color: var(--app-text);
-  margin-bottom: 0.75rem;
-  padding: 1rem;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.task-card-full:active {
+.task-card-professional:hover {
+  border-color: rgb(var(--accent));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.task-card-professional:active {
   cursor: grabbing;
+  transform: scale(0.98);
 }
 
-.task-card-full:hover {
-  background: var(--app-hover);
-  border-color: var(--app-accent);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  transform: translateY(-1px);
+.task-card-professional.dragging {
+  opacity: 0.6;
+  transform: rotate(3deg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.task-card-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgb(var(--text));
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+
+.task-card-description {
+  font-size: 0.75rem;
+  color: rgb(var(--text-secondary));
+  margin-bottom: 0.75rem;
+  line-height: 1.4;
+}
+
+.task-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: rgb(var(--muted));
+}
+
+.task-card-tags {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.task-tag {
+  background: rgb(var(--panel));
+  color: rgb(var(--text-secondary));
+  padding: 0.125rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.625rem;
+  font-weight: 500;
+  border: 1px solid rgb(var(--border));
+}
+
+.task-status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 0.5rem;
+  flex-shrink: 0;
+}
+
+.add-task-area {
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid rgb(var(--border));
+}
+
+.add-task-button {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px dashed rgb(var(--border));
+  border-radius: 8px;
+  background: transparent;
+  color: rgb(var(--text-secondary));
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.add-task-button:hover {
+  border-color: rgb(var(--accent));
+  background: rgb(var(--accent) / 0.05);
+  color: rgb(var(--accent));
 }
 
 /* Task metadata */

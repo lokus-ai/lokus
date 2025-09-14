@@ -96,8 +96,8 @@ function DraggableTaskCard({ task, onUpdate, onDelete }) {
       style={style}
       {...attributes}
       {...listeners}
-      className={`p-4 mb-3 rounded-lg border-2 cursor-grab active:cursor-grabbing transition-all hover:shadow-md ${statusColor} ${
-        isDragging ? 'shadow-lg' : ''
+      className={`task-card-professional ${statusColor} ${
+        isDragging ? 'dragging' : ''
       }`}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -145,9 +145,9 @@ function DraggableTaskCard({ task, onUpdate, onDelete }) {
               className="flex-1 cursor-pointer"
               onClick={() => setIsEditing(true)}
             >
-              <div className="font-medium text-sm mb-1">{task.title}</div>
+              <div className="task-card-title">{task.title}</div>
               {task.description && (
-                <div className="text-xs opacity-70 line-clamp-2">{task.description}</div>
+                <div className="task-card-description line-clamp-2">{task.description}</div>
               )}
             </div>
             
@@ -233,7 +233,7 @@ function DraggableTaskCard({ task, onUpdate, onDelete }) {
             </div>
           )}
           
-          <div className="flex justify-between items-center text-xs opacity-50">
+          <div className="task-card-meta">
             <span>{formatDate(task.created_at)}</span>
             <span className="capitalize">{task.status.replace('-', ' ')}</span>
           </div>
@@ -277,17 +277,16 @@ function DroppableColumn({ column, tasks, onTaskUpdate, onTaskDelete, onAddTask 
   }, [handleAddTask])
 
   return (
-    <div className="bg-app-panel rounded-xl p-4 min-w-80 max-w-80 flex flex-col">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className={`font-semibold text-sm ${column.headerColor}`}>
-          {column.title}
-          <span className="ml-2 px-2 py-1 bg-app-border/30 rounded-full text-xs font-normal">
-            {tasks.length}
-          </span>
-        </h3>
+    <div className="kanban-column">
+      <div className="kanban-column-header">
+        <div className="task-status-indicator" style={{ backgroundColor: `rgb(var(--task-${column.status}))` }}></div>
+        <div className="kanban-column-title">
+          <span className={column.headerColor}>{column.title}</span>
+          <span className="kanban-column-count">{tasks.length}</span>
+        </div>
         <button
           onClick={() => setIsAdding(true)}
-          className="p-1.5 rounded-lg hover:bg-app-hover text-app-muted hover:text-app-text transition-colors"
+          className="ml-auto p-1.5 rounded-lg hover:bg-app-hover text-app-muted hover:text-app-text transition-colors"
           title="Add task"
         >
           <Plus className="w-4 h-4" />
@@ -296,7 +295,7 @@ function DroppableColumn({ column, tasks, onTaskUpdate, onTaskDelete, onAddTask 
       
       <div 
         ref={setNodeRef}
-        className={`flex-1 overflow-y-auto min-h-96 transition-colors ${
+        className={`kanban-column-content ${
           isOver ? 'bg-app-accent/10 rounded-lg' : ''
         }`}
       >
@@ -309,8 +308,17 @@ function DroppableColumn({ column, tasks, onTaskUpdate, onTaskDelete, onAddTask 
           />
         ))}
         
-        {isAdding && (
-          <div className="p-4 mb-3 rounded-lg border-2 border-dashed border-app-border bg-app-bg/50">
+        {tasks.length === 0 && !isAdding && (
+          <div className="text-center text-app-muted py-8">
+            <div className="text-sm mb-2">No {column.title.toLowerCase()} tasks</div>
+            <div className="text-xs">Drag tasks here or click + to add</div>
+          </div>
+        )}
+      </div>
+      
+      <div className="add-task-area">
+        {isAdding ? (
+          <div className="p-3 mb-2 rounded-lg border border-app-border bg-app-bg/50">
             <input
               type="text"
               value={newTaskTitle}
@@ -325,13 +333,13 @@ function DroppableColumn({ column, tasks, onTaskUpdate, onTaskDelete, onAddTask 
               Press Enter to save, Esc to cancel
             </div>
           </div>
-        )}
-        
-        {tasks.length === 0 && !isAdding && (
-          <div className="text-center text-app-muted py-8">
-            <div className="text-sm mb-2">No {column.title.toLowerCase()} tasks</div>
-            <div className="text-xs">Drag tasks here or click + to add</div>
-          </div>
+        ) : (
+          <button
+            onClick={() => setIsAdding(true)}
+            className="add-task-button"
+          >
+            + Add new task
+          </button>
         )}
       </div>
     </div>
@@ -508,9 +516,9 @@ export default function FullKanban({ workspacePath, onFileOpen }) {
   const completedTasks = tasks.filter(t => t.status === 'completed').length
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col full-kanban">
       {/* Header */}
-      <div className="p-6 border-b border-app-border bg-app-panel">
+      <div className="kanban-header">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-xl font-semibold text-app-text">Task Board</h1>
@@ -571,7 +579,7 @@ export default function FullKanban({ workspacePath, onFileOpen }) {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex gap-6 p-6 min-h-full">
+          <div className="kanban-columns-container">
             {Object.values(FULL_COLUMNS).map(column => (
               <DroppableColumn
                 key={column.id}

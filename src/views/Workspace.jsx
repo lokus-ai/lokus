@@ -5,6 +5,7 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
 import { Menu, FilePlus2, FolderPlus, Search, Share2, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers } from "lucide-react";
+import LokusLogo from "../components/LokusLogo.jsx";
 // import GraphView from "./GraphView.jsx"; // Temporarily disabled
 import Editor from "../editor";
 import Canvas from "./Canvas.jsx";
@@ -42,33 +43,42 @@ function useDragColumns({ minLeft = 220, maxLeft = 500, minRight = 220, maxRight
   const [rightW, setRightW] = useState(280);
   const dragRef = useRef(null);
 
-  useEffect(() => {
+
+  const startLeftDrag = useCallback((e) => { 
+    dragRef.current = { side: "left", startX: e.clientX, left0: leftW, right0: rightW };
+    
     function onMove(e) {
       const d = dragRef.current;
       if (!d) return;
-      if (d.side === "left") {
-        setLeftW(Math.min(maxLeft, Math.max(minLeft, d.left0 + (e.clientX - d.startX))));
-      } else {
-        setRightW(Math.min(maxRight, Math.max(minRight, d.right0 - (e.clientX - d.startX))));
-      }
+      setLeftW(Math.min(maxLeft, Math.max(minLeft, d.left0 + (e.clientX - d.startX))));
     }
     function onUp() {
       dragRef.current = null;
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
     }
-    if (dragRef.current) {
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp);
+    
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [leftW, rightW, maxLeft, minLeft]);
+  
+  const startRightDrag = useCallback((e) => { 
+    dragRef.current = { side: "right", startX: e.clientX, left0: leftW, right0: rightW };
+    
+    function onMove(e) {
+      const d = dragRef.current;
+      if (!d) return;
+      setRightW(Math.min(maxRight, Math.max(minRight, d.right0 - (e.clientX - d.startX))));
     }
-    return () => {
+    function onUp() {
+      dragRef.current = null;
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
-    };
-  }, [leftW, rightW, minLeft, maxLeft, minRight, maxRight]);
-
-  const startLeftDrag = (e) => { dragRef.current = { side: "left", startX: e.clientX, left0: leftW, right0: rightW }; };
-  const startRightDrag = (e) => { dragRef.current = { side: "right", startX: e.clientX, left0: leftW, right0: rightW }; };
+    }
+    
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [leftW, rightW, maxRight, minRight]);
 
   return { leftW, rightW, startLeftDrag, startRightDrag };
 }
@@ -128,8 +138,8 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
     }
   };
 
-  const baseClasses = "w-full text-left px-2 py-1 text-sm rounded flex items-center gap-2 transition-colors";
-  const stateClasses = activeFile === entry.path ? 'bg-app-accent/20 text-app-text' : 'text-app-muted hover:text-app-text hover:bg-app-bg';
+  const baseClasses = "obsidian-file-item";
+  const stateClasses = activeFile === entry.path ? 'active' : '';
   const dropTargetClasses = isDropTarget ? 'bg-app-accent/30 ring-2 ring-app-accent' : '';
   const draggingClasses = isDragging ? 'opacity-50' : '';
 
@@ -256,9 +266,9 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
           >
             <button {...listeners} {...attributes} onClick={handleClick} className={`${baseClasses} ${stateClasses} ${dropTargetClasses} ${draggingClasses}`}>
               {entry.is_directory ? (
-                <Icon path={isExpanded ? "M19.5 8.25l-7.5 7.5-7.5-7.5" : "M8.25 4.5l7.5 7.5-7.5 7.5"} className="w-4 h-4 flex-shrink-0" />
+                <Icon path={isExpanded ? "M19.5 8.25l-7.5 7.5-7.5-7.5" : "M8.25 4.5l7.5 7.5-7.5 7.5"} className="obsidian-file-icon" />
               ) : (
-                <Icon path="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" className="w-4 h-4 flex-shrink-0" />
+                <Icon path="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" className="obsidian-file-icon" />
               )}
               <span className="truncate">{entry.name}</span>
             </button>
@@ -352,7 +362,7 @@ function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDra
 
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-      <div className="h-12 shrink-0 flex items-center border-b border-app-border px-2">
+      <div className="h-9 shrink-0 flex items-end bg-app-panel border-b border-app-border px-0">
         <div className="flex-1 flex items-center overflow-x-auto no-scrollbar">
           {tabs.map(tab => (
             <DraggableTab
@@ -367,11 +377,11 @@ function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDra
         </div>
         <button
           onClick={onNewTab}
-          title="New file"
-          className="ml-2 h-8 w-8 grid place-items-center rounded-md text-app-muted hover:text-app-text hover:bg-app-bg border border-transparent"
+          title="New file (⌘N)"
+          className="obsidian-button icon-only ml-2 mb-1"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-            <path d="M12 4.5v15m7.5-7.5h-15" />
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
         </button>
       </div>
@@ -871,7 +881,7 @@ export default function Workspace({ initialPath = "" }) {
   })();
 
   return (
-    <div className="h-screen bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden">
+    <div className="h-screen bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select">
       {/* Test Mode Indicator */}
       {isTestMode && (
         <div className="fixed top-4 right-4 bg-yellow-500 text-black px-3 py-1 rounded-md text-sm font-medium z-50">
@@ -884,9 +894,9 @@ export default function Workspace({ initialPath = "" }) {
           <button
             onClick={() => setShowLeft(v => !v)}
             title={showLeft ? "Hide sidebar" : "Show sidebar"}
-            className={`p-2 rounded-md transition-colors mb-2 ${showLeft ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:bg-app-bg hover:text-app-text'}`}
+            className={`obsidian-button icon-only mb-2 ${showLeft ? 'primary' : ''}`}
           >
-            <Menu className="w-5 h-5" />
+            <LokusLogo className="w-6 h-6" />
           </button>
           
           {/* Activity Bar - VS Code Style */}
@@ -898,7 +908,7 @@ export default function Workspace({ initialPath = "" }) {
                 setShowLeft(true);
               }}
               title="Explorer"
-              className={`w-full p-2 rounded-md transition-colors mb-1 flex items-center justify-center ${!showKanban && !showPlugins && showLeft ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:bg-app-bg hover:text-app-text'}`}
+              className={`obsidian-button icon-only w-full mb-1 ${!showKanban && !showPlugins && showLeft ? 'primary' : ''}`}
             >
               <FolderOpen className="w-5 h-5" />
             </button>
@@ -910,7 +920,7 @@ export default function Workspace({ initialPath = "" }) {
                 setShowLeft(true);
               }}
               title="Task Board"
-              className={`w-full p-2 rounded-md transition-colors mb-1 flex items-center justify-center ${showKanban && !showPlugins ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:bg-app-bg hover:text-app-text'}`}
+              className={`obsidian-button icon-only w-full mb-1 ${showKanban && !showPlugins ? 'primary' : ''}`}
             >
               <LayoutGrid className="w-5 h-5" />
             </button>
@@ -922,7 +932,7 @@ export default function Workspace({ initialPath = "" }) {
                 setShowLeft(true);
               }}
               title="Extensions"
-              className={`w-full p-2 rounded-md transition-colors flex items-center justify-center ${showPlugins ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:bg-app-bg hover:text-app-text'}`}
+              className={`obsidian-button icon-only w-full ${showPlugins ? 'primary' : ''}`}
             >
               <Puzzle className="w-5 h-5" />
             </button>
@@ -939,20 +949,20 @@ export default function Workspace({ initialPath = "" }) {
                     {showPlugins ? 'Extensions' : 'Explorer'}
                   </h2>
                   {!showPlugins && (
-                    <button onClick={closeAllFolders} title="Close all folders" className="p-1 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
+                    <button onClick={closeAllFolders} title="Close all folders" className="obsidian-button small icon-only">
                       <FolderMinus className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
                 {!showPlugins && (
                   <div className="flex items-center gap-1">
-                    <button onClick={handleCreateFile} title="New File" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
+                    <button onClick={handleCreateFile} title="New File" className="obsidian-button small icon-only">
                       <FilePlus className="w-4 h-4" />
                     </button>
-                    <button onClick={handleCreateCanvas} title="New Canvas" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
+                    <button onClick={handleCreateCanvas} title="New Canvas" className="obsidian-button small icon-only">
                       <Layers className="w-4 h-4" />
                     </button>
-                    <button onClick={handleCreateFolder} title="New Folder" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
+                    <button onClick={handleCreateFolder} title="New Folder" className="obsidian-button small icon-only">
                       <FolderPlus className="w-4 h-4" />
                     </button>
                   </div>
@@ -1007,11 +1017,8 @@ export default function Workspace({ initialPath = "" }) {
             )}
           </aside>
         )}
-        {showLeft && <div onMouseDown={startLeftDrag} className="cursor-col-resize bg-app-border/20 hover:bg-app-accent/50 transition-colors duration-300 w-px" />}
+        {showLeft && <div onMouseDown={startLeftDrag} className="cursor-col-resize bg-app-border hover:bg-app-accent transition-colors duration-300 w-1 min-h-full" />}
         <main className="min-w-0 min-h-0 flex flex-col bg-app-bg">
-          <div className="px-4 py-2 border-b border-app-border flex items-center justify-end">
-            <button disabled title="Graph view coming soon" className="px-2 py-1 text-xs rounded border border-app-border bg-app-panel/50 text-app-muted/50 cursor-not-allowed opacity-50">Graph</button>
-          </div>
           <TabBar 
             tabs={openTabs}
             activeTab={activeFile}
@@ -1113,9 +1120,7 @@ export default function Workspace({ initialPath = "" }) {
                       {/* Header Section */}
                       <div className="text-center mb-10">
                         <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-app-accent/20 to-app-accent/10 border border-app-accent/20 flex items-center justify-center">
-                          <svg className="w-8 h-8 text-app-accent" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
-                          </svg>
+                          <LokusLogo className="w-10 h-10 text-app-accent" />
                         </div>
                         <h1 className="text-3xl font-bold text-app-text mb-2">Welcome to Lokus</h1>
                         <p className="text-app-muted text-lg">Your modern knowledge management platform</p>
@@ -1260,6 +1265,62 @@ export default function Workspace({ initialPath = "" }) {
         onFileOpen={handleFileOpen}
         workspacePath={path}
       />
+      
+      {/* Enhanced Obsidian Status Bar */}
+      <div className="obsidian-status-bar">
+        <div className="obsidian-status-bar-section">
+          <div className="obsidian-status-bar-item">
+            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <span>Ready</span>
+          </div>
+          {activeFile && (
+            <>
+              <div className="obsidian-status-bar-separator" />
+              <div className="obsidian-status-bar-item">
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                </svg>
+                <span>{activeFile.split('/').pop()}</span>
+              </div>
+            </>
+          )}
+          <div className="obsidian-status-bar-separator" />
+          <div className="obsidian-status-bar-item">
+            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+            </svg>
+            <span>{openTabs.length} {openTabs.length === 1 ? 'file' : 'files'}</span>
+          </div>
+        </div>
+        
+        <div className="obsidian-status-bar-section">
+          {unsavedChanges.size > 0 && (
+            <>
+              <div className="obsidian-status-bar-item active">
+                <div className="w-2 h-2 rounded-full bg-current" />
+                <span>{unsavedChanges.size} unsaved</span>
+              </div>
+              <div className="obsidian-status-bar-separator" />
+            </>
+          )}
+          <div className="obsidian-status-bar-item clickable">
+            <span>Markdown</span>
+          </div>
+          <div className="obsidian-status-bar-separator" />
+          <div className="obsidian-status-bar-item clickable">
+            <span>UTF-8</span>
+          </div>
+          <div className="obsidian-status-bar-separator" />
+          <div className="obsidian-status-bar-item clickable">
+            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+            </svg>
+            <span>Settings</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
