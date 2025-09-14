@@ -51,11 +51,20 @@ export async function getGlobalConfigPath() {
 }
 
 export async function readConfig() {
-  return (await readJson(await getGlobalConfigPath())) || {};
+  const configPath = await getGlobalConfigPath();
+  console.log('[config] Reading config from path:', configPath);
+  const result = (await readJson(configPath)) || {};
+  console.log('[config] Read config result:', result);
+  return result;
 }
 
 export async function writeConfig(next) {
-  return writeJson(await getGlobalConfigPath(), next);
+  const configPath = await getGlobalConfigPath();
+  console.log('[config] Writing config to path:', configPath);
+  console.log('[config] Writing config data:', next);
+  const result = await writeJson(configPath, next);
+  console.log('[config] Write config completed');
+  return result;
 }
 
 export async function updateConfig(patch) {

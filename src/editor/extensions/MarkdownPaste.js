@@ -31,6 +31,11 @@ const MarkdownPaste = Extension.create({
               text: text?.substring(0, 100) 
             })
 
+            // Skip processing if HTML content is also present (avoid double-processing rich text)
+            if (html && html.trim()) {
+              return false
+            }
+
             // Process text that looks like markdown (prioritize plain text, but also handle rich text sources)
             if (text && isMarkdownContent(text)) {
               console.log('[MarkdownPaste] Converting markdown content...')
@@ -44,19 +49,7 @@ const MarkdownPaste = Extension.create({
                   .use(markdownItMark)
                   .use(markdownItStrikethrough)
 
-                let htmlContent = md.render(text)
-                
-                // Handle special Lokus-specific markdown patterns
-                // Convert wiki image embeds ![[image]] first (before regular images)
-                htmlContent = htmlContent.replace(/!\[\[([^\]]+)\]\]/g, '<span data-type="wiki-link" data-embed="true" href="$1">$1</span>')
-                
-                // Convert wiki links [[page]] (but not if already processed as images)
-                htmlContent = htmlContent.replace(/(?<!data-type="wiki-link"[^>]*>\s*)\[\[([^\]]+)\]\]/g, '<span data-type="wiki-link" href="$1">$1</span>')
-                
-                // Ensure regular markdown images are properly formatted
-                htmlContent = htmlContent.replace(/<p>!\[([^\]]*)\]\(([^)]+)\)<\/p>/g, '<img src="$2" alt="$1" class="editor-image" />')
-                htmlContent = htmlContent.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="editor-image" />')
-                
+                const htmlContent = md.render(text)
                 console.log('[MarkdownPaste] Converted HTML:', htmlContent)
 
                 // Prevent default paste
@@ -104,8 +97,6 @@ function isMarkdownContent(text) {
     /\[[^\]]*\]\([^)]*\)/,  // [link](url)
     /```[\s\S]*?```/,       // ```code blocks```
     /^\s*- \[[x\s]\]/m,     // - [x] task lists
-    /\[\[[^\]]+\]\]/,       // [[wiki links]]
-    /!\[\[[^\]]+\]\]/,      // ![[wiki embeds]]
   ]
 
   return markdownPatterns.some(pattern => pattern.test(text))

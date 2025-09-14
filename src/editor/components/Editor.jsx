@@ -25,18 +25,11 @@ import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
 import HeadingAltInput from "../extensions/HeadingAltInput.js";
 import MarkdownPaste from "../extensions/MarkdownPaste.js";
 import MarkdownTablePaste from "../extensions/MarkdownTablePaste.js";
+import SmartTask from "../extensions/SmartTask.js";
+import SimpleTask from "../extensions/SimpleTask.js";
 import liveEditorSettings from "../../core/editor/live-settings.js";
 
-import InFileSearch from "../../components/InFileSearch.jsx";
-import { createSearchPlugin } from "../../core/search/index.js";
-import { listen } from "@tauri-apps/api/event";
-import MarkdownIt from "markdown-it";
-import markdownItMark from "markdown-it-mark";
-import markdownItStrikethrough from "markdown-it-strikethrough-alt";
-
-
 import "../styles/editor.css";
-import "../../core/search/search.css";
 
 const Editor = ({ content, onContentChange }) => {
   const [extensions, setExtensions] = useState(null);
@@ -158,9 +151,9 @@ const Editor = ({ content, onContentChange }) => {
     // Markdown paste functionality
     exts.push(MarkdownPaste);
     exts.push(MarkdownTablePaste);
-
-    // Search functionality
-    exts.push(createSearchPlugin());
+    
+    // Simple task management with unique patterns
+    exts.push(SimpleTask);
 
     // Load markdown shortcut prefs and editor settings
     (async () => {
@@ -172,7 +165,7 @@ const Editor = ({ content, onContentChange }) => {
         const hs = cfg.markdownShortcuts?.headingAlt
         const invalid = ['$', '[', '!'] // avoid conflicts with math / wikilinks
         if (hs?.enabled && hs.marker && !invalid.includes(hs.marker)) {
-          exts.push(HeadingAltInput({ marker: hs.marker }))
+          // exts.push(HeadingAltInput({ marker: hs.marker })) // Temporarily disabled
         }
         
         // Load editor settings
@@ -242,7 +235,6 @@ const Editor = ({ content, onContentChange }) => {
 
 function Tiptap({ extensions, content, onContentChange, editorSettings }) {
   const isSettingRef = useRef(false);
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
   
   // Subscribe to live settings changes for real-time updates
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
@@ -253,22 +245,6 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
     });
     return unsubscribe;
   }, []);
-
-  // Listen for global find command
-  useEffect(() => {
-    let isTauri = false; 
-    try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
-    
-    if (isTauri) {
-      const sub = listen('lokus:find', () => setIsSearchOpen(true));
-      return () => { sub.then(u => u()); };
-    } else {
-      const onDom = () => setIsSearchOpen(true);
-      window.addEventListener('lokus:find', onDom);
-      return () => window.removeEventListener('lokus:find', onDom);
-    }
-  }, []);
-
   
   // Memoize callbacks for performance
   const handleEditorUpdate = useCallback(({ editor }) => {
@@ -285,23 +261,6 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
     editorProps: {
       attributes: { class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl m-5 focus:outline-none tiptap-area pb-16 smooth-type" },
       handleDOMEvents: {
-        keydown: (view, event) => {
-          // Handle Ctrl+F for search
-          if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
-            event.preventDefault();
-            setIsSearchOpen(true);
-            return true;
-          }
-          
-          // Handle Ctrl+H for find and replace
-          if ((event.ctrlKey || event.metaKey) && event.key === 'h') {
-            event.preventDefault();
-            setIsSearchOpen(true);
-            return true;
-          }
-          
-          return false;
-        },
         click: (view, event) => {
           const t = event.target;
           if (!(t instanceof Element)) return false;
@@ -333,61 +292,6 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
       editor.commands.setContent(content);
     }
   }, [content, editor]);
-
-  // Listen for goto-line command (from search results)
-  useEffect(() => {
-    if (!editor) return;
-
-    const findDocumentPosition = (doc, textOffset) => {
-      let currentOffset = 0;
-      let position = null;
-      
-      doc.descendants((node, pos) => {
-        if (node.isText) {
-          const nodeEnd = currentOffset + node.text.length;
-          if (textOffset >= currentOffset && textOffset <= nodeEnd) {
-            position = pos + (textOffset - currentOffset);
-            return false; // Stop iteration
-          }
-          currentOffset = nodeEnd;
-        }
-        return true;
-      });
-      
-      return position;
-    };
-
-    const handleGotoLine = (event) => {
-      if (!editor) return;
-      
-      const { line, column = 0 } = event.detail;
-      
-      // Convert line number to document position
-      const content = editor.state.doc.textContent;
-      const lines = content.split('\n');
-      
-      if (line > lines.length) return;
-      
-      // Calculate position from line number
-      let position = 0;
-      for (let i = 0; i < line - 1; i++) {
-        position += lines[i].length + 1; // +1 for newline
-      }
-      position += Math.min(column, lines[line - 1]?.length || 0);
-      
-      // Convert text position to document position
-      const docPos = findDocumentPosition(editor.state.doc, position);
-      if (docPos !== null) {
-        const selection = editor.state.selection.constructor.create(editor.state.doc, docPos);
-        const tr = editor.state.tr.setSelection(selection);
-        editor.view.dispatch(tr);
-        editor.commands.scrollIntoView();
-      }
-    };
-
-    window.addEventListener('lokus:goto-line', handleGotoLine);
-    return () => window.removeEventListener('lokus:goto-line', handleGotoLine);
-  }, [editor]);
 
   const showDebug = useMemo(() => {
     try { const p = new URLSearchParams(window.location.search); if (p.get('dev') === '1') return true; } catch {}
@@ -436,11 +340,12 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
         editor.commands.redo();
         break;
       case 'find':
-        setIsSearchOpen(true);
+        // TODO: Implement find functionality
+        console.log('Find in editor');
         break;
       case 'findAndReplace':
-        setIsSearchOpen(true);
-        // The search component will handle showing replace options
+        // TODO: Implement find and replace
+        console.log('Find and replace in editor');
         break;
       case 'commandPalette':
         // Dispatch event to open command palette
@@ -493,11 +398,6 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
         </div>
       )}
       {editor && <TableBubbleMenu editor={editor} />}
-      <InFileSearch 
-        editor={editor}
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-      />
       <EditorContextMenu 
         onAction={handleEditorAction}
         hasSelection={editor?.state?.selection && !editor.state.selection.empty}

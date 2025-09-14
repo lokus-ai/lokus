@@ -1,425 +1,318 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, X, ChevronUp, ChevronDown, ToggleLeft, ToggleRight } from 'lucide-react';
-import { searchPluginKey } from '../core/search/index.js';
-import { TextSelection } from '@tiptap/pm/state';
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { Search, X, ChevronUp, ChevronDown, Replace, ToggleLeft } from 'lucide-react'
+import { TextSelection } from '@tiptap/pm/state'
 
-const InFileSearch = ({ 
-  editor, 
-  isOpen, 
-  onClose, 
-  className = '' 
-}) => {
-  const [query, setQuery] = useState('');
-  const [replaceQuery, setReplaceQuery] = useState('');
-  const [showReplace, setShowReplace] = useState(false);
-  const [currentMatch, setCurrentMatch] = useState(0);
-  const [totalMatches, setTotalMatches] = useState(0);
-  const [options, setOptions] = useState({
-    caseSensitive: false,
-    wholeWord: false,
-    regex: false
-  });
-  const [matches, setMatches] = useState([]);
+export default function InFileSearch({ editor, isVisible, onClose }) {
+  const [query, setQuery] = useState('')
+  const [replaceQuery, setReplaceQuery] = useState('')
+  const [matches, setMatches] = useState([])
+  const [currentMatch, setCurrentMatch] = useState(0)
+  const [totalMatches, setTotalMatches] = useState(0)
+  const [showReplace, setShowReplace] = useState(false)
+  const [caseSensitive, setCaseSensitive] = useState(false)
+  const [wholeWord, setWholeWord] = useState(false)
+  const [useRegex, setUseRegex] = useState(false)
+  
+  const searchInputRef = useRef(null)
+  const replaceInputRef = useRef(null)
 
-  const searchInputRef = useRef(null);
-  const replaceInputRef = useRef(null);
-
-  // Auto-focus search input when opened
+  // Focus search input when panel becomes visible
   useEffect(() => {
-    if (isOpen && searchInputRef.current) {
-      searchInputRef.current.focus();
-      searchInputRef.current.select();
+    if (isVisible && searchInputRef.current) {
+      searchInputRef.current.focus()
     }
-  }, [isOpen]);
+  }, [isVisible])
 
-  // Search functionality using TipTap search plugin
-  const performSearch = useCallback((searchQuery = query, searchOptions = options) => {
-    if (!editor || !searchQuery) {
-      setTotalMatches(0);
-      setCurrentMatch(0);
-      setMatches([]);
-      // Clear search in editor
-      editor.view.dispatch(
-        editor.state.tr.setMeta(searchPluginKey, {
-          searchTerm: '',
-          matches: [],
-          currentMatch: 0
-        })
-      );
-      return;
+  // Perform search
+  const performSearch = useCallback(() => {
+    if (!editor || !query.trim()) {
+      setMatches([])
+      setTotalMatches(0)
+      setCurrentMatch(0)
+      return
     }
 
     try {
-      // Calculate matches without changing editor state
-      const content = editor.state.doc.textContent;
-      let searchRegex;
-
-      if (searchOptions.regex) {
-        try {
-          searchRegex = new RegExp(searchQuery, searchOptions.caseSensitive ? 'g' : 'gi');
-        } catch (e) {
-          console.warn('Invalid regex pattern:', e);
-          return;
-        }
-      } else {
-        const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const pattern = searchOptions.wholeWord ? `\\b${escapedQuery}\\b` : escapedQuery;
-        searchRegex = new RegExp(pattern, searchOptions.caseSensitive ? 'g' : 'gi');
+      const content = editor.state.doc.textContent
+      let flags = 'g'
+      if (!caseSensitive) flags += 'i'
+      
+      let pattern = query
+      if (!useRegex) {
+        pattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
+      }
+      if (wholeWord) {
+        pattern = `\\b${pattern}\\b`
       }
 
-      const matchesArray = Array.from(content.matchAll(searchRegex));
-      const matchPositions = [];
+      const regex = new RegExp(pattern, flags)
+      const foundMatches = []
+      let match
 
-      // Convert text positions to document positions
-      matchesArray.forEach((match, index) => {
-        const textPos = match.index;
-        const docPos = findDocumentPosition(editor.state.doc, textPos);
-        if (docPos !== null) {
-          matchPositions.push({
-            from: docPos,
-            to: docPos + match[0].length,
-            text: match[0]
-          });
-        }
-      });
-
-      setMatches(matchPositions);
-      setTotalMatches(matchPositions.length);
-      
-      if (matchPositions.length > 0) {
-        setCurrentMatch(1);
+      while ((match = regex.exec(content)) !== null) {
+        const from = match.index
+        const to = match.index + match[0].length
+        foundMatches.push({ from, to, text: match[0] })
         
-        // Update search plugin state without causing editor updates
-        editor.view.dispatch(
-          editor.state.tr.setMeta(searchPluginKey, {
-            searchTerm: searchQuery,
-            matches: matchPositions,
-            currentMatch: 0,
-            options: searchOptions
-          })
-        );
+        // Prevent infinite loop with zero-length matches
+        if (match[0].length === 0) break
+      }
 
-        // Jump to first match
-        jumpToMatch(0);
+      setMatches(foundMatches)
+      setTotalMatches(foundMatches.length)
+      
+      if (foundMatches.length > 0) {
+        setCurrentMatch(0)
+        jumpToMatch(0, foundMatches)
       } else {
-        setCurrentMatch(0);
-        editor.view.dispatch(
-          editor.state.tr.setMeta(searchPluginKey, {
-            searchTerm: '',
-            matches: [],
-            currentMatch: 0
-          })
-        );
+        setCurrentMatch(0)
       }
     } catch (error) {
-      console.error('Search error:', error);
+      console.error('Search error:', error)
+      setMatches([])
+      setTotalMatches(0)
+      setCurrentMatch(0)
     }
-  }, [editor, query, options]);
+  }, [editor, query, caseSensitive, wholeWord, useRegex])
 
-  // Helper function to convert text position to document position
-  const findDocumentPosition = (doc, textOffset) => {
-    let currentOffset = 0;
-    let position = null;
-    
-    doc.descendants((node, pos) => {
-      if (node.isText) {
-        const nodeEnd = currentOffset + node.text.length;
-        if (textOffset >= currentOffset && textOffset <= nodeEnd) {
-          position = pos + (textOffset - currentOffset);
-          return false; // Stop iteration
-        }
-        currentOffset = nodeEnd;
-      }
-      return true;
-    });
-    
-    return position;
-  };
+  // Jump to a specific match
+  const jumpToMatch = useCallback((matchIndex, matchList = matches) => {
+    if (!editor || !matchList.length) return
 
-  // Jump to a specific match without losing focus from search input
-  const jumpToMatch = useCallback((matchIndex) => {
-    if (!editor || !matches.length || matchIndex >= matches.length) return;
+    const match = matchList[matchIndex]
+    if (!match) return
 
-    const match = matches[matchIndex];
-    
-    // Update search plugin to highlight current match
-    editor.view.dispatch(
-      editor.state.tr.setMeta(searchPluginKey, {
-        currentMatch: matchIndex
-      })
-    );
-
-    // Create text selection and scroll to match
-    const selection = TextSelection.create(editor.state.doc, match.from, match.to);
-    const tr = editor.state.tr.setSelection(selection);
-    editor.view.dispatch(tr);
-
-    // Scroll to the match position using TipTap's built-in scrolling
-    editor.commands.scrollIntoView();
-    
-    // Don't focus the editor to keep search input focused
-  }, [editor, matches]);
+    try {
+      const selection = TextSelection.create(editor.state.doc, match.from, match.to)
+      const tr = editor.state.tr.setSelection(selection)
+      editor.view.dispatch(tr)
+      editor.commands.scrollIntoView()
+    } catch (error) {
+      console.error('Error jumping to match:', error)
+    }
+  }, [editor, matches])
 
   // Navigate to next match
   const nextMatch = useCallback(() => {
-    if (totalMatches === 0) return;
-    const nextIndex = currentMatch >= totalMatches ? 0 : currentMatch;
-    const newCurrentMatch = nextIndex + 1;
-    setCurrentMatch(newCurrentMatch);
-    jumpToMatch(nextIndex);
-  }, [currentMatch, totalMatches, jumpToMatch]);
+    if (totalMatches === 0) return
+    const next = (currentMatch + 1) % totalMatches
+    setCurrentMatch(next)
+    jumpToMatch(next)
+  }, [currentMatch, totalMatches, jumpToMatch])
 
   // Navigate to previous match
-  const previousMatch = useCallback(() => {
-    if (totalMatches === 0) return;
-    const prevIndex = currentMatch <= 1 ? totalMatches - 1 : currentMatch - 2;
-    const newCurrentMatch = prevIndex + 1;
-    setCurrentMatch(newCurrentMatch);
-    jumpToMatch(prevIndex);
-  }, [currentMatch, totalMatches, jumpToMatch]);
+  const prevMatch = useCallback(() => {
+    if (totalMatches === 0) return
+    const prev = currentMatch === 0 ? totalMatches - 1 : currentMatch - 1
+    setCurrentMatch(prev)
+    jumpToMatch(prev)
+  }, [currentMatch, totalMatches, jumpToMatch])
 
-  // Handle replace current match
+  // Replace current match
   const replace = useCallback(() => {
-    if (!editor || totalMatches === 0 || currentMatch === 0) return;
-    
-    const matchIndex = currentMatch - 1;
-    const match = matches[matchIndex];
-    
-    if (!match) return;
+    if (!editor || !matches.length || !replaceQuery) return
 
-    // Replace the text at the current match position
-    const tr = editor.state.tr.replaceWith(match.from, match.to, editor.schema.text(replaceQuery));
-    editor.view.dispatch(tr);
-    
-    // Refresh search results after replacement
-    setTimeout(() => performSearch(), 100);
-  }, [editor, totalMatches, currentMatch, matches, replaceQuery, performSearch]);
+    const match = matches[currentMatch]
+    if (!match) return
 
-  // Handle replace all matches
-  const replaceAll = useCallback(() => {
-    if (!editor || totalMatches === 0 || !replaceQuery) return;
-    
-    // Sort matches in reverse order to maintain correct positions during replacement
-    const sortedMatches = [...matches].sort((a, b) => b.from - a.from);
-    
-    let tr = editor.state.tr;
-    
-    // Replace all matches from end to start to maintain positions
-    sortedMatches.forEach(match => {
-      tr = tr.replaceWith(match.from, match.to, editor.schema.text(replaceQuery));
-    });
-    
-    editor.view.dispatch(tr);
-    
-    // Refresh search results after replacement
-    setTimeout(() => performSearch(), 100);
-  }, [editor, totalMatches, matches, replaceQuery, performSearch]);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (!isOpen) return;
-
-      switch (event.key) {
-        case 'Escape':
-          onClose();
-          break;
-        case 'Enter':
-          event.preventDefault();
-          if (event.shiftKey) {
-            previousMatch();
-          } else {
-            nextMatch();
-          }
-          break;
-        case 'f':
-          if (event.ctrlKey || event.metaKey) {
-            event.preventDefault();
-            if (searchInputRef.current) {
-              searchInputRef.current.focus();
-              searchInputRef.current.select();
-            }
-          }
-          break;
-        case 'h':
-          if (event.ctrlKey || event.metaKey) {
-            event.preventDefault();
-            setShowReplace(true);
-            if (replaceInputRef.current) {
-              replaceInputRef.current.focus();
-            }
-          }
-          break;
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, nextMatch, previousMatch]);
-
-  // Perform search when query or options change
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      performSearch();
-    }, 150); // Debounce search
-
-    return () => clearTimeout(timeoutId);
-  }, [query, options, performSearch]);
-
-  // Clean up search when component closes
-  useEffect(() => {
-    if (!isOpen && editor) {
-      // Clear search when closing
-      editor.view.dispatch(
-        editor.state.tr.setMeta(searchPluginKey, {
-          searchTerm: '',
-          matches: [],
-          currentMatch: 0
-        })
-      );
-      setQuery('');
-      setTotalMatches(0);
-      setCurrentMatch(0);
-      setMatches([]);
+    try {
+      const tr = editor.state.tr.replaceWith(match.from, match.to, editor.schema.text(replaceQuery))
+      editor.view.dispatch(tr)
+      
+      // Re-search after replacing
+      setTimeout(() => performSearch(), 100)
+    } catch (error) {
+      console.error('Error replacing text:', error)
     }
-  }, [isOpen, editor]);
+  }, [editor, matches, currentMatch, replaceQuery, performSearch])
 
-  if (!isOpen) return null;
+  // Replace all matches
+  const replaceAll = useCallback(() => {
+    if (!editor || !matches.length || !replaceQuery) return
+
+    try {
+      let tr = editor.state.tr
+      // Replace from end to start to maintain positions
+      const reversedMatches = [...matches].reverse()
+      
+      for (const match of reversedMatches) {
+        tr = tr.replaceWith(match.from, match.to, editor.schema.text(replaceQuery))
+      }
+      
+      editor.view.dispatch(tr)
+      
+      // Re-search after replacing
+      setTimeout(() => performSearch(), 100)
+    } catch (error) {
+      console.error('Error replacing all text:', error)
+    }
+  }, [editor, matches, replaceQuery, performSearch])
+
+  // Handle keyboard shortcuts
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'Escape') {
+      onClose()
+    } else if (e.key === 'Enter') {
+      if (e.shiftKey) {
+        prevMatch()
+      } else {
+        nextMatch()
+      }
+    } else if (e.key === 'F3') {
+      e.preventDefault()
+      if (e.shiftKey) {
+        prevMatch()
+      } else {
+        nextMatch()
+      }
+    }
+  }, [onClose, nextMatch, prevMatch])
+
+  // Debounced search
+  useEffect(() => {
+    const timeoutId = setTimeout(performSearch, 300)
+    return () => clearTimeout(timeoutId)
+  }, [performSearch])
+
+  if (!isVisible) return null
 
   return (
-    <div className={`fixed top-4 right-4 z-50 bg-app-panel border border-app-border rounded-lg shadow-lg min-w-80 p-4 ${className}`}>
-      {/* Search Input */}
-      <div className="flex items-center gap-2 mb-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-app-muted" />
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Find in file..."
-            className="w-full pl-10 pr-4 py-2 text-sm bg-app-bg border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent focus:border-transparent"
-          />
-        </div>
-        
-        {/* Match counter */}
-        <span className="text-xs text-app-muted whitespace-nowrap">
-          {totalMatches > 0 ? `${currentMatch} of ${totalMatches}` : 'No matches'}
-        </span>
-        
-        {/* Navigation buttons */}
-        <div className="flex">
+    <div className="fixed top-0 right-0 z-50 bg-app-bg border border-app-border shadow-lg p-3 min-w-80">
+      <div className="flex flex-col gap-2">
+        {/* Search input row */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-app-muted" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Find in file..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="w-full pl-8 pr-3 py-1.5 text-sm bg-app-bg border border-app-border rounded focus:outline-none focus:ring-1 focus:ring-app-primary"
+            />
+          </div>
+          
+          {/* Match counter */}
+          {query.trim() && (
+            <span className="text-xs text-app-muted whitespace-nowrap">
+              {totalMatches > 0 ? `${currentMatch + 1} of ${totalMatches}` : 'No matches'}
+            </span>
+          )}
+          
+          {/* Navigation buttons */}
           <button
-            onClick={previousMatch}
+            onClick={prevMatch}
             disabled={totalMatches === 0}
-            className="p-1 rounded text-app-muted hover:text-app-text hover:bg-app-bg disabled:opacity-50 disabled:cursor-not-allowed"
             title="Previous match (Shift+Enter)"
+            className="p-1 rounded hover:bg-app-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <ChevronUp className="h-4 w-4" />
+            <ChevronUp className="w-4 h-4" />
           </button>
+          
           <button
             onClick={nextMatch}
             disabled={totalMatches === 0}
-            className="p-1 rounded text-app-muted hover:text-app-text hover:bg-app-bg disabled:opacity-50 disabled:cursor-not-allowed"
             title="Next match (Enter)"
+            className="p-1 rounded hover:bg-app-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <ChevronDown className="h-4 w-4" />
+            <ChevronDown className="w-4 h-4" />
+          </button>
+          
+          {/* Toggle replace button */}
+          <button
+            onClick={() => setShowReplace(!showReplace)}
+            title="Toggle replace (Ctrl+H)"
+            className={`p-1 rounded hover:bg-app-hover ${showReplace ? 'bg-app-hover' : ''}`}
+          >
+            <Replace className="w-4 h-4" />
+          </button>
+          
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            title="Close (Escape)"
+            className="p-1 rounded hover:bg-app-hover"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
-        
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          className="p-1 rounded text-app-muted hover:text-app-text hover:bg-app-bg"
-          title="Close (Escape)"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
 
-      {/* Replace Input (conditional) */}
-      {showReplace && (
-        <div className="flex items-center gap-2 mb-3">
-          <input
-            ref={replaceInputRef}
-            type="text"
-            value={replaceQuery}
-            onChange={(e) => setReplaceQuery(e.target.value)}
-            placeholder="Replace with..."
-            className="flex-1 px-3 py-2 text-sm bg-app-bg border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent focus:border-transparent"
-          />
-          <button
-            onClick={replace}
-            disabled={totalMatches === 0}
-            className="px-2 py-1 text-xs bg-app-accent text-white rounded hover:bg-app-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Replace
-          </button>
-          <button
-            onClick={replaceAll}
-            disabled={totalMatches === 0}
-            className="px-2 py-1 text-xs bg-app-accent text-white rounded hover:bg-app-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            All
-          </button>
+        {/* Replace input row */}
+        {showReplace && (
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Replace className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-app-muted" />
+              <input
+                ref={replaceInputRef}
+                type="text"
+                placeholder="Replace with..."
+                value={replaceQuery}
+                onChange={(e) => setReplaceQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="w-full pl-8 pr-3 py-1.5 text-sm bg-app-bg border border-app-border rounded focus:outline-none focus:ring-1 focus:ring-app-primary"
+              />
+            </div>
+            
+            <button
+              onClick={replace}
+              disabled={totalMatches === 0 || !replaceQuery}
+              title="Replace current match"
+              className="px-2 py-1 text-xs rounded hover:bg-app-hover disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Replace
+            </button>
+            
+            <button
+              onClick={replaceAll}
+              disabled={totalMatches === 0 || !replaceQuery}
+              title="Replace all matches"
+              className="px-2 py-1 text-xs rounded hover:bg-app-hover disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              All
+            </button>
+          </div>
+        )}
+
+        {/* Search options */}
+        <div className="flex items-center gap-3 text-xs">
+          <label className="flex items-center gap-1 cursor-pointer hover:text-app-primary">
+            <input
+              type="checkbox"
+              checked={caseSensitive}
+              onChange={(e) => setCaseSensitive(e.target.checked)}
+              className="w-3 h-3"
+            />
+            <span title="Match case">Aa</span>
+          </label>
+          
+          <label className="flex items-center gap-1 cursor-pointer hover:text-app-primary">
+            <input
+              type="checkbox"
+              checked={wholeWord}
+              onChange={(e) => setWholeWord(e.target.checked)}
+              className="w-3 h-3"
+            />
+            <span title="Whole word">ab</span>
+          </label>
+          
+          <label className="flex items-center gap-1 cursor-pointer hover:text-app-primary">
+            <input
+              type="checkbox"
+              checked={useRegex}
+              onChange={(e) => setUseRegex(e.target.checked)}
+              className="w-3 h-3"
+            />
+            <span title="Regular expression">.*</span>
+          </label>
         </div>
-      )}
 
-      {/* Search Options */}
-      <div className="flex items-center gap-4 text-xs">
-        <button
-          onClick={() => setOptions(prev => ({ ...prev, caseSensitive: !prev.caseSensitive }))}
-          className={`flex items-center gap-1 p-1 rounded transition-colors ${
-            options.caseSensitive 
-              ? 'text-app-accent bg-app-accent/10' 
-              : 'text-app-muted hover:text-app-text'
-          }`}
-          title="Match case"
-        >
-          {options.caseSensitive ? <ToggleRight className="h-3 w-3" /> : <ToggleLeft className="h-3 w-3" />}
-          Aa
-        </button>
-        
-        <button
-          onClick={() => setOptions(prev => ({ ...prev, wholeWord: !prev.wholeWord }))}
-          className={`flex items-center gap-1 p-1 rounded transition-colors ${
-            options.wholeWord 
-              ? 'text-app-accent bg-app-accent/10' 
-              : 'text-app-muted hover:text-app-text'
-          }`}
-          title="Whole word"
-        >
-          {options.wholeWord ? <ToggleRight className="h-3 w-3" /> : <ToggleLeft className="h-3 w-3" />}
-          Ab
-        </button>
-        
-        <button
-          onClick={() => setOptions(prev => ({ ...prev, regex: !prev.regex }))}
-          className={`flex items-center gap-1 p-1 rounded transition-colors ${
-            options.regex 
-              ? 'text-app-accent bg-app-accent/10' 
-              : 'text-app-muted hover:text-app-text'
-          }`}
-          title="Regular expression"
-        >
-          {options.regex ? <ToggleRight className="h-3 w-3" /> : <ToggleLeft className="h-3 w-3" />}
-          .*
-        </button>
-        
-        <button
-          onClick={() => setShowReplace(!showReplace)}
-          className={`p-1 rounded transition-colors ${
-            showReplace 
-              ? 'text-app-accent bg-app-accent/10' 
-              : 'text-app-muted hover:text-app-text'
-          }`}
-          title="Toggle replace (Ctrl+H)"
-        >
-          Replace
-        </button>
+        {/* No matches message */}
+        {query && totalMatches === 0 && (
+          <div className="text-xs text-app-muted">No matches found</div>
+        )}
       </div>
     </div>
-  );
-};
-
-export default InFileSearch;
+  )
+}

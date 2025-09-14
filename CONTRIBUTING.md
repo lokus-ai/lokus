@@ -21,13 +21,23 @@ This project and everyone participating in it is governed by our [Code of Conduc
 
 ### Ways to Contribute
 
-- 🐛 **Bug Reports**: Help us identify and fix issues
-- ✨ **Feature Requests**: Suggest new features or improvements
-- 💻 **Code**: Implement features, fix bugs, improve performance
-- 📖 **Documentation**: Improve README, add tutorials, fix typos
-- 🧪 **Testing**: Add test cases, improve test coverage
-- 🎨 **Design**: UI/UX improvements, themes, icons
-- 🌍 **Translation**: Help translate Lokus to other languages
+| 🐛 **Bug Reports** | ✨ **Feature Requests** | 💻 **Code Contributions** |
+|:---:|:---:|:---:|
+| Help us identify and fix issues | Suggest new features or improvements | Implement features, fix bugs, improve performance |
+| [Report a bug](https://github.com/CodeWithInferno/Lokus/issues/new?template=bug_report.yml) | [Request a feature](https://github.com/CodeWithInferno/Lokus/issues/new?template=feature_request.yml) | Check [`good first issue`](https://github.com/CodeWithInferno/Lokus/labels/good%20first%20issue) |
+
+| 📖 **Documentation** | 🧪 **Testing** | 🎨 **Design** |
+|:---:|:---:|:---:|
+| Improve README, add tutorials, fix typos | Add test cases, improve test coverage | UI/UX improvements, themes, icons |
+| Help others understand Lokus | Make the app more reliable | Make the app more beautiful |
+
+### 🌟 Special Contribution Opportunities
+
+- **🏷️ First-time contributors**: Look for [`good first issue`](https://github.com/CodeWithInferno/Lokus/labels/good%20first%20issue) labels
+- **🆘 Help wanted**: Check [`help wanted`](https://github.com/CodeWithInferno/Lokus/labels/help%20wanted) for high-impact areas
+- **🎃 Hacktoberfest**: During October, look for [`hacktoberfest`](https://github.com/CodeWithInferno/Lokus/labels/hacktoberfest) eligible issues
+- **📸 Content creation**: Help create screenshots, videos, and demo content
+- **🌍 Localization**: Help translate Lokus to other languages (coming soon)
 
 ### Before You Start
 
