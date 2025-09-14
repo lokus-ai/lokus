@@ -1,4 +1,5 @@
 import { Node, mergeAttributes, InputRule } from '@tiptap/core'
+import { sanitizeMathHtml, safeSetInnerHTML } from '../../core/security/index.js'
 
 function getKatex() {
   try {
@@ -68,7 +69,8 @@ export const MathInline = Node.create({
       
       const renderMath = () => {
         const html = renderMathHTML(node.attrs.src, false)
-        dom.innerHTML = html
+        const sanitizedHtml = sanitizeMathHtml(html)
+        safeSetInnerHTML(dom, sanitizedHtml)
       }
       
       // Try to render immediately, but also listen for KaTeX load
@@ -148,7 +150,8 @@ export const MathBlock = Node.create({
       
       const renderMath = () => {
         const html = renderMathHTML(node.attrs.src, true)
-        dom.innerHTML = html
+        const sanitizedHtml = sanitizeMathHtml(html)
+        safeSetInnerHTML(dom, sanitizedHtml)
       }
       
       // Try to render immediately, but also listen for KaTeX load

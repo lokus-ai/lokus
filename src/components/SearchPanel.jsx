@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Search, X, ChevronDown, ChevronRight, Settings, Clock } from 'lucide-react'
+import { sanitizeSearchHighlight, isValidSearchQuery } from '../core/security/index.js'
 
-// Utility function to highlight search matches in text
+// Utility function to highlight search matches in text (XSS-safe)
 const highlightText = (text, query, options) => {
-  if (!query.trim()) return text
+  if (!query.trim() || !isValidSearchQuery(query)) {
+    return text
+  }
   
   try {
     let flags = 'gi'
@@ -19,7 +22,10 @@ const highlightText = (text, query, options) => {
     }
     
     const regex = new RegExp(pattern, flags)
-    return text.replace(regex, '<mark class="bg-yellow-200 dark:bg-yellow-800">$&</mark>')
+    const highlighted = text.replace(regex, '<mark class="bg-yellow-200 dark:bg-yellow-800">$&</mark>')
+    
+    // Sanitize the result to prevent XSS
+    return sanitizeSearchHighlight(highlighted)
   } catch (error) {
     return text
   }
