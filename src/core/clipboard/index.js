@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { stripHtml, sanitizeHtml } from '../security/index.js';
 
 /**
  * Custom clipboard manager that syncs with macOS system clipboard
@@ -45,11 +46,9 @@ class ClipboardManager {
       // Try to write HTML first
       await invoke('clipboard_write_html', { html });
       
-      // If no plain text provided, strip HTML tags as fallback
+      // If no plain text provided, strip HTML tags as fallback (secure)
       if (!plainText) {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
-        plainText = tempDiv.textContent || tempDiv.innerText || '';
+        plainText = stripHtml(html);
       }
 
       this._notifyListeners('write', { type: 'html', data: html, plainText });
@@ -190,12 +189,10 @@ class ClipboardManager {
   }
 
   /**
-   * Private: Strip HTML tags from string
+   * Private: Strip HTML tags from string (secure)
    */
   _stripHTML(html) {
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = html;
-    return tempDiv.textContent || tempDiv.innerText || '';
+    return stripHtml(html);
   }
 }
 

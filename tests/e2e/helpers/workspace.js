@@ -3,6 +3,28 @@ import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
+// Helper functions for creating test workspaces
+export async function createTestWorkspace() {
+  const tempDir = join(tmpdir(), `lokus-test-${Date.now()}-${Math.random().toString(36).substring(7)}`);
+  await fs.mkdir(tempDir, { recursive: true });
+  
+  // Create a test markdown file
+  const testFile = join(tempDir, 'test.md');
+  await fs.writeFile(testFile, '# Test File\n\nThis is a test file for E2E testing.');
+  
+  return tempDir;
+}
+
+export async function cleanupTestWorkspace(workspacePath) {
+  if (workspacePath) {
+    try {
+      await fs.rm(workspacePath, { recursive: true, force: true });
+    } catch (error) {
+      console.warn('Failed to cleanup test workspace:', error);
+    }
+  }
+}
+
 export class WorkspaceHelper {
   constructor(page) {
     this.page = page;
