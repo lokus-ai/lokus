@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { isValidCanvasData, isValidFilePath, sanitizeUserInput } from '../security/index.js';
 
 /**
  * Canvas File Manager
@@ -18,8 +19,23 @@ export class CanvasManager {
    */
   async createCanvas(workspacePath, name) {
     try {
-      const fileName = name.endsWith('.canvas') ? name : `${name}.canvas`;
+      // Validate inputs
+      if (!isValidFilePath(workspacePath)) {
+        throw new Error('Invalid workspace path');
+      }
+      
+      const sanitizedName = sanitizeUserInput(name);
+      if (!sanitizedName) {
+        throw new Error('Invalid canvas name');
+      }
+      
+      const fileName = sanitizedName.endsWith('.canvas') ? sanitizedName : `${sanitizedName}.canvas`;
       const canvasPath = `${workspacePath}/${fileName}`;
+      
+      // Validate final path
+      if (!isValidFilePath(canvasPath)) {
+        throw new Error('Invalid canvas path');
+      }
       
       // Create empty canvas with JSON Canvas format
       const emptyCanvas = this.createEmptyCanvasData();
@@ -44,6 +60,11 @@ export class CanvasManager {
    */
   async loadCanvas(canvasPath) {
     try {
+      // Validate file path
+      if (!isValidFilePath(canvasPath)) {
+        throw new Error('Invalid canvas path');
+      }
+      
       // Check cache first
       if (this.canvasCache.has(canvasPath)) {
         return this.canvasCache.get(canvasPath);
@@ -56,6 +77,12 @@ export class CanvasManager {
         canvasData = JSON.parse(content);
       } catch (parseError) {
         console.warn('Invalid JSON in canvas file, creating new canvas:', parseError);
+        canvasData = this.createEmptyCanvasData();
+      }
+
+      // Security validation for canvas data
+      if (!isValidCanvasData(canvasData)) {
+        console.warn('Invalid canvas data detected, using empty canvas');
         canvasData = this.createEmptyCanvasData();
       }
 
@@ -81,6 +108,16 @@ export class CanvasManager {
    */
   async saveCanvas(canvasPath, canvasData) {
     try {
+      // Validate file path
+      if (!isValidFilePath(canvasPath)) {
+        throw new Error('Invalid canvas path');
+      }
+      
+      // Security validation for canvas data
+      if (!isValidCanvasData(canvasData)) {
+        throw new Error('Invalid canvas data - security validation failed');
+      }
+      
       // Validate data before saving
       const validatedData = this.validateCanvasData(canvasData);
       

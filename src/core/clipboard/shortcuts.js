@@ -1,4 +1,5 @@
 import clipboard from './index.js';
+import { safeSetTextContent } from '../security/index.js';
 
 /**
  * Keyboard shortcut handler for clipboard operations
@@ -167,38 +168,40 @@ class ClipboardShortcuts {
   }
 
   /**
-   * Private: Convert ProseMirror node to HTML
+   * Private: Convert ProseMirror node to HTML (secure)
    */
   _nodeToHTML(node) {
-    // Create a temporary editor instance to convert node to HTML
-    const tempDiv = document.createElement('div');
+    // Safely create HTML without using innerHTML
+    const textContent = node.textContent || '';
     
-    // Simple conversion for common node types
+    // Simple conversion for common node types with proper escaping
     if (node.type.name === 'paragraph') {
-      tempDiv.innerHTML = `<p>${node.textContent}</p>`;
+      return `<p>${this._escapeHtml(textContent)}</p>`;
     } else if (node.type.name === 'heading') {
-      const level = node.attrs.level || 1;
-      tempDiv.innerHTML = `<h${level}>${node.textContent}</h${level}>`;
+      const level = Math.min(6, Math.max(1, node.attrs.level || 1));
+      return `<h${level}>${this._escapeHtml(textContent)}</h${level}>`;
     } else if (node.type.name === 'codeBlock') {
-      tempDiv.innerHTML = `<pre><code>${node.textContent}</code></pre>`;
+      return `<pre><code>${this._escapeHtml(textContent)}</code></pre>`;
     } else {
-      tempDiv.innerHTML = node.textContent;
+      return this._escapeHtml(textContent);
     }
-    
-    return tempDiv.innerHTML;
+  }
+  
+  /**
+   * Private: Escape HTML characters
+   */
+  _escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   /**
-   * Private: Convert ProseMirror fragment to HTML
+   * Private: Convert ProseMirror fragment to HTML (secure)
    */
   _fragmentToHTML(fragment) {
-    const tempDiv = document.createElement('div');
-    
-    // For now, use text content as fallback
-    // In a full implementation, you'd want to properly serialize the fragment
-    tempDiv.textContent = fragment.textContent;
-    
-    return tempDiv.innerHTML;
+    // Safely escape fragment text content
+    return this._escapeHtml(fragment.textContent || '');
   }
 
   /**

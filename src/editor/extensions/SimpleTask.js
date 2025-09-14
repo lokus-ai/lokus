@@ -1,6 +1,7 @@
 import { Extension } from '@tiptap/core'
 import { InputRule } from '@tiptap/core'
 import { invoke } from '@tauri-apps/api/core'
+import { sanitizeUserInput, safeSetTextContent, createSafeTextNode } from '../../core/security/index.js'
 
 // Create task import autocomplete widget
 function createTaskImportWidget(editor) {
@@ -102,13 +103,23 @@ function createTaskImportWidget(editor) {
     } catch (error) {
       console.error('❌ Failed to load tasks:', error)
       console.error('Error details:', error)
-      tasksList.innerHTML = '<div style="padding: 20px; text-align: center; color: #ef4444;">Failed to load tasks: ' + error + '</div>'
+      // Create error message safely
+      const errorDiv = document.createElement('div')
+      errorDiv.style.cssText = 'padding: 20px; text-align: center; color: #ef4444;'
+      safeSetTextContent(errorDiv, 'Failed to load tasks: ' + String(error).substring(0, 200))
+      tasksList.innerHTML = ''
+      tasksList.appendChild(errorDiv)
     }
   }
   
   function renderTasks() {
     if (filteredTasks.length === 0) {
-      tasksList.innerHTML = '<div style="padding: 20px; text-align: center; color: #9ca3af;">No tasks found</div>'
+      // Create no tasks message safely
+      const noTasksDiv = document.createElement('div')
+      noTasksDiv.style.cssText = 'padding: 20px; text-align: center; color: #9ca3af;'
+      safeSetTextContent(noTasksDiv, 'No tasks found')
+      tasksList.innerHTML = ''
+      tasksList.appendChild(noTasksDiv)
       return
     }
     

@@ -8,6 +8,7 @@ import { X, Save, Download, Maximize2, Minimize2 } from 'lucide-react'
 import { jsonCanvasToTldraw, tldrawToJsonCanvas, migrateCanvasFormat } from '../core/canvas/parser.js'
 import { canvasConfigs, themeConfigs } from '../core/canvas/config.js'
 import { useTheme } from '../hooks/theme.jsx'
+import { isValidCanvasData, isValidFilePath } from '../core/security/index.js'
 
 export default function Canvas({ 
   canvasPath = null,
@@ -45,8 +46,22 @@ export default function Canvas({
     const loadCanvas = async () => {
       setIsLoading(true)
       try {
+        // Validate canvas path
+        if (!isValidFilePath(canvasPath)) {
+          throw new Error('Invalid canvas file path');
+        }
+        
         const content = await invoke('read_file_content', { path: canvasPath })
         const canvasData = JSON.parse(content)
+        
+        // Security validation for canvas data
+        if (!isValidCanvasData(canvasData)) {
+          console.warn('Invalid canvas data detected, using empty canvas');
+          const emptyTldrawData = jsonCanvasToTldraw({ nodes: [], edges: [] })
+          loadSnapshot(store, emptyTldrawData)
+          setIsDirty(false)
+          return;
+        }
         
         // Migrate and convert to tldraw format
         const migratedData = migrateCanvasFormat(canvasData)
@@ -82,10 +97,20 @@ export default function Canvas({
 
     setIsLoading(true)
     try {
+      // Validate canvas path
+      if (!isValidFilePath(canvasPath)) {
+        throw new Error('Invalid canvas file path');
+      }
+      
       const snapshot = store.getSnapshot()
       
       // Convert tldraw format to JSON Canvas format
       const canvasData = tldrawToJsonCanvas(snapshot)
+      
+      // Security validation for canvas data before saving
+      if (!isValidCanvasData(canvasData)) {
+        throw new Error('Invalid canvas data - security validation failed');
+      }
       
       console.log('Saving canvas data:', canvasData)
 
