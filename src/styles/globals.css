@@ -4,19 +4,34 @@
 
 :root {
   color-scheme: light dark;
-  --radius: 8px;
+  --radius: 6px; /* Obsidian uses smaller radius */
+
+  /* Obsidian-inspired Typography */
+  --font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', 'Segoe UI', sans-serif;
+  --font-mono: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+  
+  /* Obsidian-inspired sizing */
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 24px;
 
   /* The new variable for the top bar */
-  --app-titlebar: 30 41 59; /* slate-800 */
+  --app-titlebar: 32 32 32; /* Obsidian dark titlebar */
 
-  /* Core theme tokens */
-  --bg: 15 23 42;          /* slate-900 */
-  --panel: 30 41 59;       /* slate-800 */
-  --border: 51 65 85;      /* slate-700 */
-  --border-hover: 71 85 105; /* slate-600 */
-  --text: 241 245 249;     /* slate-100 */
-  --muted: 148 163 184;    /* slate-400 */
-  --accent: 139 92 246;    /* violet-500 */
+  /* Core theme tokens - Obsidian Dark */
+  --bg: 30 30 30;          /* #1e1e1e - Obsidian main bg */
+  --panel: 42 42 42;       /* #2a2a2a - Obsidian sidebar */
+  --panel-secondary: 54 54 54; /* #363636 - Secondary panels */
+  --border: 58 58 58;      /* #3a3a3a - Obsidian borders */
+  --border-hover: 74 74 74; /* #4a4a4a - Hover borders */
+  --text: 220 221 222;     /* #dcddde - Obsidian text */
+  --text-secondary: 136 136 136; /* #888888 - Secondary text */
+  --muted: 85 85 85;       /* #555555 - Muted text */
+  --accent: 124 58 237;    /* #7c3aed - Purple accent like Obsidian */
+  --accent-hover: 109 40 217; /* #6d28d9 - Darker purple */
   --accent-fg: 255 255 255;
 
   /* Task status colors */
@@ -71,16 +86,19 @@
 }
 
 :root[data-theme="dark"] {
-  --app-titlebar: 30 41 59; /* slate-800 */
+  --app-titlebar: 32 32 32; /* Obsidian dark titlebar */
   
-  /* Core theme tokens */
-  --bg: 15 23 42;          /* slate-900 */
-  --panel: 30 41 59;       /* slate-800 */
-  --border: 51 65 85;      /* slate-700 */
-  --border-hover: 71 85 105; /* slate-600 */
-  --text: 226 232 240;     /* slate-200 */
-  --muted: 148 163 184;    /* slate-400 */
-  --accent: 139 92 246;    /* violet-500 */
+  /* Core theme tokens - Obsidian Dark */
+  --bg: 30 30 30;          /* #1e1e1e - Obsidian main bg */
+  --panel: 42 42 42;       /* #2a2a2a - Obsidian sidebar */
+  --panel-secondary: 54 54 54; /* #363636 - Secondary panels */
+  --border: 58 58 58;      /* #3a3a3a - Obsidian borders */
+  --border-hover: 74 74 74; /* #4a4a4a - Hover borders */
+  --text: 220 221 222;     /* #dcddde - Obsidian text */
+  --text-secondary: 136 136 136; /* #888888 - Secondary text */
+  --muted: 85 85 85;       /* #555555 - Muted text */
+  --accent: 124 58 237;    /* #7c3aed - Purple accent like Obsidian */
+  --accent-hover: 109 40 217; /* #6d28d9 - Darker purple */
   --accent-fg: 255 255 255;
 
   /* Task status colors */
@@ -180,3 +198,644 @@
 .editor-block[data-type="h1"].is-active::before { content: '# '; @apply text-3xl; }
 .editor-block[data-type="h2"].is-active::before { content: '## '; @apply text-2xl; }
 .editor-block[data-type="blockquote"].is-active::before { content: '> '; }
+
+/* Obsidian-inspired Base Styles */
+body {
+  font-family: var(--font-family);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Prevent text selection in UI areas */
+.no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Apply no-select to common UI elements */
+aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item, 
+.obsidian-status-bar, button, .sidebar, .file-tree, [role="button"] {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* But allow text selection in editor and input areas */
+.ProseMirror, input, textarea, [contenteditable="true"], .editor-content {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+/* Obsidian-style Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--border));
+  border-radius: 4px;
+  border: none;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--border-hover));
+}
+
+/* Obsidian-style Selection */
+::selection {
+  background-color: rgb(var(--accent) / 0.2);
+  color: rgb(var(--text));
+}
+
+/* Obsidian File Explorer Styles */
+.obsidian-file-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: rgb(var(--text));
+  cursor: pointer;
+  transition: all 150ms ease;
+  position: relative;
+  border: none;
+  background: transparent;
+  text-align: left;
+}
+
+.obsidian-file-item:hover {
+  background-color: rgb(var(--panel-secondary) / 0.6);
+}
+
+.obsidian-file-item.active {
+  background-color: rgb(var(--accent) / 0.15);
+  color: rgb(var(--accent));
+}
+
+.obsidian-file-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  opacity: 0.7;
+}
+
+.obsidian-file-badge {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: rgb(var(--muted));
+  background-color: rgb(var(--panel-secondary));
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* Legacy tab styles - removed to avoid conflicts */
+
+.obsidian-tab-close {
+  margin-left: 8px;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.obsidian-tab:hover .obsidian-tab-close {
+  opacity: 0.7;
+}
+
+.obsidian-tab-close:hover {
+  opacity: 1;
+}
+
+/* Obsidian Button Styles */
+.obsidian-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  background-color: transparent;
+  border: none;
+  border-radius: var(--radius);
+  color: rgb(var(--text-secondary));
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms ease;
+  text-decoration: none;
+  min-height: 32px;
+  white-space: nowrap;
+}
+
+.obsidian-button:hover {
+  background-color: rgb(var(--panel-secondary));
+  color: rgb(var(--text));
+}
+
+.obsidian-button.primary {
+  background-color: rgb(var(--accent));
+  color: rgb(var(--accent-fg));
+}
+
+.obsidian-button.primary:hover {
+  background-color: rgb(var(--accent-hover));
+}
+
+/* Small button variant */
+.obsidian-button.small {
+  padding: 4px 8px;
+  min-height: 24px;
+  font-size: var(--text-xs);
+}
+
+/* Icon-only button variant */
+.obsidian-button.icon-only {
+  padding: 6px;
+  min-width: 32px;
+}
+
+/* Obsidian Input Styles */
+.obsidian-input {
+  width: 100%;
+  padding: 8px 12px;
+  background-color: rgb(var(--bg));
+  border: 1px solid rgb(var(--border));
+  border-radius: var(--radius);
+  color: rgb(var(--text));
+  font-size: var(--text-sm);
+  font-family: var(--font-family);
+  transition: all 150ms ease;
+}
+
+.obsidian-input:focus {
+  outline: none;
+  border-color: rgb(var(--accent));
+  box-shadow: 0 0 0 2px rgb(var(--accent) / 0.1);
+}
+
+.obsidian-input::placeholder {
+  color: rgb(var(--muted));
+}
+
+/* Obsidian Typography */
+.obsidian-text-xs { font-size: var(--text-xs); }
+.obsidian-text-sm { font-size: var(--text-sm); }
+.obsidian-text-base { font-size: var(--text-base); }
+.obsidian-text-lg { font-size: var(--text-lg); }
+.obsidian-text-xl { font-size: var(--text-xl); }
+.obsidian-text-2xl { font-size: var(--text-2xl); }
+
+/* Enhanced Obsidian Status Bar */
+.obsidian-status-bar {
+  height: 24px;
+  background-color: rgb(var(--panel));
+  border-top: 1px solid rgb(var(--border));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-size: var(--text-xs);
+  color: rgb(var(--text-secondary));
+  gap: 8px;
+  flex-shrink: 0;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.obsidian-status-bar-section {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.obsidian-status-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  transition: background-color 150ms ease;
+  cursor: default;
+}
+
+.obsidian-status-bar-item:hover {
+  background-color: rgb(var(--panel-secondary) / 0.5);
+}
+
+.obsidian-status-bar-item.active {
+  color: rgb(var(--accent));
+  background-color: rgb(var(--accent) / 0.1);
+}
+
+.obsidian-status-bar-item.clickable {
+  cursor: pointer;
+}
+
+.obsidian-status-bar-item.clickable:hover {
+  background-color: rgb(var(--panel-secondary));
+  color: rgb(var(--text));
+}
+
+/* Status bar separators */
+.obsidian-status-bar-separator {
+  width: 1px;
+  height: 12px;
+  background-color: rgb(var(--border));
+  margin: 0 4px;
+}
+
+/* Enhanced Tab Styling - Obsidian-like */
+.obsidian-tab {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  color: rgb(var(--text-secondary));
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: all 150ms ease;
+  position: relative;
+  min-width: 120px;
+  max-width: 240px;
+  height: 36px;
+  border-top: 2px solid transparent;
+  border-left: 1px solid rgb(var(--border) / 0.5);
+  border-right: 1px solid rgb(var(--border) / 0.5);
+  background-color: rgb(var(--panel) / 0.8);
+}
+
+.obsidian-tab:first-child {
+  border-left: none;
+}
+
+.obsidian-tab:hover {
+  background-color: rgb(var(--panel-secondary));
+  color: rgb(var(--text));
+  border-top-color: rgb(var(--accent) / 0.3);
+}
+
+.obsidian-tab.active {
+  background-color: rgb(var(--bg));
+  color: rgb(var(--text));
+  border-top-color: rgb(var(--accent));
+  border-left-color: rgb(var(--border));
+  border-right-color: rgb(var(--border));
+  z-index: 2;
+}
+
+/* Remove the old ::after pseudo element */
+.obsidian-tab.active::after {
+  display: none;
+}
+
+.obsidian-file-icon {
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.obsidian-tab.active .obsidian-file-icon {
+  opacity: 0.8;
+}
+
+/* Enhanced File Tree Styling */
+.obsidian-file-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: rgb(var(--text));
+  cursor: pointer;
+  transition: all 120ms ease;
+  position: relative;
+  border: none;
+  background: transparent;
+  text-align: left;
+  min-height: 24px;
+}
+
+.obsidian-file-item:hover {
+  background-color: rgb(var(--panel-secondary) / 0.5);
+}
+
+.obsidian-file-item.active {
+  background-color: rgb(var(--accent) / 0.12);
+  color: rgb(var(--accent));
+}
+
+.obsidian-file-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background-color: rgb(var(--accent));
+  border-radius: 0 2px 2px 0;
+}
+
+.obsidian-text-muted { color: rgb(var(--muted)); }
+.obsidian-text-secondary { color: rgb(var(--text-secondary)); }
+
+/* Enhanced Drag Handle */
+.cursor-col-resize {
+  transition: all 150ms ease;
+}
+
+.cursor-col-resize:hover {
+  background-color: rgb(var(--accent) / 0.3) !important;
+}
+
+/* Better resize handle visual feedback */
+.cursor-col-resize:active {
+  background-color: rgb(var(--accent) / 0.5) !important;
+}
+
+/* Improved button transitions */
+.obsidian-button {
+  transition: all 120ms ease;
+}
+
+.obsidian-button:active {
+  transform: translateY(1px);
+}
+
+/* Enhanced tab close button */
+.obsidian-tab-close {
+  border-radius: 3px;
+  padding: 2px;
+  transition: all 120ms ease;
+}
+
+.obsidian-tab-close:hover {
+  background-color: rgb(var(--danger) / 0.1);
+  color: rgb(var(--danger));
+}
+
+/* Better focus states for accessibility */
+.obsidian-button:focus-visible,
+.obsidian-tab:focus-visible,
+.obsidian-file-item:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
+}
+
+/* Smooth transitions for theme changes */
+* {
+  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+}
+
+/* Override transitions for animations that should be instant */
+.ProseMirror *,
+[data-radix-popper-content-wrapper] *,
+.animate-in *,
+.animate-out * {
+  transition: none !important;
+}
+
+/* Obsidian Editor Styles */
+.obsidian-editor {
+  background-color: rgb(var(--bg));
+  color: rgb(var(--text));
+  font-family: var(--font-family);
+  padding: 2rem;
+  min-height: calc(100vh - 120px);
+  border-radius: var(--radius);
+  line-height: 1.6;
+  font-size: var(--text-base);
+}
+
+.obsidian-editor h1,
+.obsidian-editor h2,
+.obsidian-editor h3,
+.obsidian-editor h4,
+.obsidian-editor h5,
+.obsidian-editor h6 {
+  color: rgb(var(--text));
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.3;
+}
+
+.obsidian-editor h1 { font-size: 2rem; }
+.obsidian-editor h2 { font-size: 1.5rem; }
+.obsidian-editor h3 { font-size: 1.25rem; }
+
+.obsidian-editor p {
+  margin-bottom: 1rem;
+  color: rgb(var(--text));
+}
+
+.obsidian-editor blockquote {
+  border-left: 4px solid rgb(var(--accent));
+  padding-left: 1rem;
+  margin: 1rem 0;
+  color: rgb(var(--text-secondary));
+  font-style: italic;
+}
+
+.obsidian-editor code {
+  background-color: rgb(var(--panel));
+  color: rgb(var(--accent));
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.obsidian-editor pre {
+  background-color: rgb(var(--panel));
+  border: 1px solid rgb(var(--border));
+  border-radius: var(--radius);
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.obsidian-editor pre code {
+  background: none;
+  padding: 0;
+  color: rgb(var(--text));
+}
+
+/* Obsidian Smooth Transitions and Animations */
+
+/* Smooth page transitions */
+@keyframes obsidian-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes obsidian-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes obsidian-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Apply smooth transitions to all Obsidian components */
+.obsidian-file-item,
+.obsidian-tab,
+.obsidian-button,
+.obsidian-input {
+  transition: all 200ms cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+/* Hover states with smooth animations */
+.obsidian-file-item:hover {
+  transform: translateX(2px);
+}
+
+.obsidian-tab:hover {
+  transform: translateY(-1px);
+}
+
+.obsidian-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Smooth focus states */
+.obsidian-input:focus {
+  transform: scale(1.02);
+}
+
+/* Loading animations */
+@keyframes obsidian-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.obsidian-loading {
+  animation: obsidian-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Tab switching animation */
+.obsidian-tab-content {
+  animation: obsidian-fade-in 300ms ease-out;
+}
+
+/* Sidebar animation */
+.obsidian-sidebar {
+  transition: transform 250ms cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+/* Editor content smooth typing effect */
+.obsidian-editor .ProseMirror {
+  transition: all 150ms ease-out;
+}
+
+/* Smooth scrolling for the entire app */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Dialog animations enhancement */
+.obsidian-dialog-content {
+  animation: obsidian-scale-in 200ms ease-out;
+}
+
+/* Dropdown menu animations */
+@keyframes obsidian-dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.obsidian-dropdown {
+  animation: obsidian-dropdown-in 150ms ease-out;
+}
+
+/* Obsidian Status Bar */
+.obsidian-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  padding: 0 12px;
+  background-color: rgb(var(--panel));
+  border-top: 1px solid rgb(var(--border));
+  color: rgb(var(--text-secondary));
+  font-size: var(--text-xs);
+  font-weight: 500;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.obsidian-status-bar-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.obsidian-status-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.obsidian-status-bar-item:hover {
+  background-color: rgb(var(--panel-secondary) / 0.6);
+  color: rgb(var(--text));
+}
+
+.obsidian-status-bar-item.active {
+  background-color: rgb(var(--accent) / 0.1);
+  color: rgb(var(--accent));
+}
