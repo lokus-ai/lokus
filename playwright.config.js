@@ -10,12 +10,26 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:1420',
     trace: 'on-first-retry',
+    // Set test mode headers
+    extraHTTPHeaders: {
+      'X-Test-Mode': 'true'
+    }
   },
+
+  /* Global setup for test workspaces */
+  globalSetup: './tests/e2e/setup/global-setup.js',
+  globalTeardown: './tests/e2e/setup/global-teardown.js',
 
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { 
+        ...devices['Desktop Chrome'],
+        // Test workspace configuration
+        contextOptions: {
+          permissions: ['clipboard-read', 'clipboard-write']
+        }
+      },
     },
   ],
 
@@ -23,5 +37,6 @@ export default defineConfig({
     command: 'npm run dev',
     url: 'http://localhost:1420',
     reuseExistingServer: !process.env.CI,
+    timeout: 120 * 1000, // 2 minutes
   },
 });

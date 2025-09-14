@@ -4,9 +4,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, Share2, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, Share2, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers } from "lucide-react";
 // import GraphView from "./GraphView.jsx"; // Temporarily disabled
 import Editor from "../editor";
+import Canvas from "./Canvas.jsx";
 import FileContextMenu from "../components/FileContextMenu.jsx";
 import {
   ContextMenu,
@@ -24,6 +25,7 @@ import FullKanban from "../components/FullKanban.jsx";
 import PluginSettings from "./PluginSettings.jsx";
 import PluginMarketplace from "./PluginMarketplace.jsx";
 import PluginDetail from "./PluginDetail.jsx";
+import { canvasManager } from "../core/canvas/manager.js";
 
 const MAX_OPEN_TABS = 10;
 
@@ -388,6 +390,9 @@ export default function Workspace({ initialPath = "" }) {
   const [fileTree, setFileTree] = useState([]);
   const [expandedFolders, setExpandedFolders] = useState(new Set());
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  
+  // Check if we're in test mode
+  const isTestMode = new URLSearchParams(window.location.search).get('testMode') === 'true';
   const [keymap, setKeymap] = useState({});
   
   const [openTabs, setOpenTabs] = useState([]);
@@ -789,6 +794,16 @@ export default function Workspace({ initialPath = "" }) {
     }
   };
 
+  const handleCreateCanvas = async () => {
+    try {
+      const newCanvasPath = await canvasManager.createCanvas(path, "Untitled Canvas");
+      handleRefreshFiles();
+      handleFileOpen({ path: newCanvasPath, name: "Untitled Canvas.canvas", is_directory: false });
+    } catch (error) {
+      console.error("Failed to create canvas:", error);
+    }
+  };
+
   const handleCreateFolder = () => {
     setIsCreatingFolder(true);
   };
@@ -857,6 +872,12 @@ export default function Workspace({ initialPath = "" }) {
 
   return (
     <div className="h-screen bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden">
+      {/* Test Mode Indicator */}
+      {isTestMode && (
+        <div className="fixed top-4 right-4 bg-yellow-500 text-black px-3 py-1 rounded-md text-sm font-medium z-50">
+          🧪 Test Mode Active
+        </div>
+      )}
       <div className="flex-1 min-h-0 grid overflow-hidden" style={{ gridTemplateColumns: cols }}>
         <aside className="flex flex-col items-center gap-1 py-3 border-r border-app-border bg-app-panel">
           {/* Menu Toggle */}
@@ -928,6 +949,9 @@ export default function Workspace({ initialPath = "" }) {
                     <button onClick={handleCreateFile} title="New File" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
                       <FilePlus className="w-4 h-4" />
                     </button>
+                    <button onClick={handleCreateCanvas} title="New Canvas" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
+                      <Layers className="w-4 h-4" />
+                    </button>
                     <button onClick={handleCreateFolder} title="New Folder" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
                       <FolderPlus className="w-4 h-4" />
                     </button>
@@ -955,6 +979,7 @@ export default function Workspace({ initialPath = "" }) {
                       onFileClick={handleFileOpen} 
                       activeFile={activeFile}
                       onRefresh={handleRefreshFiles}
+                      data-testid="file-tree"
                       expandedFolders={expandedFolders}
                       toggleFolder={toggleFolder}
                       isCreating={isCreatingFolder}
@@ -967,6 +992,9 @@ export default function Workspace({ initialPath = "" }) {
                   <ContextMenuItem onClick={handleCreateFile}>
                     New File
                     <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-file'])}</span>
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={handleCreateCanvas}>
+                    New Canvas
                   </ContextMenuItem>
                   <ContextMenuItem onClick={handleCreateFolder}>
                     New Folder
@@ -998,6 +1026,33 @@ export default function Workspace({ initialPath = "" }) {
               <FullKanban 
                 workspacePath={path}
                 onFileOpen={handleFileOpen}
+              />
+            </div>
+          ) : activeFile && activeFile.endsWith('.canvas') ? (
+            <div className="flex-1 overflow-hidden">
+              <Canvas
+                canvasPath={activeFile}
+                canvasName={openTabs.find(tab => tab.path === activeFile)?.name}
+                onSave={async (canvasData) => {
+                  try {
+                    await canvasManager.saveCanvas(activeFile, canvasData);
+                    setUnsavedChanges(prev => {
+                      const newSet = new Set(prev);
+                      newSet.delete(activeFile);
+                      return newSet;
+                    });
+                  } catch (error) {
+                    console.error("Failed to save canvas:", error);
+                  }
+                }}
+                onContentChange={(canvasData) => {
+                  setUnsavedChanges(prev => {
+                    const newSet = new Set(prev);
+                    newSet.add(activeFile);
+                    return newSet;
+                  });
+                }}
+                initialData={null} // Will be loaded by Canvas component
               />
             </div>
           ) : (
@@ -1069,7 +1124,7 @@ export default function Workspace({ initialPath = "" }) {
                       {/* Quick Actions */}
                       <div className="mb-12">
                         <h2 className="text-lg font-semibold text-app-text mb-6">Start</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                           <button
                             onClick={handleCreateFile}
                             className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
@@ -1080,6 +1135,17 @@ export default function Workspace({ initialPath = "" }) {
                             <h3 className="font-medium text-app-text mb-2">New Note</h3>
                             <p className="text-sm text-app-muted">Create your first note and start writing</p>
                             <div className="mt-3 text-xs text-app-muted/70">⌘N</div>
+                          </button>
+                          
+                          <button
+                            onClick={handleCreateCanvas}
+                            className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
+                          >
+                            <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
+                              <Layers className="w-5 h-5 text-app-accent" />
+                            </div>
+                            <h3 className="font-medium text-app-text mb-2">New Canvas</h3>
+                            <p className="text-sm text-app-muted">Create visual mind maps and diagrams</p>
                           </button>
                           
                           <button
