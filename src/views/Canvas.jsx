@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Tldraw, loadSnapshot, createTLStore, defaultShapeUtils, defaultBindingUtils, defaultTools } from 'tldraw'
+import { Tldraw, loadSnapshot, getSnapshot, createTLStore, defaultShapeUtils, defaultBindingUtils, defaultTools } from 'tldraw'
 import 'tldraw/tldraw.css'
 import '../styles/canvas.css'
 import { invoke } from '@tauri-apps/api/core'
@@ -102,7 +102,7 @@ export default function Canvas({
         throw new Error('Invalid canvas file path');
       }
       
-      const snapshot = store.getSnapshot()
+      const snapshot = getSnapshot(store)
       
       // Convert tldraw format to JSON Canvas format
       const canvasData = tldrawToJsonCanvas(snapshot)
@@ -152,7 +152,7 @@ export default function Canvas({
       
       // Debounce changes to avoid mouse move false positives
       changeTimeout = setTimeout(() => {
-        const currentSnapshot = store.getSnapshot()
+        const currentSnapshot = getSnapshot(store)
         
         // Compare with initial snapshot to detect real changes
         if (initialSnapshot && hasRealChanges(initialSnapshot, currentSnapshot)) {
@@ -176,7 +176,7 @@ export default function Canvas({
 
     // Capture initial snapshot after loading
     setTimeout(() => {
-      initialSnapshot = store.getSnapshot()
+      initialSnapshot = getSnapshot(store)
     }, 1000)
 
     const unsubscribe = store.listen(handleStoreChange)

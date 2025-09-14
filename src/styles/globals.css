@@ -364,6 +364,17 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
 .obsidian-button.icon-only {
   padding: 6px;
   min-width: 32px;
+  min-height: 32px;
+}
+
+/* Activity bar specific buttons - match tab bar height */
+.activity-bar-button {
+  height: 36px;
+  width: 36px;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Obsidian Input Styles */
@@ -462,7 +473,7 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
 .obsidian-tab {
   display: flex;
   align-items: center;
-  padding: 8px 16px;
+  padding: 10px 16px;
   background-color: transparent;
   border: none;
   border-radius: 0;
@@ -473,7 +484,7 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   position: relative;
   min-width: 120px;
   max-width: 240px;
-  height: 36px;
+  height: 40px;
   border-top: 2px solid transparent;
   border-left: 1px solid rgb(var(--border) / 0.5);
   border-right: 1px solid rgb(var(--border) / 0.5);

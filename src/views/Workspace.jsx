@@ -362,7 +362,7 @@ function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDra
 
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-      <div className="h-9 shrink-0 flex items-end bg-app-panel border-b border-app-border px-0">
+      <div className="h-12 shrink-0 flex items-end bg-app-panel border-b border-app-border px-0">
         <div className="flex-1 flex items-center overflow-x-auto no-scrollbar">
           {tabs.map(tab => (
             <DraggableTab
@@ -889,18 +889,18 @@ export default function Workspace({ initialPath = "" }) {
         </div>
       )}
       <div className="flex-1 min-h-0 grid overflow-hidden" style={{ gridTemplateColumns: cols }}>
-        <aside className="flex flex-col items-center gap-1 py-3 border-r border-app-border bg-app-panel">
+        <aside className="flex flex-col items-center gap-1 py-2 border-r border-app-border bg-app-panel">
           {/* Menu Toggle */}
           <button
             onClick={() => setShowLeft(v => !v)}
             title={showLeft ? "Hide sidebar" : "Show sidebar"}
-            className={`obsidian-button icon-only mb-2 ${showLeft ? 'primary' : ''}`}
+            className={`activity-bar-button obsidian-button ${showLeft ? 'primary' : ''}`}
           >
             <LokusLogo className="w-6 h-6" />
           </button>
           
           {/* Activity Bar - VS Code Style */}
-          <div className="w-full border-t border-app-border/50 pt-2">
+          <div className="w-full border-t border-app-border/50 pt-1 flex flex-col items-center gap-1">
             <button
               onClick={() => { 
                 setShowKanban(false); 
@@ -908,7 +908,7 @@ export default function Workspace({ initialPath = "" }) {
                 setShowLeft(true);
               }}
               title="Explorer"
-              className={`obsidian-button icon-only w-full mb-1 ${!showKanban && !showPlugins && showLeft ? 'primary' : ''}`}
+              className={`activity-bar-button obsidian-button ${!showKanban && !showPlugins && showLeft ? 'primary' : ''}`}
             >
               <FolderOpen className="w-5 h-5" />
             </button>
@@ -920,7 +920,7 @@ export default function Workspace({ initialPath = "" }) {
                 setShowLeft(true);
               }}
               title="Task Board"
-              className={`obsidian-button icon-only w-full mb-1 ${showKanban && !showPlugins ? 'primary' : ''}`}
+              className={`activity-bar-button obsidian-button ${showKanban && !showPlugins ? 'primary' : ''}`}
             >
               <LayoutGrid className="w-5 h-5" />
             </button>
@@ -932,7 +932,7 @@ export default function Workspace({ initialPath = "" }) {
                 setShowLeft(true);
               }}
               title="Extensions"
-              className={`obsidian-button icon-only w-full ${showPlugins ? 'primary' : ''}`}
+              className={`activity-bar-button obsidian-button ${showPlugins ? 'primary' : ''}`}
             >
               <Puzzle className="w-5 h-5" />
             </button>
