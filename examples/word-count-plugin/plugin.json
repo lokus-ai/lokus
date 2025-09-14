@@ -1,0 +1,56 @@
+{
+  "name": "Word Count Plugin",
+  "id": "word-count-plugin",
+  "version": "1.0.0",
+  "description": "Shows live word count, character count, and reading time estimation in the editor",
+  "author": "Lokus Team",
+  "main": "index.js",
+  "permissions": [
+    "editor:read",
+    "ui:sidebar",
+    "ui:statusbar"
+  ],
+  "ui": {
+    "sidebar": {
+      "title": "Word Count",
+      "position": "right",
+      "icon": "counter",
+      "defaultOpen": false
+    },
+    "statusbar": {
+      "position": "right",
+      "priority": 10
+    }
+  },
+  "settings": {
+    "showCharacterCount": {
+      "type": "boolean",
+      "default": true,
+      "label": "Show Character Count",
+      "description": "Display character count in addition to word count"
+    },
+    "showReadingTime": {
+      "type": "boolean", 
+      "default": true,
+      "label": "Show Reading Time",
+      "description": "Estimate and display reading time"
+    },
+    "wordsPerMinute": {
+      "type": "number",
+      "default": 200,
+      "min": 100,
+      "max": 500,
+      "label": "Reading Speed (WPM)",
+      "description": "Words per minute for reading time calculation"
+    },
+    "excludeCodeBlocks": {
+      "type": "boolean",
+      "default": false,
+      "label": "Exclude Code Blocks",
+      "description": "Don't count words in code blocks"
+    }
+  },
+  "engines": {
+    "lokus": ">=1.0.0"
+  }
+}

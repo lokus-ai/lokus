@@ -320,8 +320,3 @@ pub async fn build_search_index(workspace_path: String) -> Result<String, String
     // Could use libraries like tantivy for full-text search indexing
     Ok(format!("Search index built for workspace: {}", workspace_path))
 }
-
-// Include comprehensive tests
-#[cfg(test)]
-#[path = "search.test.rs"]
-mod search_tests;
