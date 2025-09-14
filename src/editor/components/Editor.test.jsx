@@ -28,11 +28,14 @@ const mockEditor = {
   }
 }
 
-const mockUseEditor = vi.fn()
 vi.mock('@tiptap/react', () => ({
-  useEditor: mockUseEditor,
+  useEditor: vi.fn(),
   EditorContent: ({ editor }) => <div data-testid="editor-content" />
 }))
+
+// Get the mocked useEditor function
+import { useEditor } from '@tiptap/react'
+const mockUseEditor = vi.mocked(useEditor)
 
 // Mock extensions
 vi.mock('../extensions/Math.js', () => ({ default: null }))

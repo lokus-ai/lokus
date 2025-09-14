@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, Share2, FolderMinus } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, Share2, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus } from "lucide-react";
 // import GraphView from "./GraphView.jsx"; // Temporarily disabled
 import Editor from "../editor";
 import FileContextMenu from "../components/FileContextMenu.jsx";
@@ -17,6 +17,13 @@ import {
 } from "../components/ui/context-menu.jsx";
 import { getActiveShortcuts, formatAccelerator } from "../core/shortcuts/registry.js";
 import CommandPalette from "../components/CommandPalette.jsx";
+import InFileSearch from "../components/InFileSearch.jsx";
+import SearchPanel from "../components/SearchPanel.jsx";
+import MiniKanban from "../components/MiniKanban.jsx";
+import FullKanban from "../components/FullKanban.jsx";
+import PluginSettings from "./PluginSettings.jsx";
+import PluginMarketplace from "./PluginMarketplace.jsx";
+import PluginDetail from "./PluginDetail.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -375,6 +382,7 @@ export default function Workspace({ initialPath = "" }) {
   const [path, setPath] = useState(initialPath);
   const { leftW, startLeftDrag } = useDragColumns({});
   const [showLeft, setShowLeft] = useState(true);
+  const [showMiniKanban, setShowMiniKanban] = useState(false);
   const [refreshId, setRefreshId] = useState(0);
 
   const [fileTree, setFileTree] = useState([]);
@@ -391,9 +399,14 @@ export default function Workspace({ initialPath = "" }) {
   const [savedContent, setSavedContent] = useState("");
   const [showGraph, setShowGraph] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showInFileSearch, setShowInFileSearch] = useState(false);
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  const [showKanban, setShowKanban] = useState(false);
+  const [showPlugins, setShowPlugins] = useState(false);
   
   // --- Refs for stable callbacks ---
   const stateRef = useRef({});
+  const editorRef = useRef(null);
   stateRef.current = {
     activeFile,
     openTabs,
@@ -581,6 +594,19 @@ export default function Workspace({ initialPath = "" }) {
 
   const handleRefreshFiles = () => setRefreshId(id => id + 1);
 
+  const handleOpenPluginDetail = (plugin) => {
+    const pluginPath = `__plugin_${plugin.id}__`;
+    const pluginName = `${plugin.name} Plugin`;
+    
+    setOpenTabs(prevTabs => {
+      const newTabs = prevTabs.filter(t => t.path !== pluginPath);
+      newTabs.unshift({ path: pluginPath, name: pluginName, plugin });
+      if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
+      return newTabs;
+    });
+    setActiveFile(pluginPath);
+  };
+
   const toggleFolder = (folderPath) => {
     setExpandedFolders(prev => {
       const newSet = new Set(prev);
@@ -598,6 +624,40 @@ export default function Workspace({ initialPath = "" }) {
   };
 
   const handleFileOpen = (file) => {
+    // Handle search result format with line numbers
+    if (file.path && file.lineNumber !== undefined) {
+      const filePath = file.path;
+      const fileName = filePath.split('/').pop();
+      
+      setOpenTabs(prevTabs => {
+        const newTabs = prevTabs.filter(t => t.path !== filePath);
+        newTabs.unshift({ path: filePath, name: fileName });
+        if (newTabs.length > MAX_OPEN_TABS) {
+          newTabs.pop();
+        }
+        return newTabs;
+      });
+      setActiveFile(filePath);
+      
+      // Jump to line after editor loads
+      setTimeout(() => {
+        if (editorRef.current && file.lineNumber) {
+          try {
+            const doc = editorRef.current.state.doc;
+            const linePos = doc.line(file.lineNumber).from + (file.column || 0);
+            const selection = editorRef.current.state.selection.constructor.create(doc, linePos, linePos);
+            const tr = editorRef.current.state.tr.setSelection(selection);
+            editorRef.current.view.dispatch(tr);
+            editorRef.current.commands.scrollIntoView();
+          } catch (error) {
+            console.error('Error jumping to line:', error);
+          }
+        }
+      }, 100);
+      return;
+    }
+    
+    // Handle regular file format
     if (file.is_directory) return;
 
     setOpenTabs(prevTabs => {
@@ -609,6 +669,22 @@ export default function Workspace({ initialPath = "" }) {
       return newTabs;
     });
     setActiveFile(file.path);
+  };
+
+  const handleOpenFullKanban = () => {
+    const kanbanPath = '__kanban__';
+    const kanbanName = 'Task Board';
+    
+    setOpenTabs(prevTabs => {
+      const newTabs = prevTabs.filter(t => t.path !== kanbanPath);
+      newTabs.unshift({ path: kanbanPath, name: kanbanName });
+      if (newTabs.length > MAX_OPEN_TABS) {
+        newTabs.pop();
+      }
+      return newTabs;
+    });
+    setActiveFile(kanbanPath);
+    setShowKanban(false); // Close mini kanban when opening full
   };
 
   const handleTabClick = (path) => {
@@ -758,6 +834,8 @@ export default function Workspace({ initialPath = "" }) {
     const unlistenNewFolder = isTauri ? listen("lokus:new-folder", () => setIsCreatingFolder(true)) : Promise.resolve(addDom('lokus:new-folder', () => setIsCreatingFolder(true)));
     const unlistenToggleSidebar = isTauri ? listen("lokus:toggle-sidebar", () => setShowLeft(v => !v)) : Promise.resolve(addDom('lokus:toggle-sidebar', () => setShowLeft(v => !v)));
     const unlistenCommandPalette = isTauri ? listen("lokus:command-palette", () => setShowCommandPalette(true)) : Promise.resolve(addDom('lokus:command-palette', () => setShowCommandPalette(true)));
+    const unlistenInFileSearch = isTauri ? listen("lokus:in-file-search", () => setShowInFileSearch(true)) : Promise.resolve(addDom('lokus:in-file-search', () => setShowInFileSearch(true)));
+    const unlistenGlobalSearch = isTauri ? listen("lokus:global-search", () => setShowGlobalSearch(true)) : Promise.resolve(addDom('lokus:global-search', () => setShowGlobalSearch(true)));
 
     return () => {
       unlistenSave.then(f => { if (typeof f === 'function') f(); });
@@ -766,6 +844,8 @@ export default function Workspace({ initialPath = "" }) {
       unlistenNewFolder.then(f => { if (typeof f === 'function') f(); });
       unlistenToggleSidebar.then(f => { if (typeof f === 'function') f(); });
       unlistenCommandPalette.then(f => { if (typeof f === 'function') f(); });
+      unlistenInFileSearch.then(f => { if (typeof f === 'function') f(); });
+      unlistenGlobalSearch.then(f => { if (typeof f === 'function') f(); });
     };
   }, [handleSave, handleTabClose]);
 
@@ -778,68 +858,125 @@ export default function Workspace({ initialPath = "" }) {
   return (
     <div className="h-screen bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden">
       <div className="flex-1 min-h-0 grid overflow-hidden" style={{ gridTemplateColumns: cols }}>
-        <aside className="flex flex-col items-center gap-2 py-2 border-r border-app-border">
+        <aside className="flex flex-col items-center gap-1 py-3 border-r border-app-border bg-app-panel">
+          {/* Menu Toggle */}
           <button
             onClick={() => setShowLeft(v => !v)}
             title={showLeft ? "Hide sidebar" : "Show sidebar"}
-            className={`p-2 rounded-md transition-colors ${showLeft ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:bg-app-bg'}`}
+            className={`p-2 rounded-md transition-colors mb-2 ${showLeft ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:bg-app-bg hover:text-app-text'}`}
           >
             <Menu className="w-5 h-5" />
           </button>
-          <button
-            disabled
-            title="Graph view coming soon"
-            className="p-2 rounded-md text-app-muted/50 cursor-not-allowed opacity-50"
-          >
-            <Share2 className="w-5 h-5" />
-          </button>
+          
+          {/* Activity Bar - VS Code Style */}
+          <div className="w-full border-t border-app-border/50 pt-2">
+            <button
+              onClick={() => { 
+                setShowKanban(false); 
+                setShowPlugins(false); 
+                setShowLeft(true);
+              }}
+              title="Explorer"
+              className={`w-full p-2 rounded-md transition-colors mb-1 flex items-center justify-center ${!showKanban && !showPlugins && showLeft ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:bg-app-bg hover:text-app-text'}`}
+            >
+              <FolderOpen className="w-5 h-5" />
+            </button>
+            
+            <button
+              onClick={() => { 
+                setShowKanban(true); 
+                setShowPlugins(false); 
+                setShowLeft(true);
+              }}
+              title="Task Board"
+              className={`w-full p-2 rounded-md transition-colors mb-1 flex items-center justify-center ${showKanban && !showPlugins ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:bg-app-bg hover:text-app-text'}`}
+            >
+              <LayoutGrid className="w-5 h-5" />
+            </button>
+            
+            <button
+              onClick={() => { 
+                setShowPlugins(true); 
+                setShowKanban(false);
+                setShowLeft(true);
+              }}
+              title="Extensions"
+              className={`w-full p-2 rounded-md transition-colors flex items-center justify-center ${showPlugins ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:bg-app-bg hover:text-app-text'}`}
+            >
+              <Puzzle className="w-5 h-5" />
+            </button>
+          </div>
         </aside>
         <div className="bg-app-border/20 w-px" />
         {showLeft && (
           <aside className="overflow-y-auto flex flex-col">
-            <div className="h-12 shrink-0 px-4 flex items-center justify-between gap-2 border-b border-app-border">
-              <span className="font-semibold text-sm">Files</span>
-              <div className="flex items-center">
-                <button onClick={handleCreateFile} title="New File" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
-                  <Icon path="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" className="w-4 h-4" />
-                </button>
-                <button onClick={handleCreateFolder} title="New Folder" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
-                  <Icon path="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" className="w-4 h-4" />
-                </button>
-                <button onClick={closeAllFolders} title="Close all folders" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
-                  <FolderMinus className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <ContextMenu>
-              <ContextMenuTrigger asChild>
-                <div className="p-2 flex-1 overflow-y-auto">
-                  <FileTreeView 
-                    entries={fileTree}
-                    onFileClick={handleFileOpen} 
-                    activeFile={activeFile}
-                    onRefresh={handleRefreshFiles}
-                    expandedFolders={expandedFolders}
-                    toggleFolder={toggleFolder}
-                    isCreating={isCreatingFolder}
-                    onCreateConfirm={handleConfirmCreateFolder}
-                    keymap={keymap}
-                  />
+            {/* Clean Header with Title and Actions - Hide for Kanban */}
+            {!showKanban && (
+              <div className="h-12 shrink-0 px-4 flex items-center justify-between gap-2 border-b border-app-border">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-sm font-medium text-app-text">
+                    {showPlugins ? 'Extensions' : 'Explorer'}
+                  </h2>
+                  {!showPlugins && (
+                    <button onClick={closeAllFolders} title="Close all folders" className="p-1 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
+                      <FolderMinus className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
-              </ContextMenuTrigger>
-              <ContextMenuContent>
-                <ContextMenuItem onClick={handleCreateFile}>
-                  New File
-                  <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-file'])}</span>
-                </ContextMenuItem>
-                <ContextMenuItem onClick={handleCreateFolder}>
-                  New Folder
-                  <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-folder'])}</span>
-                </ContextMenuItem>
-                <ContextMenuSeparator />
-                <ContextMenuItem onClick={handleRefreshFiles}>Refresh</ContextMenuItem>
-              </ContextMenuContent>
-            </ContextMenu>
+                {!showPlugins && (
+                  <div className="flex items-center gap-1">
+                    <button onClick={handleCreateFile} title="New File" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
+                      <FilePlus className="w-4 h-4" />
+                    </button>
+                    <button onClick={handleCreateFolder} title="New Folder" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
+                      <FolderPlus className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            {showPlugins ? (
+              <div className="flex-1 overflow-hidden">
+                <PluginSettings onOpenPluginDetail={handleOpenPluginDetail} />
+              </div>
+            ) : showKanban ? (
+              <div className="flex-1 overflow-hidden">
+                <MiniKanban 
+                  workspacePath={path}
+                  onOpenFull={handleOpenFullKanban}
+                />
+              </div>
+            ) : (
+              <ContextMenu>
+                <ContextMenuTrigger asChild>
+                  <div className="p-2 flex-1 overflow-y-auto">
+                    <FileTreeView 
+                      entries={fileTree}
+                      onFileClick={handleFileOpen} 
+                      activeFile={activeFile}
+                      onRefresh={handleRefreshFiles}
+                      expandedFolders={expandedFolders}
+                      toggleFolder={toggleFolder}
+                      isCreating={isCreatingFolder}
+                      onCreateConfirm={handleConfirmCreateFolder}
+                      keymap={keymap}
+                    />
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem onClick={handleCreateFile}>
+                    New File
+                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-file'])}</span>
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={handleCreateFolder}>
+                    New Folder
+                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-folder'])}</span>
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onClick={handleRefreshFiles}>Refresh</ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
+            )}
           </aside>
         )}
         {showLeft && <div onMouseDown={startLeftDrag} className="cursor-col-resize bg-app-border/20 hover:bg-app-accent/50 transition-colors duration-300 w-px" />}
@@ -856,17 +993,32 @@ export default function Workspace({ initialPath = "" }) {
             onDragEnd={handleTabDragEnd}
             onNewTab={handleCreateFile}
           />
-          <div className="flex-1 p-8 md:p-12 overflow-y-auto">
-            <div className="max-w-4xl mx-auto">
-              {activeFile === '__graph__' ? (
-                <div className="flex items-center justify-center h-64 text-center">
-                  <div>
-                    <div className="text-4xl mb-4 text-app-muted/50">📊</div>
-                    <h2 className="text-xl font-medium text-app-text mb-2">Graph View Coming Soon</h2>
-                    <p className="text-app-muted">The graph view is temporarily disabled while we improve it.</p>
+          {activeFile === '__kanban__' ? (
+            <div className="flex-1 bg-app-panel overflow-hidden">
+              <FullKanban 
+                workspacePath={path}
+                onFileOpen={handleFileOpen}
+              />
+            </div>
+          ) : (
+            <div className="flex-1 p-8 md:p-12 overflow-y-auto">
+              <div className="max-w-4xl mx-auto">
+                {activeFile === '__graph__' ? (
+                  <div className="flex items-center justify-center h-64 text-center">
+                    <div>
+                      <div className="text-4xl mb-4 text-app-muted/50">📊</div>
+                      <h2 className="text-xl font-medium text-app-text mb-2">Graph View Coming Soon</h2>
+                      <p className="text-app-muted">The graph view is temporarily disabled while we improve it.</p>
+                    </div>
                   </div>
-                </div>
-              ) : activeFile ? (
+                ) : activeFile && activeFile.startsWith('__plugin_') ? (
+                  <div className="flex-1 overflow-hidden">
+                    {(() => {
+                      const activeTab = openTabs.find(tab => tab.path === activeFile);
+                      return activeTab?.plugin ? <PluginDetail plugin={activeTab.plugin} /> : <div>Plugin not found</div>;
+                    })()}
+                  </div>
+                ) : activeFile ? (
                 <ContextMenu>
                   <ContextMenuTrigger asChild>
                     <div>
@@ -877,6 +1029,7 @@ export default function Workspace({ initialPath = "" }) {
                         className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
                       />
                       <Editor
+                        ref={editorRef}
                         content={editorContent}
                         onContentChange={handleEditorChange}
                       />
@@ -896,56 +1049,109 @@ export default function Workspace({ initialPath = "" }) {
                   </ContextMenuContent>
                 </ContextMenu>
               ) : (
-                <div className="mx-auto max-w-2xl text-center">
-                  <div className="rounded-lg border border-app-border bg-app-panel/50 p-8">
-                    <h1 className="text-2xl font-semibold">Welcome to Lokus</h1>
-                    <p className="mt-2 text-app-muted">Create your first note or add a folder to get started.</p>
-
-                    <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                      <button
-                        onClick={handleCreateFile}
-                        className="inline-flex items-center gap-2 rounded-md border border-app-border bg-app-bg px-4 py-2 text-sm hover:bg-app-panel transition-colors"
-                      >
-                        <FilePlus2 className="w-4 h-4" />
-                        New note
-                      </button>
-                      <button
-                        onClick={handleCreateFolder}
-                        className="inline-flex items-center gap-2 rounded-md border border-app-border bg-app-bg px-4 py-2 text-sm hover:bg-app-panel transition-colors"
-                      >
-                        <FolderPlus className="w-4 h-4" />
-                        New folder
-                      </button>
-                      <button
-                        onClick={handleRefreshFiles}
-                        className="inline-flex items-center gap-2 rounded-md border border-app-border bg-app-bg px-4 py-2 text-sm hover:bg-app-panel transition-colors"
-                      >
-                        <Search className="w-4 h-4" />
-                        Refresh files
-                      </button>
-                    </div>
-
-                    <div className="mt-6 text-left text-sm text-app-muted">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="rounded-md bg-app-bg/50 border border-app-border p-3">
-                          <div className="font-medium text-app-text mb-1">Tips</div>
-                          <ul className="list-disc list-inside space-y-1">
-                            <li>Press <span className="font-mono">Cmd/Ctrl + S</span> to save.</li>
-                            <li>Rename a note by editing its title.</li>
-                            <li>Drag files into folders to move them.</li>
-                          </ul>
+                <>
+                  {/* Modern Welcome Screen - VS Code Inspired */}
+                  <div className="h-full flex flex-col">
+                  <div className="flex-1 flex items-center justify-center p-8">
+                    <div className="max-w-4xl w-full">
+                      
+                      {/* Header Section */}
+                      <div className="text-center mb-10">
+                        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-app-accent/20 to-app-accent/10 border border-app-accent/20 flex items-center justify-center">
+                          <svg className="w-8 h-8 text-app-accent" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+                          </svg>
                         </div>
-                        <div className="rounded-md bg-app-bg/50 border border-app-border p-3">
-                          <div className="font-medium text-app-text mb-1">Recent activity</div>
-                          <p>No recent notes yet.</p>
+                        <h1 className="text-3xl font-bold text-app-text mb-2">Welcome to Lokus</h1>
+                        <p className="text-app-muted text-lg">Your modern knowledge management platform</p>
+                      </div>
+
+                      {/* Quick Actions */}
+                      <div className="mb-12">
+                        <h2 className="text-lg font-semibold text-app-text mb-6">Start</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <button
+                            onClick={handleCreateFile}
+                            className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
+                          >
+                            <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
+                              <FilePlus2 className="w-5 h-5 text-app-accent" />
+                            </div>
+                            <h3 className="font-medium text-app-text mb-2">New Note</h3>
+                            <p className="text-sm text-app-muted">Create your first note and start writing</p>
+                            <div className="mt-3 text-xs text-app-muted/70">⌘N</div>
+                          </button>
+                          
+                          <button
+                            onClick={handleCreateFolder}
+                            className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
+                          >
+                            <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
+                              <FolderPlus className="w-5 h-5 text-app-accent" />
+                            </div>
+                            <h3 className="font-medium text-app-text mb-2">New Folder</h3>
+                            <p className="text-sm text-app-muted">Organize your notes with folders</p>
+                            <div className="mt-3 text-xs text-app-muted/70">⌘⇧N</div>
+                          </button>
+                          
+                          <button
+                            onClick={() => setShowCommandPalette(true)}
+                            className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
+                          >
+                            <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
+                              <Search className="w-5 h-5 text-app-accent" />
+                            </div>
+                            <h3 className="font-medium text-app-text mb-2">Command Palette</h3>
+                            <p className="text-sm text-app-muted">Quick access to all commands</p>
+                            <div className="mt-3 text-xs text-app-muted/70">⌘K</div>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Recent & Help */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <div>
+                          <h2 className="text-lg font-semibold text-app-text mb-4">Recent</h2>
+                          <div className="space-y-2">
+                            <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
+                              <p className="text-sm text-app-muted">No recent files yet. Start by creating your first note!</p>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <h2 className="text-lg font-semibold text-app-text mb-4">Learn</h2>
+                          <div className="space-y-3">
+                            <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
+                              <h3 className="font-medium text-app-text text-sm mb-2">✨ Features</h3>
+                              <ul className="text-sm text-app-muted space-y-1">
+                                <li>• Rich text editing with math equations</li>
+                                <li>• Wiki-style linking with <code className="px-1 py-0.5 bg-app-bg/50 rounded text-xs">[[brackets]]</code></li>
+                                <li>• Task management and kanban boards</li>
+                                <li>• Plugin system for extensibility</li>
+                              </ul>
+                            </div>
+                            
+                            <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
+                              <h3 className="font-medium text-app-text text-sm mb-2">⌨️ Quick Tips</h3>
+                              <ul className="text-sm text-app-muted space-y-1">
+                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">⌘K</kbd> Command palette</li>
+                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">⌘S</kbd> Save current file</li>
+                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">⌘P</kbd> Quick file open</li>
+                                <li>• Drag files to move them between folders</li>
+                              </ul>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
+                </>
               )}
+              </div>
             </div>
-          </div>
+          )}
         </main>
       </div>
       
@@ -974,6 +1180,19 @@ export default function Workspace({ initialPath = "" }) {
         onToggleSidebar={() => setShowLeft(v => !v)}
         onCloseTab={handleTabClose}
         activeFile={activeFile}
+      />
+      
+      <InFileSearch
+        editor={editorRef.current}
+        isVisible={showInFileSearch}
+        onClose={() => setShowInFileSearch(false)}
+      />
+      
+      <SearchPanel
+        isOpen={showGlobalSearch}
+        onClose={() => setShowGlobalSearch(false)}
+        onFileOpen={handleFileOpen}
+        workspacePath={path}
       />
     </div>
   );

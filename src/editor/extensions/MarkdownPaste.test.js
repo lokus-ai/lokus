@@ -239,6 +239,14 @@ describe('MarkdownPaste Extension', () => {
   });
 
   describe('Editor Integration', () => {
+    let mockClipboardData;
+
+    beforeEach(() => {
+      mockClipboardData = {
+        getData: vi.fn()
+      };
+    });
+
     it('should insert converted content into editor', () => {
       const markdownText = '**bold text**';
       const convertedHtml = '<p><strong>bold text</strong></p>';

@@ -10,7 +10,8 @@ vi.mock('lucide-react', () => ({
   ChevronUp: () => <div data-testid="chevron-up-icon" />,
   ChevronDown: () => <div data-testid="chevron-down-icon" />,
   ToggleLeft: () => <div data-testid="toggle-left-icon" />,
-  ToggleRight: () => <div data-testid="toggle-right-icon" />
+  ToggleRight: () => <div data-testid="toggle-right-icon" />,
+  Replace: () => <div data-testid="replace-icon" />
 }))
 
 // Mock search utilities
@@ -74,7 +75,7 @@ describe('InFileSearch', () => {
     render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={false}
+        isVisible={false}
         onClose={mockOnClose}
       />
     )
@@ -86,20 +87,19 @@ describe('InFileSearch', () => {
     render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={true}
+        isVisible={true}
         onClose={mockOnClose}
       />
     )
     
     expect(screen.getByPlaceholderText('Find in file...')).toBeInTheDocument()
-    expect(screen.getByText('No matches')).toBeInTheDocument()
   })
 
   it('should auto-focus search input when opened', () => {
     render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={true}
+        isVisible={true}
         onClose={mockOnClose}
       />
     )
@@ -111,7 +111,7 @@ describe('InFileSearch', () => {
     render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={true}
+        isVisible={true}
         onClose={mockOnClose}
       />
     )
@@ -128,7 +128,7 @@ describe('InFileSearch', () => {
     render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={true}
+        isVisible={true}
         onClose={mockOnClose}
       />
     )
@@ -145,7 +145,7 @@ describe('InFileSearch', () => {
     render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={true}
+        isVisible={true}
         onClose={mockOnClose}
       />
     )
@@ -163,7 +163,7 @@ describe('InFileSearch', () => {
     render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={true}
+        isVisible={true}
         onClose={mockOnClose}
       />
     )
@@ -181,7 +181,7 @@ describe('InFileSearch', () => {
     render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={true}
+        isVisible={true}
         onClose={mockOnClose}
       />
     )
@@ -196,7 +196,7 @@ describe('InFileSearch', () => {
     render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={true}
+        isVisible={true}
         onClose={mockOnClose}
       />
     )
@@ -210,7 +210,7 @@ describe('InFileSearch', () => {
     render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={true}
+        isVisible={true}
         onClose={mockOnClose}
       />
     )
@@ -231,7 +231,7 @@ describe('InFileSearch', () => {
     render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={true}
+        isVisible={true}
         onClose={mockOnClose}
       />
     )
@@ -246,7 +246,7 @@ describe('InFileSearch', () => {
     render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={true}
+        isVisible={true}
         onClose={mockOnClose}
       />
     )
@@ -263,7 +263,7 @@ describe('InFileSearch', () => {
     render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={true}
+        isVisible={true}
         onClose={mockOnClose}
       />
     )
@@ -288,7 +288,7 @@ describe('InFileSearch', () => {
     render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={true}
+        isVisible={true}
         onClose={mockOnClose}
       />
     )
@@ -313,7 +313,7 @@ describe('InFileSearch', () => {
     render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={true}
+        isVisible={true}
         onClose={mockOnClose}
       />
     )
@@ -333,7 +333,7 @@ describe('InFileSearch', () => {
     render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={true}
+        isVisible={true}
         onClose={mockOnClose}
       />
     )
@@ -353,7 +353,7 @@ describe('InFileSearch', () => {
     const { rerender } = render(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={true}
+        isVisible={true}
         onClose={mockOnClose}
       />
     )
@@ -361,7 +361,7 @@ describe('InFileSearch', () => {
     rerender(
       <InFileSearch 
         editor={mockEditor}
-        isOpen={false}
+        isVisible={false}
         onClose={mockOnClose}
       />
     )

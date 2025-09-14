@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { ThemeProvider } from "./hooks/theme.jsx";
 import "./styles/globals.css";
+import "./styles/kanban.css";
 
 // Load KaTeX for math rendering
 import katex from "katex";

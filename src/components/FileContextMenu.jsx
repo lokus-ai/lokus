@@ -133,7 +133,7 @@ export default function FileContextMenu({ children, file, onAction }) {
         
         <ContextMenuItem 
           onClick={() => handleAction('delete')}
-          className="text-red-400 focus:text-red-300"
+          className="text-[rgb(var(--danger))] focus:text-[rgb(var(--danger))/0.8]"
         >
           <Trash2 className="mr-2 h-4 w-4" />
           Delete

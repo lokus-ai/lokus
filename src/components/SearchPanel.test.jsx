@@ -4,10 +4,13 @@ import userEvent from '@testing-library/user-event'
 import SearchPanel from './SearchPanel.jsx'
 
 // Mock Tauri invoke
-const mockInvoke = vi.fn()
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: mockInvoke
+  invoke: vi.fn()
 }))
+
+// Get the mocked invoke function
+import { invoke } from '@tauri-apps/api/core'
+const mockInvoke = vi.mocked(invoke)
 
 // Mock Lucide React icons
 vi.mock('lucide-react', () => ({
@@ -20,7 +23,8 @@ vi.mock('lucide-react', () => ({
   Clock: () => <div data-testid="clock-icon" />,
   FolderOpen: () => <div data-testid="folder-open-icon" />,
   ChevronDown: () => <div data-testid="chevron-down-icon" />,
-  ChevronRight: () => <div data-testid="chevron-right-icon" />
+  ChevronRight: () => <div data-testid="chevron-right-icon" />,
+  Settings: () => <div data-testid="settings-icon" />
 }))
 
 // Mock search utilities

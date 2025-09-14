@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2.0.0",
-  "productName": "lokus",
-  "version": "0.1.0",
+  "productName": "Lokus",
+  "version": "1.0.1",
   "identifier": "com.pratham.lokus",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "lokus",
+        "title": "Lokus",
         "width": 800,
         "height": 600
       }
@@ -33,7 +33,12 @@
     ],
     "resources": [
       "../src/themes"
-    ]
+    ],
+    "macOS": {
+      "signingIdentity": null,
+      "hardenedRuntime": true,
+      "entitlements": null
+    }
   },
   "plugins": {
     "fs": {

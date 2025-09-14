@@ -9,8 +9,8 @@ function parseMarkdownTable(text) {
   // Find the header and separator lines
   const header = raw[0];
   const sep = raw[1];
-  if (!/^\|?.*\|.*$/.test(header)) return null;
-  if (!/^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(sep)) return null;
+  if (!/^\|?.*\|/.test(header)) return null;
+  if (!/^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?$/.test(sep)) return null;
 
   const split = (line) => line
     .replace(/^\|\s*/, '')

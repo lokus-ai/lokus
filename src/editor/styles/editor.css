@@ -55,7 +55,7 @@
 .ProseMirror p.is-editor-empty:first-child::before {
     content: attr(data-placeholder);
     float: left;
-    color: #adb5bd;
+    color: rgb(var(--editor-placeholder));
     pointer-events: none;
     height: 0;
 }
@@ -404,4 +404,119 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
     text-align: center;
     font-family: "KaTeX_Main", "Times New Roman", serif;
     overflow-x: auto;
+}
+
+/* Interactive task styles */
+.ProseMirror .editor-task {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 0.375rem 0.75rem;
+  margin: 0.25rem 0;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* Task text styling for emoji-prefixed tasks */
+.ProseMirror p:has-text(🔴),
+.ProseMirror p:has-text(🟡),
+.ProseMirror p:has-text(🔵),
+.ProseMirror p:has-text(⚪),
+.ProseMirror p:has-text(✅) {
+  cursor: pointer;
+}
+
+/* Style task text that starts with status emojis */
+.ProseMirror *[data-task-text],
+.ProseMirror span[data-task-text] {
+  background: rgba(var(--accent), 0.1);
+  border: 1px solid rgba(var(--accent), 0.2);
+  border-radius: 6px;
+  padding: 0.25rem 0.5rem;
+  margin: 0.125rem 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-block;
+  font-weight: 500;
+}
+
+.ProseMirror *[data-task-text]:hover,
+.ProseMirror span[data-task-text]:hover {
+  background: rgba(var(--accent), 0.2);
+  border-color: rgba(var(--accent), 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.ProseMirror .editor-task:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--app-accent);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.ProseMirror .task-indicator {
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  text-align: center;
+  min-width: 1.5rem;
+}
+
+.ProseMirror .editor-task.task-urgent .task-indicator {
+  background: rgb(var(--task-urgent) / 0.2);
+  color: rgb(var(--task-urgent));
+  border: 1px solid rgb(var(--task-urgent) / 0.3);
+}
+
+.ProseMirror .editor-task.task-needs-info .task-indicator {
+  background: rgb(var(--task-question) / 0.2);
+  color: rgb(var(--task-question));
+  border: 1px solid rgb(var(--task-question) / 0.3);
+}
+
+.ProseMirror .editor-task.task-in-progress .task-indicator {
+  background: rgb(var(--task-progress) / 0.2);
+  color: rgb(var(--task-progress));
+  border: 1px solid rgb(var(--task-progress) / 0.3);
+}
+
+.ProseMirror .editor-task.task-todo .task-indicator {
+  background: rgb(var(--task-todo) / 0.2);
+  color: rgb(var(--task-todo));
+  border: 1px solid rgb(var(--task-todo) / 0.3);
+}
+
+.ProseMirror .editor-task.task-completed .task-indicator {
+  background: rgb(var(--task-completed) / 0.2);
+  color: rgb(var(--task-completed));
+  border: 1px solid rgb(var(--task-completed) / 0.3);
+}
+
+.ProseMirror .task-text {
+  flex: 1;
+  color: var(--app-text);
+  font-size: 0.875rem;
+}
+
+.ProseMirror .task-jump-btn {
+  background: none;
+  border: none;
+  font-size: 0.75rem;
+  opacity: 0.6;
+  cursor: pointer;
+  padding: 0.125rem;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+}
+
+.ProseMirror .task-jump-btn:hover {
+  opacity: 1;
+  background: var(--app-accent);
+  transform: scale(1.1);
 }
