@@ -5,24 +5,24 @@ import { Plus, MoreHorizontal, RefreshCw, Search, Filter, Calendar, Tag, Externa
 
 // Task status to column mapping for full kanban
 const FULL_COLUMNS = {
-  todo: { id: 'todo', title: 'Todo', status: 'todo', color: 'border-gray-300', headerColor: 'text-gray-700' },
-  'in-progress': { id: 'in-progress', title: 'In Progress', status: 'in-progress', color: 'border-blue-300', headerColor: 'text-blue-700' },
-  urgent: { id: 'urgent', title: 'Urgent', status: 'urgent', color: 'border-red-300', headerColor: 'text-red-700' },
-  question: { id: 'question', title: 'Question', status: 'question', color: 'border-yellow-300', headerColor: 'text-yellow-700' },
-  completed: { id: 'completed', title: 'Completed', status: 'completed', color: 'border-green-300', headerColor: 'text-green-700' },
-  cancelled: { id: 'cancelled', title: 'Cancelled', status: 'cancelled', color: 'border-gray-300', headerColor: 'text-gray-500' },
-  delegated: { id: 'delegated', title: 'Delegated', status: 'delegated', color: 'border-purple-300', headerColor: 'text-purple-700' }
+  todo: { id: 'todo', title: 'Todo', status: 'todo', color: 'border-[rgb(var(--task-todo))]', headerColor: 'text-[rgb(var(--task-todo))]' },
+  'in-progress': { id: 'in-progress', title: 'In Progress', status: 'in-progress', color: 'border-[rgb(var(--task-progress))]', headerColor: 'text-[rgb(var(--task-progress))]' },
+  urgent: { id: 'urgent', title: 'Urgent', status: 'urgent', color: 'border-[rgb(var(--task-urgent))]', headerColor: 'text-[rgb(var(--task-urgent))]' },
+  question: { id: 'question', title: 'Question', status: 'question', color: 'border-[rgb(var(--task-question))]', headerColor: 'text-[rgb(var(--task-question))]' },
+  completed: { id: 'completed', title: 'Completed', status: 'completed', color: 'border-[rgb(var(--task-completed))]', headerColor: 'text-[rgb(var(--task-completed))]' },
+  cancelled: { id: 'cancelled', title: 'Cancelled', status: 'cancelled', color: 'border-[rgb(var(--task-cancelled))]', headerColor: 'text-[rgb(var(--task-cancelled))]' },
+  delegated: { id: 'delegated', title: 'Delegated', status: 'delegated', color: 'border-[rgb(var(--task-delegated))]', headerColor: 'text-[rgb(var(--task-delegated))]' }
 }
 
 // Task status colors for cards
 const STATUS_COLORS = {
-  todo: 'bg-gray-50 border-gray-200 text-gray-700',
-  'in-progress': 'bg-blue-50 border-blue-200 text-blue-700',
-  urgent: 'bg-red-50 border-red-200 text-red-700',
-  question: 'bg-yellow-50 border-yellow-200 text-yellow-700',
-  completed: 'bg-green-50 border-green-200 text-green-700',
-  cancelled: 'bg-gray-50 border-gray-200 text-gray-500 line-through',
-  delegated: 'bg-purple-50 border-purple-200 text-purple-700'
+  todo: 'bg-app-panel border-app-border text-app-text',
+  'in-progress': 'bg-app-panel border-[rgb(var(--task-progress))] text-app-text',
+  urgent: 'bg-app-panel border-[rgb(var(--task-urgent))] text-app-text',
+  question: 'bg-app-panel border-[rgb(var(--task-question))] text-app-text',
+  completed: 'bg-app-panel border-[rgb(var(--task-completed))] text-app-text opacity-75',
+  cancelled: 'bg-app-panel border-[rgb(var(--task-cancelled))] text-app-muted line-through opacity-60',
+  delegated: 'bg-app-panel border-[rgb(var(--task-delegated))] text-app-text'
 }
 
 // Draggable task card component

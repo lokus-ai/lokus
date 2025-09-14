@@ -55,7 +55,7 @@
 .ProseMirror p.is-editor-empty:first-child::before {
     content: attr(data-placeholder);
     float: left;
-    color: #adb5bd;
+    color: rgb(var(--editor-placeholder));
     pointer-events: none;
     height: 0;
 }
@@ -469,33 +469,33 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
 }
 
 .ProseMirror .editor-task.task-urgent .task-indicator {
-  background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgb(var(--task-urgent) / 0.2);
+  color: rgb(var(--task-urgent));
+  border: 1px solid rgb(var(--task-urgent) / 0.3);
 }
 
 .ProseMirror .editor-task.task-needs-info .task-indicator {
-  background: rgba(245, 158, 11, 0.2);
-  color: #f59e0b;
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: rgb(var(--task-question) / 0.2);
+  color: rgb(var(--task-question));
+  border: 1px solid rgb(var(--task-question) / 0.3);
 }
 
 .ProseMirror .editor-task.task-in-progress .task-indicator {
-  background: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgb(var(--task-progress) / 0.2);
+  color: rgb(var(--task-progress));
+  border: 1px solid rgb(var(--task-progress) / 0.3);
 }
 
 .ProseMirror .editor-task.task-todo .task-indicator {
-  background: rgba(107, 114, 128, 0.2);
-  color: #6b7280;
-  border: 1px solid rgba(107, 114, 128, 0.3);
+  background: rgb(var(--task-todo) / 0.2);
+  color: rgb(var(--task-todo));
+  border: 1px solid rgb(var(--task-todo) / 0.3);
 }
 
 .ProseMirror .editor-task.task-completed .task-indicator {
-  background: rgba(16, 185, 129, 0.2);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgb(var(--task-completed) / 0.2);
+  color: rgb(var(--task-completed));
+  border: 1px solid rgb(var(--task-completed) / 0.3);
 }
 
 .ProseMirror .task-text {

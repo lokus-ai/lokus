@@ -4,10 +4,10 @@ import { Plus, ExternalLink, RefreshCw } from 'lucide-react'
 
 // Task status to column mapping for mini kanban
 const MINI_COLUMNS = {
-  todo: { id: 'todo', title: 'Todo', status: 'todo', color: 'text-gray-600' },
-  'in-progress': { id: 'in-progress', title: 'In Progress', status: 'in-progress', color: 'text-blue-600' },
-  urgent: { id: 'urgent', title: 'Urgent', status: 'urgent', color: 'text-red-600' },
-  completed: { id: 'completed', title: 'Done', status: 'completed', color: 'text-green-600' }
+  todo: { id: 'todo', title: 'Todo', status: 'todo', color: 'text-[rgb(var(--task-todo))]' },
+  'in-progress': { id: 'in-progress', title: 'In Progress', status: 'in-progress', color: 'text-[rgb(var(--task-progress))]' },
+  urgent: { id: 'urgent', title: 'Urgent', status: 'urgent', color: 'text-[rgb(var(--task-urgent))]' },
+  completed: { id: 'completed', title: 'Done', status: 'completed', color: 'text-[rgb(var(--task-completed))]' }
 }
 
 // Compact task card for mini view
@@ -62,7 +62,7 @@ function MiniTaskCard({ task, onUpdate }) {
   }
 
   return (
-    <div className="flex items-center gap-2 p-2 text-xs rounded hover:bg-app-hover group">
+    <div className="flex items-center gap-2 p-2 text-xs rounded-md hover:bg-app-hover/50 group transition-all duration-200">
       <button
         onClick={cycleStatus}
         className={`w-3 h-3 flex items-center justify-center rounded-full text-xs hover:scale-110 transition-transform ${
@@ -125,15 +125,18 @@ function MiniColumn({ column, tasks, onTaskUpdate, onAddTask }) {
   }, [handleAddTask])
 
   return (
-    <div className="mb-4">
+    <div className="mb-3">
       <div className="flex items-center justify-between mb-2 px-2">
-        <div className={`text-xs font-medium ${column.color}`}>
-          {column.title}
-          <span className="ml-1 text-app-muted">({tasks.length})</span>
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full bg-current ${column.color}`}></div>
+          <div className="text-xs font-medium text-app-text">
+            {column.title}
+          </div>
+          <span className="text-xs text-app-muted">({tasks.length})</span>
         </div>
         <button
           onClick={() => setIsAdding(true)}
-          className="p-0.5 rounded hover:bg-app-hover text-app-muted hover:text-app-text"
+          className="p-0.5 rounded-md hover:bg-app-hover text-app-muted hover:text-app-text transition-colors"
           title="Add task"
         >
           <Plus className="w-3 h-3" />
@@ -261,7 +264,7 @@ export default function MiniKanban({ workspacePath, onOpenFull }) {
   if (error) {
     return (
       <div className="p-4 text-center">
-        <div className="text-xs text-red-600 mb-2">{error}</div>
+        <div className="text-xs text-[rgb(var(--danger))] mb-2">{error}</div>
         <button
           onClick={loadTasks}
           className="p-1 text-xs rounded border border-app-border hover:bg-app-hover"
@@ -278,12 +281,12 @@ export default function MiniKanban({ workspacePath, onOpenFull }) {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="p-3 border-b border-app-border">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-medium text-app-text">Tasks</h3>
+      <div className="p-3 border-b border-app-border/50">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-app-text">Task Board</h3>
           <button
             onClick={onOpenFull}
-            className="p-1 rounded hover:bg-app-hover text-app-muted hover:text-app-text"
+            className="p-1.5 rounded-md hover:bg-app-hover text-app-muted hover:text-app-text transition-colors"
             title="Open full kanban board"
           >
             <ExternalLink className="w-4 h-4" />
@@ -292,14 +295,14 @@ export default function MiniKanban({ workspacePath, onOpenFull }) {
         
         {/* Progress indicator */}
         {totalTasks > 0 && (
-          <div className="space-y-1">
+          <div className="space-y-2">
             <div className="flex justify-between text-xs text-app-muted">
-              <span>{completedTasks}/{totalTasks}</span>
-              <span>{Math.round((completedTasks / totalTasks) * 100)}%</span>
+              <span>Progress</span>
+              <span className="font-medium">{completedTasks}/{totalTasks} ({Math.round((completedTasks / totalTasks) * 100)}%)</span>
             </div>
-            <div className="w-full bg-app-border rounded-full h-1">
+            <div className="w-full bg-app-panel rounded-full h-1.5">
               <div 
-                className="bg-green-500 h-1 rounded-full transition-all duration-300" 
+                className="bg-[rgb(var(--task-completed))] h-1.5 rounded-full transition-all duration-500 ease-out" 
                 style={{ width: `${(completedTasks / totalTasks) * 100}%` }}
               />
             </div>
@@ -328,10 +331,10 @@ export default function MiniKanban({ workspacePath, onOpenFull }) {
       </div>
       
       {/* Quick actions */}
-      <div className="p-2 border-t border-app-border">
+      <div className="p-3 border-t border-app-border/50">
         <button
           onClick={() => handleAddTask('New task')}
-          className="w-full text-xs py-1 px-2 rounded border border-dashed border-app-border hover:bg-app-hover text-app-muted hover:text-app-text transition-colors"
+          className="w-full text-xs py-2 px-3 rounded-md border border-dashed border-app-border/70 hover:bg-app-panel/50 hover:border-app-accent text-app-muted hover:text-app-text transition-all duration-200"
         >
           + Quick add task
         </button>

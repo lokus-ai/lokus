@@ -19,33 +19,33 @@
 
 /* Task state indicators */
 .task-todo {
-  border-left: 3px solid #6b7280;
+  border-left: 3px solid rgb(var(--task-todo));
 }
 
 .task-in-progress {
-  border-left: 3px solid #3b82f6;
+  border-left: 3px solid rgb(var(--task-progress));
 }
 
 .task-urgent {
-  border-left: 3px solid #ef4444;
+  border-left: 3px solid rgb(var(--task-urgent));
 }
 
 .task-question {
-  border-left: 3px solid #f59e0b;
+  border-left: 3px solid rgb(var(--task-question));
 }
 
 .task-completed {
-  border-left: 3px solid #10b981;
+  border-left: 3px solid rgb(var(--task-completed));
   opacity: 0.8;
 }
 
 .task-cancelled {
-  border-left: 3px solid #6b7280;
+  border-left: 3px solid rgb(var(--task-cancelled));
   opacity: 0.6;
 }
 
 .task-delegated {
-  border-left: 3px solid #8b5cf6;
+  border-left: 3px solid rgb(var(--task-delegated));
 }
 
 /* Mini kanban specific styles */
@@ -247,7 +247,7 @@
 
 /* Error states */
 .kanban-error {
-  color: #ef4444;
+  color: rgb(var(--danger));
   text-align: center;
   padding: 2rem;
 }

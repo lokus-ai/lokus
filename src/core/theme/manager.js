@@ -7,15 +7,37 @@ const GLOBAL_CONFIG = "config.json";
 const THEMES_DIRNAME = "themes";
 const WS_CONFIG_REL = ".lokus/config.json";
 // These must match CSS variables defined in src/styles/globals.css and tailwind.config.cjs
-const THEME_TOKEN_KEYS = ["--bg", "--text", "--panel", "--border", "--muted", "--accent"];
-const BUILT_IN_THEME_TOKENS = { "--bg": "15 23 42", "--text": "241 245 249", "--panel": "30 41 59", "--border": "51 65 85", "--muted": "148 163 184", "--accent": "139 92 246" };
+const THEME_TOKEN_KEYS = [
+  // Core tokens
+  "--bg", "--text", "--panel", "--border", "--muted", "--accent", "--accent-fg",
+  // Task status colors
+  "--task-todo", "--task-progress", "--task-urgent", "--task-question", 
+  "--task-completed", "--task-cancelled", "--task-delegated",
+  // Semantic colors
+  "--danger", "--success", "--warning", "--info",
+  // Editor colors
+  "--editor-placeholder"
+];
+const BUILT_IN_THEME_TOKENS = { 
+  // Core tokens
+  "--bg": "15 23 42", "--text": "241 245 249", "--panel": "30 41 59", 
+  "--border": "51 65 85", "--muted": "148 163 184", "--accent": "139 92 246", "--accent-fg": "255 255 255",
+  // Task status colors (gray, blue, red, amber, green, gray, purple)
+  "--task-todo": "107 114 128", "--task-progress": "59 130 246", "--task-urgent": "239 68 68",
+  "--task-question": "245 158 11", "--task-completed": "16 185 129", "--task-cancelled": "107 114 128",
+  "--task-delegated": "139 92 246",
+  // Semantic colors
+  "--danger": "239 68 68", "--success": "16 185 129", "--warning": "245 158 11", "--info": "59 130 246",
+  // Editor colors
+  "--editor-placeholder": "148 163 184"
+};
 
 // NEW: High-quality, professional default themes
 const DEFAULT_THEMES = ["dracula", "nord", "one-dark-pro"];
 const DEFAULT_THEME_CONTENT = {
-  "dracula": `{"name": "Dracula", "tokens": {"--bg": "#282a36", "--text": "#f8f8f2", "--panel": "#21222c", "--border": "#44475a", "--muted": "#6272a4", "--accent": "#bd93f9"}}`,
-  "nord": `{"name": "Nord", "tokens": {"--bg": "#2E3440", "--text": "#ECEFF4", "--panel": "#3B4252", "--border": "#4C566A", "--muted": "#D8DEE9", "--accent": "#88C0D0"}}`,
-  "one-dark-pro": `{"name": "One Dark Pro", "tokens": {"--bg": "#282c34", "--text": "#abb2bf", "--panel": "#21252b", "--border": "#3a3f4b", "--muted": "#5c6370", "--accent": "#61afef"}}`
+  "dracula": `{"name": "Dracula", "tokens": {"--bg": "#282a36", "--text": "#f8f8f2", "--panel": "#21222c", "--border": "#44475a", "--muted": "#6272a4", "--accent": "#bd93f9", "--accent-fg": "#ffffff", "--task-todo": "#6272a4", "--task-progress": "#8be9fd", "--task-urgent": "#ff5555", "--task-question": "#f1fa8c", "--task-completed": "#50fa7b", "--task-cancelled": "#6272a4", "--task-delegated": "#bd93f9", "--danger": "#ff5555", "--success": "#50fa7b", "--warning": "#f1fa8c", "--info": "#8be9fd", "--editor-placeholder": "#6272a4"}}`,
+  "nord": `{"name": "Nord", "tokens": {"--bg": "#2E3440", "--text": "#ECEFF4", "--panel": "#3B4252", "--border": "#4C566A", "--muted": "#D8DEE9", "--accent": "#88C0D0", "--accent-fg": "#2E3440", "--task-todo": "#4C566A", "--task-progress": "#5E81AC", "--task-urgent": "#BF616A", "--task-question": "#EBCB8B", "--task-completed": "#A3BE8C", "--task-cancelled": "#4C566A", "--task-delegated": "#B48EAD", "--danger": "#BF616A", "--success": "#A3BE8C", "--warning": "#EBCB8B", "--info": "#5E81AC", "--editor-placeholder": "#4C566A"}}`,
+  "one-dark-pro": `{"name": "One Dark Pro", "tokens": {"--bg": "#282c34", "--text": "#abb2bf", "--panel": "#21252b", "--border": "#3a3f4b", "--muted": "#5c6370", "--accent": "#61afef", "--accent-fg": "#ffffff", "--task-todo": "#5c6370", "--task-progress": "#61afef", "--task-urgent": "#e06c75", "--task-question": "#d19a66", "--task-completed": "#98c379", "--task-cancelled": "#5c6370", "--task-delegated": "#c678dd", "--danger": "#e06c75", "--success": "#98c379", "--warning": "#d19a66", "--info": "#61afef", "--editor-placeholder": "#5c6370"}}`
 };
 
 // --- File System & JSON Helpers ---
