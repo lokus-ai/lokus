@@ -1,6 +1,6 @@
 [package]
 name = "lokus"
-version = "1.0.0"
+version = "1.0.1"
 description = "Lokus - Modern Knowledge Management and Writing Platform"
 authors = ["you"]
 edition = "2021"
