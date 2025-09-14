@@ -170,3 +170,6 @@ This release represents months of dedicated development, testing, and refinement
 [Download Lokus v1.0.0 Now] | [View on GitHub] | [Join Community]
 
 *Lokus v1.0.0 - Where ideas take shape* ✨
+
+
+

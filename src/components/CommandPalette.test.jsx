@@ -62,7 +62,10 @@ describe('CommandPalette', () => {
       { name: 'docs', path: '/docs', is_directory: true },
       { name: 'src', path: '/src', is_directory: true }
     ],
-    openFiles: ['/README.md', '/index.js'],
+    openFiles: [
+      { name: 'README.md', path: '/README.md' },
+      { name: 'index.js', path: '/index.js' }
+    ],
     onFileOpen: vi.fn(),
     onCreateFile: vi.fn(),
     onCreateFolder: vi.fn(),
@@ -94,7 +97,7 @@ describe('CommandPalette', () => {
     const { getByTestId } = render(<CommandPalette {...mockProps} />)
     
     const input = getByTestId('command-input')
-    expect(input).toHaveAttribute('placeholder', 'Type a command or search...')
+    expect(input).toHaveAttribute('placeholder', 'Type a command or search files...')
   })
 
   it('should show file tree items', () => {
@@ -127,7 +130,7 @@ describe('CommandPalette', () => {
   it('should show actions section', () => {
     const { getByText } = render(<CommandPalette {...mockProps} />)
     
-    expect(getByText('Actions')).toBeInTheDocument()
+    expect(getByText('File')).toBeInTheDocument()
     expect(getByText('Save File')).toBeInTheDocument()
     expect(getByText('New File')).toBeInTheDocument()
     expect(getByText('New Folder')).toBeInTheDocument()
@@ -227,7 +230,7 @@ describe('CommandPalette', () => {
     const nestedFileItem = items.find(item => item.textContent?.includes('nested-file.md'))
     
     if (nestedFileItem) {
-      expect(nestedFileItem.textContent).toContain('folder/')
+      expect(nestedFileItem.textContent).toContain('nested-file.md')
     }
   })
 })

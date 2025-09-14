@@ -1,6 +1,19 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { applyTokens, setGlobalVisuals, readGlobalVisuals } from './manager.js'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { applyTokens, setGlobalActiveTheme, readGlobalVisuals } from './manager.js'
 import { writeConfig } from '../config/store.js'
+
+// Mock Tauri APIs for browser environment
+vi.mock('@tauri-apps/api/path', () => ({
+  appDataDir: vi.fn().mockResolvedValue('/mock/app/data'),
+  join: vi.fn().mockImplementation((...paths) => paths.join('/'))
+}))
+
+vi.mock('@tauri-apps/plugin-fs', () => ({
+  exists: vi.fn().mockResolvedValue(false),
+  mkdir: vi.fn(),
+  readTextFile: vi.fn(),
+  writeTextFile: vi.fn()
+}))
 
 describe('theme manager (browser mode)', () => {
   beforeEach(async () => {
@@ -17,12 +30,10 @@ describe('theme manager (browser mode)', () => {
     expect(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()).toBe('255 0 0')
   })
 
-  it('sets visuals and data-theme', async () => {
-    await setGlobalVisuals({ mode: 'dark', accent: '10 20 30' })
-    expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
-    expect(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()).toBe('10 20 30')
+  it('sets theme', async () => {
+    await setGlobalActiveTheme('dracula')
     const v = await readGlobalVisuals()
-    expect(v.mode).toBe('dark')
+    expect(v.theme).toBe('dracula')
   })
 })
 

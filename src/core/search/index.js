@@ -152,6 +152,7 @@ export const searchCommands = {
   
   nextMatch: () => ({ state, tr, dispatch }) => {
     const searchState = searchPluginKey.getState(state);
+    if (!searchState) return false;
     const { matches, currentMatch } = searchState;
     
     if (matches.length === 0) return false;
@@ -167,6 +168,7 @@ export const searchCommands = {
   
   previousMatch: () => ({ state, tr, dispatch }) => {
     const searchState = searchPluginKey.getState(state);
+    if (!searchState) return false;
     const { matches, currentMatch } = searchState;
     
     if (matches.length === 0) return false;

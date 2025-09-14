@@ -152,40 +152,31 @@ export async function listAvailableThemes() {
 
 // --- Public API ---
 export async function readGlobalVisuals() {
+  console.log('[theme] Reading config...');
   const cfg = await readConfig();
-  return { mode: cfg.mode || null, accent: cfg.accent || null, theme: cfg.theme || null };
+  console.log('[theme] Config loaded:', cfg);
+  const result = { theme: cfg.theme || null };
+  console.log('[theme] Returning visuals:', result);
+  return result;
 }
 
 export async function setGlobalActiveTheme(id) {
-  try { await updateConfig({ theme: id }); } catch (e) { console.warn('[theme] persist failed:', e); }
+  console.log('[theme] Saving theme to config:', id);
+  try { 
+    await updateConfig({ theme: id }); 
+    console.log('[theme] Theme saved successfully:', id);
+  } catch (e) { 
+    console.error('[theme] Failed to save theme:', e); 
+    return;
+  }
   const manifest = await loadThemeManifestById(id);
   const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
   applyTokens(tokensToApply);
-  await broadcastTheme({ tokens: tokensToApply });
+  console.log('[theme] Broadcasting theme change:', id);
+  await broadcastTheme({ tokens: tokensToApply, visuals: { theme: id } });
 }
 
-export async function setGlobalVisuals(visuals) {
-  const current = await readGlobalVisuals();
-  const next = { ...current, ...visuals };
-  try { await updateConfig(next); } catch {}
-  // Apply mode/accent locally for immediate feedback even without ThemeProvider
-  try {
-    if (Object.prototype.hasOwnProperty.call(visuals, 'mode')) {
-      const mode = visuals.mode;
-      if (!mode || mode === 'system') {
-        document.documentElement.removeAttribute('data-theme');
-      } else {
-        document.documentElement.setAttribute('data-theme', mode);
-      }
-    }
-    if (Object.prototype.hasOwnProperty.call(visuals, 'accent') && visuals.accent) {
-      applyTokens({ "--accent": visuals.accent });
-    }
-  } catch (e) {
-    console.warn('[theme] failed to apply visuals locally:', e);
-  }
-  await broadcastTheme({ visuals });
-}
+// Removed setGlobalVisuals - themes now handle everything
 
 export async function loadThemeForWorkspace(workspacePath) {
   let wsCfg = null;
@@ -201,24 +192,13 @@ export async function loadThemeForWorkspace(workspacePath) {
   const manifest = await loadThemeManifestById(id);
   const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
   applyTokens(tokensToApply);
+  console.log('[theme] Applied workspace theme:', id || 'built-in');
 }
 
 export async function applyInitialTheme() {
-  const { theme, mode, accent } = await readGlobalVisuals();
+  const { theme } = await readGlobalVisuals();
   const manifest = await loadThemeManifestById(theme);
   const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
   applyTokens(tokensToApply);
-  // Also apply saved mode/accent on boot
-  try {
-    if (mode && mode !== 'system') {
-      document.documentElement.setAttribute('data-theme', mode);
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-    }
-    if (accent) {
-      applyTokens({ "--accent": accent });
-    }
-  } catch (e) {
-    console.warn('[theme] failed to apply initial visuals:', e);
-  }
+  console.log('[theme] Applied initial theme:', theme || 'built-in');
 }

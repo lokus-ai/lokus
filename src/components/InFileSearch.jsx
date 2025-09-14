@@ -195,7 +195,7 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
           </div>
           
           {/* Match counter */}
-          {totalMatches > 0 && (
+          {query.trim() && (
             <span className="text-xs text-app-muted whitespace-nowrap">
               {totalMatches > 0 ? `${currentMatch + 1} of ${totalMatches}` : 'No matches'}
             </span>

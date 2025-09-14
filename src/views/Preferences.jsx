@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { setGlobalActiveTheme, listAvailableThemes, readGlobalVisuals } from "../core/theme/manager.js";
-import { useTheme } from "../hooks/theme.jsx";
-import AccentPicker from "../components/AccentPicker.jsx";
+import { setGlobalActiveTheme, listAvailableThemes, readGlobalVisuals, applyInitialTheme } from "../core/theme/manager.js";
 import { listActions, getActiveShortcuts, setShortcut, resetShortcuts } from "../core/shortcuts/registry.js";
 import { readConfig, updateConfig } from "../core/config/store.js";
 import { formatAccelerator } from "../core/shortcuts/registry.js";
@@ -12,7 +10,7 @@ export default function Preferences() {
   const [themes, setThemes] = useState([]);
   const [activeTheme, setActiveTheme] = useState("");
   const [section, setSection] = useState("Appearance");
-  const { mode, setMode } = useTheme();
+  // Removed mode/accent complexity - themes handle everything now
   const actions = useMemo(() => listActions(), []);
   const [keymap, setKeymap] = useState({});
   const [editing, setEditing] = useState(null);
@@ -23,6 +21,16 @@ export default function Preferences() {
   const [saveStatus, setSaveStatus] = useState(''); // For showing save feedback
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
   
+  // Initialize theme for preferences window
+  useEffect(() => {
+    const initTheme = async () => {
+      console.log('[preferences] Initializing theme...');
+      await applyInitialTheme();
+      console.log('[preferences] Theme initialized');
+    };
+    initTheme().catch(console.error);
+  }, []);
+
   // Subscribe to live settings changes
   useEffect(() => {
     const unsubscribe = liveEditorSettings.onSettingsChange(() => {
@@ -66,7 +74,9 @@ export default function Preferences() {
       const available = await listAvailableThemes();
       setThemes(available);
       const visuals = await readGlobalVisuals();
+      console.log('[preferences] Loaded visuals:', visuals);
       setActiveTheme(visuals.theme || "");
+      console.log('[preferences] Set activeTheme to:', visuals.theme || "");
       // load markdown prefs if present
       try {
         const { readConfig } = await import("../core/config/store.js");
@@ -140,9 +150,29 @@ export default function Preferences() {
 
   const handleThemeChange = (e) => {
     const themeId = e.target.value;
+    console.log('[preferences] Theme changed to:', themeId);
     setActiveTheme(themeId);
     setGlobalActiveTheme(themeId).catch(console.error);
   };
+
+  // Listen for theme changes from other windows
+  useEffect(() => {
+    const handleThemeUpdate = (e) => {
+      const data = e.detail || e.payload || {};
+      console.log('[preferences] Received theme update:', data);
+      if (data.visuals?.theme !== undefined) {
+        console.log('[preferences] Updating activeTheme to:', data.visuals.theme);
+        setActiveTheme(data.visuals.theme || "");
+      }
+    };
+
+    // Listen for both DOM events (browser) and theme:apply events
+    window.addEventListener('theme:apply', handleThemeUpdate);
+    
+    return () => {
+      window.removeEventListener('theme:apply', handleThemeUpdate);
+    };
+  }, []);
 
   // Editor Settings Helpers
   const updateEditorSetting = (category, key, value) => {
@@ -231,20 +261,6 @@ export default function Preferences() {
         <main className="p-6 overflow-auto">
           {section === "Appearance" && (
             <div className="space-y-8 max-w-xl">
-              <section>
-                <h2 className="text-sm uppercase tracking-wide text-app-muted mb-3">Mode</h2>
-                <div className="inline-flex rounded-md border border-app-border overflow-hidden">
-                  {["system","light","dark"].map(m => (
-                    <button
-                      key={m}
-                      onClick={() => setMode(m)}
-                      className={`px-3 py-1 text-sm ${mode===m?"bg-app-accent text-app-accent-fg":"bg-app-panel hover:bg-app-bg"}`}
-                    >
-                      {m[0].toUpperCase()+m.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </section>
 
               <section>
                 <h2 className="text-sm uppercase tracking-wide text-app-muted mb-3">Theme</h2>
@@ -265,10 +281,6 @@ export default function Preferences() {
                 </p>
               </section>
 
-              <section>
-                <h2 className="text-sm uppercase tracking-wide text-app-muted mb-3">Accent</h2>
-                <AccentPicker />
-              </section>
             </div>
           )}
 

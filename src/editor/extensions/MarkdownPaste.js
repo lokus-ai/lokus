@@ -31,6 +31,11 @@ const MarkdownPaste = Extension.create({
               text: text?.substring(0, 100) 
             })
 
+            // Skip processing if HTML content is also present (avoid double-processing rich text)
+            if (html && html.trim()) {
+              return false
+            }
+
             // Process text that looks like markdown (prioritize plain text, but also handle rich text sources)
             if (text && isMarkdownContent(text)) {
               console.log('[MarkdownPaste] Converting markdown content...')
