@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, fireEvent, waitFor } from '@testing-library/react'
+import { render, fireEvent, waitFor, act } from '@testing-library/react'
 import CommandPalette from './CommandPalette.jsx'
 
 // Mock shortcuts registry
@@ -18,7 +18,7 @@ vi.mock('../core/shortcuts/registry.js', () => ({
 // Mock UI components
 vi.mock('./ui/command.jsx', () => ({
   Command: ({ children, ...props }) => <div data-testid="command" {...props}>{children}</div>,
-  CommandDialog: ({ children, open, ...props }) => open ? <div data-testid="command-dialog" {...props}>{children}</div> : null,
+  CommandDialog: ({ children, open, onOpenChange, ...props }) => open ? <div data-testid="command-dialog" {...props}>{children}</div> : null,
   CommandInput: (props) => <input data-testid="command-input" {...props} />,
   CommandList: ({ children, ...props }) => <div data-testid="command-list" {...props}>{children}</div>,
   CommandEmpty: ({ children, ...props }) => <div data-testid="command-empty" {...props}>{children}</div>,
