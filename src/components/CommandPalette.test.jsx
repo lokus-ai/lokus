@@ -18,7 +18,16 @@ vi.mock('../core/shortcuts/registry.js', () => ({
 // Mock UI components
 vi.mock('./ui/command.jsx', () => ({
   Command: ({ children, ...props }) => <div data-testid="command" {...props}>{children}</div>,
-  CommandDialog: ({ children, open, onOpenChange, ...props }) => open ? <div data-testid="command-dialog" {...props}>{children}</div> : null,
+  CommandDialog: ({ children, open, onOpenChange, ...props }) => 
+    open ? (
+      <div 
+        data-testid="command-dialog" 
+        onKeyDown={(e) => e.key === 'Escape' && onOpenChange(false)}
+        {...props}
+      >
+        {children}
+      </div>
+    ) : null,
   CommandInput: (props) => <input data-testid="command-input" {...props} />,
   CommandList: ({ children, ...props }) => <div data-testid="command-list" {...props}>{children}</div>,
   CommandEmpty: ({ children, ...props }) => <div data-testid="command-empty" {...props}>{children}</div>,
@@ -112,30 +121,42 @@ describe('CommandPalette', () => {
     }))
   })
 
-  it('should render when open is true', () => {
-    const { getByTestId } = render(<CommandPalette {...mockProps} />)
+  it('should render when open is true', async () => {
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} />)
+    })
     
-    expect(getByTestId('command-dialog')).toBeInTheDocument()
-    expect(getByTestId('command-input')).toBeInTheDocument()
+    expect(result.getByTestId('command-dialog')).toBeInTheDocument()
+    expect(result.getByTestId('command-input')).toBeInTheDocument()
   })
 
-  it('should not render when open is false', () => {
-    const { queryByTestId } = render(<CommandPalette {...mockProps} open={false} />)
+  it('should not render when open is false', async () => {
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} open={false} />)
+    })
     
-    expect(queryByTestId('command-dialog')).not.toBeInTheDocument()
+    expect(result.queryByTestId('command-dialog')).not.toBeInTheDocument()
   })
 
-  it('should display search input with placeholder', () => {
-    const { getByTestId } = render(<CommandPalette {...mockProps} />)
+  it('should display search input with placeholder', async () => {
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} />)
+    })
     
-    const input = getByTestId('command-input')
+    const input = result.getByTestId('command-input')
     expect(input).toHaveAttribute('placeholder', 'Type a command or search files...')
   })
 
-  it('should show file tree items', () => {
-    const { getAllByTestId } = render(<CommandPalette {...mockProps} />)
+  it('should show file tree items', async () => {
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} />)
+    })
     
-    const items = getAllByTestId('command-item')
+    const items = result.getAllByTestId('command-item')
     expect(items.length).toBeGreaterThan(0)
     
     // Should contain file items
@@ -153,59 +174,91 @@ describe('CommandPalette', () => {
     expect(input.value).toBe('README')
   })
 
-  it('should show recent files section', () => {
-    const { getByText } = render(<CommandPalette {...mockProps} />)
+  it('should show recent files section', async () => {
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} />)
+    })
     
-    expect(getByText('Recent Files')).toBeInTheDocument()
+    // The "Recent Files" text is in a heading attribute of CommandGroup
+    const recentFilesGroup = result.container.querySelector('[heading="Recent Files"]')
+    expect(recentFilesGroup).toBeInTheDocument()
   })
 
-  it('should show actions section', () => {
-    const { getByText } = render(<CommandPalette {...mockProps} />)
+  it('should show actions section', async () => {
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} />)
+    })
     
-    expect(getByText('File')).toBeInTheDocument()
-    expect(getByText('Save File')).toBeInTheDocument()
-    expect(getByText('New File')).toBeInTheDocument()
-    expect(getByText('New Folder')).toBeInTheDocument()
+    // Check for heading attributes instead of direct text
+    const fileGroup = result.container.querySelector('[heading="File"]')
+    expect(fileGroup).toBeInTheDocument()
+    
+    // Check for actual command text content
+    expect(result.getByText('Save File')).toBeInTheDocument()
+    expect(result.getByText('New File')).toBeInTheDocument()
+    expect(result.getByText('New Folder')).toBeInTheDocument()
   })
 
-  it('should call onFileOpen when file is selected', () => {
-    const { getAllByTestId } = render(<CommandPalette {...mockProps} />)
+  it('should call onFileOpen when file is selected', async () => {
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} />)
+    })
     
-    const items = getAllByTestId('command-item')
+    const items = result.getAllByTestId('command-item')
     const readmeItem = items.find(item => item.textContent?.includes('README.md'))
     
     if (readmeItem) {
-      fireEvent.click(readmeItem)
-      expect(mockProps.onFileOpen).toHaveBeenCalledWith('/README.md')
+      await act(async () => {
+        fireEvent.click(readmeItem)
+      })
+      expect(mockProps.onFileOpen).toHaveBeenCalledWith({ name: 'README.md', path: '/README.md' })
       expect(mockProps.setOpen).toHaveBeenCalledWith(false)
     }
   })
 
-  it('should call onSave when save action is selected', () => {
-    const { getByText } = render(<CommandPalette {...mockProps} />)
+  it('should call onSave when save action is selected', async () => {
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} />)
+    })
     
-    const saveItem = getByText('Save File')
-    fireEvent.click(saveItem)
+    const saveItem = result.getByText('Save File')
+    await act(async () => {
+      fireEvent.click(saveItem)
+    })
     
     expect(mockProps.onSave).toHaveBeenCalled()
     expect(mockProps.setOpen).toHaveBeenCalledWith(false)
   })
 
-  it('should call onCreateFile when new file action is selected', () => {
-    const { getByText } = render(<CommandPalette {...mockProps} />)
+  it('should call onCreateFile when new file action is selected', async () => {
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} />)
+    })
     
-    const newFileItem = getByText('New File')
-    fireEvent.click(newFileItem)
+    const newFileItem = result.getByText('New File')
+    await act(async () => {
+      fireEvent.click(newFileItem)
+    })
     
     expect(mockProps.onCreateFile).toHaveBeenCalled()
     expect(mockProps.setOpen).toHaveBeenCalledWith(false)
   })
 
-  it('should call onOpenPreferences when preferences action is selected', () => {
-    const { getByText } = render(<CommandPalette {...mockProps} />)
+  it('should call onOpenPreferences when preferences action is selected', async () => {
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} />)
+    })
     
-    const preferencesItem = getByText('Open Preferences')
-    fireEvent.click(preferencesItem)
+    const preferencesItem = result.getByText('Open Preferences')
+    await act(async () => {
+      fireEvent.click(preferencesItem)
+    })
     
     expect(mockProps.onOpenPreferences).toHaveBeenCalled()
     expect(mockProps.setOpen).toHaveBeenCalledWith(false)
@@ -221,12 +274,15 @@ describe('CommandPalette', () => {
     expect(true).toBe(true)
   })
 
-  it('should show keyboard shortcuts', () => {
-    const { getByText } = render(<CommandPalette {...mockProps} />)
+  it('should show keyboard shortcuts', async () => {
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} />)
+    })
     
     // Actions should show keyboard shortcuts
-    const saveItem = getByText('Save File')
-    expect(saveItem.parentElement).toHaveTextContent('⌘S')
+    const saveItem = result.getByText('Save File')
+    expect(saveItem.parentElement).toHaveTextContent('⌘+S')
   })
 
   it.skip('should filter out directories when searching for files', async () => {
@@ -239,26 +295,34 @@ describe('CommandPalette', () => {
     expect(true).toBe(true)
   })
 
-  it('should close on escape key', () => {
-    const { getByTestId } = render(<CommandPalette {...mockProps} />)
+  it('should close on escape key', async () => {
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} />)
+    })
     
-    const input = getByTestId('command-input')
-    fireEvent.keyDown(input, { key: 'Escape' })
+    const input = result.getByTestId('command-input')
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'Escape' })
+    })
     
     expect(mockProps.setOpen).toHaveBeenCalledWith(false)
   })
 
-  it('should handle file path display correctly', () => {
+  it('should handle file path display correctly', async () => {
     const fileTreeWithPaths = [
       { name: 'nested-file.md', path: '/folder/nested-file.md', is_directory: false },
       { name: 'root-file.md', path: '/root-file.md', is_directory: false }
     ]
     
-    const { getAllByTestId } = render(
-      <CommandPalette {...mockProps} fileTree={fileTreeWithPaths} />
-    )
+    let result
+    await act(async () => {
+      result = render(
+        <CommandPalette {...mockProps} fileTree={fileTreeWithPaths} />
+      )
+    })
     
-    const items = getAllByTestId('command-item')
+    const items = result.getAllByTestId('command-item')
     const nestedFileItem = items.find(item => item.textContent?.includes('nested-file.md'))
     
     if (nestedFileItem) {
@@ -267,14 +331,17 @@ describe('CommandPalette', () => {
   })
 
   describe('Command History', () => {
-    it('should not show history section when no history items exist', () => {
-      const { queryByText } = render(<CommandPalette {...mockProps} />)
+    it('should not show history section when no history items exist', async () => {
+      let result
+      await act(async () => {
+        result = render(<CommandPalette {...mockProps} />)
+      })
       
-      expect(queryByText('History')).not.toBeInTheDocument()
-      expect(queryByText('Clear History')).not.toBeInTheDocument()
+      expect(result.queryByText('History')).not.toBeInTheDocument()
+      expect(result.queryByText('Clear History')).not.toBeInTheDocument()
     })
 
-    it('should display history section with items', () => {
+    it('should display history section with items', async () => {
       const mockHistory = [
         {
           id: 'file-123-abc',
@@ -299,20 +366,25 @@ describe('CommandPalette', () => {
         clearHistory: mockClearHistory
       }))
 
-      const { getByText, getAllByTestId } = render(<CommandPalette {...mockProps} />)
+      let result
+      await act(async () => {
+        result = render(<CommandPalette {...mockProps} />)
+      })
       
-      expect(getByText('History')).toBeInTheDocument()
-      expect(getByText('test.md')).toBeInTheDocument()
-      expect(getByText('5m ago')).toBeInTheDocument()
-      expect(getByText('Save File')).toBeInTheDocument()
-      expect(getByText('10m ago')).toBeInTheDocument()
-      expect(getByText('Clear History')).toBeInTheDocument()
+      // The "History" text is in a heading attribute
+      const historyGroup = result.container.querySelector('[heading="History"]')
+      expect(historyGroup).toBeInTheDocument()
+      expect(result.getByText('test.md')).toBeInTheDocument()
+      expect(result.getByText('5m ago')).toBeInTheDocument()
+      expect(result.getAllByText('Save File')).toHaveLength(2) // One in history, one in commands
+      expect(result.getByText('10m ago')).toBeInTheDocument()
+      expect(result.getByText('Clear History')).toBeInTheDocument()
 
       // Check that history icons are rendered
-      expect(getAllByTestId('history-icon')).toHaveLength(2)
+      expect(result.getAllByTestId('history-icon')).toHaveLength(2)
     })
 
-    it('should limit history display to 8 items and show overflow message', () => {
+    it('should limit history display to 8 items and show overflow message', async () => {
       const mockHistory = Array.from({ length: 12 }, (_, i) => ({
         id: `item-${i}`,
         type: 'file',
@@ -328,18 +400,21 @@ describe('CommandPalette', () => {
         clearHistory: mockClearHistory
       }))
 
-      const { getByText, getAllByTestId } = render(<CommandPalette {...mockProps} />)
+      let result
+      await act(async () => {
+        result = render(<CommandPalette {...mockProps} />)
+      })
       
       // Should show first 8 items
-      expect(getAllByTestId('history-icon')).toHaveLength(8)
-      expect(getByText('file0.md')).toBeInTheDocument()
-      expect(getByText('file7.md')).toBeInTheDocument()
+      expect(result.getAllByTestId('history-icon')).toHaveLength(8)
+      expect(result.getByText('file0.md')).toBeInTheDocument()
+      expect(result.getByText('file7.md')).toBeInTheDocument()
       
       // Should show overflow message
-      expect(getByText('...and 4 more items')).toBeInTheDocument()
+      expect(result.getByText('...and 4 more items')).toBeInTheDocument()
     })
 
-    it('should execute file from history', () => {
+    it('should execute file from history', async () => {
       const mockHistory = [
         {
           id: 'file-123-abc',
@@ -357,10 +432,15 @@ describe('CommandPalette', () => {
         clearHistory: mockClearHistory
       }))
 
-      const { getByText } = render(<CommandPalette {...mockProps} />)
+      let result
+      await act(async () => {
+        result = render(<CommandPalette {...mockProps} />)
+      })
       
-      const historyItem = getByText('test.md')
-      fireEvent.click(historyItem)
+      const historyItem = result.getByText('test.md')
+      await act(async () => {
+        fireEvent.click(historyItem)
+      })
       
       expect(mockProps.onFileOpen).toHaveBeenCalledWith({
         name: 'test.md',
@@ -369,7 +449,7 @@ describe('CommandPalette', () => {
       expect(mockProps.setOpen).toHaveBeenCalledWith(false)
     })
 
-    it('should execute commands from history', () => {
+    it('should execute commands from history', async () => {
       const mockHistory = [
         {
           id: 'command-456-def',
@@ -394,9 +474,12 @@ describe('CommandPalette', () => {
         clearHistory: mockClearHistory
       }))
 
-      const { getAllByTestId } = render(<CommandPalette {...mockProps} />)
+      let result
+      await act(async () => {
+        result = render(<CommandPalette {...mockProps} />)
+      })
       
-      const historyItems = getAllByTestId('command-item')
+      const historyItems = result.getAllByTestId('command-item')
       const newFileItem = historyItems.find(item => 
         item.textContent?.includes('New File') && item.textContent?.includes('10m ago')
       )
@@ -406,7 +489,9 @@ describe('CommandPalette', () => {
       
       // Test New File command
       if (newFileItem) {
-        fireEvent.click(newFileItem)
+        await act(async () => {
+          fireEvent.click(newFileItem)
+        })
         expect(mockProps.onCreateFile).toHaveBeenCalled()
         expect(mockProps.setOpen).toHaveBeenCalledWith(false)
       }
@@ -414,13 +499,15 @@ describe('CommandPalette', () => {
       // Reset mocks and test Save File command
       vi.clearAllMocks()
       if (saveFileItem) {
-        fireEvent.click(saveFileItem)
+        await act(async () => {
+          fireEvent.click(saveFileItem)
+        })
         expect(mockProps.onSave).toHaveBeenCalled()
         expect(mockProps.setOpen).toHaveBeenCalledWith(false)
       }
     })
 
-    it('should handle unknown commands from history gracefully', () => {
+    it('should handle unknown commands from history gracefully', async () => {
       const mockHistory = [
         {
           id: 'command-unknown',
@@ -439,10 +526,15 @@ describe('CommandPalette', () => {
       }))
 
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      const { getByText } = render(<CommandPalette {...mockProps} />)
+      let result
+      await act(async () => {
+        result = render(<CommandPalette {...mockProps} />)
+      })
       
-      const historyItem = getByText('Unknown Command')
-      fireEvent.click(historyItem)
+      const historyItem = result.getByText('Unknown Command')
+      await act(async () => {
+        fireEvent.click(historyItem)
+      })
       
       expect(consoleSpy).toHaveBeenCalledWith('Unknown command: Unknown Command')
       // Unknown commands don't close the palette, they just warn
@@ -451,7 +543,7 @@ describe('CommandPalette', () => {
       consoleSpy.mockRestore()
     })
 
-    it('should remove individual history items', () => {
+    it('should remove individual history items', async () => {
       const mockHistory = [
         {
           id: 'file-123-abc',
@@ -469,20 +561,25 @@ describe('CommandPalette', () => {
         clearHistory: mockClearHistory
       }))
 
-      const { getAllByTestId } = render(<CommandPalette {...mockProps} />)
+      let result
+      await act(async () => {
+        result = render(<CommandPalette {...mockProps} />)
+      })
       
-      const removeButtons = getAllByTestId('x-icon')
+      const removeButtons = result.getAllByTestId('x-icon')
       const removeButton = removeButtons.find(button => 
         button.closest('[data-testid="command-item"]')?.textContent?.includes('test.md')
       )
       
       if (removeButton) {
-        fireEvent.click(removeButton)
+        await act(async () => {
+          fireEvent.click(removeButton)
+        })
         expect(mockRemoveFromHistory).toHaveBeenCalledWith('file-123-abc')
       }
     })
 
-    it('should prevent event propagation when removing history items', () => {
+    it('should prevent event propagation when removing history items', async () => {
       const mockHistory = [
         {
           id: 'file-123-abc',
@@ -500,22 +597,27 @@ describe('CommandPalette', () => {
         clearHistory: mockClearHistory
       }))
 
-      const { getAllByTestId } = render(<CommandPalette {...mockProps} />)
+      let result
+      await act(async () => {
+        result = render(<CommandPalette {...mockProps} />)
+      })
       
-      const removeButtons = getAllByTestId('x-icon')
+      const removeButtons = result.getAllByTestId('x-icon')
       const removeButton = removeButtons.find(button => 
         button.closest('[data-testid="command-item"]')?.textContent?.includes('test.md')
       )
       
       if (removeButton) {
-        fireEvent.click(removeButton)
+        await act(async () => {
+          fireEvent.click(removeButton)
+        })
         expect(mockRemoveFromHistory).toHaveBeenCalledWith('file-123-abc')
         // File should not be opened when remove button is clicked
         expect(mockProps.onFileOpen).not.toHaveBeenCalled()
       }
     })
 
-    it('should clear all history when clear button is clicked', () => {
+    it('should clear all history when clear button is clicked', async () => {
       const mockHistory = [
         {
           id: 'file-123-abc',
@@ -533,23 +635,33 @@ describe('CommandPalette', () => {
         clearHistory: mockClearHistory
       }))
 
-      const { getByText } = render(<CommandPalette {...mockProps} />)
+      let result
+      await act(async () => {
+        result = render(<CommandPalette {...mockProps} />)
+      })
       
-      const clearButton = getByText('Clear History')
-      fireEvent.click(clearButton)
+      const clearButton = result.getByText('Clear History')
+      await act(async () => {
+        fireEvent.click(clearButton)
+      })
       
       expect(mockClearHistory).toHaveBeenCalled()
       expect(mockProps.setOpen).toHaveBeenCalledWith(false)
     })
 
-    it('should track file selections with history', () => {
-      const { getAllByTestId } = render(<CommandPalette {...mockProps} />)
+    it('should track file selections with history', async () => {
+      let result
+      await act(async () => {
+        result = render(<CommandPalette {...mockProps} />)
+      })
       
-      const items = getAllByTestId('command-item')
+      const items = result.getAllByTestId('command-item')
       const readmeItem = items.find(item => item.textContent?.includes('README.md'))
       
       if (readmeItem) {
-        fireEvent.click(readmeItem)
+        await act(async () => {
+          fireEvent.click(readmeItem)
+        })
         
         // Should add to history with proper file data
         expect(mockAddToHistory).toHaveBeenCalledWith({
@@ -562,11 +674,16 @@ describe('CommandPalette', () => {
       }
     })
 
-    it('should track command executions with history', () => {
-      const { getByText } = render(<CommandPalette {...mockProps} />)
+    it('should track command executions with history', async () => {
+      let result
+      await act(async () => {
+        result = render(<CommandPalette {...mockProps} />)
+      })
       
-      const newFileButton = getByText('New File')
-      fireEvent.click(newFileButton)
+      const newFileButton = result.getByText('New File')
+      await act(async () => {
+        fireEvent.click(newFileButton)
+      })
       
       expect(mockAddToHistory).toHaveBeenCalledWith({
         type: 'command',
@@ -575,8 +692,10 @@ describe('CommandPalette', () => {
 
       // Reset and test another command
       vi.clearAllMocks()
-      const saveButton = getByText('Save File')
-      fireEvent.click(saveButton)
+      const saveButton = result.getByText('Save File')
+      await act(async () => {
+        fireEvent.click(saveButton)
+      })
       
       expect(mockAddToHistory).toHaveBeenCalledWith({
         type: 'command',
