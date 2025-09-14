@@ -259,7 +259,7 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
     extensions,
     shouldRerenderOnTransaction: false,
     editorProps: {
-      attributes: { class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl m-5 focus:outline-none tiptap-area pb-16 smooth-type" },
+      attributes: { class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none tiptap-area obsidian-editor" },
       handleDOMEvents: {
         click: (view, event) => {
           const t = event.target;
