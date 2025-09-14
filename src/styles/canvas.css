@@ -1,0 +1,221 @@
+/* Custom Canvas Styling - Shows extensive customization possibilities */
+
+/* Override tldraw default styles to match Lokus theme */
+.tldraw-canvas {
+  /* Custom grid pattern */
+  --tl-grid-size: 20px;
+  --tl-grid-color: var(--app-border);
+  
+  /* Custom selection colors */
+  --tl-selection-foreground: var(--app-accent);
+  --tl-selection-background: var(--app-accent-alpha);
+  
+  /* Custom canvas background */
+  background-color: var(--app-bg);
+  background-image: 
+    radial-gradient(circle, var(--app-border) 1px, transparent 1px);
+  background-size: var(--tl-grid-size) var(--tl-grid-size);
+}
+
+/* Dark mode specific styles */
+.dark .tldraw-canvas {
+  --tl-grid-color: rgba(255, 255, 255, 0.1);
+  background-image: 
+    radial-gradient(circle, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+}
+
+/* Custom toolbar styling */
+.tldraw .tlui-toolbar {
+  background: var(--app-panel) !important;
+  border: 1px solid var(--app-border) !important;
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+}
+
+.tldraw .tlui-toolbar__inner {
+  padding: 8px;
+  gap: 4px;
+}
+
+/* Custom button styles */
+.tldraw .tlui-button {
+  background: transparent !important;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--app-text) !important;
+  transition: all 0.2s ease;
+}
+
+.tldraw .tlui-button:hover {
+  background: var(--app-hover) !important;
+  border-color: var(--app-border);
+}
+
+.tldraw .tlui-button[data-state="selected"] {
+  background: var(--app-accent) !important;
+  color: white !important;
+}
+
+/* Custom shape styles */
+.tldraw .tl-shape {
+  /* Add custom drop shadows */
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.1));
+}
+
+.dark .tldraw .tl-shape {
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+}
+
+/* Custom text styles */
+.tldraw .tl-text-shape__wrapper {
+  font-family: var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+}
+
+/* Custom arrow styles */
+.tldraw .tl-arrow-shape {
+  stroke: var(--app-text);
+  stroke-width: 2;
+}
+
+/* Custom selection box */
+.tldraw .tl-selection-box {
+  border: 2px solid var(--app-accent);
+  background: var(--app-accent-alpha);
+}
+
+/* Custom handles */
+.tldraw .tl-handle {
+  border: 2px solid var(--app-accent);
+  background: var(--app-bg);
+}
+
+/* Custom context menu */
+.tldraw .tlui-menu {
+  background: var(--app-panel) !important;
+  border: 1px solid var(--app-border) !important;
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+}
+
+.tldraw .tlui-menu-item {
+  color: var(--app-text) !important;
+  border-radius: 4px;
+}
+
+.tldraw .tlui-menu-item:hover {
+  background: var(--app-hover) !important;
+}
+
+/* Custom zoom indicator */
+.tldraw .tlui-zoom-menu {
+  background: var(--app-panel) !important;
+  border: 1px solid var(--app-border) !important;
+  color: var(--app-text) !important;
+  border-radius: 6px;
+}
+
+/* Minimap styling */
+.tldraw .tlui-minimap {
+  background: var(--app-panel) !important;
+  border: 1px solid var(--app-border) !important;
+  border-radius: 8px;
+}
+
+/* Custom grid patterns */
+.canvas-grid-dots {
+  background-image: radial-gradient(circle, var(--app-border) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.canvas-grid-lines {
+  background-image: 
+    linear-gradient(var(--app-border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--app-border) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.canvas-grid-cross {
+  background-image: 
+    linear-gradient(var(--app-border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--app-border) 1px, transparent 1px),
+    radial-gradient(circle, var(--app-border) 2px, transparent 2px);
+  background-size: 20px 20px, 20px 20px, 100px 100px;
+}
+
+/* Custom animations */
+.tldraw .tl-shape {
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.tldraw .tl-shape:hover {
+  transform: translateZ(0);
+}
+
+/* Collaborative cursors */
+.tldraw .tl-collaborative-cursor {
+  transition: all 0.1s ease;
+}
+
+/* Custom loading state */
+.canvas-loading {
+  background: var(--app-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvas-loading::after {
+  content: '';
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--app-border);
+  border-top: 3px solid var(--app-accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .tldraw .tlui-toolbar {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: auto;
+  }
+  
+  .tldraw .tlui-zoom-menu {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .tldraw-canvas {
+    --tl-selection-foreground: #000000;
+    --tl-grid-color: #666666;
+  }
+  
+  .tldraw .tl-shape {
+    filter: contrast(1.2);
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .tldraw .tl-shape {
+    transition: none;
+  }
+  
+  .canvas-loading::after {
+    animation: none;
+    border-top-color: transparent;
+  }
+}
