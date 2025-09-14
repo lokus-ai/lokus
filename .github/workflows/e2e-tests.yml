@@ -1,0 +1,80 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+
+      - name: Create test workspace
+        run: |
+          mkdir -p /tmp/lokus-ci-workspace
+          echo "# CI Test Workspace" > /tmp/lokus-ci-workspace/README.md
+          echo "# Test Note" > /tmp/lokus-ci-workspace/test.md
+          echo '{"nodes":[],"edges":[],"metadata":{"version":"1.0","createdWith":"CI"}}' > /tmp/lokus-ci-workspace/test.canvas
+
+      - name: Run Playwright tests
+        run: npx playwright test
+        env:
+          LOKUS_TEST_WORKSPACE: /tmp/lokus-ci-workspace
+          CI: true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+
+  test-macos:
+    timeout-minutes: 60
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+
+      - name: Create test workspace
+        run: |
+          mkdir -p /tmp/lokus-ci-workspace
+          echo "# CI Test Workspace" > /tmp/lokus-ci-workspace/README.md
+          echo "# Test Note" > /tmp/lokus-ci-workspace/test.md
+          echo '{"nodes":[],"edges":[],"metadata":{"version":"1.0","createdWith":"CI"}}' > /tmp/lokus-ci-workspace/test.canvas
+
+      - name: Run Playwright tests
+        run: npx playwright test
+        env:
+          LOKUS_TEST_WORKSPACE: /tmp/lokus-ci-workspace
+          CI: true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-macos
+          path: playwright-report/
+          retention-days: 30

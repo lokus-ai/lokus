@@ -21,9 +21,11 @@ export default defineConfig({
         'build/'
       ]
     },
+    // Include test files
+    include: ['tests/**/*.{test,spec}.{js,jsx,ts,tsx}', 'src/**/*.{test,spec}.{js,jsx,ts,tsx}'],
     // Watch mode configuration
     watch: {
-      include: ['src/**/*.{js,jsx,ts,tsx}']
+      include: ['src/**/*.{js,jsx,ts,tsx}', 'tests/**/*.{js,jsx,ts,tsx}']
     },
     // Test timeout
     testTimeout: 10000,

@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { homeDir } from "@tauri-apps/api/path";
 import { invoke } from "@tauri-apps/api/core";
 import { readRecents, addRecent, shortenPath } from "../lib/recents.js";
+import { testWorkspaceManager } from "../utils/test-workspace.js";
 
 // --- Reusable Icon Component ---
 const Icon = ({ path, className = "w-5 h-5" }) => (
@@ -13,15 +14,68 @@ const Icon = ({ path, className = "w-5 h-5" }) => (
 
 // --- Main Launcher Component ---
 async function openWorkspace(path) {
-  await invoke("open_workspace_window", { workspacePath: path });
+  // In test mode or browser mode, transition current window to workspace
+  const isTestMode = new URLSearchParams(window.location.search).get('testMode') === 'true';
+  const isTauri = typeof window !== 'undefined' && (
+    (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function') ||
+    window.__TAURI_METADATA__ ||
+    (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.includes('Tauri'))
+  );
+  
+  if (isTestMode || !isTauri) {
+    // For test mode or browser mode, update URL to include workspace path
+    const url = new URL(window.location);
+    url.searchParams.set('workspacePath', encodeURIComponent(path));
+    // Keep test mode parameter if it exists
+    if (isTestMode) {
+      url.searchParams.set('testMode', 'true');
+    }
+    window.history.replaceState({}, '', url.toString());
+    // Trigger a page reload to activate workspace mode
+    window.location.reload();
+  } else {
+    // Normal Tauri mode - open new window
+    await invoke("open_workspace_window", { workspacePath: path });
+  }
 }
 
 export default function Launcher() {
   const [recents, setRecents] = useState([]);
+  const [isTestMode, setIsTestMode] = useState(false);
 
   useEffect(() => {
     // The ThemeProvider now handles initial theme loading.
     setRecents(readRecents());
+    
+    // Check for test mode and auto-create workspace
+    const initializeTestMode = async () => {
+      if (testWorkspaceManager.detectTestMode()) {
+        setIsTestMode(true);
+        console.log('🧪 Test mode activated');
+        
+        try {
+          // Create test workspace with files
+          const testWorkspacePath = await testWorkspaceManager.createTestWorkspace();
+          
+          if (testWorkspacePath) {
+            console.log('📁 Test workspace created, opening...');
+            
+            // Add to recents for consistency
+            addRecent(testWorkspacePath);
+            setRecents(readRecents());
+            
+            // Open the test workspace
+            await openWorkspace(testWorkspacePath);
+          }
+        } catch (error) {
+          console.error('❌ Failed to create test workspace:', error);
+          console.log('This is normal in web mode - continuing with mock setup');
+        }
+      }
+    };
+    
+    // Small delay to ensure app is ready
+    setTimeout(initializeTestMode, 500);
   }, []);
 
   const handleSelectWorkspace = async () => {
@@ -41,6 +95,13 @@ export default function Launcher() {
 
   return (
     <div className="h-screen bg-app-bg text-app-text flex items-center justify-center p-8 transition-colors duration-300">
+      {/* Test Mode Indicator */}
+      {isTestMode && (
+        <div className="fixed top-4 right-4 bg-yellow-500 text-black px-3 py-1 rounded-md text-sm font-medium z-50">
+          🧪 Test Mode Active
+        </div>
+      )}
+      
       <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="flex flex-col">
           <h2 className="text-sm font-semibold text-app-muted px-3">Recently Opened</h2>
