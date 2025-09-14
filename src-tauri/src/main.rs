@@ -7,6 +7,7 @@ mod handlers;
 mod clipboard;
 mod tasks;
 mod search;
+mod plugins;
 
 use windows::{open_workspace_window, open_preferences_window};
 use tauri::Manager;
@@ -88,7 +89,21 @@ fn main() {
       search::search_in_files,
       search::search_in_file,
       search::get_file_content_with_lines,
-      search::build_search_index
+      search::build_search_index,
+      plugins::list_plugins,
+      plugins::install_plugin,
+      plugins::uninstall_plugin,
+      plugins::get_plugin_info,
+      plugins::validate_plugin_manifest,
+      plugins::get_plugins_directory,
+      plugins::create_plugins_directory,
+      plugins::enable_plugin,
+      plugins::disable_plugin,
+      plugins::get_enabled_plugins,
+      plugins::set_plugin_permission,
+      plugins::get_plugin_permissions,
+      plugins::set_plugin_setting,
+      plugins::get_plugin_setting
     ])
     .setup(|app| {
       menu::init(&app.handle())?;

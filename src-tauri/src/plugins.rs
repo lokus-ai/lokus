@@ -140,7 +140,7 @@ fn load_plugin_info(plugin_path: &Path) -> Result<PluginInfo, String> {
                 .unwrap_or_default()
                 .to_rfc3339()
         })
-        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+        .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
     
     Ok(PluginInfo {
         manifest,
@@ -194,7 +194,7 @@ pub async fn install_plugin(path: String) -> Result<String, String> {
     if source_path.is_file() {
         install_plugin_from_zip(&source_path, &plugins_dir).await
     } else if source_path.is_dir() {
-        install_plugin_from_directory(&source_path, &plugins_dir)
+        install_plugin_from_directory(&source_path, &plugins_dir).await
     } else {
         Err("Invalid plugin source path".to_string())
     }

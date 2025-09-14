@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, Share2, LayoutGrid, FolderMinus } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, Share2, LayoutGrid, FolderMinus, Puzzle } from "lucide-react";
 // import GraphView from "./GraphView.jsx"; // Temporarily disabled
 import Editor from "../editor";
 import FileContextMenu from "../components/FileContextMenu.jsx";
@@ -21,6 +21,9 @@ import InFileSearch from "../components/InFileSearch.jsx";
 import SearchPanel from "../components/SearchPanel.jsx";
 import MiniKanban from "../components/MiniKanban.jsx";
 import FullKanban from "../components/FullKanban.jsx";
+import PluginSettings from "./PluginSettings.jsx";
+import PluginMarketplace from "./PluginMarketplace.jsx";
+import PluginDetail from "./PluginDetail.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -399,6 +402,7 @@ export default function Workspace({ initialPath = "" }) {
   const [showInFileSearch, setShowInFileSearch] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showKanban, setShowKanban] = useState(false);
+  const [showPlugins, setShowPlugins] = useState(false);
   
   // --- Refs for stable callbacks ---
   const stateRef = useRef({});
@@ -589,6 +593,19 @@ export default function Workspace({ initialPath = "" }) {
   }, [openTabs, activeFile]);
 
   const handleRefreshFiles = () => setRefreshId(id => id + 1);
+
+  const handleOpenPluginDetail = (plugin) => {
+    const pluginPath = `__plugin_${plugin.id}__`;
+    const pluginName = `${plugin.name} Plugin`;
+    
+    setOpenTabs(prevTabs => {
+      const newTabs = prevTabs.filter(t => t.path !== pluginPath);
+      newTabs.unshift({ path: pluginPath, name: pluginName, plugin });
+      if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
+      return newTabs;
+    });
+    setActiveFile(pluginPath);
+  };
 
   const toggleFolder = (folderPath) => {
     setExpandedFolders(prev => {
@@ -857,6 +874,21 @@ export default function Workspace({ initialPath = "" }) {
             <LayoutGrid className="w-5 h-5" />
           </button>
           <button
+            onClick={() => { 
+              if (showPlugins) {
+                setShowPlugins(false);
+              } else {
+                setShowPlugins(true); 
+                setShowKanban(false);
+                setShowLeft(true);
+              }
+            }}
+            title={showPlugins ? "Hide extensions" : "Show extensions"}
+            className={`p-2 rounded-md transition-colors ${showPlugins ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:bg-app-bg hover:text-app-text'}`}
+          >
+            <Puzzle className="w-5 h-5" />
+          </button>
+          <button
             disabled
             title="Graph view coming soon"
             className="p-2 rounded-md text-app-muted/50 cursor-not-allowed opacity-50"
@@ -870,24 +902,31 @@ export default function Workspace({ initialPath = "" }) {
             <div className="h-12 shrink-0 px-4 flex items-center justify-between gap-2 border-b border-app-border">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setShowKanban(false)}
+                  onClick={() => { setShowKanban(false); setShowPlugins(false); }}
                   title="Files view"
-                  className={`px-2 py-1 text-xs rounded transition-colors ${!showKanban ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:text-app-text hover:bg-app-bg'}`}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${!showKanban && !showPlugins ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:text-app-text hover:bg-app-bg'}`}
                 >
                   Files
                 </button>
                 <button
-                  onClick={() => setShowKanban(true)}
+                  onClick={() => { setShowKanban(true); setShowPlugins(false); }}
                   title="Kanban view"
-                  className={`px-2 py-1 text-xs rounded transition-colors ${showKanban ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:text-app-text hover:bg-app-bg'}`}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${showKanban && !showPlugins ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:text-app-text hover:bg-app-bg'}`}
                 >
                   Tasks
+                </button>
+                <button
+                  onClick={() => { setShowPlugins(true); setShowKanban(false); }}
+                  title="Extensions view"
+                  className={`px-2 py-1 text-xs rounded transition-colors ${showPlugins ? 'bg-app-accent text-app-accent-fg' : 'text-app-muted hover:text-app-text hover:bg-app-bg'}`}
+                >
+                  Extensions
                 </button>
                 <button onClick={closeAllFolders} title="Close all folders" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
                   <FolderMinus className="w-4 h-4" />
                 </button>
               </div>
-              {!showKanban && (
+              {!showKanban && !showPlugins && (
                 <div className="flex items-center">
                   <button onClick={handleCreateFile} title="New File" className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors">
                     <Icon path="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" className="w-4 h-4" />
@@ -898,7 +937,11 @@ export default function Workspace({ initialPath = "" }) {
                 </div>
               )}
             </div>
-            {showKanban ? (
+            {showPlugins ? (
+              <div className="flex-1 overflow-hidden">
+                <PluginSettings onOpenPluginDetail={handleOpenPluginDetail} />
+              </div>
+            ) : showKanban ? (
               <div className="flex-1 overflow-hidden">
                 <MiniKanban 
                   workspacePath={path}
@@ -969,6 +1012,13 @@ export default function Workspace({ initialPath = "" }) {
                       <h2 className="text-xl font-medium text-app-text mb-2">Graph View Coming Soon</h2>
                       <p className="text-app-muted">The graph view is temporarily disabled while we improve it.</p>
                     </div>
+                  </div>
+                ) : activeFile && activeFile.startsWith('__plugin_') ? (
+                  <div className="flex-1 overflow-hidden">
+                    {(() => {
+                      const activeTab = openTabs.find(tab => tab.path === activeFile);
+                      return activeTab?.plugin ? <PluginDetail plugin={activeTab.plugin} /> : <div>Plugin not found</div>;
+                    })()}
                   </div>
                 ) : activeFile ? (
                 <ContextMenu>

@@ -1,7 +1,7 @@
 [package]
 name = "lokus"
-version = "0.1.0"
-description = "A Tauri App"
+version = "1.0.0"
+description = "Lokus - Modern Knowledge Management and Writing Platform"
 authors = ["you"]
 edition = "2021"
 
@@ -31,3 +31,5 @@ tauri-plugin-clipboard-manager = "2.0"
 tokio = { version = "1", features = ["full"] }
 regex = "1.0"
 walkdir = "2.0"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5.0"
