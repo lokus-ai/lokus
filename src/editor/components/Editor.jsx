@@ -315,6 +315,9 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
   // Expose editor instance to parent component via ref
   useImperativeHandle(ref, () => ({
     commands: editor?.commands,
+    chain: () => editor?.chain(),
+    state: editor?.state,
+    view: editor?.view,
     getHTML: () => editor?.getHTML(),
     setContent: (content) => editor?.commands?.setContent(content),
     insertContent: (content) => editor?.commands?.insertContent(content),
