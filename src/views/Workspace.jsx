@@ -1296,6 +1296,22 @@ export default function Workspace({ initialPath = "" }) {
         }}
         onToggleSidebar={() => setShowLeft(v => !v)}
         onCloseTab={handleTabClose}
+        onShowTemplatePicker={() => {
+          setShowTemplatePicker(true);
+          setTemplatePickerData({
+            editorState: { editor: editorRef.current },
+            onSelect: (template, processedContent) => {
+              if (editorRef.current) {
+                try {
+                  editorRef.current.commands.insertContent(processedContent);
+                } catch (err) {
+                  console.error('Failed to insert template:', err);
+                  editorRef.current.commands.insertContent(template.content);
+                }
+              }
+            }
+          });
+        }}
         activeFile={activeFile}
       />
       
