@@ -1,5 +1,5 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle, useMemo } from 'react'
-import { Command, CommandList, CommandItem, CommandEmpty } from '@/components/ui/command'
+import { Command, CommandList, CommandItem, CommandEmpty } from '../../components/ui/command'
 
 const WikiLinkList = forwardRef((props, ref) => {
   const [value, setValue] = useState('')

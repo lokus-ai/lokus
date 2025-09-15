@@ -29,6 +29,57 @@ function extToMime(p) {
   return map[ext] || 'application/octet-stream'
 }
 
+function resolveInternalTarget(target) {
+  try {
+    const index = globalThis.__LOKUS_FILE_INDEX__ || []
+    if (!Array.isArray(index) || !index.length || !target) return null
+    
+    // Remove alias part after | if present
+    const base = String(target).split('|')[0].trim()
+    if (!base) return null
+    
+    // Helper functions
+    const dirname = (p) => {
+      if (!p) return ''
+      const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'))
+      return i >= 0 ? p.slice(0, i) : ''
+    }
+    
+    const filename = (p) => (p || '').split(/[\\/]/).pop()
+    
+    // If includes slash, try exact path match
+    if (/[/\\]/.test(base)) {
+      const hit = index.find(f => f.path.endsWith(base)) || index.find(f => f.path === base)
+      return hit?.path || null
+    }
+    
+    // Otherwise, match by filename (with or without .md extension)
+    const activePath = globalThis.__LOKUS_ACTIVE_FILE__ || ''
+    const activeDir = dirname(activePath)
+    
+    // Create name-based index
+    const nameMap = new Map()
+    for (const f of index) {
+      const name = filename(f.path)
+      if (!nameMap.has(name)) nameMap.set(name, [])
+      nameMap.get(name).push(f)
+    }
+    
+    // Try exact name match, then with .md extension
+    let candidates = nameMap.get(base) || nameMap.get(`${base}.md`) || []
+    
+    if (!candidates.length) return null
+    if (candidates.length === 1) return candidates[0].path
+    
+    // Multiple matches - prefer same folder
+    const sameFolder = candidates.find(f => dirname(f.path) === activeDir)
+    return sameFolder ? sameFolder.path : candidates[0].path
+  } catch (e) {
+    console.warn('[resolve] Failed to resolve internal target:', target, e)
+    return null
+  }
+}
+
 function isAbsolutePath(p) {
   return /^\//.test(p) || /^[a-zA-Z]:\\/.test(p)
 }
@@ -85,6 +136,7 @@ export async function resolveWikiTarget(target) {
       if (dataUrl) return { href: abs, src: dataUrl, isImage: true }
     }
   } catch {}
-  // Fallback: internal note/file; no src
-  return { href: t, src: '', isImage: hasImageExt(t) }
+  // Resolve internal note/file using file index
+  const resolved = resolveInternalTarget(t)
+  return { href: resolved || t, src: '', isImage: hasImageExt(t) }
 }

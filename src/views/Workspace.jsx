@@ -4,9 +4,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, Share2, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package } from "lucide-react";
 import LokusLogo from "../components/LokusLogo.jsx";
-// import GraphView from "./GraphView.jsx"; // Temporarily disabled
+import GraphView from "./GraphView.jsx";
 import Editor from "../editor";
 import Canvas from "./Canvas.jsx";
 import FileContextMenu from "../components/FileContextMenu.jsx";
@@ -412,13 +412,13 @@ export default function Workspace({ initialPath = "" }) {
   const [editorContent, setEditorContent] = useState("");
   const [editorTitle, setEditorTitle] = useState("");
   const [savedContent, setSavedContent] = useState("");
-  const [showGraph, setShowGraph] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showInFileSearch, setShowInFileSearch] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showKanban, setShowKanban] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
   const [showMarketplace, setShowMarketplace] = useState(false);
+  // Graph view now opens as a tab instead of sidebar panel
   
   // --- Refs for stable callbacks ---
   const stateRef = useRef({});
@@ -1105,6 +1105,13 @@ export default function Workspace({ initialPath = "" }) {
                       const activeTab = openTabs.find(tab => tab.path === activeFile);
                       return activeTab?.plugin ? <PluginDetail plugin={activeTab.plugin} /> : <div>Plugin not found</div>;
                     })()}
+                  </div>
+                ) : activeFile === 'graph-view' ? (
+                  <div className="flex-1 h-full w-full">
+                    <GraphView 
+                      workspacePath={path} 
+                      onOpenFile={handleFileOpen}
+                    />
                   </div>
                 ) : activeFile ? (
                 <ContextMenu>

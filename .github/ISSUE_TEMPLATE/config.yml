@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: 💬 Discussions
-    url: https://github.com/CodeWithInferno/Lokus/discussions
+    url: https://github.com/lokus-ai/lokus/discussions
     about: Ask questions and discuss ideas with the community
   - name: 📚 Documentation
-    url: https://github.com/CodeWithInferno/Lokus/wiki
+    url: https://github.com/lokus-ai/lokus/wiki
     about: Check our documentation and guides
   - name: 💡 Ideas & Feedback
-    url: https://github.com/CodeWithInferno/Lokus/discussions/categories/ideas
+    url: https://github.com/lokus-ai/lokus/discussions/categories/ideas
     about: Share ideas and provide feedback on existing features
