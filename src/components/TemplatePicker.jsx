@@ -148,7 +148,8 @@ export default function TemplatePicker({
       
       // Call onSelect with both template and processed content
       console.log('[TemplatePicker] Calling onSelect with processed content');
-      onSelect?.(template, result.content);
+      console.log('[TemplatePicker] Result structure:', result);
+      onSelect?.(template, result.result || result.content || result);
       onClose?.();
     } catch (err) {
       console.error('[TemplatePicker] Failed to process template:', err);
