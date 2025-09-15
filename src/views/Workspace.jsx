@@ -1306,25 +1306,40 @@ export default function Workspace({ initialPath = "" }) {
               console.log('[Workspace] Processed content:', processedContent);
               console.log('[Workspace] Editor ref:', !!editorRef.current);
               
-              if (editorRef.current) {
+              if (editorRef.current && processedContent) {
                 try {
                   console.log('[Workspace] Inserting content into editor');
+                  console.log('[Workspace] Content to insert:', processedContent);
                   
-                  // Insert content at cursor position (don't replace all content)
-                  editorRef.current.commands.insertContent(processedContent);
-                  console.log('[Workspace] Content inserted successfully');
+                  // Use a timeout to ensure editor is ready
+                  setTimeout(() => {
+                    try {
+                      if (editorRef.current?.commands?.insertContent) {
+                        editorRef.current.commands.insertContent(processedContent);
+                        console.log('[Workspace] Content inserted successfully');
+                      } else {
+                        console.error('[Workspace] Editor commands not available');
+                      }
+                    } catch (err) {
+                      console.error('[Workspace] Delayed insertion failed:', err);
+                      // Try fallback with focus first
+                      try {
+                        editorRef.current.commands.focus();
+                        editorRef.current.commands.insertContent(processedContent);
+                        console.log('[Workspace] Content inserted with focus');
+                      } catch (err2) {
+                        console.error('[Workspace] All insertion methods failed:', err2);
+                      }
+                    }
+                  }, 100);
+                  
                 } catch (err) {
-                  console.error('[Workspace] Failed to insert template:', err);
-                  console.log('[Workspace] Trying basic text insertion');
-                  try {
-                    // Try inserting as plain text
-                    editorRef.current.commands.insertContent(processedContent);
-                  } catch (err2) {
-                    console.error('[Workspace] All insertion methods failed:', err2);
-                  }
+                  console.error('[Workspace] Failed to setup template insertion:', err);
                 }
               } else {
-                console.error('[Workspace] No editor reference available');
+                console.error('[Workspace] No editor reference or content available');
+                console.log('[Workspace] Editor ref:', !!editorRef.current);
+                console.log('[Workspace] Content:', processedContent);
               }
             }
           });
