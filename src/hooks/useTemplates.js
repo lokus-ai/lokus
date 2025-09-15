@@ -148,10 +148,110 @@ export function useTemplates() {
     return manager.getStatistics();
   }, [manager]);
 
+  // Initialize with demo templates if none exist
+  const initializeDemoTemplates = useCallback(async () => {
+    try {
+      const result = manager.list();
+      if (result.templates.length === 0) {
+        console.log('No templates found, initializing demo templates...');
+        
+        // Import and create demo templates
+        const demoTemplates = [
+          {
+            id: 'meeting-notes',
+            name: 'Meeting Notes',
+            content: `# {{title || "Meeting Notes"}}
+
+**Date:** {{date}}
+**Time:** {{time}}
+**Attendees:** {{attendees || "Add attendees here"}}
+
+## Agenda
+{{agenda || "Add agenda items here"}}
+
+## Notes
+{{cursor}}
+
+## Action Items
+- [ ] `,
+            category: 'Work',
+            tags: ['meeting', 'notes'],
+            metadata: { description: 'Template for meeting notes with agenda and action items' }
+          },
+          {
+            id: 'daily-journal',
+            name: 'Daily Journal',
+            content: `# {{date:MMMM Do, YYYY}}
+
+## Morning Reflection
+**Mood:** {{mood || "How are you feeling?"}}
+**Goals for today:**
+- {{goal1 || "What do you want to accomplish?"}}
+
+## Evening Review
+**Accomplishments:**
+{{cursor}}
+
+**Gratitude:**
+- 
+
+**Tomorrow's focus:**
+- `,
+            category: 'Personal',
+            tags: ['journal', 'daily'],
+            metadata: { description: 'Daily journal template for reflection and planning' }
+          },
+          {
+            id: 'project-readme',
+            name: 'Project README',
+            content: `# {{title || "Project Name"}}
+
+## Description
+{{description || "Brief description of the project"}}
+
+## Installation
+\`\`\`bash
+npm install
+\`\`\`
+
+## Usage
+{{cursor}}
+
+## Contributing
+Please read CONTRIBUTING.md for details on our code of conduct.
+
+## License
+This project is licensed under the MIT License.
+`,
+            category: 'Documentation', 
+            tags: ['readme', 'project'],
+            metadata: { description: 'Standard README template for projects' }
+          }
+        ];
+
+        // Create all demo templates
+        for (const template of demoTemplates) {
+          await manager.create(template);
+        }
+        
+        console.log(`Initialized ${demoTemplates.length} demo templates`);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Failed to initialize demo templates:', err);
+      return false;
+    }
+  }, [manager]);
+
   // Load templates on mount
   useEffect(() => {
-    loadTemplates();
-  }, [loadTemplates]);
+    const init = async () => {
+      await initializeDemoTemplates();
+      await loadTemplates();
+    };
+    init();
+  }, [initializeDemoTemplates, loadTemplates]);
 
   return {
     templates,
