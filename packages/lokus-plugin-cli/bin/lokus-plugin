@@ -1,0 +1,20 @@
+#!/usr/bin/env node
+
+const path = require('path');
+const fs = require('fs');
+
+// Check if we're running from source or built version
+const srcPath = path.join(__dirname, '..', 'src', 'index.ts');
+const distPath = path.join(__dirname, '..', 'dist', 'index.js');
+
+if (fs.existsSync(distPath)) {
+  // Running from built version
+  require(distPath);
+} else if (fs.existsSync(srcPath)) {
+  // Running from source (development)
+  require('ts-node/register');
+  require(srcPath);
+} else {
+  console.error('CLI not found. Please run "npm run build" first.');
+  process.exit(1);
+}

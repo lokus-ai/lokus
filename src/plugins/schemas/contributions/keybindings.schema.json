@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lokus.dev/schemas/contributions/keybindings.json",
+  "title": "Keybindings Contribution Schema",
+  "description": "Schema for keybinding contributions in Lokus plugins",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9.-]*[a-zA-Z0-9]$",
+        "description": "Command to execute"
+      },
+      "key": {
+        "type": "string",
+        "pattern": "^(ctrl|cmd|alt|shift|meta)*(\\+[a-zA-Z0-9]|\\+f[1-9]|\\+f1[0-2]|\\+[;,.'\\[\\]\\-=`]|\\+space|\\+tab|\\+enter|\\+escape|\\+backspace|\\+delete|\\+insert|\\+home|\\+end|\\+pageup|\\+pagedown|\\+up|\\+down|\\+left|\\+right)*[a-zA-Z0-9;,.'\\[\\]\\-=`]|(f[1-9]|f1[0-2]|space|tab|enter|escape|backspace|delete|insert|home|end|pageup|pagedown|up|down|left|right)$",
+        "description": "Key combination (e.g., 'ctrl+shift+p')"
+      },
+      "mac": {
+        "type": "string",
+        "pattern": "^(ctrl|cmd|alt|shift|meta)*(\\+[a-zA-Z0-9]|\\+f[1-9]|\\+f1[0-2]|\\+[;,.'\\[\\]\\-=`]|\\+space|\\+tab|\\+enter|\\+escape|\\+backspace|\\+delete|\\+insert|\\+home|\\+end|\\+pageup|\\+pagedown|\\+up|\\+down|\\+left|\\+right)*[a-zA-Z0-9;,.'\\[\\]\\-=`]|(f[1-9]|f1[0-2]|space|tab|enter|escape|backspace|delete|insert|home|end|pageup|pagedown|up|down|left|right)$",
+        "description": "Key combination specific to macOS"
+      },
+      "linux": {
+        "type": "string",
+        "pattern": "^(ctrl|cmd|alt|shift|meta)*(\\+[a-zA-Z0-9]|\\+f[1-9]|\\+f1[0-2]|\\+[;,.'\\[\\]\\-=`]|\\+space|\\+tab|\\+enter|\\+escape|\\+backspace|\\+delete|\\+insert|\\+home|\\+end|\\+pageup|\\+pagedown|\\+up|\\+down|\\+left|\\+right)*[a-zA-Z0-9;,.'\\[\\]\\-=`]|(f[1-9]|f1[0-2]|space|tab|enter|escape|backspace|delete|insert|home|end|pageup|pagedown|up|down|left|right)$",
+        "description": "Key combination specific to Linux"
+      },
+      "win": {
+        "type": "string",
+        "pattern": "^(ctrl|cmd|alt|shift|meta)*(\\+[a-zA-Z0-9]|\\+f[1-9]|\\+f1[0-2]|\\+[;,.'\\[\\]\\-=`]|\\+space|\\+tab|\\+enter|\\+escape|\\+backspace|\\+delete|\\+insert|\\+home|\\+end|\\+pageup|\\+pagedown|\\+up|\\+down|\\+left|\\+right)*[a-zA-Z0-9;,.'\\[\\]\\-=`]|(f[1-9]|f1[0-2]|space|tab|enter|escape|backspace|delete|insert|home|end|pageup|pagedown|up|down|left|right)$",
+        "description": "Key combination specific to Windows"
+      },
+      "when": {
+        "type": "string",
+        "description": "When clause expression for conditional activation"
+      },
+      "args": {
+        "description": "Arguments to pass to the command"
+      },
+      "metadata": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Human-readable title for the keybinding"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Description of what the keybinding does"
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 50,
+            "description": "Category for grouping keybindings"
+          },
+          "priority": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50,
+            "description": "Priority for resolving conflicts (higher wins)"
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["global", "editor", "view", "panel"],
+            "default": "global",
+            "description": "Scope where keybinding is active"
+          },
+          "experimental": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether keybinding is experimental"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "required": ["command", "key"],
+    "additionalProperties": false
+  },
+  "minItems": 1,
+  "maxItems": 50
+}
