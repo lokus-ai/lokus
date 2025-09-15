@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Getting Started - Lokus Documentation</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="icon" type="image/svg+xml" href="../lokus-logo.svg">
+    <meta name="description" content="Get started with Lokus - Learn the basics of note-taking, workspace setup, and essential features">
+</head>
+<body>
+    <!-- Mobile overlay for sidebar -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+    
+    <!-- Sidebar Navigation -->
+    <nav id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-container">
+                <img src="../lokus-logo.svg" alt="Lokus Logo" class="logo">
+                <h1><a href="../index.html" style="color: inherit; text-decoration: none;">Lokus Docs</a></h1>
+            </div>
+            <button id="sidebar-close" class="sidebar-close" aria-label="Close sidebar">
+                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+
+        <div class="sidebar-content">
+            <!-- Search Box -->
+            <div class="search-container">
+                <input type="text" id="search-input" placeholder="Search documentation..." class="search-input">
+                <svg class="search-icon" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+            </div>
+
+            <!-- Navigation Menu -->
+            <div class="nav-menu">
+                <!-- Quick Start -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Quick Start</h3>
+                    <ul class="nav-list">
+                        <li><a href="../index.html" class="nav-link">Documentation Home</a></li>
+                        <li><a href="getting-started.html" class="nav-link active">Getting Started</a></li>
+                    </ul>
+                </div>
+
+                <!-- Core Features -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Core Features</h3>
+                    <ul class="nav-list">
+                        <li><a href="../features/editor.html" class="nav-link">Rich Text Editor</a></li>
+                        <li><a href="../features/file-management.html" class="nav-link">File Management</a></li>
+                        <li><a href="../features/command-palette.html" class="nav-link">Command Palette</a></li>
+                        <li><a href="../features/search.html" class="nav-link">Search</a></li>
+                        <li><a href="../features/themes.html" class="nav-link">Themes</a></li>
+                    </ul>
+                </div>
+
+                <!-- Advanced Features -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Advanced Features</h3>
+                    <ul class="nav-list">
+                        <li><a href="../features/template-system.html" class="nav-link">Template System</a></li>
+                        <li><a href="../features/wiki-links.html" class="nav-link">Wiki Links</a></li>
+                        <li><a href="../features/graph-view.html" class="nav-link">Graph View</a></li>
+                        <li><a href="../features/canvas.html" class="nav-link">Canvas</a></li>
+                        <li><a href="../features/kanban.html" class="nav-link">Kanban Boards</a></li>
+                        <li><a href="../features/math.html" class="nav-link">Math Rendering</a></li>
+                    </ul>
+                </div>
+
+                <!-- Interface & UX -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Interface & UX</h3>
+                    <ul class="nav-list">
+                        <li><a href="../features/shortcuts.html" class="nav-link">Keyboard Shortcuts</a></li>
+                        <li><a href="../features/context-menus.html" class="nav-link">Context Menus</a></li>
+                        <li><a href="../features/animations-ux.html" class="nav-link">Animations & UX</a></li>
+                        <li><a href="../features/clipboard.html" class="nav-link">Clipboard Integration</a></li>
+                    </ul>
+                </div>
+
+                <!-- Extensibility -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Extensibility</h3>
+                    <ul class="nav-list">
+                        <li><a href="../features/plugin-system.html" class="nav-link">Plugin System</a></li>
+                        <li><a href="../features/marketplace.html" class="nav-link">Plugin Marketplace</a></li>
+                    </ul>
+                </div>
+
+                <!-- Developer Docs -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Developer Docs</h3>
+                    <ul class="nav-list">
+                        <li><a href="../developer/testing.html" class="nav-link">Testing</a></li>
+                        <li><a href="../developer/markdown-compiler.html" class="nav-link">Markdown Compiler</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="header">
+            <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar">
+                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="breadcrumb">
+                <a href="../index.html" class="breadcrumb-item">Documentation</a>
+                <span class="breadcrumb-separator">></span>
+                <a href="#user-guide" class="breadcrumb-item">User Guide</a>
+                <span class="breadcrumb-separator">></span>
+                <span class="breadcrumb-item current">Getting Started</span>
+            </div>
+        </header>
+
+        <!-- Content Area -->
+        <div class="content">
+            <div class="content-header">
+                <h1>Getting Started with Lokus</h1>
+                <p class="content-description">
+                    Welcome to Lokus! This guide will help you get up and running with Lokus quickly, 
+                    covering the essential features you need to start taking notes, organizing your knowledge, 
+                    and building your personal knowledge base.
+                </p>
+            </div>
+
+            <!-- Quick Navigation -->
+            <nav class="page-nav">
+                <h3>On This Page</h3>
+                <ul>
+                    <li><a href="#what-is-lokus">What is Lokus?</a></li>
+                    <li><a href="#first-launch">First Launch</a></li>
+                    <li><a href="#basic-usage">Basic Usage</a></li>
+                    <li><a href="#essential-features">Essential Features</a></li>
+                    <li><a href="#next-steps">Next Steps</a></li>
+                </ul>
+            </nav>
+
+            <!-- What is Lokus Section -->
+            <section id="what-is-lokus" class="section">
+                <h2>🤔 What is Lokus?</h2>
+                <p>
+                    Lokus is a modern note-taking application that combines the best of rich text editing 
+                    with powerful knowledge management features. It's designed for researchers, writers, 
+                    students, and knowledge workers who need to organize and connect their ideas effectively.
+                </p>
+
+                <h3>Key Capabilities</h3>
+                <div class="capabilities-grid">
+                    <div class="capability-item">
+                        <div class="capability-icon">✍️</div>
+                        <h4>Rich Text Editor</h4>
+                        <p>Professional editing with markdown support</p>
+                    </div>
+                    <div class="capability-item">
+                        <div class="capability-icon">🔗</div>
+                        <h4>Wiki-style Linking</h4>
+                        <p>Connect notes with bidirectional links</p>
+                    </div>
+                    <div class="capability-item">
+                        <div class="capability-icon">📄</div>
+                        <h4>Template System</h4>
+                        <p>Reusable content templates with variables</p>
+                    </div>
+                    <div class="capability-item">
+                        <div class="capability-icon">🧩</div>
+                        <h4>Plugin Ecosystem</h4>
+                        <p>Extend functionality with VS Code-level plugins</p>
+                    </div>
+                    <div class="capability-item">
+                        <div class="capability-icon">🎨</div>
+                        <h4>Visual Tools</h4>
+                        <p>Graph view, canvas, and kanban boards</p>
+                    </div>
+                    <div class="capability-item">
+                        <div class="capability-icon">🔍</div>
+                        <h4>Smart Search</h4>
+                        <p>Powerful search across all your content</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- First Launch Section -->
+            <section id="first-launch" class="section">
+                <h2>🚀 First Launch</h2>
+                
+                <h3>Creating Your First Workspace</h3>
+                <p>When you first open Lokus:</p>
+                
+                <div class="step-by-step">
+                    <div class="step">
+                        <div class="step-number">1</div>
+                        <div class="step-content">
+                            <h4>Welcome Screen</h4>
+                            <p>You'll see a welcome screen with options to create or open a workspace</p>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">2</div>
+                        <div class="step-content">
+                            <h4>Create New Workspace</h4>
+                            <p>Click "Create New Workspace" to start fresh</p>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                            <h4>Choose Location</h4>
+                            <p>Select a folder on your computer to store your notes</p>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">4</div>
+                        <div class="step-content">
+                            <h4>Workspace Setup</h4>
+                            <p>Lokus will set up the workspace structure automatically</p>
+                        </div>
+                    </div>
+                </div>
+
+                <h3>Interface Overview</h3>
+                <p>After creating your workspace, you'll see:</p>
+                <div class="interface-overview">
+                    <div class="interface-item">
+                        <h4>📁 File Explorer (left)</h4>
+                        <p>Browse and organize your files and folders</p>
+                    </div>
+                    <div class="interface-item">
+                        <h4>📝 Editor (center)</h4>
+                        <p>Write and edit your notes with rich text formatting</p>
+                    </div>
+                    <div class="interface-item">
+                        <h4>🔧 Toolbar (top)</h4>
+                        <p>Access main features and formatting tools</p>
+                    </div>
+                    <div class="interface-item">
+                        <h4>⚙️ Status Bar (bottom)</h4>
+                        <p>View document information and quick actions</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Basic Usage Section -->
+            <section id="basic-usage" class="section">
+                <h2>📝 Basic Usage</h2>
+                
+                <h3>Creating Your First Note</h3>
+                <div class="usage-steps">
+                    <ol class="numbered-steps">
+                        <li>
+                            <strong>New File:</strong> Press <kbd>⌘N</kbd> / <kbd>Ctrl+N</kbd> or click the "+" button in the file explorer
+                        </li>
+                        <li>
+                            <strong>Name Your File:</strong> Give your note a descriptive name (e.g., "Project Ideas")
+                        </li>
+                        <li>
+                            <strong>Start Writing:</strong> Begin typing in the editor - it supports both rich text and markdown
+                        </li>
+                        <li>
+                            <strong>Save:</strong> Press <kbd>⌘S</kbd> / <kbd>Ctrl+S</kbd> to save your work
+                        </li>
+                    </ol>
+                </div>
+
+                <h3>Basic Formatting</h3>
+                <p>Get familiar with these essential formatting options:</p>
+                <div class="formatting-basics">
+                    <div class="format-group">
+                        <h4>Text Formatting</h4>
+                        <ul class="format-list">
+                            <li><strong>Bold:</strong> <kbd>⌘B</kbd> / <kbd>Ctrl+B</kbd> or <code>**text**</code></li>
+                            <li><em>Italic:</em> <kbd>⌘I</kbd> / <kbd>Ctrl+I</kbd> or <code>*text*</code></li>
+                            <li><code>Code:</code> <kbd>⌘E</kbd> / <kbd>Ctrl+E</kbd> or <code>`text`</code></li>
+                        </ul>
+                    </div>
+                    <div class="format-group">
+                        <h4>Structure</h4>
+                        <ul class="format-list">
+                            <li><strong>Headings:</strong> <kbd>⌘⌥1-6</kbd> or <code># Heading</code></li>
+                            <li><strong>Lists:</strong> <kbd>⌘⇧8</kbd> for bullets, <kbd>⌘⇧7</kbd> for numbers</li>
+                            <li><strong>Links:</strong> <code>[text](url)</code> or use the toolbar</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Essential Features Section -->
+            <section id="essential-features" class="section">
+                <h2>⭐ Essential Features</h2>
+                
+                <div class="essential-features-grid">
+                    <div class="essential-feature">
+                        <div class="feature-header">
+                            <span class="feature-icon">⌘</span>
+                            <h3>Command Palette</h3>
+                        </div>
+                        <p>Access any feature quickly with <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd></p>
+                        <ul class="feature-benefits">
+                            <li>Quick file creation and navigation</li>
+                            <li>Format text without reaching for toolbar</li>
+                            <li>Insert templates and special content</li>
+                        </ul>
+                        <a href="../features/command-palette.html" class="feature-link">Learn more →</a>
+                    </div>
+                    
+                    <div class="essential-feature">
+                        <div class="feature-header">
+                            <span class="feature-icon">🔗</span>
+                            <h3>Wiki Links</h3>
+                        </div>
+                        <p>Connect your notes with <code>[[Note Name]]</code> syntax</p>
+                        <ul class="feature-benefits">
+                            <li>Automatic note creation when linking</li>
+                            <li>Bidirectional link tracking</li>
+                            <li>Visual graph of connections</li>
+                        </ul>
+                        <a href="../features/wiki-links.html" class="feature-link">Learn more →</a>
+                    </div>
+                    
+                    <div class="essential-feature">
+                        <div class="feature-header">
+                            <span class="feature-icon">🔍</span>
+                            <h3>Global Search</h3>
+                        </div>
+                        <p>Find anything across your workspace with <kbd>⌘⇧F</kbd> / <kbd>Ctrl+Shift+F</kbd></p>
+                        <ul class="feature-benefits">
+                            <li>Search file names and content</li>
+                            <li>Regex and case-sensitive options</li>
+                            <li>Quick preview of results</li>
+                        </ul>
+                        <a href="../features/search.html" class="feature-link">Learn more →</a>
+                    </div>
+                    
+                    <div class="essential-feature">
+                        <div class="feature-header">
+                            <span class="feature-icon">📄</span>
+                            <h3>Templates</h3>
+                        </div>
+                        <p>Create reusable content templates for consistent note structure</p>
+                        <ul class="feature-benefits">
+                            <li>Meeting notes, project plans, daily journals</li>
+                            <li>Variable substitution and dynamic content</li>
+                            <li>Quick insertion via Command Palette</li>
+                        </ul>
+                        <a href="../features/template-system.html" class="feature-link">Learn more →</a>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Next Steps Section -->
+            <section id="next-steps" class="section">
+                <h2>🎯 Next Steps</h2>
+                
+                <p>Now that you've got the basics down, here's what to explore next:</p>
+                
+                <div class="next-steps-grid">
+                    <div class="next-step">
+                        <h3>📚 Organize Your Knowledge</h3>
+                        <p>Learn advanced file management and organization strategies</p>
+                        <ul>
+                            <li><a href="../features/file-management.html">File Management Guide</a></li>
+                            <li><a href="../features/graph-view.html">Visualize Note Connections</a></li>
+                            <li><a href="../features/themes.html">Customize Your Workspace</a></li>
+                        </ul>
+                    </div>
+                    
+                    <div class="next-step">
+                        <h3>⚡ Boost Productivity</h3>
+                        <p>Discover features that will speed up your workflow</p>
+                        <ul>
+                            <li><a href="../features/shortcuts.html">Master Keyboard Shortcuts</a></li>
+                            <li><a href="../features/math.html">Add Mathematical Equations</a></li>
+                            <li><a href="../features/clipboard.html">Smart Paste Features</a></li>
+                        </ul>
+                    </div>
+                    
+                    <div class="next-step">
+                        <h3>🎨 Visual Organization</h3>
+                        <p>Explore visual tools for different thinking styles</p>
+                        <ul>
+                            <li><a href="../features/canvas.html">Infinite Canvas for Mind Maps</a></li>
+                            <li><a href="../features/kanban.html">Kanban Boards for Projects</a></li>
+                            <li><a href="../features/context-menus.html">Efficient Right-Click Operations</a></li>
+                        </ul>
+                    </div>
+                    
+                    <div class="next-step">
+                        <h3>🔧 Extend & Customize</h3>
+                        <p>Make Lokus work exactly how you want</p>
+                        <ul>
+                            <li><a href="../features/plugin-system.html">Plugin System Overview</a></li>
+                            <li><a href="../features/marketplace.html">Browse Plugin Marketplace</a></li>
+                            <li><a href="../developer/testing.html">Contribute to Development</a></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="help-box">
+                    <h3>💬 Need Help?</h3>
+                    <p>If you get stuck or have questions:</p>
+                    <ul>
+                        <li><strong>Documentation:</strong> Search this documentation for specific features</li>
+                        <li><strong>Community:</strong> Join our Discord for real-time help</li>
+                        <li><strong>Issues:</strong> Report bugs or request features on GitHub</li>
+                    </ul>
+                </div>
+            </section>
+        </div>
+
+        <!-- Footer Navigation -->
+        <footer class="footer">
+            <div class="footer-nav">
+                <a href="../index.html" class="footer-link prev">
+                    <span class="footer-link-label">Previous</span>
+                    <span class="footer-link-title">← Documentation Home</span>
+                </a>
+                <a href="../features/editor.html" class="footer-link next">
+                    <span class="footer-link-label">Next</span>
+                    <span class="footer-link-title">Rich Text Editor →</span>
+                </a>
+            </div>
+            <div class="footer-info">
+                <p>Getting Started Guide | Last Updated: September 15, 2025</p>
+            </div>
+        </footer>
+    </main>
+
+    <script src="../script.js"></script>
+</body>
+</html>

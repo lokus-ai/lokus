@@ -29,6 +29,7 @@ import PluginDetail from "./PluginDetail.jsx";
 import { canvasManager } from "../core/canvas/manager.js";
 import TemplatePicker from "../components/TemplatePicker.jsx";
 import { getMarkdownCompiler } from "../core/markdown/compiler.js";
+import CreateTemplate from "../components/CreateTemplate.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -418,6 +419,8 @@ export default function Workspace({ initialPath = "" }) {
   const [showInFileSearch, setShowInFileSearch] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [templatePickerData, setTemplatePickerData] = useState(null);
+  const [showCreateTemplate, setShowCreateTemplate] = useState(false);
+  const [createTemplateContent, setCreateTemplateContent] = useState('');
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showKanban, setShowKanban] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
@@ -839,6 +842,40 @@ export default function Workspace({ initialPath = "" }) {
     setIsCreatingFolder(false);
   };
 
+  const handleCreateTemplate = useCallback(() => {
+    // Get selected text from editor or use entire content if nothing selected
+    const getContentForTemplate = () => {
+      if (editorRef.current) {
+        const { state } = editorRef.current;
+        const { selection } = state;
+        
+        // Check if there's a selection
+        if (!selection.empty) {
+          // Get selected text
+          const selectedText = state.doc.textBetween(selection.from, selection.to);
+          console.log('[Workspace] Using selected text for template:', selectedText.substring(0, 100));
+          return selectedText;
+        } else if (activeFile) {
+          // No selection, use current file content
+          const currentContent = editorRef.current.getHTML() || editorRef.current.getText() || stateRef.current.editorContent;
+          console.log('[Workspace] Using full file content for template:', currentContent.substring(0, 100));
+          return currentContent;
+        }
+      }
+      return '';
+    };
+
+    const contentForTemplate = getContentForTemplate();
+    setCreateTemplateContent(contentForTemplate);
+    setShowCreateTemplate(true);
+  }, [activeFile]);
+
+  const handleCreateTemplateSaved = useCallback(() => {
+    // Template was saved successfully
+    setShowCreateTemplate(false);
+    setCreateTemplateContent('');
+    console.log('[Workspace] Template saved successfully');
+  }, []);
 
   const handleTabDragEnd = (event) => {
     const { active, over } = event;
@@ -1463,6 +1500,7 @@ export default function Workspace({ initialPath = "" }) {
             }
           });
         }}
+        onCreateTemplate={handleCreateTemplate}
         activeFile={activeFile}
       />
       
@@ -1495,6 +1533,13 @@ export default function Workspace({ initialPath = "" }) {
         onClose={() => setShowGlobalSearch(false)}
         onFileOpen={handleFileOpen}
         workspacePath={path}
+      />
+      
+      <CreateTemplate
+        open={showCreateTemplate}
+        onClose={() => setShowCreateTemplate(false)}
+        initialContent={createTemplateContent}
+        onSaved={handleCreateTemplateSaved}
       />
       
       {/* Enhanced Obsidian Status Bar */}

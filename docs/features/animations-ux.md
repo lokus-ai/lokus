@@ -270,3 +270,7 @@ const hoverEffect = "hover:bg-app-bg/40 transition-colors";
 - **[Accessibility](./accessibility.md)** - Accessibility considerations for animations
 - **[Performance](./performance.md)** - Performance optimization strategies
 - **[User Interface](./ui-components.md)** - Component-level animation details
+
+
+
+
