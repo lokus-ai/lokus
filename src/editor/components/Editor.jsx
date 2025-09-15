@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback, forwardRef, useImperativeHandle } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import * as StarterKitExt from "@tiptap/starter-kit";
 import * as PlaceholderExt from "@tiptap/extension-placeholder";
@@ -31,7 +31,7 @@ import liveEditorSettings from "../../core/editor/live-settings.js";
 
 import "../styles/editor.css";
 
-const Editor = ({ content, onContentChange }) => {
+const Editor = forwardRef(({ content, onContentChange }, ref) => {
   const [extensions, setExtensions] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editorSettings, setEditorSettings] = useState(null);
@@ -312,6 +312,16 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
     }
   }, [content, editor]);
 
+  // Expose editor instance to parent component via ref
+  useImperativeHandle(ref, () => ({
+    commands: editor?.commands,
+    getHTML: () => editor?.getHTML(),
+    setContent: (content) => editor?.commands?.setContent(content),
+    insertContent: (content) => editor?.commands?.insertContent(content),
+    focus: () => editor?.commands?.focus(),
+    editor
+  }), [editor]);
+
   const showDebug = useMemo(() => {
     try { const p = new URLSearchParams(window.location.search); if (p.get('dev') === '1') return true; } catch {}
     try { return !!import.meta?.env?.DEV; } catch { return false; }
@@ -427,6 +437,6 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
       </EditorContextMenu>
     </>
   );
-}
+});
 
 export default Editor;
