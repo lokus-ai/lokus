@@ -1311,42 +1311,71 @@ export default function Workspace({ initialPath = "" }) {
                   console.log('[Workspace] Inserting content into editor');
                   console.log('[Workspace] Content to insert:', processedContent);
                   
-                  // Try different insertion methods
-                  const insertMethods = [
-                    // Method 1: Standard insertContent
-                    () => editorRef.current.commands.insertContent(processedContent),
+                  // Smart template insertion with cursor positioning
+                  const insertTemplateContent = (content) => {
+                    // Check if content has {{cursor}} placeholder
+                    const cursorIndex = content.indexOf('{{cursor}}');
                     
-                    // Method 2: Focus first then insert
+                    if (cursorIndex !== -1) {
+                      // Split content at cursor position
+                      const beforeCursor = content.substring(0, cursorIndex);
+                      const afterCursor = content.substring(cursorIndex + 10); // 10 = '{{cursor}}'.length
+                      
+                      console.log('[Workspace] Template has cursor placeholder at position:', cursorIndex);
+                      console.log('[Workspace] Before cursor:', beforeCursor);
+                      console.log('[Workspace] After cursor:', afterCursor);
+                      
+                      // Insert content in parts to position cursor correctly
+                      return editorRef.current.chain()
+                        .focus()
+                        .insertContent(beforeCursor)
+                        .insertContent(afterCursor)
+                        .setTextSelection(beforeCursor.length + editorRef.current.state.selection.from)
+                        .run();
+                    } else {
+                      // No cursor placeholder, just insert normally
+                      return editorRef.current.chain()
+                        .focus()
+                        .insertContent(content)
+                        .run();
+                    }
+                  };
+                  
+                  // Try multiple insertion methods with smart cursor handling
+                  const insertMethods = [
+                    // Method 1: Smart template insertion with cursor positioning
+                    () => insertTemplateContent(processedContent),
+                    
+                    // Method 2: Standard chain operation
+                    () => editorRef.current.chain().focus().insertContent(processedContent).run(),
+                    
+                    // Method 3: Simple commands
                     () => {
                       editorRef.current.commands.focus();
                       return editorRef.current.commands.insertContent(processedContent);
                     },
                     
-                    // Method 3: Use chain for atomic operation
-                    () => editorRef.current.chain().focus().insertContent(processedContent).run(),
+                    // Method 4: Direct content insertion
+                    () => editorRef.current.commands.insertContent(processedContent),
                     
-                    // Method 4: Direct view insertion
+                    // Method 5: Manual transaction (fallback)
                     () => {
                       const { view } = editorRef.current;
                       const { state } = view;
                       const { tr } = state;
                       const pos = state.selection.from;
-                      view.dispatch(tr.insertText(processedContent, pos));
-                    },
-                    
-                    // Method 5: Replace current selection
-                    () => editorRef.current.commands.insertContentAt(
-                      editorRef.current.state.selection.from, 
-                      processedContent
-                    )
+                      // Remove {{cursor}} for fallback method
+                      const cleanContent = processedContent.replace(/\{\{cursor\}\}/g, '');
+                      view.dispatch(tr.insertText(cleanContent, pos));
+                    }
                   ];
                   
                   let inserted = false;
                   for (let i = 0; i < insertMethods.length && !inserted; i++) {
                     try {
                       console.log(`[Workspace] Trying insertion method ${i + 1}`);
-                      insertMethods[i]();
-                      console.log(`[Workspace] Content inserted successfully with method ${i + 1}`);
+                      const result = insertMethods[i]();
+                      console.log(`[Workspace] Content inserted successfully with method ${i + 1}`, result);
                       inserted = true;
                     } catch (err) {
                       console.error(`[Workspace] Method ${i + 1} failed:`, err.message);
