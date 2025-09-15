@@ -1297,8 +1297,66 @@ export default function Workspace({ initialPath = "" }) {
         }}
         onToggleSidebar={() => setShowLeft(v => !v)}
         onCloseTab={handleTabClose}
-        onShowTemplatePicker={() => {
-          console.log('[Workspace] Opening template picker');
+        onShowTemplatePicker={(templateSelection) => {
+          // Handle direct template selection from Command Palette
+          if (templateSelection && templateSelection.template && templateSelection.processedContent) {
+            console.log('[Workspace] Direct template selection from Command Palette');
+            const { template, processedContent } = templateSelection;
+            console.log('[Workspace] Template selected:', template.name);
+            console.log('[Workspace] Processed content:', processedContent);
+            console.log('[Workspace] Editor ref:', !!editorRef.current);
+            
+            if (editorRef.current && processedContent) {
+              // Process template content through markdown compiler
+              const compiler = getMarkdownCompiler()
+              
+              // Process template content through markdown compiler
+              const processedWithMarkdown = compiler.processTemplate(processedContent)
+              console.log('[Workspace] Template processed through markdown compiler:', processedWithMarkdown.substring(0, 200))
+              
+              // Smart template insertion with cursor positioning
+              const insertTemplateContent = (content) => {
+                // Check if content has {{cursor}} placeholder
+                const cursorIndex = content.indexOf('{{cursor}}');
+                
+                if (cursorIndex !== -1) {
+                  // Split content at cursor position
+                  const beforeCursor = content.substring(0, cursorIndex);
+                  const afterCursor = content.substring(cursorIndex + 10); // 10 = '{{cursor}}'.length
+                  
+                  console.log('[Workspace] Template has cursor placeholder at position:', cursorIndex);
+                  console.log('[Workspace] Before cursor:', beforeCursor);
+                  console.log('[Workspace] After cursor:', afterCursor);
+                  
+                  // Insert content in parts to position cursor correctly
+                  return editorRef.current.chain()
+                    .focus()
+                    .insertContent(beforeCursor)
+                    .insertContent(afterCursor)
+                    .setTextSelection(beforeCursor.length + editorRef.current.state.selection.from)
+                    .run();
+                } else {
+                  // No cursor placeholder, just insert normally
+                  return editorRef.current.chain()
+                    .focus()
+                    .insertContent(content)
+                    .run();
+                }
+              };
+              
+              try {
+                console.log('[Workspace] Inserting template content from Command Palette');
+                insertTemplateContent(processedWithMarkdown);
+                console.log('[Workspace] Template inserted successfully');
+              } catch (err) {
+                console.error('[Workspace] Failed to insert template from Command Palette:', err);
+              }
+            }
+            return;
+          }
+          
+          // Fall back to opening template picker modal
+          console.log('[Workspace] Opening template picker modal');
           setShowTemplatePicker(true);
           setTemplatePickerData({
             editorState: { editor: editorRef.current },

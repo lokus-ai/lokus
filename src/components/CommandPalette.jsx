@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { getActiveShortcuts, formatAccelerator } from '../core/shortcuts/registry'
 import { useCommandHistory, createFileHistoryItem, createCommandHistoryItem } from '../hooks/useCommandHistory.js'
+import { useTemplates, useTemplateProcessor } from '../hooks/useTemplates.js'
 
 export default function CommandPalette({ 
   open, 
@@ -43,6 +44,8 @@ export default function CommandPalette({
   const [shortcuts, setShortcuts] = useState({})
   const [recentFiles, setRecentFiles] = useState([])
   const { formattedHistory, addToHistory, removeFromHistory, clearHistory } = useCommandHistory()
+  const { templates } = useTemplates()
+  const { process: processTemplate } = useTemplateProcessor()
 
   useEffect(() => {
     getActiveShortcuts().then(setShortcuts)
@@ -73,6 +76,44 @@ export default function CommandPalette({
     const historyItem = createCommandHistoryItem(commandName, commandData)
     runCommand(command, historyItem)
   }, [runCommand])
+
+  // Handle template selection
+  const handleTemplateSelect = React.useCallback(async (template) => {
+    console.log('[CommandPalette] Selecting template:', template.name)
+    
+    try {
+      // Process the template with built-in variables
+      const result = await processTemplate(template.id, {}, {
+        context: {}
+      })
+      
+      console.log('[CommandPalette] Template processed successfully')
+      
+      // Call onShowTemplatePicker with processed content
+      if (onShowTemplatePicker) {
+        // Create a mock event that mimics the TemplatePicker selection
+        const mockSelection = {
+          template,
+          processedContent: result.result || result.content || result
+        }
+        onShowTemplatePicker(mockSelection)
+      }
+      
+      // Close command palette
+      setOpen(false)
+    } catch (err) {
+      console.error('[CommandPalette] Failed to process template:', err)
+      // Fallback to raw template content
+      if (onShowTemplatePicker) {
+        const mockSelection = {
+          template,
+          processedContent: template.content
+        }
+        onShowTemplatePicker(mockSelection)
+      }
+      setOpen(false)
+    }
+  }, [processTemplate, onShowTemplatePicker, setOpen])
 
   // Flatten file tree for search
   const flattenFileTree = (entries, path = '') => {
@@ -193,14 +234,18 @@ export default function CommandPalette({
                 <span>Close Tab</span>
                 <CommandShortcut>{formatAccelerator(shortcuts['close-tab'])}</CommandShortcut>
               </CommandItem>
-              <CommandItem 
-                onSelect={() => runCommandWithHistory(() => onShowTemplatePicker && onShowTemplatePicker(), 'Insert Template')}
-                disabled={!onShowTemplatePicker}
-              >
-                <FileText className="mr-2 h-4 w-4" />
-                <span>Insert Template</span>
-                <CommandShortcut>T</CommandShortcut>
-              </CommandItem>
+              {/* Individual template commands */}
+              {templates.map((template) => (
+                <CommandItem
+                  key={template.id}
+                  onSelect={() => runCommandWithHistory(() => handleTemplateSelect(template), `Template: ${template.name}`, { templateId: template.id })}
+                  disabled={!onShowTemplatePicker}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  <span>Template: {template.name}</span>
+                  <CommandShortcut className="text-xs">{template.category}</CommandShortcut>
+                </CommandItem>
+              ))}
             </>
           )}
         </CommandGroup>
