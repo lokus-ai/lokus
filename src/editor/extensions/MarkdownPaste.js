@@ -31,32 +31,44 @@ const MarkdownPaste = Extension.create({
               text: text?.substring(0, 100) 
             })
 
-            // Skip processing if HTML content is also present (avoid double-processing rich text)
-            if (html && html.trim()) {
+            // Skip processing if HTML content is present and looks like rich formatted content
+            // But allow processing if HTML is just basic/minimal (often happens with markdown sources)
+            if (html && html.trim() && isRichHTML(html)) {
+              console.log('[MarkdownPaste] Skipping - rich HTML detected')
               return false
             }
 
-            // Process text that looks like markdown (prioritize plain text, but also handle rich text sources)
-            if (text && isMarkdownContent(text)) {
+            // Force process if user has markdown content
+            // This is more aggressive - when in doubt, try to process as markdown
+            const shouldProcessAsMarkdown = text && (
+              isMarkdownContent(text) || 
+              isLikelyMarkdown(text) ||
+              // Force process if text contains line breaks and is longer than 20 chars
+              (text.length > 20 && text.includes('\n'))
+            )
+
+            if (shouldProcessAsMarkdown) {
               console.log('[MarkdownPaste] Converting markdown content...')
+              console.log('[MarkdownPaste] Input text:', text.substring(0, 200))
               
               try {
                 const md = new MarkdownIt({
                   html: true,
                   linkify: true,
                   typographer: true,
+                  breaks: true,  // Convert line breaks to <br>
                 })
                   .use(markdownItMark)
                   .use(markdownItStrikethrough)
 
                 const htmlContent = md.render(text)
-                console.log('[MarkdownPaste] Converted HTML:', htmlContent)
+                console.log('[MarkdownPaste] Converted HTML:', htmlContent.substring(0, 300))
 
                 // Prevent default paste
                 event.preventDefault()
 
                 // Insert the converted HTML
-                editor.chain()
+                const inserted = editor.chain()
                   .focus()
                   .insertContent(htmlContent, {
                     parseOptions: {
@@ -65,6 +77,7 @@ const MarkdownPaste = Extension.create({
                   })
                   .run()
 
+                console.log('[MarkdownPaste] Insertion result:', inserted)
                 return true
               } catch (error) {
                 console.error('[MarkdownPaste] Conversion failed:', error)
@@ -100,6 +113,62 @@ function isMarkdownContent(text) {
   ]
 
   return markdownPatterns.some(pattern => pattern.test(text))
+}
+
+function isRichHTML(html) {
+  if (!html || typeof html !== 'string') return false
+  
+  // Check for rich formatting that indicates this is already formatted content
+  // rather than simple HTML that might accompany markdown
+  const richHTMLPatterns = [
+    /<(div|span)[^>]*style[^>]*>/i,    // Inline styles
+    /<(b|strong|i|em|u|font)[^>]*>/i,  // Rich text formatting tags
+    /<img[^>]*>/i,                     // Images with HTML
+    /<table[^>]*>/i,                   // HTML tables
+    /<(h[1-6])[^>]*>/i,               // HTML headings (vs markdown)
+    /<p[^>]*class[^>]*>/i,            // Styled paragraphs
+    /<[^>]*color[^>]*>/i,             // Color styling
+  ]
+
+  // Also check for complex HTML structure
+  const tagCount = (html.match(/<[^>]+>/g) || []).length
+  const hasComplexStructure = tagCount > 3 // More than simple wrapping tags
+  
+  return richHTMLPatterns.some(pattern => pattern.test(html)) || hasComplexStructure
+}
+
+function isLikelyMarkdown(text) {
+  if (!text || typeof text !== 'string') return false
+  
+  // More aggressive detection for content that should be processed as markdown
+  const indicators = [
+    // Multiple lines with consistent markdown-like patterns
+    /^.+\n.+/m,                        // Multi-line content (often markdown)
+    /\n\s*\n/,                         // Double line breaks (markdown paragraphs)
+    /^[A-Z][^.!?]*[.!?]\s*$/m,        // Sentence-like lines (might be headings)
+    /\w+:\s*\w+/,                      // Key-value pairs (metadata)
+    /^\w+.*$/m,                        // Simple text lines (benefit from markdown processing)
+  ]
+  
+  // Count how many markdown-like characteristics this text has
+  let score = 0
+  
+  // Length bonus (longer text more likely to be markdown content)
+  if (text.length > 50) score += 1
+  if (text.length > 200) score += 1
+  
+  // Line count bonus (markdown often multi-line)
+  const lineCount = text.split('\n').length
+  if (lineCount > 2) score += 1
+  if (lineCount > 5) score += 1
+  
+  // Pattern matching
+  indicators.forEach(pattern => {
+    if (pattern.test(text)) score += 1
+  })
+  
+  // If it has any explicit markdown OR scores high on likelihood, process it
+  return score >= 2
 }
 
 export default MarkdownPaste
