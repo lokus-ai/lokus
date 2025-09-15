@@ -6,7 +6,7 @@ import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerS
 import { DraggableTab } from "./DraggableTab";
 import { Menu, FilePlus2, FolderPlus, Search, Share2, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package } from "lucide-react";
 import LokusLogo from "../components/LokusLogo.jsx";
-// import GraphView from "./GraphView.jsx"; // Temporarily disabled
+import GraphView from "./GraphView.jsx";
 import Editor from "../editor";
 import Canvas from "./Canvas.jsx";
 import FileContextMenu from "../components/FileContextMenu.jsx";
@@ -412,13 +412,13 @@ export default function Workspace({ initialPath = "" }) {
   const [editorContent, setEditorContent] = useState("");
   const [editorTitle, setEditorTitle] = useState("");
   const [savedContent, setSavedContent] = useState("");
-  const [showGraph, setShowGraph] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showInFileSearch, setShowInFileSearch] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showKanban, setShowKanban] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
   const [showMarketplace, setShowMarketplace] = useState(false);
+  // Graph view now opens as a tab instead of sidebar panel
   
   // --- Refs for stable callbacks ---
   const stateRef = useRef({});
@@ -933,6 +933,27 @@ export default function Workspace({ initialPath = "" }) {
             </button>
             
             <button
+              onClick={() => {
+                // Open graph as a tab in the main editor area
+                const graphTabId = 'graph-view';
+                if (!openTabs.some(tab => tab.id === graphTabId)) {
+                  const newTab = {
+                    id: graphTabId,
+                    path: graphTabId,
+                    title: 'Graph View',
+                    type: 'graph'
+                  };
+                  setOpenTabs(prev => [...prev, newTab]);
+                }
+                setActiveFile(graphTabId);
+              }}
+              title="Graph View"
+              className={`obsidian-button icon-only w-full mb-1 ${activeFile === 'graph-view' ? 'primary' : ''}`}
+            >
+              <Share2 className="w-5 h-5" />
+            </button>
+            
+            <button
               onClick={() => { 
                 setShowPlugins(true); 
                 setShowKanban(false);
@@ -1105,6 +1126,13 @@ export default function Workspace({ initialPath = "" }) {
                       const activeTab = openTabs.find(tab => tab.path === activeFile);
                       return activeTab?.plugin ? <PluginDetail plugin={activeTab.plugin} /> : <div>Plugin not found</div>;
                     })()}
+                  </div>
+                ) : activeFile === 'graph-view' ? (
+                  <div className="flex-1 overflow-hidden">
+                    <GraphView 
+                      workspacePath={path} 
+                      onOpenFile={handleFileOpen}
+                    />
                   </div>
                 ) : activeFile ? (
                 <ContextMenu>
