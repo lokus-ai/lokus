@@ -20,8 +20,7 @@ import {
   ToggleLeft,
   Clock,
   History,
-  Trash2,
-  FileTemplate
+  Trash2
 } from 'lucide-react'
 import { getActiveShortcuts, formatAccelerator } from '../core/shortcuts/registry'
 import { useCommandHistory, createFileHistoryItem, createCommandHistoryItem } from '../hooks/useCommandHistory.js'
@@ -198,7 +197,7 @@ export default function CommandPalette({
                 onSelect={() => runCommandWithHistory(() => onShowTemplatePicker && onShowTemplatePicker(), 'Insert Template')}
                 disabled={!onShowTemplatePicker}
               >
-                <FileTemplate className="mr-2 h-4 w-4" />
+                <FileText className="mr-2 h-4 w-4" />
                 <span>Insert Template</span>
                 <CommandShortcut>T</CommandShortcut>
               </CommandItem>
