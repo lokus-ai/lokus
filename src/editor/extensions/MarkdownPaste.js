@@ -1,8 +1,6 @@
 import { Extension } from '@tiptap/core'
 import { Plugin } from '@tiptap/pm/state'
-import MarkdownIt from "markdown-it"
-import markdownItMark from "markdown-it-mark"
-import markdownItStrikethrough from "markdown-it-strikethrough-alt"
+import { getMarkdownCompiler } from '../../core/markdown/compiler.js'
 
 const MarkdownPaste = Extension.create({
   name: 'markdownPaste',
@@ -28,75 +26,49 @@ const MarkdownPaste = Extension.create({
             console.log('[MarkdownPaste] Paste event:', { 
               hasText: !!text, 
               hasHtml: !!html, 
-              text: text?.substring(0, 100),
-              html: html?.substring(0, 100),
               textLength: text?.length,
-              htmlLength: html?.length
+              htmlLength: html?.length,
+              textSample: text?.substring(0, 100)
             })
 
-            // Skip processing if HTML content is present and looks like rich formatted content
-            // But allow processing if HTML is just basic/minimal (often happens with markdown sources)
-            if (html && html.trim() && isRichHTML(html)) {
-              console.log('[MarkdownPaste] Skipping - rich HTML detected:', html.substring(0, 200))
+            // Skip if we already have rich HTML content
+            if (html && html.trim() && html.length > text?.length) {
+              console.log('[MarkdownPaste] Rich HTML detected, skipping markdown processing')
               return false
-            } else if (html && html.trim()) {
-              console.log('[MarkdownPaste] HTML present but seems basic, will process if text looks like markdown:', html.substring(0, 200))
             }
 
-            // Force process if user has markdown content
-            // This is more aggressive - when in doubt, try to process as markdown
-            const hasExplicitMarkdown = text && isMarkdownContent(text)
-            const seemsLikeMarkdown = text && isLikelyMarkdown(text)
-            const hasLineBreaksAndLength = text && text.length > 20 && text.includes('\n')
-            
-            console.log('[MarkdownPaste] Detection results:', {
-              hasExplicitMarkdown,
-              seemsLikeMarkdown, 
-              hasLineBreaksAndLength,
-              textSample: text?.substring(0, 150)
-            })
-            
-            const shouldProcessAsMarkdown = text && (
-              hasExplicitMarkdown || 
-              seemsLikeMarkdown ||
-              hasLineBreaksAndLength
-            )
-
-            if (shouldProcessAsMarkdown) {
-              console.log('[MarkdownPaste] Converting markdown content...')
-              console.log('[MarkdownPaste] Input text:', text.substring(0, 200))
+            // Use our universal markdown compiler
+            if (text) {
+              const compiler = getMarkdownCompiler()
               
-              try {
-                const md = new MarkdownIt({
-                  html: true,
-                  linkify: true,
-                  typographer: true,
-                  breaks: true,  // Convert line breaks to <br>
-                })
-                  .use(markdownItMark)
-                  .use(markdownItStrikethrough)
+              if (compiler.isMarkdown(text)) {
+                console.log('[MarkdownPaste] Markdown detected, processing...')
+                
+                try {
+                  // Prevent default paste
+                  event.preventDefault()
 
-                const htmlContent = md.render(text)
-                console.log('[MarkdownPaste] Converted HTML:', htmlContent.substring(0, 300))
+                  // Compile markdown to HTML
+                  const htmlContent = compiler.compile(text)
+                  
+                  // Insert the converted HTML
+                  const inserted = editor.chain()
+                    .focus()
+                    .insertContent(htmlContent, {
+                      parseOptions: {
+                        preserveWhitespace: 'full',
+                      }
+                    })
+                    .run()
 
-                // Prevent default paste
-                event.preventDefault()
-
-                // Insert the converted HTML
-                const inserted = editor.chain()
-                  .focus()
-                  .insertContent(htmlContent, {
-                    parseOptions: {
-                      preserveWhitespace: 'full',
-                    }
-                  })
-                  .run()
-
-                console.log('[MarkdownPaste] Insertion result:', inserted)
-                return true
-              } catch (error) {
-                console.error('[MarkdownPaste] Conversion failed:', error)
-                return false
+                  console.log('[MarkdownPaste] Successfully inserted compiled markdown')
+                  return true
+                } catch (error) {
+                  console.error('[MarkdownPaste] Compilation failed:', error)
+                  return false
+                }
+              } else {
+                console.log('[MarkdownPaste] Text not detected as markdown')
               }
             }
 
@@ -107,84 +79,5 @@ const MarkdownPaste = Extension.create({
     ]
   },
 })
-
-function isMarkdownContent(text) {
-  if (!text || typeof text !== 'string') return false
-  
-  const markdownPatterns = [
-    /\*\*[^*]+\*\*/,        // **bold**
-    /\*[^*]+\*/,            // *italic*
-    /~~[^~]+~~/,            // ~~strikethrough~~
-    /==[^=]+=/,             // ==highlight==
-    /`[^`]+`/,              // `code`
-    /^#{1,6}\s+/m,          // # headings
-    /^>\s+/m,               // > blockquotes
-    /^[-*+]\s+/m,           // - lists
-    /^\d+\.\s+/m,           // 1. numbered lists
-    /^\|.+\|/m,             // | table |
-    /\[[^\]]*\]\([^)]*\)/,  // [link](url)
-    /```[\s\S]*?```/,       // ```code blocks```
-    /^\s*- \[[x\s]\]/m,     // - [x] task lists
-  ]
-
-  return markdownPatterns.some(pattern => pattern.test(text))
-}
-
-function isRichHTML(html) {
-  if (!html || typeof html !== 'string') return false
-  
-  // Check for rich formatting that indicates this is already formatted content
-  // rather than simple HTML that might accompany markdown
-  const richHTMLPatterns = [
-    /<(div|span)[^>]*style[^>]*>/i,    // Inline styles
-    /<(b|strong|i|em|u|font)[^>]*>/i,  // Rich text formatting tags
-    /<img[^>]*>/i,                     // Images with HTML
-    /<table[^>]*>/i,                   // HTML tables
-    /<(h[1-6])[^>]*>/i,               // HTML headings (vs markdown)
-    /<p[^>]*class[^>]*>/i,            // Styled paragraphs
-    /<[^>]*color[^>]*>/i,             // Color styling
-  ]
-
-  // Also check for complex HTML structure
-  const tagCount = (html.match(/<[^>]+>/g) || []).length
-  const hasComplexStructure = tagCount > 3 // More than simple wrapping tags
-  
-  return richHTMLPatterns.some(pattern => pattern.test(html)) || hasComplexStructure
-}
-
-function isLikelyMarkdown(text) {
-  if (!text || typeof text !== 'string') return false
-  
-  // More aggressive detection for content that should be processed as markdown
-  const indicators = [
-    // Multiple lines with consistent markdown-like patterns
-    /^.+\n.+/m,                        // Multi-line content (often markdown)
-    /\n\s*\n/,                         // Double line breaks (markdown paragraphs)
-    /^[A-Z][^.!?]*[.!?]\s*$/m,        // Sentence-like lines (might be headings)
-    /\w+:\s*\w+/,                      // Key-value pairs (metadata)
-    /^\w+.*$/m,                        // Simple text lines (benefit from markdown processing)
-  ]
-  
-  // Count how many markdown-like characteristics this text has
-  let score = 0
-  
-  // Length bonus (longer text more likely to be markdown content)
-  if (text.length > 50) score += 1
-  if (text.length > 200) score += 1
-  
-  // Line count bonus (markdown often multi-line)
-  const lineCount = text.split('\n').length
-  if (lineCount > 2) score += 1
-  if (lineCount > 5) score += 1
-  
-  // Pattern matching
-  indicators.forEach(pattern => {
-    if (pattern.test(text)) score += 1
-  })
-  
-  // If it has any explicit markdown OR scores high on likelihood, process it
-  // Lowered threshold to be more aggressive about processing content
-  return score >= 1
-}
 
 export default MarkdownPaste

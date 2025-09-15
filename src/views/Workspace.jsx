@@ -1311,6 +1311,14 @@ export default function Workspace({ initialPath = "" }) {
                   console.log('[Workspace] Inserting content into editor');
                   console.log('[Workspace] Content to insert:', processedContent);
                   
+                  // Import markdown compiler for template processing
+                  const { getMarkdownCompiler } = await import('../core/markdown/compiler.js')
+                  const compiler = getMarkdownCompiler()
+                  
+                  // Process template content through markdown compiler
+                  const processedWithMarkdown = compiler.processTemplate(processedContent)
+                  console.log('[Workspace] Template processed through markdown compiler:', processedWithMarkdown.substring(0, 200))
+                  
                   // Smart template insertion with cursor positioning
                   const insertTemplateContent = (content) => {
                     // Check if content has {{cursor}} placeholder
@@ -1343,29 +1351,29 @@ export default function Workspace({ initialPath = "" }) {
                   
                   // Try multiple insertion methods with smart cursor handling
                   const insertMethods = [
-                    // Method 1: Smart template insertion with cursor positioning
-                    () => insertTemplateContent(processedContent),
+                    // Method 1: Smart template insertion with cursor positioning (markdown processed)
+                    () => insertTemplateContent(processedWithMarkdown),
                     
-                    // Method 2: Standard chain operation
-                    () => editorRef.current.chain().focus().insertContent(processedContent).run(),
+                    // Method 2: Standard chain operation (markdown processed)
+                    () => editorRef.current.chain().focus().insertContent(processedWithMarkdown).run(),
                     
-                    // Method 3: Simple commands
+                    // Method 3: Simple commands (markdown processed)
                     () => {
                       editorRef.current.commands.focus();
-                      return editorRef.current.commands.insertContent(processedContent);
+                      return editorRef.current.commands.insertContent(processedWithMarkdown);
                     },
                     
-                    // Method 4: Direct content insertion
-                    () => editorRef.current.commands.insertContent(processedContent),
+                    // Method 4: Direct content insertion (markdown processed)
+                    () => editorRef.current.commands.insertContent(processedWithMarkdown),
                     
-                    // Method 5: Manual transaction (fallback)
+                    // Method 5: Manual transaction (fallback, clean content)
                     () => {
                       const { view } = editorRef.current;
                       const { state } = view;
                       const { tr } = state;
                       const pos = state.selection.from;
-                      // Remove {{cursor}} for fallback method
-                      const cleanContent = processedContent.replace(/\{\{cursor\}\}/g, '');
+                      // Remove {{cursor}} and use markdown processed content for fallback
+                      const cleanContent = processedWithMarkdown.replace(/\{\{cursor\}\}/g, '');
                       view.dispatch(tr.insertText(cleanContent, pos));
                     }
                   ];
