@@ -28,23 +28,38 @@ const MarkdownPaste = Extension.create({
             console.log('[MarkdownPaste] Paste event:', { 
               hasText: !!text, 
               hasHtml: !!html, 
-              text: text?.substring(0, 100) 
+              text: text?.substring(0, 100),
+              html: html?.substring(0, 100),
+              textLength: text?.length,
+              htmlLength: html?.length
             })
 
             // Skip processing if HTML content is present and looks like rich formatted content
             // But allow processing if HTML is just basic/minimal (often happens with markdown sources)
             if (html && html.trim() && isRichHTML(html)) {
-              console.log('[MarkdownPaste] Skipping - rich HTML detected')
+              console.log('[MarkdownPaste] Skipping - rich HTML detected:', html.substring(0, 200))
               return false
+            } else if (html && html.trim()) {
+              console.log('[MarkdownPaste] HTML present but seems basic, will process if text looks like markdown:', html.substring(0, 200))
             }
 
             // Force process if user has markdown content
             // This is more aggressive - when in doubt, try to process as markdown
+            const hasExplicitMarkdown = text && isMarkdownContent(text)
+            const seemsLikeMarkdown = text && isLikelyMarkdown(text)
+            const hasLineBreaksAndLength = text && text.length > 20 && text.includes('\n')
+            
+            console.log('[MarkdownPaste] Detection results:', {
+              hasExplicitMarkdown,
+              seemsLikeMarkdown, 
+              hasLineBreaksAndLength,
+              textSample: text?.substring(0, 150)
+            })
+            
             const shouldProcessAsMarkdown = text && (
-              isMarkdownContent(text) || 
-              isLikelyMarkdown(text) ||
-              // Force process if text contains line breaks and is longer than 20 chars
-              (text.length > 20 && text.includes('\n'))
+              hasExplicitMarkdown || 
+              seemsLikeMarkdown ||
+              hasLineBreaksAndLength
             )
 
             if (shouldProcessAsMarkdown) {
@@ -168,7 +183,8 @@ function isLikelyMarkdown(text) {
   })
   
   // If it has any explicit markdown OR scores high on likelihood, process it
-  return score >= 2
+  // Lowered threshold to be more aggressive about processing content
+  return score >= 1
 }
 
 export default MarkdownPaste
