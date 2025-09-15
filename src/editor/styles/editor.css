@@ -406,6 +406,18 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
     overflow-x: auto;
 }
 
+.ProseMirror .math-empty {
+    opacity: 0.5;
+    font-style: italic;
+    color: rgb(var(--muted-foreground));
+    border: 1px dashed rgb(var(--border) / 0.5);
+}
+
+.ProseMirror .math-empty:hover {
+    opacity: 0.8;
+    cursor: pointer;
+}
+
 /* Interactive task styles */
 .ProseMirror .editor-task {
   display: inline-flex;

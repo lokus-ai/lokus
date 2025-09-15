@@ -31,19 +31,35 @@ fn save_last_workspace(app: tauri::AppHandle, path: String) {
 }
 
 #[tauri::command]
-fn save_session_state(app: tauri::AppHandle, open_tabs: Vec<String>, expanded_folders: Vec<String>) {
+fn save_session_state(app: tauri::AppHandle, workspace_path: String, open_tabs: Vec<String>, expanded_folders: Vec<String>) {
     let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
     let _ = store.reload();
     let session = SessionState { open_tabs, expanded_folders };
-    let _ = store.set("session_state".to_string(), serde_json::to_value(session).unwrap());
+    
+    // Create workspace-specific key by hashing the path
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    workspace_path.hash(&mut hasher);
+    let workspace_key = format!("session_state_{}", hasher.finish());
+    
+    let _ = store.set(workspace_key, serde_json::to_value(session).unwrap());
     let _ = store.save();
 }
 
 #[tauri::command]
-fn load_session_state(app: tauri::AppHandle) -> Option<SessionState> {
+fn load_session_state(app: tauri::AppHandle, workspace_path: String) -> Option<SessionState> {
     let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
     let _ = store.reload();
-    store.get("session_state").and_then(|value| serde_json::from_value(value.clone()).ok())
+    
+    // Create workspace-specific key by hashing the path
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    workspace_path.hash(&mut hasher);
+    let workspace_key = format!("session_state_{}", hasher.finish());
+    
+    store.get(&workspace_key).and_then(|value| serde_json::from_value(value.clone()).ok())
 }
 
 fn main() {
