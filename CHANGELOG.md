@@ -5,6 +5,72 @@ All notable changes to Lokus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2025-09-15
+
+### 🎯 Major Features
+
+#### 📋 Universal Template System
+- **Complete Template Engine** - Create, manage, and use text templates with variable substitution
+- **Template Creation Dialog** - Professional interface with live markdown preview
+- **Smart Template Workflow** - Select text → Cmd+K → "Save as Template" → Configure → Save
+- **Template Variables** - Built-in support for `{{date}}`, `{{time}}`, `{{datetime}}`, and `{{cursor}}`
+- **Category Organization** - Organize templates by category for better management
+- **Selection-based Creation** - Convert selected text directly into reusable templates
+
+#### 🔄 Universal Markdown Compiler
+- **Middleware Architecture** - Centralized markdown processing bypassing TipTap limitations
+- **Consistent Rendering** - Unified markdown compilation across all features
+- **Enhanced Compatibility** - Improved markdown detection and processing
+- **Template Integration** - Native markdown compilation for template preview
+
+#### ⚡ Enhanced Command Palette
+- **Template Integration** - Access and apply templates directly from command palette
+- **Command History** - Track and revisit recent commands across sessions
+- **Unified Workflow** - Single interface for all app operations
+- **Smart Search** - Improved command discovery and execution
+
+#### 📚 Modern Documentation Website
+- **Professional Design** - Clean, responsive documentation interface
+- **Sidebar Navigation** - Hierarchical organization of documentation sections
+- **Search Functionality** - Fast content discovery across all documentation
+- **Mobile Responsive** - Optimized reading experience on all devices
+
+### 🛠 Technical Improvements
+
+#### Architecture Enhancements
+- **Shared Markdown Compiler** - Reusable markdown processing across features
+- **Selection-aware APIs** - Template creation from editor selection state
+- **Command History Persistence** - Local storage integration for command tracking
+- **Variable Resolution Engine** - Extensible system for template variable processing
+
+#### Performance Optimizations
+- **Efficient Template Rendering** - Optimized live preview updates
+- **Smart Re-rendering** - Reduced unnecessary component updates
+- **Debounced Operations** - Smooth user experience during rapid interactions
+
+### 🐛 Bug Fixes
+- **Markdown Paste Detection** - Fixed issues with markdown content recognition
+- **Template Variable Parsing** - Improved variable substitution reliability
+- **Command Palette Focus** - Enhanced keyboard navigation and focus management
+- **Selection Handling** - Better text selection preservation during template operations
+
+### 🎨 UI/UX Improvements
+- **Template Creation Interface** - Intuitive dialog with real-time preview
+- **Command Palette Design** - Enhanced visual hierarchy and interaction patterns
+- **Documentation Layout** - Professional sidebar navigation with improved readability
+- **Responsive Adaptations** - Better mobile and tablet experience
+
+### 📁 File Organization
+- **Template Storage** - Organized template persistence and retrieval
+- **Documentation Structure** - Logical organization of help content
+- **Asset Management** - Efficient handling of documentation resources
+
+### 🔮 Developer Experience
+- **Template API** - Clean interfaces for template operations
+- **Markdown Utilities** - Reusable compilation and processing functions
+- **Command System** - Extensible command registration and execution
+- **Documentation Tools** - Streamlined content creation and management
+
 ## [1.0.0] - 2025-09-14
 
 ### 🚀 Initial Release
