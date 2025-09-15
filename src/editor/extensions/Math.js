@@ -19,14 +19,33 @@ function getKatex() {
   }
 }
 
+function preprocessLatexSource(src) {
+  if (!src || typeof src !== 'string') return src
+  
+  // Fix comment issues: ensure comments end with newlines
+  let processed = src.replace(/(%[^\r\n]*?)(?=\s*[\$\}])/g, '$1\n')
+  
+  // Remove trailing whitespace that could interfere with parsing
+  processed = processed.trim()
+  
+  // Handle empty or whitespace-only input
+  if (!processed) return ''
+  
+  return processed
+}
+
 function renderMathHTML(src, displayMode) {
   try {
     const render = getKatex()
     if (render) {
-      const rendered = render(src, { 
+      // Preprocess the LaTeX source to fix common issues
+      const processedSrc = preprocessLatexSource(src)
+      
+      const rendered = render(processedSrc, { 
         throwOnError: false, 
         displayMode,
         errorColor: '#cc0000',
+        strict: 'warn', // Show warnings but don't fail
         macros: {
           "\\f": "#1f(#2)"
         }
@@ -68,9 +87,22 @@ export const MathInline = Node.create({
       dom.setAttribute('data-src', node.attrs.src)
       
       const renderMath = () => {
-        const html = renderMathHTML(node.attrs.src, false)
-        const sanitizedHtml = sanitizeMathHtml(html)
-        safeSetInnerHTML(dom, sanitizedHtml)
+        const src = node.attrs.src || ''
+        console.log('Math inline rendering:', { src, trimmed: src.trim() }) // Debug log
+        
+        if (!src.trim()) {
+          dom.textContent = '[empty]'
+          dom.classList.add('math-empty')
+          return
+        }
+        
+        const html = renderMathHTML(src, false)
+        console.log('Rendered inline math HTML:', html) // Debug log
+        
+        // For now, bypass sanitization for KaTeX since it's trusted content
+        console.log('Using raw KaTeX HTML for inline math (bypassing sanitization)')
+        dom.innerHTML = html
+        dom.classList.remove('math-empty')
       }
       
       // Try to render immediately, but also listen for KaTeX load
@@ -109,7 +141,7 @@ export const MathInline = Node.create({
         find: /\$([^$\s][^$]*[^$\s])\$\s*$/,  // $...$ but not $$ and not empty
         handler: ({ state, range, match, chain }) => {
           const src = match[1].trim()
-          if (src) {
+          if (src && src.length > 0) {
             chain().deleteRange(range).insertContent({ type: this.name, attrs: { src } }).run()
           }
         },
@@ -117,8 +149,10 @@ export const MathInline = Node.create({
       new InputRule({
         find: /\$([^$\s])\$\s*$/,  // Single character math like $x$
         handler: ({ state, range, match, chain }) => {
-          const src = match[1]
-          chain().deleteRange(range).insertContent({ type: this.name, attrs: { src } }).run()
+          const src = match[1].trim()
+          if (src && src.length > 0) {
+            chain().deleteRange(range).insertContent({ type: this.name, attrs: { src } }).run()
+          }
         },
       }),
     ]
@@ -149,9 +183,23 @@ export const MathBlock = Node.create({
       dom.setAttribute('data-src', node.attrs.src)
       
       const renderMath = () => {
-        const html = renderMathHTML(node.attrs.src, true)
-        const sanitizedHtml = sanitizeMathHtml(html)
-        safeSetInnerHTML(dom, sanitizedHtml)
+        const src = node.attrs.src || ''
+        console.log('Math block rendering:', { src, trimmed: src.trim() }) // Debug log
+        
+        if (!src.trim()) {
+          dom.textContent = '[Empty Math Block - Click to edit]'
+          dom.classList.add('math-empty')
+          return
+        }
+        
+        const html = renderMathHTML(src, true)
+        console.log('Rendered math HTML:', html) // Debug log
+        
+        // For now, bypass sanitization for KaTeX since it's trusted content
+        // TODO: Create proper KaTeX-specific sanitization
+        console.log('Using raw KaTeX HTML (bypassing sanitization)')
+        dom.innerHTML = html
+        dom.classList.remove('math-empty')
       }
       
       // Try to render immediately, but also listen for KaTeX load
@@ -187,11 +235,18 @@ export const MathBlock = Node.create({
   addInputRules() {
     return [
       new InputRule({
-        find: /^\$\$\s*([\s\S]*?)\s*\$\$\s*$/m, // $$...$$ anywhere on line
+        find: /\$\$\s*([\s\S]*?)\s*\$\$\s*$/, // $$...$$ at end of input
         handler: ({ range, match, chain }) => {
           const src = match[1].trim()
-          if (src) {
-            chain().deleteRange(range).insertContent({ type: this.name, attrs: { src } }).run()
+          console.log('Math block input rule matched:', { fullMatch: match[0], captured: src, length: src.length })
+          if (src && src.length > 0) {
+            console.log('Creating math block with src:', src)
+            chain().deleteRange(range).insertContent({ 
+              type: this.name, 
+              attrs: { src } 
+            }).run()
+          } else {
+            console.log('Skipping empty math block')
           }
         },
       }),

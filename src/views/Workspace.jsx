@@ -434,23 +434,25 @@ export default function Workspace({ initialPath = "" }) {
 
   // Load session state on initial mount
   useEffect(() => {
-    invoke("load_session_state").then(session => {
-      if (session && session.open_tabs) {
-        setExpandedFolders(new Set(session.expanded_folders || []));
-        
-        const tabsWithNames = session.open_tabs.map(p => ({
-          path: p,
-          name: p.split('/').pop()
-        }));
-        
-        setOpenTabs(tabsWithNames);
-        
-        if (tabsWithNames.length > 0) {
-          setActiveFile(tabsWithNames[0].path);
+    if (path) {
+      invoke("load_session_state", { workspacePath: path }).then(session => {
+        if (session && session.open_tabs) {
+          setExpandedFolders(new Set(session.expanded_folders || []));
+          
+          const tabsWithNames = session.open_tabs.map(p => ({
+            path: p,
+            name: p.split('/').pop()
+          }));
+          
+          setOpenTabs(tabsWithNames);
+          
+          if (tabsWithNames.length > 0) {
+            setActiveFile(tabsWithNames[0].path);
+          }
         }
-      }
-    });
-  }, []);
+      });
+    }
+  }, [path]);
 
   // Load shortcuts map for hints and keep it fresh
   useEffect(() => {
@@ -472,12 +474,14 @@ export default function Workspace({ initialPath = "" }) {
   // Save session state on change (debounced)
   useEffect(() => {
     const saveTimeout = setTimeout(() => {
-      const tabPaths = openTabs.map(t => t.path);
-      const folderPaths = Array.from(expandedFolders);
-      invoke("save_session_state", { openTabs: tabPaths, expandedFolders: folderPaths });
+      if (path) {
+        const tabPaths = openTabs.map(t => t.path);
+        const folderPaths = Array.from(expandedFolders);
+        invoke("save_session_state", { workspacePath: path, openTabs: tabPaths, expandedFolders: folderPaths });
+      }
     }, 500);
     return () => clearTimeout(saveTimeout);
-  }, [openTabs, expandedFolders]);
+  }, [openTabs, expandedFolders, path]);
 
   // Fetch file tree
   useEffect(() => {

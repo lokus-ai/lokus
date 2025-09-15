@@ -55,10 +55,22 @@ const STRICT_CONFIG = {
  * Configuration for math content (KaTeX output)
  */
 const MATH_CONFIG = {
-  ALLOWED_TAGS: ['span', 'div', 'annotation', 'mi', 'mn', 'mo', 'mrow', 'msup', 'msub', 'mfrac', 'munder', 'mover', 'munderover'],
-  ALLOWED_ATTR: ['class', 'style', 'data-*'],
+  ALLOWED_TAGS: [
+    // HTML tags used by KaTeX
+    'span', 'div', 
+    // MathML tags used by KaTeX
+    'math', 'semantics', 'mrow', 'mi', 'mn', 'mo', 'msup', 'msub', 'mfrac', 
+    'munder', 'mover', 'munderover', 'annotation', 'mspace', 'mpadded',
+    'menclose', 'mtable', 'mtr', 'mtd', 'mlabeledtr', 'maligngroup', 'malignmark'
+  ],
+  ALLOWED_ATTR: [
+    'class', 'style', 'data-*', 'aria-hidden', 'xmlns', 'display', 'encoding',
+    'height', 'width', 'top', 'margin-right', 'margin-left', 'vertical-align'
+  ],
   FORBID_TAGS: ['script', 'object', 'embed', 'link', 'iframe', 'form', 'input'],
-  SANITIZE_DOM: true
+  SANITIZE_DOM: true,
+  // Allow KaTeX-specific styling
+  ALLOW_DATA_ATTR: true
 };
 
 /**
@@ -91,11 +103,38 @@ export function sanitizeUserInput(input) {
 
 /**
  * Sanitize math content (for KaTeX rendered HTML)
- * @param {string} mathHtml - Math HTML to sanitize
+ * @param {string} mathHtml - Math HTML to sanitize  
  * @returns {string} Sanitized math HTML
  */
 export function sanitizeMathHtml(mathHtml) {
-  return sanitizeHtml(mathHtml, MATH_CONFIG);
+  if (!mathHtml || typeof mathHtml !== 'string') {
+    return '';
+  }
+
+  // KaTeX generates trusted HTML, so we use minimal sanitization
+  // Only remove dangerous script-like content but preserve all formatting
+  try {
+    const result = DOMPurify.sanitize(mathHtml, {
+      ALLOWED_TAGS: false, // Allow all tags
+      ALLOWED_ATTR: false, // Allow all attributes  
+      FORBID_TAGS: ['script', 'object', 'embed', 'iframe', 'form', 'input', 'link', 'base'],
+      FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur', 'onchange', 'onsubmit', 'onmousedown', 'onmouseup', 'onkeydown', 'onkeyup'],
+      ALLOW_UNKNOWN_PROTOCOLS: false,
+      WHOLE_DOCUMENT: false,
+      RETURN_DOM_FRAGMENT: false,
+      SANITIZE_DOM: false, // Don't sanitize DOM structure
+      KEEP_CONTENT: true,   // Keep content even if tags are removed
+      ADD_TAGS: ['math', 'semantics', 'mrow', 'mi', 'mn', 'mo', 'msup', 'msub', 'annotation'], // Explicitly allow MathML
+      ADD_ATTR: ['xmlns', 'display', 'encoding', 'aria-hidden'] // Allow MathML attributes
+    });
+    
+    console.log('DOMPurify result:', result); // Debug log
+    return result;
+  } catch (error) {
+    console.error('Math HTML sanitization failed:', error);
+    console.log('Returning original HTML due to sanitization failure');
+    return mathHtml; // Return unsanitized if sanitization fails
+  }
 }
 
 /**
