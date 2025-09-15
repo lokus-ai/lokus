@@ -27,6 +27,7 @@ import PluginSettings from "./PluginSettings.jsx";
 import Marketplace from "./Marketplace.jsx";
 import PluginDetail from "./PluginDetail.jsx";
 import { canvasManager } from "../core/canvas/manager.js";
+import TemplatePicker from "../components/TemplatePicker.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -414,6 +415,8 @@ export default function Workspace({ initialPath = "" }) {
   const [savedContent, setSavedContent] = useState("");
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showInFileSearch, setShowInFileSearch] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [templatePickerData, setTemplatePickerData] = useState(null);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showKanban, setShowKanban] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
@@ -866,6 +869,13 @@ export default function Workspace({ initialPath = "" }) {
     const unlistenCommandPalette = isTauri ? listen("lokus:command-palette", () => setShowCommandPalette(true)) : Promise.resolve(addDom('lokus:command-palette', () => setShowCommandPalette(true)));
     const unlistenInFileSearch = isTauri ? listen("lokus:in-file-search", () => setShowInFileSearch(true)) : Promise.resolve(addDom('lokus:in-file-search', () => setShowInFileSearch(true)));
     const unlistenGlobalSearch = isTauri ? listen("lokus:global-search", () => setShowGlobalSearch(true)) : Promise.resolve(addDom('lokus:global-search', () => setShowGlobalSearch(true)));
+    
+    // Template picker event listener
+    const handleTemplatePicker = (event) => {
+      setTemplatePickerData(event.detail);
+      setShowTemplatePicker(true);
+    };
+    const unlistenTemplatePicker = Promise.resolve(addDom('open-template-picker', handleTemplatePicker));
 
     return () => {
       unlistenSave.then(f => { if (typeof f === 'function') f(); });
@@ -876,6 +886,7 @@ export default function Workspace({ initialPath = "" }) {
       unlistenCommandPalette.then(f => { if (typeof f === 'function') f(); });
       unlistenInFileSearch.then(f => { if (typeof f === 'function') f(); });
       unlistenGlobalSearch.then(f => { if (typeof f === 'function') f(); });
+      unlistenTemplatePicker.then(f => { if (typeof f === 'function') f(); });
     };
   }, [handleSave, handleTabClose]);
 
@@ -1293,6 +1304,24 @@ export default function Workspace({ initialPath = "" }) {
         isVisible={showInFileSearch}
         onClose={() => setShowInFileSearch(false)}
       />
+      
+      {showTemplatePicker && templatePickerData && (
+        <TemplatePicker
+          open={showTemplatePicker}
+          onClose={() => {
+            setShowTemplatePicker(false);
+            setTemplatePickerData(null);
+          }}
+          onSelect={(template, processedContent) => {
+            if (templatePickerData.onSelect) {
+              templatePickerData.onSelect(template, processedContent);
+            }
+            setShowTemplatePicker(false);
+            setTemplatePickerData(null);
+          }}
+          editorState={templatePickerData.editorState}
+        />
+      )}
       
       <SearchPanel
         isOpen={showGlobalSearch}

@@ -532,3 +532,190 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
   background: var(--app-accent);
   transform: scale(1.1);
 }
+
+/* Template Extension Styles */
+
+/* Template Variable Highlighting */
+.ProseMirror .template-variable {
+  background: rgba(var(--accent), 0.1);
+  border: 1px solid rgba(var(--accent), 0.2);
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: 0 1px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.9em;
+  color: rgb(var(--accent));
+  transition: all 0.2s ease;
+  cursor: pointer;
+  display: inline-block;
+  position: relative;
+}
+
+.ProseMirror .template-variable:hover {
+  background: rgba(var(--accent), 0.2);
+  border-color: rgb(var(--accent));
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(var(--accent), 0.2);
+}
+
+/* Cursor Placeholder Specific Styling */
+.ProseMirror .template-cursor-placeholder {
+  background: rgba(var(--warning), 0.15);
+  border-color: rgba(var(--warning), 0.3);
+  color: rgb(var(--warning));
+  animation: pulse-cursor 2s infinite;
+}
+
+.ProseMirror .template-cursor-placeholder:hover {
+  background: rgba(var(--warning), 0.25);
+  border-color: rgb(var(--warning));
+}
+
+@keyframes pulse-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Invalid Variable Styling */
+.ProseMirror .template-invalid {
+  background: rgba(var(--destructive), 0.1);
+  border-color: rgba(var(--destructive), 0.3);
+  color: rgb(var(--destructive));
+}
+
+.ProseMirror .template-invalid:hover {
+  background: rgba(var(--destructive), 0.2);
+  border-color: rgb(var(--destructive));
+}
+
+.ProseMirror .template-invalid::after {
+  content: '⚠';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  font-size: 8px;
+  color: rgb(var(--destructive));
+  background: rgb(var(--background));
+  border-radius: 50%;
+  width: 10px;
+  height: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* JavaScript Block Highlighting */
+.ProseMirror .template-js-block {
+  background: rgba(var(--muted), 0.1);
+  border: 1px solid rgba(var(--muted), 0.2);
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin: 0 2px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+  color: rgb(var(--muted-foreground));
+  transition: all 0.2s ease;
+  cursor: help;
+  display: inline-block;
+}
+
+.ProseMirror .template-js-block:hover {
+  background: rgba(var(--muted), 0.2);
+  border-color: rgb(var(--muted));
+}
+
+/* Template Comment Highlighting */
+.ProseMirror .template-comment {
+  background: rgba(var(--muted), 0.05);
+  border: 1px dashed rgba(var(--muted), 0.2);
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: 0 1px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+  color: rgb(var(--muted-foreground));
+  opacity: 0.7;
+  transition: all 0.2s ease;
+  display: inline-block;
+}
+
+.ProseMirror .template-comment:hover {
+  opacity: 1;
+  background: rgba(var(--muted), 0.1);
+}
+
+/* Template Variable Tooltip */
+.template-variable-tooltip {
+  position: absolute;
+  z-index: 1000;
+  background: rgb(var(--popover));
+  border: 1px solid rgb(var(--border));
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: rgb(var(--popover-foreground));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-width: 200px;
+  word-wrap: break-word;
+  opacity: 0;
+  transform: translateY(-5px);
+  transition: all 0.2s ease;
+  pointer-events: none;
+}
+
+.template-variable-tooltip.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Template content preview in modal */
+.template-content-preview {
+  background: rgb(var(--background));
+  border: 1px solid rgb(var(--border));
+  border-radius: 6px;
+  padding: 12px;
+  font-family: inherit;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Template syntax highlighting in template editor */
+.template-editor .template-variable {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.2);
+  color: rgb(59, 130, 246);
+}
+
+.template-editor .template-js-block {
+  background: rgba(168, 85, 247, 0.1);
+  border-color: rgba(168, 85, 247, 0.2);
+  color: rgb(168, 85, 247);
+}
+
+.template-editor .template-comment {
+  background: rgba(107, 114, 128, 0.1);
+  border-color: rgba(107, 114, 128, 0.2);
+  color: rgb(107, 114, 128);
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .ProseMirror .template-variable {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.3);
+  }
+  
+  .ProseMirror .template-js-block {
+    background: rgba(168, 85, 247, 0.15);
+    border-color: rgba(168, 85, 247, 0.3);
+  }
+  
+  .ProseMirror .template-comment {
+    background: rgba(107, 114, 128, 0.15);
+    border-color: rgba(107, 114, 128, 0.3);
+  }
+}
