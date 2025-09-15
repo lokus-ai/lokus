@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { buildWorkspaceGraph } from '@/core/wiki/graph.js'
+import { Dialog, DialogContent } from '../components/ui/dialog'
+import { buildWorkspaceGraph } from '../core/wiki/graph.js'
 
 export default function GraphModal({ open, onOpenChange, workspacePath }) {
   const [graph, setGraph] = useState({ nodes: [], edges: [] })

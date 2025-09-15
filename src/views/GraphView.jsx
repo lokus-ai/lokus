@@ -1,660 +1,378 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { buildWorkspaceGraph } from '@/core/wiki/graph.js'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
+import Sigma from 'sigma'
+import Graph from 'graphology'
+import forceAtlas2 from 'graphology-layout-forceatlas2'
+import { buildWorkspaceGraph } from '../core/wiki/graph.js'
+
+const COLORS = {
+  light: {
+    node: '#6366f1',
+    nodeHover: '#4f46e5',
+    nodeSelected: '#3730a3',
+    edge: '#e5e7eb',
+    edgeHover: '#9ca3af',
+    background: '#ffffff',
+    text: '#374151'
+  },
+  dark: {
+    node: '#818cf8',
+    nodeHover: '#a5b4fc',
+    nodeSelected: '#c7d2fe',
+    edge: '#374151',
+    edgeHover: '#6b7280',
+    background: '#111827',
+    text: '#f3f4f6'
+  }
+}
 
 export default function GraphView({ workspacePath, onOpenFile }) {
-  const [graph, setGraph] = useState({ nodes: [], edges: [] })
-  const [selectedNode, setSelectedNode] = useState(null)
-  const [isDarkMode, setIsDarkMode] = useState(true)
+  const containerRef = useRef(null)
+  const sigmaRef = useRef(null)
+  const graphRef = useRef(null)
+  const layoutWorkerRef = useRef(null)
   const [loading, setLoading] = useState(true)
-  const [nodePositions, setNodePositions] = useState(new Map())
-  const canvasRef = useRef(null)
-  const viewRef = useRef({ scale: 1, tx: 0, ty: 0, dragging: false, dragNode: null, lastX: 0, lastY: 0 })
-  const hoverRef = useRef({ id: null })
-  const animationRef = useRef(null)
-
-  // Simple circle layout function
-  const createLayout = (nodes, edges, width = 1200, height = 800) => {
-    const positions = new Map()
-    const centerX = width / 2, centerY = height / 2
-    
-    if (nodes.length === 0) return positions
-    if (nodes.length === 1) {
-      positions.set(nodes[0].id, { x: centerX, y: centerY })
-      return positions
+  const [nodeCount, setNodeCount] = useState(0)
+  const [edgeCount, setEdgeCount] = useState(0)
+  const [selectedNode, setSelectedNode] = useState(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    try {
+      return document.documentElement.classList.contains('dark')
+    } catch {
+      return true
     }
-    
-    // Simple circular layout - works instantly
-    const radius = Math.min(width, height) * 0.35
-    nodes.forEach((node, i) => {
-      const angle = (i / nodes.length) * 2 * Math.PI
-      positions.set(node.id, {
-        x: centerX + Math.cos(angle) * radius,
-        y: centerY + Math.sin(angle) * radius
-      })
-    })
-    
-    return positions
-  }
+  })
 
+  // Initialize graph and sigma
+  const initGraph = useCallback(async (data) => {
+    if (!containerRef.current || !data.nodes.length) return
+
+    try {
+      // Clean up previous instances
+      if (layoutWorkerRef.current) {
+        layoutWorkerRef.current.kill()
+        layoutWorkerRef.current = null
+      }
+      if (sigmaRef.current) {
+        sigmaRef.current.kill()
+        sigmaRef.current = null
+      }
+
+      // Create new graph
+      const graph = new Graph({ multi: false, type: 'undirected' })
+      graphRef.current = graph
+
+      // Memory optimization: Pre-calculate degree centrality for better performance
+      const degreeMap = new Map()
+      data.edges.forEach(edge => {
+        degreeMap.set(edge.source, (degreeMap.get(edge.source) || 0) + 1)
+        degreeMap.set(edge.target, (degreeMap.get(edge.target) || 0) + 1)
+      })
+
+      // Add nodes with optimized positioning and sizing
+      data.nodes.forEach((node, index) => {
+        // Initial circular layout to prevent overlaps
+        const angle = (index / data.nodes.length) * 2 * Math.PI
+        const radius = Math.min(300, Math.max(100, Math.sqrt(data.nodes.length) * 20))
+        const degree = degreeMap.get(node.id) || 0
+        
+        graph.addNode(node.id, {
+          label: node.title,
+          x: Math.cos(angle) * radius,
+          y: Math.sin(angle) * radius,
+          size: Math.max(3, Math.min(15, Math.log(1 + degree * 2))),
+          color: COLORS[isDarkMode ? 'dark' : 'light'].node,
+          originalColor: COLORS[isDarkMode ? 'dark' : 'light'].node,
+          path: node.path,
+          degree: degree // Store for later use
+        })
+      })
+
+      // Add edges with memory-efficient batching
+      const BATCH_SIZE = 1000
+      for (let i = 0; i < data.edges.length; i += BATCH_SIZE) {
+        const batch = data.edges.slice(i, i + BATCH_SIZE)
+        
+        batch.forEach((edge, batchIndex) => {
+          try {
+            if (graph.hasNode(edge.source) && graph.hasNode(edge.target)) {
+              graph.addEdge(`edge_${i + batchIndex}`, edge.source, edge.target, {
+                color: COLORS[isDarkMode ? 'dark' : 'light'].edge,
+                size: 1
+              })
+            }
+          } catch (e) {
+            console.warn('Failed to add edge:', edge, e)
+          }
+        })
+        
+        // Yield control between batches to prevent blocking
+        if (i + BATCH_SIZE < data.edges.length) {
+          await new Promise(resolve => setTimeout(resolve, 0))
+        }
+      }
+
+      setNodeCount(graph.order)
+      setEdgeCount(graph.size)
+
+      // Initialize Sigma with performance optimizations
+      const sigma = new Sigma(graph, containerRef.current, {
+        // Performance settings for large graphs
+        renderEdgeLabels: false,
+        defaultNodeColor: COLORS[isDarkMode ? 'dark' : 'light'].node,
+        defaultEdgeColor: COLORS[isDarkMode ? 'dark' : 'light'].edge,
+        minCameraRatio: 0.05, // Allow more zoom out for large graphs
+        maxCameraRatio: 5, // Limit zoom in for performance
+        labelDensity: data.nodes.length > 500 ? 1 : 2, // Reduce label density for large graphs
+        labelRenderedSizeThreshold: data.nodes.length > 1000 ? 15 : 8, // Higher threshold for large graphs
+        enableEdgeClickEvents: data.nodes.length < 1000, // Disable for performance on large graphs
+        enableEdgeHoverEvents: data.nodes.length < 1000, // Disable for performance on large graphs
+        
+        // Level-of-detail optimizations
+        hideEdgesOnMove: data.nodes.length > 200,
+        hideLabelsOnMove: data.nodes.length > 100,
+        
+        // Rendering optimizations
+        stagePadding: 50,
+        edgeReducer: (edge, data) => {
+          const res = { ...data }
+          if (selectedNode && (edge.source === selectedNode || edge.target === selectedNode)) {
+            res.color = COLORS[isDarkMode ? 'dark' : 'light'].edgeHover
+            res.size = 2
+          }
+          return res
+        },
+        nodeReducer: (node, data) => {
+          const res = { ...data }
+          if (selectedNode === node) {
+            res.color = COLORS[isDarkMode ? 'dark' : 'light'].nodeSelected
+            res.size = Math.max(data.size * 1.5, 8)
+          } else if (selectedNode && graph.hasEdge(selectedNode, node)) {
+            res.color = COLORS[isDarkMode ? 'dark' : 'light'].nodeHover
+          }
+          
+          // Search highlighting
+          if (searchQuery && data.label.toLowerCase().includes(searchQuery.toLowerCase())) {
+            res.color = '#ef4444' // red highlight for search results
+            res.size = Math.max(data.size * 1.2, 6)
+          }
+          
+          return res
+        }
+      })
+
+      sigmaRef.current = sigma
+
+      // Event handlers
+      sigma.on('clickNode', ({ node }) => {
+        const nodeData = graph.getNodeAttributes(node)
+        setSelectedNode(selectedNode === node ? null : node)
+        
+        if (onOpenFile && nodeData.path) {
+          onOpenFile(nodeData.path)
+        }
+      })
+
+      sigma.on('clickStage', () => {
+        setSelectedNode(null)
+      })
+
+      // Adaptive layout based on graph size
+      if (data.nodes.length > 1) {
+        if (data.nodes.length < 2000) {
+          // Use ForceAtlas2 for medium graphs
+          const settings = forceAtlas2.inferSettings(graph)
+          const sensibleSettings = {
+            ...settings,
+            iterations: Math.min(200, Math.max(30, Math.sqrt(data.nodes.length) * 10)),
+            settings: {
+              ...settings.settings,
+              barnesHutOptimize: data.nodes.length > 50, // Enable optimization earlier
+              strongGravityMode: data.nodes.length < 100, // Only for small graphs
+              gravity: data.nodes.length > 500 ? 0.01 : 0.05, // Reduce gravity for large graphs
+              scalingRatio: Math.max(1, Math.min(20, data.nodes.length / 50)),
+              slowDown: data.nodes.length > 500 ? 5 : 2, // More slowdown for stability
+              outboundAttractionDistribution: data.nodes.length > 200,
+              linLogMode: data.nodes.length > 200 // Better for large graphs
+            }
+          }
+
+          // Progressive layout rendering with memory management
+          let currentIteration = 0
+          const maxIterations = sensibleSettings.iterations
+          const batchSize = Math.max(5, Math.min(30, Math.floor(200 / Math.sqrt(data.nodes.length))))
+          
+          const runLayoutBatch = (iterations) => {
+            try {
+              forceAtlas2.assign(graph, { iterations, settings: sensibleSettings.settings })
+              sigma.refresh()
+              currentIteration += iterations
+              
+              // Progress indicator for large graphs
+              if (data.nodes.length > 200 && currentIteration < maxIterations) {
+                console.log(`[Graph] Layout progress: ${Math.round((currentIteration / maxIterations) * 100)}%`)
+              }
+              
+              if (currentIteration < maxIterations) {
+                const remaining = Math.min(batchSize, maxIterations - currentIteration)
+                requestAnimationFrame(() => runLayoutBatch(remaining))
+              } else {
+                console.log('[Graph] Layout completed')
+              }
+            } catch (error) {
+              console.warn('[Graph] Layout error:', error)
+            }
+          }
+
+          // Start layout
+          requestAnimationFrame(() => runLayoutBatch(batchSize))
+        } else {
+          // For very large graphs, use simple grid/cluster layout
+          console.log('[Graph] Using simplified layout for large graph')
+          const cols = Math.ceil(Math.sqrt(data.nodes.length))
+          const spacing = 50
+          
+          graph.forEachNode((node, attributes, index) => {
+            const row = Math.floor(index / cols)
+            const col = index % cols
+            graph.setNodeAttribute(node, 'x', (col - cols / 2) * spacing)
+            graph.setNodeAttribute(node, 'y', (row - cols / 2) * spacing)
+          })
+          
+          sigma.refresh()
+        }
+      }
+
+      setLoading(false)
+    } catch (error) {
+      console.error('Failed to initialize graph:', error)
+      setLoading(false)
+    }
+  }, [isDarkMode, selectedNode, searchQuery, onOpenFile])
+
+  // Load graph data
   useEffect(() => {
+    if (!workspacePath) return
+    
     let mounted = true
     setLoading(true)
     
     buildWorkspaceGraph(workspacePath)
-      .then(g => { 
-        if (mounted) {
-          setGraph(g)
-          // Create layout immediately - no physics needed
-          const canvas = canvasRef.current
-          const w = canvas?.clientWidth || 1200
-          const h = canvas?.clientHeight || 800
-          const positions = createLayout(g.nodes, g.edges, w, h)
-          setNodePositions(positions)
-          setLoading(false)
+      .then(data => {
+        if (mounted && data) {
+          console.log('[GraphView] Loaded graph:', data.nodes.length, 'nodes,', data.edges.length, 'edges')
+          initGraph(data)
         }
       })
-      .catch(e => {
-        console.error('[GraphView] Failed to build graph:', e)
+      .catch(error => {
+        console.error('[GraphView] Failed to build graph:', error)
         if (mounted) setLoading(false)
       })
-    
+      
     return () => { mounted = false }
-  }, [workspacePath])
+  }, [workspacePath, initGraph])
 
+  // Theme change handler
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
+    const handleThemeChange = () => {
+      const dark = document.documentElement.classList.contains('dark')
+      if (dark !== isDarkMode) {
+        setIsDarkMode(dark)
+      }
+    }
     
-    const resize = () => {
-      const dpr = window.devicePixelRatio || 1
-      const w = canvas.clientWidth
-      const h = canvas.clientHeight
-      canvas.width = w * dpr
-      canvas.height = h * dpr
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      draw(w, h)
-    }
-
-
-    const draw = (w, h) => {
-      const v = viewRef.current
-      
-      // Clear canvas with dark background
-      const bgColor = isDarkMode ? '#1a1a1a' : '#ffffff'
-      ctx.fillStyle = bgColor
-      ctx.fillRect(0, 0, w, h)
-      
-      // Early return if no nodes
-      if (graph.nodes.length === 0) return
-      
-      // Use our simple static positions
-      const pos = new Map()
-      for (const n of graph.nodes) {
-        const staticPos = nodePositions.get(n.id)
-        if (staticPos) {
-          pos.set(n.id, { 
-            x: staticPos.x * v.scale + v.tx, 
-            y: staticPos.y * v.scale + v.ty 
-          })
-        }
-      }
-      
-      // Get connection counts for node sizing
-      const connections = new Map()
-      graph.nodes.forEach(n => connections.set(n.id, 0))
-      graph.edges.forEach(e => {
-        connections.set(e.source, (connections.get(e.source) || 0) + 1)
-        connections.set(e.target, (connections.get(e.target) || 0) + 1)
-      })
-      
-      const hover = hoverRef.current.id
-      const selected = selectedNode
-      const neighbors = new Set()
-      const connectedEdges = new Set()
-      
-      // Find neighbors of hovered/selected node
-      if (hover || selected) {
-        const activeNode = hover || selected
-        for (const e of graph.edges) {
-          if (e.source === activeNode) {
-            neighbors.add(e.target)
-            connectedEdges.add(`${e.source}-${e.target}`)
-          }
-          if (e.target === activeNode) {
-            neighbors.add(e.source)
-            connectedEdges.add(`${e.source}-${e.target}`)
-          }
-        }
-      }
-      
-      // Draw edges
-      ctx.lineCap = 'round'
-      for (const e of graph.edges) {
-        const s = pos.get(e.source)
-        const t = pos.get(e.target)
-        if (!s || !t) continue
-        
-        const edgeKey = `${e.source}-${e.target}`
-        const isConnected = connectedEdges.has(edgeKey)
-        const isHighlighted = isConnected || (!hover && !selected)
-        
-        if (isHighlighted) {
-          ctx.strokeStyle = isDarkMode ? 'rgba(147, 197, 253, 0.6)' : 'rgba(59, 130, 246, 0.6)'
-          ctx.lineWidth = 2
-        } else {
-          ctx.strokeStyle = isDarkMode ? 'rgba(75, 85, 99, 0.3)' : 'rgba(156, 163, 175, 0.3)'
-          ctx.lineWidth = 1
-        }
-        
-        ctx.beginPath()
-        ctx.moveTo(s.x, s.y)
-        ctx.lineTo(t.x, t.y)
-        ctx.stroke()
-      }
-      
-      // Draw nodes
-      for (const n of graph.nodes) {
-        const p = pos.get(n.id)
-        if (!p) continue
-        
-        const isHover = n.id === hover
-        const isSelected = n.id === selected
-        const isNeighbor = neighbors.has(n.id)
-        const connectionCount = connections.get(n.id) || 0
-        
-        // Node size based on connections
-        let radius = Math.max(6, Math.min(12, 6 + connectionCount * 0.5))
-        if (isHover || isSelected) radius *= 1.2
-        
-        // Node colors
-        let fillColor, strokeColor
-        if (isHover) {
-          fillColor = isDarkMode ? '#60a5fa' : '#3b82f6'
-          strokeColor = isDarkMode ? '#93c5fd' : '#1d4ed8'
-        } else if (isSelected) {
-          fillColor = isDarkMode ? '#a855f7' : '#8b5cf6'
-          strokeColor = isDarkMode ? '#c084fc' : '#7c3aed'
-        } else if (isNeighbor) {
-          fillColor = isDarkMode ? '#34d399' : '#10b981'
-          strokeColor = isDarkMode ? '#6ee7b7' : '#047857'
-        } else {
-          fillColor = isDarkMode ? '#6b7280' : '#9ca3af'
-          strokeColor = isDarkMode ? '#9ca3af' : '#6b7280'
-        }
-        
-        // Draw node
-        ctx.fillStyle = fillColor
-        ctx.strokeStyle = strokeColor
-        ctx.lineWidth = 1.5
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, radius, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.stroke()
-      }
-      
-      // Draw labels
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif'
-      
-      for (const n of graph.nodes) {
-        const p = pos.get(n.id)
-        if (!p) continue
-        
-        const isHover = n.id === hover
-        const isSelected = n.id === selected
-        const isNeighbor = neighbors.has(n.id)
-        const shouldShowLabel = true // Always show labels for simplicity
-        
-        if (shouldShowLabel) {
-          const title = n.title.replace(/\.(md|markdown)$/i, '') || 'Untitled'
-          const connectionCount = connections.get(n.id) || 0
-          const yOffset = Math.max(6, Math.min(12, 6 + connectionCount * 0.5)) + 12
-          
-          // Text with shadow for readability
-          ctx.fillStyle = isDarkMode ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.7)'
-          ctx.fillText(title, p.x + 1, p.y + yOffset + 1)
-          
-          ctx.fillStyle = isDarkMode ? '#f1f5f9' : '#1e293b'
-          if (isHover || isSelected) {
-            ctx.fillStyle = isDarkMode ? '#ffffff' : '#000000'
-          }
-          ctx.fillText(title, p.x, p.y + yOffset)
-        }
-      }
-      // Enhanced click handler with selection
-      const onClick = (e) => {
-        const r = canvas.getBoundingClientRect()
-        const x = e.clientX - r.left, y = e.clientY - r.top
-        let best = null, dmin = 1e9
-        for (const n of graph.nodes) {
-          const p = pos.get(n.id); if (!p) continue
-          const connectionCount = connections.get(n.id) || 0
-          const radius = Math.max(4, Math.min(12, 4 + connectionCount * 0.8)) * v.scale
-          const d = Math.hypot(p.x - x, p.y - y)
-          if (d < dmin) { dmin = d; best = n }
-        }
-        const clickRadius = 20 * v.scale
-        if (best && dmin < clickRadius) {
-          if (e.detail === 2 && onOpenFile) { // Double click to open
-            onOpenFile(best.path)
-          } else { // Single click to select
-            setSelectedNode(selectedNode === best.id ? null : best.id)
-          }
-        } else {
-          setSelectedNode(null) // Click on empty space deselects
-        }
-      }
-      const onWheel = (e) => {
-        e.preventDefault()
-        const delta = e.deltaY < 0 ? 1.1 : 0.9
-        const v2 = viewRef.current
-        v2.scale = Math.max(0.4, Math.min(2.5, v2.scale * delta))
-        draw(canvas.clientWidth, canvas.clientHeight)
-      }
-      const onDown = (e) => {
-        const r = canvas.getBoundingClientRect()
-        const x = e.clientX - r.left, y = e.clientY - r.top
-        const v2 = viewRef.current
-        
-        // Check if clicking on a node (using current positions)
-        let clickedNode = null
-        let dmin = 1e9
-        for (const n of graph.nodes) {
-          const staticPos = nodePositions.get(n.id)
-          if (!staticPos) continue
-          const p = { 
-            x: staticPos.x * v2.scale + v2.tx, 
-            y: staticPos.y * v2.scale + v2.ty 
-          }
-          const d = Math.hypot(p.x - x, p.y - y)
-          if (d < 20 && d < dmin) { dmin = d; clickedNode = n.id }
-        }
-        
-        if (clickedNode) {
-          v2.dragNode = clickedNode
-        } else {
-          v2.dragging = true
-        }
-        
-        v2.lastX = e.clientX
-        v2.lastY = e.clientY
-      }
-      
-      const onMove = (e) => {
-        const v2 = viewRef.current
-        const dx = e.clientX - v2.lastX, dy = e.clientY - v2.lastY
-        v2.lastX = e.clientX; v2.lastY = e.clientY
-        
-        if (v2.dragNode) {
-          // Drag node - update its static position
-          const currentPos = nodePositions.get(v2.dragNode)
-          if (currentPos) {
-            const newPos = {
-              x: currentPos.x + dx / v2.scale,
-              y: currentPos.y + dy / v2.scale
-            }
-            setNodePositions(prev => new Map(prev).set(v2.dragNode, newPos))
-          }
-        } else if (v2.dragging) {
-          // Pan view
-          v2.tx += dx
-          v2.ty += dy
-        }
-        
-        draw(canvas.clientWidth, canvas.clientHeight)
-      }
-      
-      const onUp = () => {
-        const v2 = viewRef.current
-        v2.dragNode = null
-        v2.dragging = false
-      }
-      const onHover = (e) => {
-        const r = canvas.getBoundingClientRect()
-        const x = e.clientX - r.left, y = e.clientY - r.top
-        const v2 = viewRef.current
-        let best = null, dmin = 1e9
-        
-        for (const n of graph.nodes) {
-          const staticPos = nodePositions.get(n.id)
-          if (!staticPos) continue
-          const p = { 
-            x: staticPos.x * v2.scale + v2.tx, 
-            y: staticPos.y * v2.scale + v2.ty 
-          }
-          const d = Math.hypot(p.x - x, p.y - y)
-          if (d < dmin) { dmin = d; best = n.id }
-        }
-        
-        const prevHover = hoverRef.current.id
-        hoverRef.current.id = dmin < 20 ? best : null
-        
-        // Only redraw if hover changed
-        if (prevHover !== hoverRef.current.id) {
-          draw(canvas.clientWidth, canvas.clientHeight)
-        }
-      }
-      canvas.addEventListener('click', onClick)
-      canvas.addEventListener('wheel', onWheel, { passive: false })
-      canvas.addEventListener('mousedown', onDown)
-      canvas.addEventListener('mousemove', onHover)
-      window.addEventListener('mousemove', onMove)
-      window.addEventListener('mouseup', onUp)
-      return () => {
-        canvas.removeEventListener('click', onClick)
-        canvas.removeEventListener('wheel', onWheel)
-        canvas.removeEventListener('mousedown', onDown)
-        canvas.removeEventListener('mousemove', onHover)
-        window.removeEventListener('mousemove', onMove)
-        window.removeEventListener('mouseup', onUp)
-      }
-    }
-    const cleanup = resize()
-    window.addEventListener('resize', resize)
+    const observer = new MutationObserver(handleThemeChange)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
     
-    return () => { 
-      window.removeEventListener('resize', resize)
-      if (cleanup) cleanup()
-    }
-  }, [graph.nodes.length, isDarkMode, selectedNode]) // Only depend on length, not the whole nodePositions map
+    return () => observer.disconnect()
+  }, [isDarkMode])
 
-  // Redraw when positions change (without causing infinite loop)
+  // Cleanup
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (canvas && nodePositions.size > 0) {
-      const ctx = canvas.getContext('2d')
-      const w = canvas.clientWidth
-      const h = canvas.clientHeight
-      
-      // Simple redraw without recreating positions
-      const draw = (w, h) => {
-        const v = viewRef.current
-        
-        // Clear canvas
-        const bgColor = isDarkMode ? '#1a1a1a' : '#ffffff'
-        ctx.fillStyle = bgColor
-        ctx.fillRect(0, 0, w, h)
-        
-        if (graph.nodes.length === 0) return
-        
-        // Get current positions
-        const pos = new Map()
-        for (const n of graph.nodes) {
-          const staticPos = nodePositions.get(n.id)
-          if (staticPos) {
-            pos.set(n.id, { 
-              x: staticPos.x * v.scale + v.tx, 
-              y: staticPos.y * v.scale + v.ty 
-            })
-          }
-        }
-        
-        // Get connection counts
-        const connections = new Map()
-        graph.nodes.forEach(n => connections.set(n.id, 0))
-        graph.edges.forEach(e => {
-          connections.set(e.source, (connections.get(e.source) || 0) + 1)
-          connections.set(e.target, (connections.get(e.target) || 0) + 1)
-        })
-        
-        const hover = hoverRef.current.id
-        const selected = selectedNode
-        const neighbors = new Set()
-        const connectedEdges = new Set()
-        
-        if (hover || selected) {
-          const activeNode = hover || selected
-          for (const e of graph.edges) {
-            if (e.source === activeNode) {
-              neighbors.add(e.target)
-              connectedEdges.add(`${e.source}-${e.target}`)
-            }
-            if (e.target === activeNode) {
-              neighbors.add(e.source)
-              connectedEdges.add(`${e.source}-${e.target}`)
-            }
-          }
-        }
-        
-        // Draw edges
-        ctx.lineCap = 'round'
-        for (const e of graph.edges) {
-          const s = pos.get(e.source)
-          const t = pos.get(e.target)
-          if (!s || !t) continue
-          
-          const edgeKey = `${e.source}-${e.target}`
-          const isConnected = connectedEdges.has(edgeKey)
-          const isHighlighted = isConnected || (!hover && !selected)
-          
-          if (isHighlighted) {
-            ctx.strokeStyle = isDarkMode ? 'rgba(147, 197, 253, 0.6)' : 'rgba(59, 130, 246, 0.6)'
-            ctx.lineWidth = 2
-          } else {
-            ctx.strokeStyle = isDarkMode ? 'rgba(75, 85, 99, 0.3)' : 'rgba(156, 163, 175, 0.3)'
-            ctx.lineWidth = 1
-          }
-          
-          ctx.beginPath()
-          ctx.moveTo(s.x, s.y)
-          ctx.lineTo(t.x, t.y)
-          ctx.stroke()
-        }
-        
-        // Draw nodes
-        for (const n of graph.nodes) {
-          const p = pos.get(n.id)
-          if (!p) continue
-          
-          const isHover = n.id === hover
-          const isSelected = n.id === selected
-          const isNeighbor = neighbors.has(n.id)
-          const connectionCount = connections.get(n.id) || 0
-          
-          let radius = Math.max(6, Math.min(12, 6 + connectionCount * 0.5))
-          if (isHover || isSelected) radius *= 1.2
-          
-          let fillColor, strokeColor
-          if (isHover) {
-            fillColor = isDarkMode ? '#60a5fa' : '#3b82f6'
-            strokeColor = isDarkMode ? '#93c5fd' : '#1d4ed8'
-          } else if (isSelected) {
-            fillColor = isDarkMode ? '#a855f7' : '#8b5cf6'
-            strokeColor = isDarkMode ? '#c084fc' : '#7c3aed'
-          } else if (isNeighbor) {
-            fillColor = isDarkMode ? '#34d399' : '#10b981'
-            strokeColor = isDarkMode ? '#6ee7b7' : '#047857'
-          } else {
-            fillColor = isDarkMode ? '#6b7280' : '#9ca3af'
-            strokeColor = isDarkMode ? '#9ca3af' : '#6b7280'
-          }
-          
-          ctx.fillStyle = fillColor
-          ctx.strokeStyle = strokeColor
-          ctx.lineWidth = 1.5
-          ctx.beginPath()
-          ctx.arc(p.x, p.y, radius, 0, Math.PI * 2)
-          ctx.fill()
-          ctx.stroke()
-        }
-        
-        // Draw labels
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif'
-        
-        for (const n of graph.nodes) {
-          const p = pos.get(n.id)
-          if (!p) continue
-          
-          const title = n.title.replace(/\.(md|markdown)$/i, '') || 'Untitled'
-          const connectionCount = connections.get(n.id) || 0
-          const yOffset = Math.max(6, Math.min(12, 6 + connectionCount * 0.5)) + 12
-          
-          ctx.fillStyle = isDarkMode ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.7)'
-          ctx.fillText(title, p.x + 1, p.y + yOffset + 1)
-          
-          const isHover = n.id === hover
-          const isSelected = n.id === selected
-          ctx.fillStyle = isDarkMode ? '#f1f5f9' : '#1e293b'
-          if (isHover || isSelected) {
-            ctx.fillStyle = isDarkMode ? '#ffffff' : '#000000'
-          }
-          ctx.fillText(title, p.x, p.y + yOffset)
-        }
+    return () => {
+      if (layoutWorkerRef.current) {
+        layoutWorkerRef.current.kill()
       }
-      
-      draw(w, h)
+      if (sigmaRef.current) {
+        sigmaRef.current.kill()
+      }
     }
-  }, [nodePositions, selectedNode, isDarkMode, graph.nodes, graph.edges])
+  }, [])
+
+  // Search functionality
+  const handleSearch = useCallback((query) => {
+    setSearchQuery(query)
+    if (sigmaRef.current) {
+      sigmaRef.current.refresh()
+    }
+  }, [])
+
+  // Reset view
+  const handleResetView = useCallback(() => {
+    if (sigmaRef.current) {
+      sigmaRef.current.getCamera().animate({ x: 0, y: 0, ratio: 1 }, { duration: 300 })
+      setSelectedNode(null)
+      setSearchQuery('')
+    }
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full bg-app-bg text-app-text">
+        <div className="text-center space-y-3">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-app-accent mx-auto"></div>
+          <p className="text-app-muted">Building graph...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="relative w-full h-[calc(100vh-140px)] md:h-[calc(100vh-156px)]" style={{backgroundColor: isDarkMode ? '#1a1a1a' : '#ffffff'}}>
-      <canvas ref={canvasRef} className="w-full h-full block" />
-      
-      {/* Loading state */}
-      {loading && (
-        <div 
-          className="absolute inset-0 flex items-center justify-center"
-          style={{backgroundColor: isDarkMode ? 'rgba(26, 26, 26, 0.8)' : 'rgba(255, 255, 255, 0.8)'}}
-        >
-          <div className="text-center">
-            <div 
-              className="w-8 h-8 border-2 rounded-full animate-spin mb-4 mx-auto"
-              style={{
-                borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                borderTopColor: isDarkMode ? '#60a5fa' : '#3b82f6'
-              }}
-            />
-            <div 
-              className="text-sm font-medium"
-              style={{color: isDarkMode ? '#f1f5f9' : '#1e293b'}}
-            >
-              Building graph...
-            </div>
-          </div>
+    <div className="relative h-full bg-app-bg">
+      {/* Controls */}
+      <div className="absolute top-4 left-4 z-10 bg-app-panel border border-app-border rounded-lg shadow-lg p-3 space-y-2">
+        <div className="text-xs text-app-muted">
+          {nodeCount} nodes • {edgeCount} edges
         </div>
-      )}
-      
-      {/* Empty state */}
-      {!loading && graph.nodes.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-center">
-            <div 
-              className="text-6xl mb-4"
-              style={{color: isDarkMode ? '#4b5563' : '#9ca3af'}}
-            >
-              📊
-            </div>
-            <div 
-              className="text-lg font-medium mb-2"
-              style={{color: isDarkMode ? '#9ca3af' : '#6b7280'}}
-            >
-              No graph to display
-            </div>
-            <div 
-              className="text-sm"
-              style={{color: isDarkMode ? '#6b7280' : '#9ca3af'}}
-            >
-              Create some files with [[wiki links]] to see the graph
-            </div>
-          </div>
+        
+        <div className="flex items-center space-x-2">
+          <input
+            type="text"
+            placeholder="Search nodes..."
+            value={searchQuery}
+            onChange={(e) => handleSearch(e.target.value)}
+            className="px-2 py-1 text-xs bg-app-bg border border-app-border rounded focus:outline-none focus:border-app-accent text-app-text"
+          />
+          <button
+            onClick={handleResetView}
+            className="px-2 py-1 text-xs bg-app-accent text-app-accent-fg rounded hover:bg-app-accent/90 transition-colors"
+          >
+            Reset
+          </button>
         </div>
-      )}
-      
-      {/* Obsidian-style controls */}
-      <div className="absolute right-4 top-4 flex flex-col gap-2">
-        <button 
-          className="w-10 h-10 rounded-lg shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 flex items-center justify-center text-lg font-medium"
-          style={{
-            backgroundColor: isDarkMode ? 'rgba(55, 65, 81, 0.8)' : 'rgba(255, 255, 255, 0.8)',
-            color: isDarkMode ? '#f1f5f9' : '#1e293b',
-            border: `1px solid ${isDarkMode ? 'rgba(75, 85, 99, 0.5)' : 'rgba(203, 213, 225, 0.5)'}`
-          }}
-          onClick={() => { viewRef.current.scale = Math.min(2.5, viewRef.current.scale * 1.2); }}
-        >
-          +
-        </button>
-        <button 
-          className="w-10 h-10 rounded-lg shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 flex items-center justify-center text-lg font-medium"
-          style={{
-            backgroundColor: isDarkMode ? 'rgba(55, 65, 81, 0.8)' : 'rgba(255, 255, 255, 0.8)',
-            color: isDarkMode ? '#f1f5f9' : '#1e293b',
-            border: `1px solid ${isDarkMode ? 'rgba(75, 85, 99, 0.5)' : 'rgba(203, 213, 225, 0.5)'}`
-          }}
-          onClick={() => { viewRef.current.scale = Math.max(0.4, viewRef.current.scale / 1.2); }}
-        >
-          −
-        </button>
-        <button 
-          className="px-3 py-2 rounded-lg shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-105 text-sm font-medium"
-          style={{
-            backgroundColor: isDarkMode ? 'rgba(55, 65, 81, 0.8)' : 'rgba(255, 255, 255, 0.8)',
-            color: isDarkMode ? '#f1f5f9' : '#1e293b',
-            border: `1px solid ${isDarkMode ? 'rgba(75, 85, 99, 0.5)' : 'rgba(203, 213, 225, 0.5)'}`
-          }}
-          onClick={() => { 
-            const centerX = canvasRef.current.clientWidth / 2
-            const centerY = canvasRef.current.clientHeight / 2
-            viewRef.current.tx = centerX - (graph.nodes.length > 0 ? 0 : centerX)
-            viewRef.current.ty = centerY - (graph.nodes.length > 0 ? 0 : centerY)
-            viewRef.current.scale = 1
-          }}
-        >
-          Reset
-        </button>
-        <button 
-          className="px-3 py-2 rounded-lg shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-105 text-sm font-medium"
-          style={{
-            backgroundColor: isDarkMode ? 'rgba(55, 65, 81, 0.8)' : 'rgba(255, 255, 255, 0.8)',
-            color: isDarkMode ? '#f1f5f9' : '#1e293b',
-            border: `1px solid ${isDarkMode ? 'rgba(75, 85, 99, 0.5)' : 'rgba(203, 213, 225, 0.5)'}`
-          }}
-          onClick={() => setIsDarkMode(!isDarkMode)}
-        >
-          {isDarkMode ? '☀️' : '🌙'}
-        </button>
+
+        {selectedNode && (
+          <div className="text-xs text-app-text pt-2 border-t border-app-border">
+            <strong>Selected:</strong> {graphRef.current?.getNodeAttribute(selectedNode, 'label') || selectedNode}
+          </div>
+        )}
       </div>
 
-      {/* Node info tooltip */}
-      {selectedNode && (
-        <div 
-          className="absolute left-4 bottom-4 p-4 rounded-lg shadow-lg backdrop-blur-sm max-w-sm"
-          style={{
-            backgroundColor: isDarkMode ? 'rgba(31, 41, 55, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-            border: `1px solid ${isDarkMode ? 'rgba(75, 85, 99, 0.5)' : 'rgba(203, 213, 225, 0.5)'}`
-          }}
-        >
-          {(() => {
-            const node = graph.nodes.find(n => n.id === selectedNode)
-            const connectionCount = graph.edges.filter(e => e.source === selectedNode || e.target === selectedNode).length
-            return (
-              <div style={{color: isDarkMode ? '#f1f5f9' : '#1e293b'}}>
-                <h3 className="font-semibold text-lg mb-2">{node?.title?.replace(/\.(md|markdown)$/i, '')}</h3>
-                <p className="text-sm opacity-75 mb-2">{connectionCount} connection{connectionCount !== 1 ? 's' : ''}</p>
-                <p className="text-xs opacity-50">{node?.path}</p>
-                <div className="mt-3 text-xs opacity-75">
-                  Double-click to open • Drag to move
-                </div>
-              </div>
-            )
-          })()}
-        </div>
-      )}
-
-      {/* Graph stats */}
+      {/* Graph Container */}
       <div 
-        className="absolute left-4 top-4 p-3 rounded-lg shadow-lg backdrop-blur-sm"
-        style={{
-          backgroundColor: isDarkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)',
-          border: `1px solid ${isDarkMode ? 'rgba(75, 85, 99, 0.5)' : 'rgba(203, 213, 225, 0.5)'}`
+        ref={containerRef} 
+        className="w-full h-full" 
+        style={{ 
+          background: COLORS[isDarkMode ? 'dark' : 'light'].background,
+          cursor: selectedNode ? 'pointer' : 'grab'
         }}
-      >
-        <div className="text-sm font-medium" style={{color: isDarkMode ? '#f1f5f9' : '#1e293b'}}>
-          {graph.nodes.length} notes • {graph.edges.length} links
-        </div>
+      />
+
+      {/* Help */}
+      <div className="absolute bottom-4 right-4 text-xs text-app-muted bg-app-panel border border-app-border rounded-lg p-2 max-w-xs">
+        <div><strong>Click</strong> node to select/open</div>
+        <div><strong>Drag</strong> to pan • <strong>Scroll</strong> to zoom</div>
+        {searchQuery && <div><strong>Search:</strong> Highlighted in red</div>}
       </div>
     </div>
   )

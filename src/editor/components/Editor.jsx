@@ -267,8 +267,27 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
           const el = t.closest('[data-type="wiki-link"]');
           if (!el) return false;
           const href = el.getAttribute('href') || '';
+          const target = el.getAttribute('target') || '';
           if (!href) return true;
+          
           event.preventDefault();
+          
+          // Log for debugging
+          console.log('[WikiLink] Click:', { href, target, element: el });
+          
+          // Check if this is a resolved file path that exists in the index
+          const index = globalThis.__LOKUS_FILE_INDEX__ || [];
+          const fileExists = index.some(f => f.path === href);
+          
+          if (!fileExists && target) {
+            console.warn('[WikiLink] File not found in index:', href, 'original target:', target);
+            // Show a user-friendly message
+            try {
+              // You could show a toast notification here instead
+              console.log(`WikiLink target "${target}" could not be resolved to an existing file`);
+            } catch {}
+          }
+          
           // Emit to workspace to open file (Tauri or DOM event)
           (async () => {
             try {
