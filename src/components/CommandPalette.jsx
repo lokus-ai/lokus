@@ -20,7 +20,8 @@ import {
   ToggleLeft,
   Clock,
   History,
-  Trash2
+  Trash2,
+  FileTemplate
 } from 'lucide-react'
 import { getActiveShortcuts, formatAccelerator } from '../core/shortcuts/registry'
 import { useCommandHistory, createFileHistoryItem, createCommandHistoryItem } from '../hooks/useCommandHistory.js'
@@ -37,6 +38,7 @@ export default function CommandPalette({
   onOpenPreferences, 
   onToggleSidebar, 
   onCloseTab,
+  onShowTemplatePicker,
   activeFile 
 }) {
   const [shortcuts, setShortcuts] = useState({})
@@ -93,7 +95,7 @@ export default function CommandPalette({
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Type a command or search files..." />
+      <CommandInput placeholder="Type a command or search files... (try 'template')" />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
         
@@ -125,6 +127,11 @@ export default function CommandPalette({
                           break
                         case 'Open Preferences':
                           runCommand(onOpenPreferences)
+                          break
+                        case 'Insert Template':
+                          if (onShowTemplatePicker) {
+                            runCommand(onShowTemplatePicker)
+                          }
                           break
                         default:
                           console.warn(`Unknown command: ${commandName}`)
@@ -186,6 +193,14 @@ export default function CommandPalette({
                 <X className="mr-2 h-4 w-4" />
                 <span>Close Tab</span>
                 <CommandShortcut>{formatAccelerator(shortcuts['close-tab'])}</CommandShortcut>
+              </CommandItem>
+              <CommandItem 
+                onSelect={() => runCommandWithHistory(() => onShowTemplatePicker && onShowTemplatePicker(), 'Insert Template')}
+                disabled={!onShowTemplatePicker}
+              >
+                <FileTemplate className="mr-2 h-4 w-4" />
+                <span>Insert Template</span>
+                <CommandShortcut>T</CommandShortcut>
               </CommandItem>
             </>
           )}
