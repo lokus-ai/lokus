@@ -240,7 +240,7 @@ export default function TemplatePicker({
         <DialogHeader>
           <DialogTitle>Select Template</DialogTitle>
           <DialogDescription>
-            Choose a template to insert into your document. Templates support variables like {'{'}{'{'}{'}'}date{'}'}{'{'}date}} and {'{'}{'{'}{'}'}cursor{'}'}{'}'}.
+            Choose a template to insert into your document. Templates support variables like {"{{date}}"} and {"{{cursor}}"}.
           </DialogDescription>
         </DialogHeader>
 
