@@ -1309,7 +1309,16 @@ export default function Workspace({ initialPath = "" }) {
               if (editorRef.current) {
                 try {
                   console.log('[Workspace] Inserting content into editor');
-                  editorRef.current.commands.insertContent(processedContent);
+                  
+                  // Try to set content as markdown first, then fall back to plain text
+                  if (editorRef.current.commands.setContent) {
+                    console.log('[Workspace] Setting content as markdown');
+                    editorRef.current.commands.setContent(processedContent);
+                  } else {
+                    console.log('[Workspace] Using insertContent method');
+                    editorRef.current.commands.insertContent(processedContent);
+                  }
+                  
                   console.log('[Workspace] Content inserted successfully');
                 } catch (err) {
                   console.error('[Workspace] Failed to insert template:', err);
