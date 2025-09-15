@@ -55,7 +55,7 @@ body:
     attributes:
       label: Location
       description: Where is this documentation located? (URL, file path, etc.)
-      placeholder: e.g., README.md line 42, https://github.com/CodeWithInferno/Lokus/wiki/Setup
+      placeholder: e.g., README.md line 42, https://github.com/lokus-ai/lokus/wiki/Setup
 
   - type: textarea
     id: suggested-fix

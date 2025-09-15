@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, Share2, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package } from "lucide-react";
 import LokusLogo from "../components/LokusLogo.jsx";
 import GraphView from "./GraphView.jsx";
 import Editor from "../editor";
@@ -933,27 +933,6 @@ export default function Workspace({ initialPath = "" }) {
             </button>
             
             <button
-              onClick={() => {
-                // Open graph as a tab in the main editor area
-                const graphTabId = 'graph-view';
-                if (!openTabs.some(tab => tab.id === graphTabId)) {
-                  const newTab = {
-                    id: graphTabId,
-                    path: graphTabId,
-                    title: 'Graph View',
-                    type: 'graph'
-                  };
-                  setOpenTabs(prev => [...prev, newTab]);
-                }
-                setActiveFile(graphTabId);
-              }}
-              title="Graph View"
-              className={`obsidian-button icon-only w-full mb-1 ${activeFile === 'graph-view' ? 'primary' : ''}`}
-            >
-              <Share2 className="w-5 h-5" />
-            </button>
-            
-            <button
               onClick={() => { 
                 setShowPlugins(true); 
                 setShowKanban(false);
@@ -1128,7 +1107,7 @@ export default function Workspace({ initialPath = "" }) {
                     })()}
                   </div>
                 ) : activeFile === 'graph-view' ? (
-                  <div className="flex-1 overflow-hidden">
+                  <div className="flex-1 h-full w-full">
                     <GraphView 
                       workspacePath={path} 
                       onOpenFile={handleFileOpen}
