@@ -31,15 +31,29 @@ const MarkdownPaste = Extension.create({
               textSample: text?.substring(0, 100)
             })
 
-            // Skip if we already have rich HTML content
-            if (html && html.trim() && html.length > text?.length) {
-              console.log('[MarkdownPaste] Rich HTML detected, skipping markdown processing')
-              return false
-            }
-
             // Use our universal markdown compiler
             if (text) {
               const compiler = getMarkdownCompiler()
+              
+              // Check if HTML is actually rich content or just bloated markup
+              if (html && html.trim()) {
+                const isMarkdownText = compiler.isMarkdown(text)
+                const htmlTextRatio = html.length / (text?.length || 1)
+                
+                console.log('[MarkdownPaste] HTML analysis:', {
+                  htmlTextRatio: htmlTextRatio.toFixed(2),
+                  isMarkdownText,
+                  htmlSample: html.substring(0, 200)
+                })
+                
+                // If text is clearly markdown, process it even if HTML is present
+                if (isMarkdownText) {
+                  console.log('[MarkdownPaste] Text is markdown, processing despite HTML presence')
+                } else if (htmlTextRatio > 5) {
+                  console.log('[MarkdownPaste] Rich HTML detected (ratio > 5), skipping markdown processing')
+                  return false
+                }
+              }
               
               if (compiler.isMarkdown(text)) {
                 console.log('[MarkdownPaste] Markdown detected, processing...')
