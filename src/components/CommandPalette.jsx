@@ -39,6 +39,7 @@ export default function CommandPalette({
   onToggleSidebar, 
   onCloseTab,
   onShowTemplatePicker,
+  onCreateTemplate,
   activeFile 
 }) {
   const [shortcuts, setShortcuts] = useState({})
@@ -246,6 +247,15 @@ export default function CommandPalette({
                   <CommandShortcut className="text-xs">{template.category}</CommandShortcut>
                 </CommandItem>
               ))}
+              {/* Save as Template command */}
+              <CommandItem 
+                onSelect={() => runCommandWithHistory(() => onCreateTemplate && onCreateTemplate(), 'Save as Template')}
+                disabled={!onCreateTemplate}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                <span>Save as Template</span>
+                <CommandShortcut>S</CommandShortcut>
+              </CommandItem>
             </>
           )}
         </CommandGroup>
