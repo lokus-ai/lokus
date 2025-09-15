@@ -230,10 +230,10 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
     return <div className="m-5 text-app-muted">Loading editor…</div>;
   }
 
-  return <Tiptap extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} />;
-};
+  return <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} />;
+});
 
-function Tiptap({ extensions, content, onContentChange, editorSettings }) {
+const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings }, ref) => {
   const isSettingRef = useRef(false);
   
   // Subscribe to live settings changes for real-time updates
