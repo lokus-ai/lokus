@@ -14,6 +14,13 @@ import {
   X
 } from 'lucide-react';
 import { useTemplates, useTemplateProcessor } from '../hooks/useTemplates.js';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog.jsx';
 
 export default function TemplatePicker({ 
   open, 
@@ -37,6 +44,8 @@ export default function TemplatePicker({
     deleteTemplate,
     duplicateTemplate
   } = useTemplates();
+  
+  const { process: processTemplate } = useTemplateProcessor();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -123,9 +132,24 @@ export default function TemplatePicker({
   }, [templates, searchQuery, selectedCategory, selectedTags, sortBy, sortOrder]);
 
   // Handle template selection
-  const handleSelect = (template) => {
-    onSelect?.(template);
-    onClose?.();
+  const handleSelect = async (template) => {
+    try {
+      // Process the template with built-in variables
+      const result = await processTemplate(template.id, {}, {
+        context: {
+          // Add any context like current file info
+        }
+      });
+      
+      // Call onSelect with both template and processed content
+      onSelect?.(template, result.content);
+      onClose?.();
+    } catch (err) {
+      console.error('Failed to process template:', err);
+      // Fallback to raw template content
+      onSelect?.(template, template.content);
+      onClose?.();
+    }
   };
 
   // Handle template preview
@@ -210,21 +234,15 @@ export default function TemplatePicker({
     return 'Just now';
   };
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-app-panel border border-app-border rounded-lg shadow-lg w-full max-w-4xl h-[80vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-app-border">
-          <h2 className="text-lg font-semibold text-app-text">Select Template</h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-app-bg rounded-md transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="w-full max-w-4xl h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Select Template</DialogTitle>
+          <DialogDescription>
+            Choose a template to insert into your document. Templates support variables like {'{'}{'{'}{'}'}date{'}'}{'{'}date}} and {'{'}{'{'}{'}'}cursor{'}'}{'}'}.
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Filters */}
         <div className="p-4 border-b border-app-border space-y-3">
@@ -448,7 +466,7 @@ export default function TemplatePicker({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
