@@ -21,7 +21,7 @@ export default defineConfig({
         'build/'
       ]
     },
-    // Include test files
+    // Include test files  
     include: ['tests/**/*.{test,spec}.{js,jsx,ts,tsx}', 'src/**/*.{test,spec}.{js,jsx,ts,tsx}'],
     // Watch mode configuration
     watch: {
