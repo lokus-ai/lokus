@@ -291,6 +291,9 @@ export function useTemplateProcessor() {
       const builtins = builtinVariables.resolveAll(options.context || {});
       const allVariables = { ...builtins, ...variables };
       
+      console.log('[useTemplateProcessor] Built-in variables:', builtins);
+      console.log('[useTemplateProcessor] All variables:', allVariables);
+      
       const result = await manager.process(templateId, allVariables, options);
       return result;
     } catch (err) {
