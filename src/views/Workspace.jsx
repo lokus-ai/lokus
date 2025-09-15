@@ -1311,27 +1311,51 @@ export default function Workspace({ initialPath = "" }) {
                   console.log('[Workspace] Inserting content into editor');
                   console.log('[Workspace] Content to insert:', processedContent);
                   
-                  // Use a timeout to ensure editor is ready
-                  setTimeout(() => {
+                  // Try different insertion methods
+                  const insertMethods = [
+                    // Method 1: Standard insertContent
+                    () => editorRef.current.commands.insertContent(processedContent),
+                    
+                    // Method 2: Focus first then insert
+                    () => {
+                      editorRef.current.commands.focus();
+                      return editorRef.current.commands.insertContent(processedContent);
+                    },
+                    
+                    // Method 3: Use chain for atomic operation
+                    () => editorRef.current.chain().focus().insertContent(processedContent).run(),
+                    
+                    // Method 4: Direct view insertion
+                    () => {
+                      const { view } = editorRef.current;
+                      const { state } = view;
+                      const { tr } = state;
+                      const pos = state.selection.from;
+                      view.dispatch(tr.insertText(processedContent, pos));
+                    },
+                    
+                    // Method 5: Replace current selection
+                    () => editorRef.current.commands.insertContentAt(
+                      editorRef.current.state.selection.from, 
+                      processedContent
+                    )
+                  ];
+                  
+                  let inserted = false;
+                  for (let i = 0; i < insertMethods.length && !inserted; i++) {
                     try {
-                      if (editorRef.current?.commands?.insertContent) {
-                        editorRef.current.commands.insertContent(processedContent);
-                        console.log('[Workspace] Content inserted successfully');
-                      } else {
-                        console.error('[Workspace] Editor commands not available');
-                      }
+                      console.log(`[Workspace] Trying insertion method ${i + 1}`);
+                      insertMethods[i]();
+                      console.log(`[Workspace] Content inserted successfully with method ${i + 1}`);
+                      inserted = true;
                     } catch (err) {
-                      console.error('[Workspace] Delayed insertion failed:', err);
-                      // Try fallback with focus first
-                      try {
-                        editorRef.current.commands.focus();
-                        editorRef.current.commands.insertContent(processedContent);
-                        console.log('[Workspace] Content inserted with focus');
-                      } catch (err2) {
-                        console.error('[Workspace] All insertion methods failed:', err2);
-                      }
+                      console.error(`[Workspace] Method ${i + 1} failed:`, err.message);
                     }
-                  }, 100);
+                  }
+                  
+                  if (!inserted) {
+                    console.error('[Workspace] All insertion methods failed');
+                  }
                   
                 } catch (err) {
                   console.error('[Workspace] Failed to setup template insertion:', err);
