@@ -1297,17 +1297,27 @@ export default function Workspace({ initialPath = "" }) {
         onToggleSidebar={() => setShowLeft(v => !v)}
         onCloseTab={handleTabClose}
         onShowTemplatePicker={() => {
+          console.log('[Workspace] Opening template picker');
           setShowTemplatePicker(true);
           setTemplatePickerData({
             editorState: { editor: editorRef.current },
             onSelect: (template, processedContent) => {
+              console.log('[Workspace] Template selected:', template.name);
+              console.log('[Workspace] Processed content:', processedContent);
+              console.log('[Workspace] Editor ref:', !!editorRef.current);
+              
               if (editorRef.current) {
                 try {
+                  console.log('[Workspace] Inserting content into editor');
                   editorRef.current.commands.insertContent(processedContent);
+                  console.log('[Workspace] Content inserted successfully');
                 } catch (err) {
-                  console.error('Failed to insert template:', err);
+                  console.error('[Workspace] Failed to insert template:', err);
+                  console.log('[Workspace] Trying fallback insertion');
                   editorRef.current.commands.insertContent(template.content);
                 }
+              } else {
+                console.error('[Workspace] No editor reference available');
               }
             }
           });

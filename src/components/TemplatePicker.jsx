@@ -133,20 +133,27 @@ export default function TemplatePicker({
 
   // Handle template selection
   const handleSelect = async (template) => {
+    console.log('[TemplatePicker] Selecting template:', template.name);
+    
     try {
       // Process the template with built-in variables
+      console.log('[TemplatePicker] Processing template with ID:', template.id);
       const result = await processTemplate(template.id, {}, {
         context: {
           // Add any context like current file info
         }
       });
       
+      console.log('[TemplatePicker] Template processed successfully:', result);
+      
       // Call onSelect with both template and processed content
+      console.log('[TemplatePicker] Calling onSelect with processed content');
       onSelect?.(template, result.content);
       onClose?.();
     } catch (err) {
-      console.error('Failed to process template:', err);
+      console.error('[TemplatePicker] Failed to process template:', err);
       // Fallback to raw template content
+      console.log('[TemplatePicker] Using fallback - raw template content');
       onSelect?.(template, template.content);
       onClose?.();
     }
