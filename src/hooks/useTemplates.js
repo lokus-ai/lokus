@@ -181,7 +181,7 @@ export function useTemplates() {
           {
             id: 'daily-journal',
             name: 'Daily Journal',
-            content: `# {{date.long}}
+            content: `# {{date}}
 
 ## Morning Reflection
 **Mood:** {{mood || "How are you feeling?"}}
