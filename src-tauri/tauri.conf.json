@@ -40,16 +40,16 @@
       "entitlements": null,
       "dmg": {
         "appPosition": {
-          "x": 180,
-          "y": 190
+          "x": 198,
+          "y": 300
         },
         "applicationFolderPosition": {
-          "x": 480,
-          "y": 190
+          "x": 955,
+          "y": 335
         },
         "windowSize": {
-          "width": 660,
-          "height": 400
+          "width": 1200,
+          "height": 740
         },
         "background": "dmg-background.png"
       }
