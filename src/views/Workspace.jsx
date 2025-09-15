@@ -28,6 +28,7 @@ import Marketplace from "./Marketplace.jsx";
 import PluginDetail from "./PluginDetail.jsx";
 import { canvasManager } from "../core/canvas/manager.js";
 import TemplatePicker from "../components/TemplatePicker.jsx";
+import { getMarkdownCompiler } from "../core/markdown/compiler.js";
 
 const MAX_OPEN_TABS = 10;
 
@@ -1311,8 +1312,7 @@ export default function Workspace({ initialPath = "" }) {
                   console.log('[Workspace] Inserting content into editor');
                   console.log('[Workspace] Content to insert:', processedContent);
                   
-                  // Import markdown compiler for template processing
-                  const { getMarkdownCompiler } = await import('../core/markdown/compiler.js')
+                  // Process template content through markdown compiler
                   const compiler = getMarkdownCompiler()
                   
                   // Process template content through markdown compiler
