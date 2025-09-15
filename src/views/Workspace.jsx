@@ -1310,20 +1310,18 @@ export default function Workspace({ initialPath = "" }) {
                 try {
                   console.log('[Workspace] Inserting content into editor');
                   
-                  // Try to set content as markdown first, then fall back to plain text
-                  if (editorRef.current.commands.setContent) {
-                    console.log('[Workspace] Setting content as markdown');
-                    editorRef.current.commands.setContent(processedContent);
-                  } else {
-                    console.log('[Workspace] Using insertContent method');
-                    editorRef.current.commands.insertContent(processedContent);
-                  }
-                  
+                  // Insert content at cursor position (don't replace all content)
+                  editorRef.current.commands.insertContent(processedContent);
                   console.log('[Workspace] Content inserted successfully');
                 } catch (err) {
                   console.error('[Workspace] Failed to insert template:', err);
-                  console.log('[Workspace] Trying fallback insertion');
-                  editorRef.current.commands.insertContent(template.content);
+                  console.log('[Workspace] Trying basic text insertion');
+                  try {
+                    // Try inserting as plain text
+                    editorRef.current.commands.insertContent(processedContent);
+                  } catch (err2) {
+                    console.error('[Workspace] All insertion methods failed:', err2);
+                  }
                 }
               } else {
                 console.error('[Workspace] No editor reference available');
