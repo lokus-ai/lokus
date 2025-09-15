@@ -1,0 +1,117 @@
+{
+  "name": "@lokus/plugin-sdk",
+  "version": "1.0.0",
+  "description": "Official Plugin Development Kit (PDK) for Lokus - Build powerful plugins with TypeScript-first development experience",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "module": "dist/index.esm.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.esm.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./testing": {
+      "import": "./dist/testing/index.esm.js",
+      "require": "./dist/testing/index.js",
+      "types": "./dist/testing/index.d.ts"
+    },
+    "./templates": {
+      "import": "./dist/templates/index.esm.js",
+      "require": "./dist/templates/index.js",
+      "types": "./dist/templates/index.d.ts"
+    },
+    "./utils": {
+      "import": "./dist/utils/index.esm.js",
+      "require": "./dist/utils/index.js",
+      "types": "./dist/utils/index.d.ts"
+    }
+  },
+  "files": [
+    "dist/",
+    "templates/",
+    "docs/",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rollup -c rollup.config.js",
+    "build:watch": "rollup -c rollup.config.js --watch",
+    "dev": "npm run build:watch",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "typecheck": "tsc --noEmit",
+    "docs": "typedoc src/index.ts",
+    "docs:serve": "http-server docs -p 8080",
+    "prepublishOnly": "npm run build && npm run test && npm run lint",
+    "create-plugin": "node dist/cli/create-plugin.js",
+    "dev-server": "node dist/cli/dev-server.js"
+  },
+  "keywords": [
+    "lokus",
+    "plugin",
+    "sdk",
+    "pdk",
+    "development",
+    "typescript",
+    "extension",
+    "api"
+  ],
+  "author": "Lokus Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lokus/lokus.git",
+    "directory": "packages/plugin-sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/lokus/lokus/issues"
+  },
+  "homepage": "https://lokus.dev/docs/plugin-development",
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "peerDependencies": {
+    "typescript": ">=4.5.0"
+  },
+  "dependencies": {
+    "eventemitter3": "^5.0.1",
+    "ajv": "^8.12.0",
+    "ajv-formats": "^2.1.1",
+    "semver": "^7.5.4",
+    "chalk": "^5.3.0",
+    "commander": "^11.1.0",
+    "inquirer": "^9.2.12",
+    "fs-extra": "^11.1.1",
+    "glob": "^10.3.10",
+    "chokidar": "^3.5.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.0",
+    "@types/jest": "^29.5.5",
+    "@types/fs-extra": "^11.0.2",
+    "@types/semver": "^7.5.4",
+    "@types/inquirer": "^9.0.3",
+    "@typescript-eslint/eslint-plugin": "^6.7.0",
+    "@typescript-eslint/parser": "^6.7.0",
+    "eslint": "^8.50.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "rollup": "^3.29.0",
+    "@rollup/plugin-typescript": "^11.1.4",
+    "@rollup/plugin-node-resolve": "^15.2.1",
+    "@rollup/plugin-commonjs": "^25.0.4",
+    "@rollup/plugin-json": "^6.0.1",
+    "rollup-plugin-dts": "^6.0.2",
+    "typedoc": "^0.25.2",
+    "http-server": "^14.1.1",
+    "typescript": "^5.2.2"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

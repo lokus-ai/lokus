@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.0.1",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "vite",
     "dev:test": "concurrently \"npm run dev\" \"npm run test:watch:silent\"",

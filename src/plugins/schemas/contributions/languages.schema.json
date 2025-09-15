@@ -1,0 +1,204 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lokus.dev/schemas/contributions/languages.json",
+  "title": "Languages Contribution Schema",
+  "description": "Schema for language contributions in Lokus plugins",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+        "minLength": 1,
+        "maxLength": 50,
+        "description": "Unique language identifier (lowercase, kebab-case)"
+      },
+      "aliases": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "maxItems": 10,
+        "uniqueItems": true,
+        "description": "Alternative names for the language"
+      },
+      "extensions": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^\\.[a-zA-Z0-9_-]+$"
+        },
+        "maxItems": 20,
+        "uniqueItems": true,
+        "description": "File extensions associated with this language"
+      },
+      "filenames": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "maxItems": 20,
+        "uniqueItems": true,
+        "description": "Specific filenames associated with this language"
+      },
+      "filenamePatterns": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "maxItems": 10,
+        "uniqueItems": true,
+        "description": "Filename patterns (glob patterns) for language detection"
+      },
+      "firstLine": {
+        "type": "string",
+        "maxLength": 200,
+        "description": "Regular expression to match first line for language detection"
+      },
+      "configuration": {
+        "type": "string",
+        "pattern": "^\\./.*\\.json$",
+        "description": "Path to language configuration file"
+      },
+      "icon": {
+        "type": "object",
+        "properties": {
+          "light": {
+            "type": "string",
+            "description": "Icon for light themes"
+          },
+          "dark": {
+            "type": "string",
+            "description": "Icon for dark themes"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Icons for the language"
+      },
+      "mimetypes": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^[a-z]+/[a-z0-9][a-z0-9!#$&-^_`|~]*$"
+        },
+        "maxItems": 10,
+        "uniqueItems": true,
+        "description": "MIME types associated with this language"
+      },
+      "metadata": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Human-readable display name"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Description of the language"
+          },
+          "homepage": {
+            "type": "string",
+            "format": "uri",
+            "description": "Language homepage URL"
+          },
+          "documentation": {
+            "type": "string",
+            "format": "uri",
+            "description": "Language documentation URL"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "Programming",
+              "Markup", 
+              "Data",
+              "Configuration",
+              "Script",
+              "Query",
+              "Stylesheet",
+              "Documentation",
+              "Other"
+            ],
+            "description": "Language category"
+          },
+          "features": {
+            "type": "object",
+            "properties": {
+              "syntax": {
+                "type": "boolean",
+                "default": true,
+                "description": "Supports syntax highlighting"
+              },
+              "completion": {
+                "type": "boolean",
+                "default": false,
+                "description": "Supports code completion"
+              },
+              "diagnostics": {
+                "type": "boolean",
+                "default": false,
+                "description": "Supports error/warning diagnostics"
+              },
+              "formatting": {
+                "type": "boolean",
+                "default": false,
+                "description": "Supports code formatting"
+              },
+              "folding": {
+                "type": "boolean",
+                "default": false,
+                "description": "Supports code folding"
+              },
+              "outline": {
+                "type": "boolean",
+                "default": false,
+                "description": "Supports document outline"
+              },
+              "hover": {
+                "type": "boolean",
+                "default": false,
+                "description": "Supports hover information"
+              },
+              "definition": {
+                "type": "boolean",
+                "default": false,
+                "description": "Supports go-to-definition"
+              },
+              "references": {
+                "type": "boolean",
+                "default": false,
+                "description": "Supports find references"
+              },
+              "rename": {
+                "type": "boolean",
+                "default": false,
+                "description": "Supports symbol renaming"
+              }
+            },
+            "additionalProperties": false
+          },
+          "experimental": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether language support is experimental"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "required": ["id"],
+    "additionalProperties": false
+  },
+  "minItems": 1,
+  "maxItems": 20
+}

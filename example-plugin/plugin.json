@@ -1,0 +1,19 @@
+{
+  "id": "hello-world-plugin",
+  "name": "Hello World Plugin",
+  "version": "1.0.0",
+  "description": "A simple example plugin to demonstrate Lokus plugin development",
+  "author": "Lokus Team <team@lokus.app>",
+  "main": "src/index.js",
+  "lokusVersion": "^1.0.0",
+  "permissions": [
+    "modify_ui"
+  ],
+  "activationEvents": [
+    "onStartup"
+  ],
+  "categories": ["Other"],
+  "keywords": ["example", "demo", "hello-world"],
+  "repository": "https://github.com/lokus-editor/example-plugins",
+  "license": "MIT"
+}

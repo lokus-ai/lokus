@@ -1,0 +1,135 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lokus.dev/schemas/contributions/commands.json",
+  "title": "Commands Contribution Schema",
+  "description": "Schema for command contributions in Lokus plugins",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9.-]*[a-zA-Z0-9]$",
+        "minLength": 1,
+        "maxLength": 100,
+        "description": "Unique command identifier (should follow convention: extension.commandName)"
+      },
+      "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100,
+        "description": "Human-readable command title"
+      },
+      "shortTitle": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 50,
+        "description": "Short version of the title for space-constrained UI"
+      },
+      "category": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 50,
+        "description": "Category for grouping commands in command palette"
+      },
+      "icon": {
+        "anyOf": [
+          {
+            "type": "string",
+            "description": "Path to icon file or icon identifier"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "light": {
+                "type": "string",
+                "description": "Icon for light themes"
+              },
+              "dark": {
+                "type": "string", 
+                "description": "Icon for dark themes"
+              }
+            },
+            "required": ["light", "dark"],
+            "additionalProperties": false
+          }
+        ],
+        "description": "Icon for the command"
+      },
+      "enablement": {
+        "type": "string",
+        "description": "When clause expression determining when command is enabled"
+      },
+      "tooltip": {
+        "type": "string",
+        "maxLength": 200,
+        "description": "Tooltip text for the command"
+      },
+      "arguments": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Parameter name"
+            },
+            "type": {
+              "type": "string",
+              "enum": ["string", "number", "boolean", "object", "array"],
+              "description": "Parameter type"
+            },
+            "description": {
+              "type": "string",
+              "description": "Parameter description"
+            },
+            "required": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether parameter is required"
+            },
+            "default": {
+              "description": "Default value for parameter"
+            }
+          },
+          "required": ["name", "type"],
+          "additionalProperties": false
+        },
+        "maxItems": 10,
+        "description": "Command parameter definitions"
+      },
+      "metadata": {
+        "type": "object",
+        "properties": {
+          "keybinding": {
+            "type": "string",
+            "description": "Suggested default keybinding"
+          },
+          "group": {
+            "type": "string",
+            "description": "Logical grouping for related commands"
+          },
+          "order": {
+            "type": "number",
+            "description": "Display order within group"
+          },
+          "deprecated": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether command is deprecated"
+          },
+          "experimental": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether command is experimental"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "required": ["command", "title"],
+    "additionalProperties": false
+  },
+  "minItems": 1,
+  "maxItems": 100
+}
