@@ -1,0 +1,888 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lokus.dev/schemas/manifest-v2.json",
+  "title": "Lokus Plugin Manifest v2",
+  "description": "Schema for Lokus plugin manifest files following VS Code extension model",
+  "type": "object",
+  "required": [
+    "manifest",
+    "id",
+    "name",
+    "version",
+    "engines"
+  ],
+  "properties": {
+    "manifest": {
+      "type": "string",
+      "const": "2.0",
+      "description": "Manifest version identifier"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "minLength": 2,
+      "maxLength": 214,
+      "description": "Unique plugin identifier (lowercase, kebab-case)"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "Human-readable plugin name"
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "Plugin display name for marketplace"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+      "description": "Semantic version of the plugin"
+    },
+    "publisher": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+      "minLength": 2,
+      "maxLength": 100,
+      "description": "Publisher name (lowercase, kebab-case)"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Brief description of the plugin"
+    },
+    "engines": {
+      "type": "object",
+      "required": ["lokus"],
+      "properties": {
+        "lokus": {
+          "type": "string",
+          "pattern": "^(\\^|~|>=|>|<|<=|=)?\\d+\\.\\d+\\.\\d+",
+          "description": "Compatible Lokus version range"
+        },
+        "node": {
+          "type": "string",
+          "pattern": "^(\\^|~|>=|>|<|<=|=)?\\d+\\.\\d+\\.\\d+",
+          "description": "Required Node.js version"
+        }
+      },
+      "additionalProperties": false
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "Programming Languages",
+          "Snippets", 
+          "Linters",
+          "Themes",
+          "Debuggers",
+          "Formatters",
+          "Keymaps",
+          "SCM Providers",
+          "Extension Packs",
+          "Language Packs",
+          "Data Science",
+          "Machine Learning",
+          "Visualization",
+          "Notebooks",
+          "Education",
+          "Testing",
+          "Other"
+        ]
+      },
+      "maxItems": 5,
+      "uniqueItems": true,
+      "description": "Plugin categories for marketplace organization"
+    },
+    "keywords": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 50
+      },
+      "maxItems": 20,
+      "uniqueItems": true,
+      "description": "Keywords for plugin discovery"
+    },
+    "main": {
+      "type": "string",
+      "pattern": "\\.(js|mjs|ts)$",
+      "description": "Main entry point for Node.js environment"
+    },
+    "browser": {
+      "type": "string", 
+      "pattern": "\\.(js|mjs)$",
+      "description": "Main entry point for browser environment"
+    },
+    "activationEvents": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "anyOf": [
+          { "const": "*" },
+          { "const": "onStartupFinished" },
+          { "pattern": "^onCommand:" },
+          { "pattern": "^onLanguage:" },
+          { "pattern": "^onDebug:" },
+          { "pattern": "^onDebugResolve:" },
+          { "pattern": "^onDebugInitialConfigurations$" },
+          { "pattern": "^onDebugDynamicConfigurations:" },
+          { "pattern": "^workspaceContains:" },
+          { "pattern": "^onFileSystem:" },
+          { "pattern": "^onSearch:" },
+          { "pattern": "^onView:" },
+          { "pattern": "^onUri$" },
+          { "pattern": "^onWebviewPanel:" },
+          { "pattern": "^onCustomEditor:" },
+          { "pattern": "^onAuthenticationRequest:" },
+          { "pattern": "^onOpenExternalUri:" },
+          { "pattern": "^onTerminalProfile:" }
+        ]
+      },
+      "uniqueItems": true,
+      "description": "Events that trigger plugin activation"
+    },
+    "contributes": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/command"
+          }
+        },
+        "menus": {
+          "type": "object",
+          "patternProperties": {
+            "^(commandPalette|editor/context|editor/title|editor/title/context|explorer/context|scm/title|scm/resourceGroup/context|scm/resourceState/context|scm/change/title|view/title|view/item/context|menuBar|touchBar|webview/context|comments/commentThread/context|comments/comment/title|comments/comment/context|timeline/title|timeline/item/context|extension/context|file/newFile)$": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/menuItem"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "keybindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/keybinding"
+          }
+        },
+        "languages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/language"
+          }
+        },
+        "grammars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/grammar"
+          }
+        },
+        "themes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/theme"
+          }
+        },
+        "iconThemes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/iconTheme"
+          }
+        },
+        "snippets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/snippet"
+          }
+        },
+        "configuration": {
+          "$ref": "#/definitions/configuration"
+        },
+        "configurationDefaults": {
+          "type": "object",
+          "description": "Default configuration values"
+        },
+        "views": {
+          "type": "object",
+          "patternProperties": {
+            "^[a-zA-Z0-9-_.]+$": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/view"
+              }
+            }
+          }
+        },
+        "viewsContainers": {
+          "type": "object",
+          "properties": {
+            "activitybar": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/viewContainer"
+              }
+            },
+            "panel": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/viewContainer"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "problemMatchers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/problemMatcher"
+          }
+        },
+        "taskDefinitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/taskDefinition"
+          }
+        },
+        "debuggers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/debugger"
+          }
+        },
+        "breakpoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/breakpoint"
+          }
+        },
+        "colors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/colorContribution"
+          }
+        },
+        "authentication": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/authenticationProvider"
+          }
+        },
+        "resourceLabelFormatters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/resourceLabelFormatter"
+          }
+        },
+        "customEditors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/customEditor"
+          }
+        },
+        "webviews": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/webview"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "description": "Plugin contributions to Lokus functionality"
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "untrustedWorkspaces": {
+          "type": "object",
+          "properties": {
+            "supported": {
+              "anyOf": [
+                { "type": "boolean" },
+                { "const": "limited" }
+              ]
+            },
+            "restrictedConfigurations": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "description": {
+              "type": "string"
+            }
+          },
+          "required": ["supported"]
+        },
+        "virtualWorkspaces": {
+          "type": "object", 
+          "properties": {
+            "supported": {
+              "anyOf": [
+                { "type": "boolean" },
+                { "const": "limited" }
+              ]
+            },
+            "description": {
+              "type": "string"
+            }
+          },
+          "required": ["supported"]
+        }
+      },
+      "additionalProperties": false,
+      "description": "Plugin workspace and security capabilities"
+    },
+    "author": {
+      "anyOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "email": { 
+              "type": "string", 
+              "format": "email"
+            },
+            "url": { 
+              "type": "string", 
+              "format": "uri"
+            }
+          },
+          "required": ["name"],
+          "additionalProperties": false
+        }
+      ],
+      "description": "Plugin author information"
+    },
+    "license": {
+      "type": "string",
+      "description": "SPDX license identifier"
+    },
+    "homepage": {
+      "type": "string",
+      "format": "uri",
+      "description": "Plugin homepage URL"
+    },
+    "repository": {
+      "anyOf": [
+        { "type": "string", "format": "uri" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string" },
+            "url": { "type": "string", "format": "uri" },
+            "directory": { "type": "string" }
+          },
+          "required": ["type", "url"],
+          "additionalProperties": false
+        }
+      ],
+      "description": "Repository information"
+    },
+    "bugs": {
+      "anyOf": [
+        { "type": "string", "format": "uri" },
+        {
+          "type": "object",
+          "properties": {
+            "url": { "type": "string", "format": "uri" },
+            "email": { "type": "string", "format": "email" }
+          },
+          "additionalProperties": false
+        }
+      ],
+      "description": "Bug reporting information"
+    },
+    "qna": {
+      "anyOf": [
+        { "type": "boolean" },
+        { "const": "marketplace" },
+        { "type": "string", "format": "uri" }
+      ],
+      "description": "Q&A support configuration"
+    },
+    "badges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "href": { "type": "string", "format": "uri" },
+          "description": { "type": "string" }
+        },
+        "required": ["url", "href", "description"],
+        "additionalProperties": false
+      },
+      "maxItems": 3,
+      "description": "Badges to display in marketplace"
+    },
+    "markdown": {
+      "type": "string",
+      "enum": ["github", "standard"],
+      "description": "Markdown flavor for README and description"
+    },
+    "galleryBanner": {
+      "type": "object",
+      "properties": {
+        "color": { 
+          "type": "string", 
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "theme": { 
+          "type": "string", 
+          "enum": ["dark", "light"]
+        }
+      },
+      "additionalProperties": false,
+      "description": "Marketplace banner configuration"
+    },
+    "preview": {
+      "type": "boolean",
+      "description": "Mark plugin as preview/experimental"
+    },
+    "enabledApiProposals": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true,
+      "description": "Experimental API proposals to enable"
+    },
+    "api": {
+      "type": "string",
+      "enum": ["none"],
+      "description": "API usage restrictions"
+    },
+    "extensionDependencies": {
+      "type": "array",
+      "items": { 
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]\\.[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "description": "Other plugins this plugin depends on"
+    },
+    "extensionPack": {
+      "type": "array",
+      "items": { 
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]\\.[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "description": "Plugins bundled with this plugin"
+    },
+    "icon": {
+      "type": "string",
+      "pattern": "\\.(png|jpg|jpeg|svg)$",
+      "description": "Path to plugin icon"
+    },
+    "scripts": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-zA-Z0-9-_]+$": { "type": "string" }
+      },
+      "description": "Build and lifecycle scripts"
+    },
+    "pricing": {
+      "type": "string",
+      "enum": ["Free", "Trial", "Paid"],
+      "description": "Plugin pricing model"
+    },
+    "sponsor": {
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "format": "uri" }
+      },
+      "required": ["url"],
+      "description": "Sponsorship information"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "command": {
+      "type": "object",
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "category": { "type": "string" },
+        "icon": {
+          "anyOf": [
+            { "type": "string" },
+            {
+              "type": "object",
+              "properties": {
+                "light": { "type": "string" },
+                "dark": { "type": "string" }
+              },
+              "required": ["light", "dark"]
+            }
+          ]
+        },
+        "enablement": { "type": "string" },
+        "shortTitle": { "type": "string" }
+      },
+      "required": ["command", "title"],
+      "additionalProperties": false
+    },
+    "menuItem": {
+      "type": "object",
+      "properties": {
+        "command": { "type": "string" },
+        "alt": { "type": "string" },
+        "when": { "type": "string" },
+        "group": { "type": "string" },
+        "submenu": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "keybinding": {
+      "type": "object",
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "key": { "type": "string", "minLength": 1 },
+        "mac": { "type": "string" },
+        "linux": { "type": "string" },
+        "win": { "type": "string" },
+        "when": { "type": "string" },
+        "args": {}
+      },
+      "required": ["command", "key"],
+      "additionalProperties": false
+    },
+    "language": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "aliases": { 
+          "type": "array", 
+          "items": { "type": "string" }
+        },
+        "extensions": { 
+          "type": "array", 
+          "items": { "type": "string" }
+        },
+        "filenames": { 
+          "type": "array", 
+          "items": { "type": "string" }
+        },
+        "filenamePatterns": { 
+          "type": "array", 
+          "items": { "type": "string" }
+        },
+        "firstLine": { "type": "string" },
+        "configuration": { "type": "string" },
+        "icon": {
+          "type": "object",
+          "properties": {
+            "light": { "type": "string" },
+            "dark": { "type": "string" }
+          }
+        }
+      },
+      "required": ["id"],
+      "additionalProperties": false
+    },
+    "grammar": {
+      "type": "object",
+      "properties": {
+        "language": { "type": "string" },
+        "scopeName": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "embeddedLanguages": {
+          "type": "object",
+          "patternProperties": {
+            "^.*$": { "type": "string" }
+          }
+        },
+        "tokenTypes": {
+          "type": "object",
+          "patternProperties": {
+            "^.*$": { "type": "string" }
+          }
+        },
+        "injectTo": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["scopeName", "path"],
+      "additionalProperties": false
+    },
+    "theme": {
+      "type": "object",
+      "properties": {
+        "label": { "type": "string", "minLength": 1 },
+        "uiTheme": { 
+          "type": "string", 
+          "enum": ["vs", "vs-dark", "hc-black", "hc-light"]
+        },
+        "path": { "type": "string", "minLength": 1 }
+      },
+      "required": ["label", "uiTheme", "path"],
+      "additionalProperties": false
+    },
+    "iconTheme": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 }
+      },
+      "required": ["id", "label", "path"],
+      "additionalProperties": false
+    },
+    "snippet": {
+      "type": "object",
+      "properties": {
+        "language": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 }
+      },
+      "required": ["language", "path"],
+      "additionalProperties": false
+    },
+    "configuration": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "properties": {
+          "type": "object",
+          "patternProperties": {
+            "^.*$": {
+              "type": "object",
+              "properties": {
+                "type": { 
+                  "anyOf": [
+                    { "type": "string" },
+                    { "type": "array", "items": { "type": "string" } }
+                  ]
+                },
+                "default": {},
+                "description": { "type": "string" },
+                "enum": { "type": "array" },
+                "enumDescriptions": { 
+                  "type": "array", 
+                  "items": { "type": "string" } 
+                },
+                "scope": { 
+                  "type": "string", 
+                  "enum": ["application", "machine", "window", "resource", "language-overridable", "machine-overridable"]
+                },
+                "minimum": { "type": "number" },
+                "maximum": { "type": "number" },
+                "pattern": { "type": "string" },
+                "patternErrorMessage": { "type": "string" },
+                "deprecationMessage": { "type": "string" },
+                "markdownDeprecationMessage": { "type": "string" },
+                "order": { "type": "number" }
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "view": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "when": { "type": "string" },
+        "icon": { "type": "string" },
+        "contextualTitle": { "type": "string" },
+        "type": { 
+          "type": "string", 
+          "enum": ["tree", "webview"]
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["visible", "collapsed", "hidden"]
+        }
+      },
+      "required": ["id", "name"],
+      "additionalProperties": false
+    },
+    "viewContainer": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "icon": { "type": "string", "minLength": 1 }
+      },
+      "required": ["id", "title", "icon"],
+      "additionalProperties": false
+    },
+    "problemMatcher": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "label": { "type": "string" },
+        "owner": { "type": "string" },
+        "source": { "type": "string" },
+        "applyTo": { 
+          "type": "string", 
+          "enum": ["allDocuments", "openDocuments", "closedDocuments"]
+        },
+        "severity": { 
+          "type": "string", 
+          "enum": ["error", "warning", "info"]
+        },
+        "fileLocation": {
+          "anyOf": [
+            { "type": "string" },
+            { "type": "array" }
+          ]
+        },
+        "pattern": {},
+        "background": {
+          "type": "object",
+          "properties": {
+            "activeOnStart": { "type": "boolean" },
+            "beginsPattern": { "type": "string" },
+            "endsPattern": { "type": "string" }
+          }
+        },
+        "watching": {
+          "type": "object",
+          "properties": {
+            "activeOnStart": { "type": "boolean" },
+            "beginsPattern": { "type": "string" },
+            "endsPattern": { "type": "string" }
+          }
+        }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    },
+    "taskDefinition": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "required": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "properties": {
+          "type": "object",
+          "patternProperties": {
+            "^.*$": {
+              "type": "object",
+              "properties": {
+                "type": { "type": "string" },
+                "description": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "debugger": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "label": { "type": "string" },
+        "program": { "type": "string" },
+        "runtime": { "type": "string" },
+        "configurationAttributes": {},
+        "initialConfigurations": {},
+        "configurationSnippets": {},
+        "variables": {},
+        "languages": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "breakpoint": {
+      "type": "object",
+      "properties": {
+        "language": { "type": "string", "minLength": 1 }
+      },
+      "required": ["language"],
+      "additionalProperties": false
+    },
+    "colorContribution": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "defaults": {
+          "type": "object",
+          "properties": {
+            "light": { "type": "string" },
+            "dark": { "type": "string" },
+            "highContrast": { "type": "string" }
+          }
+        }
+      },
+      "required": ["id", "description"],
+      "additionalProperties": false
+    },
+    "authenticationProvider": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 }
+      },
+      "required": ["id", "label"],
+      "additionalProperties": false
+    },
+    "resourceLabelFormatter": {
+      "type": "object",
+      "properties": {
+        "scheme": { "type": "string", "minLength": 1 },
+        "authority": { "type": "string" },
+        "formatting": {
+          "type": "object",
+          "properties": {
+            "label": { "type": "string" },
+            "separator": { "type": "string" },
+            "tildify": { "type": "boolean" },
+            "workspaceSuffix": { "type": "string" }
+          }
+        }
+      },
+      "required": ["scheme", "formatting"],
+      "additionalProperties": false
+    },
+    "customEditor": {
+      "type": "object",
+      "properties": {
+        "viewType": { "type": "string", "minLength": 1 },
+        "displayName": { "type": "string", "minLength": 1 },
+        "selector": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "filenamePattern": { "type": "string" }
+            }
+          }
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["default", "builtin", "option"]
+        }
+      },
+      "required": ["viewType", "displayName"],
+      "additionalProperties": false
+    },
+    "webview": {
+      "type": "object",
+      "properties": {
+        "viewType": { "type": "string", "minLength": 1 },
+        "displayName": { "type": "string", "minLength": 1 }
+      },
+      "required": ["viewType", "displayName"],
+      "additionalProperties": false
+    }
+  }
+}

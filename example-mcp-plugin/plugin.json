@@ -1,0 +1,60 @@
+{
+  "manifest": "2.0",
+  "id": "example-mcp-plugin",
+  "name": "Example MCP Plugin",
+  "displayName": "Example MCP AI Plugin",
+  "version": "1.0.0",
+  "publisher": "lokus-team",
+  "description": "An example MCP plugin demonstrating AI integration with Lokus",
+  "engines": {
+    "lokus": "^1.0.0",
+    "node": ">=16.0.0"
+  },
+  "categories": ["AI", "Programming Languages"],
+  "keywords": ["mcp", "ai", "example", "assistant"],
+  "main": "src/index.js",
+  "type": "mcp-server",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "exampleMCP.activate",
+        "title": "Activate MCP Example"
+      }
+    ]
+  },
+  "mcp": {
+    "capabilities": {
+      "resources": {
+        "subscribe": true,
+        "listChanged": true
+      },
+      "tools": {
+        "listChanged": true
+      },
+      "prompts": {}
+    },
+    "enableResourceSubscriptions": true,
+    "enableToolExecution": true
+  },
+  "permissions": [
+    "mcp:serve",
+    "mcp:resources", 
+    "mcp:tools",
+    "mcp:prompts",
+    "read_files",
+    "modify_ui"
+  ],
+  "author": {
+    "name": "Lokus Team",
+    "email": "team@lokus.app",
+    "url": "https://lokus.app"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lokus-editor/example-plugins"
+  },
+  "license": "MIT"
+}

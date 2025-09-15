@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lokus.dev/schemas/contributions/menus.json",
+  "title": "Menus Contribution Schema",
+  "description": "Schema for menu contributions in Lokus plugins",
+  "type": "object",
+  "patternProperties": {
+    "^(commandPalette|editor/context|editor/title|editor/title/context|explorer/context|scm/title|scm/resourceGroup/context|scm/resourceState/context|scm/change/title|view/title|view/item/context|menuBar|touchBar|webview/context|comments/commentThread/context|comments/comment/title|comments/comment/context|timeline/title|timeline/item/context|extension/context|file/newFile)$": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/menuItem"
+      },
+      "maxItems": 50
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "menuItem": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9.-]*[a-zA-Z0-9]$",
+          "description": "Command to execute when menu item is selected"
+        },
+        "alt": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9.-]*[a-zA-Z0-9]$",
+          "description": "Alternative command when Alt key is held"
+        },
+        "when": {
+          "type": "string",
+          "description": "When clause expression for conditional display"
+        },
+        "group": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]+(@[0-9]+)?$",
+          "description": "Menu group identifier with optional sort order (e.g., 'navigation@1')"
+        },
+        "submenu": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9.-]*[a-zA-Z0-9]$",
+          "description": "Submenu identifier for nested menus"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Display title for the menu item"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Icon identifier or path"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "light": {
+                  "type": "string"
+                },
+                "dark": {
+                  "type": "string"
+                }
+              },
+              "required": ["light", "dark"],
+              "additionalProperties": false
+            }
+          ],
+          "description": "Icon for the menu item"
+        },
+        "enablement": {
+          "type": "string",
+          "description": "When clause for enabling/disabling the menu item"
+        },
+        "tooltip": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Tooltip text for the menu item"
+        },
+        "args": {
+          "description": "Arguments to pass to the command"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "keybinding": {
+              "type": "string",
+              "description": "Keyboard shortcut display"
+            },
+            "order": {
+              "type": "number",
+              "description": "Sort order within group"
+            },
+            "separator": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether to show separator after this item"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "anyOf": [
+        {
+          "required": ["command"]
+        },
+        {
+          "required": ["submenu", "title"]
+        }
+      ],
+      "additionalProperties": false
+    }
+  }
+}

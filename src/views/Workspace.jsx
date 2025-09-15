@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, Share2, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, Share2, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package } from "lucide-react";
 import LokusLogo from "../components/LokusLogo.jsx";
 // import GraphView from "./GraphView.jsx"; // Temporarily disabled
 import Editor from "../editor";
@@ -24,7 +24,7 @@ import SearchPanel from "../components/SearchPanel.jsx";
 import MiniKanban from "../components/MiniKanban.jsx";
 import FullKanban from "../components/FullKanban.jsx";
 import PluginSettings from "./PluginSettings.jsx";
-import PluginMarketplace from "./PluginMarketplace.jsx";
+import Marketplace from "./Marketplace.jsx";
 import PluginDetail from "./PluginDetail.jsx";
 import { canvasManager } from "../core/canvas/manager.js";
 
@@ -418,6 +418,7 @@ export default function Workspace({ initialPath = "" }) {
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showKanban, setShowKanban] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
+  const [showMarketplace, setShowMarketplace] = useState(false);
   
   // --- Refs for stable callbacks ---
   const stateRef = useRef({});
@@ -905,10 +906,11 @@ export default function Workspace({ initialPath = "" }) {
               onClick={() => { 
                 setShowKanban(false); 
                 setShowPlugins(false); 
+                setShowMarketplace(false);
                 setShowLeft(true);
               }}
               title="Explorer"
-              className={`obsidian-button icon-only w-full mb-1 ${!showKanban && !showPlugins && showLeft ? 'primary' : ''}`}
+              className={`obsidian-button icon-only w-full mb-1 ${!showKanban && !showPlugins && !showMarketplace && showLeft ? 'primary' : ''}`}
             >
               <FolderOpen className="w-5 h-5" />
             </button>
@@ -917,10 +919,11 @@ export default function Workspace({ initialPath = "" }) {
               onClick={() => { 
                 setShowKanban(true); 
                 setShowPlugins(false); 
+                setShowMarketplace(false);
                 setShowLeft(true);
               }}
               title="Task Board"
-              className={`obsidian-button icon-only w-full mb-1 ${showKanban && !showPlugins ? 'primary' : ''}`}
+              className={`obsidian-button icon-only w-full mb-1 ${showKanban && !showPlugins && !showMarketplace ? 'primary' : ''}`}
             >
               <LayoutGrid className="w-5 h-5" />
             </button>
@@ -929,20 +932,34 @@ export default function Workspace({ initialPath = "" }) {
               onClick={() => { 
                 setShowPlugins(true); 
                 setShowKanban(false);
+                setShowMarketplace(false);
                 setShowLeft(true);
               }}
               title="Extensions"
-              className={`obsidian-button icon-only w-full ${showPlugins ? 'primary' : ''}`}
+              className={`obsidian-button icon-only w-full mb-1 ${showPlugins && !showKanban && !showMarketplace ? 'primary' : ''}`}
             >
               <Puzzle className="w-5 h-5" />
+            </button>
+            
+            <button
+              onClick={() => { 
+                setShowMarketplace(true); 
+                setShowPlugins(false); 
+                setShowKanban(false);
+                setShowLeft(true);
+              }}
+              title="Plugin Marketplace"
+              className={`obsidian-button icon-only w-full ${showMarketplace ? 'primary' : ''}`}
+            >
+              <Package className="w-5 h-5" />
             </button>
           </div>
         </aside>
         <div className="bg-app-border/20 w-px" />
         {showLeft && (
           <aside className="overflow-y-auto flex flex-col">
-            {/* Clean Header with Title and Actions - Hide for Kanban */}
-            {!showKanban && (
+            {/* Clean Header with Title and Actions - Hide for Kanban and Marketplace */}
+            {!showKanban && !showMarketplace && (
               <div className="h-12 shrink-0 px-4 flex items-center justify-between gap-2 border-b border-app-border">
                 <div className="flex items-center gap-3">
                   <h2 className="text-sm font-medium text-app-text">
@@ -1019,16 +1036,21 @@ export default function Workspace({ initialPath = "" }) {
         )}
         {showLeft && <div onMouseDown={startLeftDrag} className="cursor-col-resize bg-app-border hover:bg-app-accent transition-colors duration-300 w-1 min-h-full" />}
         <main className="min-w-0 min-h-0 flex flex-col bg-app-bg">
-          <TabBar 
-            tabs={openTabs}
-            activeTab={activeFile}
-            onTabClick={handleTabClick}
-            onTabClose={handleTabClose}
-            unsavedChanges={unsavedChanges}
-            onDragEnd={handleTabDragEnd}
-            onNewTab={handleCreateFile}
-          />
-          {activeFile === '__kanban__' ? (
+          {/* Show marketplace as full-screen view when marketplace is active */}
+          {showMarketplace ? (
+            <Marketplace />
+          ) : (
+            <>
+              <TabBar 
+                tabs={openTabs}
+                activeTab={activeFile}
+                onTabClick={handleTabClick}
+                onTabClose={handleTabClose}
+                unsavedChanges={unsavedChanges}
+                onDragEnd={handleTabDragEnd}
+                onNewTab={handleCreateFile}
+              />
+              {activeFile === '__kanban__' ? (
             <div className="flex-1 bg-app-panel overflow-hidden">
               <FullKanban 
                 workspacePath={path}
@@ -1222,6 +1244,8 @@ export default function Workspace({ initialPath = "" }) {
               )}
               </div>
             </div>
+          )}
+            </>
           )}
         </main>
       </div>

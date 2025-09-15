@@ -1,0 +1,298 @@
+{
+  "manifest": "2.0",
+  "id": "smart-writing-assistant",
+  "name": "Smart Writing Assistant",
+  "displayName": "Smart Writing Assistant",
+  "version": "1.0.0",
+  "description": "AI-powered writing assistant with chat interface, prompt templates, and intelligent text processing",
+  "publisher": "lokus-examples",
+  "author": "Lokus Team",
+  "license": "MIT",
+  "engines": {
+    "lokus": "^1.0.0"
+  },
+  "main": "./src/index.js",
+  "activationEvents": [
+    "onStartup",
+    "onCommand:ai.chat",
+    "onCommand:ai.help",
+    "onCommand:ai.rewrite",
+    "onLanguage:markdown",
+    "onLanguage:plaintext"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "ai.chat",
+        "title": "Start AI Chat",
+        "category": "AI Assistant",
+        "icon": "chat"
+      },
+      {
+        "command": "ai.help",
+        "title": "AI Writing Help",
+        "category": "AI Assistant",
+        "icon": "help"
+      },
+      {
+        "command": "ai.rewrite",
+        "title": "Rewrite Selection",
+        "category": "AI Assistant",
+        "icon": "edit"
+      },
+      {
+        "command": "ai.summarize",
+        "title": "Summarize Text",
+        "category": "AI Assistant",
+        "icon": "list"
+      },
+      {
+        "command": "ai.expand",
+        "title": "Expand Ideas",
+        "category": "AI Assistant",
+        "icon": "expand"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "ai.rewrite",
+          "when": "editorHasSelection",
+          "group": "ai@1"
+        },
+        {
+          "command": "ai.summarize",
+          "when": "editorHasSelection",
+          "group": "ai@2"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "ai.chat",
+        "key": "ctrl+alt+c",
+        "mac": "cmd+alt+c"
+      },
+      {
+        "command": "ai.rewrite",
+        "key": "ctrl+alt+r",
+        "mac": "cmd+alt+r",
+        "when": "editorHasSelection"
+      }
+    ],
+    "mcp": {
+      "servers": [
+        {
+          "id": "writing-assistant",
+          "name": "Writing Assistant",
+          "description": "AI-powered writing and text processing server"
+        }
+      ],
+      "resources": [
+        {
+          "name": "writing-templates",
+          "description": "Collection of writing templates and prompts",
+          "pattern": "ai://templates/**",
+          "type": "template",
+          "mimeType": "text/plain"
+        },
+        {
+          "name": "chat-history",
+          "description": "Chat conversation history",
+          "pattern": "ai://chat/**",
+          "type": "conversation",
+          "mimeType": "application/json"
+        }
+      ],
+      "tools": [
+        {
+          "name": "rewrite_text",
+          "description": "Rewrite text with specified style and improvements",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" },
+              "style": { "type": "string", "enum": ["casual", "formal", "academic", "creative"] },
+              "improvements": { "type": "array", "items": { "type": "string" } }
+            },
+            "required": ["text"]
+          }
+        },
+        {
+          "name": "summarize_text",
+          "description": "Create a summary of the provided text",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" },
+              "length": { "type": "string", "enum": ["short", "medium", "long"] },
+              "format": { "type": "string", "enum": ["paragraph", "bullets", "outline"] }
+            },
+            "required": ["text"]
+          }
+        },
+        {
+          "name": "expand_ideas",
+          "description": "Expand and elaborate on ideas or concepts",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "topic": { "type": "string" },
+              "context": { "type": "string" },
+              "depth": { "type": "string", "enum": ["basic", "detailed", "comprehensive"] }
+            },
+            "required": ["topic"]
+          }
+        },
+        {
+          "name": "check_grammar",
+          "description": "Check and correct grammar in text",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" },
+              "language": { "type": "string", "default": "en" }
+            },
+            "required": ["text"]
+          }
+        }
+      ],
+      "prompts": [
+        {
+          "name": "writing_coach",
+          "description": "Get writing advice and feedback",
+          "template": "As a writing coach, please review this text and provide feedback: {{text}}\n\nFocus on: {{focus_areas}}",
+          "arguments": [
+            { "name": "text", "required": true, "type": "string" },
+            { "name": "focus_areas", "required": false, "type": "string", "default": "clarity, structure, engagement" }
+          ]
+        },
+        {
+          "name": "brainstorm",
+          "description": "Brainstorm ideas for a topic",
+          "template": "Help me brainstorm ideas for: {{topic}}\n\nContext: {{context}}\nAudience: {{audience}}\nGoal: {{goal}}",
+          "arguments": [
+            { "name": "topic", "required": true, "type": "string" },
+            { "name": "context", "required": false, "type": "string" },
+            { "name": "audience", "required": false, "type": "string" },
+            { "name": "goal", "required": false, "type": "string" }
+          ]
+        },
+        {
+          "name": "content_outline",
+          "description": "Create an outline for content",
+          "template": "Create a detailed outline for: {{title}}\n\nType: {{content_type}}\nLength: {{target_length}}\nAudience: {{audience}}\nKey points to cover: {{key_points}}",
+          "arguments": [
+            { "name": "title", "required": true, "type": "string" },
+            { "name": "content_type", "required": false, "type": "string", "default": "article" },
+            { "name": "target_length", "required": false, "type": "string" },
+            { "name": "audience", "required": false, "type": "string" },
+            { "name": "key_points", "required": false, "type": "string" }
+          ]
+        }
+      ]
+    }
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": {
+      "supported": true
+    }
+  },
+  "permissions": [
+    "network_access",
+    "secure_storage",
+    "mcp:serve",
+    "mcp:client",
+    "mcp:resources",
+    "mcp:tools",
+    "mcp:prompts"
+  ],
+  "categories": [
+    "MCP Plugin",
+    "AI & ML",
+    "Writing",
+    "Assistant",
+    "Productivity"
+  ],
+  "keywords": [
+    "ai",
+    "assistant",
+    "writing",
+    "chat",
+    "gpt",
+    "text",
+    "productivity",
+    "mcp"
+  ],
+  "mcp": {
+    "type": "mcp-server",
+    "version": "1.0.0",
+    "capabilities": {
+      "resources": {
+        "subscribe": true,
+        "listChanged": true
+      },
+      "tools": {
+        "listChanged": true
+      },
+      "prompts": {
+        "listChanged": true
+      },
+      "logging": {
+        "enabled": true
+      },
+      "sampling": {
+        "enabled": true
+      }
+    },
+    "enableResourceSubscriptions": true,
+    "enableToolExecution": true,
+    "enablePromptTemplates": true,
+    "enableSampling": true,
+    "memoryLimit": 100,
+    "cpuTimeLimit": 10000,
+    "maxApiCalls": 1000
+  },
+  "configuration": {
+    "title": "Smart Writing Assistant",
+    "properties": {
+      "smartWritingAssistant.apiProvider": {
+        "type": "string",
+        "enum": ["openai", "anthropic", "local"],
+        "default": "openai",
+        "description": "AI service provider"
+      },
+      "smartWritingAssistant.apiKey": {
+        "type": "string",
+        "description": "API key for the AI service"
+      },
+      "smartWritingAssistant.model": {
+        "type": "string",
+        "default": "gpt-3.5-turbo",
+        "description": "AI model to use"
+      },
+      "smartWritingAssistant.maxTokens": {
+        "type": "number",
+        "default": 2000,
+        "minimum": 100,
+        "maximum": 8000,
+        "description": "Maximum tokens per request"
+      },
+      "smartWritingAssistant.temperature": {
+        "type": "number",
+        "default": 0.7,
+        "minimum": 0,
+        "maximum": 1,
+        "description": "Creativity level (0-1)"
+      },
+      "smartWritingAssistant.autoSave": {
+        "type": "boolean",
+        "default": true,
+        "description": "Automatically save chat history"
+      }
+    }
+  }
+}

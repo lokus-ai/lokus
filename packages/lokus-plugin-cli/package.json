@@ -1,0 +1,66 @@
+{
+  "name": "@lokus/plugin-cli",
+  "version": "1.0.0",
+  "description": "Official CLI tool for developing Lokus plugins",
+  "main": "dist/index.js",
+  "bin": {
+    "lokus-plugin": "bin/lokus-plugin.js"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "lokus",
+    "plugin",
+    "cli",
+    "development",
+    "mcp",
+    "vscode",
+    "extension"
+  ],
+  "author": "Lokus Team <team@lokus.app>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lokus-editor/lokus.git",
+    "directory": "packages/lokus-plugin-cli"
+  },
+  "homepage": "https://lokus.app/plugins",
+  "bugs": {
+    "url": "https://github.com/lokus-editor/lokus/issues"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "dependencies": {
+    "commander": "^11.0.0",
+    "inquirer": "^9.2.0",
+    "chalk": "^5.3.0",
+    "ora": "^7.0.0",
+    "fs-extra": "^11.1.0",
+    "semver": "^7.5.0",
+    "yaml": "^2.3.0",
+    "archiver": "^6.0.0",
+    "node-fetch": "^3.3.0",
+    "tar": "^6.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/fs-extra": "^11.0.0",
+    "@types/semver": "^7.5.0",
+    "@types/archiver": "^6.0.0",
+    "@types/tar": "^6.1.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "templates",
+    "README.md"
+  ]
+}

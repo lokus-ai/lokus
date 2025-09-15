@@ -1,0 +1,190 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lokus.dev/schemas/contributions/themes.json",
+  "title": "Themes Contribution Schema",
+  "description": "Schema for theme contributions in Lokus plugins",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+        "minLength": 1,
+        "maxLength": 50,
+        "description": "Unique theme identifier"
+      },
+      "label": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100,
+        "description": "Human-readable theme name"
+      },
+      "uiTheme": {
+        "type": "string",
+        "enum": ["vs", "vs-dark", "hc-black", "hc-light"],
+        "description": "Base UI theme (light, dark, high contrast)"
+      },
+      "path": {
+        "type": "string",
+        "pattern": "^\\./.*\\.(json|tmTheme)$",
+        "description": "Path to theme definition file"
+      },
+      "description": {
+        "type": "string",
+        "maxLength": 500,
+        "description": "Theme description"
+      },
+      "metadata": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "Light",
+              "Dark", 
+              "High Contrast",
+              "Color Blind Friendly",
+              "Minimal",
+              "Vibrant",
+              "Retro",
+              "Professional",
+              "Other"
+            ],
+            "description": "Theme category"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20
+            },
+            "maxItems": 10,
+            "uniqueItems": true,
+            "description": "Theme tags for discoverability"
+          },
+          "author": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Theme author"
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+",
+            "description": "Theme version"
+          },
+          "homepage": {
+            "type": "string",
+            "format": "uri",
+            "description": "Theme homepage"
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "screenshot": {
+                "type": "string",
+                "description": "Path to preview screenshot"
+              },
+              "colors": {
+                "type": "object",
+                "properties": {
+                  "primary": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                  },
+                  "secondary": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                  },
+                  "accent": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                  },
+                  "background": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                  },
+                  "foreground": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "compatibility": {
+            "type": "object",
+            "properties": {
+              "lokusVersion": {
+                "type": "string",
+                "description": "Compatible Lokus version range"
+              },
+              "languages": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Languages this theme is optimized for"
+              },
+              "features": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "syntax-highlighting",
+                    "semantic-highlighting",
+                    "bracket-matching",
+                    "error-highlighting",
+                    "search-highlighting",
+                    "selection-highlighting",
+                    "terminal-colors",
+                    "git-decorations",
+                    "minimap",
+                    "peek-view",
+                    "find-widget"
+                  ]
+                },
+                "description": "Features supported by this theme"
+              }
+            },
+            "additionalProperties": false
+          },
+          "accessibility": {
+            "type": "object",
+            "properties": {
+              "highContrast": {
+                "type": "boolean",
+                "default": false,
+                "description": "Whether theme provides high contrast"
+              },
+              "colorBlindFriendly": {
+                "type": "boolean",
+                "default": false,
+                "description": "Whether theme is color blind friendly"
+              },
+              "wcagCompliant": {
+                "type": "string",
+                "enum": ["AA", "AAA"],
+                "description": "WCAG compliance level"
+              }
+            },
+            "additionalProperties": false
+          },
+          "experimental": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether theme is experimental"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "required": ["label", "uiTheme", "path"],
+    "additionalProperties": false
+  },
+  "minItems": 1,
+  "maxItems": 10
+}

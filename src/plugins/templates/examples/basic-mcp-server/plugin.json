@@ -1,0 +1,160 @@
+{
+  "manifest": "2.0",
+  "id": "basic-file-server",
+  "name": "Basic File Server",
+  "displayName": "Basic MCP File Server",
+  "version": "1.0.0",
+  "description": "A simple MCP server that provides file system access and basic file operations",
+  "publisher": "lokus-examples",
+  "author": "Lokus Team",
+  "license": "MIT",
+  "engines": {
+    "lokus": "^1.0.0"
+  },
+  "main": "./src/index.js",
+  "activationEvents": [
+    "onStartup",
+    "onMCPServer:file-server",
+    "onCommand:fileServer.status"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "fileServer.status",
+        "title": "Show File Server Status",
+        "category": "File Server"
+      },
+      {
+        "command": "fileServer.refresh",
+        "title": "Refresh File Resources",
+        "category": "File Server"
+      }
+    ],
+    "mcp": {
+      "servers": [
+        {
+          "id": "file-server",
+          "name": "File Server",
+          "description": "Provides access to file system resources"
+        }
+      ],
+      "resources": [
+        {
+          "name": "workspace-files",
+          "description": "Files in the workspace directory",
+          "pattern": "file:///workspace/**/*",
+          "type": "file",
+          "mimeType": "text/*"
+        },
+        {
+          "name": "documents",
+          "description": "Document files",
+          "pattern": "file:///workspace/**/*.{md,txt,doc,docx,pdf}",
+          "type": "document",
+          "mimeType": "text/*"
+        }
+      ],
+      "tools": [
+        {
+          "name": "read_file",
+          "description": "Read contents of a file",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Path to the file to read"
+              }
+            },
+            "required": ["path"]
+          }
+        },
+        {
+          "name": "write_file",
+          "description": "Write content to a file",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Path to the file to write"
+              },
+              "content": {
+                "type": "string",
+                "description": "Content to write to the file"
+              }
+            },
+            "required": ["path", "content"]
+          }
+        },
+        {
+          "name": "list_directory",
+          "description": "List contents of a directory",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Path to the directory to list"
+              },
+              "recursive": {
+                "type": "boolean",
+                "description": "Whether to list recursively",
+                "default": false
+              }
+            },
+            "required": ["path"]
+          }
+        }
+      ]
+    }
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": {
+      "supported": true
+    }
+  },
+  "permissions": [
+    "read_files",
+    "write_files",
+    "mcp:serve",
+    "mcp:resources",
+    "mcp:tools"
+  ],
+  "categories": [
+    "MCP Plugin",
+    "File System",
+    "Tools"
+  ],
+  "keywords": [
+    "mcp",
+    "file",
+    "server",
+    "filesystem",
+    "basic"
+  ],
+  "mcp": {
+    "type": "mcp-server",
+    "version": "1.0.0",
+    "capabilities": {
+      "resources": {
+        "subscribe": true,
+        "listChanged": true
+      },
+      "tools": {
+        "listChanged": true
+      },
+      "logging": {
+        "enabled": true
+      }
+    },
+    "enableResourceSubscriptions": true,
+    "enableToolExecution": true,
+    "memoryLimit": 25,
+    "cpuTimeLimit": 5000,
+    "maxApiCalls": 500
+  }
+}

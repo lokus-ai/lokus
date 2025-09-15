@@ -1,0 +1,298 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lokus.dev/schemas/contributions/configuration.json",
+  "title": "Configuration Contribution Schema",
+  "description": "Schema for configuration contributions in Lokus plugins",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "Configuration section title"
+    },
+    "order": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 1000,
+      "description": "Order for configuration section display"
+    },
+    "properties": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-zA-Z][a-zA-Z0-9.-]*[a-zA-Z0-9]$": {
+          "$ref": "#/definitions/configurationProperty"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Configuration properties"
+    }
+  },
+  "required": ["properties"],
+  "additionalProperties": false,
+  "definitions": {
+    "configurationProperty": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": ["string", "number", "integer", "boolean", "array", "object", "null"]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["string", "number", "integer", "boolean", "array", "object", "null"]
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          ],
+          "description": "Property type or array of allowed types"
+        },
+        "default": {
+          "description": "Default value for the property"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Human-readable description"
+        },
+        "markdownDescription": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "description": "Markdown description with rich formatting"
+        },
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Allowed values for the property"
+        },
+        "enumDescriptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": "Descriptions for enum values"
+        },
+        "enumItemLabels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "description": "Human-readable labels for enum values"
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "application",
+            "machine",
+            "machine-overridable", 
+            "window",
+            "resource",
+            "language-overridable"
+          ],
+          "default": "window",
+          "description": "Configuration scope"
+        },
+        "minimum": {
+          "type": "number",
+          "description": "Minimum value for numeric properties"
+        },
+        "maximum": {
+          "type": "number",
+          "description": "Maximum value for numeric properties"
+        },
+        "multipleOf": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Value must be multiple of this number"
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum length for string properties"
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum length for string properties"
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Regular expression pattern for string validation"
+        },
+        "patternErrorMessage": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Error message when pattern validation fails"
+        },
+        "minItems": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum items for array properties"
+        },
+        "maxItems": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum items for array properties"
+        },
+        "uniqueItems": {
+          "type": "boolean",
+          "description": "Whether array items must be unique"
+        },
+        "items": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/configurationProperty"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/configurationProperty"
+              }
+            }
+          ],
+          "description": "Schema for array items"
+        },
+        "properties": {
+          "type": "object",
+          "patternProperties": {
+            "^.*$": {
+              "$ref": "#/definitions/configurationProperty"
+            }
+          },
+          "description": "Properties for object type"
+        },
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/configurationProperty"
+            }
+          ],
+          "description": "Whether additional properties are allowed"
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "description": "Required properties for object type"
+        },
+        "deprecationMessage": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Deprecation message"
+        },
+        "markdownDeprecationMessage": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Markdown deprecation message"
+        },
+        "order": {
+          "type": "number",
+          "description": "Display order for this property"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "experimental",
+              "preview",
+              "deprecated",
+              "advanced",
+              "beginner",
+              "hidden",
+              "internal"
+            ]
+          },
+          "uniqueItems": true,
+          "description": "Property tags"
+        },
+        "editPresentation": {
+          "type": "string",
+          "enum": ["multilineText", "singlelineText", "password"],
+          "description": "How to present the property in UI"
+        },
+        "ignoreSync": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to exclude from settings sync"
+        },
+        "restricted": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether property is restricted in untrusted workspaces"
+        },
+        "when": {
+          "type": "string",
+          "description": "When clause for conditional property visibility"
+        },
+        "overrides": {
+          "type": "object",
+          "patternProperties": {
+            "^\\[[a-z]+\\]$": {
+              "description": "Language-specific overrides"
+            }
+          },
+          "description": "Language-specific configuration overrides"
+        },
+        "examples": {
+          "type": "array",
+          "maxItems": 5,
+          "description": "Example values for documentation"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "maxLength": 50,
+              "description": "Configuration category"
+            },
+            "subcategory": {
+              "type": "string",
+              "maxLength": 50,
+              "description": "Configuration subcategory"
+            },
+            "requiresRestart": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether changing this setting requires restart"
+            },
+            "requiresReload": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether changing this setting requires window reload"
+            },
+            "affectsPerformance": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether this setting affects performance"
+            },
+            "sensitive": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether this setting contains sensitive data"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    }
+  }
+}
