@@ -12,7 +12,7 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-} from "@/components/ui/command";
+} from "../../components/ui/command";
 
 const SlashCommandList = forwardRef((props, ref) => {
   const [value, setValue] = useState("");

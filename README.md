@@ -8,39 +8,18 @@
 
 *Why settle for rigid note-taking tools when you can have infinite customization?*
 
-[![Tests](https://github.com/CodeWithInferno/Lokus/workflows/Tests/badge.svg)](https://github.com/CodeWithInferno/Lokus/actions)
-[![Build](https://github.com/CodeWithInferno/Lokus/workflows/Build/badge.svg)](https://github.com/CodeWithInferno/Lokus/actions)
+[![Tests](https://github.com/lokus-ai/lokus/workflows/Tests/badge.svg)](https://github.com/lokus-ai/lokus/actions)
+[![Build](https://github.com/lokus-ai/lokus/workflows/Build/badge.svg)](https://github.com/lokus-ai/lokus/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
-[![Contributors](https://img.shields.io/github/contributors/CodeWithInferno/Lokus)](https://github.com/CodeWithInferno/Lokus/graphs/contributors)
-[![Stars](https://img.shields.io/github/stars/CodeWithInferno/Lokus)](https://github.com/CodeWithInferno/Lokus/stargazers)
+[![Contributors](https://img.shields.io/github/contributors/lokus-ai/lokus)](https://github.com/lokus-ai/lokus/graphs/contributors)
+[![Stars](https://img.shields.io/github/stars/lokus-ai/lokus)](https://github.com/lokus-ai/lokus/stargazers)
 
 [🎯 Features](#-features) • [🚀 Quick Start](#-quick-start) • [🎨 Showcase](#-showcase) • [🤝 Contributing](#-contributing) • [💬 Community](#-community)
 
 </div>
 
 ---
-
-## 🎨 Showcase
-
-<div align="center">
-
-### ✨ Math Equations That Actually Work
-*LaTeX rendering so smooth, you'll forget it's not native*
-
-![Math Demo](docs-screenshots/math-demo.png)
-
-### 🔗 Wiki Links with Intelligence
-*Connect your thoughts with autocomplete suggestions*
-
-![Wiki Links Demo](docs-screenshots/wiki-demo.png)
-
-### 🎨 Themes That Adapt to You
-*Real-time customization with live preview*
-
-![Theme Demo](docs-screenshots/theme-demo.png)
-
-</div>
 
 ## 🎯 Features
 
@@ -76,7 +55,7 @@
 
 *Coming Soon: Pre-built installers for all platforms*
 
-[💾 Download for macOS](https://github.com/CodeWithInferno/Lokus/releases) • [💾 Windows](https://github.com/CodeWithInferno/Lokus/releases) • [💾 Linux](https://github.com/CodeWithInferno/Lokus/releases)
+[💾 Download for macOS](https://github.com/lokus-ai/lokus/releases) • [💾 Windows](https://github.com/lokus-ai/lokus/releases) • [💾 Linux](https://github.com/lokus-ai/lokus/releases)
 
 </div>
 
@@ -100,14 +79,14 @@
 
 ```bash
 # Clone and run Lokus in development mode
-git clone https://github.com/CodeWithInferno/Lokus.git && cd Lokus && npm install && npm run tauri dev
+git clone https://github.com/lokus-ai/lokus.git && cd Lokus && npm install && npm run tauri dev
 ```
 
 ### 📋 Step by Step
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/CodeWithInferno/Lokus.git
+git clone https://github.com/lokus-ai/lokus.git
 cd Lokus
 
 # 2. Install dependencies  
@@ -126,7 +105,7 @@ npm run tauri build
 2. **Try wiki links**: Type `[[My New Note]]` and see the magic
 3. **Write some math**: Try `$E = mc^2$` or `$$\int_0^∞ e^{-x} dx$$`  
 4. **Customize everything**: Press `Ctrl+,` to open preferences
-5. **Need help?**: Check our [📚 Wiki](https://github.com/CodeWithInferno/Lokus/wiki) or join [💬 Discussions](https://github.com/CodeWithInferno/Lokus/discussions)
+5. **Need help?**: Check our [📚 Wiki](https://github.com/lokus-ai/lokus/wiki) or join [💬 Discussions](https://github.com/lokus-ai/lokus/discussions)
 
 ## 📖 Documentation
 
@@ -205,7 +184,7 @@ lokus/
 
 **Join 50+ developers building the future of note-taking!**
 
-[![Contributors](https://contrib.rocks/image?repo=CodeWithInferno/Lokus)](https://github.com/CodeWithInferno/Lokus/graphs/contributors)
+[![Contributors](https://contrib.rocks/image?repo=lokus-ai/lokus)](https://github.com/lokus-ai/lokus/graphs/contributors)
 
 *Every contribution matters - from bug reports to feature requests to code improvements*
 
@@ -215,7 +194,7 @@ lokus/
 
 | 🐛 **Found a Bug?** | 💡 **Have an Idea?** | 🛠️ **Want to Code?** |
 |:---:|:---:|:---:|
-| [Report it](https://github.com/CodeWithInferno/Lokus/issues/new?template=bug_report.md) | [Share it](https://github.com/CodeWithInferno/Lokus/issues/new?template=feature_request.md) | [Build it](CONTRIBUTING.md) |
+| [Report it](https://github.com/lokus-ai/lokus/issues/new?template=bug_report.md) | [Share it](https://github.com/lokus-ai/lokus/issues/new?template=feature_request.md) | [Build it](CONTRIBUTING.md) |
 | Help us squash bugs | Suggest new features | Implement improvements |
 
 ### 🚀 Quick Contribution Guide
@@ -241,7 +220,7 @@ git push origin feature/amazing-feature
 
 ### 🎯 Good First Issues
 
-New to the project? Look for issues labeled [`good first issue`](https://github.com/CodeWithInferno/Lokus/labels/good%20first%20issue) - they're designed to be beginner-friendly!
+New to the project? Look for issues labeled [`good first issue`](https://github.com/lokus-ai/lokus/labels/good%20first%20issue) - they're designed to be beginner-friendly!
 
 ### 💖 Recognition
 
@@ -277,9 +256,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/CodeWithInferno/Lokus/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/CodeWithInferno/Lokus/discussions)
-- **Documentation**: [Wiki](https://github.com/CodeWithInferno/Lokus/wiki)
+- **Issues**: [GitHub Issues](https://github.com/lokus-ai/lokus/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/lokus-ai/lokus/discussions)
+- **Documentation**: [Wiki](https://github.com/lokus-ai/lokus/wiki)
 
 ## 💬 Community
 
@@ -292,7 +271,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 | 🎯 **GitHub Discussions** | 💬 **Discord Server** | 🐦 **Twitter** |
 |:---:|:---:|:---:|
-| [Ask questions & share ideas](https://github.com/CodeWithInferno/Lokus/discussions) | [Real-time chat with the community](https://discord.gg/lokus) | [Follow for updates & tips](https://twitter.com/lokusapp) |
+| [Ask questions & share ideas](https://github.com/lokus-ai/lokus/discussions) | [Real-time chat with the community](https://discord.gg/lokus) | [Follow for updates & tips](https://twitter.com/lokusapp) |
 | Feature requests & feedback | Get help from other users | Latest news & releases |
 
 </div>
@@ -303,7 +282,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🌟 Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=CodeWithInferno/Lokus&type=Date)](https://star-history.com/#CodeWithInferno/Lokus&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=lokus-ai/lokus&type=Date)](https://www.star-history.com/#lokus-ai/lokus&Date)
 
 ---
 
@@ -311,7 +290,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Love Lokus? Here's how you can help:**
 
-⭐ [Star this repo](https://github.com/CodeWithInferno/Lokus) • 🐛 [Report bugs](https://github.com/CodeWithInferno/Lokus/issues) • 💡 [Suggest features](https://github.com/CodeWithInferno/Lokus/discussions) • 🤝 [Contribute code](CONTRIBUTING.md) • 🗣️ [Spread the word](https://twitter.com/intent/tweet?text=Check%20out%20Lokus%20-%20a%20lightning-fast%20markdown%20editor%20with%20infinite%20customization!&url=https://github.com/CodeWithInferno/Lokus)
+⭐ [Star this repo](https://github.com/lokus-ai/lokus) • 🐛 [Report bugs](https://github.com/lokus-ai/lokus/issues) • 💡 [Suggest features](https://github.com/lokus-ai/lokus/discussions) • 🤝 [Contribute code](CONTRIBUTING.md) • 🗣️ [Spread the word](https://twitter.com/intent/tweet?text=Check%20out%20Lokus%20-%20a%20lightning-fast%20markdown%20editor%20with%20infinite%20customization!&url=https://github.com/lokus-ai/lokus)
 
 ---
 
