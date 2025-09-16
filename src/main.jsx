@@ -23,10 +23,24 @@ if (typeof globalThis !== 'undefined') {
   window.React = React;
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <ThemeProvider>
-      <App />
-    </ThemeProvider>
-  </React.StrictMode>
-);
+// Apply theme synchronously before React renders to prevent flash
+async function initializeTheme() {
+  try {
+    const { applyInitialTheme } = await import("./core/theme/manager.js");
+    await applyInitialTheme();
+    console.log('[main] Pre-render theme applied');
+  } catch (e) {
+    console.warn('[main] Failed to apply pre-render theme:', e);
+  }
+}
+
+// Initialize theme and then render
+initializeTheme().finally(() => {
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    <React.StrictMode>
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
+    </React.StrictMode>
+  );
+});
