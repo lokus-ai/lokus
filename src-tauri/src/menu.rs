@@ -7,6 +7,7 @@ use tauri::{
 pub const PREFERENCES_ID: &str = "preferences";
 const FILE_SAVE_ID: &str = "file-save";
 const FILE_CLOSE_TAB_ID: &str = "file-close-tab";
+const FILE_INSTALL_PLUGIN_ID: &str = "file-install-plugin";
 
 pub fn init(app: &AppHandle) -> tauri::Result<()> {
   // macOS app menu
@@ -32,6 +33,11 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     .item(&MenuItemBuilder::with_id(FILE_SAVE_ID, "Save")
       .accelerator("CmdOrCtrl+S")
       .build(app)?)
+    .separator()
+    .item(&MenuItemBuilder::with_id(FILE_INSTALL_PLUGIN_ID, "Install Plugin…")
+      .accelerator("CmdOrCtrl+Shift+I")
+      .build(app)?)
+    .separator()
     .item(&MenuItemBuilder::with_id(FILE_CLOSE_TAB_ID, "Close Tab")
       .accelerator("CmdOrCtrl+W")
       .build(app)?)
@@ -51,6 +57,9 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
       }
       FILE_SAVE_ID => {
         let _ = app.emit("lokus:save-file", ());
+      }
+      FILE_INSTALL_PLUGIN_ID => {
+        let _ = app.emit("lokus:install-plugin", ());
       }
       FILE_CLOSE_TAB_ID => {
         let _ = app.emit("lokus:close-tab", ());
