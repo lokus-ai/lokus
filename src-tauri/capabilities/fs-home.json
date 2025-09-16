@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2.0.0/capabilities.json",
   "identifier": "fs-home-scope",
-  "description": "Filesystem permissions and HOME scope for the main window.",
-  "windows": ["main"],
+  "description": "Filesystem permissions and HOME scope for all windows.",
+  "windows": ["main", "ws-lokus-workspace"],
   "permissions": [
     "fs:default",
     {
