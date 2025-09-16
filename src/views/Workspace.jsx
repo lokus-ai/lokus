@@ -27,6 +27,9 @@ import PluginSettings from "./PluginSettings.jsx";
 import Marketplace from "./Marketplace.jsx";
 import PluginDetail from "./PluginDetail.jsx";
 import { canvasManager } from "../core/canvas/manager.js";
+import TemplatePicker from "../components/TemplatePicker.jsx";
+import { getMarkdownCompiler } from "../core/markdown/compiler.js";
+import CreateTemplate from "../components/CreateTemplate.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -414,6 +417,10 @@ export default function Workspace({ initialPath = "" }) {
   const [savedContent, setSavedContent] = useState("");
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showInFileSearch, setShowInFileSearch] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [templatePickerData, setTemplatePickerData] = useState(null);
+  const [showCreateTemplate, setShowCreateTemplate] = useState(false);
+  const [createTemplateContent, setCreateTemplateContent] = useState('');
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showKanban, setShowKanban] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
@@ -835,6 +842,40 @@ export default function Workspace({ initialPath = "" }) {
     setIsCreatingFolder(false);
   };
 
+  const handleCreateTemplate = useCallback(() => {
+    // Get selected text from editor or use entire content if nothing selected
+    const getContentForTemplate = () => {
+      if (editorRef.current) {
+        const { state } = editorRef.current;
+        const { selection } = state;
+        
+        // Check if there's a selection
+        if (!selection.empty) {
+          // Get selected text
+          const selectedText = state.doc.textBetween(selection.from, selection.to);
+          console.log('[Workspace] Using selected text for template:', selectedText.substring(0, 100));
+          return selectedText;
+        } else if (activeFile) {
+          // No selection, use current file content
+          const currentContent = editorRef.current.getHTML() || editorRef.current.getText() || stateRef.current.editorContent;
+          console.log('[Workspace] Using full file content for template:', currentContent.substring(0, 100));
+          return currentContent;
+        }
+      }
+      return '';
+    };
+
+    const contentForTemplate = getContentForTemplate();
+    setCreateTemplateContent(contentForTemplate);
+    setShowCreateTemplate(true);
+  }, [activeFile]);
+
+  const handleCreateTemplateSaved = useCallback(() => {
+    // Template was saved successfully
+    setShowCreateTemplate(false);
+    setCreateTemplateContent('');
+    console.log('[Workspace] Template saved successfully');
+  }, []);
 
   const handleTabDragEnd = (event) => {
     const { active, over } = event;
@@ -866,6 +907,13 @@ export default function Workspace({ initialPath = "" }) {
     const unlistenCommandPalette = isTauri ? listen("lokus:command-palette", () => setShowCommandPalette(true)) : Promise.resolve(addDom('lokus:command-palette', () => setShowCommandPalette(true)));
     const unlistenInFileSearch = isTauri ? listen("lokus:in-file-search", () => setShowInFileSearch(true)) : Promise.resolve(addDom('lokus:in-file-search', () => setShowInFileSearch(true)));
     const unlistenGlobalSearch = isTauri ? listen("lokus:global-search", () => setShowGlobalSearch(true)) : Promise.resolve(addDom('lokus:global-search', () => setShowGlobalSearch(true)));
+    
+    // Template picker event listener
+    const handleTemplatePicker = (event) => {
+      setTemplatePickerData(event.detail);
+      setShowTemplatePicker(true);
+    };
+    const unlistenTemplatePicker = Promise.resolve(addDom('open-template-picker', handleTemplatePicker));
 
     return () => {
       unlistenSave.then(f => { if (typeof f === 'function') f(); });
@@ -876,6 +924,7 @@ export default function Workspace({ initialPath = "" }) {
       unlistenCommandPalette.then(f => { if (typeof f === 'function') f(); });
       unlistenInFileSearch.then(f => { if (typeof f === 'function') f(); });
       unlistenGlobalSearch.then(f => { if (typeof f === 'function') f(); });
+      unlistenTemplatePicker.then(f => { if (typeof f === 'function') f(); });
     };
   }, [handleSave, handleTabClose]);
 
@@ -1285,6 +1334,173 @@ export default function Workspace({ initialPath = "" }) {
         }}
         onToggleSidebar={() => setShowLeft(v => !v)}
         onCloseTab={handleTabClose}
+        onShowTemplatePicker={(templateSelection) => {
+          // Handle direct template selection from Command Palette
+          if (templateSelection && templateSelection.template && templateSelection.processedContent) {
+            console.log('[Workspace] Direct template selection from Command Palette');
+            const { template, processedContent } = templateSelection;
+            console.log('[Workspace] Template selected:', template.name);
+            console.log('[Workspace] Processed content:', processedContent);
+            console.log('[Workspace] Editor ref:', !!editorRef.current);
+            
+            if (editorRef.current && processedContent) {
+              // Process template content through markdown compiler
+              const compiler = getMarkdownCompiler()
+              
+              // Process template content through markdown compiler
+              const processedWithMarkdown = compiler.processTemplate(processedContent)
+              console.log('[Workspace] Template processed through markdown compiler:', processedWithMarkdown.substring(0, 200))
+              
+              // Smart template insertion with cursor positioning
+              const insertTemplateContent = (content) => {
+                // Check if content has {{cursor}} placeholder
+                const cursorIndex = content.indexOf('{{cursor}}');
+                
+                if (cursorIndex !== -1) {
+                  // Split content at cursor position
+                  const beforeCursor = content.substring(0, cursorIndex);
+                  const afterCursor = content.substring(cursorIndex + 10); // 10 = '{{cursor}}'.length
+                  
+                  console.log('[Workspace] Template has cursor placeholder at position:', cursorIndex);
+                  console.log('[Workspace] Before cursor:', beforeCursor);
+                  console.log('[Workspace] After cursor:', afterCursor);
+                  
+                  // Insert content in parts to position cursor correctly
+                  return editorRef.current.chain()
+                    .focus()
+                    .insertContent(beforeCursor)
+                    .insertContent(afterCursor)
+                    .setTextSelection(beforeCursor.length + editorRef.current.state.selection.from)
+                    .run();
+                } else {
+                  // No cursor placeholder, just insert normally
+                  return editorRef.current.chain()
+                    .focus()
+                    .insertContent(content)
+                    .run();
+                }
+              };
+              
+              try {
+                console.log('[Workspace] Inserting template content from Command Palette');
+                insertTemplateContent(processedWithMarkdown);
+                console.log('[Workspace] Template inserted successfully');
+              } catch (err) {
+                console.error('[Workspace] Failed to insert template from Command Palette:', err);
+              }
+            }
+            return;
+          }
+          
+          // Fall back to opening template picker modal
+          console.log('[Workspace] Opening template picker modal');
+          setShowTemplatePicker(true);
+          setTemplatePickerData({
+            editorState: { editor: editorRef.current },
+            onSelect: (template, processedContent) => {
+              console.log('[Workspace] Template selected:', template.name);
+              console.log('[Workspace] Processed content:', processedContent);
+              console.log('[Workspace] Editor ref:', !!editorRef.current);
+              
+              if (editorRef.current && processedContent) {
+                try {
+                  console.log('[Workspace] Inserting content into editor');
+                  console.log('[Workspace] Content to insert:', processedContent);
+                  
+                  // Process template content through markdown compiler
+                  const compiler = getMarkdownCompiler()
+                  
+                  // Process template content through markdown compiler
+                  const processedWithMarkdown = compiler.processTemplate(processedContent)
+                  console.log('[Workspace] Template processed through markdown compiler:', processedWithMarkdown.substring(0, 200))
+                  
+                  // Smart template insertion with cursor positioning
+                  const insertTemplateContent = (content) => {
+                    // Check if content has {{cursor}} placeholder
+                    const cursorIndex = content.indexOf('{{cursor}}');
+                    
+                    if (cursorIndex !== -1) {
+                      // Split content at cursor position
+                      const beforeCursor = content.substring(0, cursorIndex);
+                      const afterCursor = content.substring(cursorIndex + 10); // 10 = '{{cursor}}'.length
+                      
+                      console.log('[Workspace] Template has cursor placeholder at position:', cursorIndex);
+                      console.log('[Workspace] Before cursor:', beforeCursor);
+                      console.log('[Workspace] After cursor:', afterCursor);
+                      
+                      // Insert content in parts to position cursor correctly
+                      return editorRef.current.chain()
+                        .focus()
+                        .insertContent(beforeCursor)
+                        .insertContent(afterCursor)
+                        .setTextSelection(beforeCursor.length + editorRef.current.state.selection.from)
+                        .run();
+                    } else {
+                      // No cursor placeholder, just insert normally
+                      return editorRef.current.chain()
+                        .focus()
+                        .insertContent(content)
+                        .run();
+                    }
+                  };
+                  
+                  // Try multiple insertion methods with smart cursor handling
+                  const insertMethods = [
+                    // Method 1: Smart template insertion with cursor positioning (markdown processed)
+                    () => insertTemplateContent(processedWithMarkdown),
+                    
+                    // Method 2: Standard chain operation (markdown processed)
+                    () => editorRef.current.chain().focus().insertContent(processedWithMarkdown).run(),
+                    
+                    // Method 3: Simple commands (markdown processed)
+                    () => {
+                      editorRef.current.commands.focus();
+                      return editorRef.current.commands.insertContent(processedWithMarkdown);
+                    },
+                    
+                    // Method 4: Direct content insertion (markdown processed)
+                    () => editorRef.current.commands.insertContent(processedWithMarkdown),
+                    
+                    // Method 5: Manual transaction (fallback, clean content)
+                    () => {
+                      const { view } = editorRef.current;
+                      const { state } = view;
+                      const { tr } = state;
+                      const pos = state.selection.from;
+                      // Remove {{cursor}} and use markdown processed content for fallback
+                      const cleanContent = processedWithMarkdown.replace(/\{\{cursor\}\}/g, '');
+                      view.dispatch(tr.insertText(cleanContent, pos));
+                    }
+                  ];
+                  
+                  let inserted = false;
+                  for (let i = 0; i < insertMethods.length && !inserted; i++) {
+                    try {
+                      console.log(`[Workspace] Trying insertion method ${i + 1}`);
+                      const result = insertMethods[i]();
+                      console.log(`[Workspace] Content inserted successfully with method ${i + 1}`, result);
+                      inserted = true;
+                    } catch (err) {
+                      console.error(`[Workspace] Method ${i + 1} failed:`, err.message);
+                    }
+                  }
+                  
+                  if (!inserted) {
+                    console.error('[Workspace] All insertion methods failed');
+                  }
+                  
+                } catch (err) {
+                  console.error('[Workspace] Failed to setup template insertion:', err);
+                }
+              } else {
+                console.error('[Workspace] No editor reference or content available');
+                console.log('[Workspace] Editor ref:', !!editorRef.current);
+                console.log('[Workspace] Content:', processedContent);
+              }
+            }
+          });
+        }}
+        onCreateTemplate={handleCreateTemplate}
         activeFile={activeFile}
       />
       
@@ -1294,11 +1510,36 @@ export default function Workspace({ initialPath = "" }) {
         onClose={() => setShowInFileSearch(false)}
       />
       
+      {showTemplatePicker && templatePickerData && (
+        <TemplatePicker
+          open={showTemplatePicker}
+          onClose={() => {
+            setShowTemplatePicker(false);
+            setTemplatePickerData(null);
+          }}
+          onSelect={(template, processedContent) => {
+            if (templatePickerData.onSelect) {
+              templatePickerData.onSelect(template, processedContent);
+            }
+            setShowTemplatePicker(false);
+            setTemplatePickerData(null);
+          }}
+          editorState={templatePickerData.editorState}
+        />
+      )}
+      
       <SearchPanel
         isOpen={showGlobalSearch}
         onClose={() => setShowGlobalSearch(false)}
         onFileOpen={handleFileOpen}
         workspacePath={path}
+      />
+      
+      <CreateTemplate
+        open={showCreateTemplate}
+        onClose={() => setShowCreateTemplate(false)}
+        initialContent={createTemplateContent}
+        onSaved={handleCreateTemplateSaved}
       />
       
       {/* Enhanced Obsidian Status Bar */}

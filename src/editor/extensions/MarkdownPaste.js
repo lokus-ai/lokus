@@ -1,8 +1,6 @@
 import { Extension } from '@tiptap/core'
 import { Plugin } from '@tiptap/pm/state'
-import MarkdownIt from "markdown-it"
-import markdownItMark from "markdown-it-mark"
-import markdownItStrikethrough from "markdown-it-strikethrough-alt"
+import { getMarkdownCompiler } from '../../core/markdown/compiler.js'
 
 const MarkdownPaste = Extension.create({
   name: 'markdownPaste',
@@ -28,47 +26,63 @@ const MarkdownPaste = Extension.create({
             console.log('[MarkdownPaste] Paste event:', { 
               hasText: !!text, 
               hasHtml: !!html, 
-              text: text?.substring(0, 100) 
+              textLength: text?.length,
+              htmlLength: html?.length,
+              textSample: text?.substring(0, 100)
             })
 
-            // Skip processing if HTML content is also present (avoid double-processing rich text)
-            if (html && html.trim()) {
-              return false
-            }
-
-            // Process text that looks like markdown (prioritize plain text, but also handle rich text sources)
-            if (text && isMarkdownContent(text)) {
-              console.log('[MarkdownPaste] Converting markdown content...')
+            // Use our universal markdown compiler
+            if (text) {
+              const compiler = getMarkdownCompiler()
               
-              try {
-                const md = new MarkdownIt({
-                  html: true,
-                  linkify: true,
-                  typographer: true,
+              // Check if HTML is actually rich content or just bloated markup
+              if (html && html.trim()) {
+                const isMarkdownText = compiler.isMarkdown(text)
+                const htmlTextRatio = html.length / (text?.length || 1)
+                
+                console.log('[MarkdownPaste] HTML analysis:', {
+                  htmlTextRatio: htmlTextRatio.toFixed(2),
+                  isMarkdownText,
+                  htmlSample: html.substring(0, 200)
                 })
-                  .use(markdownItMark)
-                  .use(markdownItStrikethrough)
+                
+                // If text is clearly markdown, process it even if HTML is present
+                if (isMarkdownText) {
+                  console.log('[MarkdownPaste] Text is markdown, processing despite HTML presence')
+                } else if (htmlTextRatio > 5) {
+                  console.log('[MarkdownPaste] Rich HTML detected (ratio > 5), skipping markdown processing')
+                  return false
+                }
+              }
+              
+              if (compiler.isMarkdown(text)) {
+                console.log('[MarkdownPaste] Markdown detected, processing...')
+                
+                try {
+                  // Prevent default paste
+                  event.preventDefault()
 
-                const htmlContent = md.render(text)
-                console.log('[MarkdownPaste] Converted HTML:', htmlContent)
+                  // Compile markdown to HTML
+                  const htmlContent = compiler.compile(text)
+                  
+                  // Insert the converted HTML
+                  const inserted = editor.chain()
+                    .focus()
+                    .insertContent(htmlContent, {
+                      parseOptions: {
+                        preserveWhitespace: 'full',
+                      }
+                    })
+                    .run()
 
-                // Prevent default paste
-                event.preventDefault()
-
-                // Insert the converted HTML
-                editor.chain()
-                  .focus()
-                  .insertContent(htmlContent, {
-                    parseOptions: {
-                      preserveWhitespace: 'full',
-                    }
-                  })
-                  .run()
-
-                return true
-              } catch (error) {
-                console.error('[MarkdownPaste] Conversion failed:', error)
-                return false
+                  console.log('[MarkdownPaste] Successfully inserted compiled markdown')
+                  return true
+                } catch (error) {
+                  console.error('[MarkdownPaste] Compilation failed:', error)
+                  return false
+                }
+              } else {
+                console.log('[MarkdownPaste] Text not detected as markdown')
               }
             }
 
@@ -79,27 +93,5 @@ const MarkdownPaste = Extension.create({
     ]
   },
 })
-
-function isMarkdownContent(text) {
-  if (!text || typeof text !== 'string') return false
-  
-  const markdownPatterns = [
-    /\*\*[^*]+\*\*/,        // **bold**
-    /\*[^*]+\*/,            // *italic*
-    /~~[^~]+~~/,            // ~~strikethrough~~
-    /==[^=]+=/,             // ==highlight==
-    /`[^`]+`/,              // `code`
-    /^#{1,6}\s+/m,          // # headings
-    /^>\s+/m,               // > blockquotes
-    /^[-*+]\s+/m,           // - lists
-    /^\d+\.\s+/m,           // 1. numbered lists
-    /^\|.+\|/m,             // | table |
-    /\[[^\]]*\]\([^)]*\)/,  // [link](url)
-    /```[\s\S]*?```/,       // ```code blocks```
-    /^\s*- \[[x\s]\]/m,     // - [x] task lists
-  ]
-
-  return markdownPatterns.some(pattern => pattern.test(text))
-}
 
 export default MarkdownPaste

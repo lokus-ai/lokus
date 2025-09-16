@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rich Text Editor - Lokus Documentation</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="icon" type="image/svg+xml" href="../lokus-logo.svg">
+    <meta name="description" content="Comprehensive guide to Lokus's rich text editor featuring TipTap, markdown support, and advanced formatting options">
+</head>
+<body>
+    <!-- Mobile overlay for sidebar -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+    
+    <!-- Sidebar Navigation -->
+    <nav id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-container">
+                <img src="../lokus-logo.svg" alt="Lokus Logo" class="logo">
+                <h1><a href="../index.html" style="color: inherit; text-decoration: none;">Lokus Docs</a></h1>
+            </div>
+            <button id="sidebar-close" class="sidebar-close" aria-label="Close sidebar">
+                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+
+        <div class="sidebar-content">
+            <!-- Search Box -->
+            <div class="search-container">
+                <input type="text" id="search-input" placeholder="Search documentation..." class="search-input">
+                <svg class="search-icon" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+            </div>
+
+            <!-- Navigation Menu -->
+            <div class="nav-menu">
+                <!-- Quick Start -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Quick Start</h3>
+                    <ul class="nav-list">
+                        <li><a href="../index.html" class="nav-link">Documentation Home</a></li>
+                        <li><a href="../user-guide/getting-started.html" class="nav-link">Getting Started</a></li>
+                    </ul>
+                </div>
+
+                <!-- Core Features -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Core Features</h3>
+                    <ul class="nav-list">
+                        <li><a href="editor.html" class="nav-link active">Rich Text Editor</a></li>
+                        <li><a href="file-management.html" class="nav-link">File Management</a></li>
+                        <li><a href="command-palette.html" class="nav-link">Command Palette</a></li>
+                        <li><a href="search.html" class="nav-link">Search</a></li>
+                        <li><a href="themes.html" class="nav-link">Themes</a></li>
+                    </ul>
+                </div>
+
+                <!-- Advanced Features -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Advanced Features</h3>
+                    <ul class="nav-list">
+                        <li><a href="template-system.html" class="nav-link">Template System</a></li>
+                        <li><a href="wiki-links.html" class="nav-link">Wiki Links</a></li>
+                        <li><a href="graph-view.html" class="nav-link">Graph View</a></li>
+                        <li><a href="canvas.html" class="nav-link">Canvas</a></li>
+                        <li><a href="kanban.html" class="nav-link">Kanban Boards</a></li>
+                        <li><a href="math.html" class="nav-link">Math Rendering</a></li>
+                    </ul>
+                </div>
+
+                <!-- Interface & UX -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Interface & UX</h3>
+                    <ul class="nav-list">
+                        <li><a href="shortcuts.html" class="nav-link">Keyboard Shortcuts</a></li>
+                        <li><a href="context-menus.html" class="nav-link">Context Menus</a></li>
+                        <li><a href="animations-ux.html" class="nav-link">Animations & UX</a></li>
+                        <li><a href="clipboard.html" class="nav-link">Clipboard Integration</a></li>
+                    </ul>
+                </div>
+
+                <!-- Extensibility -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Extensibility</h3>
+                    <ul class="nav-list">
+                        <li><a href="plugin-system.html" class="nav-link">Plugin System</a></li>
+                        <li><a href="marketplace.html" class="nav-link">Plugin Marketplace</a></li>
+                    </ul>
+                </div>
+
+                <!-- Developer Docs -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Developer Docs</h3>
+                    <ul class="nav-list">
+                        <li><a href="../developer/testing.html" class="nav-link">Testing</a></li>
+                        <li><a href="../developer/markdown-compiler.html" class="nav-link">Markdown Compiler</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="header">
+            <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar">
+                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="breadcrumb">
+                <a href="../index.html" class="breadcrumb-item">Documentation</a>
+                <span class="breadcrumb-separator">></span>
+                <a href="#core-features" class="breadcrumb-item">Core Features</a>
+                <span class="breadcrumb-separator">></span>
+                <span class="breadcrumb-item current">Rich Text Editor</span>
+            </div>
+        </header>
+
+        <!-- Content Area -->
+        <div class="content">
+            <div class="content-header">
+                <h1>Rich Text Editor</h1>
+                <p class="content-description">
+                    Lokus features a powerful rich text editor built on TipTap that provides a seamless writing 
+                    experience with comprehensive formatting options, markdown support, and advanced features 
+                    like math rendering and wiki links.
+                </p>
+            </div>
+
+            <!-- Quick Navigation -->
+            <nav class="page-nav">
+                <h3>On This Page</h3>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#core-features">Core Features</a></li>
+                    <li><a href="#formatting">Text Formatting</a></li>
+                    <li><a href="#structural">Structural Elements</a></li>
+                    <li><a href="#advanced">Advanced Features</a></li>
+                    <li><a href="#shortcuts">Keyboard Shortcuts</a></li>
+                    <li><a href="#configuration">Configuration</a></li>
+                </ul>
+            </nav>
+
+            <!-- Overview Section -->
+            <section id="overview" class="section">
+                <h2>📖 Overview</h2>
+                <p>The Lokus editor combines the best of rich text editing with markdown compatibility:</p>
+                <div class="feature-grid">
+                    <div class="feature-item">
+                        <h4>🎨 TipTap-powered</h4>
+                        <p>Rich text editing with modern UI</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4>📝 Markdown Support</h4>
+                        <p>Complete markdown compatibility with extensions</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4>🧮 Math Rendering</h4>
+                        <p>LaTeX equation rendering using KaTeX</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4>🔗 Wiki Links</h4>
+                        <p>Wiki-style linking between notes</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4>📋 Smart Paste</h4>
+                        <p>Automatic format conversion</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4>🔧 Extensible</h4>
+                        <p>Extensible architecture for custom functionality</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Core Features Section -->
+            <section id="core-features" class="section">
+                <h2>✨ Core Features</h2>
+                
+                <h3 id="formatting">Rich Text Formatting</h3>
+                
+                <h4>Basic Text Formatting</h4>
+                <div class="formatting-table">
+                    <table class="feature-table">
+                        <thead>
+                            <tr>
+                                <th>Format</th>
+                                <th>Shortcut</th>
+                                <th>Markdown</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Bold</strong></td>
+                                <td><kbd>⌘B</kbd> / <kbd>Ctrl+B</kbd></td>
+                                <td><code>**text**</code></td>
+                                <td>Make text bold</td>
+                            </tr>
+                            <tr>
+                                <td><em>Italic</em></td>
+                                <td><kbd>⌘I</kbd> / <kbd>Ctrl+I</kbd></td>
+                                <td><code>*text*</code></td>
+                                <td>Italicize text</td>
+                            </tr>
+                            <tr>
+                                <td><del>Strikethrough</del></td>
+                                <td><kbd>⌘⇧X</kbd> / <kbd>Ctrl+Shift+X</kbd></td>
+                                <td><code>~~text~~</code></td>
+                                <td>Cross out text</td>
+                            </tr>
+                            <tr>
+                                <td><u>Underline</u></td>
+                                <td><kbd>⌘U</kbd> / <kbd>Ctrl+U</kbd></td>
+                                <td>-</td>
+                                <td>Underline text</td>
+                            </tr>
+                            <tr>
+                                <td><code>Code</code></td>
+                                <td><kbd>⌘E</kbd> / <kbd>Ctrl+E</kbd></td>
+                                <td><code>`code`</code></td>
+                                <td>Inline code formatting</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h4>Advanced Formatting</h4>
+                <ul class="feature-list">
+                    <li><strong>Highlight</strong> - Mark important text with <code>==highlighted text==</code></li>
+                    <li><strong>Superscript</strong> - Create superscript text like H<sup>2</sup>O using <code>H^2^O</code></li>
+                    <li><strong>Subscript</strong> - Create subscript text like H<sub>2</sub>O using <code>H~2~O</code></li>
+                    <li><strong>Hyperlinks</strong> - Create links with <code>[text](url)</code> syntax or toolbar</li>
+                </ul>
+            </section>
+
+            <!-- Structural Elements -->
+            <section id="structural" class="section">
+                <h2>🏗️ Structural Elements</h2>
+                
+                <h3>Headings</h3>
+                <p>Create structured documents with six heading levels:</p>
+                <div class="heading-examples">
+                    <div class="heading-item">
+                        <h1 style="font-size: 2rem; margin: 0.5rem 0;">Heading 1</h1>
+                        <code># Heading 1</code> - <kbd>⌘⌥1</kbd> / <kbd>Ctrl+Alt+1</kbd>
+                    </div>
+                    <div class="heading-item">
+                        <h2 style="font-size: 1.5rem; margin: 0.5rem 0;">Heading 2</h2>
+                        <code>## Heading 2</code> - <kbd>⌘⌥2</kbd> / <kbd>Ctrl+Alt+2</kbd>
+                    </div>
+                    <div class="heading-item">
+                        <h3 style="font-size: 1.25rem; margin: 0.5rem 0;">Heading 3</h3>
+                        <code>### Heading 3</code> - <kbd>⌘⌥3</kbd> / <kbd>Ctrl+Alt+3</kbd>
+                    </div>
+                </div>
+
+                <h3>Lists and Organization</h3>
+                <div class="list-examples">
+                    <div class="list-type">
+                        <h4>Bullet Lists</h4>
+                        <p><kbd>⌘⇧8</kbd> / <kbd>Ctrl+Shift+8</kbd></p>
+                        <ul>
+                            <li>First item</li>
+                            <li>Second item</li>
+                            <li>Third item</li>
+                        </ul>
+                        <code>- First item<br>- Second item<br>- Third item</code>
+                    </div>
+                    
+                    <div class="list-type">
+                        <h4>Numbered Lists</h4>
+                        <p><kbd>⌘⇧7</kbd> / <kbd>Ctrl+Shift+7</kbd></p>
+                        <ol>
+                            <li>First item</li>
+                            <li>Second item</li>
+                            <li>Third item</li>
+                        </ol>
+                        <code>1. First item<br>2. Second item<br>3. Third item</code>
+                    </div>
+                    
+                    <div class="list-type">
+                        <h4>Task Lists</h4>
+                        <p>Interactive checkboxes</p>
+                        <ul class="task-list">
+                            <li><input type="checkbox" checked disabled> Completed task</li>
+                            <li><input type="checkbox" disabled> Pending task</li>
+                        </ul>
+                        <code>- [x] Completed task<br>- [ ] Pending task</code>
+                    </div>
+                </div>
+
+                <h3>Advanced Structures</h3>
+                <div class="advanced-structures">
+                    <div class="structure-item">
+                        <h4>Code Blocks</h4>
+                        <p>Syntax-highlighted code with language detection</p>
+                        <pre><code>```javascript
+function greet(name) {
+    return `Hello, ${name}!`;
+}
+```</code></pre>
+                    </div>
+                    
+                    <div class="structure-item">
+                        <h4>Blockquotes</h4>
+                        <p><kbd>⌘⇧.</kbd> / <kbd>Ctrl+Shift+.</kbd></p>
+                        <blockquote>
+                            This is a blockquote example. Use it for highlighting important quotes or notes.
+                        </blockquote>
+                        <code>&gt; This is a blockquote example.</code>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Advanced Features -->
+            <section id="advanced" class="section">
+                <h2>🚀 Advanced Features</h2>
+                
+                <div class="advanced-features-grid">
+                    <div class="advanced-feature">
+                        <h3>Math Equations</h3>
+                        <p>Render LaTeX equations using KaTeX</p>
+                        <div class="math-examples">
+                            <p><strong>Inline:</strong> <code>$E = mc^2$</code></p>
+                            <p><strong>Block:</strong></p>
+                            <pre><code>$$
+\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
+$$</code></pre>
+                        </div>
+                        <a href="math.html" class="feature-link">Learn more about math rendering →</a>
+                    </div>
+                    
+                    <div class="advanced-feature">
+                        <h3>Wiki Links</h3>
+                        <p>Connect notes with wiki-style links</p>
+                        <div class="wiki-examples">
+                            <p><code>[[Note Name]]</code> - Link to another note</p>
+                            <p><code>[[Note Name|Display Text]]</code> - Link with custom text</p>
+                        </div>
+                        <a href="wiki-links.html" class="feature-link">Learn more about wiki links →</a>
+                    </div>
+                    
+                    <div class="advanced-feature">
+                        <h3>Tables</h3>
+                        <p>Create structured data tables with markdown syntax</p>
+                        <table class="example-table">
+                            <thead>
+                                <tr><th>Column 1</th><th>Column 2</th><th>Column 3</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr><td>Data 1</td><td>Data 2</td><td>Data 3</td></tr>
+                                <tr><td>Data 4</td><td>Data 5</td><td>Data 6</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="advanced-feature">
+                        <h3>Smart Paste</h3>
+                        <p>Automatically convert formats when pasting</p>
+                        <ul class="paste-features">
+                            <li>Rich text to markdown conversion</li>
+                            <li>URL auto-linking</li>
+                            <li>Image paste support</li>
+                            <li>Code block detection</li>
+                        </ul>
+                        <a href="clipboard.html" class="feature-link">Learn more about clipboard integration →</a>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Shortcuts Section -->
+            <section id="shortcuts" class="section">
+                <h2>⌨️ Keyboard Shortcuts</h2>
+                <p>Complete list of editor keyboard shortcuts for efficient editing:</p>
+                
+                <div class="shortcuts-grid">
+                    <div class="shortcut-category">
+                        <h3>Basic Formatting</h3>
+                        <div class="shortcut-list">
+                            <div class="shortcut-item">
+                                <span class="shortcut-keys"><kbd>⌘B</kbd> / <kbd>Ctrl+B</kbd></span>
+                                <span class="shortcut-desc">Bold</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-keys"><kbd>⌘I</kbd> / <kbd>Ctrl+I</kbd></span>
+                                <span class="shortcut-desc">Italic</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-keys"><kbd>⌘U</kbd> / <kbd>Ctrl+U</kbd></span>
+                                <span class="shortcut-desc">Underline</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-keys"><kbd>⌘E</kbd> / <kbd>Ctrl+E</kbd></span>
+                                <span class="shortcut-desc">Code</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="shortcut-category">
+                        <h3>Structure</h3>
+                        <div class="shortcut-list">
+                            <div class="shortcut-item">
+                                <span class="shortcut-keys"><kbd>⌘⌥1-6</kbd> / <kbd>Ctrl+Alt+1-6</kbd></span>
+                                <span class="shortcut-desc">Headings</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-keys"><kbd>⌘⇧8</kbd> / <kbd>Ctrl+Shift+8</kbd></span>
+                                <span class="shortcut-desc">Bullet List</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-keys"><kbd>⌘⇧7</kbd> / <kbd>Ctrl+Shift+7</kbd></span>
+                                <span class="shortcut-desc">Numbered List</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-keys"><kbd>⌘⇧.</kbd> / <kbd>Ctrl+Shift+.</kbd></span>
+                                <span class="shortcut-desc">Blockquote</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <a href="shortcuts.html" class="card-link">View complete keyboard shortcuts reference →</a>
+            </section>
+
+            <!-- Configuration Section -->
+            <section id="configuration" class="section">
+                <h2>⚙️ Configuration</h2>
+                <p>Customize the editor behavior and appearance through preferences:</p>
+                
+                <div class="config-options">
+                    <div class="config-category">
+                        <h3>Editor Behavior</h3>
+                        <ul>
+                            <li>Auto-save interval settings</li>
+                            <li>Spell check configuration</li>
+                            <li>Tab size and indentation</li>
+                            <li>Word wrap preferences</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="config-category">
+                        <h3>Appearance</h3>
+                        <ul>
+                            <li>Font family and size</li>
+                            <li>Line height adjustment</li>
+                            <li>Theme customization</li>
+                            <li>Toolbar configuration</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="tip-box">
+                    <h4>💡 Pro Tip</h4>
+                    <p>Access editor preferences quickly with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or through the Command Palette with <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd>.</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- Footer Navigation -->
+        <footer class="footer">
+            <div class="footer-nav">
+                <a href="../index.html" class="footer-link prev">
+                    <span class="footer-link-label">Previous</span>
+                    <span class="footer-link-title">← Documentation Home</span>
+                </a>
+                <a href="file-management.html" class="footer-link next">
+                    <span class="footer-link-label">Next</span>
+                    <span class="footer-link-title">File Management →</span>
+                </a>
+            </div>
+            <div class="footer-info">
+                <p>Rich Text Editor Documentation | Last Updated: September 15, 2025</p>
+            </div>
+        </footer>
+    </main>
+
+    <script src="../script.js"></script>
+</body>
+</html>
