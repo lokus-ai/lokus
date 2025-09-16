@@ -839,3 +839,18 @@ html {
   background-color: rgb(var(--accent) / 0.1);
   color: rgb(var(--accent));
 }
+
+/* Plugin status bar items */
+.status-bar-plugin-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+.time-tracker-status {
+  color: rgb(var(--text-secondary));
+  font-size: var(--text-xs);
+}
+
+.time-tracker-status:hover {
+  color: rgb(var(--text));
+}

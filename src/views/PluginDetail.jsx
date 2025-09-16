@@ -27,7 +27,10 @@ export default function PluginDetail({ plugin }) {
   const isEnabled = enabledPlugins.has(plugin.id);
 
   const handleToggle = () => {
-    togglePlugin(plugin.id);
+    console.log('🔘 PluginDetail handleToggle called for:', plugin.id, 'current enabled:', isEnabled);
+    const newEnabledState = !isEnabled;
+    console.log('🔘 PluginDetail calculated new enabled state:', newEnabledState, 'type:', typeof newEnabledState);
+    togglePlugin(plugin.id, newEnabledState);
   };
 
   const handleUninstall = async () => {

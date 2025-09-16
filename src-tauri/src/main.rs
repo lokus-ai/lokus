@@ -13,8 +13,6 @@ use windows::{open_workspace_window, open_preferences_window};
 use tauri::Manager;
 use tauri_plugin_store::{StoreBuilder, JsonValue};
 use std::path::PathBuf;
-use tauri_plugin_global_shortcut::GlobalShortcutExt;
-use tauri::{Emitter, Listener};
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct SessionState {
@@ -119,7 +117,9 @@ fn main() {
       plugins::set_plugin_permission,
       plugins::get_plugin_permissions,
       plugins::set_plugin_setting,
-      plugins::get_plugin_setting
+      plugins::get_plugin_setting,
+      plugins::read_plugin_file,
+      plugins::get_plugin_manifest
     ])
     .setup(|app| {
       menu::init(&app.handle())?;
