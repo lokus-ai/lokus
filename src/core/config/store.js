@@ -52,18 +52,34 @@ export async function getGlobalConfigPath() {
 
 export async function readConfig() {
   const configPath = await getGlobalConfigPath();
-  console.log('[config] Reading config from path:', configPath);
-  const result = (await readJson(configPath)) || {};
-  console.log('[config] Read config result:', result);
+  
+  // Ensure directory exists before reading
+  if (isTauri) {
+    const dir = await getGlobalDir();
+    await ensureDir(dir);
+  }
+  
+  let result = await readJson(configPath);
+  
+  // If config file doesn't exist or failed to read, initialize with empty config
+  if (result === null) {
+    result = {};
+    // Don't save empty config - let it be created when user actually changes settings
+  }
+  
   return result;
 }
 
 export async function writeConfig(next) {
   const configPath = await getGlobalConfigPath();
-  console.log('[config] Writing config to path:', configPath);
-  console.log('[config] Writing config data:', next);
+  
+  // Ensure directory exists before writing
+  if (isTauri) {
+    const dir = await getGlobalDir();
+    await ensureDir(dir);
+  }
+  
   const result = await writeJson(configPath, next);
-  console.log('[config] Write config completed');
   return result;
 }
 
