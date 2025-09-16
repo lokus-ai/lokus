@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { PluginLoader } from "../plugins/PluginLoader.js";
 
 const PluginContext = createContext(null);
 
@@ -10,6 +11,7 @@ export function PluginProvider({ children }) {
   const [error, setError] = useState(null);
   const [installingPlugins, setInstallingPlugins] = useState(new Set());
   const [enabledPlugins, setEnabledPlugins] = useState(new Set());
+  const [pluginLoader] = useState(() => new PluginLoader());
 
   // Load plugins on mount
   useEffect(() => {
@@ -40,101 +42,107 @@ export function PluginProvider({ children }) {
     }
   }, []);
 
+  const loadEnabledPlugins = useCallback(async (allPlugins, enabledPluginNames) => {
+    for (const pluginInfo of allPlugins) {
+      if (enabledPluginNames.includes(pluginInfo.id)) {
+        try {
+          await pluginLoader.loadPlugin(pluginInfo);
+          await pluginLoader.activatePlugin(pluginInfo.id);
+        } catch (error) {
+          console.error(`❌ Failed to load plugin ${pluginInfo.id}:`, error);
+        }
+      }
+    }
+  }, [pluginLoader]);
+
   const loadPlugins = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // In a real implementation, this would call the Tauri backend
-      // For now, we'll use mock data
-      const mockPlugins = [
-        {
-          id: "markdown-extensions",
-          name: "Advanced Markdown Extensions",
-          version: "1.2.0",
-          description: "Adds support for tables, task lists, and custom syntax highlighting",
-          author: "Lokus Team",
-          enabled: true,
-          permissions: ["file-system", "editor-extensions"],
-          lastUpdated: "2024-01-15",
-          rating: 4.8,
-          downloads: 12500,
-          settings: {
-            enableTables: true,
-            enableTaskLists: true,
-            customSyntax: false
-          },
-          dependencies: [],
-          conflicts: [],
-          ui: {
-            panels: [
-              {
-                id: 'markdown-tools',
-                title: 'Markdown Tools',
-                type: 'react-component',
-                component: 'MarkdownToolsPanel'
-              }
-            ]
-          }
-        },
-        {
-          id: "git-integration",
-          name: "Git Integration",
-          version: "2.1.3",
-          description: "Seamless Git integration with commit, branch, and merge support",
-          author: "Community",
-          enabled: false,
-          permissions: ["file-system", "network", "shell-commands"],
-          lastUpdated: "2024-01-10",
-          rating: 4.5,
-          downloads: 8900,
-          settings: {
-            autoCommit: false,
-            showBranchStatus: true,
-            integrationLevel: "basic"
-          },
-          dependencies: ["git-cli"],
-          conflicts: [],
-          ui: {
-            panels: [
-              {
-                id: 'git-status',
-                title: 'Git Status',
-                type: 'react-component',
-                component: 'GitStatusPanel'
-              }
-            ]
-          }
-        }
-      ];
+      let isTauri = false; 
+      try {
+        const w = window;
+        isTauri = !!(
+          (w.__TAURI_INTERNALS__ && typeof w.__TAURI_INTERNALS__.invoke === 'function') ||
+          w.__TAURI_METADATA__ ||
+          (navigator?.userAgent || '').includes('Tauri')
+        );
+      } catch {}
       
-      setPlugins(mockPlugins);
-      setEnabledPlugins(new Set(mockPlugins.filter(p => p.enabled).map(p => p.id)));
+      if (isTauri) {
+        console.log('🔍 Loading plugins from Tauri backend...');
+        // Load real plugins from Tauri backend
+        const [pluginInfos, enabledPluginNames] = await Promise.all([
+          invoke('list_plugins'),
+          invoke('get_enabled_plugins')
+        ]);
+        
+        
+        // Convert backend format to frontend format
+        const convertedPlugins = pluginInfos.map(pluginInfo => {
+          // The backend uses directory name as plugin ID, extract from path
+          const pluginId = pluginInfo.manifest.id || pluginInfo.path.split('/').pop();
+          const pluginName = pluginInfo.manifest.name;
+          const isEnabled = enabledPluginNames.includes(pluginId);
+          
+          
+          return {
+            id: pluginId,
+            name: pluginName,
+            version: pluginInfo.manifest.version,
+            description: pluginInfo.manifest.description,
+            author: pluginInfo.manifest.author,
+            enabled: isEnabled,
+            permissions: pluginInfo.manifest.permissions,
+            lastUpdated: pluginInfo.installed_at,
+            path: pluginInfo.path,
+            size: pluginInfo.size,
+            main: pluginInfo.manifest.main,
+            dependencies: pluginInfo.manifest.dependencies || {},
+            keywords: pluginInfo.manifest.keywords || [],
+            repository: pluginInfo.manifest.repository,
+            homepage: pluginInfo.manifest.homepage,
+            license: pluginInfo.manifest.license,
+            // Default UI properties
+            rating: 0,
+            downloads: 0,
+            settings: {},
+            conflicts: [],
+            ui: {
+              panels: []
+            }
+          };
+        });
+        
+        
+        setPlugins(convertedPlugins);
+        setEnabledPlugins(new Set(enabledPluginNames));
+        
+        // Load and activate enabled plugins
+        await loadEnabledPlugins(convertedPlugins, enabledPluginNames);
+      } else {
+        // Browser mode - empty list
+        setPlugins([]);
+        setEnabledPlugins(new Set());
+      }
     } catch (err) {
       setError(err.message);
       console.error('Failed to load plugins:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadEnabledPlugins]);
 
   const installPlugin = useCallback(async (pluginId, pluginData) => {
     try {
       setInstallingPlugins(prev => new Set(prev).add(pluginId));
       
-      // In a real implementation, this would call the Tauri backend
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate installation
+      // Call Tauri backend to install plugin
+      await invoke('install_plugin', { path: pluginData.path });
       
-      // Add to plugins list
-      setPlugins(prev => [...prev, { ...pluginData, enabled: false }]);
-      
-      // Emit plugin update event
-      try {
-        const { emit } = await import('@tauri-apps/api/event');
-        await emit('plugins:updated');
-      } catch {
-        window.dispatchEvent(new CustomEvent('plugins:updated'));
-      }
+      // Reload plugins to get updated state
+      await loadPlugins();
       
       return true;
     } catch (err) {
@@ -147,62 +155,82 @@ export function PluginProvider({ children }) {
         return newSet;
       });
     }
-  }, []);
+  }, [loadPlugins]);
 
   const uninstallPlugin = useCallback(async (pluginId) => {
     try {
-      // In a real implementation, this would call the Tauri backend
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate uninstallation
+      // Call Tauri backend to uninstall plugin
+      await invoke('uninstall_plugin', { name: pluginId });
       
-      // Remove from plugins list
-      setPlugins(prev => prev.filter(p => p.id !== pluginId));
-      setEnabledPlugins(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(pluginId);
-        return newSet;
-      });
-      
-      // Emit plugin update event
-      try {
-        const { emit } = await import('@tauri-apps/api/event');
-        await emit('plugins:updated');
-      } catch {
-        window.dispatchEvent(new CustomEvent('plugins:updated'));
-      }
+      // Reload plugins to get updated state
+      await loadPlugins();
       
       return true;
     } catch (err) {
       console.error(`Failed to uninstall plugin ${pluginId}:`, err);
       throw err;
     }
-  }, []);
+  }, [loadPlugins]);
 
   const togglePlugin = useCallback(async (pluginId, enabled) => {
     try {
-      // In a real implementation, this would call the Tauri backend
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate toggle
+      console.log(`🎯 TogglePlugin called: ${pluginId}, enabled: ${enabled}, type: ${typeof enabled}`);
       
-      // Update plugin state
-      setPlugins(prev => prev.map(plugin => 
-        plugin.id === pluginId ? { ...plugin, enabled } : plugin
-      ));
+      // CRITICAL FIX: Validate input parameters
+      if (!pluginId || typeof pluginId !== 'string') {
+        throw new Error(`Invalid pluginId: ${pluginId} (type: ${typeof pluginId})`);
+      }
       
-      setEnabledPlugins(prev => {
-        const newSet = new Set(prev);
-        if (enabled) {
-          newSet.add(pluginId);
-        } else {
-          newSet.delete(pluginId);
-        }
-        return newSet;
-      });
+      if (typeof enabled !== 'boolean') {
+        console.error(`🚨 CRITICAL ERROR: enabled parameter is not boolean!`);
+        console.error(`   pluginId: ${pluginId}`);
+        console.error(`   enabled: ${enabled}`);
+        console.error(`   type: ${typeof enabled}`);
+        console.error(`   Stack trace:`, new Error().stack);
+        throw new Error(`Invalid enabled parameter: ${enabled} (type: ${typeof enabled}) - must be boolean`);
+      }
       
-      // Emit plugin update event
+      let isTauri = false; 
       try {
-        const { emit } = await import('@tauri-apps/api/event');
-        await emit('plugins:updated');
-      } catch {
-        window.dispatchEvent(new CustomEvent('plugins:updated'));
+        const w = window;
+        isTauri = !!(
+          (w.__TAURI_INTERNALS__ && typeof w.__TAURI_INTERNALS__.invoke === 'function') ||
+          w.__TAURI_METADATA__ ||
+          (navigator?.userAgent || '').includes('Tauri')
+        );
+      } catch {}
+      
+      if (isTauri) {
+        // Use real Tauri commands
+        console.log(`🔧 ${enabled ? 'Enabling' : 'Disabling'} plugin: ${pluginId}`);
+        if (enabled) {
+          const result = await invoke('enable_plugin', { name: pluginId });
+          console.log('✅ Enable result:', result);
+        } else {
+          const result = await invoke('disable_plugin', { name: pluginId });
+          console.log('❌ Disable result:', result);
+        }
+        
+        // Reload plugins from backend to get the correct state
+        console.log('🔄 Reloading plugins from backend after toggle...');
+        await loadPlugins();
+      } else {
+        // Browser mode fallback
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        setPlugins(prev => prev.map(plugin => 
+          plugin.id === pluginId ? { ...plugin, enabled } : plugin
+        ));
+        
+        setEnabledPlugins(prev => {
+          const newSet = new Set(prev);
+          if (enabled) {
+            newSet.add(pluginId);
+          } else {
+            newSet.delete(pluginId);
+          }
+          return newSet;
+        });
       }
       
       return true;
@@ -210,7 +238,7 @@ export function PluginProvider({ children }) {
       console.error(`Failed to toggle plugin ${pluginId}:`, err);
       throw err;
     }
-  }, []);
+  }, [loadPlugins]);
 
   const updatePluginSettings = useCallback(async (pluginId, settings) => {
     try {

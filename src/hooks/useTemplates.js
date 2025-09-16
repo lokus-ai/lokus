@@ -153,7 +153,6 @@ export function useTemplates() {
     try {
       const result = manager.list();
       if (result.templates.length === 0) {
-        console.log('No templates found, initializing demo templates...');
         
         // Import and create demo templates
         const demoTemplates = [
@@ -234,7 +233,6 @@ This project is licensed under the MIT License.
           await manager.create(template);
         }
         
-        console.log(`Initialized ${demoTemplates.length} demo templates`);
         return true;
       }
       return false;
