@@ -20,7 +20,6 @@ export class TestWorkspaceManager {
                      window.TEST_WORKSPACE_PATH || 
                      localStorage.getItem('lokus-test-workspace')
     
-    console.log('Test mode detected:', this.isTestMode)
     return this.isTestMode
   }
 

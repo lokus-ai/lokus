@@ -152,28 +152,37 @@ export async function listAvailableThemes() {
 
 // --- Public API ---
 export async function readGlobalVisuals() {
-  console.log('[theme] Reading config...');
+  console.log('[theme] Reading theme from config...');
   const cfg = await readConfig();
-  console.log('[theme] Config loaded:', cfg);
-  const result = { theme: cfg.theme || null };
+  console.log('[theme] Full config loaded:', cfg);
+  const themeId = cfg.theme || null;
+  const result = { theme: themeId };
+  console.log(`[theme] Extracted theme: "${themeId}" (type: ${typeof themeId})`);
   console.log('[theme] Returning visuals:', result);
   return result;
 }
 
 export async function setGlobalActiveTheme(id) {
-  console.log('[theme] Saving theme to config:', id);
+  console.log(`[theme] === Setting Global Active Theme: "${id}" ===`);
+  
   try { 
     await updateConfig({ theme: id }); 
-    console.log('[theme] Theme saved successfully:', id);
+    console.log(`[theme] ✅ Theme "${id}" saved to config successfully`);
   } catch (e) { 
-    console.error('[theme] Failed to save theme:', e); 
+    console.error(`[theme] ❌ Failed to save theme "${id}":`, e); 
     return;
   }
+  
   const manifest = await loadThemeManifestById(id);
   const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
+  
+  console.log(`[theme] Applying tokens for theme "${id}"`);
   applyTokens(tokensToApply);
-  console.log('[theme] Broadcasting theme change:', id);
+  
+  console.log(`[theme] Broadcasting theme change to other windows: "${id}"`);
   await broadcastTheme({ tokens: tokensToApply, visuals: { theme: id } });
+  
+  console.log(`[theme] === Theme "${id}" fully activated ===`);
 }
 
 // Removed setGlobalVisuals - themes now handle everything
@@ -196,9 +205,19 @@ export async function loadThemeForWorkspace(workspacePath) {
 }
 
 export async function applyInitialTheme() {
+  console.log('[theme] === Applying Initial Theme ===');
   const { theme } = await readGlobalVisuals();
+  
+  if (theme) {
+    console.log(`[theme] Loading saved theme: "${theme}"`);
+  } else {
+    console.log('[theme] No saved theme found, using built-in theme');
+  }
+  
   const manifest = await loadThemeManifestById(theme);
   const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
   applyTokens(tokensToApply);
-  console.log('[theme] Applied initial theme:', theme || 'built-in');
+  
+  const appliedTheme = theme || 'built-in';
+  console.log(`[theme] ✅ Initial theme applied: "${appliedTheme}"`);
 }

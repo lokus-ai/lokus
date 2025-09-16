@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tauri::{AppHandle, Manager};
-use tauri_plugin_store::{StoreBuilder, JsonValue};
+use tauri::AppHandle;
+use tauri_plugin_store::StoreBuilder;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -475,10 +475,6 @@ mod regex {
                 _ => None,
             }
         }
-    }
-    
-    pub fn unwrap(result: Result<Regex, String>) -> Regex {
-        result.unwrap()
     }
 }
 
