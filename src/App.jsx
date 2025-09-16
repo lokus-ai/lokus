@@ -6,6 +6,8 @@ import { usePreferenceActivation } from "./hooks/usePreferenceActivation";
 import { useWorkspaceActivation } from "./hooks/useWorkspaceActivation";
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/shortcuts/registry.js";
 import { PluginProvider } from "./hooks/usePlugins.jsx";
+// Import workspace manager to expose developer utilities
+import "./core/workspace/manager.js";
 // Guard window access in non-Tauri environments
 import { emit } from "@tauri-apps/api/event";
 

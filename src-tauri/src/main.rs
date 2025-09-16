@@ -29,6 +29,97 @@ fn save_last_workspace(app: tauri::AppHandle, path: String) {
 }
 
 #[tauri::command]
+fn clear_last_workspace(app: tauri::AppHandle) {
+    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
+    let _ = store.reload();
+    let _ = store.delete("last_workspace_path".to_string());
+    let _ = store.save();
+}
+
+#[tauri::command]
+fn validate_workspace_path(path: String) -> bool {
+    let workspace_path = std::path::Path::new(&path);
+    
+    // Check if path exists and is a directory
+    if !workspace_path.exists() || !workspace_path.is_dir() {
+        return false;
+    }
+    
+    // Check if we can read the directory
+    if workspace_path.read_dir().is_err() {
+        return false;
+    }
+    
+    // Check if it's a valid Lokus workspace or can be initialized as one
+    let lokus_dir = workspace_path.join(".lokus");
+    if lokus_dir.exists() {
+        // It's already a Lokus workspace
+        return lokus_dir.is_dir();
+    }
+    
+    // If no .lokus folder, check if we can create one (write permissions)
+    match std::fs::create_dir(&lokus_dir) {
+        Ok(_) => {
+            // Successfully created, remove it and return true
+            let _ = std::fs::remove_dir(&lokus_dir);
+            true
+        }
+        Err(_) => false
+    }
+}
+
+#[tauri::command] 
+fn get_validated_workspace_path(app: tauri::AppHandle) -> Option<String> {
+    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
+    let _ = store.reload();
+    
+    if let Some(path) = store.get("last_workspace_path") {
+        if let Some(path_str) = path.as_str() {
+            if validate_workspace_path(path_str.to_string()) {
+                return Some(path_str.to_string());
+            } else {
+                // Invalid path, clear it
+                let _ = store.delete("last_workspace_path".to_string());
+                let _ = store.save();
+            }
+        }
+    }
+    None
+}
+
+#[tauri::command]
+fn clear_all_workspace_data(app: tauri::AppHandle) {
+    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
+    let _ = store.reload();
+    
+    // Clear all workspace-related keys
+    let _ = store.delete("last_workspace_path".to_string());
+    
+    // Clear all session states
+    let keys = store.keys();
+    for key in keys {
+        if key.starts_with("session_state_") {
+            let _ = store.delete(key.to_string());
+        }
+    }
+    
+    let _ = store.save();
+    println!("Cleared all workspace data for development");
+}
+
+#[tauri::command]
+fn is_development_mode() -> bool {
+    // Check if we're in development mode
+    cfg!(debug_assertions)
+}
+
+#[tauri::command]
+fn force_launcher_mode(app: tauri::AppHandle) -> bool {
+    clear_all_workspace_data(app);
+    true
+}
+
+#[tauri::command]
 fn save_session_state(app: tauri::AppHandle, workspace_path: String, open_tabs: Vec<String>, expanded_folders: Vec<String>) {
     let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
     let _ = store.reload();
@@ -72,6 +163,12 @@ fn main() {
       open_workspace_window,
       open_preferences_window,
       save_last_workspace,
+      clear_last_workspace,
+      validate_workspace_path,
+      get_validated_workspace_path,
+      clear_all_workspace_data,
+      is_development_mode,
+      force_launcher_mode,
       save_session_state,
       load_session_state,
       theme::theme_broadcast,
@@ -128,16 +225,25 @@ fn main() {
       let store = StoreBuilder::new(app.handle(), PathBuf::from(".settings.dat")).build().unwrap();
       let _ = store.reload();
 
-      if let Some(path) = store.get("last_workspace_path") {
-        if let Some(path_str) = path.as_str() {
-          let main_window = app.get_webview_window("main").unwrap();
-          main_window.hide().unwrap();
-          let _ = open_workspace_window(app_handle, path_str.to_string());
-        }
-      } else {
-        // If no workspace is open, explicitly show the main window
+      // In development mode, always clear workspace data and show launcher
+      if cfg!(debug_assertions) {
+        println!("Development mode detected - clearing workspace data and showing launcher");
+        clear_all_workspace_data(app.handle().clone());
         let main_window = app.get_webview_window("main").unwrap();
         main_window.show().unwrap();
+      } else {
+        // Production mode - use the validation function to check for valid workspace
+        if let Some(valid_path) = get_validated_workspace_path(app.handle().clone()) {
+          println!("Loading validated workspace: {}", valid_path);
+          let main_window = app.get_webview_window("main").unwrap();
+          main_window.hide().unwrap();
+          let _ = open_workspace_window(app_handle, valid_path);
+        } else {
+          // No valid workspace found, show the launcher
+          println!("No valid workspace found, showing launcher");
+          let main_window = app.get_webview_window("main").unwrap();
+          main_window.show().unwrap();
+        }
       }
 
       Ok(())
