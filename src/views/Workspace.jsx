@@ -23,9 +23,9 @@ import InFileSearch from "../components/InFileSearch.jsx";
 import SearchPanel from "../components/SearchPanel.jsx";
 import MiniKanban from "../components/MiniKanban.jsx";
 import FullKanban from "../components/FullKanban.jsx";
-import PluginSettings from "./PluginSettings.jsx";
-import PluginMarketplace from "./PluginMarketplace.jsx";
+import Extensions from "./Extensions.jsx";
 import PluginDetail from "./PluginDetail.jsx";
+import PluginInstallDialog from "../components/PluginInstallDialog.jsx";
 import { canvasManager } from "../core/canvas/manager.js";
 
 const MAX_OPEN_TABS = 10;
@@ -418,10 +418,14 @@ export default function Workspace({ initialPath = "" }) {
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showKanban, setShowKanban] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
+  const [selectedExtension, setSelectedExtension] = useState(null);
+  const [showPluginInstall, setShowPluginInstall] = useState(false);
   
   // --- Refs for stable callbacks ---
   const stateRef = useRef({});
   const editorRef = useRef(null);
+  const closingTabRef = useRef(null);
+  const lastCloseTime = useRef(0);
   stateRef.current = {
     activeFile,
     openTabs,
@@ -622,6 +626,20 @@ export default function Workspace({ initialPath = "" }) {
     setActiveFile(pluginPath);
   };
 
+  const handleExtensionSelect = (extension) => {
+    setSelectedExtension(extension);
+    const extensionPath = `__extension_${extension.id}__`;
+    const extensionName = extension.name;
+    
+    setOpenTabs(prevTabs => {
+      const newTabs = prevTabs.filter(t => t.path !== extensionPath);
+      newTabs.unshift({ path: extensionPath, name: extensionName, extension });
+      if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
+      return newTabs;
+    });
+    setActiveFile(extensionPath);
+  };
+
   const toggleFolder = (folderPath) => {
     setExpandedFolders(prev => {
       const newSet = new Set(prev);
@@ -707,38 +725,54 @@ export default function Workspace({ initialPath = "" }) {
   };
 
   const handleTabClose = useCallback(async (path) => {
-    const closeTab = () => {
-      setOpenTabs(prevTabs => {
-        const tabIndex = prevTabs.findIndex(t => t.path === path);
-        const newTabs = prevTabs.filter(t => t.path !== path);
-        
-        if (stateRef.current.activeFile === path) {
-          if (newTabs.length === 0) {
-            setActiveFile(null);
-          } else {
-            const newActiveIndex = Math.max(0, tabIndex - 1);
-            setActiveFile(newTabs[newActiveIndex].path);
-          }
-        }
-        return newTabs;
-      });
-      setUnsavedChanges(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(path);
-        return newSet;
-      });
-    };
+    // Prevent multiple simultaneous close operations and debounce rapid calls
+    const now = Date.now();
+    if (!path || closingTabRef.current === path || (now - lastCloseTime.current) < 200) return;
+    
+    lastCloseTime.current = now;
+    closingTabRef.current = path;
 
-    if (stateRef.current.unsavedChanges.has(path)) {
-      const confirmed = await confirm("You have unsaved changes. Close without saving?", {
-        title: "Unsaved Changes",
-        type: "warning",
-      });
-      if (confirmed) {
+    try {
+      const closeTab = () => {
+        setOpenTabs(prevTabs => {
+          const tabIndex = prevTabs.findIndex(t => t.path === path);
+          const newTabs = prevTabs.filter(t => t.path !== path);
+          
+          if (stateRef.current.activeFile === path) {
+            if (newTabs.length === 0) {
+              setActiveFile(null);
+            } else {
+              const newActiveIndex = Math.max(0, tabIndex - 1);
+              setActiveFile(newTabs[newActiveIndex].path);
+            }
+          }
+          return newTabs;
+        });
+        setUnsavedChanges(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(path);
+          return newSet;
+        });
+      };
+
+      if (stateRef.current.unsavedChanges.has(path)) {
+        const confirmed = await confirm("You have unsaved changes. Close without saving?", {
+          title: "Unsaved Changes",
+          type: "warning",
+        });
+        if (confirmed) {
+          closeTab();
+        }
+      } else {
         closeTab();
       }
-    } else {
-      closeTab();
+    } finally {
+      // Clear the closing flag after a short delay
+      setTimeout(() => {
+        if (closingTabRef.current === path) {
+          closingTabRef.current = null;
+        }
+      }, 100);
     }
   }, []);
 
@@ -848,7 +882,17 @@ export default function Workspace({ initialPath = "" }) {
 
   useEffect(() => {
     let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
-    const addDom = (name, fn) => { const h = () => fn(); window.addEventListener(name, h); return () => window.removeEventListener(name, h); };
+    const addDom = (name, fn) => { 
+      const h = (e) => {
+        if (e && typeof e.preventDefault === 'function') {
+          e.preventDefault(); 
+          e.stopPropagation();
+        }
+        fn();
+      }; 
+      window.addEventListener(name, h); 
+      return () => window.removeEventListener(name, h); 
+    };
     const unlistenSave = isTauri ? listen("lokus:save-file", handleSave) : Promise.resolve(addDom('lokus:save-file', handleSave));
     const unlistenClose = isTauri ? listen("lokus:close-tab", () => {
       if (stateRef.current.activeFile) {
@@ -861,6 +905,7 @@ export default function Workspace({ initialPath = "" }) {
     const unlistenCommandPalette = isTauri ? listen("lokus:command-palette", () => setShowCommandPalette(true)) : Promise.resolve(addDom('lokus:command-palette', () => setShowCommandPalette(true)));
     const unlistenInFileSearch = isTauri ? listen("lokus:in-file-search", () => setShowInFileSearch(true)) : Promise.resolve(addDom('lokus:in-file-search', () => setShowInFileSearch(true)));
     const unlistenGlobalSearch = isTauri ? listen("lokus:global-search", () => setShowGlobalSearch(true)) : Promise.resolve(addDom('lokus:global-search', () => setShowGlobalSearch(true)));
+    const unlistenInstallPlugin = isTauri ? listen("lokus:install-plugin", () => setShowPluginInstall(true)) : Promise.resolve(addDom('lokus:install-plugin', () => setShowPluginInstall(true)));
 
     return () => {
       unlistenSave.then(f => { if (typeof f === 'function') f(); });
@@ -871,6 +916,7 @@ export default function Workspace({ initialPath = "" }) {
       unlistenCommandPalette.then(f => { if (typeof f === 'function') f(); });
       unlistenInFileSearch.then(f => { if (typeof f === 'function') f(); });
       unlistenGlobalSearch.then(f => { if (typeof f === 'function') f(); });
+      unlistenInstallPlugin.then(f => { if (typeof f === 'function') f(); });
     };
   }, [handleSave, handleTabClose]);
 
@@ -894,13 +940,13 @@ export default function Workspace({ initialPath = "" }) {
           <button
             onClick={() => setShowLeft(v => !v)}
             title={showLeft ? "Hide sidebar" : "Show sidebar"}
-            className={`activity-bar-button obsidian-button ${showLeft ? 'primary' : ''}`}
+            className="activity-bar-button obsidian-button"
           >
             <LokusLogo className="w-6 h-6" />
           </button>
           
           {/* Activity Bar - VS Code Style */}
-          <div className="w-full border-t border-app-border/50 pt-1 flex flex-col items-center gap-1">
+          <div className="w-full flex flex-col items-center gap-1">
             <button
               onClick={() => { 
                 setShowKanban(false); 
@@ -908,7 +954,7 @@ export default function Workspace({ initialPath = "" }) {
                 setShowLeft(true);
               }}
               title="Explorer"
-              className={`activity-bar-button obsidian-button ${!showKanban && !showPlugins && showLeft ? 'primary' : ''}`}
+              className={`activity-bar-button obsidian-button ${!showKanban && !showPlugins && showLeft ? 'active' : ''}`}
             >
               <FolderOpen className="w-5 h-5" />
             </button>
@@ -920,7 +966,7 @@ export default function Workspace({ initialPath = "" }) {
                 setShowLeft(true);
               }}
               title="Task Board"
-              className={`activity-bar-button obsidian-button ${showKanban && !showPlugins ? 'primary' : ''}`}
+              className={`activity-bar-button obsidian-button ${showKanban && !showPlugins ? 'active' : ''}`}
             >
               <LayoutGrid className="w-5 h-5" />
             </button>
@@ -932,7 +978,7 @@ export default function Workspace({ initialPath = "" }) {
                 setShowLeft(true);
               }}
               title="Extensions"
-              className={`activity-bar-button obsidian-button ${showPlugins ? 'primary' : ''}`}
+              className={`activity-bar-button obsidian-button ${showPlugins ? 'active' : ''}`}
             >
               <Puzzle className="w-5 h-5" />
             </button>
@@ -971,7 +1017,7 @@ export default function Workspace({ initialPath = "" }) {
             )}
             {showPlugins ? (
               <div className="flex-1 overflow-hidden">
-                <PluginSettings onOpenPluginDetail={handleOpenPluginDetail} />
+                <Extensions onSelectExtension={handleExtensionSelect} />
               </div>
             ) : showKanban ? (
               <div className="flex-1 overflow-hidden">
@@ -1078,6 +1124,13 @@ export default function Workspace({ initialPath = "" }) {
                     {(() => {
                       const activeTab = openTabs.find(tab => tab.path === activeFile);
                       return activeTab?.plugin ? <PluginDetail plugin={activeTab.plugin} /> : <div>Plugin not found</div>;
+                    })()}
+                  </div>
+                ) : activeFile && activeFile.startsWith('__extension_') ? (
+                  <div className="flex-1 overflow-hidden">
+                    {(() => {
+                      const activeTab = openTabs.find(tab => tab.path === activeFile);
+                      return activeTab?.extension ? <PluginDetail plugin={activeTab.extension} /> : <div>Extension not found</div>;
                     })()}
                   </div>
                 ) : activeFile ? (
@@ -1264,6 +1317,11 @@ export default function Workspace({ initialPath = "" }) {
         onClose={() => setShowGlobalSearch(false)}
         onFileOpen={handleFileOpen}
         workspacePath={path}
+      />
+
+      <PluginInstallDialog
+        isOpen={showPluginInstall}
+        onClose={() => setShowPluginInstall(false)}
       />
       
       {/* Enhanced Obsidian Status Bar */}

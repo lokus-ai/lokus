@@ -45,71 +45,58 @@ export function PluginProvider({ children }) {
       setLoading(true);
       setError(null);
       
-      // In a real implementation, this would call the Tauri backend
-      // For now, we'll use mock data
-      const mockPlugins = [
-        {
-          id: "markdown-extensions",
-          name: "Advanced Markdown Extensions",
-          version: "1.2.0",
-          description: "Adds support for tables, task lists, and custom syntax highlighting",
-          author: "Lokus Team",
-          enabled: true,
-          permissions: ["file-system", "editor-extensions"],
-          lastUpdated: "2024-01-15",
-          rating: 4.8,
-          downloads: 12500,
-          settings: {
-            enableTables: true,
-            enableTaskLists: true,
-            customSyntax: false
-          },
-          dependencies: [],
-          conflicts: [],
-          ui: {
-            panels: [
-              {
-                id: 'markdown-tools',
-                title: 'Markdown Tools',
-                type: 'react-component',
-                component: 'MarkdownToolsPanel'
-              }
-            ]
-          }
-        },
-        {
-          id: "git-integration",
-          name: "Git Integration",
-          version: "2.1.3",
-          description: "Seamless Git integration with commit, branch, and merge support",
-          author: "Community",
-          enabled: false,
-          permissions: ["file-system", "network", "shell-commands"],
-          lastUpdated: "2024-01-10",
-          rating: 4.5,
-          downloads: 8900,
-          settings: {
-            autoCommit: false,
-            showBranchStatus: true,
-            integrationLevel: "basic"
-          },
-          dependencies: ["git-cli"],
-          conflicts: [],
-          ui: {
-            panels: [
-              {
-                id: 'git-status',
-                title: 'Git Status',
-                type: 'react-component',
-                component: 'GitStatusPanel'
-              }
-            ]
-          }
-        }
-      ];
+      let isTauri = false; 
+      try {
+        const w = window;
+        isTauri = !!(
+          (w.__TAURI_INTERNALS__ && typeof w.__TAURI_INTERNALS__.invoke === 'function') ||
+          w.__TAURI_METADATA__ ||
+          (navigator?.userAgent || '').includes('Tauri')
+        );
+      } catch {}
       
-      setPlugins(mockPlugins);
-      setEnabledPlugins(new Set(mockPlugins.filter(p => p.enabled).map(p => p.id)));
+      if (isTauri) {
+        // Load real plugins from Tauri backend
+        const [pluginInfos, enabledPluginNames] = await Promise.all([
+          invoke('list_plugins'),
+          invoke('get_enabled_plugins')
+        ]);
+        
+        // Convert backend format to frontend format
+        const convertedPlugins = pluginInfos.map(pluginInfo => ({
+          id: pluginInfo.manifest.name,
+          name: pluginInfo.manifest.name,
+          version: pluginInfo.manifest.version,
+          description: pluginInfo.manifest.description,
+          author: pluginInfo.manifest.author,
+          enabled: enabledPluginNames.includes(pluginInfo.manifest.name),
+          permissions: pluginInfo.manifest.permissions,
+          lastUpdated: pluginInfo.installed_at,
+          path: pluginInfo.path,
+          size: pluginInfo.size,
+          main: pluginInfo.manifest.main,
+          dependencies: pluginInfo.manifest.dependencies || {},
+          keywords: pluginInfo.manifest.keywords || [],
+          repository: pluginInfo.manifest.repository,
+          homepage: pluginInfo.manifest.homepage,
+          license: pluginInfo.manifest.license,
+          // Default UI properties for now
+          rating: 0,
+          downloads: 0,
+          settings: {},
+          conflicts: [],
+          ui: {
+            panels: []
+          }
+        }));
+        
+        setPlugins(convertedPlugins);
+        setEnabledPlugins(new Set(enabledPluginNames));
+      } else {
+        // Browser mode - use empty list for now
+        setPlugins([]);
+        setEnabledPlugins(new Set());
+      }
     } catch (err) {
       setError(err.message);
       console.error('Failed to load plugins:', err);
@@ -179,10 +166,29 @@ export function PluginProvider({ children }) {
 
   const togglePlugin = useCallback(async (pluginId, enabled) => {
     try {
-      // In a real implementation, this would call the Tauri backend
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate toggle
+      let isTauri = false; 
+      try {
+        const w = window;
+        isTauri = !!(
+          (w.__TAURI_INTERNALS__ && typeof w.__TAURI_INTERNALS__.invoke === 'function') ||
+          w.__TAURI_METADATA__ ||
+          (navigator?.userAgent || '').includes('Tauri')
+        );
+      } catch {}
       
-      // Update plugin state
+      if (isTauri) {
+        // Use real Tauri commands
+        if (enabled) {
+          await invoke('enable_plugin', { name: pluginId });
+        } else {
+          await invoke('disable_plugin', { name: pluginId });
+        }
+      } else {
+        // Browser mode - simulate delay
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      // Update local state
       setPlugins(prev => prev.map(plugin => 
         plugin.id === pluginId ? { ...plugin, enabled } : plugin
       ));

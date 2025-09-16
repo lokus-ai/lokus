@@ -92,6 +92,8 @@ fn main() {
       search::build_search_index,
       plugins::list_plugins,
       plugins::install_plugin,
+      plugins::install_plugin_from_path,
+      plugins::install_plugin_from_url,
       plugins::uninstall_plugin,
       plugins::get_plugin_info,
       plugins::validate_plugin_manifest,

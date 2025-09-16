@@ -200,6 +200,44 @@ pub async fn install_plugin(path: String) -> Result<String, String> {
     }
 }
 
+#[derive(Serialize)]
+pub struct InstallResult {
+    pub success: bool,
+    pub message: String,
+    pub plugin_name: Option<String>,
+    pub error: Option<String>,
+}
+
+#[tauri::command]
+pub async fn install_plugin_from_path(path: String) -> Result<InstallResult, String> {
+    match install_plugin(path).await {
+        Ok(plugin_name) => Ok(InstallResult {
+            success: true,
+            message: format!("Plugin '{}' installed successfully", plugin_name),
+            plugin_name: Some(plugin_name),
+            error: None,
+        }),
+        Err(error) => Ok(InstallResult {
+            success: false,
+            message: "Installation failed".to_string(),
+            plugin_name: None,
+            error: Some(error),
+        }),
+    }
+}
+
+#[tauri::command]
+pub async fn install_plugin_from_url(url: String) -> Result<InstallResult, String> {
+    // For now, URL installation is not implemented
+    // This would require git cloning or downloading from URL
+    Ok(InstallResult {
+        success: false,
+        message: "URL installation not yet implemented".to_string(),
+        plugin_name: None,
+        error: Some("URL-based plugin installation is coming soon. Please download the plugin manually and install from a local directory.".to_string()),
+    })
+}
+
 async fn install_plugin_from_directory(source_dir: &Path, plugins_dir: &Path) -> Result<String, String> {
     // Validate plugin manifest first
     let manifest_path = source_dir.join("plugin.json");
