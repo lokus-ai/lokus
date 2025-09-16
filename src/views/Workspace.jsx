@@ -1522,7 +1522,7 @@ export default function Workspace({ initialPath = "" }) {
         onSaved={handleCreateTemplateSaved}
       />
       
-      {/* Pluginable Status Bar */}
+      {/* Pluginable Status Bar - replaces the old Obsidian status bar */}
       <StatusBar 
         activeFile={activeFile} 
         unsavedChanges={unsavedChanges} 
