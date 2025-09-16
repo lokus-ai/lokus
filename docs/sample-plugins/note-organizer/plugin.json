@@ -1,0 +1,124 @@
+{
+  "id": "note-organizer",
+  "name": "Advanced Note Organizer",
+  "version": "1.2.0",
+  "description": "Organize notes with tags, categories, and powerful search functionality. Track relationships between notes and maintain a knowledge base.",
+  "main": "index.js",
+  "lokusVersion": "^1.0.0",
+  "author": {
+    "name": "Lokus Plugin Examples",
+    "email": "examples@lokus.app"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/lokus-app/plugin-examples/note-organizer",
+  "keywords": [
+    "notes",
+    "organization",
+    "tags",
+    "search",
+    "categories",
+    "knowledge management"
+  ],
+  "categories": ["Editor", "Other"],
+  "permissions": [
+    "read_files",
+    "write_files",
+    "modify_ui",
+    "access_settings"
+  ],
+  "activationEvents": [
+    "onStartup",
+    "onFileType:md",
+    "onCommand:note-organizer.search"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "note-organizer.addTag",
+        "title": "Add Tag to Note",
+        "category": "Note Organizer"
+      },
+      {
+        "command": "note-organizer.searchNotes",
+        "title": "Search Notes",
+        "category": "Note Organizer"
+      },
+      {
+        "command": "note-organizer.createTemplate",
+        "title": "Create Note Template",
+        "category": "Note Organizer"
+      },
+      {
+        "command": "note-organizer.linkNotes",
+        "title": "Link Related Notes",
+        "category": "Note Organizer"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "noteOrganizer.tagsView",
+          "name": "Tags",
+          "when": "workspaceHasNotes"
+        },
+        {
+          "id": "noteOrganizer.categoriesView", 
+          "name": "Categories",
+          "when": "workspaceHasNotes"
+        }
+      ]
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "note-organizer.addTag",
+          "when": "editorTextFocus",
+          "group": "organization"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "note-organizer.searchNotes",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f"
+      },
+      {
+        "command": "note-organizer.addTag",
+        "key": "ctrl+shift+t",
+        "mac": "cmd+shift+t"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Note Organizer",
+      "properties": {
+        "noteOrganizer.defaultTags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": ["personal", "work", "idea"],
+          "description": "Default tags available for new notes"
+        },
+        "noteOrganizer.autoTag": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically suggest tags based on content"
+        },
+        "noteOrganizer.searchDepth": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Maximum depth for related note searches"
+        },
+        "noteOrganizer.backupEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic backup of note metadata"
+        }
+      }
+    }
+  }
+}

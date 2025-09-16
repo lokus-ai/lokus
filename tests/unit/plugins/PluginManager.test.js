@@ -507,5 +507,175 @@ describe('PluginManager', () => {
       await expect(pluginManager.deactivatePlugin('error-plugin'))
         .rejects.toThrow('Deactivation failed')
     })
+    
+    it('should handle plugin loading with invalid export', async () => {
+      const pluginInfo = {
+        path: '/mock/plugins/invalid-plugin',
+        manifest: { id: 'invalid-plugin', main: 'index.js' }
+      }
+      
+      pluginManager.registry.set('invalid-plugin', pluginInfo)
+      pluginManager.dependencies.set('invalid-plugin', new Set())
+      mockExists.mockResolvedValue(true)
+      
+      // Mock import with invalid export (no default or Plugin class)
+      const originalImport = global.import
+      global.import = vi.fn().mockResolvedValue({ someOtherExport: () => {} })
+      
+      await expect(pluginManager.loadPlugin('invalid-plugin'))
+        .rejects.toThrow('Plugin must export a default class or Plugin class')
+        
+      expect(pluginManager.registry.get('invalid-plugin').status).toBe('error')
+      
+      global.import = originalImport
+    })
+    
+    it('should handle missing dependency gracefully', () => {
+      const plugin1 = {
+        manifest: {
+          id: 'plugin1',
+          dependencies: { 'missing-plugin': '^1.0.0' }
+        }
+      }
+      
+      pluginManager.registry.set('plugin1', plugin1)
+      pluginManager.buildDependencyGraph()
+      
+      expect(() => pluginManager.resolveLoadOrder())
+        .toThrow('Missing dependency: missing-plugin required by plugin1')
+    })
+    
+    it('should handle plugin not found errors', async () => {
+      await expect(pluginManager.loadPlugin('non-existent-plugin'))
+        .rejects.toThrow('Plugin not found: non-existent-plugin')
+        
+      await expect(pluginManager.activatePlugin('non-existent-plugin'))
+        .rejects.toThrow('Plugin not loaded: non-existent-plugin')
+    })
+    
+    it('should handle filesystem errors during discovery', async () => {
+      mockReadDir.mockRejectedValue(new Error('Permission denied'))
+      
+      await pluginManager.setupPluginDirectories()
+      
+      // Should not throw, just log warning
+      await expect(pluginManager.discoverPlugins()).resolves.toBeUndefined()
+      expect(pluginManager.registry.size).toBe(0)
+    })
+  })
+  
+  describe('Advanced Plugin Operations', () => {
+    it('should install plugin from package', async () => {
+      const packagePath = '/mock/plugin-package.zip'
+      
+      await expect(pluginManager.installPlugin(packagePath))
+        .rejects.toThrow('Plugin installation not yet implemented')
+    })
+    
+    it('should uninstall plugin', async () => {
+      const pluginId = 'test-plugin'
+      
+      await expect(pluginManager.uninstallPlugin(pluginId))
+        .rejects.toThrow('Plugin uninstallation not yet implemented')
+    })
+    
+    it('should handle version compatibility checking', () => {
+      // Test version compatibility (currently always returns true)
+      expect(pluginManager.isVersionCompatible('1.0.0')).toBe(true)
+      expect(pluginManager.isVersionCompatible('^1.0.0')).toBe(true)
+      expect(pluginManager.isVersionCompatible('>=2.0.0')).toBe(true)
+    })
+  })
+  
+  describe('Event System', () => {
+    it('should emit plugin lifecycle events', async () => {
+      const events = []
+      
+      pluginManager.on('plugin_loaded', (data) => events.push('loaded'))
+      pluginManager.on('plugin_activated', (data) => events.push('activated'))
+      pluginManager.on('plugin_deactivated', (data) => events.push('deactivated'))
+      pluginManager.on('plugin_unloaded', (data) => events.push('unloaded'))
+      
+      const mockPlugin = {
+        activate: vi.fn(),
+        deactivate: vi.fn(),
+        cleanup: vi.fn()
+      }
+      
+      const pluginInfo = {
+        path: '/mock/plugins/test-plugin',
+        manifest: { id: 'test-plugin', main: 'index.js' }
+      }
+      
+      pluginManager.registry.set('test-plugin', pluginInfo)
+      pluginManager.dependencies.set('test-plugin', new Set())
+      mockExists.mockResolvedValue(true)
+      
+      const originalImport = global.import
+      global.import = vi.fn().mockResolvedValue({ default: vi.fn(() => mockPlugin) })
+      
+      // Load plugin
+      await pluginManager.loadPlugin('test-plugin')
+      expect(events).toContain('loaded')
+      
+      // Activate plugin
+      await pluginManager.activatePlugin('test-plugin')
+      expect(events).toContain('activated')
+      
+      // Deactivate plugin
+      await pluginManager.deactivatePlugin('test-plugin')
+      expect(events).toContain('deactivated')
+      
+      // Unload plugin
+      await pluginManager.unloadPlugin('test-plugin')
+      expect(events).toContain('unloaded')
+      
+      global.import = originalImport
+    })
+    
+    it('should emit initialization and shutdown events', async () => {
+      const events = []
+      
+      pluginManager.on('initialized', () => events.push('initialized'))
+      pluginManager.on('shutdown', () => events.push('shutdown'))
+      
+      mockReadDir.mockResolvedValue([])
+      
+      await pluginManager.initialize()
+      expect(events).toContain('initialized')
+      
+      await pluginManager.shutdown()
+      expect(events).toContain('shutdown')
+    })
+  })
+  
+  describe('Memory Management', () => {
+    it('should properly clean up plugin references on unload', async () => {
+      const mockPlugin = {
+        activate: vi.fn(),
+        deactivate: vi.fn(),
+        cleanup: vi.fn()
+      }
+      
+      pluginManager.plugins.set('test-plugin', mockPlugin)
+      pluginManager.loadedPlugins.add('test-plugin')
+      pluginManager.activePlugins.add('test-plugin')
+      pluginManager.registry.set('test-plugin', { status: 'active' })
+      
+      await pluginManager.unloadPlugin('test-plugin')
+      
+      expect(pluginManager.plugins.has('test-plugin')).toBe(false)
+      expect(pluginManager.loadedPlugins.has('test-plugin')).toBe(false)
+      expect(pluginManager.activePlugins.has('test-plugin')).toBe(false)
+      expect(mockPlugin.cleanup).toHaveBeenCalled()
+    })
+    
+    it('should clean up event listeners on shutdown', async () => {
+      const removeAllListenersSpy = vi.spyOn(pluginManager, 'removeAllListeners')
+      
+      await pluginManager.shutdown()
+      
+      expect(removeAllListenersSpy).toHaveBeenCalled()
+    })
   })
 })

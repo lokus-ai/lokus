@@ -453,6 +453,257 @@ describe('PluginAPI', () => {
       consoleSpy.mockRestore()
     })
   })
+
+  describe('Security and Permissions', () => {
+    it('should enforce file read permissions', async () => {
+      pluginAPI.permissions.clear() // Remove all permissions
+      
+      await expect(pluginAPI.readFile('/test/file.txt'))
+        .rejects.toThrow('Plugin does not have file read permission')
+    })
+    
+    it('should enforce file write permissions', async () => {
+      pluginAPI.permissions.clear() // Remove all permissions
+      
+      await expect(pluginAPI.writeFile('/test/file.txt', 'content'))
+        .rejects.toThrow('Plugin does not have file write permission')
+    })
+    
+    it('should enforce file exists permissions', async () => {
+      pluginAPI.permissions.clear() // Remove all permissions
+      
+      await expect(pluginAPI.fileExists('/test/file.txt'))
+        .rejects.toThrow('Plugin does not have file read permission')
+    })
+    
+    it('should validate file paths for security', async () => {
+      pluginAPI.grantPermission('read_files')
+      
+      // Test directory traversal prevention
+      await expect(pluginAPI.readFile('../../../etc/passwd'))
+        .rejects.toThrow('Invalid file path')
+        
+      await expect(pluginAPI.readFile('~/secrets.txt'))
+        .rejects.toThrow('Invalid file path')
+    })
+    
+    it('should allow access with proper permissions', async () => {
+      pluginAPI.grantPermission('read_files')
+      pluginAPI.grantPermission('write_files')
+      mockExists.mockResolvedValue(true)
+      mockReadTextFile.mockResolvedValue('file content')
+      
+      const content = await pluginAPI.readFile('/valid/path/file.txt')
+      expect(content).toBe('file content')
+      
+      await pluginAPI.writeFile('/valid/path/file.txt', 'new content')
+      expect(mockWriteTextFile).toHaveBeenCalledWith('/valid/path/file.txt', 'new content')
+      
+      const exists = await pluginAPI.fileExists('/valid/path/file.txt')
+      expect(exists).toBe(true)
+    })
+    
+    it('should check permissions correctly', () => {
+      expect(pluginAPI.hasPermission('read_files')).toBe(false)
+      
+      pluginAPI.grantPermission('read_files')
+      expect(pluginAPI.hasPermission('read_files')).toBe(true)
+      
+      pluginAPI.grantPermission('all')
+      expect(pluginAPI.hasPermission('any_permission')).toBe(true)
+      
+      pluginAPI.revokePermission('all')
+      expect(pluginAPI.hasPermission('write_files')).toBe(false)
+      expect(pluginAPI.hasPermission('read_files')).toBe(true) // Still has this one
+    })
+    
+    it('should track and cleanup plugin registrations', async () => {
+      const mockExtension = { name: 'TestExtension' }
+      const mockCommand = { name: 'testCommand' }
+      
+      pluginAPI.addExtension(mockExtension)
+      pluginAPI.addSlashCommand(mockCommand)
+      
+      expect(pluginAPI.registrations.get('extensions').size).toBe(1)
+      expect(pluginAPI.registrations.get('slashCommands').size).toBe(1)
+      
+      await pluginAPI.cleanup()
+      
+      expect(mockEditorAPI.removeExtension).toHaveBeenCalled()
+      expect(mockEditorAPI.removeSlashCommand).toHaveBeenCalled()
+      expect(pluginAPI.registrations.size).toBe(0)
+    })
+  })
+  
+  describe('Settings Management', () => {
+    beforeEach(() => {
+      mockInvoke.mockResolvedValue({ testKey: 'testValue' })
+    })
+    
+    it('should get plugin settings', async () => {
+      const value = await pluginAPI.getSetting('testKey', 'default')
+      
+      expect(mockInvoke).toHaveBeenCalledWith('get_plugin_settings', { 
+        pluginId: 'test-plugin' 
+      })
+      expect(value).toBe('testValue')
+    })
+    
+    it('should return default value when setting not found', async () => {
+      const value = await pluginAPI.getSetting('nonExistentKey', 'default')
+      expect(value).toBe('default')
+    })
+    
+    it('should handle settings storage errors gracefully', async () => {
+      mockInvoke.mockRejectedValue(new Error('Storage error'))
+      
+      const value = await pluginAPI.getSetting('testKey', 'default')
+      expect(value).toBe('default')
+    })
+    
+    it('should set plugin settings', async () => {
+      mockInvoke.mockResolvedValueOnce({ existingKey: 'existingValue' }) // getAllSettings
+      mockInvoke.mockResolvedValueOnce() // saveAllSettings
+      
+      await pluginAPI.setSetting('newKey', 'newValue')
+      
+      expect(mockInvoke).toHaveBeenCalledWith('save_plugin_settings', {
+        pluginId: 'test-plugin',
+        settings: { existingKey: 'existingValue', newKey: 'newValue' }
+      })
+    })
+    
+    it('should emit setting change events', async () => {
+      const events = []
+      pluginAPI.on('setting_changed', (data) => events.push(data))
+      
+      mockInvoke.mockResolvedValueOnce({}) // getAllSettings
+      mockInvoke.mockResolvedValueOnce() // saveAllSettings
+      
+      await pluginAPI.setSetting('testKey', 'testValue')
+      
+      expect(events).toHaveLength(1)
+      expect(events[0]).toEqual({
+        key: 'testKey',
+        value: 'testValue',
+        pluginId: 'test-plugin'
+      })
+    })
+  })
+  
+  describe('UI Integration', () => {
+    it('should register panels with proper IDs', () => {
+      const panel = { name: 'TestPanel', component: 'div' }
+      
+      const panelId = pluginAPI.registerPanel(panel)
+      
+      expect(panelId).toBe('test-plugin_TestPanel')
+      expect(pluginAPI.registrations.get('panels').has(panelId)).toBe(true)
+    })
+    
+    it('should add menu items with proper IDs', () => {
+      const menuItem = { name: 'TestMenuItem', action: vi.fn() }
+      
+      const menuId = pluginAPI.addMenuItem(menuItem)
+      
+      expect(menuId).toBe('test-plugin_TestMenuItem')
+      expect(pluginAPI.registrations.get('menuItems').has(menuId)).toBe(true)
+    })
+    
+    it('should show notifications with plugin context', () => {
+      const events = []
+      pluginAPI.on('notification', (data) => events.push(data))
+      
+      pluginAPI.showNotification({
+        message: 'Test notification',
+        type: 'info'
+      })
+      
+      expect(events).toHaveLength(1)
+      expect(events[0]).toMatchObject({
+        message: 'Test notification',
+        type: 'info',
+        pluginId: 'test-plugin'
+      })
+      expect(events[0].timestamp).toBeDefined()
+    })
+    
+    it('should show dialogs with plugin context', async () => {
+      const events = []
+      pluginAPI.on('dialog', (data) => events.push(data))
+      
+      const dialogPromise = pluginAPI.showDialog({
+        title: 'Test Dialog',
+        message: 'Test message'
+      })
+      
+      expect(events).toHaveLength(1)
+      expect(events[0]).toMatchObject({
+        title: 'Test Dialog',
+        message: 'Test message',
+        pluginId: 'test-plugin'
+      })
+      expect(events[0].resolve).toBeInstanceOf(Function)
+      
+      // Simulate dialog resolution
+      events[0].resolve('user_response')
+      const result = await dialogPromise
+      expect(result).toBe('user_response')
+    })
+  })
+  
+  describe('Error Handling and Edge Cases', () => {
+    it('should handle editor API errors gracefully', () => {
+      mockEditorAPI.addExtension.mockImplementation(() => {
+        throw new Error('Editor error')
+      })
+      
+      const mockExtension = { name: 'FailingExtension' }
+      
+      expect(() => {
+        pluginAPI.addExtension(mockExtension)
+      }).toThrow('Editor error')
+    })
+    
+    it('should handle file operation errors', async () => {
+      pluginAPI.grantPermission('read_files')
+      mockReadTextFile.mockRejectedValue(new Error('File read error'))
+      
+      await expect(pluginAPI.readFile('/valid/path.txt'))
+        .rejects.toThrow('File read error')
+    })
+    
+    it('should handle settings operation errors', async () => {
+      mockInvoke.mockRejectedValue(new Error('Settings error'))
+      
+      await expect(pluginAPI.setSetting('key', 'value'))
+        .rejects.toThrow('Settings error')
+    })
+    
+    it('should handle missing editor API methods', () => {
+      const apiWithoutMethods = new PluginAPI('test-plugin', {})
+      
+      expect(() => {
+        apiWithoutMethods.addExtension({ name: 'Test' })
+      }).toThrow('Editor API not available')
+      
+      expect(() => {
+        apiWithoutMethods.getEditorContent()
+      }).toThrow('Editor API not available')
+    })
+    
+    it('should provide registration information', () => {
+      pluginAPI.addExtension({ name: 'Ext1' })
+      pluginAPI.addSlashCommand({ name: 'Cmd1' })
+      
+      const registrations = pluginAPI.getRegistrations()
+      
+      expect(registrations).toHaveProperty('extensions')
+      expect(registrations).toHaveProperty('slashCommands')
+      expect(registrations.extensions).toBeInstanceOf(Array)
+      expect(registrations.slashCommands).toBeInstanceOf(Array)
+    })
+  })
 })
 
 describe('PluginAPIFactory', () => {

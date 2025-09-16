@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { usePlugins } from "../hooks/usePlugins.jsx";
 import { filterPlugins, sortPlugins } from "../utils/pluginUtils.js";
+import { pluginRuntime } from "../plugins/runtime/PluginRuntime.js";
+import { pluginApiManager } from "../plugins/api/PluginApiManager.js";
 import { 
   Search, 
   Filter, 
@@ -154,6 +156,37 @@ export default function Extensions({ onSelectExtension }) {
     marketplace: true
   });
   const [marketplaceLoading, setMarketplaceLoading] = useState(false);
+  const [pluginRuntimeReady, setPluginRuntimeReady] = useState(false);
+
+  // Initialize plugin runtime when component mounts
+  useEffect(() => {
+    const initializePluginRuntime = async () => {
+      try {
+        // Initialize plugin runtime
+        await pluginRuntime.initializeEventSystem();
+        
+        // Load all enabled plugins into runtime
+        for (const plugin of installedPlugins) {
+          if (enabledPlugins.has(plugin.id)) {
+            try {
+              await pluginRuntime.loadPlugin(plugin);
+              await pluginRuntime.activatePlugin(plugin.id);
+            } catch (error) {
+              console.error(`Failed to initialize plugin ${plugin.id}:`, error);
+            }
+          }
+        }
+        
+        setPluginRuntimeReady(true);
+      } catch (error) {
+        console.error('Failed to initialize plugin runtime:', error);
+      }
+    };
+
+    if (installedPlugins.length > 0) {
+      initializePluginRuntime();
+    }
+  }, [installedPlugins, enabledPlugins]);
 
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
@@ -202,7 +235,22 @@ export default function Extensions({ onSelectExtension }) {
 
   const handleTogglePlugin = async (plugin) => {
     try {
-      await togglePlugin(plugin.id, !plugin.isEnabled);
+      const newEnabledState = !plugin.isEnabled;
+      await togglePlugin(plugin.id, newEnabledState);
+      
+      // Update plugin runtime
+      if (pluginRuntimeReady) {
+        if (newEnabledState) {
+          // Enable plugin in runtime
+          if (!pluginRuntime.getLoadedPlugins().includes(plugin.id)) {
+            await pluginRuntime.loadPlugin(plugin);
+          }
+          await pluginRuntime.activatePlugin(plugin.id);
+        } else {
+          // Disable plugin in runtime
+          await pluginRuntime.deactivatePlugin(plugin.id);
+        }
+      }
     } catch (error) {
       console.error(`Failed to toggle plugin: ${plugin.id}`, error);
     }
@@ -210,6 +258,11 @@ export default function Extensions({ onSelectExtension }) {
 
   const handleUninstallPlugin = async (plugin) => {
     try {
+      // Remove from runtime first
+      if (pluginRuntimeReady && pluginRuntime.getLoadedPlugins().includes(plugin.id)) {
+        await pluginRuntime.unloadPlugin(plugin.id);
+      }
+      
       await uninstallPlugin(plugin.id);
     } catch (error) {
       console.error(`Failed to uninstall plugin: ${plugin.id}`, error);

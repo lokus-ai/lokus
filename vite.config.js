@@ -13,6 +13,20 @@ export default defineConfig(async () => ({
     },
   },
 
+  // Build options
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          // Bundle Tauri APIs separately for easier loading
+          if (id.includes('@tauri-apps/api')) {
+            return 'tauri-api';
+          }
+        }
+      }
+    }
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

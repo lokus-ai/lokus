@@ -584,6 +584,160 @@ describe('BasePlugin', () => {
       expect(() => plugin.getSelection()).toThrow('Plugin API not available')
     })
   })
+  
+  describe('Timer and Utility Methods', () => {
+    beforeEach(async () => {
+      await plugin.initialize(mockAPI)
+    })
+    
+    it('should handle setTimeout with cleanup', () => {
+      const callback = vi.fn()
+      
+      const timeoutId = plugin.setTimeout(callback, 100)
+      
+      expect(timeoutId).toBeDefined()
+      expect(plugin.disposables).toHaveLength(1)
+      
+      // Cleanup should clear timeout
+      plugin.cleanup()
+      expect(plugin.disposables).toHaveLength(0)
+    })
+    
+    it('should handle setInterval with cleanup', () => {
+      const callback = vi.fn()
+      
+      const intervalId = plugin.setInterval(callback, 100)
+      
+      expect(intervalId).toBeDefined()
+      expect(plugin.disposables).toHaveLength(1)
+      
+      // Cleanup should clear interval
+      plugin.cleanup()
+      expect(plugin.disposables).toHaveLength(0)
+    })
+    
+    it('should create debounced function', () => {
+      const func = vi.fn()
+      const debouncedFunc = plugin.debounce(func, 100)
+      
+      expect(debouncedFunc).toBeInstanceOf(Function)
+      expect(plugin.disposables).toHaveLength(1)
+    })
+    
+    it('should create throttled function', () => {
+      const func = vi.fn()
+      const throttledFunc = plugin.throttle(func, 100)
+      
+      expect(throttledFunc).toBeInstanceOf(Function)
+    })
+    
+    it('should get plugin info correctly', () => {
+      const info = plugin.getPluginInfo()
+      
+      expect(info).toEqual({
+        id: 'test-plugin',
+        name: 'Test Plugin',
+        version: '1.0.0',
+        description: '',
+        author: 'Unknown',
+        isActive: false,
+        permissions: ['read_files'],
+        dependencies: {}
+      })
+    })
+    
+    it('should handle missing manifest in getPluginInfo', () => {
+      plugin.manifest = null
+      
+      const info = plugin.getPluginInfo()
+      
+      expect(info).toEqual({
+        id: 'test-plugin',
+        name: 'test-plugin',
+        version: '1.0.0',
+        description: '',
+        author: 'Unknown',
+        isActive: false,
+        permissions: [],
+        dependencies: {}
+      })
+    })
+    
+    it('should return false for hasPermission without API', () => {
+      plugin.api = null
+      
+      const hasPermission = plugin.hasPermission('read_files')
+      
+      expect(hasPermission).toBe(false)
+    })
+  })
+  
+  describe('Event System Integration', () => {
+    beforeEach(async () => {
+      await plugin.initialize(mockAPI)
+    })
+    
+    it('should add and track event listeners', () => {
+      const listener = vi.fn()
+      const unsubscribe = vi.fn()
+      
+      mockAPI.on.mockReturnValue(unsubscribe)
+      
+      const result = plugin.addEventListener('test-event', listener)
+      
+      expect(mockAPI.on).toHaveBeenCalledWith('test-event', listener)
+      expect(result).toBe(unsubscribe)
+      expect(plugin.disposables).toContain(unsubscribe)
+    })
+    
+    it('should emit events', () => {
+      const eventData = { test: 'data' }
+      
+      plugin.emitEvent('test-event', eventData)
+      
+      expect(mockAPI.emit).toHaveBeenCalledWith('test-event', eventData)
+    })
+  })
+  
+  describe('Resource Management', () => {
+    beforeEach(async () => {
+      await plugin.initialize(mockAPI)
+    })
+    
+    it('should add and remove disposables', () => {
+      const disposable = vi.fn()
+      
+      plugin.addDisposable(disposable)
+      expect(plugin.disposables).toContain(disposable)
+      
+      plugin.removeDisposable(disposable)
+      expect(plugin.disposables).not.toContain(disposable)
+    })
+    
+    it('should handle removing non-existent disposable', () => {
+      const disposable = vi.fn()
+      
+      // Should not throw when removing non-existent disposable
+      expect(() => plugin.removeDisposable(disposable)).not.toThrow()
+    })
+    
+    it('should track multiple types of registrations', () => {
+      // Register different types of components
+      plugin.registerCommand({ name: 'cmd' })
+      plugin.registerExtension({ name: 'ext' })
+      plugin.registerToolbarButton({ name: 'btn' })
+      plugin.registerPanel({ name: 'panel' })
+      
+      // Each should add a cleanup disposable
+      expect(plugin.disposables).toHaveLength(4)
+      
+      // Verify all API methods were called
+      expect(mockAPI.addSlashCommand).toHaveBeenCalled()
+      expect(mockAPI.addExtension).toHaveBeenCalled()
+      expect(mockAPI.addToolbarButton).toHaveBeenCalled()
+      expect(mockAPI.registerPanel).toHaveBeenCalled()
+    })
+  })
 })
 
 describe('PluginUtils', () => {

@@ -105,7 +105,21 @@ fn main() {
       plugins::set_plugin_permission,
       plugins::get_plugin_permissions,
       plugins::set_plugin_setting,
-      plugins::get_plugin_setting
+      plugins::get_plugin_setting,
+      plugins::get_installation_history,
+      plugins::check_plugin_updates,
+      plugins::update_plugin,
+      plugins::backup_all_plugins,
+      plugins::restore_plugins_from_backup,
+      plugins::bulk_install_plugins,
+      plugins::get_plugin_code,
+      plugins::get_plugin_manifest,
+      plugins::get_workspace_folders,
+      plugins::open_text_document,
+      plugins::execute_command,
+      plugins::notify_plugin_activated,
+      plugins::notify_plugin_deactivated,
+      plugins::show_message_dialog
     ])
     .setup(|app| {
       menu::init(&app.handle())?;
