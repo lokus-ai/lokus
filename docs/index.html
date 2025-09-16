@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lokus Documentation</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/svg+xml" href="lokus-logo.svg">
+    <meta name="description" content="Comprehensive documentation for Lokus - A modern note-taking application built with React, TipTap, and Tauri">
+</head>
+<body>
+    <!-- Mobile overlay for sidebar -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+    
+    <!-- Sidebar Navigation -->
+    <nav id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-container">
+                <img src="lokus-logo.svg" alt="Lokus Logo" class="logo">
+                <h1>Lokus Docs</h1>
+            </div>
+            <button id="sidebar-close" class="sidebar-close" aria-label="Close sidebar">
+                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+
+        <div class="sidebar-content">
+            <!-- Search Box -->
+            <div class="search-container">
+                <input type="text" id="search-input" placeholder="Search documentation..." class="search-input">
+                <svg class="search-icon" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+            </div>
+
+            <!-- Navigation Menu -->
+            <div class="nav-menu">
+                <!-- Quick Start -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Quick Start</h3>
+                    <ul class="nav-list">
+                        <li><a href="#getting-started" class="nav-link">Getting Started</a></li>
+                        <li><a href="#installation" class="nav-link">Installation</a></li>
+                        <li><a href="#first-steps" class="nav-link">First Steps</a></li>
+                    </ul>
+                </div>
+
+                <!-- Core Features -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Core Features</h3>
+                    <ul class="nav-list">
+                        <li><a href="features/editor.html" class="nav-link">Rich Text Editor</a></li>
+                        <li><a href="features/file-management.html" class="nav-link">File Management</a></li>
+                        <li><a href="features/command-palette.html" class="nav-link">Command Palette</a></li>
+                        <li><a href="features/search.html" class="nav-link">Search</a></li>
+                        <li><a href="features/themes.html" class="nav-link">Themes</a></li>
+                    </ul>
+                </div>
+
+                <!-- Advanced Features -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Advanced Features</h3>
+                    <ul class="nav-list">
+                        <li><a href="features/template-system.html" class="nav-link">Template System</a></li>
+                        <li><a href="features/wiki-links.html" class="nav-link">Wiki Links</a></li>
+                        <li><a href="features/graph-view.html" class="nav-link">Graph View</a></li>
+                        <li><a href="features/canvas.html" class="nav-link">Canvas</a></li>
+                        <li><a href="features/kanban.html" class="nav-link">Kanban Boards</a></li>
+                        <li><a href="features/math.html" class="nav-link">Math Rendering</a></li>
+                    </ul>
+                </div>
+
+                <!-- Interface & UX -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Interface & UX</h3>
+                    <ul class="nav-list">
+                        <li><a href="features/shortcuts.html" class="nav-link">Keyboard Shortcuts</a></li>
+                        <li><a href="features/context-menus.html" class="nav-link">Context Menus</a></li>
+                        <li><a href="features/animations-ux.html" class="nav-link">Animations & UX</a></li>
+                        <li><a href="features/clipboard.html" class="nav-link">Clipboard Integration</a></li>
+                    </ul>
+                </div>
+
+                <!-- Extensibility -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Extensibility</h3>
+                    <ul class="nav-list">
+                        <li><a href="features/plugin-system.html" class="nav-link">Plugin System</a></li>
+                        <li><a href="features/marketplace.html" class="nav-link">Plugin Marketplace</a></li>
+                    </ul>
+                </div>
+
+                <!-- Developer Docs -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Developer Docs</h3>
+                    <ul class="nav-list">
+                        <li><a href="developer/testing.html" class="nav-link">Testing</a></li>
+                        <li><a href="developer/markdown-compiler.html" class="nav-link">Markdown Compiler</a></li>
+                        <li><a href="#architecture" class="nav-link">Architecture</a></li>
+                        <li><a href="#contributing" class="nav-link">Contributing</a></li>
+                    </ul>
+                </div>
+
+                <!-- User Guide -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">User Guide</h3>
+                    <ul class="nav-list">
+                        <li><a href="user-guide/getting-started.html" class="nav-link">Getting Started</a></li>
+                        <li><a href="#feature-tour" class="nav-link">Feature Tour</a></li>
+                        <li><a href="#organization-strategies" class="nav-link">Organization Strategies</a></li>
+                        <li><a href="#troubleshooting" class="nav-link">Troubleshooting</a></li>
+                    </ul>
+                </div>
+
+                <!-- API Reference -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">API Reference</h3>
+                    <ul class="nav-list">
+                        <li><a href="#core-api" class="nav-link">Core APIs</a></li>
+                        <li><a href="#editor-api" class="nav-link">Editor APIs</a></li>
+                        <li><a href="#plugin-api" class="nav-link">Plugin APIs</a></li>
+                        <li><a href="#template-api" class="nav-link">Template APIs</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="header">
+            <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar">
+                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="breadcrumb">
+                <span class="breadcrumb-item">Documentation</span>
+                <span class="breadcrumb-separator">></span>
+                <span class="breadcrumb-item current">Overview</span>
+            </div>
+        </header>
+
+        <!-- Content Area -->
+        <div class="content">
+            <div class="content-header">
+                <h1>Lokus Documentation</h1>
+                <p class="content-description">
+                    Welcome to the comprehensive documentation for Lokus, a modern note-taking application 
+                    built with React, TipTap, and Tauri. This documentation covers all features, 
+                    development guides, and API references.
+                </p>
+            </div>
+
+            <!-- Quick Start Cards -->
+            <section class="section">
+                <h2>🚀 Quick Start</h2>
+                <div class="card-grid">
+                    <div class="card">
+                        <div class="card-icon">👥</div>
+                        <h3>For Users</h3>
+                        <p>New to Lokus? Start here to learn the basics and get up and running quickly.</p>
+                        <a href="user-guide/getting-started.html" class="card-link">Get Started →</a>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">⚡</div>
+                        <h3>Feature Tour</h3>
+                        <p>Explore all the powerful features that make Lokus a great note-taking tool.</p>
+                        <a href="#feature-tour" class="card-link">Take Tour →</a>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">🔧</div>
+                        <h3>For Developers</h3>
+                        <p>Want to contribute or build plugins? Learn about the development environment.</p>
+                        <a href="developer/testing.html" class="card-link">Start Developing →</a>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Feature Categories -->
+            <section class="section">
+                <h2>📚 Feature Categories</h2>
+                <div class="feature-categories">
+                    <div class="category">
+                        <h3>🖊️ Core Functionality</h3>
+                        <p>Essential features that form the foundation of Lokus</p>
+                        <ul class="feature-list">
+                            <li><a href="features/editor.html">Rich text editor with markdown support</a></li>
+                            <li><a href="features/file-management.html">File and workspace management</a></li>
+                            <li><a href="features/search.html">Search and navigation</a></li>
+                            <li><a href="features/themes.html">Theme system and customization</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="category">
+                        <h3>⚡ Productivity Features</h3>
+                        <p>Advanced tools for knowledge work and productivity</p>
+                        <ul class="feature-list">
+                            <li><a href="features/template-system.html">Template system for reusable content</a></li>
+                            <li><a href="features/command-palette.html">Command palette for quick actions</a></li>
+                            <li><a href="features/wiki-links.html">Wiki-style linking between notes</a></li>
+                            <li><a href="features/math.html">Math equation rendering</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="category">
+                        <h3>🎨 Visual & Organization</h3>
+                        <p>Tools for visual organization and knowledge mapping</p>
+                        <ul class="feature-list">
+                            <li><a href="features/graph-view.html">Graph view for note relationships</a></li>
+                            <li><a href="features/canvas.html">Infinite canvas for spatial notes</a></li>
+                            <li><a href="features/kanban.html">Kanban boards for task management</a></li>
+                            <li><a href="features/context-menus.html">Context menus for quick operations</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="category">
+                        <h3>🔌 Extensibility</h3>
+                        <p>Platform capabilities for customization and extension</p>
+                        <ul class="feature-list">
+                            <li><a href="features/plugin-system.html">Professional plugin system</a></li>
+                            <li><a href="features/marketplace.html">Plugin marketplace</a></li>
+                            <li><a href="#api-reference">Comprehensive API surface</a></li>
+                            <li><a href="#security">Security model and sandboxing</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Development Status -->
+            <section class="section">
+                <h2>🔧 Development Status</h2>
+                <div class="status-grid">
+                    <div class="status-item">
+                        <h3>✅ Recently Added</h3>
+                        <ul>
+                            <li>Template System - Complete template management with variables</li>
+                            <li>Enhanced Command Palette - Template integration and history</li>
+                            <li>Universal Markdown Compiler - Improved paste and processing</li>
+                            <li>Professional Plugin System - VS Code-level extensibility</li>
+                        </ul>
+                    </div>
+                    <div class="status-item">
+                        <h3>🚧 Active Development</h3>
+                        <ul>
+                            <li>Graph view performance improvements</li>
+                            <li>Enhanced canvas functionality</li>
+                            <li>Advanced search capabilities</li>
+                            <li>Plugin marketplace</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Quick Reference -->
+            <section class="section">
+                <h2>⌨️ Quick Reference</h2>
+                <div class="quick-ref">
+                    <div class="ref-section">
+                        <h3>Essential Shortcuts</h3>
+                        <ul class="shortcut-list">
+                            <li><kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> - Command Palette</li>
+                            <li><kbd>⌘N</kbd> / <kbd>Ctrl+N</kbd> - New file</li>
+                            <li><kbd>⌘S</kbd> / <kbd>Ctrl+S</kbd> - Save file</li>
+                            <li><kbd>⌘⇧F</kbd> / <kbd>Ctrl+Shift+F</kbd> - Global search</li>
+                            <li><kbd>⌘B</kbd> / <kbd>Ctrl+B</kbd> - Bold text</li>
+                        </ul>
+                    </div>
+                    <div class="ref-section">
+                        <h3>Common Tasks</h3>
+                        <ul class="task-list">
+                            <li><a href="features/editor.html#creating-files">Creating notes</a></li>
+                            <li><a href="features/wiki-links.html#creating-links">Linking notes</a></li>
+                            <li><a href="features/search.html">Finding content</a></li>
+                            <li><a href="features/template-system.html">Using templates</a></li>
+                            <li><a href="features/marketplace.html">Installing plugins</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Footer Navigation -->
+        <footer class="footer">
+            <div class="footer-nav">
+                <a href="user-guide/getting-started.html" class="footer-link next">
+                    <span class="footer-link-label">Next</span>
+                    <span class="footer-link-title">Getting Started →</span>
+                </a>
+            </div>
+            <div class="footer-info">
+                <p>Last Updated: September 15, 2025 | Documentation Version: 1.0.1</p>
+            </div>
+        </footer>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>

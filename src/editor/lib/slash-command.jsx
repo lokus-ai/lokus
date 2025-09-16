@@ -18,6 +18,7 @@ import {
   Strikethrough,
   Highlighter,
   Minus,
+  FileText,
 } from "lucide-react";
 import tippy from "tippy.js/dist/tippy.esm.js";
 
@@ -59,6 +60,28 @@ function buildTableHTML(rows, cols, withHeaderRow = true) {
   const body = Array.from({ length: rows }).map(() => `<tr>${tds(cols)}</tr>`).join('');
   const thead = withHeaderRow ? `<thead><tr>${th(cols)}</tr></thead>` : '';
   return `<table>${thead}<tbody>${body}</tbody></table>`;
+}
+
+function openTemplatePicker({ editor, range }) {
+  // Store current editor state for template insertion
+  const editorState = { editor, range };
+  
+  // Dispatch custom event to open template picker
+  window.dispatchEvent(new CustomEvent('open-template-picker', { 
+    detail: { 
+      editorState,
+      onSelect: (template, processedContent) => {
+        try {
+          // Insert the processed template content
+          editor.chain().focus().deleteRange(range).insertContent(processedContent).run();
+        } catch (err) {
+          console.error('Failed to insert template:', err);
+          // Fallback: insert raw template content
+          editor.chain().focus().deleteRange(range).insertContent(template.content).run();
+        }
+      }
+    } 
+  }));
 }
 
 function openTableSizePicker({ editor, range }) {
@@ -196,6 +219,14 @@ const commandItems = [
           } else {
             editor.chain().focus().deleteRange(range).insertContent(`<img src="${url}" alt="" />`).run();
           }
+        },
+      },
+      {
+        title: "Template",
+        description: "Insert a template with variables.",
+        icon: <FileText size={18} />,
+        command: ({ editor, range }) => {
+          openTemplatePicker({ editor, range });
         },
       },
       {
