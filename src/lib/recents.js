@@ -14,6 +14,11 @@ export const addRecent = (path) => {
   writeRecents(items.slice(0, 12));
 };
 
+export const removeRecent = (path) => {
+  const items = readRecents().filter((r) => r.path !== path);
+  writeRecents(items);
+};
+
 export const shortenPath = (p, max = 96) => {
   if (!p || p.length <= max) return p || "";
   const head = Math.ceil((max - 3) * 0.6);

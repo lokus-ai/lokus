@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { homeDir } from "@tauri-apps/api/path";
 import { invoke } from "@tauri-apps/api/core";
-import { readRecents, addRecent, shortenPath } from "../lib/recents.js";
+import { readRecents, addRecent, removeRecent, shortenPath } from "../lib/recents.js";
 import { testWorkspaceManager } from "../utils/test-workspace.js";
+import { WorkspaceManager } from "../core/workspace/manager.js";
 import LokusLogo from "../components/LokusLogo.jsx";
 
 // --- Reusable Icon Component ---
@@ -82,16 +83,41 @@ export default function Launcher() {
   const handleSelectWorkspace = async () => {
     const p = await open({ directory: true, defaultPath: await homeDir() });
     if (p) {
-      addRecent(p);
-      setRecents(readRecents());
-      await openWorkspace(p);
+      // Validate workspace before proceeding
+      const isValid = await WorkspaceManager.validatePath(p);
+      if (isValid) {
+        addRecent(p);
+        setRecents(readRecents());
+        await WorkspaceManager.saveWorkspacePath(p);
+        await openWorkspace(p);
+      } else {
+        console.error("Selected path is not a valid workspace:", p);
+        // Could show user error message here
+        alert("The selected folder cannot be used as a workspace. Please check permissions and try again.");
+      }
     }
   };
 
   const onRecent = async (path) => {
-    addRecent(path);
+    // Validate recent workspace before opening
+    const isValid = await WorkspaceManager.validatePath(path);
+    if (isValid) {
+      addRecent(path);
+      setRecents(readRecents());
+      await WorkspaceManager.saveWorkspacePath(path);
+      await openWorkspace(path);
+    } else {
+      console.warn("Recent workspace is no longer valid:", path);
+      // Could show user message and remove from recents
+      alert("This workspace is no longer accessible. It may have been moved or deleted.");
+      // Optionally remove from recents here
+    }
+  };
+
+  const onRemoveRecent = (e, path) => {
+    e.stopPropagation();
+    removeRecent(path);
     setRecents(readRecents());
-    await openWorkspace(path);
   };
 
   return (
@@ -124,6 +150,13 @@ export default function Launcher() {
                         {shortenPath(r.path, 50)}
                       </div>
                     </div>
+                    <button
+                      onClick={(e) => onRemoveRecent(e, r.path)}
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 hover:text-red-500 transition-all duration-200"
+                      title="Remove from recents"
+                    >
+                      <Icon path="M6 18L18 6M6 6l12 12" className="w-4 h-4" />
+                    </button>
                   </div>
                 </button>
               ))
