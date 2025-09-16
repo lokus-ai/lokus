@@ -375,6 +375,23 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 6px;
+  margin: 2px 0;
+  transition: all 200ms ease;
+  position: relative;
+}
+
+/* VS Code-style active border for activity bar */
+.activity-bar-button.active::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 16px;
+  background-color: rgb(var(--accent));
+  border-radius: 1px;
 }
 
 /* Obsidian Input Styles */
@@ -473,7 +490,7 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
 .obsidian-tab {
   display: flex;
   align-items: center;
-  padding: 10px 16px;
+  padding: 14px 16px;
   background-color: transparent;
   border: none;
   border-radius: 0;

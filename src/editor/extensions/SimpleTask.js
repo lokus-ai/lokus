@@ -138,11 +138,19 @@ function createTaskImportWidget(editor) {
         ${index === selectedIndex ? 'background: #4b5563;' : ''}
       `
       
-      // Status emoji
-      const statusEmoji = getStatusEmoji(task.status)
+      // Status label
+      const statusLabel = getStatusLabel(task.status)
       const statusSpan = document.createElement('span')
-      statusSpan.textContent = statusEmoji
-      statusSpan.style.cssText = 'font-size: 14px;'
+      statusSpan.textContent = statusLabel
+      statusSpan.className = `task-status-label task-status-${task.status}`
+      statusSpan.style.cssText = `
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      `
       
       const titleSpan = document.createElement('span')
       titleSpan.textContent = task.title
@@ -161,15 +169,15 @@ function createTaskImportWidget(editor) {
     })
   }
   
-  function getStatusEmoji(status) {
+  function getStatusLabel(status) {
     const statusMap = {
-      'urgent': '🔴',
-      'needs-info': '🟡',
-      'in-progress': '🔵',
-      'todo': '⚪',
-      'completed': '✅'
+      'urgent': 'URGENT',
+      'needs-info': 'QUESTION',
+      'in-progress': 'IN PROGRESS',
+      'todo': 'TODO',
+      'completed': 'COMPLETED'
     }
-    return statusMap[status] || '⚪'
+    return statusMap[status] || 'TODO'
   }
   
   function filterTasks(query) {
@@ -185,8 +193,8 @@ function createTaskImportWidget(editor) {
     console.log('✅ Selected task for import:', task.title)
     
     // Insert the task reference into editor using DOM element method
-    const statusEmoji = getStatusEmoji(task.status)
-    const fallbackText = `${statusEmoji} ${task.title}`
+    const statusLabel = getStatusLabel(task.status)
+    const fallbackText = `[${statusLabel}] ${task.title}`
     
     try {
       console.log('🔗 Creating DOM element for imported task')
@@ -197,7 +205,7 @@ function createTaskImportWidget(editor) {
       taskElement.setAttribute('data-task-id', task.id)
       taskElement.setAttribute('data-task-status', task.status)
       taskElement.className = 'task-element imported-task'
-      taskElement.textContent = `${statusEmoji} ${task.title}`
+      taskElement.innerHTML = `<span class="task-status-label task-status-${task.status}">${statusLabel}</span> ${task.title}`
       
       // Apply inline styles
       taskElement.style.cssText = `
@@ -218,7 +226,7 @@ function createTaskImportWidget(editor) {
           // Try as TipTap link content
           editor.chain().focus().insertContent([{
             type: 'text',
-            text: fallbackText,
+            text: `[${statusLabel}] ${task.title}`,
             marks: [{
               type: 'link',
               attrs: {
@@ -347,15 +355,15 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
   `
   
   // Task type indicator
-  const typeColors = {
-    urgent: '🔴 Urgent',
-    question: '🟡 Question', 
-    progress: '🔵 In Progress',
-    todo: '⚪ Todo'
+  const typeLabels = {
+    urgent: 'URGENT',
+    question: 'QUESTION', 
+    progress: 'IN PROGRESS',
+    todo: 'TODO'
   }
   
   const typeLabel = document.createElement('div')
-  typeLabel.textContent = typeColors[taskType] || typeColors.todo
+  typeLabel.textContent = typeLabels[taskType] || typeLabels.todo
   typeLabel.style.cssText = `
     font-size: 14px;
     color: #f3f4f6;
@@ -463,15 +471,15 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
             
             if (editor && (editor.chain || editor.commands)) {
               const taskId = newTask.id
-              const taskHtml = `<div class="editor-task task-${backendStatus}" data-task-id="${taskId}" data-status="${backendStatus}"><span class="task-indicator">${typeColors[currentType]}</span><span class="task-text">${taskText}</span><button class="task-jump-btn" title="View in kanban">📋</button></div>`
+              const taskHtml = `<div class="editor-task task-${backendStatus}" data-task-id="${taskId}" data-status="${backendStatus}"><span class="task-indicator task-status-${backendStatus}">${typeLabels[currentType]}</span><span class="task-text">${taskText}</span><button class="task-jump-btn" title="View in kanban">📋</button></div>`
               
               console.log('📝 Attempting to insert task HTML:', taskHtml)
               
               // Create a styled task link as HTML
-              const styledTaskHtml = `<span data-task-text="true" data-task-id="${taskId}" data-task-status="${backendStatus}">${typeColors[currentType]} ${taskText}</span>`
+              const styledTaskHtml = `<span data-task-text="true" data-task-id="${taskId}" data-task-status="${backendStatus}"><span class="task-status-label task-status-${backendStatus}">${typeLabels[currentType]}</span> ${taskText}</span>`
               
               // Also keep simple text as ultimate fallback
-              const fallbackText = `${typeColors[currentType]} ${taskText}`
+              const fallbackText = `[${typeLabels[currentType]}] ${taskText}`
               
               // Create DOM element directly and insert it
               try {
@@ -483,7 +491,7 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
                 taskElement.setAttribute('data-task-id', taskId)
                 taskElement.setAttribute('data-task-status', backendStatus)
                 taskElement.className = 'task-element'
-                taskElement.textContent = `${typeColors[currentType]} ${taskText}`
+                taskElement.innerHTML = `<span class="task-status-label task-status-${backendStatus}">${typeLabels[currentType]}</span> ${taskText}`
                 
                 // Apply inline styles to make it look like a clickable link
                 taskElement.style.cssText = `
@@ -519,7 +527,7 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
                     // Try inserting the DOM element directly
                     editor.chain().focus().insertContent([{
                       type: 'text',
-                      text: `${typeColors[currentType]} ${taskText}`,
+                      text: `[${typeLabels[currentType]}] ${taskText}`,
                       marks: [
                         {
                           type: 'link',
@@ -610,7 +618,7 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
       const types = ['urgent', 'question', 'progress', 'todo']
       const currentIndex = types.indexOf(currentType)
       currentType = types[(currentIndex + 1) % types.length]
-      typeLabel.textContent = typeColors[currentType]
+      typeLabel.textContent = typeLabels[currentType]
       console.log('🔄 Switched to:', currentType)
     }
   })
@@ -715,7 +723,7 @@ export const SimpleTask = Extension.create({
       // Fallback text pattern matching for tasks without proper attributes
       if (proseMirrorElement) {
         const clickedText = e.target.textContent || e.target.innerText || ''
-        const taskPattern = /^(🔴|🟡|🔵|⚪|✅)\s+(.+?)$/
+        const taskPattern = /^\[(URGENT|QUESTION|IN PROGRESS|TODO|COMPLETED)\]\s+(.+?)$/
         const match = clickedText.match(taskPattern)
         
         if (match) {

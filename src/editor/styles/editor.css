@@ -520,3 +520,46 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
   background: var(--app-accent);
   transform: scale(1.1);
 }
+
+/* Task status label highlights */
+.task-status-label {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  margin-right: 0.5rem;
+  border: 1px solid transparent;
+}
+
+.task-status-label.urgent {
+  background: rgba(239, 68, 68, 0.15);
+  color: rgb(185, 28, 28);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.task-status-label.question {
+  background: rgba(245, 158, 11, 0.15);
+  color: rgb(180, 83, 9);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.task-status-label.in-progress {
+  background: rgba(59, 130, 246, 0.15);
+  color: rgb(30, 64, 175);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.task-status-label.todo {
+  background: rgba(107, 114, 128, 0.15);
+  color: rgb(75, 85, 99);
+  border-color: rgba(107, 114, 128, 0.3);
+}
+
+.task-status-label.completed {
+  background: rgba(34, 197, 94, 0.15);
+  color: rgb(22, 101, 52);
+  border-color: rgba(34, 197, 94, 0.3);
+}
