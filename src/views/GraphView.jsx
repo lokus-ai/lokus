@@ -1,379 +1,431 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react'
-import Sigma from 'sigma'
-import Graph from 'graphology'
-import forceAtlas2 from 'graphology-layout-forceatlas2'
-import { buildWorkspaceGraph } from '../core/wiki/graph.js'
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { GraphEngine } from '../core/graph/GraphEngine.js';
+import GraphPanel from './GraphPanel.jsx';
+import './GraphView.css';
 
-const COLORS = {
-  light: {
-    node: '#6366f1',
-    nodeHover: '#4f46e5',
-    nodeSelected: '#3730a3',
-    edge: '#e5e7eb',
-    edgeHover: '#9ca3af',
-    background: '#ffffff',
-    text: '#374151'
-  },
-  dark: {
-    node: '#818cf8',
-    nodeHover: '#a5b4fc',
-    nodeSelected: '#c7d2fe',
-    edge: '#374151',
-    edgeHover: '#6b7280',
-    background: '#111827',
-    text: '#f3f4f6'
-  }
-}
+/**
+ * GraphView - React component for graph visualization
+ * 
+ * Features:
+ * - Real-time graph rendering with Sigma.js
+ * - Interactive controls and settings
+ * - Performance monitoring
+ * - Node and edge management
+ * - Layout controls
+ */
+const GraphView = ({ 
+  data = null, 
+  onNodeClick = null, 
+  onEdgeClick = null,
+  options = {},
+  className = '',
+  graphEngine = null, // Accept external GraphEngine instance
+  isVisible = true     // Whether the graph view is currently visible
+}) => {
+  const containerRef = useRef(null);
+  const graphEngineRef = useRef(graphEngine);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [isLayoutRunning, setIsLayoutRunning] = useState(false);
+  const [stats, setStats] = useState({
+    nodeCount: 0,
+    edgeCount: 0,
+    layoutIterations: 0,
+    renderTime: 0
+  });
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [colorScheme, setColorScheme] = useState('default');
+  const [performanceMode, setPerformanceMode] = useState(false);
+  const [viewportBounds, setViewportBounds] = useState(null);
+  const [zoomLevel, setZoomLevel] = useState(100);
 
-export default function GraphView({ workspacePath, onOpenFile }) {
-  const containerRef = useRef(null)
-  const sigmaRef = useRef(null)
-  const graphRef = useRef(null)
-  const layoutWorkerRef = useRef(null)
-  const [loading, setLoading] = useState(true)
-  const [nodeCount, setNodeCount] = useState(0)
-  const [edgeCount, setEdgeCount] = useState(0)
-  const [selectedNode, setSelectedNode] = useState(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    try {
-      return document.documentElement.classList.contains('dark')
-    } catch {
-      return true
-    }
-  })
-
-  // Initialize graph and sigma
-  const initGraph = useCallback(async (data) => {
-    if (!containerRef.current || !data.nodes.length) return
-
-    try {
-      // Clean up previous instances
-      if (layoutWorkerRef.current) {
-        layoutWorkerRef.current.kill()
-        layoutWorkerRef.current = null
-      }
-      if (sigmaRef.current) {
-        sigmaRef.current.kill()
-        sigmaRef.current = null
-      }
-
-      // Create new graph
-      const graph = new Graph({ multi: false, type: 'undirected' })
-      graphRef.current = graph
-
-      // Memory optimization: Pre-calculate degree centrality for better performance
-      const degreeMap = new Map()
-      data.edges.forEach(edge => {
-        degreeMap.set(edge.source, (degreeMap.get(edge.source) || 0) + 1)
-        degreeMap.set(edge.target, (degreeMap.get(edge.target) || 0) + 1)
-      })
-
-      // Add nodes with optimized positioning and sizing
-      data.nodes.forEach((node, index) => {
-        // Initial circular layout to prevent overlaps
-        const angle = (index / data.nodes.length) * 2 * Math.PI
-        const radius = Math.min(300, Math.max(100, Math.sqrt(data.nodes.length) * 20))
-        const degree = degreeMap.get(node.id) || 0
-        
-        graph.addNode(node.id, {
-          label: node.title,
-          x: Math.cos(angle) * radius,
-          y: Math.sin(angle) * radius,
-          size: Math.max(3, Math.min(15, Math.log(1 + degree * 2))),
-          color: COLORS[isDarkMode ? 'dark' : 'light'].node,
-          originalColor: COLORS[isDarkMode ? 'dark' : 'light'].node,
-          path: node.path,
-          degree: degree // Store for later use
-        })
-      })
-
-      // Add edges with memory-efficient batching
-      const BATCH_SIZE = 1000
-      for (let i = 0; i < data.edges.length; i += BATCH_SIZE) {
-        const batch = data.edges.slice(i, i + BATCH_SIZE)
-        
-        batch.forEach((edge, batchIndex) => {
-          try {
-            if (graph.hasNode(edge.source) && graph.hasNode(edge.target)) {
-              graph.addEdge(`edge_${i + batchIndex}`, edge.source, edge.target, {
-                color: COLORS[isDarkMode ? 'dark' : 'light'].edge,
-                size: 1
-              })
-            }
-          } catch (e) {
-            console.warn('Failed to add edge:', edge, e)
-          }
-        })
-        
-        // Yield control between batches to prevent blocking
-        if (i + BATCH_SIZE < data.edges.length) {
-          await new Promise(resolve => setTimeout(resolve, 0))
-        }
-      }
-
-      setNodeCount(graph.order)
-      setEdgeCount(graph.size)
-
-      // Initialize Sigma with performance optimizations
-      const sigma = new Sigma(graph, containerRef.current, {
-        // Performance settings for large graphs
-        renderEdgeLabels: false,
-        defaultNodeColor: COLORS[isDarkMode ? 'dark' : 'light'].node,
-        defaultEdgeColor: COLORS[isDarkMode ? 'dark' : 'light'].edge,
-        minCameraRatio: 0.05, // Allow more zoom out for large graphs
-        maxCameraRatio: 5, // Limit zoom in for performance
-        labelDensity: data.nodes.length > 500 ? 1 : 2, // Reduce label density for large graphs
-        labelRenderedSizeThreshold: data.nodes.length > 1000 ? 15 : 8, // Higher threshold for large graphs
-        enableEdgeClickEvents: data.nodes.length < 1000, // Disable for performance on large graphs
-        enableEdgeHoverEvents: data.nodes.length < 1000, // Disable for performance on large graphs
-        
-        // Level-of-detail optimizations
-        hideEdgesOnMove: data.nodes.length > 200,
-        hideLabelsOnMove: data.nodes.length > 100,
-        
-        // Rendering optimizations
-        stagePadding: 50,
-        edgeReducer: (edge, data) => {
-          const res = { ...data }
-          if (selectedNode && (edge.source === selectedNode || edge.target === selectedNode)) {
-            res.color = COLORS[isDarkMode ? 'dark' : 'light'].edgeHover
-            res.size = 2
-          }
-          return res
-        },
-        nodeReducer: (node, data) => {
-          const res = { ...data }
-          if (selectedNode === node) {
-            res.color = COLORS[isDarkMode ? 'dark' : 'light'].nodeSelected
-            res.size = Math.max(data.size * 1.5, 8)
-          } else if (selectedNode && graph.hasEdge(selectedNode, node)) {
-            res.color = COLORS[isDarkMode ? 'dark' : 'light'].nodeHover
-          }
-          
-          // Search highlighting
-          if (searchQuery && data.label.toLowerCase().includes(searchQuery.toLowerCase())) {
-            res.color = '#ef4444' // red highlight for search results
-            res.size = Math.max(data.size * 1.2, 6)
-          }
-          
-          return res
-        }
-      })
-
-      sigmaRef.current = sigma
-
-      // Event handlers
-      sigma.on('clickNode', ({ node }) => {
-        const nodeData = graph.getNodeAttributes(node)
-        setSelectedNode(selectedNode === node ? null : node)
-        
-        if (onOpenFile && nodeData.path) {
-          onOpenFile(nodeData.path)
-        }
-      })
-
-      sigma.on('clickStage', () => {
-        setSelectedNode(null)
-      })
-
-      // Adaptive layout based on graph size
-      if (data.nodes.length > 1) {
-        if (data.nodes.length < 2000) {
-          // Use ForceAtlas2 for medium graphs
-          const settings = forceAtlas2.inferSettings(graph)
-          const sensibleSettings = {
-            ...settings,
-            iterations: Math.min(200, Math.max(30, Math.sqrt(data.nodes.length) * 10)),
-            settings: {
-              ...settings.settings,
-              barnesHutOptimize: data.nodes.length > 50, // Enable optimization earlier
-              strongGravityMode: data.nodes.length < 100, // Only for small graphs
-              gravity: data.nodes.length > 500 ? 0.01 : 0.05, // Reduce gravity for large graphs
-              scalingRatio: Math.max(1, Math.min(20, data.nodes.length / 50)),
-              slowDown: data.nodes.length > 500 ? 5 : 2, // More slowdown for stability
-              outboundAttractionDistribution: data.nodes.length > 200,
-              linLogMode: data.nodes.length > 200 // Better for large graphs
-            }
-          }
-
-          // Progressive layout rendering with memory management
-          let currentIteration = 0
-          const maxIterations = sensibleSettings.iterations
-          const batchSize = Math.max(5, Math.min(30, Math.floor(200 / Math.sqrt(data.nodes.length))))
-          
-          const runLayoutBatch = (iterations) => {
-            try {
-              forceAtlas2.assign(graph, { iterations, settings: sensibleSettings.settings })
-              sigma.refresh()
-              currentIteration += iterations
-              
-              // Progress indicator for large graphs
-              if (data.nodes.length > 200 && currentIteration < maxIterations) {
-                console.log(`[Graph] Layout progress: ${Math.round((currentIteration / maxIterations) * 100)}%`)
-              }
-              
-              if (currentIteration < maxIterations) {
-                const remaining = Math.min(batchSize, maxIterations - currentIteration)
-                requestAnimationFrame(() => runLayoutBatch(remaining))
-              } else {
-                console.log('[Graph] Layout completed')
-              }
-            } catch (error) {
-              console.warn('[Graph] Layout error:', error)
-            }
-          }
-
-          // Start layout
-          requestAnimationFrame(() => runLayoutBatch(batchSize))
-        } else {
-          // For very large graphs, use simple grid/cluster layout
-          console.log('[Graph] Using simplified layout for large graph')
-          const cols = Math.ceil(Math.sqrt(data.nodes.length))
-          const spacing = 50
-          
-          graph.forEachNode((node, attributes, index) => {
-            const row = Math.floor(index / cols)
-            const col = index % cols
-            graph.setNodeAttribute(node, 'x', (col - cols / 2) * spacing)
-            graph.setNodeAttribute(node, 'y', (row - cols / 2) * spacing)
-          })
-          
-          sigma.refresh()
-        }
-      }
-
-      setLoading(false)
-    } catch (error) {
-      console.error('Failed to initialize graph:', error)
-      setLoading(false)
-    }
-  }, [isDarkMode, selectedNode, searchQuery, onOpenFile])
-
-  // Load graph data
+  // Initialize GraphEngine when component mounts
   useEffect(() => {
-    if (!workspacePath) return
-    
-    let mounted = true
-    setLoading(true)
-    
-    buildWorkspaceGraph(workspacePath)
-      .then(data => {
-        if (mounted && data) {
-          console.log('[GraphView] Loaded graph:', data.nodes.length, 'nodes,', data.edges.length, 'edges')
-          initGraph(data)
-        }
-      })
-      .catch(error => {
-        console.error('[GraphView] Failed to build graph:', error)
-        if (mounted) setLoading(false)
-      })
-      
-    return () => { mounted = false }
-  }, [workspacePath, initGraph])
+    if (!containerRef.current) return;
 
-  // Theme change handler
-  useEffect(() => {
-    const handleThemeChange = () => {
-      const dark = document.documentElement.classList.contains('dark')
-      if (dark !== isDarkMode) {
-        setIsDarkMode(dark)
+    let engine = graphEngineRef.current;
+
+    // If no external engine provided, create a new one
+    if (!engine && !isInitialized) {
+      try {
+        engine = new GraphEngine(containerRef.current, options);
+        
+        // Setup event listeners
+        engine.on('nodeClick', handleNodeClick);
+        engine.on('edgeClick', handleEdgeClick);
+        engine.on('layoutStarted', () => setIsLayoutRunning(true));
+        engine.on('layoutStopped', () => setIsLayoutRunning(false));
+        engine.on('nodeAdded', updateStats);
+        engine.on('edgeAdded', updateStats);
+        engine.on('nodeRemoved', updateStats);
+        engine.on('edgeRemoved', updateStats);
+
+        // Initialize the engine
+        engine.initialize();
+        graphEngineRef.current = engine;
+        setIsInitialized(true);
+        setError(null);
+
+        console.log('GraphView created new GraphEngine');
+
+      } catch (err) {
+        console.error('Failed to initialize GraphView:', err);
+        setError(err.message);
+        return;
+      }
+    } else if (engine && !isInitialized) {
+      // Use existing external engine
+      try {
+        // Update container if needed
+        if (engine.container !== containerRef.current) {
+          engine.container = containerRef.current;
+          engine.sigma.setContainer(containerRef.current);
+        }
+        
+        // Setup event listeners for this view
+        engine.on('nodeClick', handleNodeClick);
+        engine.on('edgeClick', handleEdgeClick);
+        engine.on('layoutStarted', () => setIsLayoutRunning(true));
+        engine.on('layoutStopped', () => setIsLayoutRunning(false));
+        
+        setIsInitialized(true);
+        setError(null);
+        updateStats();
+
+        console.log('GraphView using existing GraphEngine');
+
+      } catch (err) {
+        console.error('Failed to setup existing GraphEngine:', err);
+        setError(err.message);
       }
     }
-    
-    const observer = new MutationObserver(handleThemeChange)
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-    
-    return () => observer.disconnect()
-  }, [isDarkMode])
 
-  // Cleanup
-  useEffect(() => {
+    // Don't destroy engine on unmount - it might be shared
+    // Only pause it when this view unmounts
     return () => {
-      if (layoutWorkerRef.current) {
-        layoutWorkerRef.current.kill()
+      if (engine && engine.pause && !engine.isPaused) {
+        engine.pause();
       }
-      if (sigmaRef.current) {
-        sigmaRef.current.kill()
-      }
-    }
-  }, [])
+    };
+  }, [options, graphEngine]);
 
-  // Search functionality
+  // Handle data updates
+  useEffect(() => {
+    if (!isInitialized || !graphEngineRef.current || !data) return;
+
+    try {
+      graphEngineRef.current.importData(data);
+      updateStats();
+    } catch (err) {
+      console.error('Failed to import graph data:', err);
+      setError(err.message);
+    }
+  }, [data, isInitialized]);
+
+  // Update stats from graph engine
+  const updateStats = useCallback(() => {
+    if (graphEngineRef.current) {
+      setStats(graphEngineRef.current.getStats());
+    }
+  }, []);
+
+  // Handle node click events
+  const handleNodeClick = useCallback((event) => {
+    const { nodeId, nodeData } = event;
+    setSelectedNode({ id: nodeId, data: nodeData });
+    
+    if (onNodeClick) {
+      onNodeClick(event);
+    }
+  }, [onNodeClick]);
+
+  // Handle edge click events
+  const handleEdgeClick = useCallback((event) => {
+    if (onEdgeClick) {
+      onEdgeClick(event);
+    }
+  }, [onEdgeClick]);
+
+  // Control functions
+  const startLayout = useCallback(() => {
+    if (graphEngineRef.current && !isLayoutRunning) {
+      graphEngineRef.current.startLayout();
+    }
+  }, [isLayoutRunning]);
+
+  const stopLayout = useCallback(() => {
+    if (graphEngineRef.current && isLayoutRunning) {
+      graphEngineRef.current.stopLayout();
+    }
+  }, [isLayoutRunning]);
+
+  const fitToViewport = useCallback(() => {
+    if (graphEngineRef.current) {
+      graphEngineRef.current.fitToViewport();
+    }
+  }, []);
+
+  const clearGraph = useCallback(() => {
+    if (graphEngineRef.current) {
+      graphEngineRef.current.clear();
+      setSelectedNode(null);
+      updateStats();
+    }
+  }, [updateStats]);
+
+  // Add sample data for testing
+  const addSampleData = useCallback(() => {
+    if (!graphEngineRef.current) return;
+
+    const engine = graphEngineRef.current;
+    
+    // Add sample nodes
+    engine.addNode('file1', { 
+      type: 'file', 
+      label: 'Document.md',
+      size: 10
+    });
+    engine.addNode('file2', { 
+      type: 'file', 
+      label: 'Notes.md',
+      size: 8
+    });
+    engine.addNode('folder1', { 
+      type: 'folder', 
+      label: 'Projects',
+      size: 12
+    });
+    engine.addNode('tag1', { 
+      type: 'tag', 
+      label: '#important',
+      size: 6
+    });
+    engine.addNode('tag2', { 
+      type: 'tag', 
+      label: '#work',
+      size: 6
+    });
+
+    // Add sample edges
+    engine.addEdge('edge1', 'file1', 'file2', { 
+      type: 'strong',
+      size: 2
+    });
+    engine.addEdge('edge2', 'folder1', 'file1', { 
+      type: 'default'
+    });
+    engine.addEdge('edge3', 'folder1', 'file2', { 
+      type: 'default'
+    });
+    engine.addEdge('edge4', 'file1', 'tag1', { 
+      type: 'weak'
+    });
+    engine.addEdge('edge5', 'file2', 'tag2', { 
+      type: 'weak'
+    });
+
+    updateStats();
+  }, [updateStats]);
+
+  // New control functions for modern UI
   const handleSearch = useCallback((query) => {
-    setSearchQuery(query)
-    if (sigmaRef.current) {
-      sigmaRef.current.refresh()
+    setSearchQuery(query);
+    if (!graphEngineRef.current || !query.trim()) {
+      setSearchResults([]);
+      return;
     }
-  }, [])
 
-  // Reset view
-  const handleResetView = useCallback(() => {
-    if (sigmaRef.current) {
-      sigmaRef.current.getCamera().animate({ x: 0, y: 0, ratio: 1 }, { duration: 300 })
-      setSelectedNode(null)
-      setSearchQuery('')
+    // Search through nodes
+    const results = [];
+    if (data && data.nodes) {
+      data.nodes.forEach(node => {
+        if (node.label && node.label.toLowerCase().includes(query.toLowerCase())) {
+          results.push({
+            id: node.id,
+            label: node.label,
+            type: node.type || 'file'
+          });
+        }
+      });
     }
-  }, [])
+    setSearchResults(results.slice(0, 10)); // Limit results
+  }, [data]);
 
-  if (loading) {
+  const handleColorSchemeChange = useCallback((scheme) => {
+    setColorScheme(scheme);
+    if (graphEngineRef.current) {
+      // Apply color scheme to graph engine
+      graphEngineRef.current.setColorScheme(scheme);
+    }
+  }, []);
+
+  const handleZoomIn = useCallback(() => {
+    if (graphEngineRef.current) {
+      const newZoom = Math.min(zoomLevel * 1.2, 500);
+      setZoomLevel(Math.round(newZoom));
+      graphEngineRef.current.setZoom(newZoom / 100);
+    }
+  }, [zoomLevel]);
+
+  const handleZoomOut = useCallback(() => {
+    if (graphEngineRef.current) {
+      const newZoom = Math.max(zoomLevel / 1.2, 10);
+      setZoomLevel(Math.round(newZoom));
+      graphEngineRef.current.setZoom(newZoom / 100);
+    }
+  }, [zoomLevel]);
+
+  const handleCenter = useCallback(() => {
+    if (graphEngineRef.current) {
+      graphEngineRef.current.fitToViewport();
+      setZoomLevel(100);
+    }
+  }, []);
+
+  const handleReset = useCallback(() => {
+    if (graphEngineRef.current) {
+      graphEngineRef.current.resetLayout();
+      setZoomLevel(100);
+    }
+  }, []);
+
+  const handleExport = useCallback(() => {
+    if (graphEngineRef.current) {
+      graphEngineRef.current.exportToPNG();
+    }
+  }, []);
+
+  const handleViewportChange = useCallback((position) => {
+    if (graphEngineRef.current) {
+      graphEngineRef.current.panTo(position.x, position.y);
+    }
+  }, []);
+
+  const handlePerformanceModeChange = useCallback((enabled) => {
+    setPerformanceMode(enabled);
+    if (graphEngineRef.current) {
+      graphEngineRef.current.setPerformanceMode(enabled);
+    }
+  }, []);
+
+  // Handle visibility changes (pause/resume)
+  useEffect(() => {
+    if (!graphEngineRef.current || !isInitialized) return;
+
+    const engine = graphEngineRef.current;
+
+    if (isVisible) {
+      // Resume when visible
+      if (engine.isPaused) {
+        engine.resume();
+        console.log('GraphView resumed due to visibility');
+      }
+    } else {
+      // Pause when not visible
+      if (!engine.isPaused) {
+        engine.pause();
+        console.log('GraphView paused due to visibility');
+      }
+    }
+  }, [isVisible, isInitialized]);
+
+  // Update viewport bounds periodically (only when visible)
+  useEffect(() => {
+    if (!graphEngineRef.current || !isVisible) return;
+
+    const updateViewportBounds = () => {
+      try {
+        const bounds = graphEngineRef.current.getViewportBounds();
+        setViewportBounds(bounds);
+      } catch (error) {
+        // Ignore errors if graph engine doesn't support this method yet
+      }
+    };
+
+    const interval = setInterval(updateViewportBounds, 500);
+    updateViewportBounds(); // Initial call
+
+    return () => clearInterval(interval);
+  }, [isInitialized, isVisible]);
+
+  if (error) {
     return (
-      <div className="flex items-center justify-center h-full bg-app-bg text-app-text">
-        <div className="text-center space-y-3">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-app-accent mx-auto"></div>
-          <p className="text-app-muted">Building graph...</p>
+      <div className={`graph-view error ${className}`}>
+        <div className="error-message">
+          <h3>Graph Initialization Error</h3>
+          <p>{error}</p>
+          <button onClick={() => window.location.reload()}>
+            Reload Page
+          </button>
         </div>
       </div>
-    )
+    );
   }
 
   return (
-    <div className="relative h-full bg-app-bg">
-      {/* Controls */}
-      <div className="absolute top-4 left-4 z-10 bg-app-panel border border-app-border rounded-lg shadow-lg p-3 space-y-2">
-        <div className="text-xs text-app-muted">
-          {nodeCount} nodes • {edgeCount} edges
-        </div>
-        
-        <div className="flex items-center space-x-2">
-          <input
-            type="text"
-            placeholder="Search nodes..."
-            value={searchQuery}
-            onChange={(e) => handleSearch(e.target.value)}
-            className="px-2 py-1 text-xs bg-app-bg border border-app-border rounded focus:outline-none focus:border-app-accent text-app-text"
-          />
-          <button
-            onClick={handleResetView}
-            className="px-2 py-1 text-xs bg-app-accent text-app-accent-fg rounded hover:bg-app-accent/90 transition-colors"
-          >
-            Reset
-          </button>
-        </div>
-
-        {selectedNode && (
-          <div className="text-xs text-app-text pt-2 border-t border-app-border">
-            <strong>Selected:</strong> {graphRef.current?.getNodeAttribute(selectedNode, 'label') || selectedNode}
-          </div>
-        )}
-      </div>
-
+    <div className={`graph-view modern ${className}`}>
       {/* Graph Container */}
       <div 
         ref={containerRef} 
-        className="w-full h-full" 
-        style={{ 
-          background: COLORS[isDarkMode ? 'dark' : 'light'].background,
-          cursor: selectedNode ? 'pointer' : 'grab'
-        }}
+        className="graph-container"
+        style={{ width: '100%', height: '100%' }}
       />
 
-      {/* Help */}
-      <div className="absolute bottom-4 right-4 text-xs text-app-muted bg-app-panel border border-app-border rounded-lg p-2 max-w-xs">
-        <div><strong>Click</strong> node to select/open</div>
-        <div><strong>Drag</strong> to pan • <strong>Scroll</strong> to zoom</div>
-        {searchQuery && <div><strong>Search:</strong> Highlighted in red</div>}
+      {/* Unified Graph Panel */}
+      <GraphPanel
+        // Controls props
+        onLayoutStart={startLayout}
+        onLayoutStop={stopLayout}
+        onReset={handleReset}
+        onSearch={handleSearch}
+        onColorSchemeChange={handleColorSchemeChange}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onCenter={handleCenter}
+        onExport={handleExport}
+        searchResults={searchResults}
+        
+        // Stats props
+        graphEngine={graphEngineRef.current}
+        nodeCount={stats.nodeCount}
+        edgeCount={stats.edgeCount}
+        isLayoutRunning={isLayoutRunning}
+        performanceMode={performanceMode}
+        onPerformanceModeChange={handlePerformanceModeChange}
+        
+        // Minimap props
+        graphData={data}
+        viewportBounds={viewportBounds}
+        onViewportChange={handleViewportChange}
+        
+        // General props
+        isVisible={isInitialized}
+      />
+
+      {/* Loading Indicator */}
+      {!isInitialized && (
+        <div className="loading-overlay modern">
+          <div className="loading-spinner">
+            <div className="spinner modern"></div>
+            <p>Initializing Graph Engine...</p>
+            <div className="loading-progress">
+              <div className="progress-bar">
+                <div className="progress-fill"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Legacy Controls (Hidden) */}
+      <div className="legacy-controls" style={{ display: 'none' }}>
+        <button onClick={addSampleData}>Add Sample Data</button>
+        <button onClick={clearGraph}>Clear Graph</button>
       </div>
     </div>
-  )
-}
+  );
+};
+
+export default GraphView;

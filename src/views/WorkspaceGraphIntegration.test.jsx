@@ -1,0 +1,309 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import Workspace from './Workspace.jsx';
+
+// Mock all the complex dependencies
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(() => Promise.resolve(() => {})),
+  emit: vi.fn(() => Promise.resolve())
+}));
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(() => Promise.resolve([]))
+}));
+
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  confirm: vi.fn(() => Promise.resolve(true))
+}));
+
+vi.mock('@dnd-kit/core', () => ({
+  DndContext: ({ children }) => children,
+  useDraggable: () => ({ attributes: {}, listeners: {}, setNodeRef: vi.fn(), isDragging: false }),
+  useDroppable: () => ({ setNodeRef: vi.fn(), isOver: false }),
+  useSensor: vi.fn(),
+  useSensors: vi.fn(() => []),
+  PointerSensor: vi.fn()
+}));
+
+vi.mock('./DraggableTab', () => ({
+  DraggableTab: ({ tab }) => <div data-testid={`tab-${tab.path}`}>{tab.name}</div>
+}));
+
+vi.mock('../components/LokusLogo.jsx', () => ({
+  default: () => <div data-testid="lokus-logo">Logo</div>
+}));
+
+vi.mock('../editor', () => ({
+  default: ({ content, onContentChange }) => (
+    <div data-testid="editor">
+      <textarea 
+        value={content} 
+        onChange={(e) => onContentChange?.(e.target.value)}
+        data-testid="editor-textarea"
+      />
+    </div>
+  )
+}));
+
+vi.mock('../components/StatusBar.jsx', () => ({
+  default: () => <div data-testid="status-bar">Status Bar</div>
+}));
+
+vi.mock('./Canvas.jsx', () => ({
+  default: () => <div data-testid="canvas">Canvas</div>
+}));
+
+vi.mock('./GraphView.jsx', () => ({
+  default: ({ data, onNodeClick, className }) => (
+    <div data-testid="graph-view" className={className}>
+      <div data-testid="graph-data">
+        Nodes: {data?.nodes?.length || 0}, Edges: {data?.edges?.length || 0}
+      </div>
+      <button 
+        data-testid="test-node-click" 
+        onClick={() => onNodeClick?.({ 
+          nodeId: 'test-node', 
+          nodeData: { path: '/test/file.md', isPhantom: false } 
+        })}
+      >
+        Test Node Click
+      </button>
+    </div>
+  )
+}));
+
+vi.mock('../core/graph/GraphDataProcessor.js', () => ({
+  GraphDataProcessor: vi.fn().mockImplementation(() => ({
+    buildGraphFromWorkspace: vi.fn(() => Promise.resolve({
+      nodes: [
+        { key: 'file1', attributes: { label: 'Test.md', path: '/test/file.md' } },
+        { key: 'file2', attributes: { label: 'Notes.md', path: '/test/notes.md' } }
+      ],
+      edges: [
+        { key: 'edge1', source: 'file1', target: 'file2' }
+      ],
+      stats: { nodeCount: 2, edgeCount: 1 }
+    }))
+  }))
+}));
+
+// Mock other components
+vi.mock('../components/FileContextMenu.jsx', () => ({
+  default: ({ children }) => children
+}));
+
+vi.mock('../components/ui/context-menu.jsx', () => ({
+  ContextMenu: ({ children }) => children,
+  ContextMenuTrigger: ({ children }) => children,
+  ContextMenuContent: ({ children }) => <div>{children}</div>,
+  ContextMenuItem: ({ children, onClick }) => <button onClick={onClick}>{children}</button>,
+  ContextMenuSeparator: () => <div />
+}));
+
+vi.mock('../core/shortcuts/registry.js', () => ({
+  getActiveShortcuts: vi.fn(() => Promise.resolve({})),
+  formatAccelerator: vi.fn((accel) => accel)
+}));
+
+vi.mock('../components/CommandPalette.jsx', () => ({
+  default: () => <div data-testid="command-palette">Command Palette</div>
+}));
+
+vi.mock('../components/InFileSearch.jsx', () => ({
+  default: () => <div data-testid="in-file-search">In File Search</div>
+}));
+
+vi.mock('../components/SearchPanel.jsx', () => ({
+  default: () => <div data-testid="search-panel">Search Panel</div>
+}));
+
+vi.mock('../components/MiniKanban.jsx', () => ({
+  default: () => <div data-testid="mini-kanban">Mini Kanban</div>
+}));
+
+vi.mock('../components/FullKanban.jsx', () => ({
+  default: () => <div data-testid="full-kanban">Full Kanban</div>
+}));
+
+vi.mock('./PluginSettings.jsx', () => ({
+  default: () => <div data-testid="plugin-settings">Plugin Settings</div>
+}));
+
+vi.mock('./PluginDetail.jsx', () => ({
+  default: () => <div data-testid="plugin-detail">Plugin Detail</div>
+}));
+
+vi.mock('../core/canvas/manager.js', () => ({
+  canvasManager: {
+    createCanvas: vi.fn(() => Promise.resolve('/test/canvas.canvas')),
+    saveCanvas: vi.fn(() => Promise.resolve())
+  }
+}));
+
+vi.mock('../components/TemplatePicker.jsx', () => ({
+  default: () => <div data-testid="template-picker">Template Picker</div>
+}));
+
+vi.mock('../core/markdown/compiler.js', () => ({
+  getMarkdownCompiler: vi.fn(() => ({
+    processTemplate: vi.fn((content) => content)
+  }))
+}));
+
+vi.mock('../components/CreateTemplate.jsx', () => ({
+  default: () => <div data-testid="create-template">Create Template</div>
+}));
+
+describe('Workspace Graph Integration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Mock window location for URLSearchParams
+    delete window.location;
+    window.location = { search: '' };
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should render graph view button in activity bar', () => {
+    render(<Workspace initialPath="/test/workspace" />);
+    
+    const graphButton = screen.getByTitle('Graph View');
+    expect(graphButton).toBeInTheDocument();
+  });
+
+  it('should show graph view panel when graph button clicked', async () => {
+    render(<Workspace initialPath="/test/workspace" />);
+    
+    const graphButton = screen.getByTitle('Graph View');
+    fireEvent.click(graphButton);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Graph View')).toBeInTheDocument();
+      expect(screen.getByText('Open Graph View')).toBeInTheDocument();
+    });
+  });
+
+  it('should open graph view tab when "Open Graph View" clicked', async () => {
+    render(<Workspace initialPath="/test/workspace" />);
+    
+    // Click graph view button in activity bar
+    const graphButton = screen.getByTitle('Graph View');
+    fireEvent.click(graphButton);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Open Graph View')).toBeInTheDocument();
+    });
+    
+    // Click "Open Graph View" button
+    const openButton = screen.getByText('Open Graph View');
+    fireEvent.click(openButton);
+    
+    await waitFor(() => {
+      // Should show graph view content
+      expect(screen.getByTestId('graph-view')).toBeInTheDocument();
+    });
+  });
+
+  it('should build graph data and display in graph view', async () => {
+    render(<Workspace initialPath="/test/workspace" />);
+    
+    // Navigate to graph view
+    const graphButton = screen.getByTitle('Graph View');
+    fireEvent.click(graphButton);
+    
+    const openButton = screen.getByText('Open Graph View');
+    fireEvent.click(openButton);
+    
+    await waitFor(() => {
+      expect(screen.getByTestId('graph-view')).toBeInTheDocument();
+    });
+    
+    // Should show "Build Graph" button initially
+    const buildButton = screen.getByText('Build Graph');
+    expect(buildButton).toBeInTheDocument();
+    
+    // Click build graph
+    fireEvent.click(buildButton);
+    
+    await waitFor(() => {
+      // Should show graph data
+      expect(screen.getByTestId('graph-data')).toBeInTheDocument();
+      expect(screen.getByText('Nodes: 2, Edges: 1')).toBeInTheDocument();
+    });
+  });
+
+  it('should handle node click and open files', async () => {
+    const { invoke } = require('@tauri-apps/api/core');
+    
+    // Setup mocks for different calls
+    invoke.mockImplementation((command, args) => {
+      if (command === 'read_workspace_files') {
+        return Promise.resolve([]);
+      }
+      if (command === 'read_file_content') {
+        return Promise.resolve('Test file content');
+      }
+      return Promise.resolve();
+    });
+    
+    render(<Workspace initialPath="/test/workspace" />);
+    
+    // Navigate to graph view and build graph
+    const graphButton = screen.getByTitle('Graph View');
+    fireEvent.click(graphButton);
+    
+    const openButton = screen.getByText('Open Graph View');
+    fireEvent.click(openButton);
+    
+    const buildButton = screen.getByText('Build Graph');
+    fireEvent.click(buildButton);
+    
+    await waitFor(() => {
+      expect(screen.getByTestId('graph-view')).toBeInTheDocument();
+    });
+    
+    // Click on a test node
+    const testNodeButton = screen.getByTestId('test-node-click');
+    fireEvent.click(testNodeButton);
+    
+    // Should open the file (check that invoke was called to read file content)
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('read_file_content', { path: '/test/file.md' });
+    });
+  });
+
+  it('should show graph view keyboard shortcut hint', () => {
+    render(<Workspace initialPath="/test/workspace" />);
+    
+    const graphButton = screen.getByTitle('Graph View');
+    fireEvent.click(graphButton);
+    
+    expect(screen.getByText('Use Cmd+Shift+G to quickly open the graph view.')).toBeInTheDocument();
+  });
+
+  it('should handle graph view activity bar button states correctly', () => {
+    render(<Workspace initialPath="/test/workspace" />);
+    
+    // Initially, Explorer should be active
+    const explorerButton = screen.getByTitle('Explorer');
+    expect(explorerButton).toHaveClass('primary');
+    
+    // Click graph view button
+    const graphButton = screen.getByTitle('Graph View');
+    fireEvent.click(graphButton);
+    
+    // Graph view button should be active
+    expect(graphButton).toHaveClass('primary');
+    expect(explorerButton).not.toHaveClass('primary');
+    
+    // Click back to explorer
+    fireEvent.click(explorerButton);
+    
+    // Explorer should be active again
+    expect(explorerButton).toHaveClass('primary');
+    expect(graphButton).not.toHaveClass('primary');
+  });
+});
