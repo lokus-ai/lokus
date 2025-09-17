@@ -44,44 +44,70 @@ export default function Canvas({
     if (!canvasPath || !store) return
     
     const loadCanvas = async () => {
+      console.log('📂 Loading canvas from:', canvasPath)
       setIsLoading(true)
+      
       try {
         // Validate canvas path
         if (!isValidFilePath(canvasPath)) {
           throw new Error('Invalid canvas file path');
         }
         
+        console.log('📖 Reading file content...')
         const content = await invoke('read_file_content', { path: canvasPath })
+        console.log('📄 File content length:', content.length)
+        
         const canvasData = JSON.parse(content)
+        console.log('🔍 Parsed canvas data:', {
+          hasNodes: !!canvasData.nodes,
+          nodeCount: canvasData.nodes?.length || 0,
+          hasEdges: !!canvasData.edges,
+          edgeCount: canvasData.edges?.length || 0,
+          hasMetadata: !!canvasData.metadata
+        })
         
         // Security validation for canvas data
         if (!isValidCanvasData(canvasData)) {
-          console.warn('Invalid canvas data detected, using empty canvas');
+          console.warn('⚠️ Invalid canvas data detected, using empty canvas');
           const emptyTldrawData = jsonCanvasToTldraw({ nodes: [], edges: [] })
           loadSnapshot(store, emptyTldrawData)
           setIsDirty(false)
           return;
         }
         
+        console.log('✅ Canvas data validation passed')
+        
         // Migrate and convert to tldraw format
+        console.log('🔄 Migrating canvas format...')
         const migratedData = migrateCanvasFormat(canvasData)
+        console.log('🔄 Converting to tldraw format...')
         const tldrawData = jsonCanvasToTldraw(migratedData)
         
+        console.log('📊 Tldraw data prepared:', {
+          records: tldrawData.records?.length || 0,
+          shapes: tldrawData.records?.filter(r => r.typeName === 'shape').length || 0,
+          hasSchema: !!tldrawData.schema
+        })
+        
         // Use new loadSnapshot API
+        console.log('💾 Loading snapshot into store...')
         loadSnapshot(store, tldrawData)
         
         // Mark as clean after loading
         setIsDirty(false)
         
-        console.log('Canvas loaded successfully')
+        console.log('✅ Canvas loaded successfully')
       } catch (error) {
-        console.error('Failed to load canvas:', error)
+        console.error('❌ Failed to load canvas:', error)
+        
         // Initialize with empty canvas on error
         try {
+          console.log('🔄 Loading empty canvas as fallback...')
           const emptyTldrawData = jsonCanvasToTldraw({ nodes: [], edges: [] })
           loadSnapshot(store, emptyTldrawData)
+          setIsDirty(false)
         } catch (loadError) {
-          console.error('Failed to load empty canvas:', loadError)
+          console.error('❌ Failed to load empty canvas:', loadError)
         }
       } finally {
         setIsLoading(false)
@@ -93,9 +119,14 @@ export default function Canvas({
 
   // Save canvas content
   const handleSave = useCallback(async () => {
-    if (!canvasPath || !store) return
+    if (!canvasPath || !store) {
+      console.warn('💾 Save skipped: missing canvasPath or store')
+      return
+    }
 
+    console.log('💾 Starting save operation for:', canvasPath)
     setIsLoading(true)
+    
     try {
       // Validate canvas path
       if (!isValidFilePath(canvasPath)) {
@@ -103,16 +134,24 @@ export default function Canvas({
       }
       
       const snapshot = store.getSnapshot()
+      console.log('📊 Store snapshot taken:', {
+        records: snapshot.records?.length || 0,
+        shapes: snapshot.records?.filter(r => r.typeName === 'shape').length || 0
+      })
       
       // Convert tldraw format to JSON Canvas format
       const canvasData = tldrawToJsonCanvas(snapshot)
+      console.log('🔄 Converted to JSON Canvas format:', {
+        nodes: canvasData.nodes?.length || 0,
+        edges: canvasData.edges?.length || 0
+      })
       
       // Security validation for canvas data before saving
       if (!isValidCanvasData(canvasData)) {
         throw new Error('Invalid canvas data - security validation failed');
       }
       
-      console.log('Saving canvas data:', canvasData)
+      console.log('✅ Canvas data validated, writing to file...')
 
       // Save directly to file first, then call callback
       await invoke('write_file_content', {
@@ -120,18 +159,42 @@ export default function Canvas({
         content: JSON.stringify(canvasData, null, 2)
       })
 
+      console.log('📁 File written successfully')
+
       // Call the onSave callback with canvas data
       if (onSave) {
+        console.log('🔄 Calling onSave callback...')
         await onSave(canvasData)
       }
       
       setLastSaved(new Date())
       setIsDirty(false)
-      console.log('Canvas saved successfully to:', canvasPath)
+      console.log('✅ Canvas saved successfully to:', canvasPath)
     } catch (error) {
-      console.error('Failed to save canvas:', error)
-      // Show error to user
-      alert(`Failed to save canvas: ${error.message}`)
+      console.error('❌ Failed to save canvas:', error)
+      
+      // More specific error messages for users
+      let userMessage = 'Failed to save canvas'
+      if (error.message.includes('permission')) {
+        userMessage = 'Permission denied: Cannot write to this location'
+      } else if (error.message.includes('Invalid canvas path')) {
+        userMessage = 'Invalid file path for canvas'
+      } else if (error.message.includes('security validation')) {
+        userMessage = 'Canvas data validation failed'
+      } else if (error.message.includes('network')) {
+        userMessage = 'Network error: Please check your connection'
+      } else {
+        userMessage = `Save failed: ${error.message}`
+      }
+      
+      // Show error to user with better UX than alert
+      console.error('🚨 Showing error to user:', userMessage)
+      
+      // TODO: Replace with proper notification system
+      alert(`❌ ${userMessage}`)
+      
+      // Keep dirty state so user can retry
+      setIsDirty(true)
     } finally {
       setIsLoading(false)
     }
@@ -143,41 +206,65 @@ export default function Canvas({
     
     let initialSnapshot = null
     let changeTimeout = null
+    let saveTimeout = null
     
     const handleStoreChange = () => {
-      // Clear any pending timeout
+      // Clear any pending timeouts
       if (changeTimeout) {
         clearTimeout(changeTimeout)
       }
+      if (saveTimeout) {
+        clearTimeout(saveTimeout)
+      }
       
-      // Debounce changes to avoid mouse move false positives
+      // Reduced debounce for more responsive detection
       changeTimeout = setTimeout(() => {
         const currentSnapshot = store.getSnapshot()
         
+        console.log('📝 Store changed, checking for real changes...')
+        
         // Compare with initial snapshot to detect real changes
         if (initialSnapshot && hasRealChanges(initialSnapshot, currentSnapshot)) {
+          console.log('💾 Real changes detected, marking as dirty')
           setIsDirty(true)
           
           // Call onContentChange if provided
           if (onContentChange) {
-            const canvasData = tldrawToJsonCanvas(currentSnapshot)
-            onContentChange(canvasData)
+            try {
+              const canvasData = tldrawToJsonCanvas(currentSnapshot)
+              onContentChange(canvasData)
+            } catch (error) {
+              console.error('❌ Failed to convert to JSON Canvas format:', error)
+            }
           }
           
-          // Auto-save after 2 seconds of inactivity
-          setTimeout(() => {
-            if (canvasPath) {
+          // Auto-save after shorter delay for better UX
+          saveTimeout = setTimeout(() => {
+            if (canvasPath && isDirty) {
+              console.log('🔄 Auto-saving canvas after change detection...')
               handleSave()
             }
-          }, 2000)
+          }, 1500) // Reduced from 2000ms to 1500ms
+        } else {
+          console.log('👀 Store changed but no real changes detected')
         }
-      }, 500) // 500ms debounce
+      }, 300) // Reduced from 500ms to 300ms for faster response
     }
 
-    // Capture initial snapshot after loading
-    setTimeout(() => {
-      initialSnapshot = store.getSnapshot()
-    }, 1000)
+    // Capture initial snapshot immediately after store is ready
+    const captureInitialSnapshot = () => {
+      if (store) {
+        initialSnapshot = store.getSnapshot()
+        console.log('📸 Initial snapshot captured:', {
+          records: initialSnapshot.records?.length || 0,
+          shapes: initialSnapshot.records?.filter(r => r.typeName === 'shape').length || 0
+        })
+      }
+    }
+
+    // Capture immediately, then also after a short delay to ensure loading is complete
+    captureInitialSnapshot()
+    setTimeout(captureInitialSnapshot, 100)
 
     const unsubscribe = store.listen(handleStoreChange)
     
@@ -186,36 +273,123 @@ export default function Canvas({
       if (changeTimeout) {
         clearTimeout(changeTimeout)
       }
+      if (saveTimeout) {
+        clearTimeout(saveTimeout)
+      }
     }
-  }, [store, onContentChange])
+  }, [store, onContentChange, canvasPath, isDirty])
   
-  // Helper to detect real content changes vs just mouse moves
+  // Helper to detect real content changes vs just mouse moves/viewport changes
   const hasRealChanges = (oldSnapshot, newSnapshot) => {
     if (!oldSnapshot || !newSnapshot) return false
+    
+    console.log('🔍 Checking for real changes...', {
+      oldRecords: oldSnapshot.records?.length || 0,
+      newRecords: newSnapshot.records?.length || 0
+    })
     
     const oldRecords = oldSnapshot.records || []
     const newRecords = newSnapshot.records || []
     
-    // Check if number of shapes changed
+    // Get shapes only (exclude camera, document, page, instance records)
     const oldShapes = oldRecords.filter(r => r.typeName === 'shape')
     const newShapes = newRecords.filter(r => r.typeName === 'shape')
     
-    if (oldShapes.length !== newShapes.length) return true
+    console.log('📊 Shape counts:', { old: oldShapes.length, new: newShapes.length })
     
-    // Check if any shape properties changed (excluding position updates from mouse moves)
-    for (let i = 0; i < oldShapes.length; i++) {
-      const oldShape = oldShapes[i]
+    // Check if number of shapes changed
+    if (oldShapes.length !== newShapes.length) {
+      console.log('✅ Shape count changed - real change detected')
+      return true
+    }
+    
+    // Check if any shape properties changed (excluding position updates from drags)
+    for (const oldShape of oldShapes) {
       const newShape = newShapes.find(s => s.id === oldShape.id)
       
-      if (!newShape) return true
+      if (!newShape) {
+        console.log('✅ Shape removed - real change detected', oldShape.id)
+        return true
+      }
       
-      // Compare meaningful properties (not just x,y which change on mouse over)
-      if (oldShape.type !== newShape.type || 
-          JSON.stringify(oldShape.props) !== JSON.stringify(newShape.props)) {
+      // Compare type changes (shape converted to different type)
+      if (oldShape.type !== newShape.type) {
+        console.log('✅ Shape type changed - real change detected', oldShape.id, oldShape.type, '->', newShape.type)
+        return true
+      }
+      
+      // Compare props but exclude volatile properties that change during interaction
+      const oldProps = { ...oldShape.props }
+      const newProps = { ...newShape.props }
+      
+      // Remove properties that change during normal interaction but aren't "real" edits
+      delete oldProps.scale // Scale changes during zoom
+      delete newProps.scale
+      
+      // For geo shapes, text changes are meaningful
+      if (oldShape.type === 'geo' || oldShape.type === 'text') {
+        if (oldProps.text !== newProps.text) {
+          console.log('✅ Text content changed - real change detected', oldShape.id)
+          return true
+        }
+      }
+      
+      // Compare other meaningful properties
+      const meaningfulOldProps = JSON.stringify({
+        text: oldProps.text,
+        color: oldProps.color,
+        size: oldProps.size,
+        font: oldProps.font,
+        align: oldProps.align,
+        w: oldProps.w,
+        h: oldProps.h,
+        fill: oldProps.fill,
+        dash: oldProps.dash,
+        geo: oldProps.geo
+      })
+      
+      const meaningfulNewProps = JSON.stringify({
+        text: newProps.text,
+        color: newProps.color,
+        size: newProps.size,
+        font: newProps.font,
+        align: newProps.align,
+        w: newProps.w,
+        h: newProps.h,
+        fill: newProps.fill,
+        dash: newProps.dash,
+        geo: newProps.geo
+      })
+      
+      if (meaningfulOldProps !== meaningfulNewProps) {
+        console.log('✅ Shape properties changed - real change detected', oldShape.id)
+        console.log('  Old props:', meaningfulOldProps)
+        console.log('  New props:', meaningfulNewProps)
+        return true
+      }
+      
+      // Check position changes that are more than just small drags (threshold for actual moves)
+      const oldX = oldShape.x || 0
+      const oldY = oldShape.y || 0
+      const newX = newShape.x || 0
+      const newY = newShape.y || 0
+      
+      const positionDiff = Math.sqrt(Math.pow(newX - oldX, 2) + Math.pow(newY - oldY, 2))
+      if (positionDiff > 10) { // More than 10px movement is a real change
+        console.log('✅ Significant position change - real change detected', oldShape.id, `moved ${positionDiff.toFixed(1)}px`)
         return true
       }
     }
     
+    // Check for new shapes
+    for (const newShape of newShapes) {
+      if (!oldShapes.find(s => s.id === newShape.id)) {
+        console.log('✅ New shape added - real change detected', newShape.id)
+        return true
+      }
+    }
+    
+    console.log('❌ No real changes detected')
     return false
   }
 
@@ -226,6 +400,7 @@ export default function Canvas({
         switch (e.key) {
           case 's':
             e.preventDefault()
+            console.log('⌨️ Manual save triggered by Ctrl+S')
             handleSave()
             break
           case 'Escape':
