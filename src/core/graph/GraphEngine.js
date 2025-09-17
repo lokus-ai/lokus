@@ -31,10 +31,10 @@ export class GraphEngine {
       mousePosition: { x: 0, y: 0 },
       nodeVelocities: new Map(),  // nodeId -> {vx, vy}
       forces: new Map(),          // nodeId -> {fx, fy}
-      springConstant: 0.01,       // Attraction force strength
-      dampingFactor: 0.95,        // Velocity damping
-      repulsionForce: 1000,       // Node repulsion strength
-      maxForce: 50,               // Maximum force magnitude
+      springConstant: 0.05,       // Stronger spring forces for better connection feel
+      dampingFactor: 0.85,        // Less damping for more responsive movement
+      repulsionForce: 1500,       // Balanced repulsion (reduced from 2000)
+      maxForce: 75,               // Higher max force for better responsiveness
       animationId: null
     };
     
@@ -1489,28 +1489,45 @@ export class GraphEngine {
   }
 
   /**
-   * Apply physics forces only to connected nodes (Obsidian-style)
+   * Apply physics forces to all nearby nodes (enhanced for better repulsion)
    */
   applyPhysicsForces() {
     if (!this.physics.draggedNode) return;
     
-    // Get nodes connected to the dragged node (within 2 degrees of separation)
-    const affectedNodes = this.getConnectedNodes(this.physics.draggedNode, 2);
+    // Get ALL nodes within physics range, not just connected ones
+    const draggedPos = this.graph.getNodeAttributes(this.physics.draggedNode);
+    const affectedNodes = new Set();
     
-    // Clear forces for affected nodes only
+    // Add dragged node and all nodes within reasonable distance
+    this.graph.forEachNode((nodeId, attributes) => {
+      if (nodeId === this.physics.draggedNode) {
+        affectedNodes.add(nodeId);
+        return;
+      }
+      
+      const dx = attributes.x - draggedPos.x;
+      const dy = attributes.y - draggedPos.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Include nodes within physics range (increased range for better effect)
+      if (distance < 300) {
+        affectedNodes.add(nodeId);
+      }
+    });
+    
+    // Clear forces for all affected nodes
     affectedNodes.forEach(nodeId => {
       this.physics.forces.set(nodeId, { fx: 0, fy: 0 });
     });
     
-    // Apply spring forces only between connected nodes
+    // Apply spring forces between connected nodes
     this.graph.forEachEdge((edgeId, attributes, source, target) => {
-      // Only apply forces if at least one node is in the affected set
       if (affectedNodes.has(source) || affectedNodes.has(target)) {
         this.applySpringForce(source, target);
       }
     });
     
-    // Apply repulsion forces only among affected nodes
+    // Apply repulsion forces between ALL affected nodes (not just connected ones)
     const affectedArray = Array.from(affectedNodes);
     for (let i = 0; i < affectedArray.length; i++) {
       for (let j = i + 1; j < affectedArray.length; j++) {
@@ -1518,7 +1535,7 @@ export class GraphEngine {
       }
     }
     
-    // Update positions based on forces (only for affected nodes)
+    // Update positions based on forces
     affectedNodes.forEach(nodeId => {
       if (nodeId === this.physics.draggedNode) return; // Skip dragged node
       
@@ -1535,8 +1552,8 @@ export class GraphEngine {
       velocity.vx *= this.physics.dampingFactor;
       velocity.vy *= this.physics.dampingFactor;
       
-      // Limit maximum velocity
-      const maxVel = 10;
+      // Limit maximum velocity - increased for more responsive movement
+      const maxVel = 15;
       velocity.vx = Math.max(-maxVel, Math.min(maxVel, velocity.vx));
       velocity.vy = Math.max(-maxVel, Math.min(maxVel, velocity.vy));
       
@@ -1562,9 +1579,58 @@ export class GraphEngine {
     
     if (distance === 0) return;
     
-    // Desired spring length
-    const springLength = 100;
-    const force = this.physics.springConstant * (distance - springLength);
+    // Shorter spring length for tighter connections
+    const springLength = 60;
+    
+    // Stronger spring force when one node is being dragged
+    const isDraggedConnection = (nodeA === this.physics.draggedNode || nodeB === this.physics.draggedNode);
+    const springStrength = isDraggedConnection ? this.physics.springConstant * 3 : this.physics.springConstant;
+    
+    const force = springStrength * (distance - springLength);
+    
+    // Maximum allowed stretch distance - beyond this, nodes move together
+    const maxStretch = 100;
+    if (distance > maxStretch && isDraggedConnection) {
+      // Calculate how much to move the connected node directly
+      const excessDistance = distance - maxStretch;
+      const moveDistance = Math.min(excessDistance * 0.8, distance * 0.4); // Move up to 40% of total distance
+      
+      if (nodeA === this.physics.draggedNode) {
+        // Directly move connected node (B) towards dragged node (A)
+        const moveX = (dx / distance) * moveDistance;
+        const moveY = (dy / distance) * moveDistance;
+        
+        // Apply large instantaneous force for immediate movement
+        const forceB = this.physics.forces.get(nodeB);
+        forceB.fx += moveX * 8; // Very strong force
+        forceB.fy += moveY * 8;
+        
+        // Also set velocity directly for immediate response
+        const velocityB = this.physics.nodeVelocities.get(nodeB);
+        if (velocityB) {
+          velocityB.vx += moveX * 0.3;
+          velocityB.vy += moveY * 0.3;
+        }
+        
+      } else if (nodeB === this.physics.draggedNode) {
+        // Directly move connected node (A) towards dragged node (B)
+        const moveX = (dx / distance) * moveDistance;
+        const moveY = (dy / distance) * moveDistance;
+        
+        // Apply large instantaneous force for immediate movement
+        const forceA = this.physics.forces.get(nodeA);
+        forceA.fx -= moveX * 8; // Very strong force
+        forceA.fy -= moveY * 8;
+        
+        // Also set velocity directly for immediate response
+        const velocityA = this.physics.nodeVelocities.get(nodeA);
+        if (velocityA) {
+          velocityA.vx -= moveX * 0.3;
+          velocityA.vy -= moveY * 0.3;
+        }
+      }
+      return;
+    }
     
     const fx = (dx / distance) * force;
     const fy = (dy / distance) * force;
@@ -1573,10 +1639,22 @@ export class GraphEngine {
     const forceA = this.physics.forces.get(nodeA);
     const forceB = this.physics.forces.get(nodeB);
     
-    forceA.fx += fx;
-    forceA.fy += fy;
-    forceB.fx -= fx;
-    forceB.fy -= fy;
+    if (isDraggedConnection) {
+      // When dragging, apply stronger forces to connected nodes
+      if (nodeA === this.physics.draggedNode) {
+        forceB.fx -= fx * 0.6; // Pull connected node along
+        forceB.fy -= fy * 0.6;
+      } else if (nodeB === this.physics.draggedNode) {
+        forceA.fx += fx * 0.6; // Pull connected node along
+        forceA.fy += fy * 0.6;
+      }
+    } else {
+      // Normal spring behavior for non-dragged connections
+      forceA.fx += fx * 0.3;
+      forceA.fy += fy * 0.3;
+      forceB.fx -= fx * 0.3;
+      forceB.fy -= fy * 0.3;
+    }
   }
 
   /**
@@ -1590,9 +1668,27 @@ export class GraphEngine {
     const dy = posB.y - posA.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
     
-    if (distance === 0 || distance > 200) return; // Only repel close nodes
+    // Increased repulsion range and handle zero distance
+    if (distance === 0) {
+      // Add small random displacement for overlapping nodes
+      const randomAngle = Math.random() * 2 * Math.PI;
+      const fx = Math.cos(randomAngle) * this.physics.repulsionForce * 0.1;
+      const fy = Math.sin(randomAngle) * this.physics.repulsionForce * 0.1;
+      
+      const forceA = this.physics.forces.get(nodeA);
+      const forceB = this.physics.forces.get(nodeB);
+      
+      forceA.fx -= fx;
+      forceA.fy -= fy;
+      forceB.fx += fx;
+      forceB.fy += fy;
+      return;
+    }
     
-    const force = this.physics.repulsionForce / (distance * distance);
+    if (distance > 300) return; // Match the physics range
+    
+    // Enhanced repulsion force calculation
+    const force = this.physics.repulsionForce / (distance * distance * 0.5); // Stronger force
     
     const fx = (dx / distance) * force;
     const fy = (dy / distance) * force;
@@ -1601,10 +1697,12 @@ export class GraphEngine {
     const forceA = this.physics.forces.get(nodeA);
     const forceB = this.physics.forces.get(nodeB);
     
-    forceA.fx -= fx;
-    forceA.fy -= fy;
-    forceB.fx += fx;
-    forceB.fy += fy;
+    if (forceA && forceB) {
+      forceA.fx -= fx;
+      forceA.fy -= fy;
+      forceB.fx += fx;
+      forceB.fy += fy;
+    }
   }
 
   /**
