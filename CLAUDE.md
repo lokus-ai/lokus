@@ -57,7 +57,6 @@ npm run test:e2e:headed
 - ✅ File management and workspace
 - ✅ Theme system (light/dark + custom themes)
 - ✅ Preferences with real-time editor customization
-- ✅ Graph view (disabled due to performance issues)
 
 ## 🔧 **Common Tasks**
 
@@ -86,7 +85,6 @@ npm run test:e2e:headed
 - ✅ Brackets in lists triggering wiki suggestions
 
 ### **Current Issues**
-- Graph view performance problems (disabled)
 - Need better file organization
 
 ## 📝 **Development Notes**
