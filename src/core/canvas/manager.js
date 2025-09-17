@@ -9,6 +9,8 @@ import { isValidCanvasData, isValidFilePath, sanitizeUserInput } from '../securi
 export class CanvasManager {
   constructor() {
     this.canvasCache = new Map();
+    this.saveQueue = new Map(); // Track concurrent saves per file
+    this.loadQueue = new Map(); // Track concurrent loads per file
   }
 
   /**
@@ -54,22 +56,53 @@ export class CanvasManager {
   }
 
   /**
-   * Load canvas data from file
+   * Load canvas data from file with queue management
    * @param {string} canvasPath - Path to the canvas file
    * @returns {Promise<Object>} - Canvas data in JSON Canvas format
    */
   async loadCanvas(canvasPath) {
+    // Prevent concurrent loads of same file
+    if (this.loadQueue.has(canvasPath)) {
+      console.log('🔄 Load already in progress, waiting...', canvasPath);
+      return this.loadQueue.get(canvasPath);
+    }
+    
+    const loadPromise = this._loadCanvasInternal(canvasPath);
+    this.loadQueue.set(canvasPath, loadPromise);
+    
+    try {
+      const result = await loadPromise;
+      return result;
+    } finally {
+      this.loadQueue.delete(canvasPath);
+    }
+  }
+  
+  /**
+   * Internal load implementation
+   * @private
+   */
+  async _loadCanvasInternal(canvasPath) {
     try {
       // Validate file path
       if (!isValidFilePath(canvasPath)) {
         throw new Error('Invalid canvas path');
       }
       
-      // Check cache first
+      // Wait for any pending saves to complete
+      if (this.saveQueue.has(canvasPath)) {
+        console.log('⏳ Waiting for save to complete before loading...', canvasPath);
+        await this.saveQueue.get(canvasPath);
+      }
+      
+      // Check cache first (but clear it if there was a recent save)
       if (this.canvasCache.has(canvasPath)) {
-        return this.canvasCache.get(canvasPath);
+        const cached = this.canvasCache.get(canvasPath);
+        console.log('📋 Using cached canvas data');
+        return cached;
       }
 
+      console.log('📖 Reading canvas file:', canvasPath);
       const content = await invoke('read_file_content', { path: canvasPath });
       
       let canvasData;
@@ -92,6 +125,11 @@ export class CanvasManager {
       // Cache the loaded data
       this.canvasCache.set(canvasPath, canvasData);
       
+      console.log('✅ Canvas loaded successfully:', {
+        nodes: canvasData.nodes?.length || 0,
+        edges: canvasData.edges?.length || 0
+      });
+      
       return canvasData;
     } catch (error) {
       console.error('Failed to load canvas:', error);
@@ -101,12 +139,33 @@ export class CanvasManager {
   }
 
   /**
-   * Save canvas data to file
+   * Save canvas data to file with queue management
    * @param {string} canvasPath - Path to the canvas file
    * @param {Object} canvasData - Canvas data to save
    * @returns {Promise<void>}
    */
   async saveCanvas(canvasPath, canvasData) {
+    // Prevent concurrent saves to same file
+    if (this.saveQueue.has(canvasPath)) {
+      console.log('💾 Save already in progress, waiting...', canvasPath);
+      await this.saveQueue.get(canvasPath);
+    }
+    
+    const savePromise = this._saveCanvasInternal(canvasPath, canvasData);
+    this.saveQueue.set(canvasPath, savePromise);
+    
+    try {
+      await savePromise;
+    } finally {
+      this.saveQueue.delete(canvasPath);
+    }
+  }
+  
+  /**
+   * Internal save implementation
+   * @private
+   */
+  async _saveCanvasInternal(canvasPath, canvasData) {
     try {
       // Validate file path
       if (!isValidFilePath(canvasPath)) {
@@ -126,17 +185,23 @@ export class CanvasManager {
       
       const content = JSON.stringify(jsonCanvasData, null, 2);
       
+      console.log('💾 Writing canvas file:', canvasPath, {
+        nodes: jsonCanvasData.nodes?.length || 0,
+        edges: jsonCanvasData.edges?.length || 0,
+        contentLength: content.length
+      });
+      
       await invoke('write_file_content', {
         path: canvasPath,
         content
       });
       
-      // Update cache
-      this.canvasCache.set(canvasPath, jsonCanvasData);
+      // Clear cache to force fresh read next time
+      this.canvasCache.delete(canvasPath);
       
-      console.log('Canvas saved successfully:', canvasPath);
+      console.log('✅ Canvas saved successfully:', canvasPath);
     } catch (error) {
-      console.error('Failed to save canvas:', error);
+      console.error('❌ Failed to save canvas:', error);
       throw error;
     }
   }
@@ -339,6 +404,34 @@ export class CanvasManager {
       this.canvasCache.delete(canvasPath);
     } else {
       this.canvasCache.clear();
+    }
+  }
+  
+  /**
+   * Get current queue status for debugging
+   * @returns {Object} - Queue status information
+   */
+  getQueueStatus() {
+    return {
+      activeLoads: Array.from(this.loadQueue.keys()),
+      activeSaves: Array.from(this.saveQueue.keys()),
+      cachedFiles: Array.from(this.canvasCache.keys())
+    };
+  }
+  
+  /**
+   * Wait for all pending operations to complete
+   * @returns {Promise<void>}
+   */
+  async waitForPendingOperations() {
+    const allPromises = [
+      ...Array.from(this.saveQueue.values()),
+      ...Array.from(this.loadQueue.values())
+    ];
+    
+    if (allPromises.length > 0) {
+      console.log('⏳ Waiting for', allPromises.length, 'pending operations...');
+      await Promise.all(allPromises);
     }
   }
 }
