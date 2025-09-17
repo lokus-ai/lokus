@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import { Tldraw, loadSnapshot, createTLStore, defaultShapeUtils, defaultBindingUtils, defaultTools } from 'tldraw'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { Tldraw, getSnapshot, loadSnapshot, createTLStore, defaultShapeUtils, defaultBindingUtils, defaultTools } from 'tldraw'
 import 'tldraw/tldraw.css'
 import '../styles/canvas.css'
 import { invoke } from '@tauri-apps/api/core'
@@ -9,6 +9,7 @@ import { jsonCanvasToTldraw, tldrawToJsonCanvas, migrateCanvasFormat } from '../
 import { canvasConfigs, themeConfigs } from '../core/canvas/config.js'
 import { useTheme } from '../hooks/theme.jsx'
 import { isValidCanvasData, isValidFilePath } from '../core/security/index.js'
+import { canvasManager } from '../core/canvas/manager.js'
 
 export default function Canvas({ 
   canvasPath = null,
@@ -24,7 +25,16 @@ export default function Canvas({
   const [lastSaved, setLastSaved] = useState(null)
   const [isDirty, setIsDirty] = useState(false)
   const [store, setStore] = useState(null)
+  const [editor, setEditor] = useState(null)
+  const [saveState, setSaveState] = useState('idle') // 'idle', 'saving', 'saved', 'error'
   const { theme } = useTheme()
+  
+  // Save queue system to prevent race conditions
+  const saveQueueRef = useRef({
+    queue: [],
+    isProcessing: false,
+    currentOperation: null
+  })
   
   // Determine theme mode
   const isDarkMode = theme?.name === 'dark' || theme?.mode === 'dark'
@@ -39,26 +49,26 @@ export default function Canvas({
     setStore(newStore)
   }, [])
 
-  // Load canvas file content
+  // Load canvas file content with robust handling
   useEffect(() => {
-    if (!canvasPath || !store) return
+    if (!canvasPath || !store || !editor) return
     
     const loadCanvas = async () => {
       console.log('📂 Loading canvas from:', canvasPath)
       setIsLoading(true)
+      setSaveState('idle')
       
       try {
-        // Validate canvas path
-        if (!isValidFilePath(canvasPath)) {
-          throw new Error('Invalid canvas file path');
+        // Wait for any pending save operations to complete
+        while (saveQueueRef.current.isProcessing) {
+          console.log('⏳ Waiting for save queue to finish before loading...')
+          await new Promise(resolve => setTimeout(resolve, 100))
         }
         
-        console.log('📖 Reading file content...')
-        const content = await invoke('read_file_content', { path: canvasPath })
-        console.log('📄 File content length:', content.length)
+        // Use CanvasManager for consistent load operations
+        const canvasData = await canvasManager.loadCanvas(canvasPath)
         
-        const canvasData = JSON.parse(content)
-        console.log('🔍 Parsed canvas data:', {
+        console.log('🔍 Loaded canvas data:', {
           hasNodes: !!canvasData.nodes,
           nodeCount: canvasData.nodes?.length || 0,
           hasEdges: !!canvasData.edges,
@@ -66,31 +76,15 @@ export default function Canvas({
           hasMetadata: !!canvasData.metadata
         })
         
-        // Security validation for canvas data
-        if (!isValidCanvasData(canvasData)) {
-          console.warn('⚠️ Invalid canvas data detected, using empty canvas');
-          const emptyTldrawData = jsonCanvasToTldraw({ nodes: [], edges: [] })
-          loadSnapshot(store, emptyTldrawData)
-          setIsDirty(false)
-          return;
-        }
-        
-        console.log('✅ Canvas data validation passed')
-        
-        // Migrate and convert to tldraw format
-        console.log('🔄 Migrating canvas format...')
-        const migratedData = migrateCanvasFormat(canvasData)
-        console.log('🔄 Converting to tldraw format...')
-        const tldrawData = jsonCanvasToTldraw(migratedData)
+        // Convert to tldraw format
+        const tldrawData = jsonCanvasToTldraw(canvasData)
         
         console.log('📊 Tldraw data prepared:', {
           records: tldrawData.records?.length || 0,
-          shapes: tldrawData.records?.filter(r => r.typeName === 'shape').length || 0,
-          hasSchema: !!tldrawData.schema
+          shapes: tldrawData.records?.filter(r => r.typeName === 'shape').length || 0
         })
         
-        // Use new loadSnapshot API
-        console.log('💾 Loading snapshot into store...')
+        // Load into store
         loadSnapshot(store, tldrawData)
         
         // Mark as clean after loading
@@ -115,94 +109,178 @@ export default function Canvas({
     }
 
     loadCanvas()
-  }, [canvasPath, store])
+  }, [canvasPath, store, editor])
 
-  // Save canvas content
+  // Process save queue - ensures only one save operation at a time
+  const processSaveQueue = useCallback(async () => {
+    const queue = saveQueueRef.current
+    
+    if (queue.isProcessing || queue.queue.length === 0) {
+      return
+    }
+    
+    queue.isProcessing = true
+    
+    while (queue.queue.length > 0) {
+      const saveOperation = queue.queue.shift()
+      queue.currentOperation = saveOperation
+      
+      try {
+        await saveOperation.execute()
+        saveOperation.resolve()
+      } catch (error) {
+        saveOperation.reject(error)
+      }
+    }
+    
+    queue.isProcessing = false
+    queue.currentOperation = null
+  }, [])
+  
+  // Add save operation to queue
+  const queueSaveOperation = useCallback((operation) => {
+    return new Promise((resolve, reject) => {
+      saveQueueRef.current.queue.push({
+        execute: operation,
+        resolve,
+        reject,
+        timestamp: Date.now()
+      })
+      
+      // Process queue immediately
+      processSaveQueue()
+    })
+  }, [processSaveQueue])
+  
+  // Verify file content after save
+  const verifyFileSave = useCallback(async (canvasPath, expectedData, maxRetries = 3) => {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Wait a bit for filesystem flush
+        await new Promise(resolve => setTimeout(resolve, 50 * attempt))
+        
+        const content = await invoke('read_file_content', { path: canvasPath })
+        const savedData = JSON.parse(content)
+        
+        // Compare node and edge counts
+        const expectedNodes = expectedData.nodes?.length || 0
+        const expectedEdges = expectedData.edges?.length || 0
+        const savedNodes = savedData.nodes?.length || 0
+        const savedEdges = savedData.edges?.length || 0
+        
+        if (expectedNodes === savedNodes && expectedEdges === savedEdges) {
+          console.log(`✅ File verification successful on attempt ${attempt}`)
+          return true
+        } else {
+          console.warn(`⚠️ File verification failed on attempt ${attempt}:`, {
+            expected: { nodes: expectedNodes, edges: expectedEdges },
+            saved: { nodes: savedNodes, edges: savedEdges }
+          })
+        }
+      } catch (error) {
+        console.warn(`⚠️ File verification error on attempt ${attempt}:`, error)
+      }
+    }
+    
+    console.error('❌ File verification failed after all retries')
+    return false
+  }, [])
+  
+  // Save canvas content with robust error handling
   const handleSave = useCallback(async () => {
-    if (!canvasPath || !store) {
-      console.warn('💾 Save skipped: missing canvasPath or store')
+    if (!canvasPath || !editor) {
+      console.warn('💾 Save skipped: missing canvasPath or editor')
       return
     }
 
-    console.log('💾 Starting save operation for:', canvasPath)
-    setIsLoading(true)
-    
-    try {
-      // Validate canvas path
-      if (!isValidFilePath(canvasPath)) {
-        throw new Error('Invalid canvas file path');
+    return queueSaveOperation(async () => {
+      console.log('💾 Starting queued save operation for:', canvasPath)
+      setSaveState('saving')
+      setIsLoading(true)
+      
+      try {
+        // Validate canvas path
+        if (!isValidFilePath(canvasPath)) {
+          throw new Error('Invalid canvas file path')
+        }
+        
+        // Get current canvas data
+        const snapshot = getSnapshot(editor.store)
+        const allRecords = editor.store.allRecords()
+        const finalSnapshot = snapshot.records?.length > 0 ? snapshot : { records: allRecords }
+        
+        console.log('💾 Snapshot taken with records:', finalSnapshot.records?.length || 0)
+        
+        // Convert to JSON Canvas format
+        const canvasData = tldrawToJsonCanvas(finalSnapshot)
+        console.log('🔄 Converted to JSON Canvas:', {
+          nodes: canvasData.nodes?.length || 0,
+          edges: canvasData.edges?.length || 0
+        })
+        
+        // Security validation
+        if (!isValidCanvasData(canvasData)) {
+          throw new Error('Canvas data validation failed')
+        }
+        
+        // Use CanvasManager for consistent save operations
+        await canvasManager.saveCanvas(canvasPath, canvasData)
+        
+        // Verify the save was successful
+        const isVerified = await verifyFileSave(canvasPath, canvasData)
+        if (!isVerified) {
+          throw new Error('File verification failed - data may not have been saved correctly')
+        }
+        
+        // Call onSave callback
+        if (onSave) {
+          await onSave(canvasData)
+        }
+        
+        // Update state
+        setLastSaved(new Date())
+        setIsDirty(false)
+        setSaveState('saved')
+        
+        console.log('✅ Canvas saved and verified successfully')
+        
+        // Reset save state after a delay
+        setTimeout(() => setSaveState('idle'), 2000)
+        
+      } catch (error) {
+        console.error('❌ Save operation failed:', error)
+        setSaveState('error')
+        setIsDirty(true)
+        
+        // More specific error messages
+        let userMessage = 'Failed to save canvas'
+        if (error.message.includes('permission')) {
+          userMessage = 'Permission denied: Cannot write to this location'
+        } else if (error.message.includes('Invalid canvas path')) {
+          userMessage = 'Invalid file path for canvas'
+        } else if (error.message.includes('validation')) {
+          userMessage = 'Canvas data validation failed'
+        } else if (error.message.includes('verification')) {
+          userMessage = 'Save verification failed - please try again'
+        } else {
+          userMessage = `Save failed: ${error.message}`
+        }
+        
+        console.error('🚨 Error details:', userMessage)
+        
+        // Reset error state after delay
+        setTimeout(() => setSaveState('idle'), 3000)
+        
+        throw error // Re-throw for queue handling
+      } finally {
+        setIsLoading(false)
       }
-      
-      const snapshot = store.getSnapshot()
-      console.log('📊 Store snapshot taken:', {
-        records: snapshot.records?.length || 0,
-        shapes: snapshot.records?.filter(r => r.typeName === 'shape').length || 0
-      })
-      
-      // Convert tldraw format to JSON Canvas format
-      const canvasData = tldrawToJsonCanvas(snapshot)
-      console.log('🔄 Converted to JSON Canvas format:', {
-        nodes: canvasData.nodes?.length || 0,
-        edges: canvasData.edges?.length || 0
-      })
-      
-      // Security validation for canvas data before saving
-      if (!isValidCanvasData(canvasData)) {
-        throw new Error('Invalid canvas data - security validation failed');
-      }
-      
-      console.log('✅ Canvas data validated, writing to file...')
-
-      // Save directly to file first, then call callback
-      await invoke('write_file_content', {
-        path: canvasPath,
-        content: JSON.stringify(canvasData, null, 2)
-      })
-
-      console.log('📁 File written successfully')
-
-      // Call the onSave callback with canvas data
-      if (onSave) {
-        console.log('🔄 Calling onSave callback...')
-        await onSave(canvasData)
-      }
-      
-      setLastSaved(new Date())
-      setIsDirty(false)
-      console.log('✅ Canvas saved successfully to:', canvasPath)
-    } catch (error) {
-      console.error('❌ Failed to save canvas:', error)
-      
-      // More specific error messages for users
-      let userMessage = 'Failed to save canvas'
-      if (error.message.includes('permission')) {
-        userMessage = 'Permission denied: Cannot write to this location'
-      } else if (error.message.includes('Invalid canvas path')) {
-        userMessage = 'Invalid file path for canvas'
-      } else if (error.message.includes('security validation')) {
-        userMessage = 'Canvas data validation failed'
-      } else if (error.message.includes('network')) {
-        userMessage = 'Network error: Please check your connection'
-      } else {
-        userMessage = `Save failed: ${error.message}`
-      }
-      
-      // Show error to user with better UX than alert
-      console.error('🚨 Showing error to user:', userMessage)
-      
-      // TODO: Replace with proper notification system
-      alert(`❌ ${userMessage}`)
-      
-      // Keep dirty state so user can retry
-      setIsDirty(true)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [canvasPath, onSave, store])
+    })
+  }, [canvasPath, onSave, editor, queueSaveOperation, verifyFileSave])
 
   // Auto-save on changes (only real content changes)
   useEffect(() => {
-    if (!store) return
+    if (!editor) return
     
     let initialSnapshot = null
     let changeTimeout = null
@@ -219,42 +297,45 @@ export default function Canvas({
       
       // Reduced debounce for more responsive detection
       changeTimeout = setTimeout(() => {
-        const currentSnapshot = store.getSnapshot()
-        
         console.log('📝 Store changed, checking for real changes...')
         
+        // Use proper tldraw v3 API to get current state
+        const currentSnapshot = getSnapshot(editor.store)
+        const allRecords = editor.store.allRecords()
+        
+        // Use the method that gives us data
+        const finalCurrentSnapshot = currentSnapshot.records?.length > 0 ? currentSnapshot : { records: allRecords }
+        
         // Compare with initial snapshot to detect real changes
-        if (initialSnapshot && hasRealChanges(initialSnapshot, currentSnapshot)) {
+        if (initialSnapshot && hasRealChanges(initialSnapshot, finalCurrentSnapshot)) {
           console.log('💾 Real changes detected, marking as dirty')
           setIsDirty(true)
           
           // Call onContentChange if provided
           if (onContentChange) {
             try {
-              const canvasData = tldrawToJsonCanvas(currentSnapshot)
+              const canvasData = tldrawToJsonCanvas(finalCurrentSnapshot)
               onContentChange(canvasData)
             } catch (error) {
               console.error('❌ Failed to convert to JSON Canvas format:', error)
             }
           }
           
-          // Auto-save after shorter delay for better UX
-          saveTimeout = setTimeout(() => {
-            if (canvasPath && isDirty) {
-              console.log('🔄 Auto-saving canvas after change detection...')
-              handleSave()
-            }
-          }, 1500) // Reduced from 2000ms to 1500ms
-        } else {
-          console.log('👀 Store changed but no real changes detected')
+          // Auto-save immediately when real changes are detected
+          if (canvasPath) {
+            console.log('🔄 Auto-saving canvas...')
+            handleSave()
+          }
         }
       }, 300) // Reduced from 500ms to 300ms for faster response
     }
 
-    // Capture initial snapshot immediately after store is ready
+    // Capture initial snapshot immediately after editor is ready
     const captureInitialSnapshot = () => {
-      if (store) {
-        initialSnapshot = store.getSnapshot()
+      if (editor) {
+        const snapshot = getSnapshot(editor.store)
+        const allRecords = editor.store.allRecords()
+        initialSnapshot = snapshot.records?.length > 0 ? snapshot : { records: allRecords }
         console.log('📸 Initial snapshot captured:', {
           records: initialSnapshot.records?.length || 0,
           shapes: initialSnapshot.records?.filter(r => r.typeName === 'shape').length || 0
@@ -266,7 +347,7 @@ export default function Canvas({
     captureInitialSnapshot()
     setTimeout(captureInitialSnapshot, 100)
 
-    const unsubscribe = store.listen(handleStoreChange)
+    const unsubscribe = editor.store.listen(handleStoreChange)
     
     return () => {
       unsubscribe()
@@ -277,16 +358,13 @@ export default function Canvas({
         clearTimeout(saveTimeout)
       }
     }
-  }, [store, onContentChange, canvasPath, isDirty])
+  }, [editor, onContentChange, canvasPath, isDirty])
   
   // Helper to detect real content changes vs just mouse moves/viewport changes
   const hasRealChanges = (oldSnapshot, newSnapshot) => {
     if (!oldSnapshot || !newSnapshot) return false
     
-    console.log('🔍 Checking for real changes...', {
-      oldRecords: oldSnapshot.records?.length || 0,
-      newRecords: newSnapshot.records?.length || 0
-    })
+    
     
     const oldRecords = oldSnapshot.records || []
     const newRecords = newSnapshot.records || []
@@ -295,11 +373,9 @@ export default function Canvas({
     const oldShapes = oldRecords.filter(r => r.typeName === 'shape')
     const newShapes = newRecords.filter(r => r.typeName === 'shape')
     
-    console.log('📊 Shape counts:', { old: oldShapes.length, new: newShapes.length })
     
     // Check if number of shapes changed
     if (oldShapes.length !== newShapes.length) {
-      console.log('✅ Shape count changed - real change detected')
       return true
     }
     
@@ -308,13 +384,11 @@ export default function Canvas({
       const newShape = newShapes.find(s => s.id === oldShape.id)
       
       if (!newShape) {
-        console.log('✅ Shape removed - real change detected', oldShape.id)
         return true
       }
       
       // Compare type changes (shape converted to different type)
       if (oldShape.type !== newShape.type) {
-        console.log('✅ Shape type changed - real change detected', oldShape.id, oldShape.type, '->', newShape.type)
         return true
       }
       
@@ -329,7 +403,6 @@ export default function Canvas({
       // For geo shapes, text changes are meaningful
       if (oldShape.type === 'geo' || oldShape.type === 'text') {
         if (oldProps.text !== newProps.text) {
-          console.log('✅ Text content changed - real change detected', oldShape.id)
           return true
         }
       }
@@ -362,9 +435,6 @@ export default function Canvas({
       })
       
       if (meaningfulOldProps !== meaningfulNewProps) {
-        console.log('✅ Shape properties changed - real change detected', oldShape.id)
-        console.log('  Old props:', meaningfulOldProps)
-        console.log('  New props:', meaningfulNewProps)
         return true
       }
       
@@ -376,7 +446,6 @@ export default function Canvas({
       
       const positionDiff = Math.sqrt(Math.pow(newX - oldX, 2) + Math.pow(newY - oldY, 2))
       if (positionDiff > 10) { // More than 10px movement is a real change
-        console.log('✅ Significant position change - real change detected', oldShape.id, `moved ${positionDiff.toFixed(1)}px`)
         return true
       }
     }
@@ -384,12 +453,10 @@ export default function Canvas({
     // Check for new shapes
     for (const newShape of newShapes) {
       if (!oldShapes.find(s => s.id === newShape.id)) {
-        console.log('✅ New shape added - real change detected', newShape.id)
         return true
       }
     }
     
-    console.log('❌ No real changes detected')
     return false
   }
 
@@ -436,19 +503,36 @@ export default function Canvas({
               grid: true,
               size: 'small'
             }}
+            onMount={(editorInstance) => {
+              console.log('📝 Editor mounted:', !!editorInstance)
+              setEditor(editorInstance)
+            }}
           />
         )}
         
-        {/* Floating save indicator */}
-        {isDirty && (
-          <div className="absolute top-4 right-4 bg-app-panel border border-app-border rounded px-2 py-1 text-xs text-app-muted z-20">
-            Unsaved changes • Auto-saving...
+        {/* Enhanced save state indicator */}
+        {saveState === 'saving' && (
+          <div className="absolute top-4 right-4 bg-blue-100 dark:bg-blue-900 border border-blue-300 dark:border-blue-700 rounded px-2 py-1 text-xs text-blue-800 dark:text-blue-200 z-20 flex items-center gap-1">
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+            Saving...
           </div>
         )}
         
-        {lastSaved && !isDirty && (
+        {saveState === 'saved' && lastSaved && (
           <div className="absolute top-4 right-4 bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700 rounded px-2 py-1 text-xs text-green-800 dark:text-green-200 z-20">
-            Saved at {lastSaved.toLocaleTimeString()}
+            ✅ Saved at {lastSaved.toLocaleTimeString()}
+          </div>
+        )}
+        
+        {saveState === 'error' && (
+          <div className="absolute top-4 right-4 bg-red-100 dark:bg-red-900 border border-red-300 dark:border-red-700 rounded px-2 py-1 text-xs text-red-800 dark:text-red-200 z-20">
+            ❌ Save failed
+          </div>
+        )}
+        
+        {isDirty && saveState === 'idle' && (
+          <div className="absolute top-4 right-4 bg-yellow-100 dark:bg-yellow-900 border border-yellow-300 dark:border-yellow-700 rounded px-2 py-1 text-xs text-yellow-800 dark:text-yellow-200 z-20">
+            • Unsaved changes
           </div>
         )}
       </div>
