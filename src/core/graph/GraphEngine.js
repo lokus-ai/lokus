@@ -24,6 +24,20 @@ export class GraphEngine {
     this.performanceManager = null;
     this.webWorker = null;
     
+    // Physics-based interaction system
+    this.physics = {
+      isDragging: false,
+      draggedNode: null,
+      mousePosition: { x: 0, y: 0 },
+      nodeVelocities: new Map(),  // nodeId -> {vx, vy}
+      forces: new Map(),          // nodeId -> {fx, fy}
+      springConstant: 0.01,       // Attraction force strength
+      dampingFactor: 0.95,        // Velocity damping
+      repulsionForce: 1000,       // Node repulsion strength
+      maxForce: 50,               // Maximum force magnitude
+      animationId: null
+    };
+    
     // Aggressive caching system
     this.cache = {
       layouts: new Map(),         // Cached layout positions
@@ -60,9 +74,9 @@ export class GraphEngine {
         link: '#8b5cf6'
       },
       edgeColorScheme: {
-        default: '#d1d5db',
-        strong: '#6b7280',
-        weak: '#e5e7eb'
+        default: '#ffffff',  // White for maximum visibility
+        strong: '#f0f0f0',   // Light gray for strong connections
+        weak: '#d0d0d0'      // Lighter gray for weak connections
       },
       ...options
     };
@@ -107,14 +121,16 @@ export class GraphEngine {
         minNodeSize: 4,
         maxNodeSize: 20,
         
-        // Edge rendering settings
+        // Edge rendering settings - ensure edges are visible
         defaultEdgeColor: this.options.edgeColorScheme.default,
-        defaultEdgeSize: 1,
-        minEdgeSize: 0.5,
-        maxEdgeSize: 4,
+        defaultEdgeSize: 4,     // Increased to 4 for maximum visibility
+        minEdgeSize: 2,         // Increased to 2
+        maxEdgeSize: 8,         // Increased to 8
+        renderEdges: true,      // Explicitly enable edge rendering
+        edgesPowRatio: 0.5,     // Edge size power ratio for better scaling
         
-        // Performance settings
-        hideEdgesOnMove: true,
+        // Performance settings - disabled hiding for debugging
+        hideEdgesOnMove: false,  // Changed to false to ensure edges are always visible
         hideLabelsOnMove: true,
         enableHoverEffects: true,
         
@@ -137,7 +153,16 @@ export class GraphEngine {
       // Initialize web worker for background calculations
       this.initializeWebWorker();
       
-      console.log('GraphEngine initialized successfully');
+      // Debug: Log Sigma settings related to edges
+      console.log('🔧 GraphEngine initialized successfully');
+      console.log('🔍 Edge rendering settings:', {
+        defaultEdgeColor: this.sigma.getSetting('defaultEdgeColor'),
+        defaultEdgeSize: this.sigma.getSetting('defaultEdgeSize'),
+        renderEdges: this.sigma.getSetting('renderEdges'),
+        hideEdgesOnMove: this.sigma.getSetting('hideEdgesOnMove'),
+        enableEdgeHoverEvents: this.sigma.getSetting('enableEdgeHoverEvents')
+      });
+      
       return true;
       
     } catch (error) {
@@ -165,45 +190,65 @@ export class GraphEngine {
   setupEdgeRenderers() {
     if (!this.sigma) return;
 
-    this.sigma.setSetting('edgeRenderer', (context, data, settings) => {
-      const { source, target, size, color, type } = data;
-      const sourceData = this.graph.getNodeAttributes(source);
-      const targetData = this.graph.getNodeAttributes(target);
-      
-      context.strokeStyle = color || this.options.edgeColorScheme[type] || this.options.edgeColorScheme.default;
-      context.lineWidth = size || 1;
-      
-      // Dashed line for weak connections
-      if (type === 'weak') {
-        context.setLineDash([5, 5]);
-      } else {
-        context.setLineDash([]);
-      }
-      
-      context.beginPath();
-      context.moveTo(sourceData.x, sourceData.y);
-      context.lineTo(targetData.x, targetData.y);
-      context.stroke();
+    // Use the default Sigma.js edge renderer for better compatibility
+    // Custom edge renderer was causing issues with node position access
+    
+    // Configure edge display settings instead
+    this.sigma.setSetting('defaultEdgeType', 'line');
+    this.sigma.setSetting('enableEdgeHoverEvents', true);
+    
+    // Add edge hover effects if needed
+    this.sigma.on('enterEdge', (event) => {
+      // Highlight edge on hover
+      const edgeId = event.edge;
+      const edge = this.graph.getEdgeAttributes(edgeId);
+      this.graph.setEdgeAttribute(edgeId, 'size', (edge.size || 2) * 1.5);
+      this.sigma.refresh();
+    });
+    
+    this.sigma.on('leaveEdge', (event) => {
+      // Reset edge on leave hover
+      const edgeId = event.edge;
+      const edge = this.graph.getEdgeAttributes(edgeId);
+      this.graph.setEdgeAttribute(edgeId, 'size', edge.originalSize || edge.size || 2);
+      this.sigma.refresh();
     });
   }
 
   /**
-   * Setup event handlers for user interactions
+   * Setup event handlers for user interactions with physics-based dragging
    */
   setupEventHandlers() {
     if (!this.sigma) return;
 
-    // Node click events
-    this.sigma.on('clickNode', (event) => {
-      const nodeId = event.node;
-      const nodeData = this.graph.getNodeAttributes(nodeId);
-      this.emit('nodeClick', { nodeId, nodeData });
+    // Physics-based drag and drop
+    this.sigma.on('downNode', (event) => {
+      // Prevent camera panning during node drag
+      this.sigma.getCamera().disable();
+      this.startNodeDrag(event.node, event.event);
     });
 
-    // Node hover events
+    this.sigma.getMouseCaptor().on('mouseup', () => {
+      this.endNodeDrag();
+    });
+
+    this.sigma.getMouseCaptor().on('mousemove', (event) => {
+      this.updateNodeDrag(event);
+    });
+
+    // Node click events (only if not dragging)
+    this.sigma.on('clickNode', (event) => {
+      if (!this.physics.isDragging) {
+        const nodeId = event.node;
+        const nodeData = this.graph.getNodeAttributes(nodeId);
+        this.emit('nodeClick', { nodeId, nodeData });
+      }
+    });
+
+    // Node hover events with enhanced visual feedback
     this.sigma.on('enterNode', (event) => {
       const nodeId = event.node;
-      this.highlightNode(nodeId);
+      this.highlightNodeWithConnections(nodeId);
       this.emit('nodeHover', { nodeId, enter: true });
     });
 
@@ -253,20 +298,46 @@ export class GraphEngine {
   }
 
   /**
+   * Extract display name from full path or ID
+   */
+  getDisplayLabel(nodeId, label) {
+    const displayLabel = label || nodeId;
+    
+    // If it looks like a file path, extract just the filename
+    if (typeof displayLabel === 'string' && displayLabel.includes('/')) {
+      const parts = displayLabel.split('/');
+      return parts[parts.length - 1] || displayLabel;
+    }
+    
+    // If it looks like a Windows path, extract just the filename
+    if (typeof displayLabel === 'string' && displayLabel.includes('\\')) {
+      const parts = displayLabel.split('\\');
+      return parts[parts.length - 1] || displayLabel;
+    }
+    
+    return displayLabel;
+  }
+
+  /**
    * Add a node to the graph
    */
   addNode(nodeId, attributes = {}) {
+    console.log(`📍 Adding node: ${nodeId}`, attributes);
+    
+    const displayLabel = this.getDisplayLabel(nodeId, attributes.label);
+    
     const defaultAttributes = {
       x: Math.random() * 1000,
       y: Math.random() * 1000,
       size: 8,
       color: this.options.nodeColorScheme.default,
       type: 'circle', // Force all nodes to use circle type to avoid renderer issues
-      label: nodeId
+      label: displayLabel,
+      fullPath: attributes.label || nodeId // Store full path separately
     };
 
     // Override any incoming type with 'circle' to prevent renderer errors
-    const nodeAttributes = { ...defaultAttributes, ...attributes, type: 'circle' };
+    const nodeAttributes = { ...defaultAttributes, ...attributes, type: 'circle', label: displayLabel };
     
     if (!this.graph.hasNode(nodeId)) {
       this.graph.addNode(nodeId, nodeAttributes);
@@ -274,7 +345,12 @@ export class GraphEngine {
       this.emit('nodeAdded', { nodeId, attributes: nodeAttributes });
     } else {
       // Update existing node
-      this.graph.updateNodeAttributes(nodeId, (current) => ({ ...current, ...attributes }));
+      this.graph.updateNodeAttributes(nodeId, (current) => ({ 
+        ...current, 
+        ...attributes, 
+        label: displayLabel,
+        fullPath: attributes.label || current.fullPath || nodeId
+      }));
       this.emit('nodeUpdated', { nodeId, attributes });
     }
   }
@@ -283,18 +359,56 @@ export class GraphEngine {
    * Add an edge to the graph
    */
   addEdge(edgeId, source, target, attributes = {}) {
+    // Check if source and target nodes exist
+    console.log(`🔍 addEdge check: ${edgeId}`, {
+      sourceExists: this.graph.hasNode(source),
+      targetExists: this.graph.hasNode(target),
+      source,
+      target
+    });
+    
+    if (!this.graph.hasNode(source) || !this.graph.hasNode(target)) {
+      console.warn(`❌ Cannot add edge ${edgeId}: source ${source} or target ${target} node missing`);
+      console.warn(`Graph nodes:`, this.graph.nodes().slice(0, 5));
+      return;
+    }
+
     const defaultAttributes = {
-      size: 1,
-      color: this.options.edgeColorScheme.default,
-      type: 'default'
+      size: 4,  // Increased default size for better visibility
+      color: '#ffffff', // Force white color for all edges
+      type: 'line',  // Use standard line type for Sigma.js compatibility
+      originalSize: attributes.size || 4  // Store original size for hover effects
     };
 
-    const edgeAttributes = { ...defaultAttributes, ...attributes };
+    const edgeAttributes = { 
+      ...defaultAttributes, 
+      ...attributes,
+      color: '#ffffff', // Force white color for all edges
+      type: 'line'      // Force line type for Sigma.js compatibility
+    };
 
     if (!this.graph.hasEdge(edgeId)) {
-      this.graph.addEdge(edgeId, source, target, edgeAttributes);
-      this.stats.edgeCount++;
-      this.emit('edgeAdded', { edgeId, source, target, attributes: edgeAttributes });
+      try {
+        this.graph.addEdge(edgeId, source, target, edgeAttributes);
+        this.stats.edgeCount++;
+        console.log(`✅ Added edge: ${edgeId} (${source} -> ${target})`, edgeAttributes);
+        this.emit('edgeAdded', { edgeId, source, target, attributes: edgeAttributes });
+      } catch (error) {
+        console.error(`❌ Failed to add edge ${edgeId}:`, error);
+        console.error('Edge details:', { source, target, edgeAttributes });
+        
+        // Try adding without custom ID for undirected graphs
+        try {
+          const autoEdgeId = this.graph.addEdge(source, target, edgeAttributes);
+          this.stats.edgeCount++;
+          console.log(`✅ Added edge with auto ID: ${autoEdgeId} (${source} -> ${target})`, edgeAttributes);
+          this.emit('edgeAdded', { edgeId: autoEdgeId, source, target, attributes: edgeAttributes });
+        } catch (fallbackError) {
+          console.error(`❌ Fallback edge creation also failed:`, fallbackError);
+        }
+      }
+    } else {
+      console.log(`⚠️ Edge ${edgeId} already exists, skipping`);
     }
   }
 
@@ -396,15 +510,14 @@ export class GraphEngine {
         // Apply basic force simulation manually
         const nodes = this.graph.nodes();
         nodes.forEach(nodeId => {
-          const attr = this.graph.getNodeAttributes(nodeId);
           // Add small random movement to simulate layout
           const dx = (Math.random() - 0.5) * 2;
           const dy = (Math.random() - 0.5) * 2;
-          this.graph.updateNodeAttributes(nodeId, {
-            ...attr,
-            x: attr.x + dx,
-            y: attr.y + dy
-          });
+          this.graph.updateNodeAttributes(nodeId, (current) => ({
+            ...current,
+            x: current.x + dx,
+            y: current.y + dy
+          }));
         });
         iterations++;
         this.stats.layoutIterations = iterations;
@@ -505,6 +618,187 @@ export class GraphEngine {
   }
 
   /**
+   * Set zoom level
+   */
+  setZoom(ratio) {
+    if (this.sigma) {
+      this.sigma.getCamera().animatedZoom({ ratio, duration: 300 });
+    }
+  }
+
+  /**
+   * Pan camera to position
+   */
+  panTo(x, y) {
+    if (this.sigma) {
+      this.sigma.getCamera().animatedMoveTo({ x, y, duration: 300 });
+    }
+  }
+
+  /**
+   * Reset layout positions
+   */
+  resetLayout() {
+    this.stopLayout();
+    
+    // Reset all node positions to random
+    this.graph.forEachNode((nodeId) => {
+      this.graph.updateNodeAttributes(nodeId, (current) => ({
+        ...current,
+        x: Math.random() * 1000,
+        y: Math.random() * 1000
+      }));
+    });
+    
+    if (this.sigma) {
+      this.sigma.refresh();
+      this.fitToViewport();
+    }
+    
+    this.emit('layoutReset');
+  }
+
+  /**
+   * Export graph as PNG image
+   */
+  exportToPNG() {
+    if (!this.sigma) return;
+    
+    try {
+      // Get the canvas from sigma
+      const canvas = this.sigma.getCanvas();
+      if (!canvas) {
+        console.warn('No canvas available for export');
+        return;
+      }
+      
+      // Create download link
+      const link = document.createElement('a');
+      link.download = `graph-${new Date().toISOString().slice(0, 10)}.png`;
+      link.href = canvas.toDataURL('image/png');
+      
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      this.emit('graphExported', { format: 'png', filename: link.download });
+      
+    } catch (error) {
+      console.error('Failed to export graph:', error);
+      // Fallback: capture using html2canvas if available
+      this.exportFallback();
+    }
+  }
+
+  /**
+   * Fallback export method
+   */
+  exportFallback() {
+    try {
+      // Use native screen capture if available
+      if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+        console.log('Please use your browser\'s screenshot feature to capture the graph');
+      } else {
+        console.log('Export functionality requires a modern browser');
+      }
+    } catch (error) {
+      console.error('Export fallback failed:', error);
+    }
+  }
+
+  /**
+   * Set color scheme for the graph
+   */
+  setColorScheme(scheme) {
+    const schemes = {
+      default: {
+        node: '#6366f1',
+        edge: '#d1d5db',
+        background: 'transparent'
+      },
+      ocean: {
+        node: '#0ea5e9',
+        edge: '#bae6fd',
+        background: 'transparent'
+      },
+      forest: {
+        node: '#10b981',
+        edge: '#d1fae5',
+        background: 'transparent'
+      }
+    };
+    
+    const colors = schemes[scheme] || schemes.default;
+    
+    // Update default colors
+    this.options.nodeColorScheme.default = colors.node;
+    this.options.edgeColorScheme.default = colors.edge;
+    
+    // Apply to existing nodes and edges
+    this.graph.forEachNode((nodeId) => {
+      const currentColor = this.graph.getNodeAttribute(nodeId, 'color');
+      if (currentColor === this.options.nodeColorScheme.default) {
+        this.graph.setNodeAttribute(nodeId, 'color', colors.node);
+      }
+    });
+    
+    this.graph.forEachEdge((edgeId) => {
+      const currentColor = this.graph.getEdgeAttribute(edgeId, 'color');
+      if (currentColor === this.options.edgeColorScheme.default) {
+        this.graph.setEdgeAttribute(edgeId, 'color', colors.edge);
+      }
+    });
+    
+    if (this.sigma) {
+      this.sigma.refresh();
+    }
+    
+    this.emit('colorSchemeChanged', { scheme, colors });
+  }
+
+  /**
+   * Set performance mode
+   */
+  setPerformanceMode(enabled) {
+    if (!this.sigma) return;
+    
+    this.sigma.setSetting('hideEdgesOnMove', enabled);
+    this.sigma.setSetting('hideLabelsOnMove', enabled);
+    this.sigma.setSetting('enableHoverEffects', !enabled);
+    
+    // Adjust render quality based on performance mode
+    if (enabled) {
+      this.sigma.setSetting('minNodeSize', 2);
+      this.sigma.setSetting('maxNodeSize', 12);
+    } else {
+      this.sigma.setSetting('minNodeSize', 4);
+      this.sigma.setSetting('maxNodeSize', 20);
+    }
+    
+    this.emit('performanceModeChanged', { enabled });
+  }
+
+  /**
+   * Get viewport bounds for minimap
+   */
+  getViewportBounds() {
+    if (!this.sigma) return null;
+    
+    const camera = this.sigma.getCamera();
+    const state = camera.getState();
+    const { width, height } = this.sigma.getDimensions();
+    
+    return {
+      x: state.x,
+      y: state.y,
+      width: width / state.ratio,
+      height: height / state.ratio,
+      zoom: state.ratio
+    };
+  }
+
+  /**
    * Clear the entire graph
    */
   clear() {
@@ -530,6 +824,39 @@ export class GraphEngine {
   }
 
   /**
+   * Debug method to log all edges in the graph
+   */
+  debugEdges() {
+    console.log(`🔍 Graph Debug - Total edges: ${this.graph.size}`);
+    
+    if (this.graph.size === 0) {
+      console.log('⚠️ No edges found in graph');
+      return;
+    }
+
+    this.graph.forEachEdge((edgeId, edgeAttrs, source, target) => {
+      console.log(`📎 Edge ${edgeId}:`, {
+        source,
+        target,
+        color: edgeAttrs.color,
+        size: edgeAttrs.size,
+        type: edgeAttrs.type,
+        visible: edgeAttrs.hidden !== true
+      });
+    });
+
+    // Also log Sigma.js edge settings
+    if (this.sigma) {
+      console.log('🔧 Current Sigma edge settings:', {
+        defaultEdgeColor: this.sigma.getSetting('defaultEdgeColor'),
+        defaultEdgeSize: this.sigma.getSetting('defaultEdgeSize'),
+        hideEdgesOnMove: this.sigma.getSetting('hideEdgesOnMove'),
+        renderEdges: this.sigma.getSetting('renderEdges')
+      });
+    }
+  }
+
+  /**
    * Export graph data
    */
   exportData() {
@@ -544,6 +871,13 @@ export class GraphEngine {
    * Import graph data with stack overflow protection
    */
   importData(data, maxDepth = 1000) {
+    console.log('📊 Importing graph data:', {
+      nodes: data.nodes?.length || 0,
+      edges: data.edges?.length || 0,
+      sampleNodes: data.nodes?.slice(0, 2),
+      sampleEdges: data.edges?.slice(0, 2)
+    });
+    
     this.clear();
     
     if (data.nodes) {
@@ -568,11 +902,23 @@ export class GraphEngine {
       
       for (let i = 0; i < edges.length; i += batchSize) {
         const batch = edges.slice(i, i + batchSize);
-        batch.forEach(({ key, source, target, attributes }) => {
+        batch.forEach((edge) => {
           try {
-            this.addEdge(key, source, target, attributes);
+            // More robust edge handling with logging
+            console.log('🔍 Processing edge:', edge);
+            const { key, source, target, attributes } = edge;
+            
+            if (!key || !source || !target) {
+              console.warn(`Invalid edge structure:`, edge);
+              return;
+            }
+            
+            // Ensure attributes is an object
+            const edgeAttributes = attributes || {};
+            
+            this.addEdge(key, source, target, edgeAttributes);
           } catch (error) {
-            console.warn(`Failed to add edge ${key}:`, error);
+            console.warn(`Failed to add edge:`, edge, error);
           }
         });
       }
@@ -1031,6 +1377,318 @@ export class GraphEngine {
   startMainThreadLayout(config) {
     // Use the existing layout implementation
     this.startLayout();
+  }
+
+  /**
+   * Start dragging a node with physics simulation
+   */
+  startNodeDrag(nodeId, mouseEvent) {
+    console.log('🎯 Starting node drag:', nodeId);
+    
+    this.physics.isDragging = true;
+    this.physics.draggedNode = nodeId;
+    
+    // Convert screen coordinates to graph coordinates
+    const graphPoint = this.sigma.viewportToGraph(mouseEvent);
+    this.physics.mousePosition = { x: graphPoint.x, y: graphPoint.y };
+    
+    // Initialize velocities for all nodes if not exist
+    this.graph.forEachNode((node) => {
+      if (!this.physics.nodeVelocities.has(node)) {
+        this.physics.nodeVelocities.set(node, { vx: 0, vy: 0 });
+      }
+    });
+    
+    // Stop layout algorithm during drag
+    this.stopLayout();
+    
+    // Start physics animation
+    this.startPhysicsAnimation();
+    
+    this.emit('dragStart', { nodeId, position: this.physics.mousePosition });
+  }
+
+  /**
+   * Update node drag position and apply physics
+   */
+  updateNodeDrag(mouseEvent) {
+    if (!this.physics.isDragging || !this.physics.draggedNode) return;
+    
+    // Convert screen coordinates to graph coordinates
+    const graphPoint = this.sigma.viewportToGraph(mouseEvent);
+    this.physics.mousePosition = { x: graphPoint.x, y: graphPoint.y };
+    
+    // Update dragged node position immediately
+    this.graph.updateNodeAttributes(this.physics.draggedNode, (current) => ({
+      ...current,
+      x: graphPoint.x,
+      y: graphPoint.y
+    }));
+    
+    this.emit('dragMove', { 
+      nodeId: this.physics.draggedNode, 
+      position: this.physics.mousePosition 
+    });
+  }
+
+  /**
+   * End node drag and gradually stop physics
+   */
+  endNodeDrag() {
+    if (!this.physics.isDragging) return;
+    
+    console.log('🎯 Ending node drag:', this.physics.draggedNode);
+    
+    const draggedNode = this.physics.draggedNode;
+    this.physics.isDragging = false;
+    this.physics.draggedNode = null;
+    
+    // Re-enable camera panning
+    this.sigma.getCamera().enable();
+    
+    // Let physics continue for a moment to settle
+    setTimeout(() => {
+      this.stopPhysicsAnimation();
+      // Restart layout if it was running before
+      if (this.isLayoutRunning) {
+        this.startLayout();
+      }
+    }, 2000); // 2 seconds of settling time
+    
+    this.emit('dragEnd', { nodeId: draggedNode });
+  }
+
+  /**
+   * Start physics animation loop
+   */
+  startPhysicsAnimation() {
+    if (this.physics.animationId) return; // Already running
+    
+    const animate = () => {
+      this.applyPhysicsForces();
+      this.sigma.refresh();
+      
+      if (this.physics.isDragging || this.hasSignificantMovement()) {
+        this.physics.animationId = requestAnimationFrame(animate);
+      } else {
+        this.physics.animationId = null;
+      }
+    };
+    
+    this.physics.animationId = requestAnimationFrame(animate);
+  }
+
+  /**
+   * Stop physics animation
+   */
+  stopPhysicsAnimation() {
+    if (this.physics.animationId) {
+      cancelAnimationFrame(this.physics.animationId);
+      this.physics.animationId = null;
+    }
+  }
+
+  /**
+   * Apply physics forces only to connected nodes (Obsidian-style)
+   */
+  applyPhysicsForces() {
+    if (!this.physics.draggedNode) return;
+    
+    // Get nodes connected to the dragged node (within 2 degrees of separation)
+    const affectedNodes = this.getConnectedNodes(this.physics.draggedNode, 2);
+    
+    // Clear forces for affected nodes only
+    affectedNodes.forEach(nodeId => {
+      this.physics.forces.set(nodeId, { fx: 0, fy: 0 });
+    });
+    
+    // Apply spring forces only between connected nodes
+    this.graph.forEachEdge((edgeId, attributes, source, target) => {
+      // Only apply forces if at least one node is in the affected set
+      if (affectedNodes.has(source) || affectedNodes.has(target)) {
+        this.applySpringForce(source, target);
+      }
+    });
+    
+    // Apply repulsion forces only among affected nodes
+    const affectedArray = Array.from(affectedNodes);
+    for (let i = 0; i < affectedArray.length; i++) {
+      for (let j = i + 1; j < affectedArray.length; j++) {
+        this.applyRepulsionForce(affectedArray[i], affectedArray[j]);
+      }
+    }
+    
+    // Update positions based on forces (only for affected nodes)
+    affectedNodes.forEach(nodeId => {
+      if (nodeId === this.physics.draggedNode) return; // Skip dragged node
+      
+      const force = this.physics.forces.get(nodeId);
+      const velocity = this.physics.nodeVelocities.get(nodeId);
+      
+      if (!force || !velocity) return;
+      
+      // Apply force to velocity
+      velocity.vx += force.fx;
+      velocity.vy += force.fy;
+      
+      // Apply damping
+      velocity.vx *= this.physics.dampingFactor;
+      velocity.vy *= this.physics.dampingFactor;
+      
+      // Limit maximum velocity
+      const maxVel = 10;
+      velocity.vx = Math.max(-maxVel, Math.min(maxVel, velocity.vx));
+      velocity.vy = Math.max(-maxVel, Math.min(maxVel, velocity.vy));
+      
+      // Update position
+      this.graph.updateNodeAttributes(nodeId, (current) => ({
+        ...current,
+        x: current.x + velocity.vx,
+        y: current.y + velocity.vy
+      }));
+    });
+  }
+
+  /**
+   * Apply spring force between connected nodes
+   */
+  applySpringForce(nodeA, nodeB) {
+    const posA = this.graph.getNodeAttributes(nodeA);
+    const posB = this.graph.getNodeAttributes(nodeB);
+    
+    const dx = posB.x - posA.x;
+    const dy = posB.y - posA.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance === 0) return;
+    
+    // Desired spring length
+    const springLength = 100;
+    const force = this.physics.springConstant * (distance - springLength);
+    
+    const fx = (dx / distance) * force;
+    const fy = (dy / distance) * force;
+    
+    // Apply force to both nodes
+    const forceA = this.physics.forces.get(nodeA);
+    const forceB = this.physics.forces.get(nodeB);
+    
+    forceA.fx += fx;
+    forceA.fy += fy;
+    forceB.fx -= fx;
+    forceB.fy -= fy;
+  }
+
+  /**
+   * Apply repulsion force between nodes
+   */
+  applyRepulsionForce(nodeA, nodeB) {
+    const posA = this.graph.getNodeAttributes(nodeA);
+    const posB = this.graph.getNodeAttributes(nodeB);
+    
+    const dx = posB.x - posA.x;
+    const dy = posB.y - posA.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance === 0 || distance > 200) return; // Only repel close nodes
+    
+    const force = this.physics.repulsionForce / (distance * distance);
+    
+    const fx = (dx / distance) * force;
+    const fy = (dy / distance) * force;
+    
+    // Apply repulsion force
+    const forceA = this.physics.forces.get(nodeA);
+    const forceB = this.physics.forces.get(nodeB);
+    
+    forceA.fx -= fx;
+    forceA.fy -= fy;
+    forceB.fx += fx;
+    forceB.fy += fy;
+  }
+
+  /**
+   * Get nodes connected to a given node within N degrees of separation
+   */
+  getConnectedNodes(startNode, maxDegrees = 1) {
+    const connected = new Set();
+    const toProcess = [{ node: startNode, degree: 0 }];
+    const processed = new Set();
+    
+    while (toProcess.length > 0) {
+      const { node, degree } = toProcess.shift();
+      
+      if (processed.has(node) || degree > maxDegrees) continue;
+      
+      connected.add(node);
+      processed.add(node);
+      
+      // Add neighbors for next degree
+      if (degree < maxDegrees) {
+        this.graph.forEachNeighbor(node, (neighbor) => {
+          if (!processed.has(neighbor)) {
+            toProcess.push({ node: neighbor, degree: degree + 1 });
+          }
+        });
+      }
+    }
+    
+    return connected;
+  }
+
+  /**
+   * Check if there's significant node movement
+   */
+  hasSignificantMovement() {
+    if (!this.physics.draggedNode) return false;
+    
+    // Only check movement among connected nodes
+    const affectedNodes = this.getConnectedNodes(this.physics.draggedNode, 2);
+    let maxVelocity = 0;
+    
+    affectedNodes.forEach(nodeId => {
+      const velocity = this.physics.nodeVelocities.get(nodeId);
+      if (velocity) {
+        const vel = Math.sqrt(velocity.vx * velocity.vx + velocity.vy * velocity.vy);
+        maxVelocity = Math.max(maxVelocity, vel);
+      }
+    });
+    
+    return maxVelocity > 0.1; // Threshold for significant movement
+  }
+
+  /**
+   * Enhanced node highlighting that also highlights connections
+   */
+  highlightNodeWithConnections(nodeId) {
+    // Get connected nodes
+    const connectedNodes = new Set();
+    const connectedEdges = new Set();
+    
+    this.graph.forEachEdge(nodeId, (edgeId, source, target) => {
+      connectedEdges.add(edgeId);
+      connectedNodes.add(source === nodeId ? target : source);
+    });
+    
+    // Update node visual states
+    this.graph.forEachNode((node) => {
+      this.graph.updateNodeAttributes(node, (current) => ({
+        ...current,
+        highlighted: node === nodeId,
+        dimmed: !connectedNodes.has(node) && node !== nodeId
+      }));
+    });
+    
+    // Update edge visual states
+    this.graph.forEachEdge((edgeId) => {
+      this.graph.updateEdgeAttributes(edgeId, (current) => ({
+        ...current,
+        highlighted: connectedEdges.has(edgeId),
+        dimmed: !connectedEdges.has(edgeId)
+      }));
+    });
+    
+    this.sigma.refresh();
   }
 
   /**
