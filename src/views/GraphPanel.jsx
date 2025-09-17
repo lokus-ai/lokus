@@ -1,4 +1,17 @@
 import React, { useState } from 'react';
+import {
+  PlayIcon,
+  StopIcon,
+  RefreshIcon,
+  CenterIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
+  DownloadIcon,
+  SearchIcon,
+  ChartIcon,
+  MapIcon,
+  LayersIcon
+} from '../components/icons/GraphIcons.jsx';
 
 /**
  * Unified Graph Panel - Combines controls, stats, and minimap
@@ -84,14 +97,17 @@ const GraphPanel = ({
         <div className="space-y-4">
           {/* Search Section */}
           <div className="control-section">
-            <h4>Search & Filter</h4>
-            <input
-              type="text"
-              placeholder="Search nodes..."
-              value={searchQuery}
-              onChange={handleSearchChange}
-              className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent focus:border-transparent"
-            />
+            <h4><SearchIcon size={14} className="inline mr-2" />Search & Filter</h4>
+            <div className="search-container">
+              <SearchIcon size={16} className="search-icon" />
+              <input
+                type="text"
+                placeholder="Search nodes..."
+                value={searchQuery}
+                onChange={handleSearchChange}
+                className="search-input"
+              />
+            </div>
             {searchResults.length > 0 && (
               <div className="mt-2 max-h-32 overflow-y-auto bg-app-panel border border-app-border rounded-md">
                 {searchResults.map((result, index) => (
@@ -109,55 +125,78 @@ const GraphPanel = ({
 
           {/* Layout Controls */}
           <div className="control-section">
-            <h4>Layout Controls</h4>
+            <h4><LayersIcon size={14} className="inline mr-2" />Layout Controls</h4>
             <div className="button-group">
               <button
                 onClick={isLayoutRunning ? onLayoutStop : onLayoutStart}
-                className={`btn-${isLayoutRunning ? 'danger' : 'primary'}`}
+                className={`btn-icon ${isLayoutRunning ? 'btn-danger' : 'btn-primary'}`}
                 disabled={nodeCount === 0}
+                title={isLayoutRunning ? 'Stop Layout' : 'Start Layout'}
               >
-                {isLayoutRunning ? '⏹ Stop Layout' : '▶ Play Layout'}
+                {isLayoutRunning ? (
+                  <>
+                    <StopIcon size={16} />
+                    <span>Stop Layout</span>
+                  </>
+                ) : (
+                  <>
+                    <PlayIcon size={16} />
+                    <span>Start Layout</span>
+                  </>
+                )}
               </button>
-              <button onClick={onReset} className="btn-secondary">
-                🔄 Reset
+              <button onClick={onReset} className="btn-icon btn-secondary" title="Reset Layout">
+                <RefreshIcon size={16} />
+                <span>Reset</span>
               </button>
-              <button onClick={onCenter} className="btn-secondary">
-                🎯 Center
+              <button onClick={onCenter} className="btn-icon btn-secondary" title="Center View">
+                <CenterIcon size={16} />
+                <span>Center</span>
               </button>
             </div>
           </div>
 
           {/* View Controls */}
           <div className="control-section">
-            <h4>View Controls</h4>
-            <div className="flex gap-2 mb-3">
-              <button onClick={onZoomIn} className="btn-secondary flex-1">
-                🔍+ Zoom In
+            <h4><MapIcon size={14} className="inline mr-2" />View Controls</h4>
+            <div className="button-row">
+              <button onClick={onZoomIn} className="btn-icon btn-secondary" title="Zoom In">
+                <ZoomInIcon size={16} />
+                <span>Zoom In</span>
               </button>
-              <button onClick={onZoomOut} className="btn-secondary flex-1">
-                🔍- Zoom Out
+              <button onClick={onZoomOut} className="btn-icon btn-secondary" title="Zoom Out">
+                <ZoomOutIcon size={16} />
+                <span>Zoom Out</span>
               </button>
             </div>
-            <button onClick={onExport} className="btn-tertiary w-full">
-              📸 Export PNG
+            <button onClick={onExport} className="btn-icon btn-tertiary" title="Export as PNG">
+              <DownloadIcon size={16} />
+              <span>Export PNG</span>
             </button>
           </div>
 
           {/* Color Scheme */}
           <div className="control-section">
             <h4>Color Scheme</h4>
-            <div className="space-y-2">
-              {['default', 'ocean', 'forest'].map(scheme => (
+            <div className="color-scheme-grid">
+              {[
+                { name: 'default', color: '#6366f1', label: 'Default' },
+                { name: 'ocean', color: '#0ea5e9', label: 'Ocean' },
+                { name: 'forest', color: '#10b981', label: 'Forest' }
+              ].map(scheme => (
                 <button
-                  key={scheme}
-                  onClick={() => onColorSchemeChange?.(scheme)}
-                  className={`w-full p-2 rounded text-left capitalize ${
-                    scheme === 'default' 
-                      ? 'bg-app-accent text-app-accent-fg' 
-                      : 'bg-app-panel hover:bg-app-bg text-app-text'
+                  key={scheme.name}
+                  onClick={() => onColorSchemeChange?.(scheme.name)}
+                  className={`color-scheme-option ${
+                    scheme.name === 'default' ? 'active' : ''
                   }`}
+                  title={scheme.label}
                 >
-                  {scheme}
+                  <div 
+                    className="color-preview" 
+                    style={{ backgroundColor: scheme.color }}
+                  ></div>
+                  <span>{scheme.label}</span>
                 </button>
               ))}
             </div>
@@ -169,7 +208,7 @@ const GraphPanel = ({
       {activeTab === 'stats' && (
         <div className="space-y-4">
           <div className="control-section">
-            <h4>Graph Statistics</h4>
+            <h4><ChartIcon size={14} className="inline mr-2" />Graph Statistics</h4>
             <div className="stats-grid">
               <div className="stat-item">
                 <span className="stat-label">Nodes</span>
@@ -214,7 +253,7 @@ const GraphPanel = ({
       {activeTab === 'minimap' && (
         <div className="space-y-4">
           <div className="control-section">
-            <h4>Graph Overview</h4>
+            <h4><MapIcon size={14} className="inline mr-2" />Graph Overview</h4>
             <div className="bg-app-panel border border-app-border rounded-lg p-4 h-48 flex items-center justify-center">
               {nodeCount > 0 ? (
                 <div className="text-center text-app-muted">

@@ -587,6 +587,49 @@ export default function Workspace({ initialPath = "" }) {
     }
   }, []);
 
+  // Listen for immediate wiki link creation events from WikiLinkSuggest
+  useEffect(() => {
+    const handleWikiLinkCreated = async (event) => {
+      const { sourceFile, targetFile, linkText, timestamp } = event.detail;
+      console.log('[Workspace] Wiki link created immediately:', { sourceFile, targetFile, linkText, timestamp });
+      
+      if (graphProcessorRef.current) {
+        try {
+          // Get current editor content for real-time update
+          const currentContent = editorRef.current ? 
+            (editorRef.current.getText() || stateRef.current.editorContent) : 
+            stateRef.current.editorContent;
+          
+          if (currentContent && sourceFile === stateRef.current.activeFile) {
+            console.log('[Workspace] Performing immediate graph update for new wiki link');
+            
+            // Use the real-time update method
+            const updateResult = await graphProcessorRef.current.updateFileContent(sourceFile, currentContent);
+            console.log('[Workspace] Immediate graph update result:', updateResult);
+            
+            // Update graph data if there were changes and graph is visible
+            if ((updateResult.added > 0 || updateResult.removed > 0) && activeFile === '__graph__') {
+              const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
+              setGraphData(updatedGraphData);
+              console.log('[Workspace] Graph view updated immediately after wiki link creation');
+            }
+          }
+        } catch (error) {
+          console.error('[Workspace] Failed to update graph immediately after wiki link creation:', error);
+        }
+      }
+    };
+
+    // Listen for wiki link creation events
+    window.addEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
+    document.addEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
+    
+    return () => {
+      window.removeEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
+      document.removeEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
+    };
+  }, [activeFile]);
+
   // Tab navigation shortcuts (Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W)
   useEffect(() => {
     const handleNextTab = () => {
@@ -809,6 +852,48 @@ export default function Workspace({ initialPath = "" }) {
         setOpenTabs(tabs => tabs.map(t => t.path === activeFile ? { path: path_to_save, name: newName } : t));
         setActiveFile(path_to_save);
         handleRefreshFiles();
+      } else {
+        // File content changed but not renamed - use real-time link tracking
+        if (graphProcessorRef.current) {
+          console.log('[Workspace] File saved, performing real-time graph update for:', path_to_save);
+          try {
+            // Use the new real-time update method for file content
+            const updateResult = await graphProcessorRef.current.updateFileContent(path_to_save, editorContent);
+            console.log('[Workspace] Real-time graph update result:', updateResult);
+            
+            // Only rebuild graph structure if there were actual changes
+            if (updateResult.added > 0 || updateResult.removed > 0) {
+              const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
+              setGraphData(updatedGraphData);
+              console.log('[Workspace] Graph data updated after real-time link tracking:', {
+                nodes: updatedGraphData.nodes.length,
+                edges: updatedGraphData.edges.length,
+                linksAdded: updateResult.added,
+                linksRemoved: updateResult.removed
+              });
+            } else {
+              console.log('[Workspace] No link changes detected, graph data unchanged');
+            }
+          } catch (error) {
+            console.error('[Workspace] Failed to perform real-time graph update:', error);
+            // Fallback to full selective update
+            try {
+              const updatedGraphData = await graphProcessorRef.current.updateChangedFiles([path_to_save]);
+              if (updatedGraphData) {
+                setGraphData(updatedGraphData);
+                console.log('[Workspace] Fallback graph update completed');
+              }
+            } catch (fallbackError) {
+              console.error('[Workspace] Fallback update also failed:', fallbackError);
+              // Final fallback to full refresh
+              handleRefreshFiles();
+            }
+          }
+        } else {
+          // Graph processor not initialized yet, but if graph view becomes active,
+          // it will build the graph data including this file's changes
+          console.log('[Workspace] Graph processor not initialized, changes will be included when graph is built');
+        }
       }
     } catch (error) {
       console.error("Failed to save file:", error);
@@ -892,7 +977,44 @@ export default function Workspace({ initialPath = "" }) {
     
     graphProcessorRef.current = new GraphDataProcessor(path);
     console.log('[Workspace] Graph processor initialized for:', path);
-  }, [path]);
+    
+    // Set up event listeners for real-time graph updates
+    const graphDatabase = graphProcessorRef.current.getGraphDatabase();
+    
+    // Listen for file link updates and rebuild graph if active
+    const handleFileLinksUpdated = (event) => {
+      console.log('[Workspace] File links updated event:', event);
+      if (activeFile === '__graph__' && graphData) {
+        // Rebuild graph structure if graph view is active
+        const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
+        setGraphData(updatedGraphData);
+        console.log('[Workspace] Graph data refreshed after link update');
+      }
+    };
+    
+    // Listen for connection changes
+    const handleConnectionChanged = (event) => {
+      console.log('[Workspace] Graph connection changed:', event);
+      if (activeFile === '__graph__' && graphData) {
+        // Rebuild graph structure if graph view is active
+        const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
+        setGraphData(updatedGraphData);
+        console.log('[Workspace] Graph data refreshed after connection change');
+      }
+    };
+    
+    graphDatabase.on('fileLinksUpdated', handleFileLinksUpdated);
+    graphDatabase.on('connectionAdded', handleConnectionChanged);
+    graphDatabase.on('connectionRemoved', handleConnectionChanged);
+    
+    // Store cleanup function
+    graphProcessorRef.current._cleanup = () => {
+      graphDatabase.off('fileLinksUpdated', handleFileLinksUpdated);
+      graphDatabase.off('connectionAdded', handleConnectionChanged);
+      graphDatabase.off('connectionRemoved', handleConnectionChanged);
+    };
+    
+  }, [path, activeFile, graphData]);
 
   const buildGraphData = useCallback(async () => {
     if (!graphProcessorRef.current || isLoadingGraph) return;
@@ -977,13 +1099,24 @@ export default function Workspace({ initialPath = "" }) {
     }
   }, [activeFile, graphData, isLoadingGraph, buildGraphData]);
 
-  // Cleanup persistent GraphEngine when workspace unmounts
+  // Cleanup persistent GraphEngine and GraphDatabase when workspace unmounts
   useEffect(() => {
     return () => {
       if (persistentGraphEngineRef.current) {
         console.log('🗑️ Destroying persistent GraphEngine on workspace unmount');
         persistentGraphEngineRef.current.destroy();
         persistentGraphEngineRef.current = null;
+      }
+      
+      if (graphProcessorRef.current) {
+        console.log('🗑️ Cleaning up GraphProcessor and GraphDatabase on workspace unmount');
+        // Call cleanup function for event listeners
+        if (graphProcessorRef.current._cleanup) {
+          graphProcessorRef.current._cleanup();
+        }
+        // Destroy the GraphDatabase
+        graphProcessorRef.current.destroy();
+        graphProcessorRef.current = null;
       }
     };
   }, []);

@@ -73,6 +73,35 @@ vi.mock('./GraphView.jsx', () => ({
   )
 }));
 
+// Mock GraphEngine to avoid WebGL dependencies
+vi.mock('../core/graph/GraphEngine.js', () => ({
+  GraphEngine: vi.fn().mockImplementation(() => ({
+    initialize: vi.fn(),
+    destroy: vi.fn(),
+    on: vi.fn(),
+    importData: vi.fn(),
+    getStats: vi.fn(() => ({
+      nodeCount: 5,
+      edgeCount: 3,
+      layoutIterations: 0,
+      renderTime: 16
+    })),
+    startLayout: vi.fn(),
+    stopLayout: vi.fn(),
+    fitToViewport: vi.fn(),
+    clear: vi.fn(),
+    addNode: vi.fn(),
+    addEdge: vi.fn(),
+    setColorScheme: vi.fn(),
+    setZoom: vi.fn(),
+    resetLayout: vi.fn(),
+    exportToPNG: vi.fn(),
+    panTo: vi.fn(),
+    setPerformanceMode: vi.fn(),
+    getViewportBounds: vi.fn(() => ({ x: 0, y: 0, width: 100, height: 100 }))
+  }))
+}));
+
 vi.mock('../core/graph/GraphDataProcessor.js', () => ({
   GraphDataProcessor: vi.fn().mockImplementation(() => ({
     buildGraphFromWorkspace: vi.fn(() => Promise.resolve({
@@ -84,7 +113,33 @@ vi.mock('../core/graph/GraphDataProcessor.js', () => ({
         { key: 'edge1', source: 'file1', target: 'file2' }
       ],
       stats: { nodeCount: 2, edgeCount: 1 }
-    }))
+    })),
+    updateChangedFiles: vi.fn((changedFiles) => Promise.resolve({
+      nodes: [
+        { key: 'file1', attributes: { label: 'Test.md', path: '/test/file.md' } },
+        { key: 'file2', attributes: { label: 'Notes.md', path: '/test/notes.md' } },
+        { key: 'file3', attributes: { label: 'NewFile.md', path: '/test/newfile.md' } }
+      ],
+      edges: [
+        { key: 'edge1', source: 'file1', target: 'file2' },
+        { key: 'edge2', source: 'file1', target: 'file3' }
+      ],
+      stats: { nodeCount: 3, edgeCount: 2 }
+    })),
+    extractWikiLinks: vi.fn((content) => {
+      const links = [];
+      const wikiLinkRegex = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+      let match;
+      while ((match = wikiLinkRegex.exec(content)) !== null) {
+        links.push({
+          target: match[1].trim(),
+          alias: match[2] ? match[2].trim() : null,
+          type: 'wiki',
+          position: match.index
+        });
+      }
+      return links;
+    })
   }))
 }));
 
@@ -305,5 +360,77 @@ describe('Workspace Graph Integration', () => {
     // Explorer should be active again
     expect(explorerButton).toHaveClass('primary');
     expect(graphButton).not.toHaveClass('primary');
+  });
+
+  it('should update graph when wiki links are added to files', async () => {
+    const { invoke } = require('@tauri-apps/api/core');
+    const { GraphDataProcessor } = require('../core/graph/GraphDataProcessor.js');
+    
+    // Setup mock for file reading
+    invoke.mockImplementation((command, args) => {
+      if (command === 'read_workspace_files') {
+        return Promise.resolve([
+          { name: 'test.md', path: '/test/test.md', is_directory: false }
+        ]);
+      }
+      if (command === 'read_file_content') {
+        return Promise.resolve('# Test\n\nThis is a test file with [[notes]] link.');
+      }
+      if (command === 'write_file_content') {
+        return Promise.resolve();
+      }
+      return Promise.resolve();
+    });
+
+    render(<Workspace initialPath="/test/workspace" />);
+    
+    // Wait for initial load
+    await waitFor(() => {
+      expect(screen.getByTestId('editor')).toBeInTheDocument();
+    });
+    
+    // Open graph view and build initial graph
+    const graphButton = screen.getByTitle('Graph View');
+    fireEvent.click(graphButton);
+    
+    const openButton = screen.getByText('Open Graph View');
+    fireEvent.click(openButton);
+    
+    const buildButton = screen.getByText('Build Graph');
+    fireEvent.click(buildButton);
+    
+    await waitFor(() => {
+      expect(screen.getByTestId('graph-data')).toBeInTheDocument();
+      expect(screen.getByText('Nodes: 2, Edges: 1')).toBeInTheDocument();
+    });
+    
+    // Go back to editor
+    const explorerButton = screen.getByTitle('Explorer');
+    fireEvent.click(explorerButton);
+    
+    // Simulate adding a wiki link to the editor
+    const editorTextarea = screen.getByTestId('editor-textarea');
+    fireEvent.change(editorTextarea, { 
+      target: { value: '# Test\n\nThis is a test file with [[notes]] and [[newfile]] links.' } 
+    });
+    
+    // Trigger save (simulate Ctrl+S)
+    const saveEvent = new KeyboardEvent('keydown', { key: 's', ctrlKey: true });
+    document.dispatchEvent(saveEvent);
+    
+    // Check that updateChangedFiles was called
+    await waitFor(() => {
+      const processor = GraphDataProcessor.mock.results[0].value;
+      expect(processor.updateChangedFiles).toHaveBeenCalledWith(['/test/test.md']);
+    });
+    
+    // Go back to graph view and verify updated data
+    fireEvent.click(graphButton);
+    fireEvent.click(openButton);
+    
+    await waitFor(() => {
+      // Should show updated graph with new connection
+      expect(screen.getByText('Nodes: 3, Edges: 2')).toBeInTheDocument();
+    });
   });
 });
