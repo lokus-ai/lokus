@@ -53,25 +53,9 @@ const WikiLinkSuggest = Extension.create({
         char: '[',
         allowSpaces: true,
         startOfLine: false,
-        // Only allow after double bracket [[ and not in any kind of list context
-        allow: ({ state, range }) => {
-          const textBefore = state.doc.textBetween(Math.max(0, range.from - 3), range.from)
-          const isAfterDoubleBracket = textBefore.endsWith('[')
-          
-          // Check broader context to detect lists and task items
-          const lineContext = state.doc.textBetween(Math.max(0, range.from - 50), range.from)
-          
-          // Match various list patterns
-          const isInList = (
-            /[-*+]\s*\[/.test(lineContext) ||  // Task list pattern
-            /^\s*[-*+]\s/.test(lineContext) ||  // Bullet list start
-            /^\s*\d+\.\s/.test(lineContext) ||  // Numbered list start  
-            /\n\s*[-*+]\s*[^\n]*\[/.test(lineContext) // Bullet with bracket anywhere on line
-          )
-          
-          const shouldAllow = isAfterDoubleBracket && !isInList
-          dbg('allow check', { textBefore, lineContext, isAfterDoubleBracket, isInList, shouldAllow, from: range.from })
-          return shouldAllow
+        // Disable WikiLink suggestions - use /link command instead
+        allow: () => {
+          return false; // Always disable to use /link command
         },
         items: ({ query }) => {
           const idx = getIndex()
@@ -79,7 +63,14 @@ const WikiLinkSuggest = Extension.create({
           const filtered = idx.filter(f => !query || f.title.toLowerCase().includes(query.toLowerCase()) || f.path.toLowerCase().includes(query.toLowerCase()))
           const sorted = filtered.sort((a,b) => scoreItem(b, query, active) - scoreItem(a, query, active))
           const out = sorted.slice(0, 30)
-          dbg('items', { query, idx: idx.length, out: out.length, sample: out.slice(0,3) })
+          dbg('items', { query, idx: idx.length, out: out.length, sample: out.slice(0,3), globalIndex: !!globalThis.__LOKUS_FILE_INDEX__ })
+          console.log('🔍 WikiLink file index status:', { 
+            indexExists: !!globalThis.__LOKUS_FILE_INDEX__, 
+            indexLength: idx.length, 
+            sampleFiles: idx.slice(0, 3),
+            query: query,
+            filteredCount: out.length 
+          })
           return out
         },
         command: ({ editor, range, props }) => {
@@ -104,6 +95,32 @@ const WikiLinkSuggest = Extension.create({
             } catch (e) { dbg('cleanup error', e) }
             return true
           })
+          
+          // Trigger immediate graph update for new wiki link
+          try {
+            const activeFile = globalThis.__LOKUS_ACTIVE_FILE__;
+            if (activeFile && props.path) {
+              dbg('triggering immediate graph update for new link:', { from: activeFile, to: props.path })
+              
+              // Emit custom event for real-time graph update
+              const updateEvent = new CustomEvent('lokus:wiki-link-created', {
+                detail: {
+                  sourceFile: activeFile,
+                  targetFile: props.path,
+                  linkText: props.title,
+                  timestamp: Date.now()
+                }
+              });
+              
+              // Dispatch to both window and document for maximum compatibility
+              window.dispatchEvent(updateEvent);
+              document.dispatchEvent(updateEvent);
+              
+              dbg('wiki link creation event dispatched');
+            }
+          } catch (error) {
+            dbg('failed to trigger graph update:', error);
+          }
         },
         render: () => {
           let component
