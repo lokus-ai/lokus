@@ -5,9 +5,11 @@ mod menu;
 mod theme;
 mod handlers;
 mod clipboard;
+mod clipboard_platform;
 mod tasks;
 mod search;
 mod plugins;
+mod platform;
 
 use windows::{open_workspace_window, open_preferences_window};
 use tauri::Manager;
@@ -182,12 +184,27 @@ fn main() {
       handlers::files::delete_file,
       handlers::files::reveal_in_finder,
       handlers::files::open_terminal,
+      handlers::platform_files::platform_reveal_in_file_manager,
+      handlers::platform_files::platform_open_terminal,
+      handlers::platform_files::get_platform_information,
+      handlers::platform_files::check_platform_feature_support,
+      handlers::platform_files::get_platform_capabilities,
       clipboard::clipboard_write_text,
       clipboard::clipboard_read_text,
       clipboard::clipboard_write_html,
       clipboard::clipboard_read_html,
       clipboard::clipboard_has_text,
       clipboard::clipboard_clear,
+      clipboard_platform::clipboard_write_text_enhanced,
+      clipboard_platform::clipboard_read_text_enhanced,
+      clipboard_platform::clipboard_write_html_enhanced,
+      clipboard_platform::clipboard_get_content_info,
+      clipboard_platform::clipboard_get_platform_info,
+      clipboard_platform::clipboard_get_usage_tips,
+      clipboard_platform::clipboard_clear_enhanced,
+      platform::system_info::get_system_information,
+      platform::system_info::check_system_capability,
+      platform::examples::run_platform_examples,
       tasks::create_task,
       tasks::get_all_tasks,
       tasks::get_task,
@@ -220,6 +237,15 @@ fn main() {
     ])
     .setup(|app| {
       menu::init(&app.handle())?;
+      
+      // Initialize platform-specific systems
+      if let Err(e) = handlers::platform_files::initialize() {
+        eprintln!("Warning: Failed to initialize platform file operations: {}", e);
+      }
+      
+      if let Err(e) = clipboard_platform::initialize() {
+        eprintln!("Warning: Failed to initialize platform clipboard: {}", e);
+      }
       
       let app_handle = app.handle().clone();
       let store = StoreBuilder::new(app.handle(), PathBuf::from(".settings.dat")).build().unwrap();
