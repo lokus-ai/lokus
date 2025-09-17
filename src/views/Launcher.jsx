@@ -135,10 +135,10 @@ export default function Launcher() {
           <div className="bg-app-panel/50 border border-app-border rounded-xl p-3 space-y-2 flex-1 min-h-[300px]">
             {recents.length > 0 ? (
               recents.map((r) => (
-                <button
+                <div
                   key={r.path}
                   onClick={() => onRecent(r.path)}
-                  className="w-full text-left p-4 rounded-lg hover:bg-app-bg hover:border-app-accent border border-transparent transition-all duration-200 group"
+                  className="w-full text-left p-4 rounded-lg hover:bg-app-bg hover:border-app-accent border border-transparent transition-all duration-200 group cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-md bg-app-accent/10 flex items-center justify-center flex-shrink-0">
@@ -158,7 +158,7 @@ export default function Launcher() {
                       <Icon path="M6 18L18 6M6 6l12 12" className="w-4 h-4" />
                     </button>
                   </div>
-                </button>
+                </div>
               ))
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-center p-8">
