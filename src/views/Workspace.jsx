@@ -11,6 +11,8 @@ import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
 import Editor from "../editor";
 import StatusBar from "../components/StatusBar.jsx";
 import Canvas from "./Canvas.jsx";
+import { GraphDataProcessor } from "../core/graph/GraphDataProcessor.js";
+import { GraphEngine } from "../core/graph/GraphEngine.js";
 import FileContextMenu from "../components/FileContextMenu.jsx";
 import {
   ContextMenu,
@@ -425,8 +427,20 @@ export default function Workspace({ initialPath = "" }) {
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showKanban, setShowKanban] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
+<<<<<<< HEAD
   const [showMarketplace, setShowMarketplace] = useState(false);
   // Graph view now opens as a tab instead of sidebar panel
+=======
+  const [showGraphView, setShowGraphView] = useState(false);
+  const [graphData, setGraphData] = useState(null);
+  const [isLoadingGraph, setIsLoadingGraph] = useState(false);
+  
+  // Persistent GraphEngine instance that survives tab switches
+  const persistentGraphEngineRef = useRef(null);
+  
+  // Graph data processor instance
+  const graphProcessorRef = useRef(null);
+>>>>>>> origin/main
   
   // --- Refs for stable callbacks ---
   const stateRef = useRef({});
@@ -578,6 +592,49 @@ export default function Workspace({ initialPath = "" }) {
       return () => window.removeEventListener('lokus:open-file', onDom);
     }
   }, []);
+
+  // Listen for immediate wiki link creation events from WikiLinkSuggest
+  useEffect(() => {
+    const handleWikiLinkCreated = async (event) => {
+      const { sourceFile, targetFile, linkText, timestamp } = event.detail;
+      console.log('[Workspace] Wiki link created immediately:', { sourceFile, targetFile, linkText, timestamp });
+      
+      if (graphProcessorRef.current) {
+        try {
+          // Get current editor content for real-time update
+          const currentContent = editorRef.current ? 
+            (editorRef.current.getText() || stateRef.current.editorContent) : 
+            stateRef.current.editorContent;
+          
+          if (currentContent && sourceFile === stateRef.current.activeFile) {
+            console.log('[Workspace] Performing immediate graph update for new wiki link');
+            
+            // Use the real-time update method
+            const updateResult = await graphProcessorRef.current.updateFileContent(sourceFile, currentContent);
+            console.log('[Workspace] Immediate graph update result:', updateResult);
+            
+            // Update graph data if there were changes and graph is visible
+            if ((updateResult.added > 0 || updateResult.removed > 0) && activeFile === '__graph__') {
+              const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
+              setGraphData(updatedGraphData);
+              console.log('[Workspace] Graph view updated immediately after wiki link creation');
+            }
+          }
+        } catch (error) {
+          console.error('[Workspace] Failed to update graph immediately after wiki link creation:', error);
+        }
+      }
+    };
+
+    // Listen for wiki link creation events
+    window.addEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
+    document.addEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
+    
+    return () => {
+      window.removeEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
+      document.removeEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
+    };
+  }, [activeFile]);
 
   // Tab navigation shortcuts (Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W)
   useEffect(() => {
@@ -801,6 +858,48 @@ export default function Workspace({ initialPath = "" }) {
         setOpenTabs(tabs => tabs.map(t => t.path === activeFile ? { path: path_to_save, name: newName } : t));
         setActiveFile(path_to_save);
         handleRefreshFiles();
+      } else {
+        // File content changed but not renamed - use real-time link tracking
+        if (graphProcessorRef.current) {
+          console.log('[Workspace] File saved, performing real-time graph update for:', path_to_save);
+          try {
+            // Use the new real-time update method for file content
+            const updateResult = await graphProcessorRef.current.updateFileContent(path_to_save, editorContent);
+            console.log('[Workspace] Real-time graph update result:', updateResult);
+            
+            // Only rebuild graph structure if there were actual changes
+            if (updateResult.added > 0 || updateResult.removed > 0) {
+              const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
+              setGraphData(updatedGraphData);
+              console.log('[Workspace] Graph data updated after real-time link tracking:', {
+                nodes: updatedGraphData.nodes.length,
+                edges: updatedGraphData.edges.length,
+                linksAdded: updateResult.added,
+                linksRemoved: updateResult.removed
+              });
+            } else {
+              console.log('[Workspace] No link changes detected, graph data unchanged');
+            }
+          } catch (error) {
+            console.error('[Workspace] Failed to perform real-time graph update:', error);
+            // Fallback to full selective update
+            try {
+              const updatedGraphData = await graphProcessorRef.current.updateChangedFiles([path_to_save]);
+              if (updatedGraphData) {
+                setGraphData(updatedGraphData);
+                console.log('[Workspace] Fallback graph update completed');
+              }
+            } catch (fallbackError) {
+              console.error('[Workspace] Fallback update also failed:', fallbackError);
+              // Final fallback to full refresh
+              handleRefreshFiles();
+            }
+          }
+        } else {
+          // Graph processor not initialized yet, but if graph view becomes active,
+          // it will build the graph data including this file's changes
+          console.log('[Workspace] Graph processor not initialized, changes will be included when graph is built');
+        }
       }
     } catch (error) {
       console.error("Failed to save file:", error);
@@ -878,6 +977,156 @@ export default function Workspace({ initialPath = "" }) {
     console.log('[Workspace] Template saved successfully');
   }, []);
 
+  // Graph View Functions
+  const initializeGraphProcessor = useCallback(() => {
+    if (!path || graphProcessorRef.current) return;
+    
+    graphProcessorRef.current = new GraphDataProcessor(path);
+    console.log('[Workspace] Graph processor initialized for:', path);
+    
+    // Set up event listeners for real-time graph updates
+    const graphDatabase = graphProcessorRef.current.getGraphDatabase();
+    
+    // Listen for file link updates and rebuild graph if active
+    const handleFileLinksUpdated = (event) => {
+      console.log('[Workspace] File links updated event:', event);
+      if (activeFile === '__graph__' && graphData) {
+        // Rebuild graph structure if graph view is active
+        const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
+        setGraphData(updatedGraphData);
+        console.log('[Workspace] Graph data refreshed after link update');
+      }
+    };
+    
+    // Listen for connection changes
+    const handleConnectionChanged = (event) => {
+      console.log('[Workspace] Graph connection changed:', event);
+      if (activeFile === '__graph__' && graphData) {
+        // Rebuild graph structure if graph view is active
+        const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
+        setGraphData(updatedGraphData);
+        console.log('[Workspace] Graph data refreshed after connection change');
+      }
+    };
+    
+    graphDatabase.on('fileLinksUpdated', handleFileLinksUpdated);
+    graphDatabase.on('connectionAdded', handleConnectionChanged);
+    graphDatabase.on('connectionRemoved', handleConnectionChanged);
+    
+    // Store cleanup function
+    graphProcessorRef.current._cleanup = () => {
+      graphDatabase.off('fileLinksUpdated', handleFileLinksUpdated);
+      graphDatabase.off('connectionAdded', handleConnectionChanged);
+      graphDatabase.off('connectionRemoved', handleConnectionChanged);
+    };
+    
+  }, [path, activeFile, graphData]);
+
+  const buildGraphData = useCallback(async () => {
+    if (!graphProcessorRef.current || isLoadingGraph) return;
+    
+    setIsLoadingGraph(true);
+    console.log('[Workspace] Building graph data...');
+    
+    try {
+      const data = await graphProcessorRef.current.buildGraphFromWorkspace({
+        includeNonMarkdown: false,
+        maxDepth: 10,
+        excludePatterns: ['.git', 'node_modules', '.lokus', '.DS_Store'],
+        onProgress: (progress) => {
+          console.log(`[Workspace] Graph processing progress: ${progress.progress}%`);
+        }
+      });
+      
+      setGraphData(data);
+      console.log('[Workspace] Graph data built successfully:', {
+        nodes: data.nodes.length,
+        edges: data.edges.length
+      });
+      
+    } catch (error) {
+      console.error('[Workspace] Failed to build graph data:', error);
+      setGraphData(null);
+    } finally {
+      setIsLoadingGraph(false);
+    }
+  }, [isLoadingGraph]);
+
+  const handleGraphNodeClick = useCallback((event) => {
+    const { nodeId, nodeData } = event;
+    console.log('[Workspace] Graph node clicked:', nodeId, nodeData);
+    
+    // If it's a file node (not phantom), open the file
+    if (nodeData && nodeData.path && !nodeData.isPhantom) {
+      const fileName = nodeData.path.split('/').pop();
+      handleFileOpen({ 
+        path: nodeData.path, 
+        name: fileName, 
+        is_directory: nodeData.isDirectory || false 
+      });
+    }
+  }, []);
+
+  const handleOpenGraphView = useCallback(() => {
+    const graphPath = '__graph__';
+    const graphName = 'Graph View';
+    
+    setOpenTabs(prevTabs => {
+      const newTabs = prevTabs.filter(t => t.path !== graphPath);
+      newTabs.unshift({ path: graphPath, name: graphName });
+      if (newTabs.length > MAX_OPEN_TABS) {
+        newTabs.pop();
+      }
+      return newTabs;
+    });
+    setActiveFile(graphPath);
+  }, []);
+
+  // Initialize graph processor when workspace path changes
+  useEffect(() => {
+    if (path) {
+      initializeGraphProcessor();
+    }
+  }, [path, initializeGraphProcessor]);
+
+  // Build graph data when files change
+  useEffect(() => {
+    if (graphProcessorRef.current && refreshId > 0) {
+      // Rebuild graph data when files are refreshed
+      buildGraphData();
+    }
+  }, [refreshId, buildGraphData]);
+
+  // Auto-build graph when graph view is opened
+  useEffect(() => {
+    if (activeFile === '__graph__' && !graphData && !isLoadingGraph && graphProcessorRef.current) {
+      console.log('[Workspace] Auto-building graph data for graph view...');
+      buildGraphData();
+    }
+  }, [activeFile, graphData, isLoadingGraph, buildGraphData]);
+
+  // Cleanup persistent GraphEngine and GraphDatabase when workspace unmounts
+  useEffect(() => {
+    return () => {
+      if (persistentGraphEngineRef.current) {
+        console.log('🗑️ Destroying persistent GraphEngine on workspace unmount');
+        persistentGraphEngineRef.current.destroy();
+        persistentGraphEngineRef.current = null;
+      }
+      
+      if (graphProcessorRef.current) {
+        console.log('🗑️ Cleaning up GraphProcessor and GraphDatabase on workspace unmount');
+        // Call cleanup function for event listeners
+        if (graphProcessorRef.current._cleanup) {
+          graphProcessorRef.current._cleanup();
+        }
+        // Destroy the GraphDatabase
+        graphProcessorRef.current.destroy();
+        graphProcessorRef.current = null;
+      }
+    };
+  }, []);
+
   const handleTabDragEnd = (event) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
@@ -908,6 +1157,7 @@ export default function Workspace({ initialPath = "" }) {
     const unlistenCommandPalette = isTauri ? listen("lokus:command-palette", () => setShowCommandPalette(true)) : Promise.resolve(addDom('lokus:command-palette', () => setShowCommandPalette(true)));
     const unlistenInFileSearch = isTauri ? listen("lokus:in-file-search", () => setShowInFileSearch(true)) : Promise.resolve(addDom('lokus:in-file-search', () => setShowInFileSearch(true)));
     const unlistenGlobalSearch = isTauri ? listen("lokus:global-search", () => setShowGlobalSearch(true)) : Promise.resolve(addDom('lokus:global-search', () => setShowGlobalSearch(true)));
+    const unlistenGraphView = isTauri ? listen("lokus:graph-view", handleOpenGraphView) : Promise.resolve(addDom('lokus:graph-view', handleOpenGraphView));
     
     // Template picker event listener
     const handleTemplatePicker = (event) => {
@@ -925,6 +1175,7 @@ export default function Workspace({ initialPath = "" }) {
       unlistenCommandPalette.then(f => { if (typeof f === 'function') f(); });
       unlistenInFileSearch.then(f => { if (typeof f === 'function') f(); });
       unlistenGlobalSearch.then(f => { if (typeof f === 'function') f(); });
+      unlistenGraphView.then(f => { if (typeof f === 'function') f(); });
       unlistenTemplatePicker.then(f => { if (typeof f === 'function') f(); });
     };
   }, [handleSave, handleTabClose]);
@@ -960,10 +1211,11 @@ export default function Workspace({ initialPath = "" }) {
               onClick={() => { 
                 setShowKanban(false); 
                 setShowPlugins(false);
+                setShowGraphView(false);
                 setShowLeft(true);
               }}
               title="Explorer"
-              className={`obsidian-button icon-only w-full mb-1 ${!showKanban && !showPlugins && showLeft ? 'primary' : ''}`}
+              className={`obsidian-button icon-only w-full mb-1 ${!showKanban && !showPlugins && !showGraphView && showLeft ? 'primary' : ''}`}
             >
               <FolderOpen className="w-5 h-5" />
             </button>
@@ -972,10 +1224,11 @@ export default function Workspace({ initialPath = "" }) {
               onClick={() => { 
                 setShowKanban(true); 
                 setShowPlugins(false);
+                setShowGraphView(false);
                 setShowLeft(true);
               }}
               title="Task Board"
-              className={`obsidian-button icon-only w-full mb-1 ${showKanban && !showPlugins ? 'primary' : ''}`}
+              className={`obsidian-button icon-only w-full mb-1 ${showKanban && !showPlugins && !showGraphView ? 'primary' : ''}`}
             >
               <LayoutGrid className="w-5 h-5" />
             </button>
@@ -984,16 +1237,18 @@ export default function Workspace({ initialPath = "" }) {
               onClick={() => { 
                 setShowPlugins(true); 
                 setShowKanban(false);
+                setShowGraphView(false);
                 setShowLeft(true);
               }}
               title="Extensions"
-              className={`obsidian-button icon-only w-full mb-1 ${showPlugins && !showKanban ? 'primary' : ''}`}
+              className={`obsidian-button icon-only w-full mb-1 ${showPlugins && !showKanban && !showGraphView ? 'primary' : ''}`}
             >
               <Puzzle className="w-5 h-5" />
             </button>
             
             <button
               onClick={() => { 
+<<<<<<< HEAD
                 setShowMarketplace(true); 
                 setShowPlugins(false); 
                 setShowKanban(false);
@@ -1023,6 +1278,19 @@ export default function Workspace({ initialPath = "" }) {
             >
               <Network className="w-5 h-5" />
             </button>
+=======
+                setShowGraphView(true); 
+                setShowKanban(false);
+                setShowPlugins(false);
+                setShowLeft(true);
+              }}
+              title="Graph View"
+              className={`obsidian-button icon-only w-full mb-1 ${showGraphView && !showKanban && !showPlugins ? 'primary' : ''}`}
+            >
+              <Network className="w-5 h-5" />
+            </button>
+            
+>>>>>>> origin/main
           </div>
         </aside>
         <div className="bg-app-border/20 w-px" />
@@ -1033,15 +1301,15 @@ export default function Workspace({ initialPath = "" }) {
               <div className="h-12 shrink-0 px-4 flex items-center justify-between gap-2 border-b border-app-border">
                 <div className="flex items-center gap-3">
                   <h2 className="text-sm font-medium text-app-text">
-                    {showPlugins ? 'Extensions' : 'Explorer'}
+                    {showPlugins ? 'Extensions' : showGraphView ? 'Graph View' : 'Explorer'}
                   </h2>
-                  {!showPlugins && (
+                  {!showPlugins && !showGraphView && (
                     <button onClick={closeAllFolders} title="Close all folders" className="obsidian-button small icon-only">
                       <FolderMinus className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
-                {!showPlugins && (
+                {!showPlugins && !showGraphView && (
                   <div className="flex items-center gap-1">
                     <button onClick={handleCreateFile} title="New File" className="obsidian-button small icon-only">
                       <FilePlus className="w-4 h-4" />
@@ -1066,6 +1334,21 @@ export default function Workspace({ initialPath = "" }) {
                   workspacePath={path}
                   onOpenFull={handleOpenFullKanban}
                 />
+              </div>
+            ) : showGraphView ? (
+              <div className="flex-1 overflow-hidden p-4">
+                <div className="text-center mb-4">
+                  <button
+                    onClick={handleOpenGraphView}
+                    className="obsidian-button primary w-full"
+                  >
+                    Open Graph View
+                  </button>
+                </div>
+                <div className="text-sm text-app-muted">
+                  <p className="mb-2">The graph view shows the connections between your notes.</p>
+                  <p>Use Cmd+Shift+G to quickly open the graph view.</p>
+                </div>
               </div>
             ) : (
               <ContextMenu>
@@ -1161,14 +1444,52 @@ export default function Workspace({ initialPath = "" }) {
             </div>
           ) : (
             <div className="flex-1 p-8 md:p-12 overflow-y-auto">
-              <div className="max-w-4xl mx-auto">
+              <div className="max-w-full mx-auto h-full">
                 {activeFile === '__graph__' ? (
-                  <div className="flex items-center justify-center h-64 text-center">
-                    <div>
-                      <div className="text-4xl mb-4 text-app-muted/50">📊</div>
-                      <h2 className="text-xl font-medium text-app-text mb-2">Graph View Coming Soon</h2>
-                      <p className="text-app-muted">The graph view is temporarily disabled while we improve it.</p>
-                    </div>
+                  <div className="h-full flex flex-col">
+                    {isLoadingGraph ? (
+                      <div className="flex-1 flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="animate-spin w-8 h-8 border-2 border-app-accent border-t-transparent rounded-full mx-auto mb-4"></div>
+                          <h2 className="text-xl font-medium text-app-text mb-2">Building Graph</h2>
+                          <p className="text-app-muted">Processing your workspace files...</p>
+                        </div>
+                      </div>
+                    ) : graphData ? (
+                      <div className="flex-1 h-full">
+                        <GraphView 
+                          data={graphData}
+                          onNodeClick={handleGraphNodeClick}
+                          onEdgeClick={(event) => console.log('Edge clicked:', event)}
+                          options={{
+                            enableWorkerLayout: true,
+                            autoStart: true
+                          }}
+                          className="h-full"
+                          graphEngine={persistentGraphEngineRef.current}
+                          isVisible={activeFile === '__graph__'}
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+                        <div className="mb-6">
+                          <Network className="w-16 h-16 text-app-muted/50 mx-auto mb-4" />
+                          <h2 className="text-xl font-medium text-app-text mb-2">Graph View</h2>
+                          <p className="text-app-muted mb-6 max-w-md">
+                            {isLoadingGraph 
+                              ? 'Building your knowledge graph...'
+                              : 'Visualize the connections between your notes and discover hidden relationships in your knowledge base.'
+                            }
+                          </p>
+                        </div>
+                        {isLoadingGraph && (
+                          <div className="flex items-center gap-2 text-app-accent">
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-current border-t-transparent"></div>
+                            <span>Processing notes...</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : activeFile && activeFile.startsWith('__plugin_') ? (
                   <div className="flex-1 overflow-hidden">
@@ -1176,13 +1497,6 @@ export default function Workspace({ initialPath = "" }) {
                       const activeTab = openTabs.find(tab => tab.path === activeFile);
                       return activeTab?.plugin ? <PluginDetail plugin={activeTab.plugin} /> : <div>Plugin not found</div>;
                     })()}
-                  </div>
-                ) : activeFile === 'graph-view' ? (
-                  <div className="flex-1 h-full w-full">
-                    <GraphView 
-                      workspacePath={path} 
-                      onOpenFile={handleFileOpen}
-                    />
                   </div>
                 ) : activeFile ? (
                 <ContextMenu>

@@ -1,0 +1,100 @@
+{
+  "$schema": "https://schema.tauri.app/config/2.0.0",
+  "productName": "Lokus",
+  "version": "1.0.3",
+  "identifier": "com.pratham.lokus",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Lokus",
+        "width": 800,
+        "height": 600,
+        "minWidth": 600,
+        "minHeight": 400,
+        "titleBarStyle": "default"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https: wss:; media-src 'self' data: blob:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests;"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "resources": [
+      "../src/themes"
+    ],
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "http://timestamp.sectigo.com",
+      "wix": {
+        "language": ["en-US"],
+        "template": "wix/main.wxs",
+        "fragmentPaths": ["wix/fragments"],
+        "componentGroupRefs": [],
+        "componentRefs": [],
+        "featureGroupRefs": [],
+        "featureRefs": [],
+        "mergeRefs": [],
+        "skipWebviewInstall": false,
+        "enableElevatedUpdateTask": false,
+        "banner": "icons/banner.bmp",
+        "dialogImage": "icons/dialog.bmp"
+      },
+      "nsis": {
+        "license": "../LICENSE",
+        "headerImage": "icons/nsis-header.bmp",
+        "sidebarImage": "icons/nsis-sidebar.bmp",
+        "installerIcon": "icons/icon.ico",
+        "install": true,
+        "uninstall": true,
+        "createDesktopShortcut": true,
+        "createStartMenuShortcut": true,
+        "languages": ["English"],
+        "displayLanguageSelector": false
+      }
+    }
+  },
+  "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false,
+      "scope": {
+        "allow": ["**"],
+        "deny": []
+      }
+    },
+    "dialog": {
+      "all": true,
+      "ask": true,
+      "confirm": true,
+      "message": true,
+      "open": true,
+      "save": true
+    },
+    "globalShortcut": {
+      "all": true
+    },
+    "clipboardManager": {
+      "all": true,
+      "writeText": true,
+      "readText": true
+    },
+    "shell": {
+      "all": false,
+      "open": "^https?://.*"
+    }
+  }
+}

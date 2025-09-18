@@ -14,7 +14,9 @@
       {
         "title": "Lokus",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "minWidth": 600,
+        "minHeight": 400
       }
     ],
     "security": {
@@ -33,16 +35,35 @@
     ],
     "resources": [
       "../src/themes"
-    ],
-    "macOS": {
-      "signingIdentity": null,
-      "hardenedRuntime": true,
-      "entitlements": null
-    }
+    ]
   },
   "plugins": {
     "fs": {
-      "requireLiteralLeadingDot": false
+      "requireLiteralLeadingDot": false,
+      "scope": {
+        "allow": ["**"],
+        "deny": []
+      }
+    },
+    "dialog": {
+      "all": true,
+      "ask": true,
+      "confirm": true,
+      "message": true,
+      "open": true,
+      "save": true
+    },
+    "globalShortcut": {
+      "all": true
+    },
+    "clipboardManager": {
+      "all": true,
+      "writeText": true,
+      "readText": true
+    },
+    "shell": {
+      "all": false,
+      "open": "^https?://.*"
     }
   }
 }

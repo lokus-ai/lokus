@@ -19,6 +19,7 @@ import {
   Highlighter,
   Minus,
   FileText,
+  Link,
 } from "lucide-react";
 import tippy from "tippy.js/dist/tippy.esm.js";
 
@@ -82,6 +83,211 @@ function openTemplatePicker({ editor, range }) {
       }
     } 
   }));
+}
+
+function openFileLinkPicker({ editor, range }) {
+  console.log('🔗 openFileLinkPicker called', { editor, range });
+  
+  try {
+    // Get file index for suggestions
+    const getIndex = () => {
+      const list = (globalThis.__LOKUS_FILE_INDEX__ || [])
+      return Array.isArray(list) ? list : []
+    };
+    
+    const files = getIndex();
+    console.log('📁 Files available:', files.length);
+    
+    if (files.length === 0) {
+      // No files available, just insert empty wiki link
+      console.log('⚠️ No files found, inserting empty wiki link');
+      editor.chain().focus().deleteRange(range).insertContent('[[]]').run();
+      return;
+    }
+    
+    // Create file picker UI
+    createFilePicker(files, (selectedFile) => {
+      if (selectedFile) {
+        // Insert the selected file as wiki link
+        const linkText = `[[${selectedFile.title}]]`;
+        editor.chain().focus().deleteRange(range).insertContent(linkText).run();
+        console.log('✅ Inserted wiki link:', linkText);
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error in openFileLinkPicker:', error);
+    // Fallback: just insert something
+    try {
+      editor.chain().focus().deleteRange(range).insertContent('[[Link]]').run();
+    } catch (fallbackError) {
+      console.error('❌ Fallback also failed:', fallbackError);
+    }
+  }
+}
+
+function createFilePicker(files, onSelect) {
+  // Create overlay
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    backdrop-filter: blur(4px);
+  `;
+  
+  // Create picker container
+  const picker = document.createElement('div');
+  picker.style.cssText = `
+    background: rgb(var(--panel));
+    border: 1px solid rgb(var(--border));
+    border-radius: 12px;
+    width: 500px;
+    max-height: 600px;
+    overflow: hidden;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  `;
+  
+  // Create header
+  const header = document.createElement('div');
+  header.style.cssText = `
+    padding: 16px 20px;
+    border-bottom: 1px solid rgb(var(--border));
+    background: rgb(var(--bg));
+  `;
+  header.innerHTML = `
+    <h3 style="margin: 0; color: rgb(var(--text)); font-size: 16px; font-weight: 600;">
+      Select File to Link
+    </h3>
+    <p style="margin: 4px 0 0 0; color: rgb(var(--muted)); font-size: 14px;">
+      Choose a file from your workspace
+    </p>
+  `;
+  
+  // Create file list container
+  const listContainer = document.createElement('div');
+  listContainer.style.cssText = `
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 8px 0;
+  `;
+  
+  // Create file items
+  files.forEach((file, index) => {
+    const item = document.createElement('div');
+    item.style.cssText = `
+      padding: 12px 20px;
+      cursor: pointer;
+      border-bottom: 1px solid rgba(var(--border), 0.5);
+      transition: background-color 0.15s ease;
+    `;
+    
+    // Get relative path (remove workspace path)
+    const getRelativePath = (fullPath) => {
+      const workspace = globalThis.__LOKUS_WORKSPACE_PATH__ || '';
+      if (workspace && fullPath.startsWith(workspace)) {
+        return fullPath.slice(workspace.length).replace(/^\//, '');
+      }
+      return fullPath;
+    };
+    
+    const relativePath = getRelativePath(file.path);
+    
+    item.innerHTML = `
+      <div style="color: rgb(var(--text)); font-size: 14px; font-weight: 500; margin-bottom: 2px;">
+        ${file.title}
+      </div>
+      <div style="color: rgb(var(--muted)); font-size: 12px;">
+        ${relativePath}
+      </div>
+    `;
+    
+    // Hover effect
+    item.addEventListener('mouseenter', () => {
+      item.style.backgroundColor = 'rgba(var(--accent), 0.1)';
+    });
+    
+    item.addEventListener('mouseleave', () => {
+      item.style.backgroundColor = 'transparent';
+    });
+    
+    // Click handler
+    item.addEventListener('click', () => {
+      onSelect(file);
+      cleanup();
+    });
+    
+    listContainer.appendChild(item);
+  });
+  
+  // Create footer
+  const footer = document.createElement('div');
+  footer.style.cssText = `
+    padding: 12px 20px;
+    border-top: 1px solid rgb(var(--border));
+    background: rgb(var(--bg));
+    text-align: right;
+  `;
+  
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = `
+    background: transparent;
+    border: 1px solid rgb(var(--border));
+    color: rgb(var(--muted));
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+  `;
+  
+  cancelBtn.addEventListener('click', () => {
+    onSelect(null);
+    cleanup();
+  });
+  
+  footer.appendChild(cancelBtn);
+  
+  // Assemble picker
+  picker.appendChild(header);
+  picker.appendChild(listContainer);
+  picker.appendChild(footer);
+  overlay.appendChild(picker);
+  
+  // Add to DOM
+  document.body.appendChild(overlay);
+  
+  // Cleanup function
+  const cleanup = () => {
+    if (overlay.parentNode) {
+      overlay.parentNode.removeChild(overlay);
+    }
+  };
+  
+  // Close on overlay click
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      onSelect(null);
+      cleanup();
+    }
+  });
+  
+  // Close on escape
+  const handleKeydown = (e) => {
+    if (e.key === 'Escape') {
+      onSelect(null);
+      cleanup();
+      document.removeEventListener('keydown', handleKeydown);
+    }
+  };
+  document.addEventListener('keydown', handleKeydown);
 }
 
 function openTableSizePicker({ editor, range }) {
@@ -227,6 +433,14 @@ const commandItems = [
         icon: <FileText size={18} />,
         command: ({ editor, range }) => {
           openTemplatePicker({ editor, range });
+        },
+      },
+      {
+        title: "Link to File",
+        description: "Create a wiki link to another file.",
+        icon: <Link size={18} />,
+        command: ({ editor, range }) => {
+          openFileLinkPicker({ editor, range });
         },
       },
       {
