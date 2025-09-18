@@ -427,10 +427,8 @@ export default function Workspace({ initialPath = "" }) {
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showKanban, setShowKanban] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
-<<<<<<< HEAD
   const [showMarketplace, setShowMarketplace] = useState(false);
   // Graph view now opens as a tab instead of sidebar panel
-=======
   const [showGraphView, setShowGraphView] = useState(false);
   const [graphData, setGraphData] = useState(null);
   const [isLoadingGraph, setIsLoadingGraph] = useState(false);
@@ -440,7 +438,6 @@ export default function Workspace({ initialPath = "" }) {
   
   // Graph data processor instance
   const graphProcessorRef = useRef(null);
->>>>>>> origin/main
   
   // --- Refs for stable callbacks ---
   const stateRef = useRef({});
@@ -1248,7 +1245,6 @@ export default function Workspace({ initialPath = "" }) {
             
             <button
               onClick={() => { 
-<<<<<<< HEAD
                 setShowMarketplace(true); 
                 setShowPlugins(false); 
                 setShowKanban(false);
@@ -1278,19 +1274,7 @@ export default function Workspace({ initialPath = "" }) {
             >
               <Network className="w-5 h-5" />
             </button>
-=======
-                setShowGraphView(true); 
-                setShowKanban(false);
-                setShowPlugins(false);
-                setShowLeft(true);
-              }}
-              title="Graph View"
-              className={`obsidian-button icon-only w-full mb-1 ${showGraphView && !showKanban && !showPlugins ? 'primary' : ''}`}
-            >
-              <Network className="w-5 h-5" />
-            </button>
             
->>>>>>> origin/main
           </div>
         </aside>
         <div className="bg-app-border/20 w-px" />
