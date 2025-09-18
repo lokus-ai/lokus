@@ -39,19 +39,7 @@
   },
   "plugins": {
     "fs": {
-      "requireLiteralLeadingDot": false,
-      "scope": {
-        "allow": ["**"],
-        "deny": []
-      }
-    },
-    "dialog": {
-      "all": true,
-      "ask": true,
-      "confirm": true,
-      "message": true,
-      "open": true,
-      "save": true
+      "requireLiteralLeadingDot": false
     },
     "globalShortcut": {
       "all": true
