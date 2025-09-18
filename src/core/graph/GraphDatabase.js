@@ -270,7 +270,6 @@ export class GraphDatabase extends EventEmitter {
    */
   addConnection(sourceFile, targetFile, metadata = {}) {
     const startTime = performance.now();
-    console.log('🔗 GraphDatabase.addConnection called:', { sourceFile, targetFile, metadata });
     
     try {
       this._validateNodeId(sourceFile);
@@ -319,6 +318,11 @@ export class GraphDatabase extends EventEmitter {
       const currentWeight = this.edgeWeights.get(edgeId) || 0;
       this.edgeWeights.set(edgeId, currentWeight + (metadata.weight || 1));
       
+      // Debug log for database connections
+      if (isNew) {
+        console.log(`🗄️  DB: Added connection "${sourceFile}" → "${targetFile}" (${edge.type})`);
+      }
+      
       this.metrics.operationCounts.addEdge++;
       this._trackQueryPerformance(performance.now() - startTime);
       
@@ -329,11 +333,6 @@ export class GraphDatabase extends EventEmitter {
         isNew
       });
       
-      console.log('✅ GraphDatabase connection created successfully:', { 
-        edgeId, 
-        isNew, 
-        totalEdges: this.edgeCount 
-      });
       
       return isNew;
       
@@ -610,6 +609,9 @@ export class GraphDatabase extends EventEmitter {
       };
       
       this.emit('dataExported', result.metadata);
+      
+      // Debug log for graph export summary
+      console.log(`📊 Graph exported: ${result.metadata.exportedNodes} nodes, ${result.metadata.exportedEdges} connections`);
       
       return result;
       
