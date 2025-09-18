@@ -777,7 +777,6 @@ export class MCPClientFactory {
     for (const client of this.clients.values()) {
       disconnectPromises.push(
         client.disconnect().catch(error => {
-          console.warn(`Error disconnecting client ${client.clientId}:`, error)
         })
       )
     }

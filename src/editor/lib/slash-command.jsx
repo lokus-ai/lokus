@@ -43,14 +43,12 @@ function waitForCommand(editor, key, { interval = 100, timeout = 2000 } = {}) {
 async function runWhenReady(editor, key, run, options) {
   const ok = await waitForCommand(editor, key, options);
   if (!ok) {
-    console.warn(`[slash] Command '${key}' not available in time`);
     return false;
   }
   try {
     run();
     return true;
   } catch (e) {
-    console.warn(`[slash] Failed running '${key}':`, e);
     return false;
   }
 }
@@ -76,7 +74,6 @@ function openTemplatePicker({ editor, range }) {
           // Insert the processed template content
           editor.chain().focus().deleteRange(range).insertContent(processedContent).run();
         } catch (err) {
-          console.error('Failed to insert template:', err);
           // Fallback: insert raw template content
           editor.chain().focus().deleteRange(range).insertContent(template.content).run();
         }
@@ -86,7 +83,6 @@ function openTemplatePicker({ editor, range }) {
 }
 
 function openFileLinkPicker({ editor, range }) {
-  console.log('🔗 openFileLinkPicker called', { editor, range });
   
   try {
     // Get file index for suggestions
@@ -96,11 +92,9 @@ function openFileLinkPicker({ editor, range }) {
     };
     
     const files = getIndex();
-    console.log('📁 Files available:', files.length);
     
     if (files.length === 0) {
       // No files available, just insert empty wiki link
-      console.log('⚠️ No files found, inserting empty wiki link');
       editor.chain().focus().deleteRange(range).insertContent('[[]]').run();
       return;
     }
@@ -111,17 +105,14 @@ function openFileLinkPicker({ editor, range }) {
         // Insert the selected file as wiki link
         const linkText = `[[${selectedFile.title}]]`;
         editor.chain().focus().deleteRange(range).insertContent(linkText).run();
-        console.log('✅ Inserted wiki link:', linkText);
       }
     });
     
   } catch (error) {
-    console.error('❌ Error in openFileLinkPicker:', error);
     // Fallback: just insert something
     try {
       editor.chain().focus().deleteRange(range).insertContent('[[Link]]').run();
     } catch (fallbackError) {
-      console.error('❌ Fallback also failed:', fallbackError);
     }
   }
 }

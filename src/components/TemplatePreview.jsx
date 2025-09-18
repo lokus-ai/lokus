@@ -76,7 +76,6 @@ export default function TemplatePreview({
 
       return variables;
     } catch (err) {
-      console.error('Error parsing template variables:', err);
       return [];
     }
   }, [template?.content]);
@@ -105,7 +104,6 @@ export default function TemplatePreview({
     if (open && template && Object.keys(currentVariables).length > 0) {
       preview(template.id, currentVariables, { context })
         .catch(err => {
-          console.error('Preview error:', err);
         });
     }
   }, [open, template, currentVariables, preview, context]);
@@ -145,7 +143,6 @@ export default function TemplatePreview({
       try {
         await navigator.clipboard.writeText(previewData.result);
       } catch (err) {
-        console.error('Failed to copy to clipboard:', err);
       }
     }
   };

@@ -200,7 +200,6 @@ function convertEdgeToArrow(edge, index, nodes) {
   const toNode = nodes?.find(n => n.id === edge.toNode);
 
   if (!fromNode || !toNode) {
-    console.warn('Edge references missing nodes:', edge);
     return null;
   }
 
@@ -254,52 +253,22 @@ export function tldrawToJsonCanvas(storeData) {
   const edges = [];
 
   if (!storeData.records) {
-    console.log('🔄 DEBUGGING: No records in store data, returning empty canvas');
     return createEmptyJsonCanvas();
   }
 
-  console.log('🔄 DEBUGGING: Converting tldraw to JSON Canvas:', {
-    totalRecords: storeData.records.length,
-    recordTypes: [...new Set(storeData.records.map(r => r.typeName || 'unknown'))],
-    allRecords: storeData.records.map(r => ({
-      id: r.id,
-      typeName: r.typeName,
-      type: r.type,
-      hasProps: !!r.props
-    }))
-  });
 
   // Extract shapes and convert to nodes/edges
   const shapes = storeData.records.filter(record => record.typeName === 'shape');
-  console.log('🔄 DEBUGGING: Filtered shapes:', {
-    shapeCount: shapes.length,
-    shapes: shapes.map(s => ({
-      id: s.id,
-      type: s.type,
-      hasText: s.props?.text !== undefined,
-      text: s.props?.text
-    }))
-  });
   
   shapes.forEach((shape, index) => {
-    console.log(`🔄 DEBUGGING: Converting shape ${index + 1}:`, {
-      id: shape.id,
-      type: shape.type,
-      typeName: shape.typeName,
-      hasProps: !!shape.props,
-      x: shape.x,
-      y: shape.y
-    });
     
     if (shape.type === 'arrow') {
       const edge = convertShapeToEdge(shape);
-      console.log(`🔄 DEBUGGING: Arrow converted to edge:`, edge);
       if (edge) {
         edges.push(edge);
       }
     } else {
       const node = convertShapeToNode(shape);
-      console.log(`🔄 DEBUGGING: Shape converted to node:`, node);
       if (node) {
         nodes.push(node);
       }
@@ -317,12 +286,6 @@ export function tldrawToJsonCanvas(storeData) {
     }
   };
   
-  console.log('🔄 DEBUGGING: Final JSON Canvas result:', {
-    nodeCount: result.nodes.length,
-    edgeCount: result.edges.length,
-    nodes: result.nodes,
-    edges: result.edges
-  });
   
   return result;
 }
@@ -474,6 +437,5 @@ export function migrateCanvasFormat(data) {
   }
 
   // Return empty canvas if format is unrecognized
-  console.warn('Unrecognized canvas format, creating empty canvas');
   return createEmptyJsonCanvas();
 }

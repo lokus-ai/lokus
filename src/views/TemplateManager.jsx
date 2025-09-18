@@ -116,7 +116,6 @@ export default function TemplateManager() {
   const handleEdit = (template) => {
     setSelectedTemplate(template);
     // Navigate to template editor (would need routing setup)
-    console.log('Edit template:', template);
   };
 
   const handlePreview = (template) => {
@@ -131,7 +130,6 @@ export default function TemplateManager() {
         name: `${template.name} (Copy)`
       });
     } catch (err) {
-      console.error('Failed to duplicate template:', err);
     }
   };
 
@@ -140,7 +138,6 @@ export default function TemplateManager() {
       try {
         await deleteTemplate(template.id);
       } catch (err) {
-        console.error('Failed to delete template:', err);
       }
     }
   };
@@ -156,7 +153,6 @@ export default function TemplateManager() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('Failed to export template:', err);
     }
   };
 
@@ -180,7 +176,6 @@ export default function TemplateManager() {
             }
           });
         } catch (err) {
-          console.error('Failed to import template:', err);
           alert('Failed to import template. Please check the file format.');
         }
       }
@@ -585,7 +580,6 @@ export default function TemplateManager() {
           open={showPicker}
           onClose={() => setShowPicker(false)}
           onSelect={(template) => {
-            console.log('Selected template:', template);
             setShowPicker(false);
           }}
         />
@@ -600,7 +594,6 @@ export default function TemplateManager() {
             setSelectedTemplate(null);
           }}
           onInsert={(result, variables) => {
-            console.log('Insert template result:', result, variables);
           }}
         />
       )}

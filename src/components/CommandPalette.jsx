@@ -82,7 +82,6 @@ export default function CommandPalette({
 
   // Handle template selection
   const handleTemplateSelect = React.useCallback(async (template) => {
-    console.log('[CommandPalette] Selecting template:', template.name)
     
     try {
       // Process the template with built-in variables
@@ -90,7 +89,6 @@ export default function CommandPalette({
         context: {}
       })
       
-      console.log('[CommandPalette] Template processed successfully')
       
       // Call onShowTemplatePicker with processed content
       if (onShowTemplatePicker) {
@@ -105,7 +103,6 @@ export default function CommandPalette({
       // Close command palette
       setOpen(false)
     } catch (err) {
-      console.error('[CommandPalette] Failed to process template:', err)
       // Fallback to raw template content
       if (onShowTemplatePicker) {
         const mockSelection = {
@@ -180,7 +177,6 @@ export default function CommandPalette({
                           }
                           break
                         default:
-                          console.warn(`Unknown command: ${commandName}`)
                       }
                     }
                   }}

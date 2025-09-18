@@ -53,10 +53,8 @@ export class PluginRuntime {
         loaded: true
       })
       
-      console.log(`Plugin ${pluginId} loaded successfully via PluginLoader`)
       
     } catch (error) {
-      console.error(`Failed to load plugin ${pluginInfo.id}:`, error)
       throw error
     }
   }
@@ -82,13 +80,10 @@ export class PluginRuntime {
       try {
         await emit('plugin-runtime-activated', { pluginId })
       } catch (error) {
-        console.warn('Could not emit activation event:', error)
       }
       
-      console.log(`Plugin ${pluginId} activated via PluginLoader`)
       
     } catch (error) {
-      console.error(`Failed to activate plugin ${pluginId}:`, error)
       throw error
     }
   }
@@ -111,13 +106,10 @@ export class PluginRuntime {
       try {
         await emit('plugin-runtime-deactivated', { pluginId })
       } catch (error) {
-        console.warn('Could not emit deactivation event:', error)
       }
       
-      console.log(`Plugin ${pluginId} deactivated via PluginLoader`)
       
     } catch (error) {
-      console.error(`Failed to deactivate plugin ${pluginId}:`, error)
     }
   }
 
@@ -140,10 +132,8 @@ export class PluginRuntime {
         this.pluginWorkers.delete(pluginId)
       }
       
-      console.log(`Plugin ${pluginId} unloaded via PluginLoader`)
       
     } catch (error) {
-      console.error(`Failed to unload plugin ${pluginId}:`, error)
     }
   }
 
@@ -164,7 +154,6 @@ export class PluginRuntime {
     }
     
     worker.onerror = (error) => {
-      console.error(`Worker error for plugin ${pluginInfo.id}:`, error)
     }
     
     return worker
@@ -194,15 +183,12 @@ export class PluginRuntime {
         break
         
       case 'log':
-        console.log(`[Plugin ${pluginId}]:`, data.message)
         break
         
       case 'error':
-        console.error(`[Plugin ${pluginId}]:`, data.error)
         break
         
       default:
-        console.warn(`Unknown message type from plugin ${pluginId}:`, type)
     }
   }
 
@@ -297,7 +283,6 @@ export class PluginRuntime {
       title
     })
     
-    console.log(`Registered command: ${fullCommand}`)
   }
 
   /**
@@ -428,7 +413,6 @@ export class PluginRuntime {
         }
       }
     } catch (error) {
-      console.error(`Failed to register status bar components for plugin ${pluginId}:`, error);
     }
   }
 
@@ -458,9 +442,7 @@ export class PluginRuntime {
             tooltip: 'Time Tracker'
           });
           
-          console.log(`Registered status bar component ${component} for plugin ${pluginId}`);
         } catch (error) {
-          console.error(`Failed to load component ${component}:`, error);
         }
       } else {
         // Generic component registration
@@ -477,7 +459,6 @@ export class PluginRuntime {
         });
       }
     } catch (error) {
-      console.error(`Failed to register status bar component for plugin ${pluginId}:`, error);
     }
   }
 

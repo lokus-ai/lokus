@@ -173,7 +173,6 @@ export class StandardizedPluginAPI {
     }
 
     try {
-      console.log('🔍 Loading plugins from backend...');
       const backendPlugins = await invoke('list_plugins');
       
       if (!Array.isArray(backendPlugins)) {
@@ -191,12 +190,10 @@ export class StandardizedPluginAPI {
           const validation = pluginInfo.manifest.validate();
           
           if (!validation.valid) {
-            console.warn(`Plugin ${index} validation issues:`, validation.errors);
           }
           
           return pluginInfo.toFrontendFormat();
         } catch (error) {
-          console.error(`Failed to process plugin ${index}:`, error);
           throw new PluginAPIError(
             `Invalid plugin data at index ${index}`,
             'PLUGIN_DATA_INVALID',
@@ -205,7 +202,6 @@ export class StandardizedPluginAPI {
         }
       });
 
-      console.log(`✅ Successfully loaded ${plugins.length} plugins`);
       this.setCache(cacheKey, plugins);
       return plugins;
 
@@ -233,7 +229,6 @@ export class StandardizedPluginAPI {
     }
 
     try {
-      console.log('🔍 Loading enabled plugins from backend...');
       const enabledPlugins = await invoke('get_enabled_plugins');
       
       if (!Array.isArray(enabledPlugins)) {
@@ -247,13 +242,11 @@ export class StandardizedPluginAPI {
       // Validate plugin names
       const validatedPlugins = enabledPlugins.filter(name => {
         if (typeof name !== 'string' || name.trim() === '') {
-          console.warn('Invalid plugin name in enabled list:', name);
           return false;
         }
         return true;
       });
 
-      console.log(`✅ Successfully loaded ${validatedPlugins.length} enabled plugins`);
       this.setCache(cacheKey, validatedPlugins);
       return validatedPlugins;
 
@@ -276,18 +269,15 @@ export class StandardizedPluginAPI {
     this.validatePluginName(pluginName);
 
     try {
-      console.log(`🔄 Enabling plugin: ${pluginName}`);
       await invoke('enable_plugin', { name: pluginName });
       
       // Clear cache to force reload
       this.clearCache();
       
-      console.log(`✅ Successfully enabled plugin: ${pluginName}`);
       return { success: true, message: `Plugin '${pluginName}' enabled successfully` };
 
     } catch (error) {
       const errorMessage = `Failed to enable plugin '${pluginName}': ${error.message || error}`;
-      console.error(errorMessage);
       throw new PluginAPIError(
         errorMessage,
         'ENABLE_FAILED',
@@ -303,18 +293,15 @@ export class StandardizedPluginAPI {
     this.validatePluginName(pluginName);
 
     try {
-      console.log(`🔄 Disabling plugin: ${pluginName}`);
       await invoke('disable_plugin', { name: pluginName });
       
       // Clear cache to force reload
       this.clearCache();
       
-      console.log(`✅ Successfully disabled plugin: ${pluginName}`);
       return { success: true, message: `Plugin '${pluginName}' disabled successfully` };
 
     } catch (error) {
       const errorMessage = `Failed to disable plugin '${pluginName}': ${error.message || error}`;
-      console.error(errorMessage);
       throw new PluginAPIError(
         errorMessage,
         'DISABLE_FAILED',
@@ -349,14 +336,12 @@ export class StandardizedPluginAPI {
     this.validatePluginName(pluginName);
 
     try {
-      console.log(`🔍 Getting plugin info: ${pluginName}`);
       const pluginData = await invoke('get_plugin_info', { name: pluginName });
       
       const pluginInfo = new PluginInfo(pluginData);
       const validation = pluginInfo.manifest.validate();
       
       if (!validation.valid) {
-        console.warn(`Plugin ${pluginName} validation issues:`, validation.errors);
       }
 
       return pluginInfo.toFrontendFormat();
@@ -383,13 +368,11 @@ export class StandardizedPluginAPI {
     }
 
     try {
-      console.log(`🔄 Installing plugin from path: ${path}`);
       const result = await invoke('install_plugin_from_path', { path });
       
       // Clear cache to force reload
       this.clearCache();
       
-      console.log(`✅ Plugin installation result:`, result);
       return result;
 
     } catch (error) {
@@ -414,13 +397,11 @@ export class StandardizedPluginAPI {
     }
 
     try {
-      console.log(`🔄 Installing plugin from URL: ${url}`);
       const result = await invoke('install_plugin_from_url', { url });
       
       // Clear cache to force reload
       this.clearCache();
       
-      console.log(`✅ Plugin installation result:`, result);
       return result;
 
     } catch (error) {
@@ -439,13 +420,11 @@ export class StandardizedPluginAPI {
     this.validatePluginName(pluginName);
 
     try {
-      console.log(`🔄 Uninstalling plugin: ${pluginName}`);
       await invoke('uninstall_plugin', { name: pluginName });
       
       // Clear cache to force reload
       this.clearCache();
       
-      console.log(`✅ Successfully uninstalled plugin: ${pluginName}`);
       return { success: true, message: `Plugin '${pluginName}' uninstalled successfully` };
 
     } catch (error) {

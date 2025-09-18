@@ -75,9 +75,6 @@ export class CLITemplateGenerator {
    * Get project options interactively
    */
   async getProjectOptions(template, providedOptions = {}) {
-    console.log(chalk.cyan(`\n🚀 Creating ${template.name}\n`))
-    console.log(chalk.gray(template.description))
-    console.log()
 
     const questions = []
 
@@ -317,7 +314,6 @@ export class CLITemplateGenerator {
       try {
         await this.initializeGit(projectPath)
       } catch (error) {
-        console.log(chalk.yellow('⚠️  Could not initialize git repository'))
       }
     }
 
@@ -368,7 +364,6 @@ export class CLITemplateGenerator {
       this.spinner.succeed('Dependencies installed successfully')
     } catch (error) {
       this.spinner.fail('Failed to install dependencies')
-      console.log(chalk.yellow(`You can install them manually by running: ${packageManager} install`))
     }
   }
 
@@ -400,26 +395,11 @@ export class CLITemplateGenerator {
   displaySuccessMessage(projectPath, structure) {
     const projectName = path.basename(projectPath)
     
-    console.log()
-    console.log(chalk.green('✅ Plugin generated successfully!'))
-    console.log()
-    console.log(chalk.cyan('📁 Project created at:'), chalk.bold(projectPath))
-    console.log(chalk.cyan('🔧 Template used:'), structure.metadata.templateName)
-    console.log()
-    console.log(chalk.yellow('Next steps:'))
-    console.log(`  ${chalk.dim('1.')} cd ${projectName}`)
     
     if (structure.metadata.useTypeScript) {
-      console.log(`  ${chalk.dim('2.')} npm run build`)
-      console.log(`  ${chalk.dim('3.')} npm run dev`)
     } else {
-      console.log(`  ${chalk.dim('2.')} npm run dev`)
     }
     
-    console.log(`  ${chalk.dim('4.')} Edit plugin.json to configure your plugin`)
-    console.log()
-    console.log(chalk.gray('📖 Check README.md for detailed instructions'))
-    console.log()
   }
 
   /**
@@ -443,7 +423,6 @@ export class CLITemplateGenerator {
       )
     }
 
-    console.log(chalk.cyan('\n📋 Available MCP Plugin Templates\n'))
 
     const categories = {}
     for (const template of filteredTemplates) {
@@ -454,21 +433,14 @@ export class CLITemplateGenerator {
     }
 
     for (const [category, templates] of Object.entries(categories)) {
-      console.log(chalk.yellow(`\n${category.toUpperCase()}:`))
       
       for (const template of templates) {
         const complexity = template.complexity ? chalk.gray(`(${template.complexity})`) : ''
         const features = template.features ? chalk.dim(`[${template.features.slice(0, 3).join(', ')}${template.features.length > 3 ? '...' : ''}]`) : ''
         
-        console.log(`  ${chalk.green('●')} ${chalk.bold(template.name)} ${complexity}`)
-        console.log(`    ${chalk.gray(template.description)}`)
-        console.log(`    ${chalk.cyan('ID:')} ${template.type} ${features}`)
-        console.log()
       }
     }
 
-    console.log(chalk.gray(`Total: ${filteredTemplates.length} templates`))
-    console.log()
   }
 
   /**
@@ -478,49 +450,33 @@ export class CLITemplateGenerator {
     const template = this.templateGenerator.getTemplate(templateType)
     
     if (!template) {
-      console.log(chalk.red(`❌ Template "${templateType}" not found`))
       return
     }
 
-    console.log(chalk.cyan(`\n📋 Template: ${template.name}\n`))
-    console.log(chalk.bold('Description:'), template.description)
-    console.log(chalk.bold('Category:'), template.category)
-    console.log(chalk.bold('Complexity:'), template.complexity || 'not specified')
-    console.log(chalk.bold('Version:'), template.version)
     
     if (template.author) {
-      console.log(chalk.bold('Author:'), template.author.name)
     }
     
     if (template.features && template.features.length > 0) {
-      console.log(chalk.bold('Features:'))
       for (const feature of template.features) {
-        console.log(`  ${chalk.green('●')} ${feature}`)
       }
     }
 
     if (template.customization && Object.keys(template.customization).length > 0) {
-      console.log(chalk.bold('\nCustomization Options:'))
       for (const [key, config] of Object.entries(template.customization)) {
         const required = config.required ? chalk.red('*') : ''
         const defaultValue = config.default ? chalk.gray(`(default: ${config.default})`) : ''
-        console.log(`  ${chalk.yellow(key)}${required} ${chalk.dim(`[${config.type}]`)} ${defaultValue}`)
         if (config.description) {
-          console.log(`    ${chalk.gray(config.description)}`)
         }
       }
     }
 
-    console.log(chalk.bold('\nGenerate this template:'))
-    console.log(chalk.gray(`  lokus-plugin create ${templateType} [options]`))
-    console.log()
   }
 
   /**
    * Interactive template selection and generation
    */
   async interactiveGeneration() {
-    console.log(chalk.cyan('🎯 Interactive MCP Plugin Generator\n'))
 
     // Select template category
     const categoryChoice = await prompts({
@@ -535,7 +491,6 @@ export class CLITemplateGenerator {
     })
 
     if (!categoryChoice.category) {
-      console.log(chalk.yellow('Operation cancelled'))
       return
     }
 
@@ -543,7 +498,6 @@ export class CLITemplateGenerator {
     const templates = this.templateGenerator.getTemplatesByCategory(categoryChoice.category)
     
     if (templates.length === 0) {
-      console.log(chalk.red('No templates found in this category'))
       return
     }
 
@@ -560,7 +514,6 @@ export class CLITemplateGenerator {
     })
 
     if (!templateChoice.template) {
-      console.log(chalk.yellow('Operation cancelled'))
       return
     }
 

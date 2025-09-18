@@ -292,7 +292,6 @@ export function platformSwitch(handlers) {
     return handlers.default();
   }
   
-  console.warn(`No handler provided for platform: ${platform}`);
   return null;
 }
 

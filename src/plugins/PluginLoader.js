@@ -32,7 +32,6 @@ export class PluginLoader {
         this.unloadPlugin(event.payload.pluginId);
       });
     } catch (error) {
-      console.warn('Event system not available in browser mode:', error);
     }
   }
 
@@ -44,7 +43,6 @@ export class PluginLoader {
       const pluginId = pluginInfo.id || pluginInfo.name;
       
       if (this.loadedPlugins.has(pluginId)) {
-        console.warn(`Plugin ${pluginId} is already loaded`);
         return;
       }
 
@@ -72,7 +70,6 @@ export class PluginLoader {
 
       
     } catch (error) {
-      console.error(`❌ Failed to load plugin ${pluginInfo.id}:`, error);
       throw error;
     }
   }
@@ -95,11 +92,9 @@ export class PluginLoader {
         return code;
       } else {
         // Browser mode - try to load from local storage or mock
-        console.warn('Browser mode: Cannot load real plugin files');
         return null;
       }
     } catch (error) {
-      console.error(`Failed to load plugin code:`, error);
       return null;
     }
   }
@@ -120,10 +115,10 @@ export class PluginLoader {
       // Create safe global context for plugin
       const pluginGlobals = {
         console: {
-          log: (...args) => console.log(`[${pluginId}]`, ...args),
-          error: (...args) => console.error(`[${pluginId}]`, ...args),
-          warn: (...args) => console.warn(`[${pluginId}]`, ...args),
-          info: (...args) => console.info(`[${pluginId}]`, ...args)
+          log: (...args) => {},
+          error: (...args) => {},
+          warn: (...args) => {},
+          info: (...args) => {}
         },
         // Provide Lokus API access
         lokus: this.createLokusAPI(pluginId, context),
@@ -155,8 +150,6 @@ export class PluginLoader {
       // Return the module exports (should contain activate, deactivate, getAPI methods)
       return pluginExports;
     } catch (error) {
-      console.error(`Failed to execute plugin code for ${pluginId}:`, error);
-      console.error('Error details:', error.stack);
       throw error;
     }
   }
@@ -286,17 +279,14 @@ export class PluginLoader {
 
       window: {
         showInformationMessage: async (message, ...items) => {
-          console.info(`[${pluginId}] Info: ${message}`);
           return null;
         },
         
         showWarningMessage: async (message, ...items) => {
-          console.warn(`[${pluginId}] Warning: ${message}`);
           return null;
         },
         
         showErrorMessage: async (message, ...items) => {
-          console.error(`[${pluginId}] Error: ${message}`);
           return null;
         },
 
@@ -328,7 +318,6 @@ export class PluginLoader {
         registerCommand: (command, callback) => {
           const fullCommand = `${pluginId}.${command}`;
           context.commands.set(command, callback);
-          console.log(`📝 Registered command: ${fullCommand}`);
           
           // Emit command registration event
           this.emitCommandRegistered(pluginId, command, callback);
@@ -345,7 +334,6 @@ export class PluginLoader {
           try {
             return await invoke('execute_command', { command, args });
           } catch (error) {
-            console.warn(`Command not found: ${command}`);
             return null;
           }
         }
@@ -353,7 +341,7 @@ export class PluginLoader {
 
       events: {
         emit: (event, payload) => {
-          emit(`plugin-${pluginId}-${event}`, payload).catch(console.error);
+          emit(`plugin-${pluginId}-${event}`, payload).catch(() => {});
         },
         
         on: (event, callback) => {
@@ -376,7 +364,6 @@ export class PluginLoader {
             localStorage.setItem(`plugin-${pluginId}-${key}`, JSON.stringify(value));
             return true;
           } catch (error) {
-            console.error(`Failed to save data for ${pluginId}:`, error);
             return false;
           }
         },
@@ -406,7 +393,6 @@ export class PluginLoader {
       
       // Handle relative imports for plugin components
       if (module.startsWith('./')) {
-        console.warn(`[${pluginId}] Attempted to import relative module: ${module} - returning empty object`);
         // Return a mock object for component imports
         return {
           default: () => null, // Mock React component
@@ -414,7 +400,6 @@ export class PluginLoader {
         };
       }
       
-      console.warn(`[${pluginId}] Module '${module}' is not available in plugin context - returning empty object`);
       return {};
     };
   }
@@ -430,7 +415,6 @@ export class PluginLoader {
       }
 
       if (this.activePlugins.has(pluginId)) {
-        console.warn(`Plugin ${pluginId} is already active`);
         return;
       }
 
@@ -447,12 +431,10 @@ export class PluginLoader {
       try {
         await emit('plugin-runtime-activated', { pluginId });
       } catch (error) {
-        console.warn('Could not emit activation event:', error);
       }
 
       
     } catch (error) {
-      console.error(`❌ Failed to activate plugin ${pluginId}:`, error);
       throw error;
     }
   }
@@ -464,11 +446,9 @@ export class PluginLoader {
     try {
       const plugin = this.activePlugins.get(pluginId);
       if (!plugin) {
-        console.warn(`Plugin ${pluginId} is not active`);
         return;
       }
 
-      console.log(`⏹️ Deactivating plugin: ${pluginId}`);
 
       // Call plugin's deactivate method if it exists
       if (plugin.module && typeof plugin.module.deactivate === 'function') {
@@ -485,13 +465,10 @@ export class PluginLoader {
       try {
         await emit('plugin-runtime-deactivated', { pluginId });
       } catch (error) {
-        console.warn('Could not emit deactivation event:', error);
       }
 
-      console.log(`✅ Plugin ${pluginId} deactivated successfully`);
       
     } catch (error) {
-      console.error(`❌ Failed to deactivate plugin ${pluginId}:`, error);
     }
   }
 
@@ -500,7 +477,6 @@ export class PluginLoader {
    */
   async unloadPlugin(pluginId) {
     try {
-      console.log(`🗑️ Unloading plugin: ${pluginId}`);
 
       // Deactivate if active
       if (this.activePlugins.has(pluginId)) {
@@ -512,10 +488,8 @@ export class PluginLoader {
       this.pluginModules.delete(pluginId);
       this.pluginContexts.delete(pluginId);
 
-      console.log(`✅ Plugin ${pluginId} unloaded successfully`);
       
     } catch (error) {
-      console.error(`❌ Failed to unload plugin ${pluginId}:`, error);
     }
   }
 
@@ -573,7 +547,6 @@ export class PluginLoader {
         }
       });
     } catch (error) {
-      console.warn('Could not emit status bar update:', error);
     }
   }
 
@@ -588,7 +561,6 @@ export class PluginLoader {
         title: command
       });
     } catch (error) {
-      console.warn('Could not emit command registration:', error);
     }
   }
 

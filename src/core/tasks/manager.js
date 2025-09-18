@@ -27,7 +27,6 @@ export class TaskManager {
       try {
         listener(event)
       } catch (error) {
-        console.error('Task listener error:', error)
       }
     })
   }
@@ -47,7 +46,6 @@ export class TaskManager {
       this.cache.set(cacheKey, tasks)
       return tasks
     } catch (error) {
-      console.error('Failed to get all tasks:', error)
       throw error
     }
   }
@@ -76,7 +74,6 @@ export class TaskManager {
       this.notifyListeners({ type: 'task_created', task })
       return task
     } catch (error) {
-      console.error('Failed to create task:', error)
       throw error
     }
   }
@@ -102,7 +99,6 @@ export class TaskManager {
       })
       return updatedTask
     } catch (error) {
-      console.error('Failed to update task:', error)
       throw error
     }
   }
@@ -116,7 +112,6 @@ export class TaskManager {
       this.invalidateCache()
       this.notifyListeners({ type: 'task_deleted', taskId })
     } catch (error) {
-      console.error('Failed to delete task:', error)
       throw error
     }
   }
@@ -129,7 +124,6 @@ export class TaskManager {
       const tasks = await invoke('get_tasks_by_status', { status })
       return tasks
     } catch (error) {
-      console.error('Failed to get tasks by status:', error)
       throw error
     }
   }
@@ -142,7 +136,6 @@ export class TaskManager {
       const tasks = await invoke('get_tasks_by_note', { notePath })
       return tasks
     } catch (error) {
-      console.error('Failed to get tasks by note:', error)
       throw error
     }
   }
@@ -165,7 +158,6 @@ export class TaskManager {
       })
       return updatedTasks
     } catch (error) {
-      console.error('Failed to bulk update tasks:', error)
       throw error
     }
   }
@@ -181,7 +173,6 @@ export class TaskManager {
       })
       return extractedTasks
     } catch (error) {
-      console.error('Failed to extract tasks from content:', error)
       throw error
     }
   }
@@ -229,7 +220,6 @@ export class TaskManager {
         existing: existingTasks
       }
     } catch (error) {
-      console.error('Failed to sync tasks with editor:', error)
       throw error
     }
   }
@@ -276,7 +266,6 @@ export class TaskManager {
 
       return stats
     } catch (error) {
-      console.error('Failed to get task stats:', error)
       throw error
     }
   }
@@ -309,7 +298,6 @@ export class TaskManager {
 
       return filtered
     } catch (error) {
-      console.error('Failed to search tasks:', error)
       throw error
     }
   }
@@ -329,7 +317,6 @@ export class TaskManager {
       const task = await invoke('get_task', { taskId })
       return task
     } catch (error) {
-      console.error('Failed to get task:', error)
       throw error
     }
   }

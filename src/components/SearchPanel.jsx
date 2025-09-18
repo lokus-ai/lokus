@@ -54,7 +54,6 @@ export default function SearchPanel({ isOpen, onClose, onFileOpen, workspacePath
       try {
         setRecentSearches(JSON.parse(saved))
       } catch (error) {
-        console.error('Error loading recent searches:', error)
       }
     }
   }, [])
@@ -91,7 +90,6 @@ export default function SearchPanel({ isOpen, onClose, onFileOpen, workspacePath
         setExpandedFiles(new Set(searchResults.map(result => result.file)))
       }
     } catch (error) {
-      console.error('Search error:', error)
       setResults([])
     } finally {
       setIsSearching(false)

@@ -22,4 +22,3 @@ describe('shortcuts (non-Tauri)', () => {
     expect(acc).toContain('Shift')
   })
 })
-

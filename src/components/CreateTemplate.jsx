@@ -31,7 +31,6 @@ export default function CreateTemplate({
       try {
         setCategories(getCategories());
       } catch (err) {
-        console.error('Failed to load categories:', err);
       }
     }
   }, [open, getCategories]);
@@ -95,11 +94,9 @@ export default function CreateTemplate({
 
       await createTemplate(templateData);
       
-      console.log('[CreateTemplate] Template saved successfully:', templateData.name);
       onSaved?.();
       onClose?.();
     } catch (err) {
-      console.error('[CreateTemplate] Failed to save template:', err);
       alert(`Failed to save template: ${err.message}`);
     } finally {
       setSaving(false);

@@ -210,7 +210,6 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
         setEditorSettings(mergedSettings);
         
       } catch (e) {
-        console.warn('[editor] failed to load configuration:', e)
         // Use defaults if loading fails
         setEditorSettings({
           font: { family: 'ui-sans-serif', size: 16, lineHeight: 1.7, letterSpacing: 0.003 },
@@ -288,18 +287,15 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           event.preventDefault();
           
           // Log for debugging
-          console.log('[WikiLink] Click:', { href, target, element: el });
           
           // Check if this is a resolved file path that exists in the index
           const index = globalThis.__LOKUS_FILE_INDEX__ || [];
           const fileExists = index.some(f => f.path === href);
           
           if (!fileExists && target) {
-            console.warn('[WikiLink] File not found in index:', href, 'original target:', target);
             // Show a user-friendly message
             try {
               // You could show a toast notification here instead
-              console.log(`WikiLink target "${target}" could not be resolved to an existing file`);
             } catch {}
           }
           
@@ -388,18 +384,15 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         break;
       case 'find':
         // TODO: Implement find functionality
-        console.log('Find in editor');
         break;
       case 'findAndReplace':
         // TODO: Implement find and replace
-        console.log('Find and replace in editor');
         break;
       case 'commandPalette':
         // Dispatch event to open command palette
         try {
           window.dispatchEvent(new CustomEvent('lokus:command-palette'));
         } catch (e) {
-          console.log('Command palette action');
         }
         break;
       case 'insertTable':
@@ -422,18 +415,14 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         break;
       case 'exportMarkdown':
         // TODO: Implement markdown export
-        console.log('Export as markdown');
         break;
       case 'exportHTML':
         // TODO: Implement HTML export  
-        console.log('Export as HTML');
         break;
       case 'importFile':
         // TODO: Implement file import
-        console.log('Import file');
         break;
       default:
-        console.log('Unhandled editor action:', action);
     }
   };
 

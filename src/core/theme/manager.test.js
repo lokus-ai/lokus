@@ -36,4 +36,3 @@ describe('theme manager (browser mode)', () => {
     expect(v.theme).toBe('dracula')
   })
 })
-

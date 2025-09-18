@@ -85,13 +85,6 @@ export function initializeSecurity() {
   // Set up Content Security Policy violation reporting
   if (typeof window !== 'undefined') {
     document.addEventListener('securitypolicyviolation', (event) => {
-      console.warn('CSP Violation:', {
-        directive: event.violatedDirective,
-        blockedURI: event.blockedURI,
-        lineNumber: event.lineNumber,
-        columnNumber: event.columnNumber,
-        sourceFile: event.sourceFile
-      });
       
       // In production, you might want to report this to an error tracking service
       if (process.env.NODE_ENV === 'production') {
@@ -102,7 +95,6 @@ export function initializeSecurity() {
     // Set up global error handler for security-related errors
     window.addEventListener('error', (event) => {
       if (event.error && event.error.name === 'SecurityError') {
-        console.error('Security Error:', event.error);
         // Handle security errors appropriately
       }
     });

@@ -61,7 +61,6 @@ export function usePluginUI() {
           if (commandUnlisten) commandUnlisten();
         };
       } catch (error) {
-        console.warn('Plugin UI listeners not available:', error);
         return () => {};
       }
     };
@@ -114,9 +113,7 @@ export function usePluginUI() {
           return await handler(...args);
         }
       }
-      console.warn(`Command ${command} not found for plugin ${pluginId}`);
     } catch (error) {
-      console.error(`Failed to execute command ${command} for plugin ${pluginId}:`, error);
     }
   }, []);
 

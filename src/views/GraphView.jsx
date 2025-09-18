@@ -68,10 +68,8 @@ const GraphView = ({
         setIsInitialized(true);
         setError(null);
 
-        console.log('GraphView created new GraphEngine');
 
       } catch (err) {
-        console.error('Failed to initialize GraphView:', err);
         setError(err.message);
         return;
       }
@@ -94,10 +92,8 @@ const GraphView = ({
         setError(null);
         updateStats();
 
-        console.log('GraphView using existing GraphEngine');
 
       } catch (err) {
-        console.error('Failed to setup existing GraphEngine:', err);
         setError(err.message);
       }
     }
@@ -119,7 +115,6 @@ const GraphView = ({
       graphEngineRef.current.importData(data);
       updateStats();
     } catch (err) {
-      console.error('Failed to import graph data:', err);
       setError(err.message);
     }
   }, [data, isInitialized]);
@@ -320,13 +315,11 @@ const GraphView = ({
       // Resume when visible
       if (engine.isPaused) {
         engine.resume();
-        console.log('GraphView resumed due to visibility');
       }
     } else {
       // Pause when not visible
       if (!engine.isPaused) {
         engine.pause();
-        console.log('GraphView paused due to visibility');
       }
     }
   }, [isVisible, isInitialized]);
