@@ -1,0 +1,143 @@
+{
+  "manifestVersion": "2.0",
+  "id": "mermaid-diagrams",
+  "name": "Mermaid Diagrams",
+  "version": "1.2.0",
+  "description": "Full-featured Mermaid diagram integration with live preview, editing, and export capabilities",
+  "author": {
+    "name": "Lokus Development Team",
+    "email": "dev@lokus.dev",
+    "url": "https://lokus.dev"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/lokus-dev/plugin-mermaid",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lokus-dev/plugin-mermaid.git"
+  },
+  "keywords": ["mermaid", "diagrams", "visualization", "flowchart", "uml"],
+  "category": "visualization",
+  "main": "dist/index.js",
+  "permissions": [
+    "editor:extensions",
+    "ui:panels",
+    "ui:commands",
+    "storage:local",
+    "network:https"
+  ],
+  "activationEvents": [
+    "onLanguage:mermaid",
+    "onCommand:mermaid.insert",
+    "onFileExtension:.mmd"
+  ],
+  "engines": {
+    "lokus": ">=1.0.0"
+  },
+  "dependencies": {
+    "mermaid": "^10.6.0",
+    "@tiptap/core": "^2.0.0",
+    "@tiptap/react": "^2.0.0",
+    "html2canvas": "^1.4.1",
+    "file-saver": "^2.0.5"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "mermaid.insert",
+        "title": "Insert Mermaid Diagram",
+        "icon": "diagram",
+        "category": "Mermaid"
+      },
+      {
+        "command": "mermaid.preview",
+        "title": "Preview Diagram",
+        "icon": "eye",
+        "category": "Mermaid"
+      },
+      {
+        "command": "mermaid.export",
+        "title": "Export Diagram",
+        "icon": "download",
+        "category": "Mermaid"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "mermaid.preview",
+          "when": "editorHasSelection && selectionContains:mermaid",
+          "group": "mermaid"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "mermaid.insert"
+        },
+        {
+          "command": "mermaid.export",
+          "when": "mermaidDiagramActive"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Mermaid Diagrams",
+      "properties": {
+        "mermaid.theme": {
+          "type": "string",
+          "enum": ["default", "dark", "forest", "neutral"],
+          "default": "default",
+          "description": "Default theme for Mermaid diagrams"
+        },
+        "mermaid.autoPreview": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically preview diagrams as you type"
+        },
+        "mermaid.exportFormat": {
+          "type": "string",
+          "enum": ["png", "svg", "pdf"],
+          "default": "png",
+          "description": "Default export format"
+        },
+        "mermaid.maxWidth": {
+          "type": "number",
+          "default": 800,
+          "description": "Maximum width for diagram rendering"
+        }
+      }
+    },
+    "themes": [
+      {
+        "id": "mermaid-light",
+        "label": "Mermaid Light",
+        "path": "./themes/mermaid-light.json"
+      },
+      {
+        "id": "mermaid-dark",
+        "label": "Mermaid Dark",
+        "path": "./themes/mermaid-dark.json"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "test": "vitest",
+    "lint": "eslint src/",
+    "type-check": "tsc --noEmit"
+  },
+  "lokus": {
+    "extensionPoints": {
+      "editor.nodes": ["MermaidNode"],
+      "editor.commands": ["insertMermaid", "previewMermaid"],
+      "ui.panels": ["MermaidPreviewPanel"],
+      "ui.toolbars": ["MermaidToolbar"]
+    },
+    "capabilities": {
+      "export": true,
+      "themes": true,
+      "collaboration": true,
+      "realtime": false
+    }
+  }
+}
