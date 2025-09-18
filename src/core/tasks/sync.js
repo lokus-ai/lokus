@@ -53,7 +53,6 @@ export class TaskSyncManager {
 
       return syncResult
     } catch (error) {
-      console.error('Failed to sync from editor:', error)
       throw error
     } finally {
       this.syncInProgress.delete(filePath)
@@ -89,7 +88,6 @@ export class TaskSyncManager {
       }
 
     } catch (error) {
-      console.error('Failed to sync to editor:', error)
       throw error
     } finally {
       this.syncInProgress.delete(filePath)
@@ -287,7 +285,6 @@ export class TaskSyncManager {
         const content = await callback.getCurrentContent()
         syncPromises.push(this.syncFromEditor(filePath, content))
       } catch (error) {
-        console.error(`Failed to sync file ${filePath}:`, error)
       }
     }
 
@@ -379,7 +376,6 @@ export class TaskSyncManager {
         filePath 
       }
     } catch (error) {
-      console.error(`Batch sync failed for ${filePath}:`, error)
       throw error
     }
   }

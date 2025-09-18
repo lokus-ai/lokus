@@ -201,7 +201,6 @@ export class GraphRenderer {
     gl.linkProgram(program);
     
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error('Shader program failed to link:', gl.getProgramInfoLog(program));
       return null;
     }
     
@@ -217,7 +216,6 @@ export class GraphRenderer {
     gl.compileShader(shader);
     
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.error('Shader compilation error:', gl.getShaderInfoLog(shader));
       gl.deleteShader(shader);
       return null;
     }

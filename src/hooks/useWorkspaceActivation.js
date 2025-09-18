@@ -29,7 +29,6 @@ export function useWorkspaceActivation() {
           setPath(decodedPath);
           return;
         } else {
-          console.warn("Invalid workspace path from URL parameter:", decodedPath);
         }
       }
 
@@ -41,11 +40,9 @@ export function useWorkspaceActivation() {
           return;
         }
       } catch (error) {
-        console.error("Failed to get validated workspace path:", error);
       }
 
       // Strategy 3: No valid workspace found, path remains null (shows launcher)
-      console.log("No valid workspace found, launcher will be shown");
     };
 
     initializeWorkspace();
@@ -70,7 +67,6 @@ export function useWorkspaceActivation() {
             if (isValid) {
               setPath(p);
             } else {
-              console.warn("Invalid workspace path from activation event:", p);
             }
           }
         })

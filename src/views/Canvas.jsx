@@ -54,35 +54,22 @@ export default function Canvas({
     if (!canvasPath || !store || !editor) return
     
     const loadCanvas = async () => {
-      console.log('📂 Loading canvas from:', canvasPath)
       setIsLoading(true)
       setSaveState('idle')
       
       try {
         // Wait for any pending save operations to complete
         while (saveQueueRef.current.isProcessing) {
-          console.log('⏳ Waiting for save queue to finish before loading...')
           await new Promise(resolve => setTimeout(resolve, 100))
         }
         
         // Use CanvasManager for consistent load operations
         const canvasData = await canvasManager.loadCanvas(canvasPath)
         
-        console.log('🔍 Loaded canvas data:', {
-          hasNodes: !!canvasData.nodes,
-          nodeCount: canvasData.nodes?.length || 0,
-          hasEdges: !!canvasData.edges,
-          edgeCount: canvasData.edges?.length || 0,
-          hasMetadata: !!canvasData.metadata
-        })
         
         // Convert to tldraw format
         const tldrawData = jsonCanvasToTldraw(canvasData)
         
-        console.log('📊 Tldraw data prepared:', {
-          records: tldrawData.records?.length || 0,
-          shapes: tldrawData.records?.filter(r => r.typeName === 'shape').length || 0
-        })
         
         // Load into store
         loadSnapshot(store, tldrawData)
@@ -90,18 +77,14 @@ export default function Canvas({
         // Mark as clean after loading
         setIsDirty(false)
         
-        console.log('✅ Canvas loaded successfully')
       } catch (error) {
-        console.error('❌ Failed to load canvas:', error)
         
         // Initialize with empty canvas on error
         try {
-          console.log('🔄 Loading empty canvas as fallback...')
           const emptyTldrawData = jsonCanvasToTldraw({ nodes: [], edges: [] })
           loadSnapshot(store, emptyTldrawData)
           setIsDirty(false)
         } catch (loadError) {
-          console.error('❌ Failed to load empty canvas:', loadError)
         }
       } finally {
         setIsLoading(false)
@@ -169,32 +152,23 @@ export default function Canvas({
         const savedEdges = savedData.edges?.length || 0
         
         if (expectedNodes === savedNodes && expectedEdges === savedEdges) {
-          console.log(`✅ File verification successful on attempt ${attempt}`)
           return true
         } else {
-          console.warn(`⚠️ File verification failed on attempt ${attempt}:`, {
-            expected: { nodes: expectedNodes, edges: expectedEdges },
-            saved: { nodes: savedNodes, edges: savedEdges }
-          })
         }
       } catch (error) {
-        console.warn(`⚠️ File verification error on attempt ${attempt}:`, error)
       }
     }
     
-    console.error('❌ File verification failed after all retries')
     return false
   }, [])
   
   // Save canvas content with robust error handling
   const handleSave = useCallback(async () => {
     if (!canvasPath || !editor) {
-      console.warn('💾 Save skipped: missing canvasPath or editor')
       return
     }
 
     return queueSaveOperation(async () => {
-      console.log('💾 Starting queued save operation for:', canvasPath)
       setSaveState('saving')
       setIsLoading(true)
       
@@ -209,14 +183,9 @@ export default function Canvas({
         const allRecords = editor.store.allRecords()
         const finalSnapshot = snapshot.records?.length > 0 ? snapshot : { records: allRecords }
         
-        console.log('💾 Snapshot taken with records:', finalSnapshot.records?.length || 0)
         
         // Convert to JSON Canvas format
         const canvasData = tldrawToJsonCanvas(finalSnapshot)
-        console.log('🔄 Converted to JSON Canvas:', {
-          nodes: canvasData.nodes?.length || 0,
-          edges: canvasData.edges?.length || 0
-        })
         
         // Security validation
         if (!isValidCanvasData(canvasData)) {
@@ -242,13 +211,11 @@ export default function Canvas({
         setIsDirty(false)
         setSaveState('saved')
         
-        console.log('✅ Canvas saved and verified successfully')
         
         // Reset save state after a delay
         setTimeout(() => setSaveState('idle'), 2000)
         
       } catch (error) {
-        console.error('❌ Save operation failed:', error)
         setSaveState('error')
         setIsDirty(true)
         
@@ -266,7 +233,6 @@ export default function Canvas({
           userMessage = `Save failed: ${error.message}`
         }
         
-        console.error('🚨 Error details:', userMessage)
         
         // Reset error state after delay
         setTimeout(() => setSaveState('idle'), 3000)
@@ -297,7 +263,6 @@ export default function Canvas({
       
       // Reduced debounce for more responsive detection
       changeTimeout = setTimeout(() => {
-        console.log('📝 Store changed, checking for real changes...')
         
         // Use proper tldraw v3 API to get current state
         const currentSnapshot = getSnapshot(editor.store)
@@ -308,7 +273,6 @@ export default function Canvas({
         
         // Compare with initial snapshot to detect real changes
         if (initialSnapshot && hasRealChanges(initialSnapshot, finalCurrentSnapshot)) {
-          console.log('💾 Real changes detected, marking as dirty')
           setIsDirty(true)
           
           // Call onContentChange if provided
@@ -317,13 +281,11 @@ export default function Canvas({
               const canvasData = tldrawToJsonCanvas(finalCurrentSnapshot)
               onContentChange(canvasData)
             } catch (error) {
-              console.error('❌ Failed to convert to JSON Canvas format:', error)
             }
           }
           
           // Auto-save immediately when real changes are detected
           if (canvasPath) {
-            console.log('🔄 Auto-saving canvas...')
             handleSave()
           }
         }
@@ -336,10 +298,6 @@ export default function Canvas({
         const snapshot = getSnapshot(editor.store)
         const allRecords = editor.store.allRecords()
         initialSnapshot = snapshot.records?.length > 0 ? snapshot : { records: allRecords }
-        console.log('📸 Initial snapshot captured:', {
-          records: initialSnapshot.records?.length || 0,
-          shapes: initialSnapshot.records?.filter(r => r.typeName === 'shape').length || 0
-        })
       }
     }
 
@@ -467,7 +425,6 @@ export default function Canvas({
         switch (e.key) {
           case 's':
             e.preventDefault()
-            console.log('⌨️ Manual save triggered by Ctrl+S')
             handleSave()
             break
           case 'Escape':
@@ -504,7 +461,6 @@ export default function Canvas({
               size: 'small'
             }}
             onMount={(editorInstance) => {
-              console.log('📝 Editor mounted:', !!editorInstance)
               setEditor(editorInstance)
             }}
           />

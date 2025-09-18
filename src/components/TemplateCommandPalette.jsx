@@ -23,7 +23,6 @@ export default function TemplateCommandPalette({ onSelect, onClose }) {
   );
 
   const handleSelect = async (template) => {
-    console.log('[TemplateCommandPalette] Selecting template:', template.name);
     
     try {
       // Process the template with built-in variables
@@ -31,13 +30,11 @@ export default function TemplateCommandPalette({ onSelect, onClose }) {
         context: {}
       });
       
-      console.log('[TemplateCommandPalette] Template processed successfully');
       
       // Call onSelect with both template and processed content
       onSelect?.(template, result.result || result.content || result);
       onClose?.();
     } catch (err) {
-      console.error('[TemplateCommandPalette] Failed to process template:', err);
       // Fallback to raw template content
       onSelect?.(template, template.content);
       onClose?.();

@@ -60,7 +60,6 @@ if (isTauri) {
     ({ join, appDataDir } = await import("@tauri-apps/api/path"));
     ({ exists, readDir, readTextFile, writeTextFile, mkdir } = await import("@tauri-apps/plugin-fs"));
   } catch (e) {
-    console.warn('[theme] Tauri APIs unavailable, disabling FS features:', e);
     isTauri = false;
   }
 }
@@ -128,7 +127,7 @@ export async function installDefaultThemes() {
     const themeJsonPath = await join(themesDir, `${themeId}.json`);
     if (!(await exists(themeJsonPath))) {
       try { await writeTextFile(themeJsonPath, DEFAULT_THEME_CONTENT[themeId]); }
-      catch (e) { console.error(`[theme] failed to write default theme '${themeId}':`, e); }
+      catch (e) { }
     }
   }
 }
@@ -142,7 +141,7 @@ export async function loadThemeManifestById(id) {
   }
   if (DEFAULT_THEME_CONTENT[id]) {
     try { return JSON.parse(DEFAULT_THEME_CONTENT[id]); }
-    catch (e) { console.error(`[theme] Failed to parse embedded theme '${id}':`, e); }
+    catch (e) { }
   }
   return null;
 }
@@ -166,45 +165,33 @@ export async function listAvailableThemes() {
         }
       }
     }
-  } catch (e) { console.error("[theme] Failed to read user themes directory:", e); }
+  } catch (e) { }
   return Array.from(themeMap.values());
 }
 
 // --- Public API ---
 export async function readGlobalVisuals() {
-  console.log('[theme] Reading theme from config...');
   const cfg = await readConfig();
-  console.log('[theme] Full config loaded:', cfg);
   const themeId = cfg.theme || null;
   const result = { theme: themeId };
-  console.log(`[theme] Extracted theme: "${themeId}" (type: ${typeof themeId})`);
-  console.log('[theme] Returning visuals:', result);
   return result;
 }
 
 export async function setGlobalActiveTheme(id) {
-  console.log(`[theme] === Setting Global Active Theme: "${id}" ===`);
-  
   try { 
     await updateConfig({ theme: id }); 
-    console.log(`[theme] ✅ Theme "${id}" saved to config successfully`);
   } catch (e) { 
-    console.error(`[theme] ❌ Failed to save theme "${id}":`, e); 
     return;
   }
   
   const manifest = await loadThemeManifestById(id);
   const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
-  
   console.log(`[theme] Applying tokens for theme "${id}"`);
   console.log(`[theme] Manifest loaded:`, manifest);
   console.log(`[theme] Tokens to apply:`, tokensToApply);
   applyTokens(tokensToApply);
   
-  console.log(`[theme] Broadcasting theme change to other windows: "${id}"`);
   await broadcastTheme({ tokens: tokensToApply, visuals: { theme: id } });
-  
-  console.log(`[theme] === Theme "${id}" fully activated ===`);
 }
 
 // Removed setGlobalVisuals - themes now handle everything
@@ -223,23 +210,12 @@ export async function loadThemeForWorkspace(workspacePath) {
   const manifest = await loadThemeManifestById(id);
   const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
   applyTokens(tokensToApply);
-  console.log('[theme] Applied workspace theme:', id || 'built-in');
 }
 
 export async function applyInitialTheme() {
-  console.log('[theme] === Applying Initial Theme ===');
   const { theme } = await readGlobalVisuals();
-  
-  if (theme) {
-    console.log(`[theme] Loading saved theme: "${theme}"`);
-  } else {
-    console.log('[theme] No saved theme found, using built-in theme');
-  }
   
   const manifest = await loadThemeManifestById(theme);
   const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
   applyTokens(tokensToApply);
-  
-  const appliedTheme = theme || 'built-in';
-  console.log(`[theme] ✅ Initial theme applied: "${appliedTheme}"`);
 }

@@ -48,7 +48,6 @@ class LiveEditorSettings {
       try {
         callback(key, value, this.settings);
       } catch (e) {
-        console.warn('Error in settings listener:', e);
       }
     });
   }
@@ -68,7 +67,6 @@ class LiveEditorSettings {
           callback(key, newSettings[key], this.settings);
         });
       } catch (e) {
-        console.warn('Error in settings listener:', e);
       }
     });
   }
@@ -94,7 +92,6 @@ class LiveEditorSettings {
       try {
         callback('reset', this.settings, this.settings);
       } catch (e) {
-        console.warn('Error in settings listener:', e);
       }
     });
   }

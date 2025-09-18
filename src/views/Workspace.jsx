@@ -533,9 +533,19 @@ export default function Workspace({ initialPath = "" }) {
       if (activeTab) {
         invoke("read_file_content", { path: activeFile })
           .then(content => {
-            setEditorContent(content);
+            // Process markdown content to ensure proper formatting
+            const compiler = getMarkdownCompiler();
+            let processedContent = content;
+            
+            // If this is a markdown file and the content looks like markdown, process it
+            if (activeTab.name.endsWith('.md') && compiler.isMarkdown(content)) {
+              console.log('[Workspace] Processing loaded markdown content');
+              processedContent = compiler.compile(content);
+            }
+            
+            setEditorContent(processedContent);
             setEditorTitle(activeTab.name.replace(/\.md$/, ""));
-            setSavedContent(content);
+            setSavedContent(content); // Keep original content for saving
           })
           .catch(() => {});
       }
@@ -756,7 +766,17 @@ export default function Workspace({ initialPath = "" }) {
     setActiveFile(path);
   };
 
+  // Ref to track last close timestamp for debouncing (global for any tab)
+  const lastCloseTimeRef = useRef(0);
+  
   const handleTabClose = useCallback(async (path) => {
+    // Global debounce: ignore ANY tab close within 200ms of the last one
+    const now = Date.now();
+    if (now - lastCloseTimeRef.current < 200) {
+      return;
+    }
+    lastCloseTimeRef.current = now;
+    
     const closeTab = () => {
       setOpenTabs(prevTabs => {
         const tabIndex = prevTabs.findIndex(t => t.path === path);
@@ -1110,7 +1130,9 @@ export default function Workspace({ initialPath = "" }) {
       if (stateRef.current.activeFile) {
         handleTabClose(stateRef.current.activeFile);
       }
-    }) : Promise.resolve(addDom('lokus:close-tab', () => { if (stateRef.current.activeFile) handleTabClose(stateRef.current.activeFile); }));
+    }) : Promise.resolve(addDom('lokus:close-tab', () => { 
+      if (stateRef.current.activeFile) handleTabClose(stateRef.current.activeFile); 
+    }));
     const unlistenNewFile = isTauri ? listen("lokus:new-file", handleCreateFile) : Promise.resolve(addDom('lokus:new-file', handleCreateFile));
     const unlistenNewFolder = isTauri ? listen("lokus:new-folder", () => setIsCreatingFolder(true)) : Promise.resolve(addDom('lokus:new-folder', () => setIsCreatingFolder(true)));
     const unlistenToggleSidebar = isTauri ? listen("lokus:toggle-sidebar", () => setShowLeft(v => !v)) : Promise.resolve(addDom('lokus:toggle-sidebar', () => setShowLeft(v => !v)));

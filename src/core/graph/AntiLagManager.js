@@ -113,7 +113,6 @@ export class AntiLagManager {
    * Initialize the anti-lag system
    */
   initialize() {
-    console.log('🛡️ Initializing AntiLagManager...');
     
     // Start performance monitoring
     this.startPerformanceMonitoring();
@@ -130,7 +129,6 @@ export class AntiLagManager {
     // Setup memory monitoring
     this.setupMemoryMonitoring();
     
-    console.log('✅ AntiLagManager initialized');
   }
 
   /**
@@ -223,7 +221,6 @@ export class AntiLagManager {
    * Handle performance mode changes
    */
   onPerformanceModeChanged(oldMode, newMode) {
-    console.log(`🎭 Performance mode changed: ${oldMode} → ${newMode}`);
     
     switch (newMode) {
       case 'warning':
@@ -265,7 +262,6 @@ export class AntiLagManager {
     this.adaptive.rendering.useBatchedUpdates = true;
     this.adaptive.rendering.maxBatchSize = 75;
     
-    console.log('⚠️ Warning optimizations enabled');
   }
 
   /**
@@ -291,7 +287,6 @@ export class AntiLagManager {
       this.pausePhysicsTemporarily();
     }
     
-    console.log('🔴 Critical optimizations enabled');
   }
 
   /**
@@ -303,7 +298,6 @@ export class AntiLagManager {
     this.state.emergencyModeActive = true;
     this.emergency.lastEmergencyTime = Date.now();
     
-    console.log('🚨 EMERGENCY MODE ACTIVATED');
     
     // Apply all emergency strategies
     this.applyEmergencyStrategies();
@@ -348,7 +342,6 @@ export class AntiLagManager {
       this.deactivateEmergencyMode();
     }
     
-    console.log('✅ Normal performance mode restored');
   }
 
   /**
@@ -396,7 +389,6 @@ export class AntiLagManager {
     
     this.emergency.activeStrategies.clear();
     
-    console.log('🔄 Emergency mode deactivated');
   }
 
   /**
@@ -546,7 +538,6 @@ export class AntiLagManager {
       try {
         operation.execute();
       } catch (error) {
-        console.warn('Error in batched node update:', error);
       }
     }
   }
@@ -559,7 +550,6 @@ export class AntiLagManager {
       try {
         operation.execute();
       } catch (error) {
-        console.warn('Error in batched edge update:', error);
       }
     }
   }
@@ -613,7 +603,6 @@ export class AntiLagManager {
     
     // Check for sudden drop
     if (avgRecentFPS < this.thresholds.criticalFPS && this.state.mode !== 'emergency') {
-      console.log('🚨 Sudden performance drop detected!');
       this.enableEmergencyMode();
     }
   }
@@ -639,10 +628,6 @@ export class AntiLagManager {
    * Handle memory pressure
    */
   handleMemoryPressure(memoryInfo) {
-    console.log('🧠 Memory pressure detected:', {
-      used: Math.round(memoryInfo.usedJSHeapSize / 1024 / 1024) + 'MB',
-      limit: Math.round(memoryInfo.jsHeapSizeLimit / 1024 / 1024) + 'MB'
-    });
     
     // Clear non-essential caches
     this.clearNonEssentialCaches();
@@ -678,7 +663,6 @@ export class AntiLagManager {
   reduceVisibleNodes() {
     // Temporarily hide nodes that are far from viewport
     // This would integrate with viewport culling
-    console.log('🔍 Reducing visible nodes for emergency performance');
   }
 
   /**
@@ -686,7 +670,6 @@ export class AntiLagManager {
    */
   restoreVisibleNodes() {
     // Restore hidden nodes
-    console.log('🔍 Restoring visible nodes');
   }
 
   /**
@@ -694,7 +677,6 @@ export class AntiLagManager {
    */
   simplifyEdgeRendering() {
     // Use simplified edge rendering
-    console.log('📏 Simplifying edge rendering');
   }
 
   /**
@@ -702,7 +684,6 @@ export class AntiLagManager {
    */
   restoreEdgeRendering() {
     // Restore normal edge rendering
-    console.log('📏 Restoring edge rendering');
   }
 
   /**
@@ -712,7 +693,6 @@ export class AntiLagManager {
     if (this.state.renderingPaused) return;
     
     this.state.renderingPaused = true;
-    console.log(`⏸️ Pausing rendering for ${duration}ms`);
     
     setTimeout(() => {
       this.resumeRendering();
@@ -726,7 +706,6 @@ export class AntiLagManager {
     if (!this.state.renderingPaused) return;
     
     this.state.renderingPaused = false;
-    console.log('▶️ Resuming rendering');
   }
 
   /**
@@ -746,7 +725,6 @@ export class AntiLagManager {
       }
     }
     
-    console.log('🧹 Cleared non-essential caches');
   }
 
   /**
@@ -755,7 +733,6 @@ export class AntiLagManager {
   forceGarbageCollection() {
     if (window.gc) {
       window.gc();
-      console.log('🗑️ Forced garbage collection');
     }
   }
 
@@ -787,7 +764,6 @@ export class AntiLagManager {
       this.engine.memoryPools.matrices.length = Math.floor(this.engine.memoryPools.matrices.length * 0.5);
     }
     
-    console.log('🧹 Forced immediate cleanup');
   }
 
   /**
@@ -828,7 +804,6 @@ export class AntiLagManager {
     
     // Recovery check
     if (this.state.emergencyModeActive && currentFPS > this.emergency.recoveryThreshold) {
-      console.log('📈 Performance recovered, checking for emergency mode exit...');
       
       // Wait a bit to ensure stable recovery
       setTimeout(() => {
@@ -937,7 +912,6 @@ export class AntiLagManager {
       this.restoreNormalMode();
     }
     
-    console.log(`🛡️ AntiLagManager ${enabled ? 'enabled' : 'disabled'}`);
   }
 
   /**
@@ -958,7 +932,6 @@ export class AntiLagManager {
     // Restore normal rendering
     this.restoreNormalMode();
     
-    console.log('🧹 AntiLagManager destroyed');
   }
 }
 

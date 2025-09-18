@@ -46,8 +46,11 @@ export async function setShortcut(actionId, accelerator) {
   const cfg = await readConfig();
   const shortcuts = { ...(cfg.shortcuts || {}), [actionId]: accelerator };
   await updateConfig({ shortcuts });
-  try { await emit('shortcuts:updated', { actionId, accelerator }); }
-  catch { try { window.dispatchEvent(new CustomEvent('shortcuts:updated', { detail: { actionId, accelerator } })); } catch {} }
+  if (isTauri) {
+    try { await emit('shortcuts:updated', { actionId, accelerator }); } catch (e) { console.warn('Failed to emit shortcuts:updated:', e); }
+  } else {
+    try { window.dispatchEvent(new CustomEvent('shortcuts:updated', { detail: { actionId, accelerator } })); } catch (e) { console.warn('Failed to dispatch shortcuts:updated:', e); }
+  }
 }
 
 export async function resetShortcuts() {
@@ -56,8 +59,11 @@ export async function resetShortcuts() {
     delete cfg.shortcuts;
     await updateConfig(cfg);
   }
-  try { await emit('shortcuts:updated', { reset: true }); }
-  catch { try { window.dispatchEvent(new CustomEvent('shortcuts:updated', { detail: { reset: true } })); } catch {} }
+  if (isTauri) {
+    try { await emit('shortcuts:updated', { reset: true }); } catch (e) { console.warn('Failed to emit shortcuts:updated:', e); }
+  } else {
+    try { window.dispatchEvent(new CustomEvent('shortcuts:updated', { detail: { reset: true } })); } catch (e) { console.warn('Failed to dispatch shortcuts:updated:', e); }
+  }
 }
 
 export async function registerGlobalShortcuts() {
@@ -70,13 +76,17 @@ export async function registerGlobalShortcuts() {
     try {
       await register(accel, async () => {
         if (a.id === 'open-preferences') {
-          try { await invoke('open_preferences_window'); } catch (e) { console.warn('open_preferences_window failed', e); }
+          try { await invoke('open_preferences_window'); } catch (e) { }
         } else {
-          try { await emit(a.event); } catch { try { window.dispatchEvent(new CustomEvent(a.event)); } catch {} }
+          // Use Tauri events in Tauri environment, DOM events otherwise
+          if (isTauri) {
+            try { await emit(a.event); } catch (e) { console.warn('Failed to emit Tauri event:', e); }
+          } else {
+            try { window.dispatchEvent(new CustomEvent(a.event)); } catch (e) { console.warn('Failed to dispatch DOM event:', e); }
+          }
         }
       });
     } catch (e) {
-      console.warn(`[shortcuts] Failed to register ${a.id} (${accel}):`, e);
     }
   }
 }

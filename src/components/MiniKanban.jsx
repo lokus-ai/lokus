@@ -20,7 +20,6 @@ function MiniTaskCard({ task, onUpdate }) {
       try {
         await onUpdate(task.id, { title: title.trim() })
       } catch (error) {
-        console.error('Failed to update task:', error)
         setTitle(task.title)
       }
     }
@@ -44,7 +43,6 @@ function MiniTaskCard({ task, onUpdate }) {
     try {
       await onUpdate(task.id, { status: nextStatus })
     } catch (error) {
-      console.error('Failed to update task status:', error)
     }
   }, [task.id, task.status, onUpdate])
 
@@ -110,7 +108,6 @@ function MiniColumn({ column, tasks, onTaskUpdate, onAddTask }) {
         setNewTaskTitle('')
         setIsAdding(false)
       } catch (error) {
-        console.error('Failed to add task:', error)
       }
     }
   }, [newTaskTitle, column.status, onAddTask])
@@ -186,7 +183,6 @@ export default function MiniKanban({ workspacePath, onOpenFull }) {
       setTasks(allTasks || [])
       setError(null)
     } catch (err) {
-      console.error('Failed to load tasks:', err)
       setError('Failed to load tasks')
     } finally {
       setLoading(false)
@@ -222,7 +218,6 @@ export default function MiniKanban({ workspacePath, onOpenFull }) {
         setTasks(prev => [...prev, newTask])
       }
     } catch (error) {
-      console.error('Failed to create task:', error)
       throw error
     }
   }, [])
@@ -242,7 +237,6 @@ export default function MiniKanban({ workspacePath, onOpenFull }) {
         task.id === taskId ? updatedTask : task
       ))
     } catch (error) {
-      console.error('Failed to update task:', error)
       throw error
     }
   }, [])

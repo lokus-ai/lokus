@@ -35,7 +35,6 @@ export function useTemplates() {
       return result;
     } catch (err) {
       setError(err.message);
-      console.error('Failed to load templates:', err);
       return { templates: [], total: 0 };
     } finally {
       setLoading(false);
@@ -237,7 +236,6 @@ This project is licensed under the MIT License.
       }
       return false;
     } catch (err) {
-      console.error('Failed to initialize demo templates:', err);
       return false;
     }
   }, [manager]);
@@ -289,8 +287,6 @@ export function useTemplateProcessor() {
       const builtins = builtinVariables.resolveAll(options.context || {});
       const allVariables = { ...builtins, ...variables };
       
-      console.log('[useTemplateProcessor] Built-in variables:', builtins);
-      console.log('[useTemplateProcessor] All variables:', allVariables);
       
       const result = await manager.process(templateId, allVariables, options);
       return result;
@@ -432,7 +428,6 @@ export function useTemplateOrganization() {
       setTags(tagsData);
       setStats(statsData);
     } catch (err) {
-      console.error('Failed to load organization data:', err);
     }
   }, [getCategories, getTags, getStatistics]);
 

@@ -117,7 +117,6 @@ export class BuiltinVariables {
     try {
       return variable.resolver(context);
     } catch (error) {
-      console.warn(`Error resolving built-in variable '${name}':`, error);
       return undefined;
     }
   }
@@ -132,7 +131,6 @@ export class BuiltinVariables {
       try {
         resolved[name] = variable.resolver(context);
       } catch (error) {
-        console.warn(`Error resolving built-in variable '${name}':`, error);
         resolved[name] = undefined;
       }
     }

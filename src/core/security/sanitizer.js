@@ -87,7 +87,6 @@ export function sanitizeHtml(html, config = DEFAULT_CONFIG) {
   try {
     return DOMPurify.sanitize(html, config);
   } catch (error) {
-    console.error('HTML sanitization failed:', error);
     return '';
   }
 }
@@ -128,11 +127,9 @@ export function sanitizeMathHtml(mathHtml) {
       ADD_ATTR: ['xmlns', 'display', 'encoding', 'aria-hidden'] // Allow MathML attributes
     });
     
-    console.log('DOMPurify result:', result); // Debug log
+    // Debug log
     return result;
   } catch (error) {
-    console.error('Math HTML sanitization failed:', error);
-    console.log('Returning original HTML due to sanitization failure');
     return mathHtml; // Return unsanitized if sanitization fails
   }
 }
@@ -167,7 +164,6 @@ export function stripHtml(html) {
     const stripped = DOMPurify.sanitize(html, { ALLOWED_TAGS: [] });
     return stripped;
   } catch (error) {
-    console.error('HTML stripping failed:', error);
     return html;
   }
 }

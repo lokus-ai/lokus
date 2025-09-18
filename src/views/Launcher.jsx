@@ -53,14 +53,12 @@ export default function Launcher() {
     const initializeTestMode = async () => {
       if (testWorkspaceManager.detectTestMode()) {
         setIsTestMode(true);
-        console.log('🧪 Test mode activated');
         
         try {
           // Create test workspace with files
           const testWorkspacePath = await testWorkspaceManager.createTestWorkspace();
           
           if (testWorkspacePath) {
-            console.log('📁 Test workspace created, opening...');
             
             // Add to recents for consistency
             addRecent(testWorkspacePath);
@@ -70,8 +68,6 @@ export default function Launcher() {
             await openWorkspace(testWorkspacePath);
           }
         } catch (error) {
-          console.error('❌ Failed to create test workspace:', error);
-          console.log('This is normal in web mode - continuing with mock setup');
         }
       }
     };
@@ -91,7 +87,6 @@ export default function Launcher() {
         await WorkspaceManager.saveWorkspacePath(p);
         await openWorkspace(p);
       } else {
-        console.error("Selected path is not a valid workspace:", p);
         // Could show user error message here
         alert("The selected folder cannot be used as a workspace. Please check permissions and try again.");
       }
@@ -107,7 +102,6 @@ export default function Launcher() {
       await WorkspaceManager.saveWorkspacePath(path);
       await openWorkspace(path);
     } else {
-      console.warn("Recent workspace is no longer valid:", path);
       // Could show user message and remove from recents
       alert("This workspace is no longer accessible. It may have been moved or deleted.");
       // Optionally remove from recents here

@@ -119,7 +119,6 @@ export class PerformanceManager {
    * Initialize performance optimization systems
    */
   initialize() {
-    console.log('🚀 Initializing PerformanceManager...');
     
     // Set up performance monitoring
     this.setupPerformanceMonitoring();
@@ -142,7 +141,6 @@ export class PerformanceManager {
     // Start auto-adjustment
     this.startAutoAdjustment();
     
-    console.log('✅ PerformanceManager initialized');
   }
 
   /**
@@ -177,7 +175,6 @@ export class PerformanceManager {
       this.renderEdgeWithLOD(context, data, settings, detailLevel);
     });
     
-    console.log('📊 Level of Detail enabled');
   }
 
   /**
@@ -329,7 +326,6 @@ export class PerformanceManager {
     // Initial culling calculation
     this.updateViewportCulling();
     
-    console.log('🔍 Viewport culling enabled');
   }
 
   /**
@@ -432,7 +428,6 @@ export class PerformanceManager {
       this.startOptimizedLayout();
     };
     
-    console.log('⚡ Physics optimizations enabled');
   }
 
   /**
@@ -500,7 +495,6 @@ export class PerformanceManager {
             this.physicsOptimization.consecutiveStableFrames++;
             
             if (this.physicsOptimization.consecutiveStableFrames >= this.physicsOptimization.requiredStableFrames) {
-              console.log(`🎯 Layout stabilized after ${iterations} iterations (stability: ${stabilityRatio.toFixed(4)})`);
               this.engine.stopLayout();
               return;
             }
@@ -588,7 +582,6 @@ export class PerformanceManager {
       this.cleanupMemory();
     }, this.memoryManagement.cacheCleanupInterval);
     
-    console.log('🧹 Memory management enabled');
   }
 
   /**
@@ -645,7 +638,6 @@ export class PerformanceManager {
       };
     }
     
-    console.log('🎨 Progressive rendering enabled');
   }
 
   /**
@@ -791,7 +783,6 @@ export class PerformanceManager {
       this.updateMemoryUsage();
     }, 5000);
     
-    console.log('📊 Performance monitoring enabled');
   }
 
   /**
@@ -825,7 +816,6 @@ export class PerformanceManager {
       this.adjustQualitySettings();
     }, this.autoAdjustment.adjustmentInterval);
     
-    console.log('🎛️ Auto quality adjustment enabled');
   }
 
   /**
@@ -843,11 +833,9 @@ export class PerformanceManager {
     if (performanceRatio < this.autoAdjustment.degradationThreshold) {
       // Performance is poor, reduce quality
       this.reduceQuality();
-      console.log(`📉 Reducing quality due to poor performance (${avgFPS.toFixed(1)} FPS)`);
     } else if (performanceRatio > this.autoAdjustment.improvementThreshold) {
       // Performance is good, can increase quality
       this.increaseQuality();
-      console.log(`📈 Increasing quality due to good performance (${avgFPS.toFixed(1)} FPS)`);
     }
     
     this.autoAdjustment.lastAdjustment = Date.now();
@@ -900,7 +888,6 @@ export class PerformanceManager {
    */
   pausePhysics() {
     this.physicsOptimization.simulationPaused = true;
-    console.log('⏸️ Physics simulation paused');
   }
 
   /**
@@ -908,7 +895,6 @@ export class PerformanceManager {
    */
   resumePhysics() {
     this.physicsOptimization.simulationPaused = false;
-    console.log('▶️ Physics simulation resumed');
   }
 
   /**
@@ -939,7 +925,6 @@ export class PerformanceManager {
         break;
     }
     
-    console.log(`🎯 Quality level set to: ${level}`);
   }
 
   /**
@@ -1047,7 +1032,6 @@ export class PerformanceManager {
       this.updatePerformanceMetrics();
       this.sigma.refresh();
     } catch (error) {
-      console.warn('Frame render error:', error);
     }
   }
 
@@ -1068,7 +1052,6 @@ export class PerformanceManager {
     this.metrics = {};
     this.autoAdjustment.performanceHistory = [];
     
-    console.log('🧹 PerformanceManager destroyed');
   }
 }
 

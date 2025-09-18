@@ -52,7 +52,6 @@ export function useStatusBar() {
           unlistenDeactivated();
         };
       } catch (error) {
-        console.warn('Failed to set up status bar event listeners:', error);
         return () => {}; // Return empty cleanup function
       }
     };
@@ -74,7 +73,6 @@ export function useStatusBar() {
         }
       }
     } catch (error) {
-      console.error(`Failed to register status bar items for plugin ${pluginId}:`, error);
     }
   };
 
@@ -102,13 +100,10 @@ export function useStatusBar() {
               }
             );
             
-            console.log(`Successfully registered ${component} for plugin ${pluginId}`);
             return;
           } else {
-            console.error(`Invalid component ${component} for plugin ${pluginId}:`, Component);
           }
         } else {
-          console.warn(`Component ${component} not found for plugin ${pluginId}`);
         }
       }
       
@@ -142,11 +137,9 @@ export function useStatusBar() {
                   }
                 );
                 
-                console.log(`Successfully registered ${component} for plugin ${pluginId}`);
                 return;
               }
             } catch (error) {
-              console.warn('Failed to get TimeTracker component:', error);
             }
           }
           
@@ -168,7 +161,6 @@ export function useStatusBar() {
         }
       }
     } catch (error) {
-      console.error(`Failed to register component ${config.component} for plugin ${pluginId}:`, error);
     }
   };
 
@@ -192,7 +184,6 @@ export function useStatusBar() {
       setRightItems(prev => {
         const filtered = prev.filter(item => item.id !== id);
         const newItems = [...filtered, item];
-        console.log(`🔥 Updated rightItems:`, newItems.map(i => i.id));
         return newItems;
       });
     }
@@ -236,7 +227,6 @@ export function useStatusBar() {
     
     // Validate component if provided
     if (actualComponent && !(typeof actualComponent === 'function' || (typeof actualComponent === 'object' && actualComponent.$$typeof))) {
-      console.error(`❌ Invalid component for status bar item ${id}:`, actualComponent);
       return;
     }
     

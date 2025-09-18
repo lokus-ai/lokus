@@ -68,7 +68,6 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
         setCurrentMatch(0)
       }
     } catch (error) {
-      console.error('Search error:', error)
       setMatches([])
       setTotalMatches(0)
       setCurrentMatch(0)
@@ -88,7 +87,6 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
       editor.view.dispatch(tr)
       editor.commands.scrollIntoView()
     } catch (error) {
-      console.error('Error jumping to match:', error)
     }
   }, [editor, matches])
 
@@ -122,7 +120,6 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
       // Re-search after replacing
       setTimeout(() => performSearch(), 100)
     } catch (error) {
-      console.error('Error replacing text:', error)
     }
   }, [editor, matches, currentMatch, replaceQuery, performSearch])
 
@@ -144,7 +141,6 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
       // Re-search after replacing
       setTimeout(() => performSearch(), 100)
     } catch (error) {
-      console.error('Error replacing all text:', error)
     }
   }, [editor, matches, replaceQuery, performSearch])
 
