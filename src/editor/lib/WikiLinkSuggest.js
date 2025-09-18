@@ -50,13 +50,13 @@ const WikiLinkSuggest = Extension.create({
       suggestion({
         pluginKey: WIKI_SUGGESTION_KEY,
         editor: this.editor,
-        char: '[',
+        char: '<',
         allowSpaces: true,
         startOfLine: false,
-        // Only allow after double bracket [[ and not in any kind of list context
+        // Only allow after double angle bracket << and not in any kind of list context
         allow: ({ state, range }) => {
-          const textBefore = state.doc.textBetween(Math.max(0, range.from - 3), range.from)
-          const isAfterDoubleBracket = textBefore.endsWith('[')
+          const textBefore = state.doc.textBetween(Math.max(0, range.from - 2), range.from)
+          const isAfterDoubleAngle = textBefore.endsWith('<') || textBefore === '<'
           
           // Check broader context to detect lists and task items
           const lineContext = state.doc.textBetween(Math.max(0, range.from - 50), range.from)
@@ -69,8 +69,8 @@ const WikiLinkSuggest = Extension.create({
             /\n\s*[-*+]\s*[^\n]*\[/.test(lineContext) // Bullet with bracket anywhere on line
           )
           
-          const shouldAllow = isAfterDoubleBracket && !isInList
-          dbg('allow check', { textBefore, lineContext, isAfterDoubleBracket, isInList, shouldAllow, from: range.from })
+          const shouldAllow = isAfterDoubleAngle && !isInList
+          dbg('allow check', { textBefore, lineContext, isAfterDoubleAngle, isInList, shouldAllow, from: range.from })
           return shouldAllow
         },
         items: ({ query }) => {
@@ -83,7 +83,7 @@ const WikiLinkSuggest = Extension.create({
           return out
         },
         command: ({ editor, range, props }) => {
-          // Range covers second '[' and query; include previous '[' as well
+          // Range covers second '<' and query; include previous '<' as well
           const from = Math.max((range?.from ?? editor.state.selection.from) - 1, 1)
           const to = range?.to ?? editor.state.selection.to
           // Store the full path for resolution, but show the short title.
@@ -92,12 +92,12 @@ const WikiLinkSuggest = Extension.create({
           try { editor.chain().focus().deleteRange({ from, to }).run() } catch (e) { dbg('deleteRange error', e) }
           // Insert our wiki node directly
           editor.commands.setWikiLink(raw, { embed: false })
-          // Remove trailing ]] if present right after the cursor
+          // Remove trailing >> if present right after the cursor
           editor.commands.command(({ state, tr, dispatch }) => {
             try {
               const { from: pos } = state.selection
               const next = state.doc.textBetween(Math.max(0, pos), Math.min(state.doc.content.size, pos + 2))
-              if (next === ']]') {
+              if (next === '>>') {
                 tr.delete(pos, pos + 2)
                 dispatch(tr)
               }

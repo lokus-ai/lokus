@@ -4,9 +4,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network } from "lucide-react";
 import LokusLogo from "../components/LokusLogo.jsx";
 import GraphView from "./GraphView.jsx";
+import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
 import Editor from "../editor";
 import Canvas from "./Canvas.jsx";
 import FileContextMenu from "../components/FileContextMenu.jsx";
@@ -953,9 +954,28 @@ export default function Workspace({ initialPath = "" }) {
                 setShowLeft(true);
               }}
               title="Plugin Marketplace"
-              className={`obsidian-button icon-only w-full ${showMarketplace ? 'primary' : ''}`}
+              className={`obsidian-button icon-only w-full mb-1 ${showMarketplace ? 'primary' : ''}`}
             >
               <Package className="w-5 h-5" />
+            </button>
+            
+            <button
+              onClick={() => {
+                const graphPath = '__professional_graph__';
+                const graphName = 'Professional Graph';
+                
+                setOpenTabs(prevTabs => {
+                  const newTabs = prevTabs.filter(t => t.path !== graphPath);
+                  newTabs.unshift({ path: graphPath, name: graphName });
+                  if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
+                  return newTabs;
+                });
+                setActiveFile(graphPath);
+              }}
+              title="Professional Graph View"
+              className={`obsidian-button icon-only w-full`}
+            >
+              <Network className="w-5 h-5" />
             </button>
           </div>
         </aside>
@@ -1059,6 +1079,14 @@ export default function Workspace({ initialPath = "" }) {
               <FullKanban 
                 workspacePath={path}
                 onFileOpen={handleFileOpen}
+              />
+            </div>
+          ) : activeFile === '__professional_graph__' ? (
+            <div className="flex-1 h-full overflow-hidden">
+              <ProfessionalGraphView 
+                isVisible={true}
+                workspacePath={path}
+                onOpenFile={handleFileOpen}
               />
             </div>
           ) : activeFile && activeFile.endsWith('.canvas') ? (
@@ -1285,6 +1313,18 @@ export default function Workspace({ initialPath = "" }) {
         }}
         onToggleSidebar={() => setShowLeft(v => !v)}
         onCloseTab={handleTabClose}
+        onOpenGraph={() => {
+          const graphPath = '__professional_graph__';
+          const graphName = 'Professional Graph';
+          
+          setOpenTabs(prevTabs => {
+            const newTabs = prevTabs.filter(t => t.path !== graphPath);
+            newTabs.unshift({ path: graphPath, name: graphName });
+            if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
+            return newTabs;
+          });
+          setActiveFile(graphPath);
+        }}
         activeFile={activeFile}
       />
       

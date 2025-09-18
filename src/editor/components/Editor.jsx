@@ -28,6 +28,7 @@ import MarkdownTablePaste from "../extensions/MarkdownTablePaste.js";
 import SmartTask from "../extensions/SmartTask.js";
 import SimpleTask from "../extensions/SimpleTask.js";
 import liveEditorSettings from "../../core/editor/live-settings.js";
+import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 
 import "../styles/editor.css";
 
@@ -235,6 +236,7 @@ const Editor = ({ content, onContentChange }) => {
 
 function Tiptap({ extensions, content, onContentChange, editorSettings }) {
   const isSettingRef = useRef(false);
+  const [isWikiLinkModalOpen, setIsWikiLinkModalOpen] = useState(false);
   
   // Subscribe to live settings changes for real-time updates
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
@@ -244,6 +246,19 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
       setLiveSettings(allSettings);
     });
     return unsubscribe;
+  }, []);
+
+  // Listen for WikiLink modal keyboard shortcut
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
+        e.preventDefault();
+        setIsWikiLinkModalOpen(true);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
   
   // Memoize callbacks for performance
@@ -409,6 +424,15 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
     }
   };
 
+  // WikiLink modal handlers
+  const handleSelectFile = useCallback((file) => {
+    if (editor) {
+      // Use the WikiLink command to create a proper link node
+      const raw = `${file.path}|${file.name}`;
+      editor.commands.setWikiLink(raw, { embed: false });
+    }
+  }, [editor]);
+
   return (
     <>
       {editor && showDebug && (
@@ -425,6 +449,15 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
       >
         <EditorContent editor={editor} />
       </EditorContextMenu>
+      
+      {/* WikiLink Modal */}
+      <WikiLinkModal
+        isOpen={isWikiLinkModalOpen}
+        onClose={() => setIsWikiLinkModalOpen(false)}
+        onSelectFile={handleSelectFile}
+        workspacePath={globalThis.__LOKUS_WORKSPACE_PATH__}
+        currentFile={globalThis.__LOKUS_ACTIVE_FILE__}
+      />
     </>
   );
 }
