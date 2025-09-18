@@ -20,7 +20,8 @@ import {
   ToggleLeft,
   Clock,
   History,
-  Trash2
+  Trash2,
+  Network
 } from 'lucide-react'
 import { getActiveShortcuts, formatAccelerator } from '../core/shortcuts/registry'
 import { useCommandHistory, createFileHistoryItem, createCommandHistoryItem } from '../hooks/useCommandHistory.js'
@@ -38,6 +39,7 @@ export default function CommandPalette({
   onOpenPreferences, 
   onToggleSidebar, 
   onCloseTab,
+  onOpenGraph,
   onShowTemplatePicker,
   onCreateTemplate,
   activeFile 
@@ -169,6 +171,9 @@ export default function CommandPalette({
                         case 'Open Preferences':
                           runCommand(onOpenPreferences)
                           break
+                        case 'Open Graph View':
+                          runCommand(onOpenGraph)
+                          break
                         case 'Insert Template':
                           if (onShowTemplatePicker) {
                             runCommand(onShowTemplatePicker)
@@ -273,6 +278,11 @@ export default function CommandPalette({
             <Settings className="mr-2 h-4 w-4" />
             <span>Open Preferences</span>
             <CommandShortcut>{formatAccelerator(shortcuts['open-preferences'])}</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommandWithHistory(onOpenGraph, 'Open Graph View')}>
+            <Network className="mr-2 h-4 w-4" />
+            <span>Professional Graph View</span>
+            <CommandShortcut>⌘G</CommandShortcut>
           </CommandItem>
         </CommandGroup>
 
