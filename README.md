@@ -8,8 +8,15 @@
 
 *Why settle for rigid note-taking tools when you can have infinite customization?*
 
-[![Tests](https://github.com/lokus-ai/lokus/workflows/Tests/badge.svg)](https://github.com/lokus-ai/lokus/actions)
-[![Build](https://github.com/lokus-ai/lokus/workflows/Build/badge.svg)](https://github.com/lokus-ai/lokus/actions)
+[![Tests](https://github.com/lokus-ai/lokus/workflows/Tests/badge.svg)](https://github.com/lokus-ai/lokus/actions/workflows/test.yml)
+[![E2E Tests](https://github.com/lokus-ai/lokus/workflows/E2E%20Tests/badge.svg)](https://github.com/lokus-ai/lokus/actions/workflows/e2e-tests.yml)
+[![Multi-Platform Build](https://github.com/lokus-ai/lokus/workflows/Multi-Platform%20Build/badge.svg)](https://github.com/lokus-ai/lokus/actions/workflows/build-multi-platform.yml)
+[![Release](https://github.com/lokus-ai/lokus/workflows/Release/badge.svg)](https://github.com/lokus-ai/lokus/actions/workflows/release.yml)
+
+[![Windows Build](https://img.shields.io/badge/Windows-Build-blue?logo=windows&logoColor=white)](https://github.com/lokus-ai/lokus/actions/workflows/build-multi-platform.yml)
+[![macOS Build](https://img.shields.io/badge/macOS-Build-black?logo=apple&logoColor=white)](https://github.com/lokus-ai/lokus/actions/workflows/build-multi-platform.yml)
+[![Linux Build](https://img.shields.io/badge/Linux-Build-orange?logo=linux&logoColor=white)](https://github.com/lokus-ai/lokus/actions/workflows/build-multi-platform.yml)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 [![Contributors](https://img.shields.io/github/contributors/lokus-ai/lokus)](https://github.com/lokus-ai/lokus/graphs/contributors)
@@ -61,43 +68,183 @@
 
 ---
 
+### 🖥️ Platform Compatibility
+
+<div align="center">
+
+| Platform | Min Version | Architecture | Status | Installation |
+|----------|-------------|--------------|---------|-------------|
+| **🪟 Windows** | Windows 10 (1903+) | x64, arm64 | ✅ Stable | [Download MSI](https://github.com/lokus-ai/lokus/releases) |
+| **🍎 macOS** | macOS 10.15+ | Intel, Apple Silicon | ✅ Stable | [Download DMG](https://github.com/lokus-ai/lokus/releases) |
+| **🐧 Linux** | Ubuntu 20.04+ | x64, arm64 | ✅ Stable | [Download AppImage](https://github.com/lokus-ai/lokus/releases) |
+
+*Lokus runs natively on all platforms with full feature parity*
+
+</div>
+
 ### 🛠️ Development Setup
 
 <details>
 <summary><b>🏗️ Prerequisites (Click to expand)</b></summary>
 
+**Core Requirements:**
 - [Node.js](https://nodejs.org/) (v18 or higher)
-- [Rust](https://rustup.rs/) (latest stable)  
-- Platform-specific dependencies:
-  - **Linux**: `libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf`
-  - **macOS**: Xcode Command Line Tools
-  - **Windows**: Visual Studio C++ Build Tools
+- [Rust](https://rustup.rs/) (latest stable)
+
+**Platform-Specific Dependencies:**
+
+**🪟 Windows:**
+```powershell
+# Install Visual Studio Build Tools
+winget install Microsoft.VisualStudio.2022.BuildTools
+
+# Install WebView2 (usually pre-installed on Windows 10/11)
+winget install Microsoft.EdgeWebView2
+```
+
+**🍎 macOS:**
+```bash
+# Install Xcode Command Line Tools
+xcode-select --install
+
+# Optional: Install full Xcode for iOS development
+# Available from Mac App Store
+```
+
+**🐧 Linux (Ubuntu/Debian):**
+```bash
+sudo apt-get update && sudo apt-get install -y \
+    build-essential \
+    libgtk-3-dev \
+    libwebkit2gtk-4.1-dev \
+    libappindicator3-dev \
+    librsvg2-dev \
+    patchelf \
+    pkg-config
+```
+
+**🐧 Linux (Fedora/RHEL):**
+```bash
+sudo dnf install -y \
+    gcc gcc-c++ make \
+    gtk3-devel \
+    webkit2gtk4.0-devel \
+    libappindicator-gtk3-devel \
+    librsvg2-devel
+```
+
+**🐧 Linux (Arch):**
+```bash
+sudo pacman -S \
+    base-devel \
+    webkit2gtk \
+    gtk3 \
+    libappindicator-gtk3 \
+    librsvg
+```
 
 </details>
 
-### ⚡ One-Command Setup
+### 💾 System Requirements
 
+<div align="center">
+
+| Component | Windows | macOS | Linux | Notes |
+|-----------|---------|-------|-------|-------|
+| **RAM** | 4GB minimum, 8GB recommended | 4GB minimum, 8GB recommended | 2GB minimum, 4GB recommended | |
+| **Storage** | 500MB free space | 500MB free space | 300MB free space | Plus documents |
+| **Display** | 1024x768 minimum | 1024x768 minimum | 1024x768 minimum | High DPI supported |
+| **Network** | Optional (for sync) | Optional (for sync) | Optional (for sync) | Local-first design |
+
+</div>
+
+### ⚡ Quick Development Setup
+
+**🚀 One-Command Setup:**
 ```bash
 # Clone and run Lokus in development mode
 git clone https://github.com/lokus-ai/lokus.git && cd Lokus && npm install && npm run tauri dev
 ```
 
-### 📋 Step by Step
+**📋 Step-by-Step Setup:**
+
+<details>
+<summary><b>🪟 Windows Development</b></summary>
+
+```powershell
+# 1. Clone the repository
+git clone https://github.com/lokus-ai/lokus.git
+cd Lokus
+
+# 2. Install dependencies
+npm install
+
+# 3. Run development server
+npm run dev:windows
+# or: npm run tauri dev
+
+# 4. Build for production (optional)
+npm run build:windows
+```
+
+**Troubleshooting Windows:**
+- Ensure Visual Studio Build Tools are installed
+- Run PowerShell as Administrator if needed
+- Use Windows Terminal for better experience
+
+</details>
+
+<details>
+<summary><b>🍎 macOS Development</b></summary>
 
 ```bash
 # 1. Clone the repository
 git clone https://github.com/lokus-ai/lokus.git
 cd Lokus
 
-# 2. Install dependencies  
+# 2. Install dependencies
 npm install
 
-# 3. Run in development mode
-npm run tauri dev
+# 3. Run development server
+npm run dev:macos
+# or: npm run tauri dev
 
 # 4. Build for production (optional)
-npm run tauri build
+npm run build:macos
 ```
+
+**Troubleshooting macOS:**
+- Install Xcode Command Line Tools: `xcode-select --install`
+- Grant Terminal full disk access in System Preferences
+- For Apple Silicon, ensure ARM64 Node.js: `arch -arm64 brew install node`
+
+</details>
+
+<details>
+<summary><b>🐧 Linux Development</b></summary>
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/lokus-ai/lokus.git
+cd Lokus
+
+# 2. Install dependencies
+npm install
+
+# 3. Run development server
+npm run dev:linux
+# or: npm run tauri dev
+
+# 4. Build for production (optional)
+npm run build:linux
+```
+
+**Troubleshooting Linux:**
+- Install GTK development libraries (see prerequisites above)
+- Use `export GDK_BACKEND=x11` if experiencing Wayland issues
+- Ensure pkg-config can find webkit2gtk: `pkg-config --exists webkit2gtk-4.0`
+
+</details>
 
 ### 🎉 First Launch
 
@@ -172,11 +319,16 @@ lokus/
 ### Tech Stack
 
 - **Frontend**: React 19, TipTap, Tailwind CSS
-- **Backend**: Tauri (Rust)
+- **Backend**: Tauri 2.0 (Rust)
+- **Desktop Runtime**: 
+  - **Windows**: WebView2
+  - **macOS**: WKWebView
+  - **Linux**: WebKitGTK
 - **Testing**: Vitest, Playwright
 - **Math**: KaTeX
-- **Build**: Vite
-- **CI/CD**: GitHub Actions
+- **Build**: Vite, Cargo
+- **CI/CD**: GitHub Actions (Multi-platform)
+- **Distribution**: MSI, DMG, AppImage, DEB, RPM
 
 ## 🤝 Contributing
 
@@ -254,11 +406,19 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Tauri](https://tauri.app/) for the amazing desktop framework
 - [KaTeX](https://katex.org/) for math rendering
 
-## 📞 Support
+## 📞 Support & Documentation
 
+### Getting Help
 - **Issues**: [GitHub Issues](https://github.com/lokus-ai/lokus/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/lokus-ai/lokus/discussions)
-- **Documentation**: [Wiki](https://github.com/lokus-ai/lokus/wiki)
+- **Discord**: [Join Community](https://discord.gg/lokus)
+
+### Documentation
+- **📱 Platform Guide**: [Platform-specific information](docs/PLATFORM_GUIDE.md)
+- **🔨 Build Guide**: [Complete build instructions](docs/BUILD_GUIDE.md)  
+- **🤝 Contributing**: [Development setup & guidelines](CONTRIBUTING.md)
+- **📚 API Docs**: [Wiki](https://github.com/lokus-ai/lokus/wiki)
+- **🧭 User Guide**: [Getting started tutorial](docs/user-guide/)
 
 ## 💬 Community
 

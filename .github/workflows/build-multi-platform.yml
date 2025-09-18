@@ -1,0 +1,155 @@
+name: Multi-Platform Build
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: Windows
+            os: windows-latest
+            tauri_config: src-tauri/tauri.windows.conf.json
+            artifact_name: windows
+            artifact_path: src-tauri/target/release/bundle/**/*
+          - name: macOS
+            os: macos-latest
+            tauri_config: src-tauri/tauri.macos.conf.json
+            artifact_name: macos
+            artifact_path: src-tauri/target/release/bundle/**/*
+          - name: Linux
+            os: ubuntu-latest
+            tauri_config: src-tauri/tauri.conf.json
+            artifact_name: linux
+            artifact_path: src-tauri/target/release/bundle/**/*
+
+    runs-on: ${{ matrix.platform.os }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            src-tauri/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install Linux dependencies
+        if: matrix.platform.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.0-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libayatana-appindicator3-dev
+
+      - name: Install Windows dependencies
+        if: matrix.platform.os == 'windows-latest'
+        run: |
+          # Visual Studio Build Tools are pre-installed on windows-latest
+          echo "Windows dependencies ready"
+
+      - name: Install macOS dependencies
+        if: matrix.platform.os == 'macos-latest'
+        run: |
+          # Xcode Command Line Tools are pre-installed on macos-latest
+          echo "macOS dependencies ready"
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Install Tauri CLI
+        run: |
+          npm install -g @tauri-apps/cli@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build application
+        run: |
+          npm run build
+          tauri build --config ${{ matrix.platform.tauri_config }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lokus-${{ matrix.platform.artifact_name }}
+          path: ${{ matrix.platform.artifact_path }}
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload bundle info
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-info-${{ matrix.platform.artifact_name }}
+          path: |
+            src-tauri/target/release/bundle/
+            !src-tauri/target/release/bundle/**/*.app
+            !src-tauri/target/release/bundle/**/*.exe
+            !src-tauri/target/release/bundle/**/*.msi
+            !src-tauri/target/release/bundle/**/*.dmg
+            !src-tauri/target/release/bundle/**/*.deb
+            !src-tauri/target/release/bundle/**/*.rpm
+            !src-tauri/target/release/bundle/**/*.AppImage
+          retention-days: 1
+          if-no-files-found: warn
+
+  build-summary:
+    needs: build
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Build Status Summary
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.build.result }}" == "success" ]; then
+            echo "| All Platforms | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.build.result }}" == "failure" ]; then
+            echo "| Some Platforms | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| All Platforms | ⚠️ Cancelled/Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifacts:** Available for download from the Actions page" >> $GITHUB_STEP_SUMMARY

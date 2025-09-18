@@ -1,0 +1,265 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create-release.outputs.result }}
+      upload_url: ${{ steps.create-release.outputs.upload_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "${{ steps.get_version.outputs.VERSION }}" | head -1)
+          
+          echo "## 🚀 What's New in ${{ steps.get_version.outputs.VERSION }}" > release_notes.md
+          echo "" >> release_notes.md
+          
+          if [ -n "$PREV_TAG" ]; then
+            echo "### 📝 Changes since $PREV_TAG" >> release_notes.md
+            echo "" >> release_notes.md
+            
+            # Generate commit log
+            git log $PREV_TAG..${{ steps.get_version.outputs.VERSION }} --oneline --no-merges | while read line; do
+              echo "- $line" >> release_notes.md
+            done
+          else
+            echo "### 🎉 Initial Release" >> release_notes.md
+            echo "" >> release_notes.md
+            echo "Welcome to Lokus! This is our first official release." >> release_notes.md
+          fi
+          
+          echo "" >> release_notes.md
+          echo "### 📦 Downloads" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "Choose the appropriate installer for your platform:" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "- **🍎 macOS**: Download the \`.dmg\` file" >> release_notes.md
+          echo "- **🪟 Windows**: Download the \`.msi\` or \`.exe\` installer" >> release_notes.md
+          echo "- **🐧 Linux**: Download the \`.deb\`, \`.rpm\`, or \`.AppImage\` file" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### ✨ Features" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "- 🎨 Rich text editing with TipTap" >> release_notes.md
+          echo "- 📝 Full Markdown support" >> release_notes.md
+          echo "- 🔗 Wiki links with autocomplete" >> release_notes.md
+          echo "- 🧮 LaTeX math equations" >> release_notes.md
+          echo "- 🎨 Customizable themes" >> release_notes.md
+          echo "- ⚡ Native performance with Tauri" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### 🐛 Known Issues" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "Please report any issues on our [GitHub Issues](https://github.com/lokus-ai/lokus/issues) page." >> release_notes.md
+
+      - name: Create Release
+        id: create-release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const releaseNotes = fs.readFileSync('release_notes.md', 'utf8');
+            
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: '${{ steps.get_version.outputs.VERSION }}',
+              name: 'Lokus ${{ steps.get_version.outputs.VERSION }}',
+              body: releaseNotes,
+              draft: true,
+              prerelease: false
+            });
+            
+            return data.id;
+
+  build-and-upload:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: Windows
+            os: windows-latest
+            tauri_config: src-tauri/tauri.windows.conf.json
+            bundle_path: src-tauri/target/release/bundle
+            installers:
+              - pattern: "msi/*.msi"
+                name: "Lokus-${{ github.ref_name }}-windows-x64.msi"
+              - pattern: "nsis/*.exe"
+                name: "Lokus-${{ github.ref_name }}-windows-x64-setup.exe"
+          - name: macOS
+            os: macos-latest
+            tauri_config: src-tauri/tauri.macos.conf.json
+            bundle_path: src-tauri/target/release/bundle
+            installers:
+              - pattern: "dmg/*.dmg"
+                name: "Lokus-${{ github.ref_name }}-macos-universal.dmg"
+              - pattern: "macos/*.app"
+                name: "Lokus-${{ github.ref_name }}-macos.app.tar.gz"
+                compress: true
+          - name: Linux
+            os: ubuntu-latest
+            tauri_config: src-tauri/tauri.conf.json
+            bundle_path: src-tauri/target/release/bundle
+            installers:
+              - pattern: "deb/*.deb"
+                name: "Lokus-${{ github.ref_name }}-linux-amd64.deb"
+              - pattern: "rpm/*.rpm"
+                name: "Lokus-${{ github.ref_name }}-linux-x86_64.rpm"
+              - pattern: "appimage/*.AppImage"
+                name: "Lokus-${{ github.ref_name }}-linux-x86_64.AppImage"
+
+    runs-on: ${{ matrix.platform.os }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            src-tauri/target/
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-
+            ${{ runner.os }}-cargo-
+
+      - name: Install Linux dependencies
+        if: matrix.platform.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.0-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libayatana-appindicator3-dev
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli@latest
+
+      - name: Build application for release
+        run: |
+          npm run build
+          tauri build --config ${{ matrix.platform.tauri_config }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+
+      - name: List bundle contents (debug)
+        if: always()
+        run: |
+          echo "Bundle contents:"
+          find ${{ matrix.platform.bundle_path }} -type f -name "*" | head -20
+
+      - name: Upload installers to release
+        run: |
+          cd ${{ matrix.platform.bundle_path }}
+          
+          # Function to upload file
+          upload_file() {
+            local file_path="$1"
+            local upload_name="$2"
+            local compress="$3"
+            
+            if [ -f "$file_path" ]; then
+              if [ "$compress" = "true" ]; then
+                # Compress .app bundle
+                tar -czf "${upload_name}" -C "$(dirname "$file_path")" "$(basename "$file_path")"
+                file_to_upload="${upload_name}"
+              else
+                file_to_upload="$file_path"
+                # Rename file for upload
+                cp "$file_path" "$upload_name"
+                file_to_upload="$upload_name"
+              fi
+              
+              echo "Uploading $file_to_upload..."
+              gh release upload ${{ github.ref_name }} "$file_to_upload" --clobber
+            else
+              echo "Warning: $file_path not found"
+            fi
+          }
+          
+          # Upload each installer type
+          ${{ 
+            format('
+              {0}
+            ', 
+            join(
+              matrix.platform.installers.* | map(
+                format('upload_file "$(find . -name "{0}" | head -1)" "{1}" "{2}"', 
+                .pattern, .name, .compress // "false")
+              ), 
+              '\n'
+            ))
+          }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-release:
+    needs: [create-release, build-and-upload]
+    runs-on: ubuntu-latest
+    if: always() && needs.create-release.result == 'success'
+    
+    steps:
+      - name: Publish Release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: ${{ needs.create-release.outputs.release_id }},
+              draft: false
+            });
+
+      - name: Release Summary
+        run: |
+          echo "## 🎉 Release Published!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Release URL:** https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Available Downloads" >> $GITHUB_STEP_SUMMARY
+          echo "- 🍎 macOS: DMG and App Bundle" >> $GITHUB_STEP_SUMMARY
+          echo "- 🪟 Windows: MSI and NSIS Installer" >> $GITHUB_STEP_SUMMARY
+          echo "- 🐧 Linux: DEB, RPM, and AppImage" >> $GITHUB_STEP_SUMMARY

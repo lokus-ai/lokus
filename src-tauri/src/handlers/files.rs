@@ -105,67 +105,12 @@ pub fn delete_file(path: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn reveal_in_finder(path: String) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg("-R")
-            .arg(&path)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("explorer")
-            .arg("/select,")
-            .arg(&path)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    
-    #[cfg(target_os = "linux")]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(Path::new(&path).parent().unwrap_or(Path::new("/")))
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    
-    Ok(())
+    // Use platform abstraction for better error handling and consistency
+    super::platform_files::platform_reveal_in_file_manager(path)
 }
 
 #[tauri::command]
 pub fn open_terminal(path: String) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg("-a")
-            .arg("Terminal")
-            .arg(&path)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("cmd")
-            .arg("/c")
-            .arg("start")
-            .arg("cmd")
-            .arg("/k")
-            .arg(&format!("cd /d \"{}\"", path))
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    
-    #[cfg(target_os = "linux")]
-    {
-        std::process::Command::new("gnome-terminal")
-            .arg("--working-directory")
-            .arg(&path)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    
-    Ok(())
+    // Use platform abstraction for better error handling and consistency
+    super::platform_files::platform_open_terminal(path)
 }
