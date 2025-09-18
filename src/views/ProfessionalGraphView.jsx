@@ -60,7 +60,6 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   useEffect(() => {
     if (!isVisible || graphDataManager) return; // Prevent duplicate initialization
     
-    console.log('ProfessionalGraphView initializing with workspace:', workspacePath);
     
     const initializeDataManager = async () => {
       try {
@@ -93,7 +92,6 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         updateStats(dataManager);
         
       } catch (error) {
-        console.error('Failed to initialize graph data manager:', error);
       }
     };
     
@@ -140,7 +138,6 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   // Load real workspace data
   const loadWorkspaceData = async (dataManager, workspacePath) => {
     try {
-      console.log('Loading workspace data from:', workspacePath);
       
       // Clear all existing data first to prevent stale cache
       dataManager.nodes.clear();
@@ -157,7 +154,6 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       dataManager.stats.linkCount = 0;
       dataManager.stats.wikiLinkCount = 0;
       
-      console.log('Cleared existing graph data');
       
       // Read all files from the workspace
       const files = await invoke("read_workspace_files", { workspacePath });
@@ -175,22 +171,23 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       };
       
       extractMarkdownFiles(files);
-      console.log(`Found ${markdownFiles.length} markdown files`);
       
       // Process each markdown file
       for (const file of markdownFiles) {
         try {
           // Read file content
           const content = await invoke("read_file_content", { path: file.path });
-          console.log(`Processing file: ${file.name}`);
-          console.log(`Content length: ${content.length} characters`);
+          console.log(`🔎 ProfessionalGraph reading "${file.name}": ${content.length} chars, type: ${content.includes('<') ? 'HTML' : 'Markdown'}`);
           
-          // Look for WikiLinks in the content
-          const wikiLinkMatches = content.match(/\[\[([^\]]+)\]\]/g);
-          if (wikiLinkMatches) {
-            console.log(`Found WikiLinks in ${file.name}:`, wikiLinkMatches);
+          // Look for WikiLinks in both Markdown and HTML formats
+          const markdownWikiLinks = content.match(/\[\[([^\]]+)\]\]/g) || [];
+          const htmlWikiLinks = content.match(/<a[^>]+target="([^"]+)"[^>]*>/g) || [];
+          
+          const allWikiLinks = [...markdownWikiLinks, ...htmlWikiLinks];
+          console.log(`🔗 ProfessionalGraph found ${allWikiLinks.length} WikiLinks in "${file.name}": [${allWikiLinks.join(', ')}]`);
+          
+          if (allWikiLinks.length > 0) {
           } else {
-            console.log(`No WikiLinks found in ${file.name}`);
           }
           
           // Extract title from filename (without .md extension)
@@ -208,17 +205,13 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
             }
           });
           
-          console.log(`Successfully processed ${file.name}`);
           
         } catch (error) {
-          console.error(`Failed to process file ${file.path}:`, error);
         }
       }
       
-      console.log('Workspace data loaded successfully');
       
     } catch (error) {
-      console.error('Failed to load workspace data:', error);
       // Fallback to sample data
       await loadSampleData(dataManager);
     }
@@ -320,7 +313,6 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       }
       
     } catch (error) {
-      console.error('Failed to load sample data:', error);
     }
   };
   
@@ -378,7 +370,6 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     // Open file if available (double-click or single click depending on preference)
     if (onOpenFile && node.documentId && node.type === 'document') {
       // For document nodes, open the actual file
-      console.log('Opening file for node:', node);
       onOpenFile({
         path: node.documentId,
         name: node.title + '.md',

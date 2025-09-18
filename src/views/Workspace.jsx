@@ -156,7 +156,6 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       await invoke("rename_file", { path: entry.path, newName: newName.trim() });
       onRefresh && onRefresh();
     } catch (e) {
-      console.error("Failed to rename:", e);
     }
   };
 
@@ -166,7 +165,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       const name = "Untitled.md";
       await invoke("write_file_content", { path: `${base}/${name}`, content: "" });
       onRefresh && onRefresh();
-    } catch (e) { console.error(e); }
+    } catch (e) { }
   };
 
   const onCreateFolderHere = async () => {
@@ -176,7 +175,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       const base = entry.is_directory ? entry.path : entry.path.split("/").slice(0, -1).join("/");
       await invoke("create_folder_in_workspace", { workspacePath: base, name });
       onRefresh && onRefresh();
-    } catch (e) { console.error(e); }
+    } catch (e) { }
   };
 
   const handleFileContextAction = async (action, data) => {
@@ -188,17 +187,14 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         break;
       case 'openToSide':
         // TODO: Implement open to side functionality
-        console.log('Open to side:', file.path);
         break;
       case 'openWith':
         // TODO: Implement open with functionality
-        console.log('Open with:', file.path);
         break;
       case 'revealInFinder':
         try {
           await invoke('reveal_in_finder', { path: file.path });
         } catch (e) {
-          console.error('Failed to reveal in finder:', e);
         }
         break;
       case 'openInTerminal':
@@ -206,22 +202,18 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
           const terminalPath = file.is_directory ? file.path : file.path.split("/").slice(0, -1).join("/");
           await invoke('open_terminal', { path: terminalPath });
         } catch (e) {
-          console.error('Failed to open terminal:', e);
         }
         break;
       case 'cut':
         // TODO: Implement cut functionality
-        console.log('Cut:', file.path);
         break;
       case 'copy':
         // TODO: Implement copy functionality
-        console.log('Copy:', file.path);
         break;
       case 'copyPath':
         try {
           await navigator.clipboard.writeText(file.path);
         } catch (e) {
-          console.error('Failed to copy path:', e);
         }
         break;
       case 'copyRelativePath':
@@ -230,7 +222,6 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
           const relativePath = file.path; // Simplified for now
           await navigator.clipboard.writeText(relativePath);
         } catch (e) {
-          console.error('Failed to copy relative path:', e);
         }
         break;
       case 'rename':
@@ -244,21 +235,17 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
             onRefresh && onRefresh();
           }
         } catch (e) {
-          console.error('Failed to delete:', e);
         }
         break;
       case 'selectForCompare':
         // TODO: Implement select for compare
-        console.log('Select for compare:', file.path);
         break;
       case 'shareEmail':
       case 'shareSlack':
       case 'shareTeams':
         // TODO: Implement sharing functionality
-        console.log('Share:', action, file.path);
         break;
       default:
-        console.log('Unhandled action:', action, file.path);
     }
   };
 
@@ -330,7 +317,6 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
       });
       onRefresh();
     } catch (error) {
-      console.error("Failed to move file:", error);
     }
   };
 
@@ -475,7 +461,7 @@ export default function Workspace({ initialPath = "" }) {
 
   // Load shortcuts map for hints and keep it fresh
   useEffect(() => {
-    getActiveShortcuts().then(setKeymap).catch(console.error);
+    getActiveShortcuts().then(setKeymap).catch(() => {});
     let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
     if (isTauri) {
       const sub = listen('shortcuts:updated', async () => {
@@ -532,7 +518,7 @@ export default function Workspace({ initialPath = "" }) {
           walk(tree);
           try { window.__LOKUS_FILE_INDEX__ = flat; } catch {}
         })
-        .catch(console.error);
+        .catch(() => {});
     }
   }, [path, refreshId]);
 
@@ -548,7 +534,7 @@ export default function Workspace({ initialPath = "" }) {
             setEditorTitle(activeTab.name.replace(/\.md$/, ""));
             setSavedContent(content);
           })
-          .catch(console.error);
+          .catch(() => {});
       }
     } else {
       setEditorContent("");
@@ -594,7 +580,6 @@ export default function Workspace({ initialPath = "" }) {
   useEffect(() => {
     const handleWikiLinkCreated = async (event) => {
       const { sourceFile, targetFile, linkText, timestamp } = event.detail;
-      console.log('[Workspace] Wiki link created immediately:', { sourceFile, targetFile, linkText, timestamp });
       
       if (graphProcessorRef.current) {
         try {
@@ -604,21 +589,17 @@ export default function Workspace({ initialPath = "" }) {
             stateRef.current.editorContent;
           
           if (currentContent && sourceFile === stateRef.current.activeFile) {
-            console.log('[Workspace] Performing immediate graph update for new wiki link');
             
             // Use the real-time update method
             const updateResult = await graphProcessorRef.current.updateFileContent(sourceFile, currentContent);
-            console.log('[Workspace] Immediate graph update result:', updateResult);
             
             // Update graph data if there were changes and graph is visible
             if ((updateResult.added > 0 || updateResult.removed > 0) && activeFile === '__graph__') {
               const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
               setGraphData(updatedGraphData);
-              console.log('[Workspace] Graph view updated immediately after wiki link creation');
             }
           }
         } catch (error) {
-          console.error('[Workspace] Failed to update graph immediately after wiki link creation:', error);
         }
       }
     };
@@ -732,7 +713,6 @@ export default function Workspace({ initialPath = "" }) {
             editorRef.current.view.dispatch(tr);
             editorRef.current.commands.scrollIntoView();
           } catch (error) {
-            console.error('Error jumping to line:', error);
           }
         }
       }, 100);
@@ -858,36 +838,24 @@ export default function Workspace({ initialPath = "" }) {
       } else {
         // File content changed but not renamed - use real-time link tracking
         if (graphProcessorRef.current) {
-          console.log('[Workspace] File saved, performing real-time graph update for:', path_to_save);
           try {
             // Use the new real-time update method for file content
             const updateResult = await graphProcessorRef.current.updateFileContent(path_to_save, editorContent);
-            console.log('[Workspace] Real-time graph update result:', updateResult);
             
             // Only rebuild graph structure if there were actual changes
             if (updateResult.added > 0 || updateResult.removed > 0) {
               const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
               setGraphData(updatedGraphData);
-              console.log('[Workspace] Graph data updated after real-time link tracking:', {
-                nodes: updatedGraphData.nodes.length,
-                edges: updatedGraphData.edges.length,
-                linksAdded: updateResult.added,
-                linksRemoved: updateResult.removed
-              });
             } else {
-              console.log('[Workspace] No link changes detected, graph data unchanged');
             }
           } catch (error) {
-            console.error('[Workspace] Failed to perform real-time graph update:', error);
             // Fallback to full selective update
             try {
               const updatedGraphData = await graphProcessorRef.current.updateChangedFiles([path_to_save]);
               if (updatedGraphData) {
                 setGraphData(updatedGraphData);
-                console.log('[Workspace] Fallback graph update completed');
               }
             } catch (fallbackError) {
-              console.error('[Workspace] Fallback update also failed:', fallbackError);
               // Final fallback to full refresh
               handleRefreshFiles();
             }
@@ -895,11 +863,9 @@ export default function Workspace({ initialPath = "" }) {
         } else {
           // Graph processor not initialized yet, but if graph view becomes active,
           // it will build the graph data including this file's changes
-          console.log('[Workspace] Graph processor not initialized, changes will be included when graph is built');
         }
       }
     } catch (error) {
-      console.error("Failed to save file:", error);
     }
   }, []);
 
@@ -909,7 +875,6 @@ export default function Workspace({ initialPath = "" }) {
       handleRefreshFiles();
       handleFileOpen({ path: newFilePath, name: "Untitled.md", is_directory: false });
     } catch (error) {
-      console.error("Failed to create file:", error);
     }
   };
 
@@ -919,7 +884,6 @@ export default function Workspace({ initialPath = "" }) {
       handleRefreshFiles();
       handleFileOpen({ path: newCanvasPath, name: "Untitled Canvas.canvas", is_directory: false });
     } catch (error) {
-      console.error("Failed to create canvas:", error);
     }
   };
 
@@ -933,7 +897,6 @@ export default function Workspace({ initialPath = "" }) {
         await invoke("create_folder_in_workspace", { workspacePath: path, name });
         handleRefreshFiles();
       } catch (error) {
-        console.error("Failed to create folder:", error);
       }
     }
     setIsCreatingFolder(false);
@@ -950,12 +913,10 @@ export default function Workspace({ initialPath = "" }) {
         if (!selection.empty) {
           // Get selected text
           const selectedText = state.doc.textBetween(selection.from, selection.to);
-          console.log('[Workspace] Using selected text for template:', selectedText.substring(0, 100));
           return selectedText;
         } else if (activeFile) {
           // No selection, use current file content
           const currentContent = editorRef.current.getHTML() || editorRef.current.getText() || stateRef.current.editorContent;
-          console.log('[Workspace] Using full file content for template:', currentContent.substring(0, 100));
           return currentContent;
         }
       }
@@ -971,7 +932,6 @@ export default function Workspace({ initialPath = "" }) {
     // Template was saved successfully
     setShowCreateTemplate(false);
     setCreateTemplateContent('');
-    console.log('[Workspace] Template saved successfully');
   }, []);
 
   // Graph View Functions
@@ -979,30 +939,25 @@ export default function Workspace({ initialPath = "" }) {
     if (!path || graphProcessorRef.current) return;
     
     graphProcessorRef.current = new GraphDataProcessor(path);
-    console.log('[Workspace] Graph processor initialized for:', path);
     
     // Set up event listeners for real-time graph updates
     const graphDatabase = graphProcessorRef.current.getGraphDatabase();
     
     // Listen for file link updates and rebuild graph if active
     const handleFileLinksUpdated = (event) => {
-      console.log('[Workspace] File links updated event:', event);
       if (activeFile === '__graph__' && graphData) {
         // Rebuild graph structure if graph view is active
         const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
         setGraphData(updatedGraphData);
-        console.log('[Workspace] Graph data refreshed after link update');
       }
     };
     
     // Listen for connection changes
     const handleConnectionChanged = (event) => {
-      console.log('[Workspace] Graph connection changed:', event);
       if (activeFile === '__graph__' && graphData) {
         // Rebuild graph structure if graph view is active
         const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
         setGraphData(updatedGraphData);
-        console.log('[Workspace] Graph data refreshed after connection change');
       }
     };
     
@@ -1019,39 +974,33 @@ export default function Workspace({ initialPath = "" }) {
     
   }, [path, activeFile, graphData]);
 
-  const buildGraphData = useCallback(async () => {
-    if (!graphProcessorRef.current || isLoadingGraph) return;
-    
-    setIsLoadingGraph(true);
-    console.log('[Workspace] Building graph data...');
-    
-    try {
-      const data = await graphProcessorRef.current.buildGraphFromWorkspace({
-        includeNonMarkdown: false,
-        maxDepth: 10,
-        excludePatterns: ['.git', 'node_modules', '.lokus', '.DS_Store'],
-        onProgress: (progress) => {
-          console.log(`[Workspace] Graph processing progress: ${progress.progress}%`);
-        }
-      });
-      
-      setGraphData(data);
-      console.log('[Workspace] Graph data built successfully:', {
-        nodes: data.nodes.length,
-        edges: data.edges.length
-      });
-      
-    } catch (error) {
-      console.error('[Workspace] Failed to build graph data:', error);
-      setGraphData(null);
-    } finally {
-      setIsLoadingGraph(false);
-    }
-  }, [isLoadingGraph]);
+  // OLD SYSTEM - Commented out since ProfessionalGraphView has its own data loading
+  // const buildGraphData = useCallback(async () => {
+  //   console.log('🔥 buildGraphData called! processor=', !!graphProcessorRef.current, 'isLoadingGraph=', isLoadingGraph);
+  //   if (!graphProcessorRef.current || isLoadingGraph) return;
+  //   
+  //   setIsLoadingGraph(true);
+  //   
+  //   try {
+  //     const data = await graphProcessorRef.current.buildGraphFromWorkspace({
+  //       includeNonMarkdown: false,
+  //       maxDepth: 10,
+  //       excludePatterns: ['.git', 'node_modules', '.lokus', '.DS_Store'],
+  //       onProgress: (progress) => {
+  //       }
+  //     });
+  //     
+  //     setGraphData(data);
+  //     
+  //   } catch (error) {
+  //     setGraphData(null);
+  //   } finally {
+  //     setIsLoadingGraph(false);
+  //   }
+  // }, [isLoadingGraph]);
 
   const handleGraphNodeClick = useCallback((event) => {
     const { nodeId, nodeData } = event;
-    console.log('[Workspace] Graph node clicked:', nodeId, nodeData);
     
     // If it's a file node (not phantom), open the file
     if (nodeData && nodeData.path && !nodeData.isPhantom) {
@@ -1089,30 +1038,32 @@ export default function Workspace({ initialPath = "" }) {
   // Build graph data when files change
   useEffect(() => {
     if (graphProcessorRef.current && refreshId > 0) {
+      // OLD SYSTEM - Commented out since ProfessionalGraphView has its own data loading
       // Rebuild graph data when files are refreshed
-      buildGraphData();
+      // buildGraphData();
     }
-  }, [refreshId, buildGraphData]);
+  }, [refreshId]); // Removed buildGraphData dependency
 
+  // OLD SYSTEM - Commented out since ProfessionalGraphView has its own data loading
   // Auto-build graph when graph view is opened
-  useEffect(() => {
-    if (activeFile === '__graph__' && !graphData && !isLoadingGraph && graphProcessorRef.current) {
-      console.log('[Workspace] Auto-building graph data for graph view...');
-      buildGraphData();
-    }
-  }, [activeFile, graphData, isLoadingGraph, buildGraphData]);
+  // useEffect(() => {
+  //   console.log(`🎯 Graph useEffect triggered: activeFile=${activeFile}, graphData=${!!graphData}, isLoadingGraph=${isLoadingGraph}, processor=${!!graphProcessorRef.current}`);
+  //   const isGraphView = activeFile === '__graph__' || activeFile === '__professional_graph__';
+  //   if (isGraphView && !graphData && !isLoadingGraph && graphProcessorRef.current) {
+  //     console.log('🚀 Triggering buildGraphData()...');
+  //     buildGraphData();
+  //   }
+  // }, [activeFile, graphData, isLoadingGraph, buildGraphData]);
 
   // Cleanup persistent GraphEngine and GraphDatabase when workspace unmounts
   useEffect(() => {
     return () => {
       if (persistentGraphEngineRef.current) {
-        console.log('🗑️ Destroying persistent GraphEngine on workspace unmount');
         persistentGraphEngineRef.current.destroy();
         persistentGraphEngineRef.current = null;
       }
       
       if (graphProcessorRef.current) {
-        console.log('🗑️ Cleaning up GraphProcessor and GraphDatabase on workspace unmount');
         // Call cleanup function for event listeners
         if (graphProcessorRef.current._cleanup) {
           graphProcessorRef.current._cleanup();
@@ -1413,7 +1364,6 @@ export default function Workspace({ initialPath = "" }) {
                       return newSet;
                     });
                   } catch (error) {
-                    console.error("Failed to save canvas:", error);
                   }
                 }}
                 onContentChange={(canvasData) => {
@@ -1444,7 +1394,7 @@ export default function Workspace({ initialPath = "" }) {
                         <GraphView 
                           data={graphData}
                           onNodeClick={handleGraphNodeClick}
-                          onEdgeClick={(event) => console.log('Edge clicked:', event)}
+                          onEdgeClick={(event) => {}}
                           options={{
                             enableWorkerLayout: true,
                             autoStart: true
@@ -1668,11 +1618,7 @@ export default function Workspace({ initialPath = "" }) {
         onShowTemplatePicker={(templateSelection) => {
           // Handle direct template selection from Command Palette
           if (templateSelection && templateSelection.template && templateSelection.processedContent) {
-            console.log('[Workspace] Direct template selection from Command Palette');
             const { template, processedContent } = templateSelection;
-            console.log('[Workspace] Template selected:', template.name);
-            console.log('[Workspace] Processed content:', processedContent);
-            console.log('[Workspace] Editor ref:', !!editorRef.current);
             
             if (editorRef.current && processedContent) {
               // Process template content through markdown compiler
@@ -1680,7 +1626,6 @@ export default function Workspace({ initialPath = "" }) {
               
               // Process template content through markdown compiler
               const processedWithMarkdown = compiler.processTemplate(processedContent)
-              console.log('[Workspace] Template processed through markdown compiler:', processedWithMarkdown.substring(0, 200))
               
               // Smart template insertion with cursor positioning
               const insertTemplateContent = (content) => {
@@ -1692,9 +1637,6 @@ export default function Workspace({ initialPath = "" }) {
                   const beforeCursor = content.substring(0, cursorIndex);
                   const afterCursor = content.substring(cursorIndex + 10); // 10 = '{{cursor}}'.length
                   
-                  console.log('[Workspace] Template has cursor placeholder at position:', cursorIndex);
-                  console.log('[Workspace] Before cursor:', beforeCursor);
-                  console.log('[Workspace] After cursor:', afterCursor);
                   
                   // Insert content in parts to position cursor correctly
                   return editorRef.current.chain()
@@ -1713,37 +1655,27 @@ export default function Workspace({ initialPath = "" }) {
               };
               
               try {
-                console.log('[Workspace] Inserting template content from Command Palette');
                 insertTemplateContent(processedWithMarkdown);
-                console.log('[Workspace] Template inserted successfully');
               } catch (err) {
-                console.error('[Workspace] Failed to insert template from Command Palette:', err);
               }
             }
             return;
           }
           
           // Fall back to opening template picker modal
-          console.log('[Workspace] Opening template picker modal');
           setShowTemplatePicker(true);
           setTemplatePickerData({
             editorState: { editor: editorRef.current },
             onSelect: (template, processedContent) => {
-              console.log('[Workspace] Template selected:', template.name);
-              console.log('[Workspace] Processed content:', processedContent);
-              console.log('[Workspace] Editor ref:', !!editorRef.current);
               
               if (editorRef.current && processedContent) {
                 try {
-                  console.log('[Workspace] Inserting content into editor');
-                  console.log('[Workspace] Content to insert:', processedContent);
                   
                   // Process template content through markdown compiler
                   const compiler = getMarkdownCompiler()
                   
                   // Process template content through markdown compiler
                   const processedWithMarkdown = compiler.processTemplate(processedContent)
-                  console.log('[Workspace] Template processed through markdown compiler:', processedWithMarkdown.substring(0, 200))
                   
                   // Smart template insertion with cursor positioning
                   const insertTemplateContent = (content) => {
@@ -1755,9 +1687,6 @@ export default function Workspace({ initialPath = "" }) {
                       const beforeCursor = content.substring(0, cursorIndex);
                       const afterCursor = content.substring(cursorIndex + 10); // 10 = '{{cursor}}'.length
                       
-                      console.log('[Workspace] Template has cursor placeholder at position:', cursorIndex);
-                      console.log('[Workspace] Before cursor:', beforeCursor);
-                      console.log('[Workspace] After cursor:', afterCursor);
                       
                       // Insert content in parts to position cursor correctly
                       return editorRef.current.chain()
@@ -1807,26 +1736,18 @@ export default function Workspace({ initialPath = "" }) {
                   let inserted = false;
                   for (let i = 0; i < insertMethods.length && !inserted; i++) {
                     try {
-                      console.log(`[Workspace] Trying insertion method ${i + 1}`);
                       const result = insertMethods[i]();
-                      console.log(`[Workspace] Content inserted successfully with method ${i + 1}`, result);
                       inserted = true;
                     } catch (err) {
-                      console.error(`[Workspace] Method ${i + 1} failed:`, err.message);
                     }
                   }
                   
                   if (!inserted) {
-                    console.error('[Workspace] All insertion methods failed');
                   }
                   
                 } catch (err) {
-                  console.error('[Workspace] Failed to setup template insertion:', err);
                 }
               } else {
-                console.error('[Workspace] No editor reference or content available');
-                console.log('[Workspace] Editor ref:', !!editorRef.current);
-                console.log('[Workspace] Content:', processedContent);
               }
             }
           });
