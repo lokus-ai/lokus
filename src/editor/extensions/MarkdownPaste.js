@@ -65,13 +65,16 @@ const MarkdownPaste = Extension.create({
                   // Compile markdown to HTML
                   const htmlContent = compiler.compile(text)
                   
-                  // Insert the converted HTML
+                  // Insert the converted HTML with better parsing options
                   const inserted = editor.chain()
                     .focus()
                     .insertContent(htmlContent, {
                       parseOptions: {
                         preserveWhitespace: 'full',
-                      }
+                        findPositions: true,
+                        keepWhitespace: true,
+                      },
+                      updateSelection: true,
                     })
                     .run()
 
