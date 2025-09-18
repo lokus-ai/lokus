@@ -1,13 +1,14 @@
 {
   "name": "lokus-plugin-cli",
-  "version": "1.0.0",
-  "description": "Official CLI tool for developing Lokus plugins",
-  "main": "lib/index.js",
+  "version": "2.1.0",
+  "description": "Advanced CLI toolkit for developing Lokus plugins with interactive templates, hot-reload, and comprehensive tooling",
+  "main": "index.js",
   "bin": {
-    "lokus-plugin": "lib/index.js"
+    "lokus-plugin": "index.js"
   },
   "scripts": {
-    "test": "echo \"Tests coming soon\""
+    "test": "echo \"No tests yet\"",
+    "prepublishOnly": "node index.js --help"
   },
   "keywords": [
     "lokus",
@@ -34,7 +35,28 @@
   },
   "dependencies": {
     "commander": "^11.0.0",
-    "fs-extra": "^11.1.0"
+    "fs-extra": "^11.1.0",
+    "inquirer": "^9.2.12",
+    "chalk": "^4.1.2",
+    "ora": "^7.0.1",
+    "boxen": "^7.1.1",
+    "figlet": "^1.6.0",
+    "gradient-string": "^2.0.2",
+    "listr2": "^7.0.2",
+    "execa": "^8.0.1",
+    "semver": "^7.5.4",
+    "yaml": "^2.3.4",
+    "mustache": "^4.2.0",
+    "archiver": "^6.0.1",
+    "tar": "^6.2.0",
+    "node-fetch": "^3.3.2",
+    "ajv": "^8.12.0",
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "chokidar": "^3.5.3",
+    "esbuild": "^0.19.5",
+    "glob": "^10.3.10",
+    "cors": "^2.8.5"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -42,12 +64,24 @@
     "@types/semver": "^7.5.0",
     "@types/archiver": "^6.0.0",
     "@types/tar": "^6.1.0",
+    "@types/inquirer": "^9.0.3",
+    "@types/figlet": "^1.5.6",
+    "@types/mustache": "^4.2.3",
+    "@types/express": "^4.17.19",
+    "@types/ws": "^8.5.7",
+    "@types/cors": "^2.8.15",
+    "@types/jest": "^29.5.5",
     "typescript": "^5.0.0",
-    "vitest": "^1.0.0"
+    "vitest": "^1.0.0",
+    "jest": "^29.7.0",
+    "ts-node": "^10.9.1",
+    "@typescript-eslint/eslint-plugin": "^6.7.0",
+    "@typescript-eslint/parser": "^6.7.0",
+    "eslint": "^8.50.0",
+    "prettier": "^3.0.3"
   },
   "files": [
-    "lib",
-    "templates",
+    "index.js",
     "README.md"
   ]
 }

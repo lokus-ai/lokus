@@ -1,7 +1,55 @@
-import { invoke } from '@tauri-apps/api/core'
-import { join, homeDir } from '@tauri-apps/api/path'
-import { readDir, exists, readTextFile } from '@tauri-apps/api/fs'
 import { EventEmitter } from '../utils/EventEmitter.js'
+import LokusPluginAPI from './api/LokusPluginAPI.js'
+
+// Browser compatibility utilities
+function detectTauriEnvironment() {
+  try {
+    const w = window;
+    return !!(
+      (w.__TAURI_INTERNALS__ && typeof w.__TAURI_INTERNALS__.invoke === 'function') ||
+      w.__TAURI_METADATA__ ||
+      (navigator?.userAgent || '').includes('Tauri')
+    );
+  } catch {
+    return false;
+  }
+}
+
+// Async initialization of Tauri APIs
+async function initializeTauriAPIs() {
+  const isTauri = detectTauriEnvironment();
+  
+  if (!isTauri) {
+    return { isTauri: false };
+  }
+  
+  // Only try to import Tauri APIs if we're actually in a Tauri environment
+  try {
+    // Use eval to prevent Vite from analyzing these imports
+    const importCore = new Function('return import("@tauri-apps/api/core")');
+    const importPath = new Function('return import("@tauri-apps/api/path")');
+    const importFs = new Function('return import("@tauri-apps/api/fs")');
+    
+    const [tauriCore, tauriPath, tauriFs] = await Promise.all([
+      importCore(),
+      importPath(),
+      importFs()
+    ]);
+    
+    return {
+      isTauri: true,
+      invoke: tauriCore.invoke,
+      join: tauriPath.join,
+      homeDir: tauriPath.homeDir,
+      readDir: tauriFs.readDir,
+      exists: tauriFs.exists,
+      readTextFile: tauriFs.readTextFile
+    };
+  } catch (error) {
+    console.warn('Failed to load Tauri APIs, running in browser mode:', error);
+    return { isTauri: false };
+  }
+}
 
 /**
  * Plugin Management System
@@ -9,7 +57,7 @@ import { EventEmitter } from '../utils/EventEmitter.js'
  */
 
 export class PluginManager extends EventEmitter {
-  constructor() {
+  constructor(managers = {}) {
     super()
     this.plugins = new Map() // pluginId -> plugin instance
     this.registry = new Map() // pluginId -> plugin metadata
@@ -21,6 +69,12 @@ export class PluginManager extends EventEmitter {
     this.pluginDirs = new Set()
     this.isInitialized = false
     this.logger = console // TODO: Replace with proper logger
+    
+    // Tauri API references (will be initialized in initialize())
+    this.tauri = null
+    
+    // Create the Plugin API instance that will be passed to plugins
+    this.pluginAPI = new LokusPluginAPI(managers)
   }
 
   /**
@@ -32,6 +86,10 @@ export class PluginManager extends EventEmitter {
     }
 
     try {
+      // Initialize Tauri APIs (if available)
+      this.tauri = await initializeTauriAPIs()
+      this.logger.info(`Plugin system running in ${this.tauri.isTauri ? 'Tauri' : 'browser'} mode`)
+      
       // Setup plugin directories
       await this.setupPluginDirectories()
       
@@ -55,21 +113,30 @@ export class PluginManager extends EventEmitter {
    */
   async setupPluginDirectories() {
     try {
-      const home = await homeDir()
-      const pluginDir = await join(home, '.lokus', 'plugins')
-      
-      // Add default plugin directories
-      this.pluginDirs.add(pluginDir)
-      
-      // Ensure plugin directory exists
-      if (!(await exists(pluginDir))) {
-        await invoke('create_directory', { path: pluginDir })
+      if (this.tauri.isTauri) {
+        const home = await this.tauri.homeDir()
+        const pluginDir = await this.tauri.join(home, '.lokus', 'plugins')
+        
+        // Add default plugin directories
+        this.pluginDirs.add(pluginDir)
+        
+        // Ensure plugin directory exists
+        if (!(await this.tauri.exists(pluginDir))) {
+          await this.tauri.invoke('create_directory', { path: pluginDir })
+        }
+        
+        this.logger.info(`Plugin directory: ${pluginDir}`)
+      } else {
+        // Browser mode - use test plugin directory
+        this.pluginDirs.add('./test-plugins')
+        this.logger.info('Plugin directory: ./test-plugins (browser mode)')
       }
-      
-      this.logger.info(`Plugin directory: ${pluginDir}`)
     } catch (error) {
       this.logger.error('Failed to setup plugin directories:', error)
-      throw error
+      // Don't throw in browser mode, just continue
+      if (this.tauri.isTauri) {
+        throw error
+      }
     }
   }
 
@@ -79,32 +146,51 @@ export class PluginManager extends EventEmitter {
   async discoverPlugins() {
     const discovered = []
     
-    for (const pluginDir of this.pluginDirs) {
-      try {
-        if (!(await exists(pluginDir))) {
-          continue
-        }
-        
-        const entries = await readDir(pluginDir, { recursive: false })
-        
-        for (const entry of entries) {
-          if (entry.children && entry.name) {
-            try {
-              const manifest = await this.loadPluginManifest(entry.path)
-              if (manifest) {
-                discovered.push({
-                  path: entry.path,
-                  manifest,
-                  id: manifest.id || entry.name
-                })
+    if (!this.tauri.isTauri) {
+      // Browser mode - simulate mock plugins for now
+      this.logger.info('Running in browser mode - creating mock plugin for testing')
+      discovered.push({
+        path: './test-plugins/simple-test',
+        manifest: {
+          id: 'simple-test',
+          name: 'Simple Test Plugin',
+          version: '1.0.0',
+          description: 'A simple test plugin for demonstration',
+          author: 'Lokus Team',
+          main: 'index.js',
+          permissions: ['editor', 'ui']
+        },
+        id: 'simple-test'
+      })
+    } else {
+      // Tauri mode - read actual filesystem
+      for (const pluginDir of this.pluginDirs) {
+        try {
+          if (!(await this.tauri.exists(pluginDir))) {
+            continue
+          }
+          
+          const entries = await this.tauri.readDir(pluginDir, { recursive: false })
+          
+          for (const entry of entries) {
+            if (entry.children && entry.name) {
+              try {
+                const manifest = await this.loadPluginManifest(entry.path)
+                if (manifest) {
+                  discovered.push({
+                    path: entry.path,
+                    manifest,
+                    id: manifest.id || entry.name
+                  })
+                }
+              } catch (error) {
+                this.logger.warn(`Failed to load manifest for ${entry.name}:`, error)
               }
-            } catch (error) {
-              this.logger.warn(`Failed to load manifest for ${entry.name}:`, error)
             }
           }
+        } catch (error) {
+          this.logger.warn(`Failed to scan plugin directory ${pluginDir}:`, error)
         }
-      } catch (error) {
-        this.logger.warn(`Failed to scan plugin directory ${pluginDir}:`, error)
       }
     }
     
@@ -125,16 +211,36 @@ export class PluginManager extends EventEmitter {
 
   /**
    * Load plugin manifest from directory
+   * Supports both plugin.json (legacy) and manifest.json (new CLI format)
    */
   async loadPluginManifest(pluginPath) {
+    if (!this.tauri.isTauri) {
+      // Browser mode - return mock manifest for now
+      return {
+        id: 'simple-test',
+        name: 'Simple Test Plugin',
+        version: '1.0.0',
+        description: 'A simple test plugin for demonstration',
+        author: 'Lokus Team',
+        main: 'index.js',
+        permissions: ['editor', 'ui']
+      }
+    }
+    
     try {
-      const manifestPath = await join(pluginPath, 'plugin.json')
+      // Tauri mode - read actual files
+      // Try new manifest.json first, then fall back to plugin.json
+      let manifestPath = await this.tauri.join(pluginPath, 'manifest.json')
       
-      if (!(await exists(manifestPath))) {
-        throw new Error('plugin.json not found')
+      if (!(await this.tauri.exists(manifestPath))) {
+        manifestPath = await this.tauri.join(pluginPath, 'plugin.json')
+        
+        if (!(await this.tauri.exists(manifestPath))) {
+          throw new Error('Neither manifest.json nor plugin.json found')
+        }
       }
       
-      const manifestContent = await readTextFile(manifestPath)
+      const manifestContent = await this.tauri.readTextFile(manifestPath)
       const manifest = JSON.parse(manifestContent)
       
       return manifest
@@ -145,10 +251,27 @@ export class PluginManager extends EventEmitter {
 
   /**
    * Validate plugin manifest schema
+   * Supports both old and new manifest formats
    */
   async validatePluginManifest(manifest) {
-    const required = ['id', 'name', 'version', 'main', 'lokusVersion']
+    // Required fields for new format
+    const newRequired = ['id', 'name', 'version', 'main']
+    // Required fields for old format (fallback)
+    const oldRequired = ['id', 'name', 'version', 'main', 'lokusVersion']
     
+    let required = newRequired
+    
+    // Check if this is old format (has lokusVersion)
+    if (manifest.lokusVersion) {
+      required = oldRequired
+      
+      // Validate Lokus compatibility for old format
+      if (!this.isVersionCompatible(manifest.lokusVersion)) {
+        throw new Error(`Incompatible Lokus version: ${manifest.lokusVersion}`)
+      }
+    }
+    
+    // Check required fields
     for (const field of required) {
       if (!manifest[field]) {
         throw new Error(`Missing required field: ${field}`)
@@ -160,15 +283,37 @@ export class PluginManager extends EventEmitter {
       throw new Error('Invalid version format (expected: x.y.z)')
     }
     
-    // Validate Lokus compatibility
-    if (!this.isVersionCompatible(manifest.lokusVersion)) {
-      throw new Error(`Incompatible Lokus version: ${manifest.lokusVersion}`)
+    // Validate permissions array (new format)
+    if (manifest.permissions) {
+      if (!Array.isArray(manifest.permissions)) {
+        throw new Error('Permissions must be an array')
+      }
+      
+      // Validate each permission
+      const validPermissions = [
+        'editor', 'ui', 'filesystem', 'network', 
+        'clipboard', 'notifications', 'commands', 'data'
+      ]
+      
+      for (const permission of manifest.permissions) {
+        if (!validPermissions.includes(permission)) {
+          this.logger.warn(`Unknown permission: ${permission}`)
+        }
+      }
     }
     
     // Validate dependencies
     if (manifest.dependencies) {
       if (typeof manifest.dependencies !== 'object') {
         throw new Error('Dependencies must be an object')
+      }
+    }
+    
+    // Validate plugin type
+    if (manifest.type) {
+      const validTypes = ['editor', 'panel', 'data', 'theme', 'integration']
+      if (!validTypes.includes(manifest.type)) {
+        this.logger.warn(`Unknown plugin type: ${manifest.type}`)
       }
     }
     
@@ -291,22 +436,57 @@ export class PluginManager extends EventEmitter {
       }
       
       // Load plugin main file
-      const mainPath = await join(pluginInfo.path, pluginInfo.manifest.main)
-      
-      if (!(await exists(mainPath))) {
-        throw new Error(`Main file not found: ${pluginInfo.manifest.main}`)
+      let mainPath
+      if (this.tauri.isTauri) {
+        mainPath = await this.tauri.join(pluginInfo.path, pluginInfo.manifest.main)
+        
+        if (!(await this.tauri.exists(mainPath))) {
+          throw new Error(`Main file not found: ${pluginInfo.manifest.main}`)
+        }
+      } else {
+        // Browser mode - use relative path for mock plugin
+        mainPath = `${pluginInfo.path}/${pluginInfo.manifest.main}`
       }
       
       // Dynamic import the plugin
-      const pluginModule = await import(mainPath)
-      const PluginClass = pluginModule.default || pluginModule.Plugin
-      
-      if (!PluginClass) {
-        throw new Error('Plugin must export a default class or Plugin class')
+      let PluginClass
+      if (this.tauri.isTauri) {
+        const pluginModule = await import(/* @vite-ignore */ mainPath)
+        PluginClass = pluginModule.default || pluginModule.Plugin
+        
+        if (!PluginClass) {
+          throw new Error('Plugin must export a default class or Plugin class')
+        }
+      } else {
+        // Browser mode - create mock plugin class
+        PluginClass = class MockTestPlugin {
+          constructor(api) {
+            this.api = api
+            this.id = pluginId
+            this.name = pluginInfo.manifest.name
+          }
+          
+          async activate() {
+            this.api.logger.info(`Mock plugin ${this.name} activated`)
+            // Mock adding a slash command
+            await this.api.EditorAPI.addSlashCommand({
+              name: 'test',
+              description: 'Test command from mock plugin',
+              icon: '🧪',
+              execute: () => {
+                this.api.logger.info('Test command executed!')
+              }
+            })
+          }
+          
+          async deactivate() {
+            this.api.logger.info(`Mock plugin ${this.name} deactivated`)
+          }
+        }
       }
       
-      // Create plugin instance
-      const plugin = new PluginClass()
+      // Create plugin instance with our API
+      const plugin = new PluginClass(this.pluginAPI)
       
       // Set plugin metadata
       plugin.id = pluginId
@@ -354,6 +534,9 @@ export class PluginManager extends EventEmitter {
         }
       }
       
+      // Set plugin context in API
+      this.pluginAPI.setPluginContext(pluginId, plugin)
+      
       // Call plugin activate method
       if (typeof plugin.activate === 'function') {
         await plugin.activate()
@@ -398,6 +581,9 @@ export class PluginManager extends EventEmitter {
       if (typeof plugin.deactivate === 'function') {
         await plugin.deactivate()
       }
+      
+      // Clean up plugin resources
+      await this.pluginAPI.cleanup(pluginId)
       
       this.activePlugins.delete(pluginId)
       this.registry.get(pluginId).status = 'loaded'

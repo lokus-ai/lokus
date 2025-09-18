@@ -29,6 +29,8 @@ import SmartTask from "../extensions/SmartTask.js";
 import SimpleTask from "../extensions/SimpleTask.js";
 import liveEditorSettings from "../../core/editor/live-settings.js";
 import WikiLinkModal from "../../components/WikiLinkModal.jsx";
+import { editorAPI } from "../../plugins/api/EditorAPI.js";
+import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 
 import "../styles/editor.css";
 
@@ -36,6 +38,44 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
   const [extensions, setExtensions] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editorSettings, setEditorSettings] = useState(null);
+  const [pluginExtensions, setPluginExtensions] = useState([]);
+  const [lastPluginUpdate, setLastPluginUpdate] = useState(0);
+
+  // Listen for plugin extension changes
+  useEffect(() => {
+    const handlePluginUpdate = () => {
+      const pluginExts = editorAPI.getAllExtensions();
+      console.log(`[Editor] Plugin extensions updated: ${pluginExts.length} extensions`);
+      setPluginExtensions(pluginExts);
+      setLastPluginUpdate(Date.now());
+    };
+
+    // Listen for plugin registration events
+    const unsubscribeNode = editorAPI.on('node-registered', handlePluginUpdate);
+    const unsubscribeMark = editorAPI.on('mark-registered', handlePluginUpdate);
+    const unsubscribeExt = editorAPI.on('extension-registered', handlePluginUpdate);
+    const unsubscribeUnregister = editorAPI.on('plugin-unregistered', handlePluginUpdate);
+    const unsubscribeHotReload = editorAPI.on('hot-reload-requested', ({ extensions, content: newContent }) => {
+      console.log('[Editor] Hot reload requested');
+      // Recreate editor with new extensions - this will be handled by the editor recreation logic
+      setLastPluginUpdate(Date.now());
+    });
+
+    // Initial load of plugin extensions
+    const initialPluginExts = editorAPI.getAllExtensions();
+    if (initialPluginExts.length > 0) {
+      console.log(`[Editor] Initial plugin extensions loaded: ${initialPluginExts.length}`);
+      setPluginExtensions(initialPluginExts);
+    }
+
+    return () => {
+      unsubscribeNode();
+      unsubscribeMark();
+      unsubscribeExt();
+      unsubscribeUnregister();
+      unsubscribeHotReload();
+    };
+  }, []);
 
   useEffect(() => {
     const pick = (ns, named) => ns?.default ?? ns?.[named] ?? null;
@@ -156,6 +196,10 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
     // Simple task management with unique patterns
     exts.push(SimpleTask);
 
+    // Add plugin extensions
+    console.log(`[Editor] Adding ${pluginExtensions.length} plugin extensions`);
+    exts.push(...pluginExtensions);
+
     // Load markdown shortcut prefs and editor settings
     (async () => {
       try {
@@ -225,7 +269,7 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
       setExtensions(exts);
       setLoading(false);
     })()
-  }, []);
+  }, [pluginExtensions, lastPluginUpdate]);
 
   if (loading || !extensions || !editorSettings) {
     return <div className="m-5 text-app-muted">Loading editor…</div>;
@@ -273,6 +317,19 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
   const editor = useEditor({
     extensions,
     shouldRerenderOnTransaction: false,
+    onBeforeCreate: ({ editor }) => {
+      // Set editor instance in the plugin API for hot reloading
+      editorAPI.setEditorInstance(editor);
+    },
+    onCreate: ({ editor }) => {
+      // Update editor instance reference
+      editorAPI.setEditorInstance(editor);
+      console.log(`[Editor] Created with ${extensions?.length || 0} extensions`);
+    },
+    onDestroy: () => {
+      // Clear editor instance reference
+      editorAPI.setEditorInstance(null);
+    },
     editorProps: {
       attributes: { class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none tiptap-area obsidian-editor" },
       handleDOMEvents: {
@@ -323,7 +380,27 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
       isSettingRef.current = true;
-      editor.commands.setContent(content);
+      
+      // Import markdown compiler and process content
+      (async () => {
+        try {
+          const { getMarkdownCompiler } = await import('../../core/markdown/compiler.js');
+          const compiler = getMarkdownCompiler();
+          
+          // Check if content looks like markdown and process it
+          if (compiler.isMarkdown(content)) {
+            console.log('[Editor] Processing markdown content for display');
+            const htmlContent = compiler.compile(content);
+            editor.commands.setContent(htmlContent);
+          } else {
+            editor.commands.setContent(content);
+          }
+        } catch (error) {
+          // Fallback if markdown compiler fails
+          console.warn('[Editor] Markdown compiler failed, using content as-is:', error);
+          editor.commands.setContent(content);
+        }
+      })();
     }
   }, [content, editor]);
 
