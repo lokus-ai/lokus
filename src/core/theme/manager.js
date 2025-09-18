@@ -16,7 +16,9 @@ const THEME_TOKEN_KEYS = [
   // Semantic colors
   "--danger", "--success", "--warning", "--info",
   // Editor colors
-  "--editor-placeholder"
+  "--editor-placeholder",
+  // App-prefixed tokens (for compatibility)
+  "--app-bg", "--app-text", "--app-panel", "--app-border", "--app-muted", "--app-accent", "--app-accent-fg"
 ];
 const BUILT_IN_THEME_TOKENS = { 
   // Core tokens
@@ -82,15 +84,33 @@ function normalize(val) {
 }
 
 export function applyTokens(tokens) {
+  console.log('[theme] applyTokens called with:', tokens);
   const root = document.documentElement;
+  
+  // Map app-prefixed tokens to correct CSS variable names
+  const mappedTokens = {};
+  for (const [key, value] of Object.entries(tokens)) {
+    if (key.startsWith('--app-')) {
+      // Map --app-bg to --bg, etc.
+      const mappedKey = key.replace('--app-', '--');
+      mappedTokens[mappedKey] = value;
+      console.log(`[theme] Mapping ${key} -> ${mappedKey}: ${value}`);
+    }
+    mappedTokens[key] = value;
+  }
+  
   for (const key of THEME_TOKEN_KEYS) {
-    const value = tokens[key];
+    const value = mappedTokens[key];
     if (value) {
-      root.style.setProperty(key, normalize(value));
+      const normalizedValue = normalize(value);
+      console.log(`[theme] Setting ${key}: ${value} -> ${normalizedValue}`);
+      root.style.setProperty(key, normalizedValue);
     } else {
+      console.log(`[theme] Removing ${key} (no value)`);
       root.style.removeProperty(key);
     }
   }
+  console.log('[theme] applyTokens completed');
 }
 
 export async function broadcastTheme(payload) {
@@ -177,6 +197,8 @@ export async function setGlobalActiveTheme(id) {
   const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
   
   console.log(`[theme] Applying tokens for theme "${id}"`);
+  console.log(`[theme] Manifest loaded:`, manifest);
+  console.log(`[theme] Tokens to apply:`, tokensToApply);
   applyTokens(tokensToApply);
   
   console.log(`[theme] Broadcasting theme change to other windows: "${id}"`);
