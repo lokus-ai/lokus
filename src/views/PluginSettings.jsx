@@ -84,10 +84,10 @@ export default function PluginSettings({ onOpenPluginDetail }) {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-3">
+        <div className="flex gap-1 mb-4 py-2">
           <button
             onClick={() => setActiveTab("installed")}
-            className={`px-3 py-1.5 text-sm rounded transition-colors ${
+            className={`px-3 py-2.5 text-sm rounded transition-colors ${
               activeTab === "installed"
                 ? "bg-app-accent text-app-accent-fg"
                 : "text-app-muted hover:text-app-text hover:bg-app-bg"
@@ -97,7 +97,7 @@ export default function PluginSettings({ onOpenPluginDetail }) {
           </button>
           <button
             onClick={() => setActiveTab("marketplace")}
-            className={`px-3 py-1.5 text-sm rounded transition-colors ${
+            className={`px-3 py-2.5 text-sm rounded transition-colors ${
               activeTab === "marketplace"
                 ? "bg-app-accent text-app-accent-fg"
                 : "text-app-muted hover:text-app-text hover:bg-app-bg"

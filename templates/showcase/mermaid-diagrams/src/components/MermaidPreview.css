@@ -1,0 +1,438 @@
+/* Mermaid Preview Styles */
+
+.mermaid-preview {
+  position: relative;
+  background: var(--editor-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 200px;
+}
+
+/* Controls */
+.mermaid-preview__controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: var(--shadow-sm);
+  z-index: 10;
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.dark .mermaid-preview__controls {
+  background: rgba(30, 30, 30, 0.9);
+  border-color: var(--dark-border-color, #404040);
+}
+
+.control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all var(--transition-fast);
+}
+
+.control-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.control-btn:active {
+  transform: scale(0.95);
+}
+
+.zoom-level {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+  min-width: 35px;
+  text-align: center;
+  padding: 0 4px;
+}
+
+/* Content */
+.mermaid-preview__content {
+  position: relative;
+  padding: 24px;
+  overflow: auto;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mermaid-preview__content.rendering {
+  pointer-events: none;
+}
+
+.mermaid-preview__content.error {
+  padding: 40px 24px;
+}
+
+/* SVG styling */
+.mermaid-preview__content svg {
+  max-width: 100%;
+  height: auto;
+  transition: transform var(--transition-normal);
+}
+
+.mermaid-preview__content g {
+  transition: transform var(--transition-fast);
+}
+
+/* Interactive elements */
+.mermaid-preview__content .node,
+.mermaid-preview__content .edgeLabel,
+.mermaid-preview__content .actor,
+.mermaid-preview__content [data-id] {
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.mermaid-preview__content .node:hover,
+.mermaid-preview__content .edgeLabel:hover,
+.mermaid-preview__content .actor:hover,
+.mermaid-preview__content [data-id]:hover {
+  filter: brightness(1.1);
+  transform: scale(1.02);
+}
+
+.mermaid-preview__content .node.hover,
+.mermaid-preview__content .edgeLabel.hover,
+.mermaid-preview__content .actor.hover,
+.mermaid-preview__content [data-id].hover {
+  stroke-width: 2px;
+  stroke: var(--primary-color);
+}
+
+/* Loading state */
+.mermaid-preview__loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-color);
+  border-top: 3px solid var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Error state */
+.mermaid-preview__error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+  color: var(--text-secondary);
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.error-icon {
+  font-size: 48px;
+  opacity: 0.6;
+}
+
+.error-message {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.error-message strong {
+  color: var(--error-color);
+  font-weight: 600;
+}
+
+.error-retry-btn {
+  padding: 8px 16px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.error-retry-btn:hover {
+  background: var(--primary-color-hover);
+}
+
+/* Empty state */
+.mermaid-preview__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: var(--text-muted);
+  padding: 40px 24px;
+}
+
+.empty-icon {
+  font-size: 64px;
+  opacity: 0.5;
+}
+
+.empty-message {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* Theme-specific diagram styling */
+
+/* Flowchart styling */
+.mermaid-preview svg .node rect,
+.mermaid-preview svg .node circle,
+.mermaid-preview svg .node polygon {
+  fill: var(--bg-secondary);
+  stroke: var(--border-color);
+  stroke-width: 1.5px;
+}
+
+.mermaid-preview svg .node .label {
+  color: var(--text-primary);
+  font-family: var(--font-family-sans);
+}
+
+.mermaid-preview svg .edgePath path {
+  stroke: var(--text-secondary);
+  stroke-width: 1.5px;
+  fill: none;
+}
+
+.mermaid-preview svg .edgeLabel {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+/* Sequence diagram styling */
+.mermaid-preview svg .actor {
+  fill: var(--bg-secondary);
+  stroke: var(--border-color);
+  stroke-width: 1.5px;
+}
+
+.mermaid-preview svg .actor-line {
+  stroke: var(--border-color);
+  stroke-width: 1px;
+  stroke-dasharray: 5,5;
+}
+
+.mermaid-preview svg .messageLine0,
+.mermaid-preview svg .messageLine1 {
+  stroke: var(--text-secondary);
+  stroke-width: 1.5px;
+}
+
+.mermaid-preview svg .messageText {
+  fill: var(--text-primary);
+  font-family: var(--font-family-sans);
+  font-size: 12px;
+}
+
+.mermaid-preview svg .note {
+  fill: var(--warning-color);
+  stroke: var(--warning-color);
+  opacity: 0.1;
+}
+
+.mermaid-preview svg .noteText {
+  fill: var(--text-primary);
+  font-size: 11px;
+}
+
+/* Gantt chart styling */
+.mermaid-preview svg .grid .tick {
+  stroke: var(--border-color);
+  stroke-width: 1px;
+}
+
+.mermaid-preview svg .section0,
+.mermaid-preview svg .section1,
+.mermaid-preview svg .section2 {
+  fill: var(--primary-color);
+  opacity: 0.8;
+}
+
+.mermaid-preview svg .task {
+  fill: var(--bg-secondary);
+  stroke: var(--border-color);
+  stroke-width: 1px;
+}
+
+.mermaid-preview svg .taskText {
+  fill: var(--text-primary);
+  font-family: var(--font-family-sans);
+  font-size: 11px;
+}
+
+.mermaid-preview svg .today {
+  stroke: var(--error-color);
+  stroke-width: 2px;
+}
+
+/* Pie chart styling */
+.mermaid-preview svg .pieCircle {
+  stroke: var(--bg-primary);
+  stroke-width: 2px;
+}
+
+.mermaid-preview svg .pieTitleText {
+  fill: var(--text-primary);
+  font-family: var(--font-family-sans);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.mermaid-preview svg .slice {
+  font-family: var(--font-family-sans);
+  font-size: 12px;
+}
+
+/* Git graph styling */
+.mermaid-preview svg .commit-id {
+  fill: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 10px;
+}
+
+.mermaid-preview svg .commit-msg {
+  fill: var(--text-secondary);
+  font-family: var(--font-family-sans);
+  font-size: 11px;
+}
+
+.mermaid-preview svg .branch-label {
+  fill: var(--text-primary);
+  font-family: var(--font-family-sans);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Entity Relationship diagram styling */
+.mermaid-preview svg .er-entityBox {
+  fill: var(--bg-secondary);
+  stroke: var(--border-color);
+  stroke-width: 1.5px;
+}
+
+.mermaid-preview svg .er-entityLabel {
+  fill: var(--text-primary);
+  font-family: var(--font-family-sans);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mermaid-preview svg .er-attributeBoxOdd,
+.mermaid-preview svg .er-attributeBoxEven {
+  fill: var(--bg-tertiary);
+  stroke: var(--border-color);
+  stroke-width: 1px;
+}
+
+.mermaid-preview svg .er-attributeLabel {
+  fill: var(--text-secondary);
+  font-family: var(--font-family-sans);
+  font-size: 11px;
+}
+
+.mermaid-preview svg .er-relationshipLabel {
+  fill: var(--text-primary);
+  font-family: var(--font-family-sans);
+  font-size: 11px;
+}
+
+/* Dark theme overrides */
+.dark .mermaid-preview {
+  background: var(--dark-editor-bg, #1e1e1e);
+  border-color: var(--dark-border-color, #404040);
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .mermaid-preview svg .node rect,
+  .mermaid-preview svg .node circle,
+  .mermaid-preview svg .node polygon {
+    stroke-width: 2px;
+  }
+  
+  .mermaid-preview svg .edgePath path {
+    stroke-width: 2px;
+  }
+  
+  .mermaid-preview__controls {
+    border-width: 2px;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner {
+    animation: none;
+  }
+  
+  .mermaid-preview__content svg,
+  .mermaid-preview__content g,
+  .control-btn {
+    transition: none;
+  }
+  
+  .mermaid-preview__content .node:hover,
+  .mermaid-preview__content .edgeLabel:hover,
+  .mermaid-preview__content .actor:hover,
+  .mermaid-preview__content [data-id]:hover {
+    transform: none;
+  }
+}
+
+/* Print styles */
+@media print {
+  .mermaid-preview__controls {
+    display: none;
+  }
+  
+  .mermaid-preview {
+    border: none;
+    box-shadow: none;
+  }
+  
+  .mermaid-preview__content {
+    padding: 0;
+  }
+}

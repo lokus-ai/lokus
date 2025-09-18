@@ -24,6 +24,7 @@ import {
 import tippy from "tippy.js/dist/tippy.esm.js";
 
 import SlashCommandList from "../components/SlashCommandList";
+import { editorAPI } from "../../plugins/api/EditorAPI.js";
 
 // Keep track of the current reference rect so we can open sub‑popovers
 let lastClientRect = null;
@@ -605,7 +606,15 @@ const slashCommand = {
     const matches = (title) => title.toLowerCase().startsWith(query.toLowerCase());
     const available = (_item) => true; // Always show; execution is guarded.
 
-    return commandItems
+    // Get plugin slash commands
+    const pluginCommandGroups = editorAPI.getSlashCommands();
+    
+    // Combine core commands with plugin commands
+    const allCommandGroups = [...commandItems, ...pluginCommandGroups];
+    
+    console.log(`[SlashCommand] Processing ${allCommandGroups.length} command groups (${pluginCommandGroups.length} from plugins)`);
+
+    return allCommandGroups
       .map((group) => ({
         ...group,
         commands: group.commands.filter((item) => matches(item.title) && available(item)),
@@ -621,8 +630,16 @@ const slashCommand = {
       onStart: (props) => {
         // keep latest rect for sub‑popovers (e.g., table size picker)
         if (props.clientRect) lastClientRect = props.clientRect;
+        
+        // Refresh plugin commands on each open in case they changed
+        const currentItems = slashCommand.items(props);
+        const enhancedProps = {
+          ...props,
+          items: currentItems
+        };
+        
         component = new ReactRenderer(SlashCommandList, {
-          props,
+          props: enhancedProps,
           editor: props.editor,
         });
 
@@ -642,7 +659,14 @@ const slashCommand = {
       },
 
       onUpdate(props) {
-        component.updateProps(props);
+        // Refresh items with latest plugin commands
+        const currentItems = slashCommand.items(props);
+        const enhancedProps = {
+          ...props,
+          items: currentItems
+        };
+        
+        component.updateProps(enhancedProps);
 
         if (!props.clientRect) {
           return;
@@ -672,4 +696,5 @@ const slashCommand = {
   },
 };
 
+// Export enhanced slash command with plugin support
 export default slashCommand;

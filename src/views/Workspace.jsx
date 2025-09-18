@@ -33,6 +33,8 @@ import { canvasManager } from "../core/canvas/manager.js";
 import TemplatePicker from "../components/TemplatePicker.jsx";
 import { getMarkdownCompiler } from "../core/markdown/compiler.js";
 import CreateTemplate from "../components/CreateTemplate.jsx";
+import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
+import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
 
 const MAX_OPEN_TABS = 10;
 
@@ -354,7 +356,7 @@ function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDra
 
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-      <div className="h-9 shrink-0 flex items-end bg-app-panel border-b border-app-border px-0">
+      <div className="h-12 shrink-0 flex items-end bg-app-panel border-b border-app-border px-0">
         <div className="flex-1 flex items-center overflow-x-auto no-scrollbar">
           {tabs.map(tab => (
             <DraggableTab
@@ -384,8 +386,9 @@ function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDra
 // --- Main Workspace Component ---
 export default function Workspace({ initialPath = "" }) {
   const [path, setPath] = useState(initialPath);
-  const { leftW, startLeftDrag } = useDragColumns({});
+  const { leftW, rightW, startLeftDrag, startRightDrag } = useDragColumns({});
   const [showLeft, setShowLeft] = useState(true);
+  const [showRight, setShowRight] = useState(false);
   const [showMiniKanban, setShowMiniKanban] = useState(false);
   const [refreshId, setRefreshId] = useState(0);
 
@@ -841,7 +844,16 @@ export default function Workspace({ initialPath = "" }) {
         needsStateUpdate = true;
       }
 
-      await invoke("write_file_content", { path: path_to_save, content: editorContent });
+      // For .md files, we need to convert HTML content back to markdown
+      let contentToSave = editorContent;
+      if (path_to_save.endsWith('.md')) {
+        // TODO: Implement HTML to Markdown conversion
+        // For now, we'll save the HTML content as-is
+        // This should be replaced with proper HTML->Markdown conversion
+        console.log('[Save] Saving markdown file - HTML to Markdown conversion needed');
+      }
+      
+      await invoke("write_file_content", { path: path_to_save, content: contentToSave });
       setSavedContent(editorContent);
       setUnsavedChanges(prev => {
         const newSet = new Set(prev);
@@ -1153,11 +1165,13 @@ export default function Workspace({ initialPath = "" }) {
   const cols = (() => {
     const mainContent = `minmax(0,1fr)`;
     const leftPanel = showLeft ? `${leftW}px 1px ` : "";
-    return `48px 1px ${leftPanel}${mainContent}`;
+    const rightPanel = showRight ? ` 1px ${rightW}px` : "";
+    return `48px 1px ${leftPanel}${mainContent}${rightPanel}`;
   })();
 
   return (
-    <div className="h-screen bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select">
+    <PanelManager>
+      <div className="h-screen bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select">
       {/* Test Mode Indicator */}
       {isTestMode && (
         <div className="fixed top-4 right-4 bg-yellow-500 text-black px-3 py-1 rounded-md text-sm font-medium z-50">
@@ -1599,7 +1613,22 @@ export default function Workspace({ initialPath = "" }) {
           )}
           </>
         </main>
+        {showRight && <div onMouseDown={startRightDrag} className="cursor-col-resize bg-app-border hover:bg-app-accent transition-colors duration-300 w-1 min-h-full" />}
+        {showRight && (
+          <aside className="overflow-y-auto flex flex-col bg-app-panel border-l border-app-border">
+            <PanelRegion 
+              position={PANEL_POSITIONS.SIDEBAR_RIGHT}
+              className="h-full"
+            />
+          </aside>
+        )}
       </div>
+      
+      {/* Bottom Panel Region */}
+      <PanelRegion 
+        position={PANEL_POSITIONS.BOTTOM}
+        className="border-t border-app-border"
+      />
       
       <CommandPalette
         open={showCommandPalette}
@@ -1823,5 +1852,6 @@ export default function Workspace({ initialPath = "" }) {
         openTabs={openTabs}
       />
     </div>
+    </PanelManager>
   );
 }

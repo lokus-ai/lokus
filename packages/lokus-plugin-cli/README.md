@@ -1,51 +1,56 @@
-# @lokus/plugin-cli
+# Lokus Plugin CLI
 
-Official CLI tool for developing Lokus plugins.
+Advanced CLI toolkit for developing Lokus plugins with interactive templates, hot-reload, and comprehensive tooling.
 
 ## Installation
 
 ```bash
-npm install -g @lokus/plugin-cli
+npm install -g lokus-plugin-cli
 ```
 
 ## Usage
 
+### Create a new plugin
+
 ```bash
-# Create a new plugin
-lokus-plugin create my-plugin
+lokus-plugin create my-awesome-plugin
+```
 
-# Interactive creation
-lokus-plugin create interactive
+Interactive prompts will guide you through:
+- Plugin type (Editor, UI Panel, Data Provider, Theme, Integration)
+- TypeScript or JavaScript
+- Description and author information
 
-# Create MCP plugin
-lokus-plugin create mcp-server --name "AI Helper"
+### Development
 
-# Build plugin
-lokus-plugin build
-
-# Package for distribution
-lokus-plugin package
-
-# Validate manifest
-lokus-plugin validate
-
-# Test plugin
-lokus-plugin test
-
-# Development mode
+```bash
+cd my-awesome-plugin
 lokus-plugin dev
 ```
 
-## Templates
+### Build
 
-- `basic` - Simple plugin template
-- `mcp-server` - MCP server plugin template
-- `theme` - Theme plugin template
-- `language` - Language support plugin
+```bash
+lokus-plugin build
+```
 
-## Documentation
+## Plugin Types
 
-For complete documentation, see the [Plugin Development Guide](../../PLUGIN_DEVELOPMENT.md).
+- **📝 Editor Extension** - Add custom editor functionality
+- **🎨 UI Panel** - Add sidebar/bottom panels  
+- **🔗 Data Provider** - Extend kanban/graph/search
+- **🎭 Theme Plugin** - Custom themes and styling
+- **🔌 Integration** - External service integration
+
+## Features
+
+- ✅ Interactive plugin generator
+- ✅ Multiple plugin types and templates
+- ✅ TypeScript and JavaScript support
+- ✅ Professional project structure
+- ⏳ Hot-reload development server (coming soon)
+- ⏳ Build optimization (coming soon)
+- ⏳ Plugin marketplace integration (coming soon)
 
 ## License
 
