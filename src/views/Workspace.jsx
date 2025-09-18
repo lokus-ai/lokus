@@ -530,9 +530,19 @@ export default function Workspace({ initialPath = "" }) {
       if (activeTab) {
         invoke("read_file_content", { path: activeFile })
           .then(content => {
-            setEditorContent(content);
+            // Process markdown content to ensure proper formatting
+            const compiler = getMarkdownCompiler();
+            let processedContent = content;
+            
+            // If this is a markdown file and the content looks like markdown, process it
+            if (activeTab.name.endsWith('.md') && compiler.isMarkdown(content)) {
+              console.log('[Workspace] Processing loaded markdown content');
+              processedContent = compiler.compile(content);
+            }
+            
+            setEditorContent(processedContent);
             setEditorTitle(activeTab.name.replace(/\.md$/, ""));
-            setSavedContent(content);
+            setSavedContent(content); // Keep original content for saving
           })
           .catch(() => {});
       }
