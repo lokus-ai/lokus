@@ -27,13 +27,11 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     .select_all()
     .build()?;
 
-  // File menu with explicit accelerators to ensure reliability on macOS/Windows
+  // File menu (accelerators handled by global shortcuts)
   let file_menu = SubmenuBuilder::new(app, "File")
     .item(&MenuItemBuilder::with_id(FILE_SAVE_ID, "Save")
-      .accelerator("CmdOrCtrl+S")
       .build(app)?)
     .item(&MenuItemBuilder::with_id(FILE_CLOSE_TAB_ID, "Close Tab")
-      .accelerator("CmdOrCtrl+W")
       .build(app)?)
     .build()?;
 
