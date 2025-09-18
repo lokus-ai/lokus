@@ -50,12 +50,28 @@ const WikiLinkSuggest = Extension.create({
       suggestion({
         pluginKey: WIKI_SUGGESTION_KEY,
         editor: this.editor,
-        char: '[',
+        char: '<',
         allowSpaces: true,
         startOfLine: false,
-        // Disable WikiLink suggestions - use /link command instead
-        allow: () => {
-          return false; // Always disable to use /link command
+        // Only allow after double angle bracket << and not in any kind of list context
+        allow: ({ state, range }) => {
+          const textBefore = state.doc.textBetween(Math.max(0, range.from - 2), range.from)
+          const isAfterDoubleAngle = textBefore.endsWith('<') || textBefore === '<'
+          
+          // Check broader context to detect lists and task items
+          const lineContext = state.doc.textBetween(Math.max(0, range.from - 50), range.from)
+          
+          // Match various list patterns
+          const isInList = (
+            /[-*+]\s*\[/.test(lineContext) ||  // Task list pattern
+            /^\s*[-*+]\s/.test(lineContext) ||  // Bullet list start
+            /^\s*\d+\.\s/.test(lineContext) ||  // Numbered list start  
+            /\n\s*[-*+]\s*[^\n]*\[/.test(lineContext) // Bullet with bracket anywhere on line
+          )
+          
+          const shouldAllow = isAfterDoubleAngle && !isInList
+          dbg('allow check', { textBefore, lineContext, isAfterDoubleAngle, isInList, shouldAllow, from: range.from })
+          return shouldAllow
         },
         items: ({ query }) => {
           const idx = getIndex()
@@ -63,18 +79,11 @@ const WikiLinkSuggest = Extension.create({
           const filtered = idx.filter(f => !query || f.title.toLowerCase().includes(query.toLowerCase()) || f.path.toLowerCase().includes(query.toLowerCase()))
           const sorted = filtered.sort((a,b) => scoreItem(b, query, active) - scoreItem(a, query, active))
           const out = sorted.slice(0, 30)
-          dbg('items', { query, idx: idx.length, out: out.length, sample: out.slice(0,3), globalIndex: !!globalThis.__LOKUS_FILE_INDEX__ })
-          console.log('🔍 WikiLink file index status:', { 
-            indexExists: !!globalThis.__LOKUS_FILE_INDEX__, 
-            indexLength: idx.length, 
-            sampleFiles: idx.slice(0, 3),
-            query: query,
-            filteredCount: out.length 
-          })
+          dbg('items', { query, idx: idx.length, out: out.length, sample: out.slice(0,3) })
           return out
         },
         command: ({ editor, range, props }) => {
-          // Range covers second '[' and query; include previous '[' as well
+          // Range covers second '<' and query; include previous '<' as well
           const from = Math.max((range?.from ?? editor.state.selection.from) - 1, 1)
           const to = range?.to ?? editor.state.selection.to
           // Store the full path for resolution, but show the short title.
@@ -83,44 +92,18 @@ const WikiLinkSuggest = Extension.create({
           try { editor.chain().focus().deleteRange({ from, to }).run() } catch (e) { dbg('deleteRange error', e) }
           // Insert our wiki node directly
           editor.commands.setWikiLink(raw, { embed: false })
-          // Remove trailing ]] if present right after the cursor
+          // Remove trailing >> if present right after the cursor
           editor.commands.command(({ state, tr, dispatch }) => {
             try {
               const { from: pos } = state.selection
               const next = state.doc.textBetween(Math.max(0, pos), Math.min(state.doc.content.size, pos + 2))
-              if (next === ']]') {
+              if (next === '>>') {
                 tr.delete(pos, pos + 2)
                 dispatch(tr)
               }
             } catch (e) { dbg('cleanup error', e) }
             return true
           })
-          
-          // Trigger immediate graph update for new wiki link
-          try {
-            const activeFile = globalThis.__LOKUS_ACTIVE_FILE__;
-            if (activeFile && props.path) {
-              dbg('triggering immediate graph update for new link:', { from: activeFile, to: props.path })
-              
-              // Emit custom event for real-time graph update
-              const updateEvent = new CustomEvent('lokus:wiki-link-created', {
-                detail: {
-                  sourceFile: activeFile,
-                  targetFile: props.path,
-                  linkText: props.title,
-                  timestamp: Date.now()
-                }
-              });
-              
-              // Dispatch to both window and document for maximum compatibility
-              window.dispatchEvent(updateEvent);
-              document.dispatchEvent(updateEvent);
-              
-              dbg('wiki link creation event dispatched');
-            }
-          } catch (error) {
-            dbg('failed to trigger graph update:', error);
-          }
         },
         render: () => {
           let component
