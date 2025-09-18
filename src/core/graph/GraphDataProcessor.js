@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { GraphDatabase } from "./GraphDatabase.js";
+import { createNodeId, normalizePath, wikiLinkToPath, createPhantomNodeId } from "./PathUtils.js";
 
 /**
  * GraphDataProcessor - Extracts and processes graph data from workspace files
@@ -66,25 +67,20 @@ export class GraphDataProcessor {
   setupEventListeners() {
     // Listen for file link updates from GraphDatabase
     this.graphDatabase.on('fileLinksUpdated', (event) => {
-      console.log('🔗 File links updated:', event.filePath, event);
     });
     
     // Listen for connection changes
     this.graphDatabase.on('connectionAdded', (event) => {
-      console.log('➕ Connection added:', event.sourceFile, '->', event.targetFile);
     });
     
     this.graphDatabase.on('connectionRemoved', (event) => {
-      console.log('➖ Connection removed:', event.sourceFile, '->', event.targetFile);
     });
     
     // Listen for node changes
     this.graphDatabase.on('nodeAdded', (event) => {
-      console.log('📄 Node added:', event.nodeId);
     });
     
     this.graphDatabase.on('nodeRemoved', (event) => {
-      console.log('🗑️ Node removed:', event.nodeId);
     });
   }
 
@@ -102,8 +98,6 @@ export class GraphDataProcessor {
     } = options;
 
     this.processingStats.startTime = Date.now();
-    console.log('🔍 Starting graph data processing for workspace:', this.workspacePath);
-    console.log('🔍 Build options:', { includeNonMarkdown, maxDepth, excludePatterns });
 
     try {
       // Step 1: Read workspace file structure
@@ -118,16 +112,10 @@ export class GraphDataProcessor {
       this.processingStats.endTime = Date.now();
       const processingTime = this.processingStats.endTime - this.processingStats.startTime;
       
-      console.log(`✅ Graph processing completed in ${processingTime}ms`, {
-        nodes: graphData.nodes.length,
-        edges: graphData.edges.length,
-        stats: this.processingStats
-      });
       
       return graphData;
       
     } catch (error) {
-      console.error('❌ Failed to build graph from workspace:', error);
       this.processingStats.errors++;
       throw new Error(`Graph processing failed: ${error.message}`);
     }
@@ -140,21 +128,17 @@ export class GraphDataProcessor {
    */
   async buildFileIndex(maxDepth = 10, excludePatterns = []) {
     try {
-      console.log('📁 Building file index for workspace:', this.workspacePath);
       
       // Use Tauri command to read workspace files
       const workspaceFiles = await invoke('read_workspace_files', {
         workspacePath: this.workspacePath
       });
       
-      console.log('📁 Raw workspace files received:', workspaceFiles?.length || 0, 'items');
       
       // Flatten the hierarchical structure and build index
       this.fileIndex = this.flattenFileStructure(workspaceFiles, excludePatterns, maxDepth);
       this.processingStats.totalFiles = this.fileIndex.length;
       
-      console.log(`📊 File index built: ${this.fileIndex.length} files found`);
-      console.log('📊 Sample files:', this.fileIndex.slice(0, 5).map(f => ({ name: f.name, path: f.path })));
       
       // Store globally for wiki link resolution
       if (typeof globalThis !== 'undefined') {
@@ -164,11 +148,9 @@ export class GraphDataProcessor {
       
       // If no files found, this is a problem
       if (this.fileIndex.length === 0) {
-        console.warn('⚠️ No files found in workspace. Check workspace path and permissions.');
       }
       
     } catch (error) {
-      console.error('❌ Failed to build file index:', error);
       throw error;
     }
   }
@@ -227,7 +209,6 @@ export class GraphDataProcessor {
    * @param {Function} onProgress - Progress callback function
    */
   async processFilesInBatches(includeNonMarkdown = false, onProgress = null) {
-    console.log('🔄 Processing files in batches...');
     
     // Filter files to process
     const filesToProcess = this.fileIndex.filter(file => {
@@ -238,7 +219,7 @@ export class GraphDataProcessor {
       return true;
     });
     
-    console.log(`📝 Processing ${filesToProcess.length} files (batch size: ${this.batchSize})`);
+    console.log(`🚀 Starting graph processing: ${filesToProcess.length} files to process`);
     
     // Process in batches
     for (let i = 0; i < filesToProcess.length; i += this.batchSize) {
@@ -286,21 +267,27 @@ export class GraphDataProcessor {
       let content;
       try {
         content = await invoke('read_file_content', { path: file.path });
+        console.log(`📖 Read file "${file.name}": ${content.length} chars, preview: "${content.substring(0, 100)}..."`);
       } catch (error) {
-        console.warn(`Could not read file ${file.path}:`, error.message);
+        console.log(`❌ Failed to read file "${file.name}": ${error}`);
         this.processingStats.errors++;
         return;
       }
       
       // Skip very large files
       if (content.length > this.maxFileSize) {
-        console.warn(`Skipping large file ${file.path} (${content.length} bytes)`);
+        console.log(`📏 Skipping large file "${file.name}": ${content.length} > ${this.maxFileSize}`);
         return;
       }
       
       // Extract wiki links from content
       const links = this.extractWikiLinks(content);
-      console.log(`📝 Found ${links.length} links in ${file.path}:`, links);
+      
+      if (links.length > 0) {
+        console.log(`📝 Found ${links.length} WikiLinks in "${file.name}": [${links.map(l => l.target).join(', ')}]`);
+      } else {
+        console.log(`🔍 No WikiLinks found in "${file.name}" (content type: ${content.includes('<') ? 'HTML' : 'Markdown'})`);
+      }
       
       // Create edges for each link
       for (const link of links) {
@@ -311,7 +298,6 @@ export class GraphDataProcessor {
       this.updateFileMetadata(file, content);
       
     } catch (error) {
-      console.error(`Error processing file ${file.path}:`, error);
       this.processingStats.errors++;
     }
   }
@@ -340,6 +326,11 @@ export class GraphDataProcessor {
       {
         regex: /\[([^\]]+)\]\[([^\]]*)\]/g,
         type: 'reference'
+      },
+      // HTML wiki links (from saved content): <a target="..." ...>
+      {
+        regex: /<a[^>]+target="([^"]+)"[^>]*>/g,
+        type: 'html-wiki'
       }
     ];
     
@@ -357,6 +348,9 @@ export class GraphDataProcessor {
         } else if (pattern.type === 'reference') {
           alias = match[1].trim();
           target = match[2].trim() || match[1].trim();
+        } else if (pattern.type === 'html-wiki') {
+          target = match[1].trim();
+          alias = null; // Extract from inner text if needed
         }
         
         // Skip empty targets or external URLs
@@ -392,8 +386,10 @@ export class GraphDataProcessor {
    * @param {Object} file - File object
    */
   createFileNode(file) {
-    const nodeId = file.path;
+    const nodeId = createNodeId(file.path); // Use centralized node ID generation
     const fileType = file.isDirectory ? 'folder' : file.extension;
+    
+    console.log(`📄 Created node: "${file.name}" → ID: "${nodeId}"`);
     
     const nodeData = {
       title: file.name,
@@ -417,31 +413,30 @@ export class GraphDataProcessor {
    * @param {Object} link - Link object with target and metadata
    */
   createLinkEdge(sourceFile, link) {
-    console.log('🔗 Creating link edge:', { 
-      source: sourceFile.path, 
-      linkTarget: link.target,
-      linkType: link.type 
-    });
     
     // Resolve the target file path
     let targetPath = this.resolveLinkTarget(link.target, sourceFile.path);
     
     if (!targetPath) {
-      console.log('❌ Target not resolved, creating phantom node for:', link.target);
       // Create a phantom node for unresolved links
       this.createPhantomNode(link.target);
       // Still create connection to phantom node
-      targetPath = `phantom:${link.target}`;
+      targetPath = createPhantomNodeId(link.target);
+      console.log(`👻 WikiLink "${link.target}" unresolved → phantom node: "${targetPath}"`);
+    } else {
+      console.log(`✅ WikiLink "${link.target}" resolved → file: "${targetPath}"`);
     }
     
-    const sourceId = sourceFile.path;
-    const targetId = targetPath;
+    const sourceId = createNodeId(sourceFile.path);
+    const targetId = targetPath.startsWith('phantom:') ? targetPath : createNodeId(targetPath);
     
     // Skip self-references
     if (sourceId === targetId) {
-      console.log('⚠️ Skipping self-reference:', sourceId);
+      console.log(`⚠️  Skipping self-reference: "${sourceFile.name}" → "${link.target}"`);
       return;
     }
+    
+    console.log(`🔗 Connected: "${sourceFile.name}" (${sourceId}) → "${link.target}" (${targetId})`);
     
     const connectionMetadata = {
       type: link.type,
@@ -453,7 +448,6 @@ export class GraphDataProcessor {
       lineNumber: link.lineNumber || 0
     };
     
-    console.log('✅ Adding connection:', { sourceId, targetId, metadata: connectionMetadata });
     this.graphDatabase.addConnection(sourceId, targetId, connectionMetadata);
   }
 
@@ -462,7 +456,7 @@ export class GraphDataProcessor {
    * @param {string} target - Target that couldn't be resolved
    */
   createPhantomNode(target) {
-    const nodeId = `phantom:${target}`;
+    const nodeId = createPhantomNodeId(target);
     
     const nodeData = {
       title: target,
@@ -486,21 +480,22 @@ export class GraphDataProcessor {
    * @returns {string|null} Resolved file path or null if not found
    */
   resolveLinkTarget(target, sourcePath) {
-    // Remove alias part if present
-    const cleanTarget = target.split('|')[0].trim();
+    // Use PathUtils to get the expected normalized path
+    const expectedPath = wikiLinkToPath(target, sourcePath);
+    if (!expectedPath) return null;
     
-    if (!cleanTarget) return null;
+    // First try exact match with the expected path
+    const exactMatch = this.fileIndex.find(file => {
+      const normalizedFilePath = normalizePath(file.path);
+      return normalizedFilePath === expectedPath;
+    });
     
-    // If target includes path separators, try exact match
-    if (/[/\\]/.test(cleanTarget)) {
-      const exactMatch = this.fileIndex.find(file => 
-        file.path.endsWith(cleanTarget) || file.path === cleanTarget
-      );
-      return exactMatch ? exactMatch.path : null;
+    if (exactMatch) {
+      return exactMatch.path;
     }
     
-    // Get source directory for relative resolution
-    const sourceDir = sourcePath.substring(0, sourcePath.lastIndexOf('/'));
+    // If no exact match, try alternative matching strategies
+    const cleanTarget = target.split('|')[0].trim();
     
     // Find candidates by filename
     const candidates = this.fileIndex.filter(file => {
@@ -509,7 +504,8 @@ export class GraphDataProcessor {
       
       return fileName === cleanTarget || 
              fileName === `${cleanTarget}.md` ||
-             fileNameWithoutExt === cleanTarget;
+             fileNameWithoutExt === cleanTarget ||
+             normalizePath(file.path).endsWith(expectedPath);
     });
     
     if (candidates.length === 0) {
@@ -521,6 +517,7 @@ export class GraphDataProcessor {
     }
     
     // Multiple candidates - prefer same directory
+    const sourceDir = sourcePath.substring(0, sourcePath.lastIndexOf('/'));
     const sameDir = candidates.find(file => file.path.startsWith(sourceDir));
     return sameDir ? sameDir.path : candidates[0].path;
   }
@@ -562,10 +559,11 @@ export class GraphDataProcessor {
    * @param {string} content - File content
    */
   updateFileMetadata(file, content) {
-    // Check if node exists in GraphDatabase
-    if (!this.graphDatabase.nodes.has(file.path)) return;
+    // Check if node exists in GraphDatabase using consistent node ID
+    const nodeId = createNodeId(file.path);
+    if (!this.graphDatabase.nodes.has(nodeId)) return;
     
-    const node = this.graphDatabase.nodes.get(file.path);
+    const node = this.graphDatabase.nodes.get(nodeId);
     
     // Update size based on content length
     const contentLength = content.length;
@@ -604,16 +602,6 @@ export class GraphDataProcessor {
       includeWeights: true
     });
     
-    console.log('🔍 buildGraphStructure debug:', {
-      databaseNodeCount: this.graphDatabase.nodeCount,
-      databaseEdgeCount: this.graphDatabase.edgeCount,
-      exportedNodeCount: graphData.nodes.length,
-      exportedEdgeCount: graphData.edges.length,
-      fileIndexCount: this.fileIndex.length,
-      sampleNodes: graphData.nodes.slice(0, 5),
-      sampleEdges: graphData.edges.slice(0, 3),
-      rawEdges: graphData.edges
-    });
     
     // Transform nodes to match expected format
     const nodes = graphData.nodes.map(node => ({
@@ -652,7 +640,6 @@ export class GraphDataProcessor {
           lineNumber: edge.lineNumber
         }
       };
-      console.log('🔍 Transformed edge:', { original: edge, transformed: transformedEdge });
       return transformedEdge;
     });
     
@@ -739,7 +726,6 @@ export class GraphDataProcessor {
    * @returns {Promise<Object>} Updated graph data
    */
   async updateChangedFiles(changedFiles) {
-    console.log('🔄 Updating graph data for changed files:', changedFiles);
     
     const updatedFiles = [];
     
@@ -750,7 +736,6 @@ export class GraphDataProcessor {
         
         // If not found in index, create a file object manually
         if (!fileObj) {
-          console.log('🔍 File not found in index, creating file object for:', filePath);
           const fileName = filePath.split('/').pop();
           const extension = this.getFileExtension(fileName);
           
@@ -772,7 +757,6 @@ export class GraphDataProcessor {
         try {
           content = await invoke('read_file_content', { path: filePath });
         } catch (error) {
-          console.warn(`Could not read file ${filePath}:`, error.message);
           continue;
         }
         
@@ -784,7 +768,6 @@ export class GraphDataProcessor {
         
         // Use GraphDatabase's real-time update method
         const updateResult = this.graphDatabase.updateFileLinks(filePath, newLinks);
-        console.log(`📊 Updated links for ${filePath}:`, updateResult);
         
         // Ensure the file node exists with updated metadata
         this.createFileNode(fileObj);
@@ -792,12 +775,10 @@ export class GraphDataProcessor {
         updatedFiles.push(filePath);
         
       } catch (error) {
-        console.error('❌ Failed to update file:', filePath, error);
         this.processingStats.errors++;
       }
     }
     
-    console.log('✅ Real-time graph update completed for files:', updatedFiles);
     return this.buildGraphStructure();
   }
   
@@ -808,7 +789,6 @@ export class GraphDataProcessor {
    * @returns {Promise<Object>} Update result
    */
   async updateFileContent(filePath, content) {
-    console.log('🔄 Real-time update for file content:', filePath);
     
     try {
       // Extract new links from content
@@ -819,12 +799,10 @@ export class GraphDataProcessor {
       
       // Use GraphDatabase's real-time update method
       const updateResult = this.graphDatabase.updateFileLinks(filePath, newLinks);
-      console.log(`📊 Real-time update result for ${filePath}:`, updateResult);
       
       return updateResult;
       
     } catch (error) {
-      console.error('❌ Failed to update file content:', filePath, error);
       throw error;
     }
   }

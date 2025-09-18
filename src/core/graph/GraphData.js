@@ -129,7 +129,6 @@ export class GraphData {
       this.rebuildIndices();
       this.emit('dataLoaded', { nodeCount: nodes.length, linkCount: links.length });
     } catch (error) {
-      console.error('Failed to load persisted data:', error);
     }
   }
 
@@ -286,7 +285,48 @@ export class GraphData {
       });
     }
 
-    // Format 3: <<WikiLink>> or <<WikiLink|Display>> (TEXT SYNTAX)
+    // Format 3: HTML target-based WikiLinks (from saved files): <a target="..." href="..." ...>
+    const targetWikiLinkRegex = /<a[^>]+target="([^"]+)"[^>]*>/g;
+    
+    while ((match = targetWikiLinkRegex.exec(content)) !== null) {
+      const fullMatch = match[0];
+      const target = match[1].trim();
+      
+      // Extract href from the full match for full path
+      const hrefMatch = /href="([^"]*)"/.exec(fullMatch);
+      const href = hrefMatch ? hrefMatch[1].trim() : '';
+      
+      // Use href (full path) if available, otherwise fall back to target
+      let page = href || target;
+      
+      // If href contains full path, use it directly; otherwise use target
+      if (href && href.includes('/')) {
+        // href has full path, use it directly for ID generation
+        page = href;
+      } else {
+        // No full path available, use target filename
+        page = target.replace('.md', '');
+      }
+      
+      // Don't duplicate if already found
+      const alreadyExists = links.some(link => 
+        link.page === page || link.page === target || link.page === href
+      );
+      
+      if (!alreadyExists) {
+        links.push({
+          page,
+          display: target.replace('.md', ''), // Display name is still the filename
+          position: match.index,
+          raw: fullMatch,
+          type: 'wikilink',
+          fullPath: href, // Store the full path for debugging
+          target: target  // Store the original target for debugging
+        });
+      }
+    }
+
+    // Format 4: <<WikiLink>> or <<WikiLink|Display>> (TEXT SYNTAX)
     const wikiLinkRegex = /<<([^>]+)>>/g;
     
     while ((match = wikiLinkRegex.exec(content)) !== null) {
@@ -393,6 +433,7 @@ export class GraphData {
    */
   createDocumentNode(documentId, metadata = {}) {
     const nodeId = createNodeId(documentId); // Use deterministic ID
+    console.log(`📄 Creating document node: "${documentId}" → ID: "${nodeId}"`);
     const now = Date.now();
     
     const node = {
@@ -420,6 +461,8 @@ export class GraphData {
     
     this.persistNode(node);
     this.emit('nodeCreated', { node });
+    
+    console.log(`✨ Document node created: "${node.title}" (${node.id})`);
     
     // Clean up any existing placeholder for this document
     this.cleanupPlaceholderForDocument(documentId, metadata.title);
@@ -494,26 +537,64 @@ export class GraphData {
    * Get or create node for a WikiLink target
    */
   async getOrCreateWikiLinkNode(pageName) {
-    // Normalize page name - ensure it has .md extension for consistent ID generation
-    const normalizedPageName = pageName.endsWith('.md') ? pageName : pageName + '.md';
+    console.log(`🔍 getOrCreateWikiLinkNode: searching for "${pageName}"`);
     
-    // Generate the same ID that would be used for a document node
-    const expectedNodeId = createNodeId(normalizedPageName);
+    // Handle full path vs filename scenarios
+    let expectedNodeId;
+    let normalizedPageName;
     
-    // First, check if we already have a document node with this ID
+    if (pageName.includes('/')) {
+      // This is a full path, use it directly
+      expectedNodeId = createNodeId(pageName);
+      normalizedPageName = pageName;
+      console.log(`📁 Full path detected: "${pageName}" → ID: "${expectedNodeId}"`);
+    } else {
+      // This is just a filename, normalize it
+      normalizedPageName = pageName.endsWith('.md') ? pageName : pageName + '.md';
+      expectedNodeId = createNodeId(normalizedPageName);
+      console.log(`📄 Filename detected: "${pageName}" → normalized: "${normalizedPageName}" → ID: "${expectedNodeId}"`);
+    }
+    
+    // First, check if we already have a document node with this exact ID
     if (this.nodes.has(expectedNodeId)) {
       const existingNode = this.nodes.get(expectedNodeId);
+      console.log(`✅ Found existing node with exact ID match: "${existingNode.id}"`);
       // Update wikiLinks mapping to point to this document node
       this.wikiLinks.set(pageName, existingNode.id);
       return existingNode;
     }
     
-    // Also search by title for any existing document nodes (fallback)
-    for (const node of this.nodes.values()) {
-      if (node.type === 'document' && (node.title === pageName || node.title === normalizedPageName || node.title + '.md' === normalizedPageName)) {
-        // Update wikiLinks mapping to point to this document node
-        this.wikiLinks.set(pageName, node.id);
-        return node;
+    // If we have a filename but nodes are stored with full paths, search for any node ending with this filename
+    if (!pageName.includes('/')) {
+      console.log(`🔎 Searching for nodes ending with filename: "${normalizedPageName}"`);
+      for (const node of this.nodes.values()) {
+        if (node.type === 'document') {
+          // Check if the node's documentId ends with our filename
+          if (node.documentId && node.documentId.endsWith(normalizedPageName)) {
+            console.log(`✅ Found node by filename match: "${node.documentId}" matches "${normalizedPageName}"`);
+            this.wikiLinks.set(pageName, node.id);
+            return node;
+          }
+          // Also check by title
+          if (node.title === pageName || node.title === normalizedPageName || node.title + '.md' === normalizedPageName) {
+            console.log(`✅ Found node by title match: "${node.title}" matches "${pageName}"`);
+            this.wikiLinks.set(pageName, node.id);
+            return node;
+          }
+        }
+      }
+    }
+    
+    // If we have a full path but nodes might be stored with filenames, extract filename and search
+    if (pageName.includes('/')) {
+      const filename = pageName.split('/').pop();
+      console.log(`🔎 Searching for nodes with filename extracted from path: "${filename}"`);
+      for (const node of this.nodes.values()) {
+        if (node.type === 'document' && (node.title === filename || node.title === filename.replace('.md', ''))) {
+          console.log(`✅ Found node by extracted filename: "${node.title}" matches "${filename}"`);
+          this.wikiLinks.set(pageName, node.id);
+          return node;
+        }
       }
     }
     
@@ -526,6 +607,7 @@ export class GraphData {
     
     // Create new placeholder node with the SAME ID that the document would have
     nodeId = expectedNodeId; // Use the same ID generation as document nodes!
+    console.log(`🆕 Creating placeholder node for "${pageName}" with ID: "${nodeId}"`);
     const now = Date.now();
     
     const node = {
@@ -554,6 +636,8 @@ export class GraphData {
     this.persistNode(node);
     this.emit('nodeCreated', { node });
     
+    console.log(`✨ Created placeholder node: "${node.title}" (${node.id})`);
+    
     return node;
   }
 
@@ -564,7 +648,6 @@ export class GraphData {
     const node = this.nodes.get(nodeId);
     if (!node) return;
     
-    console.log(`Updating WikiLinks for ${node.title}:`, wikiLinks);
     
     // Remove existing forward links for this node
     const existingForwardLinks = this.forwardlinks.get(nodeId) || new Set();
@@ -580,7 +663,6 @@ export class GraphData {
           backlinks.delete(nodeId);
         }
         
-        console.log(`Removed existing link: ${node.title} -> ${this.nodes.get(targetId)?.title}`);
       }
     }
     
@@ -595,7 +677,6 @@ export class GraphData {
         
         // Don't create self-links
         if (targetNode.id === nodeId) {
-          console.log(`Skipping self-link for ${node.title}`);
           continue;
         }
         
@@ -618,7 +699,6 @@ export class GraphData {
         }
         
       } catch (error) {
-        console.error(`Failed to create link for ${wikiLink.page}:`, error);
       }
     }
     
@@ -634,8 +714,17 @@ export class GraphData {
     const linkId = options.id || `${sourceId}-${targetId}`;
     
     if (this.links.has(linkId)) {
+      console.log(`🔗 Link already exists: "${sourceId}" → "${targetId}"`);
       return this.links.get(linkId); // Link already exists
     }
+    
+    // Get node titles for better logging
+    const sourceNode = this.nodes.get(sourceId);
+    const targetNode = this.nodes.get(targetId);
+    const sourceTitle = sourceNode ? sourceNode.title : sourceId;
+    const targetTitle = targetNode ? targetNode.title : targetId;
+    
+    console.log(`🚀 Creating link: "${sourceTitle}" (${sourceId}) → "${targetTitle}" (${targetId}) [${options.type || 'default'}]`);
     
     const link = {
       id: linkId,
@@ -650,6 +739,7 @@ export class GraphData {
     };
     
     this.links.set(linkId, link);
+    console.log(`✅ Link created successfully: "${linkId}"`);
     this.stats.linkCount++;
     
     // Update backlinks and forward links
@@ -664,7 +754,6 @@ export class GraphData {
     this.forwardlinks.get(sourceId).add(targetId);
     
     // Update target node backlink count
-    const targetNode = this.nodes.get(targetId);
     if (targetNode) {
       targetNode.backlinkCount = this.backlinks.get(targetId).size;
       this.persistNode(targetNode);
@@ -987,7 +1076,6 @@ export class GraphData {
       const store = transaction.objectStore('nodes');
       await store.put(node);
     } catch (error) {
-      console.error('Failed to persist node:', error);
     }
   }
 
@@ -1002,7 +1090,6 @@ export class GraphData {
       const store = transaction.objectStore('links');
       await store.put(link);
     } catch (error) {
-      console.error('Failed to persist link:', error);
     }
   }
 
@@ -1017,7 +1104,6 @@ export class GraphData {
       const store = transaction.objectStore('links');
       await store.delete(linkId);
     } catch (error) {
-      console.error('Failed to delete persisted link:', error);
     }
   }
 
@@ -1047,7 +1133,6 @@ export class GraphData {
         try {
           callback(data);
         } catch (error) {
-          console.error(`Error in event listener for ${event}:`, error);
         }
       });
     }
@@ -1160,7 +1245,6 @@ export class GraphData {
       const store = transaction.objectStore('nodes');
       await store.delete(nodeId);
     } catch (error) {
-      console.error('Failed to delete persisted node:', error);
     }
   }
 
