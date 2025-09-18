@@ -16,6 +16,13 @@ if (typeof globalThis !== 'undefined') {
   window.katex = katex;
 }
 
+// Make React globally available for plugins
+if (typeof globalThis !== 'undefined') {
+  globalThis.React = React;
+} else if (typeof window !== 'undefined') {
+  window.React = React;
+}
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ThemeProvider>

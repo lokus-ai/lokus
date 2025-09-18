@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { setGlobalActiveTheme, listAvailableThemes, readGlobalVisuals, applyInitialTheme } from "../core/theme/manager.js";
+import { setGlobalActiveTheme, listAvailableThemes, readGlobalVisuals } from "../core/theme/manager.js";
 import { listActions, getActiveShortcuts, setShortcut, resetShortcuts } from "../core/shortcuts/registry.js";
 import { readConfig, updateConfig } from "../core/config/store.js";
 import { formatAccelerator } from "../core/shortcuts/registry.js";
@@ -21,15 +21,7 @@ export default function Preferences() {
   const [saveStatus, setSaveStatus] = useState(''); // For showing save feedback
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
   
-  // Initialize theme for preferences window
-  useEffect(() => {
-    const initTheme = async () => {
-      console.log('[preferences] Initializing theme...');
-      await applyInitialTheme();
-      console.log('[preferences] Theme initialized');
-    };
-    initTheme().catch(console.error);
-  }, []);
+  // Theme is already initialized by ThemeProvider in main.jsx
 
   // Subscribe to live settings changes
   useEffect(() => {

@@ -1,6 +1,6 @@
 [package]
 name = "lokus"
-version = "1.0.1"
+version = "1.0.3"
 description = "Lokus - Modern Knowledge Management and Writing Platform"
 authors = ["you"]
 edition = "2021"
@@ -33,3 +33,9 @@ regex = "1.0"
 walkdir = "2.0"
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "5.0"
+reqwest = { version = "0.12", features = ["json"] }
+url = "2.5"
+tempfile = "3.8"
+zip = "2.4"
+sha2 = "0.10"
+semver = "1.0"

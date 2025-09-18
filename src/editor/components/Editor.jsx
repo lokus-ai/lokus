@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback, forwardRef, useImperativeHandle } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import * as StarterKitExt from "@tiptap/starter-kit";
 import * as PlaceholderExt from "@tiptap/extension-placeholder";
@@ -32,7 +32,7 @@ import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 
 import "../styles/editor.css";
 
-const Editor = ({ content, onContentChange }) => {
+const Editor = forwardRef(({ content, onContentChange }, ref) => {
   const [extensions, setExtensions] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editorSettings, setEditorSettings] = useState(null);
@@ -231,10 +231,10 @@ const Editor = ({ content, onContentChange }) => {
     return <div className="m-5 text-app-muted">Loading editor…</div>;
   }
 
-  return <Tiptap extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} />;
-};
+  return <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} />;
+});
 
-function Tiptap({ extensions, content, onContentChange, editorSettings }) {
+const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings }, ref) => {
   const isSettingRef = useRef(false);
   const [isWikiLinkModalOpen, setIsWikiLinkModalOpen] = useState(false);
   
@@ -326,6 +326,19 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
       editor.commands.setContent(content);
     }
   }, [content, editor]);
+
+  // Expose editor instance to parent component via ref
+  useImperativeHandle(ref, () => ({
+    commands: editor?.commands,
+    chain: () => editor?.chain(),
+    state: editor?.state,
+    view: editor?.view,
+    getHTML: () => editor?.getHTML(),
+    setContent: (content) => editor?.commands?.setContent(content),
+    insertContent: (content) => editor?.commands?.insertContent(content),
+    focus: () => editor?.commands?.focus(),
+    editor
+  }), [editor]);
 
   const showDebug = useMemo(() => {
     try { const p = new URLSearchParams(window.location.search); if (p.get('dev') === '1') return true; } catch {}
@@ -460,6 +473,6 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
       />
     </>
   );
-}
+});
 
 export default Editor;
