@@ -67,7 +67,7 @@ export const GraphDemo = () => {
       <ProfessionalGraphView 
         isVisible={true}
         workspacePath={null}
-        onOpenFile={(path) => console.log('Opening file:', path)}
+        onOpenFile={(path) => }
       />
     </div>
   );

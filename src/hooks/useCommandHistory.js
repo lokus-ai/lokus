@@ -16,7 +16,6 @@ export function useCommandHistory() {
         const savedHistory = config[HISTORY_KEY] || []
         setHistory(savedHistory)
       } catch (error) {
-        console.warn('[CommandHistory] Failed to load history:', error)
         setHistory([])
       } finally {
         setLoading(false)
@@ -31,7 +30,6 @@ export function useCommandHistory() {
     try {
       await updateConfig({ [HISTORY_KEY]: newHistory })
     } catch (error) {
-      console.warn('[CommandHistory] Failed to save history:', error)
     }
   }, [])
 

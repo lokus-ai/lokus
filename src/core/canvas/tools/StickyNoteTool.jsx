@@ -87,7 +87,6 @@ export const stickyNoteToolDefinition = {
   label: 'Sticky Note',
   kbd: 'n',
   onSelect: () => {
-    console.log('Sticky note tool selected')
   },
   tool: StickyNoteTool
 }

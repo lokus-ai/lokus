@@ -107,7 +107,6 @@ export class MarkdownCompiler {
       this.log('Compiled HTML:', html.substring(0, 200))
       return html
     } catch (error) {
-      console.error('[MarkdownCompiler] Compilation failed:', error)
       return text // Fallback to original text
     }
   }
@@ -147,7 +146,6 @@ export class MarkdownCompiler {
    */
   log(...args) {
     if (this.options.debugLogs) {
-      console.log('[MarkdownCompiler]', ...args)
     }
   }
 }

@@ -46,7 +46,6 @@ function App() {
           window.removeEventListener('blur', onBlur);
         };
       } catch (e) {
-        console.error("Failed to initialize shortcuts:", e);
       }
     };
 

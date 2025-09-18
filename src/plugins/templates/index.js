@@ -81,10 +81,8 @@ export class TemplateSystemIntegration {
       this.registerWithPluginManager()
 
       this.isInitialized = true
-      console.log('Template System Integration initialized')
 
     } catch (error) {
-      console.error('Failed to initialize Template System Integration:', error)
       throw error
     }
   }
@@ -332,7 +330,6 @@ export class TemplateSystemIntegration {
     this.cliIntegration = null
     this.isInitialized = false
 
-    console.log('Template System Integration shut down')
   }
 }
 

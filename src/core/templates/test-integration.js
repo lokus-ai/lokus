@@ -183,7 +183,6 @@ Best regards,
  * Initialize template system with demo data
  */
 export async function initializeTemplateSystem() {
-  console.log('🚀 Initializing Template System...');
   
   const manager = new TemplateManager();
   
@@ -191,15 +190,11 @@ export async function initializeTemplateSystem() {
   for (const templateData of demoTemplates) {
     try {
       await manager.create(templateData);
-      console.log(`✅ Created template: ${templateData.name}`);
     } catch (error) {
-      console.error(`❌ Failed to create template ${templateData.name}:`, error.message);
     }
   }
   
-  console.log('📊 Template System Statistics:');
   const stats = manager.getStatistics();
-  console.log(stats);
   
   return manager;
 }
@@ -208,7 +203,6 @@ export async function initializeTemplateSystem() {
  * Test template processing
  */
 export async function testTemplateProcessing(manager) {
-  console.log('\n🧪 Testing Template Processing...');
   
   const testVariables = {
     title: 'Weekly Team Sync',
@@ -221,18 +215,12 @@ export async function testTemplateProcessing(manager) {
   
   try {
     const result = await manager.process('meeting-notes', testVariables);
-    console.log('✅ Template processed successfully:');
-    console.log('---');
-    console.log(result.content);
-    console.log('---');
     
     if (result.cursorPosition) {
-      console.log(`📍 Cursor position: ${result.cursorPosition}`);
     }
     
     return result;
   } catch (error) {
-    console.error('❌ Template processing failed:', error.message);
     return null;
   }
 }
@@ -241,21 +229,16 @@ export async function testTemplateProcessing(manager) {
  * Test built-in variables
  */
 export function testBuiltinVariables() {
-  console.log('\n🔧 Testing Built-in Variables...');
   
   const variables = builtinVariables.resolveAll();
-  console.log('Available built-in variables:');
   
   Object.entries(variables).forEach(([name, value]) => {
-    console.log(`  ${name}: ${value}`);
   });
   
   // Test variable categories
   const categories = builtinVariables.listByCategory();
-  console.log('\nVariables by category:');
   
   Object.entries(categories).forEach(([category, vars]) => {
-    console.log(`  ${category}: ${vars.length} variables`);
   });
   
   return variables;
@@ -265,7 +248,6 @@ export function testBuiltinVariables() {
  * Test template validation
  */
 export function testTemplateValidation(manager) {
-  console.log('\n✅ Testing Template Validation...');
   
   const testCases = [
     {
@@ -292,15 +274,11 @@ export function testTemplateValidation(manager) {
   
   testCases.forEach(testCase => {
     const validation = manager.validate(testCase.content);
-    console.log(`\n${testCase.name}:`);
-    console.log(`  Valid: ${validation.valid}`);
     
     if (validation.errors.length > 0) {
-      console.log(`  Errors: ${validation.errors.join(', ')}`);
     }
     
     if (validation.warnings.length > 0) {
-      console.log(`  Warnings: ${validation.warnings.join(', ')}`);
     }
   });
 }
@@ -309,16 +287,13 @@ export function testTemplateValidation(manager) {
  * Demo template search functionality
  */
 export function testTemplateSearch(manager) {
-  console.log('\n🔍 Testing Template Search...');
   
   const searchQueries = ['meeting', 'project', 'daily'];
   
   searchQueries.forEach(query => {
     const results = manager.search(query);
-    console.log(`\nSearch for "${query}": ${results.templates.length} results`);
     
     results.templates.forEach(template => {
-      console.log(`  - ${template.name} (${template.category})`);
     });
   });
 }
@@ -327,7 +302,6 @@ export function testTemplateSearch(manager) {
  * Run complete integration test
  */
 export async function runIntegrationTest() {
-  console.log('🎯 Running Template System Integration Test\n');
   
   try {
     // Initialize system
@@ -345,13 +319,11 @@ export async function runIntegrationTest() {
     // Test search
     testTemplateSearch(manager);
     
-    console.log('\n🎉 Integration test completed successfully!');
     
     // Return manager for further testing if needed
     return manager;
     
   } catch (error) {
-    console.error('\n💥 Integration test failed:', error);
     throw error;
   }
 }
@@ -361,8 +333,7 @@ export async function runIntegrationTest() {
  */
 export function runBrowserTest() {
   if (typeof window !== 'undefined') {
-    console.log('🌐 Running template system test in browser...');
-    runIntegrationTest().catch(console.error);
+    runIntegrationTest().catch(() => {});
   }
 }
 

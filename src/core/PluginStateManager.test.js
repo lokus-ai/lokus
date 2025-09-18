@@ -7,7 +7,6 @@ import { pluginStateManager, PluginState } from './PluginStateManager.js';
 
 // Mock Tauri functions
 const mockTauriInvoke = (command, args) => {
-  console.log(`Mock Tauri invoke: ${command}`, args);
   
   switch (command) {
     case 'list_plugins':
@@ -44,11 +43,9 @@ const mockTauriInvoke = (command, args) => {
       return Promise.resolve(['test-plugin-1']); // Only plugin 1 is enabled
       
     case 'enable_plugin':
-      console.log(`✅ Mock: Enabled plugin ${args.name}`);
       return Promise.resolve({ success: true });
       
     case 'disable_plugin':
-      console.log(`❌ Mock: Disabled plugin ${args.name}`);
       return Promise.resolve({ success: true });
       
     default:
@@ -78,17 +75,12 @@ class PluginStateManagerTests {
   }
 
   async runAllTests() {
-    console.log('🧪 Running Plugin State Manager Tests...\n');
 
     for (const { name, testFn } of this.tests) {
       try {
-        console.log(`🔬 Test: ${name}`);
         await testFn();
-        console.log(`✅ PASSED: ${name}\n`);
         this.passed++;
       } catch (error) {
-        console.error(`❌ FAILED: ${name}`);
-        console.error(`   Error: ${error.message}\n`);
         this.failed++;
       }
     }
@@ -97,11 +89,6 @@ class PluginStateManagerTests {
   }
 
   printSummary() {
-    console.log('📊 TEST SUMMARY');
-    console.log(`✅ Passed: ${this.passed}`);
-    console.log(`❌ Failed: ${this.failed}`);
-    console.log(`📈 Total: ${this.tests.length}`);
-    console.log(`🎯 Success Rate: ${((this.passed / this.tests.length) * 100).toFixed(1)}%`);
   }
 
   assert(condition, message) {
@@ -151,7 +138,6 @@ tests.test('Load plugins with correct enabled states', async () => {
   tests.assertEqual(plugin2.enabled, false, 'Plugin 2 should be disabled');
   tests.assertType(plugin2.enabled, 'boolean', 'Plugin 2 enabled state should be boolean');
   
-  console.log('   ✓ Plugin states loaded correctly');
 });
 
 // Test 3: Test enable plugin functionality
@@ -167,7 +153,6 @@ tests.test('Enable plugin functionality', async () => {
   const enabledPlugins = pluginStateManager.getEnabledPlugins();
   tests.assert(enabledPlugins.has('test-plugin-2'), 'Plugin 2 should be in enabled set');
   
-  console.log('   ✓ Plugin enabled successfully');
 });
 
 // Test 4: Test disable plugin functionality
@@ -183,7 +168,6 @@ tests.test('Disable plugin functionality', async () => {
   const enabledPlugins = pluginStateManager.getEnabledPlugins();
   tests.assert(!enabledPlugins.has('test-plugin-1'), 'Plugin 1 should not be in enabled set');
   
-  console.log('   ✓ Plugin disabled successfully');
 });
 
 // Test 5: Test invalid inputs are handled
@@ -194,7 +178,6 @@ tests.test('Handle invalid inputs gracefully', async () => {
     tests.assert(false, 'Should have thrown error for undefined enabled state');
   } catch (error) {
     tests.assert(error.message.includes('must be boolean'), 'Should reject undefined enabled state');
-    console.log('   ✓ Rejected undefined enabled state');
   }
 
   // Test invalid plugin ID
@@ -203,7 +186,6 @@ tests.test('Handle invalid inputs gracefully', async () => {
     tests.assert(false, 'Should have thrown error for empty plugin ID');
   } catch (error) {
     tests.assert(error.message.includes('Plugin ID is required'), 'Should reject empty plugin ID');
-    console.log('   ✓ Rejected empty plugin ID');
   }
 
   // Test non-existent plugin
@@ -212,7 +194,6 @@ tests.test('Handle invalid inputs gracefully', async () => {
     tests.assert(false, 'Should have thrown error for non-existent plugin');
   } catch (error) {
     tests.assert(error.message.includes('Plugin not found'), 'Should reject non-existent plugin');
-    console.log('   ✓ Rejected non-existent plugin');
   }
 });
 
@@ -237,7 +218,6 @@ tests.test('State consistency after multiple operations', async () => {
   tests.assert(!enabledPlugins.has('test-plugin-1'), 'Enabled set should not contain plugin 1');
   tests.assert(enabledPlugins.has('test-plugin-2'), 'Enabled set should contain plugin 2');
   
-  console.log('   ✓ State consistency maintained');
 });
 
 // Test 7: Test statistics and debugging info
@@ -261,8 +241,6 @@ tests.test('Statistics and debugging information', async () => {
   tests.assertEqual(plugin1Stats.enabled, false, 'Plugin 1 should be disabled in stats');
   tests.assertEqual(plugin2Stats.enabled, true, 'Plugin 2 should be enabled in stats');
   
-  console.log('   ✓ Statistics accurate and complete');
-  console.log('   📊 Current stats:', JSON.stringify(stats, null, 2));
 });
 
 // Test 8: Test race condition prevention
@@ -281,7 +259,6 @@ tests.test('Race condition prevention', async () => {
   const plugin1 = pluginStateManager.getPlugin('test-plugin-1');
   tests.assertType(plugin1.enabled, 'boolean', 'Final state should be boolean');
   
-  console.log(`   ✓ Race condition handled - final state: ${plugin1.enabled}`);
 });
 
 // Export the test runner for manual execution
@@ -291,5 +268,3 @@ export { tests as pluginStateManagerTests };
 if (typeof require !== 'undefined' && require.main === module) {
   tests.runAllTests().catch(console.error);
 }
-
-console.log('🔬 Plugin State Manager test suite loaded. Run pluginStateManagerTests.runAllTests() to execute.');

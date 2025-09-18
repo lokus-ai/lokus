@@ -27,7 +27,6 @@ export const createSearchDecorations = (doc, searchTerm, options = {}) => {
       searchRegex = new RegExp(pattern, caseSensitive ? 'g' : 'gi');
     }
   } catch (error) {
-    console.warn('Invalid search pattern:', error);
     return DecorationSet.empty;
   }
 
@@ -214,7 +213,6 @@ export const highlightText = (text, searchTerm, options = {}) => {
     
     return text.replace(searchRegex, '<mark class="search-highlight">$&</mark>');
   } catch (error) {
-    console.warn('Error highlighting text:', error);
     return text;
   }
 };
@@ -241,7 +239,6 @@ export const searchInFiles = async (query, files, options = {}) => {
       searchRegex = new RegExp(pattern, caseSensitive ? 'g' : 'gi');
     }
   } catch (error) {
-    console.warn('Invalid search pattern:', error);
     return [];
   }
 
@@ -277,7 +274,6 @@ export const searchInFiles = async (query, files, options = {}) => {
         });
       }
     } catch (error) {
-      console.warn(`Error searching in file ${file.path}:`, error);
     }
   }
 

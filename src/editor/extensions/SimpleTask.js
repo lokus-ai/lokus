@@ -5,7 +5,6 @@ import { sanitizeUserInput, safeSetTextContent, createSafeTextNode } from '../..
 
 // Create task import autocomplete widget
 function createTaskImportWidget(editor) {
-  console.log('📋 Creating task import widget')
   
   const widget = document.createElement('div')
   widget.className = 'task-import-widget'
@@ -96,13 +95,10 @@ function createTaskImportWidget(editor) {
   async function loadTasks() {
     try {
       const tasks = await invoke('get_all_tasks')
-      console.log('📋 Loaded tasks for import:', tasks.length)
       allTasks = tasks
       filteredTasks = tasks
       renderTasks()
     } catch (error) {
-      console.error('❌ Failed to load tasks:', error)
-      console.error('Error details:', error)
       // Create error message safely
       const errorDiv = document.createElement('div')
       errorDiv.style.cssText = 'padding: 20px; text-align: center; color: #ef4444;'
@@ -182,14 +178,12 @@ function createTaskImportWidget(editor) {
   }
   
   function selectTask(task) {
-    console.log('✅ Selected task for import:', task.title)
     
     // Insert the task reference into editor using DOM element method
     const statusEmoji = getStatusEmoji(task.status)
     const fallbackText = `${statusEmoji} ${task.title}`
     
     try {
-      console.log('🔗 Creating DOM element for imported task')
       
       // Create the task span element
       const taskElement = document.createElement('span')
@@ -229,11 +223,9 @@ function createTaskImportWidget(editor) {
               }
             }]
           }]).run()
-          console.log('✅ Imported task as TipTap link')
         } catch (error) {
           // Fallback to text
           editor.chain().focus().insertContent(fallbackText).run()
-          console.log('✅ Imported task as text fallback')
         }
       }
       
@@ -248,13 +240,11 @@ function createTaskImportWidget(editor) {
             range.insertNode(taskElement.cloneNode(true))
             range.insertNode(document.createTextNode(' '))
             selection.removeAllRanges()
-            console.log('✅ Direct DOM insertion for import completed')
           }
         }
       }, 100)
       
     } catch (error) {
-      console.log('❌ Failed to import task:', error)
       // Ultimate fallback
       if (editor.chain && typeof editor.chain === 'function') {
         editor.chain().focus().insertContent(fallbackText).run()
@@ -268,7 +258,6 @@ function createTaskImportWidget(editor) {
         editor.commands.focus()
       }
     } catch (error) {
-      console.log('📝 Could not focus editor')
     }
   }
   
@@ -294,7 +283,6 @@ function createTaskImportWidget(editor) {
           editor.commands.focus()
         }
       } catch (error) {
-        console.log('📝 Could not focus editor')
       }
     }
   })
@@ -321,8 +309,6 @@ function createTaskImportWidget(editor) {
 
 // Create floating task input widget
 function createInlineTaskInput(editor, taskType = 'urgent') {
-  console.log('🔍 Editor received in createInlineTaskInput:', !!editor, typeof editor)
-  console.log('🎯 Creating inline task input for:', taskType)
   
   // Use document body as container (simpler approach)
   const editorContainer = document.body
@@ -421,7 +407,6 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
     if (e.key === 'Enter') {
       const taskText = input.value.trim()
       if (taskText) {
-        console.log('💾 Saving task:', taskText, 'Type:', currentType)
         
         // Create task in kanban
         try {
@@ -432,7 +417,6 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
             notePosition: null
           })
           
-          console.log('✅ Task created:', newTask)
           
           // Map task types to backend statuses
           const statusMap = {
@@ -444,7 +428,6 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
           
           const backendStatus = statusMap[currentType] || 'todo'
           
-          console.log('🔄 Mapping:', currentType, '→', backendStatus)
           
           // Update task type
           await invoke('update_task', {
@@ -455,17 +438,14 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
             priority: null
           })
           
-          console.log('✅ Task updated to:', backendStatus)
           
           // Insert interactive task in editor
           try {
-            console.log('🔍 Editor object check:', !!editor, !!editor?.chain, !!editor?.commands)
             
             if (editor && (editor.chain || editor.commands)) {
               const taskId = newTask.id
               const taskHtml = `<div class="editor-task task-${backendStatus}" data-task-id="${taskId}" data-status="${backendStatus}"><span class="task-indicator">${typeColors[currentType]}</span><span class="task-text">${taskText}</span><button class="task-jump-btn" title="View in kanban">📋</button></div>`
               
-              console.log('📝 Attempting to insert task HTML:', taskHtml)
               
               // Create a styled task link as HTML
               const styledTaskHtml = `<span data-task-text="true" data-task-id="${taskId}" data-task-status="${backendStatus}">${typeColors[currentType]} ${taskText}</span>`
@@ -475,7 +455,6 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
               
               // Create DOM element directly and insert it
               try {
-                console.log('🔗 Creating DOM element for task')
                 
                 // Create the task span element
                 const taskElement = document.createElement('span')
@@ -511,7 +490,6 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
                   taskElement.style.transform = 'translateY(0)'
                 })
                 
-                console.log('✅ Created task element:', taskElement)
                 
                 // Insert using TipTap's insertContent with the DOM element
                 if (editor.chain && typeof editor.chain === 'function') {
@@ -532,16 +510,12 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
                         }
                       ]
                     }]).run()
-                    console.log('✅ Inserted as TipTap content')
                   } catch (error) {
-                    console.log('❌ TipTap content failed, trying HTML insertion:', error.message)
                     
                     // Fallback to HTML string
                     editor.chain().focus().insertContent(styledTaskHtml).run()
-                    console.log('✅ Inserted as HTML string')
                   }
                 } else {
-                  console.log('❌ No editor chain available')
                 }
                 
                 // Also try direct DOM insertion as fallback
@@ -558,29 +532,23 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
                       
                       // Clear selection
                       selection.removeAllRanges()
-                      console.log('✅ Direct DOM insertion completed')
                     }
                   }
                 }, 100)
                 
               } catch (error) {
-                console.log('❌ All insertion methods failed:', error)
                 // Ultimate fallback to plain text
                 if (editor.chain && typeof editor.chain === 'function') {
                   editor.chain().focus().insertContent(fallbackText).run()
                 }
               }
               
-              console.log('✅ Task HTML insertion attempted')
             } else {
-              console.log('📝 Editor not available for content insertion')
             }
           } catch (error) {
-            console.log('📝 Could not insert into editor:', error.message, error)
           }
           
         } catch (error) {
-          console.error('❌ Failed to create task:', error)
         }
       }
       
@@ -591,7 +559,6 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
           editor.commands.focus()
         }
       } catch (error) {
-        console.log('📝 Could not focus editor')
       }
       
     } else if (e.key === 'Escape') {
@@ -601,7 +568,6 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
           editor.commands.focus()
         }
       } catch (error) {
-        console.log('📝 Could not focus editor')
       }
       
     } else if (e.key === 'Tab') {
@@ -611,7 +577,6 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
       const currentIndex = types.indexOf(currentType)
       currentType = types[(currentIndex + 1) % types.length]
       typeLabel.textContent = typeColors[currentType]
-      console.log('🔄 Switched to:', currentType)
     }
   })
   
@@ -625,7 +590,6 @@ function createInlineTaskInput(editor, taskType = 'urgent') {
             editor.commands.focus()
           }
         } catch (error) {
-          console.log('📝 Could not focus editor')
         }
         document.removeEventListener('click', closeWidget)
       }
@@ -644,11 +608,9 @@ export const SimpleTask = Extension.create({
   },
   
   onCreate() {
-    console.log('🚀 SimpleTask extension loaded!')
     
     // Store editor reference
     this.storage.editorInstance = this.editor
-    console.log('💾 Stored editor reference:', !!this.storage.editorInstance)
     
     // Add click handlers for task elements immediately and with delay
     this.addTaskClickHandlers()
@@ -659,15 +621,12 @@ export const SimpleTask = Extension.create({
     // Test if tasks exist on page
     setTimeout(() => {
       const taskElements = document.querySelectorAll('[data-task-text]')
-      console.log('🔍 Found task elements on page:', taskElements.length)
       taskElements.forEach((el, i) => {
-        console.log(`Task ${i}:`, el.getAttribute('data-task-id'), el.textContent)
       })
     }, 2000)
   },
   
   addTaskClickHandlers() {
-    console.log('🔗 Setting up task click handlers')
     
     // Store reference to extension methods for use in event handler
     const extensionContext = this
@@ -677,28 +636,22 @@ export const SimpleTask = Extension.create({
     
     // Create the handler function
     this.taskClickHandler = (e) => {
-      console.log('🖱️ CLICK EVENT DETECTED! Target:', e.target.tagName)
       
       // Always log clicks within ProseMirror for debugging
       const proseMirrorElement = e.target.closest('.ProseMirror')
       if (proseMirrorElement) {
-        console.log('📝 Click within ProseMirror!')
-        console.log('🎯 Target attributes:', Array.from(e.target.attributes || []).map(a => `${a.name}="${a.value}"`))
       }
       
       // Check if clicked on a task span (direct or parent)
       const taskSpan = e.target.closest('[data-task-text]') || (e.target.hasAttribute && e.target.hasAttribute('data-task-text') ? e.target : null)
       
       if (taskSpan) {
-        console.log('✅ TASK SPAN DETECTED!')
         const taskId = taskSpan.getAttribute('data-task-id')
         const taskStatus = taskSpan.getAttribute('data-task-status') 
         const taskText = taskSpan.textContent
         
-        console.log('📋 Task details:', { taskId, taskStatus, taskText })
         
         if (taskId) {
-          console.log('🚀 NAVIGATING TO KANBAN with task ID:', taskId)
           e.preventDefault()
           e.stopPropagation()
           
@@ -706,7 +659,6 @@ export const SimpleTask = Extension.create({
           try {
             extensionContext.jumpToKanban(taskId)
           } catch (error) {
-            console.error('❌ Error jumping to kanban:', error)
           }
           return
         }
@@ -719,7 +671,6 @@ export const SimpleTask = Extension.create({
         const match = clickedText.match(taskPattern)
         
         if (match) {
-          console.log('🎯 Task pattern detected in text:', match[2])
           e.preventDefault()
           e.stopPropagation()
           extensionContext.jumpToKanbanByTitle(match[2].trim())
@@ -730,23 +681,19 @@ export const SimpleTask = Extension.create({
     
     // Add the event listener
     document.addEventListener('click', this.taskClickHandler, true) // Use capture phase
-    console.log('✅ Task click handler registered')
   },
   
   jumpToKanban(taskId) {
-    console.log('🎯 Opening kanban board and highlighting task:', taskId)
     
     // Find the kanban tab button in the navigation
     const kanbanTab = document.querySelector('[data-file="__kanban__"]')
     if (kanbanTab) {
-      console.log('📋 Found kanban tab, clicking it...')
       kanbanTab.click()
       
       // After a short delay, try to highlight the specific task
       setTimeout(() => {
         const taskElement = document.querySelector(`[data-task-id="${taskId}"]`)
         if (taskElement) {
-          console.log('🎯 Found task in kanban, highlighting...')
           taskElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
           taskElement.style.outline = '2px solid var(--app-accent)'
           taskElement.style.outlineOffset = '2px'
@@ -759,17 +706,14 @@ export const SimpleTask = Extension.create({
         }
       }, 500)
     } else {
-      console.log('❌ Kanban tab not found')
     }
   },
   
   jumpToKanbanByTitle(taskTitle) {
-    console.log('🎯 Opening kanban board and finding task by title:', taskTitle)
     
     // Find the kanban tab button in the navigation
     const kanbanTab = document.querySelector('[data-file="__kanban__"]')
     if (kanbanTab) {
-      console.log('📋 Found kanban tab, clicking it...')
       kanbanTab.click()
       
       // After a short delay, try to find and highlight the task by title
@@ -787,7 +731,6 @@ export const SimpleTask = Extension.create({
         }
         
         if (foundTask) {
-          console.log('🎯 Found task in kanban by title, highlighting...')
           foundTask.scrollIntoView({ behavior: 'smooth', block: 'center' })
           foundTask.style.outline = '2px solid var(--app-accent)'
           foundTask.style.outlineOffset = '2px'
@@ -798,37 +741,29 @@ export const SimpleTask = Extension.create({
             foundTask.style.outlineOffset = ''
           }, 3000)
         } else {
-          console.log('❌ Could not find task with title:', taskTitle)
         }
       }, 500)
     } else {
-      console.log('❌ Kanban tab not found')
     }
   },
   
   showTaskDetails(taskId) {
     // Show a tooltip or modal with task details
-    console.log('ℹ️ Showing details for task:', taskId)
     // This could be expanded to show a tooltip with task info
   },
   
   addInputRules() {
-    console.log('📝 Adding SimpleTask input rules...')
     return [
       // !task -> opens task creation widget
       new InputRule({
         find: /!task\s$/,
         handler: ({ chain, range, match, editor }) => {
-          console.log('🔥 TASK WIDGET TRIGGERED!')
-          console.log('🔍 Editor from handler:', !!editor, typeof editor)
-          console.log('🔍 Editor from storage:', !!this.storage.editorInstance, typeof this.storage.editorInstance)
           
           // Remove !task trigger
           chain().deleteRange(range).run()
           
           // Use stored editor reference which should be more reliable
           const editorToUse = this.storage.editorInstance || editor
-          console.log('🎯 Using editor:', !!editorToUse)
           
           // Delay widget creation to ensure editor is ready
           setTimeout(() => {
@@ -843,16 +778,12 @@ export const SimpleTask = Extension.create({
       new InputRule({
         find: /@task\s$/,
         handler: ({ chain, range, match, editor }) => {
-          console.log('📋 TASK IMPORT TRIGGERED!')
-          console.log('🔍 Editor from handler:', !!editor, typeof editor)
-          console.log('🔍 Editor from storage:', !!this.storage.editorInstance, typeof this.storage.editorInstance)
           
           // Remove @task trigger
           chain().deleteRange(range).run()
           
           // Use stored editor reference which should be more reliable
           const editorToUse = this.storage.editorInstance || editor
-          console.log('🎯 Using editor for import:', !!editorToUse)
           
           // Delay widget creation to ensure editor is ready
           setTimeout(() => {

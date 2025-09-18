@@ -14,7 +14,6 @@ export class WorkspaceManager {
     try {
       return await invoke("validate_workspace_path", { path });
     } catch (error) {
-      console.error("Failed to validate workspace path:", error);
       return false;
     }
   }
@@ -27,7 +26,6 @@ export class WorkspaceManager {
     try {
       return await invoke("get_validated_workspace_path");
     } catch (error) {
-      console.error("Failed to get validated workspace path:", error);
       return null;
     }
   }
@@ -48,7 +46,6 @@ export class WorkspaceManager {
       await invoke("save_last_workspace", { path });
       return true;
     } catch (error) {
-      console.error("Failed to save workspace path:", error);
       return false;
     }
   }
@@ -62,7 +59,6 @@ export class WorkspaceManager {
       await invoke("clear_last_workspace");
       return true;
     } catch (error) {
-      console.error("Failed to clear workspace path:", error);
       return false;
     }
   }
@@ -80,7 +76,6 @@ export class WorkspaceManager {
         return { showLauncher: true };
       }
     } catch (error) {
-      console.error("Failed to get startup state:", error);
       return { showLauncher: true };
     }
   }
@@ -92,10 +87,8 @@ export class WorkspaceManager {
   static async clearAllWorkspaceData() {
     try {
       await invoke("clear_all_workspace_data");
-      console.log("Cleared all workspace data");
       return true;
     } catch (error) {
-      console.error("Failed to clear workspace data:", error);
       return false;
     }
   }
@@ -108,7 +101,6 @@ export class WorkspaceManager {
     try {
       return await invoke("is_development_mode");
     } catch (error) {
-      console.error("Failed to check development mode:", error);
       return false;
     }
   }
@@ -120,10 +112,8 @@ export class WorkspaceManager {
   static async forceLauncherMode() {
     try {
       await invoke("force_launcher_mode");
-      console.log("Forced launcher mode - all workspace data cleared");
       return true;
     } catch (error) {
-      console.error("Failed to force launcher mode:", error);
       return false;
     }
   }
@@ -133,12 +123,10 @@ export class WorkspaceManager {
  * Legacy support - maintain backward compatibility
  */
 export const getSavedWorkspacePath = () => {
-  console.warn("getSavedWorkspacePath is deprecated, use WorkspaceManager.getValidatedWorkspacePath()");
   return WorkspaceManager.getValidatedWorkspacePath();
 };
 
 export const saveWorkspacePath = (path) => {
-  console.warn("saveWorkspacePath is deprecated, use WorkspaceManager.saveWorkspacePath()");
   return WorkspaceManager.saveWorkspacePath(path);
 };
 
@@ -152,10 +140,4 @@ if (typeof window !== 'undefined') {
   window.clearWorkspaceData = () => WorkspaceManager.clearAllWorkspaceData();
   window.forceLauncherMode = () => WorkspaceManager.forceLauncherMode();
   window.checkDevMode = () => WorkspaceManager.isDevelopmentMode();
-  
-  console.log('🛠️ Developer workspace utilities available:');
-  console.log('- window.clearWorkspaceData() - Clear all workspace data');
-  console.log('- window.forceLauncherMode() - Force launcher mode');
-  console.log('- window.checkDevMode() - Check if in development mode');
-  console.log('- window.WorkspaceManager - Full workspace manager class');
 }

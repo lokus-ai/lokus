@@ -50,7 +50,6 @@ export class CanvasManager {
       
       return canvasPath;
     } catch (error) {
-      console.error('Failed to create canvas:', error);
       throw error;
     }
   }
@@ -63,7 +62,6 @@ export class CanvasManager {
   async loadCanvas(canvasPath) {
     // Prevent concurrent loads of same file
     if (this.loadQueue.has(canvasPath)) {
-      console.log('🔄 Load already in progress, waiting...', canvasPath);
       return this.loadQueue.get(canvasPath);
     }
     
@@ -91,31 +89,26 @@ export class CanvasManager {
       
       // Wait for any pending saves to complete
       if (this.saveQueue.has(canvasPath)) {
-        console.log('⏳ Waiting for save to complete before loading...', canvasPath);
         await this.saveQueue.get(canvasPath);
       }
       
       // Check cache first (but clear it if there was a recent save)
       if (this.canvasCache.has(canvasPath)) {
         const cached = this.canvasCache.get(canvasPath);
-        console.log('📋 Using cached canvas data');
         return cached;
       }
 
-      console.log('📖 Reading canvas file:', canvasPath);
       const content = await invoke('read_file_content', { path: canvasPath });
       
       let canvasData;
       try {
         canvasData = JSON.parse(content);
       } catch (parseError) {
-        console.warn('Invalid JSON in canvas file, creating new canvas:', parseError);
         canvasData = this.createEmptyCanvasData();
       }
 
       // Security validation for canvas data
       if (!isValidCanvasData(canvasData)) {
-        console.warn('Invalid canvas data detected, using empty canvas');
         canvasData = this.createEmptyCanvasData();
       }
 
@@ -125,14 +118,9 @@ export class CanvasManager {
       // Cache the loaded data
       this.canvasCache.set(canvasPath, canvasData);
       
-      console.log('✅ Canvas loaded successfully:', {
-        nodes: canvasData.nodes?.length || 0,
-        edges: canvasData.edges?.length || 0
-      });
       
       return canvasData;
     } catch (error) {
-      console.error('Failed to load canvas:', error);
       // Return empty canvas if file doesn't exist or can't be read
       return this.createEmptyCanvasData();
     }
@@ -147,7 +135,6 @@ export class CanvasManager {
   async saveCanvas(canvasPath, canvasData) {
     // Prevent concurrent saves to same file
     if (this.saveQueue.has(canvasPath)) {
-      console.log('💾 Save already in progress, waiting...', canvasPath);
       await this.saveQueue.get(canvasPath);
     }
     
@@ -185,11 +172,6 @@ export class CanvasManager {
       
       const content = JSON.stringify(jsonCanvasData, null, 2);
       
-      console.log('💾 Writing canvas file:', canvasPath, {
-        nodes: jsonCanvasData.nodes?.length || 0,
-        edges: jsonCanvasData.edges?.length || 0,
-        contentLength: content.length
-      });
       
       await invoke('write_file_content', {
         path: canvasPath,
@@ -199,9 +181,7 @@ export class CanvasManager {
       // Clear cache to force fresh read next time
       this.canvasCache.delete(canvasPath);
       
-      console.log('✅ Canvas saved successfully:', canvasPath);
     } catch (error) {
-      console.error('❌ Failed to save canvas:', error);
       throw error;
     }
   }
@@ -216,7 +196,6 @@ export class CanvasManager {
       await invoke('delete_file', { path: canvasPath });
       this.canvasCache.delete(canvasPath);
     } catch (error) {
-      console.error('Failed to delete canvas:', error);
       throw error;
     }
   }
@@ -387,10 +366,8 @@ export class CanvasManager {
     try {
       // This would need to be implemented with actual export functionality
       // For now, just return the canvas path
-      console.log(`Exporting canvas ${canvasPath} to ${format}`);
       return `${canvasPath}.${format}`;
     } catch (error) {
-      console.error('Failed to export canvas:', error);
       throw error;
     }
   }
@@ -430,7 +407,6 @@ export class CanvasManager {
     ];
     
     if (allPromises.length > 0) {
-      console.log('⏳ Waiting for', allPromises.length, 'pending operations...');
       await Promise.all(allPromises);
     }
   }

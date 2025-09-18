@@ -154,19 +154,10 @@ export class GraphEngine {
       this.initializeWebWorker();
       
       // Debug: Log Sigma settings related to edges
-      console.log('🔧 GraphEngine initialized successfully');
-      console.log('🔍 Edge rendering settings:', {
-        defaultEdgeColor: this.sigma.getSetting('defaultEdgeColor'),
-        defaultEdgeSize: this.sigma.getSetting('defaultEdgeSize'),
-        renderEdges: this.sigma.getSetting('renderEdges'),
-        hideEdgesOnMove: this.sigma.getSetting('hideEdgesOnMove'),
-        enableEdgeHoverEvents: this.sigma.getSetting('enableEdgeHoverEvents')
-      });
       
       return true;
       
     } catch (error) {
-      console.error('Failed to initialize GraphEngine:', error);
       throw error;
     }
   }
@@ -279,7 +270,6 @@ export class GraphEngine {
             this.sigma.getCamera().disable();
             this.sigma.getCamera().enable();
           } catch (error) {
-            console.warn('Error during resize refresh:', error);
           }
         }, 100);
       }
@@ -322,7 +312,6 @@ export class GraphEngine {
    * Add a node to the graph
    */
   addNode(nodeId, attributes = {}) {
-    console.log(`📍 Adding node: ${nodeId}`, attributes);
     
     const displayLabel = this.getDisplayLabel(nodeId, attributes.label);
     
@@ -360,16 +349,8 @@ export class GraphEngine {
    */
   addEdge(edgeId, source, target, attributes = {}) {
     // Check if source and target nodes exist
-    console.log(`🔍 addEdge check: ${edgeId}`, {
-      sourceExists: this.graph.hasNode(source),
-      targetExists: this.graph.hasNode(target),
-      source,
-      target
-    });
     
     if (!this.graph.hasNode(source) || !this.graph.hasNode(target)) {
-      console.warn(`❌ Cannot add edge ${edgeId}: source ${source} or target ${target} node missing`);
-      console.warn(`Graph nodes:`, this.graph.nodes().slice(0, 5));
       return;
     }
 
@@ -391,24 +372,18 @@ export class GraphEngine {
       try {
         this.graph.addEdge(edgeId, source, target, edgeAttributes);
         this.stats.edgeCount++;
-        console.log(`✅ Added edge: ${edgeId} (${source} -> ${target})`, edgeAttributes);
         this.emit('edgeAdded', { edgeId, source, target, attributes: edgeAttributes });
       } catch (error) {
-        console.error(`❌ Failed to add edge ${edgeId}:`, error);
-        console.error('Edge details:', { source, target, edgeAttributes });
         
         // Try adding without custom ID for undirected graphs
         try {
           const autoEdgeId = this.graph.addEdge(source, target, edgeAttributes);
           this.stats.edgeCount++;
-          console.log(`✅ Added edge with auto ID: ${autoEdgeId} (${source} -> ${target})`, edgeAttributes);
           this.emit('edgeAdded', { edgeId: autoEdgeId, source, target, attributes: edgeAttributes });
         } catch (fallbackError) {
-          console.error(`❌ Fallback edge creation also failed:`, fallbackError);
         }
       }
     } else {
-      console.log(`⚠️ Edge ${edgeId} already exists, skipping`);
     }
   }
 
@@ -528,7 +503,6 @@ export class GraphEngine {
           const energyChange = Math.abs(lastEnergy - currentEnergy) / lastEnergy;
           
           if (energyChange < this.options.stabilityThreshold) {
-            console.log(`Layout stabilized after ${iterations} iterations`);
             this.stopLayout();
             return;
           }
@@ -547,7 +521,6 @@ export class GraphEngine {
       this.emit('layoutStarted');
       
     } catch (error) {
-      console.error('Failed to start layout:', error);
       this.isLayoutRunning = false;
     }
   }
@@ -567,7 +540,6 @@ export class GraphEngine {
    * Pause the graph engine (stop rendering and layout but keep data)
    */
   pause() {
-    console.log('🔇 GraphEngine paused');
     this.isPaused = true;
     this.stopLayout();
     
@@ -583,7 +555,6 @@ export class GraphEngine {
    * Resume the graph engine
    */
   resume() {
-    console.log('🔊 GraphEngine resumed');
     this.isPaused = false;
     
     // Re-enable sigma rendering
@@ -668,7 +639,6 @@ export class GraphEngine {
       // Get the canvas from sigma
       const canvas = this.sigma.getCanvas();
       if (!canvas) {
-        console.warn('No canvas available for export');
         return;
       }
       
@@ -685,7 +655,6 @@ export class GraphEngine {
       this.emit('graphExported', { format: 'png', filename: link.download });
       
     } catch (error) {
-      console.error('Failed to export graph:', error);
       // Fallback: capture using html2canvas if available
       this.exportFallback();
     }
@@ -698,12 +667,9 @@ export class GraphEngine {
     try {
       // Use native screen capture if available
       if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
-        console.log('Please use your browser\'s screenshot feature to capture the graph');
       } else {
-        console.log('Export functionality requires a modern browser');
       }
     } catch (error) {
-      console.error('Export fallback failed:', error);
     }
   }
 
@@ -827,32 +793,16 @@ export class GraphEngine {
    * Debug method to log all edges in the graph
    */
   debugEdges() {
-    console.log(`🔍 Graph Debug - Total edges: ${this.graph.size}`);
     
     if (this.graph.size === 0) {
-      console.log('⚠️ No edges found in graph');
       return;
     }
 
     this.graph.forEachEdge((edgeId, edgeAttrs, source, target) => {
-      console.log(`📎 Edge ${edgeId}:`, {
-        source,
-        target,
-        color: edgeAttrs.color,
-        size: edgeAttrs.size,
-        type: edgeAttrs.type,
-        visible: edgeAttrs.hidden !== true
-      });
     });
 
     // Also log Sigma.js edge settings
     if (this.sigma) {
-      console.log('🔧 Current Sigma edge settings:', {
-        defaultEdgeColor: this.sigma.getSetting('defaultEdgeColor'),
-        defaultEdgeSize: this.sigma.getSetting('defaultEdgeSize'),
-        hideEdgesOnMove: this.sigma.getSetting('hideEdgesOnMove'),
-        renderEdges: this.sigma.getSetting('renderEdges')
-      });
     }
   }
 
@@ -871,12 +821,6 @@ export class GraphEngine {
    * Import graph data with stack overflow protection
    */
   importData(data, maxDepth = 1000) {
-    console.log('📊 Importing graph data:', {
-      nodes: data.nodes?.length || 0,
-      edges: data.edges?.length || 0,
-      sampleNodes: data.nodes?.slice(0, 2),
-      sampleEdges: data.edges?.slice(0, 2)
-    });
     
     this.clear();
     
@@ -890,7 +834,6 @@ export class GraphEngine {
           try {
             this.addNode(key, attributes);
           } catch (error) {
-            console.warn(`Failed to add node ${key}:`, error);
           }
         });
       }
@@ -905,11 +848,9 @@ export class GraphEngine {
         batch.forEach((edge) => {
           try {
             // More robust edge handling with logging
-            console.log('🔍 Processing edge:', edge);
             const { key, source, target, attributes } = edge;
             
             if (!key || !source || !target) {
-              console.warn(`Invalid edge structure:`, edge);
               return;
             }
             
@@ -918,7 +859,6 @@ export class GraphEngine {
             
             this.addEdge(key, source, target, edgeAttributes);
           } catch (error) {
-            console.warn(`Failed to add edge:`, edge, error);
           }
         });
       }
@@ -955,7 +895,6 @@ export class GraphEngine {
         try {
           listeners[i](data);
         } catch (error) {
-          console.error(`Error in event listener for ${event}:`, error);
         }
       }
     }
@@ -1095,7 +1034,6 @@ export class GraphEngine {
       };
       
       this.webWorker.onerror = (error) => {
-        console.error('GraphWorker error:', error);
       };
       
       // Initialize worker with current configuration
@@ -1106,10 +1044,8 @@ export class GraphEngine {
         maxIterations: this.options.maxLayoutIterations
       });
       
-      console.log('🔧 Web Worker initialized for background calculations');
       
     } catch (error) {
-      console.warn('Failed to initialize Web Worker:', error);
       // Fall back to main thread calculations
     }
   }
@@ -1342,7 +1278,6 @@ export class GraphEngine {
     
     const cachedResult = this.getCachedLayoutResult(config);
     if (cachedResult) {
-      console.log('📋 Using cached layout result');
       this.applyLayoutResult(cachedResult);
       return;
     }
@@ -1383,7 +1318,6 @@ export class GraphEngine {
    * Start dragging a node with physics simulation
    */
   startNodeDrag(nodeId, mouseEvent) {
-    console.log('🎯 Starting node drag:', nodeId);
     
     this.physics.isDragging = true;
     this.physics.draggedNode = nodeId;
@@ -1437,7 +1371,6 @@ export class GraphEngine {
   endNodeDrag() {
     if (!this.physics.isDragging) return;
     
-    console.log('🎯 Ending node drag:', this.physics.draggedNode);
     
     const draggedNode = this.physics.draggedNode;
     this.physics.isDragging = false;
@@ -1898,7 +1831,6 @@ export class GraphEngine {
       this.cache.viewportStates.clear();
     }
     
-    console.log(`📋 Cache system ${enabled ? 'enabled' : 'disabled'}`);
   }
 
   /**
@@ -1906,7 +1838,6 @@ export class GraphEngine {
    */
   forceCacheCleanup() {
     this.cleanupCache();
-    console.log('🧹 Cache cleanup completed');
   }
 
   /**
@@ -1978,7 +1909,6 @@ export class GraphEngine {
     this.graph.clear();
     this.eventListeners.clear();
     
-    console.log('GraphEngine destroyed');
   }
 }
 

@@ -355,9 +355,9 @@ export function createPluginSandbox(plugin) {
     },
     // Restricted global access
     console: {
-      log: (...args) => console.log(`[${plugin.id}]`, ...args),
-      warn: (...args) => console.warn(`[${plugin.id}]`, ...args),
-      error: (...args) => console.error(`[${plugin.id}]`, ...args)
+      log: (...args) => {},
+      warn: (...args) => {},
+      error: (...args) => {}
     }
   };
 }

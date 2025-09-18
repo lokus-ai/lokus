@@ -176,14 +176,12 @@ export class ActivationEventMatcher {
         try {
           return matcher(context, activationEvent)
         } catch (error) {
-          console.warn(`Error matching activation event ${activationEvent}:`, error)
           return false
         }
       }
     }
 
     // No matcher found
-    console.warn(`No matcher found for activation event: ${activationEvent}`)
     return false
   }
 
@@ -256,7 +254,6 @@ export class PluginActivationRegistry {
       this.pluginEvents.get(pluginId).add(event)
     })
 
-    console.log(`Registered plugin ${pluginId} for events:`, activationEvents)
   }
 
   /**
@@ -275,7 +272,6 @@ export class PluginActivationRegistry {
     this.pluginEvents.delete(pluginId)
     this.activatedPlugins.delete(pluginId)
 
-    console.log(`Unregistered plugin ${pluginId}`)
   }
 
   /**
@@ -310,7 +306,6 @@ export class PluginActivationRegistry {
       requestId: context.requestId
     })
 
-    console.log(`Plugin ${pluginId} activated for context:`, context.toString())
   }
 
   /**
@@ -318,7 +313,6 @@ export class PluginActivationRegistry {
    */
   markDeactivated(pluginId) {
     this.activatedPlugins.delete(pluginId)
-    console.log(`Plugin ${pluginId} deactivated`)
   }
 
   /**
@@ -391,12 +385,10 @@ export class ActivationEventManager {
    * Initialize the activation manager
    */
   async initialize() {
-    console.log('Initializing ActivationEventManager...')
     
     // Process any queued events
     await this.processEventQueue()
     
-    console.log('ActivationEventManager initialized')
   }
 
   /**
@@ -433,7 +425,6 @@ export class ActivationEventManager {
    */
   async fireEvent(type, data = {}) {
     const context = new ActivationContext(type, data)
-    console.log(`Firing activation event: ${context.toString()}`)
     
     if (this.processing) {
       this.eventQueue.push(context)
@@ -479,11 +470,9 @@ export class ActivationEventManager {
       const pluginsToActivate = this.registry.getPluginsToActivate(context)
       
       if (pluginsToActivate.length === 0) {
-        console.log(`No plugins to activate for context: ${context.toString()}`)
         return
       }
 
-      console.log(`Activating ${pluginsToActivate.length} plugins for context: ${context.toString()}`)
 
       // Activate plugins in parallel with timeout
       const activationPromises = pluginsToActivate.map(pluginId => 
@@ -492,7 +481,6 @@ export class ActivationEventManager {
 
       await Promise.allSettled(activationPromises)
     } catch (error) {
-      console.error('Error processing activation:', error)
     }
   }
 
@@ -501,7 +489,6 @@ export class ActivationEventManager {
    */
   async activatePlugin(pluginId, context) {
     try {
-      console.log(`Activating plugin: ${pluginId}`)
       
       // Set timeout for activation
       const timeoutPromise = new Promise((_, reject) => {
@@ -519,9 +506,7 @@ export class ActivationEventManager {
       // Notify listeners
       this.notifyListeners('pluginActivated', { pluginId, context })
       
-      console.log(`Plugin ${pluginId} activated successfully`)
     } catch (error) {
-      console.error(`Failed to activate plugin ${pluginId}:`, error)
       this.notifyListeners('pluginActivationFailed', { pluginId, context, error })
     }
   }
@@ -531,16 +516,13 @@ export class ActivationEventManager {
    */
   async deactivatePlugin(pluginId) {
     try {
-      console.log(`Deactivating plugin: ${pluginId}`)
       
       await this.pluginManager.deactivatePlugin(pluginId)
       this.registry.markDeactivated(pluginId)
       
       this.notifyListeners('pluginDeactivated', { pluginId })
       
-      console.log(`Plugin ${pluginId} deactivated successfully`)
     } catch (error) {
-      console.error(`Failed to deactivate plugin ${pluginId}:`, error)
     }
   }
 
@@ -572,7 +554,6 @@ export class ActivationEventManager {
         try {
           listener(data)
         } catch (error) {
-          console.error(`Error in event listener for ${event}:`, error)
         }
       })
     }
@@ -660,7 +641,6 @@ export class ActivationEventManager {
     this.eventQueue = []
     this.listeners.clear()
     this.processing = false
-    console.log('ActivationEventManager disposed')
   }
 }
 

@@ -549,7 +549,6 @@ export class PluginAPIFactory {
       try {
         await api.cleanup()
       } catch (error) {
-        console.error(`Failed to cleanup API for plugin ${pluginId}:`, error)
       }
     }
     this.apis.clear()

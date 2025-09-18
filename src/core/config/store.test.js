@@ -25,4 +25,3 @@ describe('config store (browser fallback)', () => {
     expect(roundtrip).toEqual({ a: 1, b: 2 })
   })
 })
-

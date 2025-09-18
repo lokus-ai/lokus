@@ -114,3 +114,7 @@ npm run test:e2e:headed
 
 *Last Updated: September 12, 2025*
 *Status: Ready for SaaS development phase*
+
+
+
+Never Mention Claude in anything no pr no issue no commits no comments never mention claude

@@ -439,12 +439,10 @@ export class PluginSandbox extends EventEmitter {
     return `
       class Plugin {
         async activate(api) {
-          console.log('Plugin activated with API:', api);
           this.api = api;
         }
         
         async deactivate() {
-          console.log('Plugin deactivated');
         }
       }
       Plugin
@@ -492,7 +490,6 @@ export class PluginSandbox extends EventEmitter {
       }
 
     } catch (error) {
-      console.warn('Resource monitoring error:', error)
     }
   }
 

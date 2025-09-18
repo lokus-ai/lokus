@@ -124,7 +124,6 @@ export default function WikiLinkModal({
       setFiles(filteredFiles)
       setFilteredFiles(filteredFiles)
     } catch (error) {
-      console.error('Failed to load workspace files:', error)
     } finally {
       setIsLoading(false)
     }

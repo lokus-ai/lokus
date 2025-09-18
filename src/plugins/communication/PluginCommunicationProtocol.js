@@ -284,7 +284,6 @@ export class PluginCommunicationProtocol extends EventEmitter {
     const pendingRequest = this.pendingRequests.get(id)
     
     if (!pendingRequest) {
-      console.warn(`Received response for unknown request ID: ${id}`)
       return
     }
 
@@ -313,7 +312,6 @@ export class PluginCommunicationProtocol extends EventEmitter {
       try {
         await handler(params, { method, pluginId: this.pluginId })
       } catch (error) {
-        console.warn(`Notification handler error for ${method}:`, error)
       }
     }
   }
@@ -330,7 +328,6 @@ export class PluginCommunicationProtocol extends EventEmitter {
         try {
           handler(data)
         } catch (error) {
-          console.warn(`Event handler error for ${event}:`, error)
         }
       }
     }

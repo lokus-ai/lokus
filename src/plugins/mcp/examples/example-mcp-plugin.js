@@ -23,7 +23,6 @@ export class ExampleMCPPlugin {
   async activate(mcpAPI) {
     this.mcpAPI = mcpAPI
     
-    console.log('Example MCP Plugin activated with API:', mcpAPI)
     
     // Register resources
     await this.registerResources()
@@ -34,7 +33,6 @@ export class ExampleMCPPlugin {
     // Register prompt templates
     await this.registerPrompts()
     
-    console.log('Example MCP Plugin setup complete')
   }
 
   /**
@@ -74,7 +72,6 @@ export class ExampleMCPPlugin {
     
     this.mcpAPI.server?.registerResource(memoryResource)
     
-    console.log('Registered MCP resources')
   }
 
   /**
@@ -179,7 +176,6 @@ export class ExampleMCPPlugin {
     
     this.mcpAPI.server?.registerTool(fileTool)
     
-    console.log('Registered MCP tools')
   }
 
   /**
@@ -278,14 +274,12 @@ Format: {{format}}`)
     
     this.mcpAPI.server?.registerPrompt(docsPrompt)
     
-    console.log('Registered MCP prompts')
   }
 
   /**
    * Plugin deactivation - called when plugin is deactivated
    */
   async deactivate() {
-    console.log('Example MCP Plugin deactivated')
     
     // Clean up watchers
     for (const watcher of this.watchers.values()) {
@@ -304,32 +298,26 @@ Format: {{format}}`)
    */
   async demonstrateClientUsage() {
     if (!this.mcpAPI.client) {
-      console.log('No MCP client available')
       return
     }
 
     try {
       // List available resources from other plugins
       const resources = await this.mcpAPI.client.listResources()
-      console.log('Available resources:', resources)
       
       // List available tools from other plugins
       const tools = await this.mcpAPI.client.listTools()
-      console.log('Available tools:', tools)
       
       // Call a tool from another plugin
       if (tools.tools && tools.tools.length > 0) {
         const firstTool = tools.tools[0]
-        console.log(`Calling tool: ${firstTool.name}`)
         
         const result = await this.mcpAPI.client.callTool(firstTool.name, {
           // Provide appropriate arguments based on the tool's schema
         })
-        console.log('Tool result:', result)
       }
       
     } catch (error) {
-      console.error('Error demonstrating MCP client usage:', error)
     }
   }
 
@@ -341,7 +329,6 @@ Format: {{format}}`)
       type: 'file'
     })
     
-    console.log('Found file resources:', fileResources)
     return fileResources
   }
 
@@ -353,7 +340,6 @@ Format: {{format}}`)
       search: 'text'
     })
     
-    console.log('Found text processing tools:', textTools)
     return textTools
   }
 }

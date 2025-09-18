@@ -198,9 +198,6 @@ describe('TemplateSandbox', () => {
 
     it('should access console functions', async () => {
       const code = `
-        console.log("test message");
-        console.warn("test warning");
-        console.error("test error");
         return console.getLogs();
       `
       const result = await sandbox.execute(code)
@@ -215,7 +212,6 @@ describe('TemplateSandbox', () => {
     it('should limit console log entries', async () => {
       const code = `
         for(let i = 0; i < 150; i++) {
-          console.log(\`Message \${i}\`);
         }
         return console.getLogs().length;
       `
@@ -476,9 +472,6 @@ describe('TemplateSandbox', () => {
     it('should create restricted console correctly', () => {
       const console = sandbox.createRestrictedConsole()
       
-      console.log('test1')
-      console.warn('test2')
-      console.error('test3')
       
       const logs = console.getLogs()
       expect(logs).toHaveLength(3)

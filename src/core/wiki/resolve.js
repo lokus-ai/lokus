@@ -75,7 +75,6 @@ function resolveInternalTarget(target) {
     const sameFolder = candidates.find(f => dirname(f.path) === activeDir)
     return sameFolder ? sameFolder.path : candidates[0].path
   } catch (e) {
-    console.warn('[resolve] Failed to resolve internal target:', target, e)
     return null
   }
 }

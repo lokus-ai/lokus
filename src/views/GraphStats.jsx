@@ -115,7 +115,6 @@ export function GraphStats({
         setClusters(estimatedClusters);
         
       } catch (error) {
-        console.warn('Failed to update graph stats:', error);
       }
     };
 

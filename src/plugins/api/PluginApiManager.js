@@ -283,7 +283,6 @@ export class PluginApiManager {
         try {
           callback(data)
         } catch (error) {
-          console.error(`Error in event listener for ${event}:`, error)
         }
       }
     }
@@ -364,7 +363,6 @@ export class PluginApiManager {
       this.notificationSystem.showMessage(payload)
     } else {
       // Fallback to console for now
-      console.log(`[${payload.type.toUpperCase()}]: ${payload.message}`)
     }
   }
 
@@ -397,7 +395,6 @@ export class PluginApiManager {
         const handler = this.commandRegistry.get(command)
         handler(...(args || []))
       } catch (error) {
-        console.error(`Error executing command ${command}:`, error)
       }
     } else {
       // Emit to other systems (like command palette)

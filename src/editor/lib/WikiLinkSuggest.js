@@ -43,7 +43,6 @@ const WikiLinkSuggest = Extension.create({
   addProseMirrorPlugins() {
     const dbg = (...args) => {
       try {
-        console.log('[wikiSuggest]', ...args)
       } catch {}
     }
     return [
