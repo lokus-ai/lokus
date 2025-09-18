@@ -15,7 +15,6 @@ export class PluginStateManager extends EventEmitter {
     super()
     
     // Log deprecation warning
-    console.warn('⚠️ DEPRECATED: plugins/runtime/PluginStateManager is deprecated. Use core/PluginStateManager instead.');
     
     this.pluginStates = new Map() // pluginId -> PluginState
     this.globalState = new Map() // global state shared across plugins
@@ -565,7 +564,6 @@ class PluginState extends EventEmitter {
     }
     
     if (!manifest || typeof manifest !== 'object') {
-      console.warn(`No manifest provided for plugin ${pluginId}, using default`)
     }
     
     this.pluginId = pluginId
@@ -584,7 +582,6 @@ class PluginState extends EventEmitter {
     try {
       this.deserialize(initialState)
     } catch (error) {
-      console.error(`Failed to initialize state for plugin ${pluginId}:`, error)
       this._isValid = false
     }
   }
@@ -627,7 +624,6 @@ class PluginState extends EventEmitter {
         timestamp: Date.now()
       })
     } catch (error) {
-      console.error(`Failed to set state ${key} for plugin ${this.pluginId}:`, error)
       throw error
     }
   }
@@ -741,7 +737,6 @@ class PluginState extends EventEmitter {
     try {
       return this._isValid ? this.data.size : 0
     } catch (error) {
-      console.error(`Failed to get size for plugin ${this.pluginId}:`, error)
       return 0
     }
   }
@@ -762,7 +757,6 @@ class PluginState extends EventEmitter {
   deserialize(serializedState) {
     try {
       if (!serializedState || typeof serializedState !== 'object') {
-        console.warn(`Invalid serialized state for plugin ${this.pluginId}, using defaults`)
         return
       }
       
@@ -777,7 +771,6 @@ class PluginState extends EventEmitter {
       this.isDirtyFlag = false
       this._isValid = true
     } catch (error) {
-      console.error(`Failed to deserialize state for plugin ${this.pluginId}:`, error)
       this._isValid = false
       throw error
     }
@@ -799,7 +792,6 @@ class PluginState extends EventEmitter {
       this._isValid = true
       this.emit('state_changed', { reset: true, timestamp: Date.now() })
     } catch (error) {
-      console.error(`Failed to reset state for plugin ${this.pluginId}:`, error)
       this._isValid = false
       throw error
     }
@@ -819,7 +811,6 @@ class PluginState extends EventEmitter {
         snapshotAt: Date.now()
       }
     } catch (error) {
-      console.error(`Failed to get snapshot for plugin ${this.pluginId}:`, error)
       return {
         pluginId: this.pluginId,
         data: {},

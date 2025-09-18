@@ -8,4 +8,3 @@ describe('slash command items', () => {
     expect(all.some(t => /table/i.test(t))).toBe(true)
   })
 })
-

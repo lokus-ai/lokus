@@ -10,11 +10,9 @@ import { GraphEngine } from './GraphEngine.js';
  * Test the complete graph processing pipeline
  */
 export async function testGraphIntegration(workspacePath, containerId = null) {
-  console.log('🧪 Starting graph integration test...');
   
   try {
     // Test 1: Create and initialize GraphDataProcessor
-    console.log('📊 Testing GraphDataProcessor...');
     const processor = new GraphDataProcessor(workspacePath);
     
     // Test 2: Process workspace files
@@ -23,23 +21,15 @@ export async function testGraphIntegration(workspacePath, containerId = null) {
       maxDepth: 5,
       excludePatterns: ['.git', 'node_modules', '.lokus', 'target'],
       onProgress: (progress) => {
-        console.log(`📈 Progress: ${progress.progress}% (${progress.processedFiles}/${progress.totalFiles})`);
       }
     });
     
-    console.log('✅ Graph data processed successfully:', {
-      nodes: graphData.nodes.length,
-      edges: graphData.edges.length,
-      stats: graphData.stats
-    });
     
     // Test 3: Initialize GraphEngine if container provided
     if (containerId) {
-      console.log('🎨 Testing GraphEngine visualization...');
       const container = document.getElementById(containerId);
       
       if (!container) {
-        console.warn(`Container with ID '${containerId}' not found`);
         return { processor, graphData, engine: null };
       }
       
@@ -66,7 +56,6 @@ export async function testGraphIntegration(workspacePath, containerId = null) {
         engine.fitToViewport();
       }, 1000);
       
-      console.log('✅ Graph visualization initialized successfully');
       
       return { processor, graphData, engine };
     }
@@ -74,7 +63,6 @@ export async function testGraphIntegration(workspacePath, containerId = null) {
     return { processor, graphData, engine: null };
     
   } catch (error) {
-    console.error('❌ Graph integration test failed:', error);
     throw error;
   }
 }
@@ -83,7 +71,6 @@ export async function testGraphIntegration(workspacePath, containerId = null) {
  * Test wiki link extraction functionality
  */
 export function testWikiLinkExtraction() {
-  console.log('🔗 Testing wiki link extraction...');
   
   const processor = new GraphDataProcessor('/test/path');
   
@@ -112,7 +99,6 @@ And inline code: \`[[also not a link]]\`
   
   const links = processor.extractWikiLinks(testContent);
   
-  console.log('📋 Extracted links:', links);
   
   // Verify extraction results
   const expectedLinks = [
@@ -127,7 +113,6 @@ And inline code: \`[[also not a link]]\`
     { type: 'wiki', target: 'multiple', alias: 'alias' }
   ];
   
-  console.log(`✅ Extracted ${links.length} links (expected patterns found)`);
   
   return links;
 }
@@ -136,7 +121,6 @@ And inline code: \`[[also not a link]]\`
  * Performance test for large workspace processing
  */
 export async function testPerformance(workspacePath, options = {}) {
-  console.log('⚡ Starting performance test...');
   
   const {
     batchSizes = [10, 25, 50, 100],
@@ -146,7 +130,6 @@ export async function testPerformance(workspacePath, options = {}) {
   const results = [];
   
   for (const batchSize of batchSizes) {
-    console.log(`📊 Testing batch size: ${batchSize}`);
     
     const iterationResults = [];
     
@@ -172,10 +155,8 @@ export async function testPerformance(workspacePath, options = {}) {
           stats: graphData.stats
         });
         
-        console.log(`  Iteration ${i + 1}: ${duration.toFixed(2)}ms`);
         
       } catch (error) {
-        console.error(`  Iteration ${i + 1} failed:`, error);
         iterationResults.push({ error: error.message });
       }
     }
@@ -190,10 +171,8 @@ export async function testPerformance(workspacePath, options = {}) {
       results: iterationResults
     });
     
-    console.log(`  Average: ${avgDuration.toFixed(2)}ms`);
   }
   
-  console.log('⚡ Performance test completed:', results);
   
   return results;
 }
@@ -202,22 +181,17 @@ export async function testPerformance(workspacePath, options = {}) {
  * Test error handling and edge cases
  */
 export async function testErrorHandling(workspacePath) {
-  console.log('🛡️ Testing error handling...');
   
   try {
     // Test 1: Invalid workspace path
-    console.log('  Testing invalid workspace path...');
     const invalidProcessor = new GraphDataProcessor('/nonexistent/path');
     
     try {
       await invalidProcessor.buildGraphFromWorkspace();
-      console.warn('  ⚠️ Expected error for invalid path, but succeeded');
     } catch (error) {
-      console.log('  ✅ Correctly handled invalid workspace path');
     }
     
     // Test 2: Valid processor with error conditions
-    console.log('  Testing error recovery...');
     const processor = new GraphDataProcessor(workspacePath);
     
     // Test with very small batch size
@@ -228,16 +202,10 @@ export async function testErrorHandling(workspacePath) {
       maxDepth: 1 // Limit to prevent long processing
     });
     
-    console.log('  ✅ Error recovery test completed:', {
-      nodes: graphData.nodes.length,
-      edges: graphData.edges.length,
-      errors: graphData.stats.errors
-    });
     
     return true;
     
   } catch (error) {
-    console.error('❌ Error handling test failed:', error);
     return false;
   }
 }
@@ -253,7 +221,6 @@ export const GraphTestUtils = {
 // Make available globally for easy testing in browser console
 if (typeof window !== 'undefined') {
   window.GraphTestUtils = GraphTestUtils;
-  console.log('🔧 Graph test utilities available globally as window.GraphTestUtils');
 }
 
 export default GraphTestUtils;

@@ -35,7 +35,6 @@ export class TestWorkspaceManager {
       const random = Math.random().toString(36).substring(7)
       this.testWorkspacePath = `/tmp/lokus-test-${timestamp}-${random}`
 
-      console.log('Creating test workspace at:', this.testWorkspacePath)
 
       // Create workspace directory
       await this.createDirectory(this.testWorkspacePath)
@@ -46,11 +45,9 @@ export class TestWorkspaceManager {
       // Store for cleanup
       window.addEventListener('beforeunload', () => this.cleanup())
 
-      console.log('✅ Test workspace created successfully')
       return this.testWorkspacePath
 
     } catch (error) {
-      console.error('Failed to create test workspace:', error)
       
       // Fallback to in-memory workspace path
       this.testWorkspacePath = `/tmp/lokus-fallback-${Date.now()}`
@@ -67,7 +64,6 @@ export class TestWorkspaceManager {
       await invoke('create_directory', { path })
     } catch (error) {
       // Browser fallback - simulate directory creation
-      console.log('Browser mode: simulating directory creation for', path)
     }
   }
 
@@ -82,7 +78,6 @@ export class TestWorkspaceManager {
       // Browser fallback - store in memory/localStorage
       const key = `test-file-${path.replace(/[^a-zA-Z0-9]/g, '-')}`
       localStorage.setItem(key, content)
-      console.log('Browser mode: stored file in localStorage:', path)
     }
   }
 
@@ -130,7 +125,6 @@ $$E = mc^2$$
 
 ### Code
 \`\`\`javascript
-console.log('Hello from test workspace!');
 \`\`\``,
 
       'todo.md': `# Todo List
@@ -226,7 +220,6 @@ These are old notes for testing archive functionality.
       await this.writeFile(fullPath, content)
     }
 
-    console.log(`✅ Created ${Object.keys(testFiles).length} test files`)
   }
 
   /**
@@ -244,12 +237,10 @@ These are old notes for testing archive functionality.
 
     try {
       await invoke('delete_directory', { path: this.testWorkspacePath })
-      console.log('✅ Test workspace cleaned up')
     } catch (error) {
       // Browser mode - clear localStorage
       const keys = Object.keys(localStorage).filter(key => key.startsWith('test-file-'))
       keys.forEach(key => localStorage.removeItem(key))
-      console.log('✅ Browser test files cleaned up')
     }
   }
 

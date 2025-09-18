@@ -62,7 +62,6 @@ function DraggableTaskCard({ task, onUpdate, onDelete }) {
       try {
         await onUpdate(task.id, updates)
       } catch (error) {
-        console.error('Failed to update task:', error)
         setTitle(task.title)
         setDescription(task.description || '')
       }
@@ -262,7 +261,6 @@ function DroppableColumn({ column, tasks, onTaskUpdate, onTaskDelete, onAddTask 
         setNewTaskTitle('')
         setIsAdding(false)
       } catch (error) {
-        console.error('Failed to add task:', error)
       }
     }
   }, [newTaskTitle, column.status, onAddTask])
@@ -371,7 +369,6 @@ export default function FullKanban({ workspacePath, onFileOpen }) {
       setTasks(allTasks || [])
       setError(null)
     } catch (err) {
-      console.error('Failed to load tasks:', err)
       setError('Failed to load tasks')
     } finally {
       setLoading(false)
@@ -407,7 +404,6 @@ export default function FullKanban({ workspacePath, onFileOpen }) {
         setTasks(prev => [...prev, newTask])
       }
     } catch (error) {
-      console.error('Failed to create task:', error)
       throw error
     }
   }, [])
@@ -427,7 +423,6 @@ export default function FullKanban({ workspacePath, onFileOpen }) {
         task.id === taskId ? updatedTask : task
       ))
     } catch (error) {
-      console.error('Failed to update task:', error)
       throw error
     }
   }, [])
@@ -438,7 +433,6 @@ export default function FullKanban({ workspacePath, onFileOpen }) {
       await invoke('delete_task', { taskId })
       setTasks(prev => prev.filter(task => task.id !== taskId))
     } catch (error) {
-      console.error('Failed to delete task:', error)
     }
   }, [])
 
@@ -457,7 +451,6 @@ export default function FullKanban({ workspacePath, onFileOpen }) {
     try {
       await handleTaskUpdate(taskId, { status: newStatus })
     } catch (error) {
-      console.error('Failed to move task:', error)
     }
   }, [handleTaskUpdate])
 

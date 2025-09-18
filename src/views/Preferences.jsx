@@ -66,9 +66,7 @@ export default function Preferences() {
       const available = await listAvailableThemes();
       setThemes(available);
       const visuals = await readGlobalVisuals();
-      console.log('[preferences] Loaded visuals:', visuals);
       setActiveTheme(visuals.theme || "");
-      console.log('[preferences] Set activeTheme to:', visuals.theme || "");
       // load markdown prefs if present
       try {
         const { readConfig } = await import("../core/config/store.js");
@@ -93,11 +91,11 @@ export default function Preferences() {
         if (typeof hs.enabled === 'boolean') setHeadingAltEnabled(hs.enabled);
       } catch {}
     }
-    loadData().catch(console.error);
+    loadData().catch(() => {});
   }, []);
 
   useEffect(() => {
-    getActiveShortcuts().then(setKeymap).catch(console.error);
+    getActiveShortcuts().then(setKeymap).catch(() => {});
   }, []);
 
   const beginEdit = (id) => setEditing(id);
@@ -142,18 +140,15 @@ export default function Preferences() {
 
   const handleThemeChange = (e) => {
     const themeId = e.target.value;
-    console.log('[preferences] Theme changed to:', themeId);
     setActiveTheme(themeId);
-    setGlobalActiveTheme(themeId).catch(console.error);
+    setGlobalActiveTheme(themeId).catch(() => {});
   };
 
   // Listen for theme changes from other windows
   useEffect(() => {
     const handleThemeUpdate = (e) => {
       const data = e.detail || e.payload || {};
-      console.log('[preferences] Received theme update:', data);
       if (data.visuals?.theme !== undefined) {
-        console.log('[preferences] Updating activeTheme to:', data.visuals.theme);
         setActiveTheme(data.visuals.theme || "");
       }
     };
@@ -182,7 +177,6 @@ export default function Preferences() {
       setSaveStatus('success');
       setTimeout(() => setSaveStatus(''), 3000);
     } catch (e) {
-      console.error('Failed to save editor settings:', e);
       setSaveStatus('error');
       setTimeout(() => setSaveStatus(''), 3000);
     }
@@ -486,7 +480,6 @@ export default function Preferences() {
                         setSaveStatus('markdown-success')
                         setTimeout(() => setSaveStatus(''), 3000)
                       } catch (e) {
-                        console.error('Failed to save markdown settings:', e)
                         setSaveStatus('markdown-error')
                         setTimeout(() => setSaveStatus(''), 3000)
                       }
@@ -599,5 +592,5 @@ export default function Preferences() {
     try {
       const { updateConfig } = await import("../core/config/store.js");
       await updateConfig({ markdown: next });
-    } catch (e) { console.warn("Failed to persist markdown prefs", e); }
+    } catch (e) { }
   };

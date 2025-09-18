@@ -194,16 +194,12 @@ export class TemplateManager {
    * Process template with variables
    */
   async process(id, variables = {}, options = {}) {
-    console.log('[TemplateManager] Processing template:', id);
-    console.log('[TemplateManager] Available templates:', Array.from(this.storage.keys()));
     
     const template = this.storage.get(id);
     if (!template) {
       throw new Error(`Template '${id}' not found`);
     }
 
-    console.log('[TemplateManager] Template found:', template.name);
-    console.log('[TemplateManager] Variables received:', variables);
     
     return await this.processor.process(template.content, variables, options);
   }

@@ -185,17 +185,14 @@ const PluginItem = ({ plugin, onToggle, onUninstall, onInstall, onSelect, instal
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                console.log('🎛️ Button clicked for plugin:', plugin.id, 'enabled property:', plugin.enabled, 'type:', typeof plugin.enabled, 'full plugin:', plugin);
                 
                 // FIX: Robust handling of undefined/null enabled state
                 const currentEnabled = plugin.enabled === true;
                 const newEnabledState = !currentEnabled;
                 
-                console.log('🎛️ Calculated states - current:', currentEnabled, 'new:', newEnabledState, 'type:', typeof newEnabledState);
                 
                 // Defensive check to ensure we're passing a boolean
                 if (typeof newEnabledState !== 'boolean') {
-                  console.error('🚨 ERROR: newEnabledState is not boolean:', newEnabledState, typeof newEnabledState);
                   return;
                 }
                 
@@ -259,7 +256,6 @@ export default function Extensions({ onSelectExtension }) {
   useEffect(() => {
     const initializePluginRuntime = async () => {
       try {
-        console.log('🚀 Initializing real plugin runtime...');
         
         // Expose plugin runtime globally for other components
         if (typeof window !== 'undefined') {
@@ -270,19 +266,15 @@ export default function Extensions({ onSelectExtension }) {
         for (const plugin of installedPlugins) {
           if (plugin.enabled) {
             try {
-              console.log(`🔄 Loading and activating plugin: ${plugin.id}`);
               await pluginRuntime.loadPlugin(plugin);
               await pluginRuntime.activatePlugin(plugin.id);
             } catch (error) {
-              console.error(`❌ Failed to initialize plugin ${plugin.id}:`, error);
             }
           }
         }
         
         setPluginRuntimeReady(true);
-        console.log('✅ Plugin runtime initialized successfully');
       } catch (error) {
-        console.error('❌ Failed to initialize plugin runtime:', error);
         setPluginRuntimeReady(true);
       }
     };
@@ -299,7 +291,6 @@ export default function Extensions({ onSelectExtension }) {
 
   // Only show installed plugins
   const allPlugins = installedPlugins.map(plugin => {
-    console.log('🎨 Extensions mapping installed plugin:', plugin.id, 'enabled:', plugin.enabled, 'type:', typeof plugin.enabled);
     return { ...plugin, isInstalled: true };
   });
 
@@ -320,7 +311,6 @@ export default function Extensions({ onSelectExtension }) {
   const installedFiltered = filteredPlugins;
 
   const handlePluginClick = (plugin) => {
-    console.log('🎯 Plugin clicked:', plugin.name, plugin);
     setSelectedPlugin(plugin);
     onSelectExtension?.(plugin);
   };
@@ -329,15 +319,12 @@ export default function Extensions({ onSelectExtension }) {
     try {
       await installPlugin(plugin.id, plugin);
     } catch (error) {
-      console.error(`Failed to install plugin: ${plugin.id}`, error);
     }
   };
 
   const handleTogglePlugin = async (pluginId, newEnabledState) => {
     try {
       // FIX: Function signature now matches the expected interface
-      console.log(`🎛️ HandleTogglePlugin called for ${pluginId}`);
-      console.log(`🎛️ New enabled state: ${newEnabledState}`);
       
       if (typeof newEnabledState !== 'boolean') {
         throw new Error(`Invalid toggle state for ${pluginId}: ${newEnabledState}`);
@@ -351,26 +338,22 @@ export default function Extensions({ onSelectExtension }) {
         if (plugin) {
           if (newEnabledState) {
             // Enable plugin in runtime
-            console.log(`🔄 Enabling plugin in runtime: ${pluginId}`);
             if (!pluginRuntime.getLoadedPlugins().includes(pluginId)) {
               await pluginRuntime.loadPlugin(plugin);
             }
             await pluginRuntime.activatePlugin(pluginId);
           } else {
             // Disable plugin in runtime
-            console.log(`🔄 Disabling plugin in runtime: ${pluginId}`);
             await pluginRuntime.deactivatePlugin(pluginId);
           }
         }
       }
     } catch (error) {
-      console.error(`Failed to toggle plugin: ${pluginId}`, error);
     }
   };
 
   const handleUninstallPlugin = async (plugin) => {
     try {
-      console.log(`🗑️ Uninstalling plugin: ${plugin.id}`);
       
       // Remove from runtime first
       if (pluginRuntimeReady && pluginRuntime.getLoadedPlugins().includes(plugin.id)) {
@@ -379,9 +362,7 @@ export default function Extensions({ onSelectExtension }) {
       
       await uninstallPlugin(plugin.id);
       
-      console.log(`✅ Plugin ${plugin.id} uninstalled successfully`);
     } catch (error) {
-      console.error(`❌ Failed to uninstall plugin: ${plugin.id}`, error);
     }
   };
 
@@ -516,17 +497,14 @@ export default function Extensions({ onSelectExtension }) {
             <div className="flex gap-2">
               <button
                 onClick={() => {
-                  console.log('🎛️ Detail view button clicked for plugin:', selectedPlugin.id, 'enabled property:', selectedPlugin.enabled, 'type:', typeof selectedPlugin.enabled);
                   
                   // FIX: Robust handling of undefined/null enabled state
                   const currentEnabled = selectedPlugin.enabled === true;
                   const newEnabledState = !currentEnabled;
                   
-                  console.log('🎛️ Detail view calculated states - current:', currentEnabled, 'new:', newEnabledState, 'type:', typeof newEnabledState);
                   
                   // Defensive check to ensure we're passing a boolean
                   if (typeof newEnabledState !== 'boolean') {
-                    console.error('🚨 ERROR: newEnabledState is not boolean in detail view:', newEnabledState, typeof newEnabledState);
                     return;
                   }
                   

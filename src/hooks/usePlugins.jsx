@@ -49,7 +49,6 @@ export function PluginProvider({ children }) {
           await pluginLoader.loadPlugin(pluginInfo);
           await pluginLoader.activatePlugin(pluginInfo.id);
         } catch (error) {
-          console.error(`❌ Failed to load plugin ${pluginInfo.id}:`, error);
         }
       }
     }
@@ -71,7 +70,6 @@ export function PluginProvider({ children }) {
       } catch {}
       
       if (isTauri) {
-        console.log('🔍 Loading plugins from Tauri backend...');
         // Load real plugins from Tauri backend
         const [pluginInfos, enabledPluginNames] = await Promise.all([
           invoke('list_plugins'),
@@ -128,7 +126,6 @@ export function PluginProvider({ children }) {
       }
     } catch (err) {
       setError(err.message);
-      console.error('Failed to load plugins:', err);
     } finally {
       setLoading(false);
     }
@@ -146,7 +143,6 @@ export function PluginProvider({ children }) {
       
       return true;
     } catch (err) {
-      console.error(`Failed to install plugin ${pluginId}:`, err);
       throw err;
     } finally {
       setInstallingPlugins(prev => {
@@ -167,14 +163,12 @@ export function PluginProvider({ children }) {
       
       return true;
     } catch (err) {
-      console.error(`Failed to uninstall plugin ${pluginId}:`, err);
       throw err;
     }
   }, [loadPlugins]);
 
   const togglePlugin = useCallback(async (pluginId, enabled) => {
     try {
-      console.log(`🎯 TogglePlugin called: ${pluginId}, enabled: ${enabled}, type: ${typeof enabled}`);
       
       // CRITICAL FIX: Validate input parameters
       if (!pluginId || typeof pluginId !== 'string') {
@@ -182,11 +176,6 @@ export function PluginProvider({ children }) {
       }
       
       if (typeof enabled !== 'boolean') {
-        console.error(`🚨 CRITICAL ERROR: enabled parameter is not boolean!`);
-        console.error(`   pluginId: ${pluginId}`);
-        console.error(`   enabled: ${enabled}`);
-        console.error(`   type: ${typeof enabled}`);
-        console.error(`   Stack trace:`, new Error().stack);
         throw new Error(`Invalid enabled parameter: ${enabled} (type: ${typeof enabled}) - must be boolean`);
       }
       
@@ -202,17 +191,13 @@ export function PluginProvider({ children }) {
       
       if (isTauri) {
         // Use real Tauri commands
-        console.log(`🔧 ${enabled ? 'Enabling' : 'Disabling'} plugin: ${pluginId}`);
         if (enabled) {
           const result = await invoke('enable_plugin', { name: pluginId });
-          console.log('✅ Enable result:', result);
         } else {
           const result = await invoke('disable_plugin', { name: pluginId });
-          console.log('❌ Disable result:', result);
         }
         
         // Reload plugins from backend to get the correct state
-        console.log('🔄 Reloading plugins from backend after toggle...');
         await loadPlugins();
       } else {
         // Browser mode fallback
@@ -235,7 +220,6 @@ export function PluginProvider({ children }) {
       
       return true;
     } catch (err) {
-      console.error(`Failed to toggle plugin ${pluginId}:`, err);
       throw err;
     }
   }, [loadPlugins]);
@@ -252,7 +236,6 @@ export function PluginProvider({ children }) {
       
       return true;
     } catch (err) {
-      console.error(`Failed to update settings for plugin ${pluginId}:`, err);
       throw err;
     }
   }, []);

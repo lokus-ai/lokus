@@ -115,17 +115,14 @@ export const customShapeExamples = {
 // Event handlers for customization
 export const canvasEvents = {
   onCanvasMount: (editor) => {
-    console.log('Canvas mounted:', editor)
     // Custom initialization logic
   },
   
   onShapeCreate: (shape) => {
-    console.log('Shape created:', shape)
     // Custom shape creation logic
   },
   
   onSelectionChange: (selection) => {
-    console.log('Selection changed:', selection)
     // Custom selection handling
   }
 }
@@ -137,7 +134,6 @@ export const canvasPlugins = {
     enabled: true,
     interval: 30000, // 30 seconds
     onSave: (data) => {
-      console.log('Auto-saving canvas data:', data)
     }
   },
   
@@ -145,8 +141,8 @@ export const canvasPlugins = {
   collaboration: {
     enabled: false,
     server: 'ws://localhost:8080',
-    onUserJoin: (user) => console.log('User joined:', user),
-    onUserLeave: (user) => console.log('User left:', user)
+    onUserJoin: (user) => {},
+    onUserLeave: (user) => {}
   },
   
   // Export plugin
@@ -154,7 +150,6 @@ export const canvasPlugins = {
     formats: ['png', 'svg', 'pdf', 'json'],
     quality: 'high',
     onExport: (format, data) => {
-      console.log(`Exporting to ${format}:`, data)
     }
   }
 }
@@ -205,7 +200,6 @@ export const lokusIntegrations = {
   markdownLinks: {
     enabled: true,
     onLinkClick: (path) => {
-      console.log('Opening markdown file:', path)
       // Integration with Lokus file system
     }
   },

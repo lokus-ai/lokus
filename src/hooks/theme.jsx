@@ -57,7 +57,6 @@ export function ThemeProvider({ children }) {
   // Theme application is now handled entirely by theme files
 
   const handleSetTheme = useCallback(async (newTheme) => {
-    console.log("Setting theme:", newTheme);
     setTheme(newTheme);
     await setGlobalActiveTheme(newTheme);
   }, []);

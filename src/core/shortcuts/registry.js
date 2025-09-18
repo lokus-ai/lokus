@@ -70,13 +70,12 @@ export async function registerGlobalShortcuts() {
     try {
       await register(accel, async () => {
         if (a.id === 'open-preferences') {
-          try { await invoke('open_preferences_window'); } catch (e) { console.warn('open_preferences_window failed', e); }
+          try { await invoke('open_preferences_window'); } catch (e) { }
         } else {
           try { await emit(a.event); } catch { try { window.dispatchEvent(new CustomEvent(a.event)); } catch {} }
         }
       });
     } catch (e) {
-      console.warn(`[shortcuts] Failed to register ${a.id} (${accel}):`, e);
     }
   }
 }

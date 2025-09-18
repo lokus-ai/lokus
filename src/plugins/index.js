@@ -138,9 +138,7 @@ export async function initializePluginSystem(editorAPI = null, options = {}) {
       try {
         const { initializeMCP } = await import('./mcp/index.js')
         mcpIntegration = await initializeMCP(pluginManager, pluginManager.securityManager, options.mcp)
-        console.info('MCP integration initialized')
       } catch (error) {
-        console.warn('Failed to initialize MCP integration:', error)
       }
     }
     
@@ -150,9 +148,7 @@ export async function initializePluginSystem(editorAPI = null, options = {}) {
       try {
         const { initializeTemplateSystem } = await import('./templates/index.js')
         templateSystem = await initializeTemplateSystem(pluginManager)
-        console.info('Template system initialized')
       } catch (error) {
-        console.warn('Failed to initialize template system:', error)
       }
     }
     
@@ -193,13 +189,10 @@ export async function initializePluginSystem(editorAPI = null, options = {}) {
           config: registryConfig
         }
         
-        console.info('Registry system initialized')
       } catch (error) {
-        console.warn('Failed to initialize registry system:', error)
       }
     }
     
-    console.info('Plugin system initialized successfully')
     return {
       pluginManager,
       apiFactory,
@@ -208,7 +201,6 @@ export async function initializePluginSystem(editorAPI = null, options = {}) {
       registrySystem
     }
   } catch (error) {
-    console.error('Failed to initialize plugin system:', error)
     throw error
   }
 }
@@ -222,9 +214,7 @@ export async function shutdownPluginSystem() {
     try {
       // Note: Registry components should be shut down in reverse order of initialization
       // This would require access to the registry system instance
-      console.info('Registry system shutdown (placeholder)')
     } catch (error) {
-      console.warn('Error shutting down registry system:', error)
     }
     
     // Shutdown template system
@@ -235,7 +225,6 @@ export async function shutdownPluginSystem() {
         await templateSystem.shutdown()
       }
     } catch (error) {
-      console.warn('Error shutting down template system:', error)
     }
     
     // Shutdown MCP integration
@@ -243,16 +232,13 @@ export async function shutdownPluginSystem() {
       const { shutdownMCP } = await import('./mcp/index.js')
       await shutdownMCP()
     } catch (error) {
-      console.warn('Error shutting down MCP integration:', error)
     }
     
     // Shutdown plugin manager
     const { pluginManager } = await import('./PluginManager.js')
     await pluginManager.shutdown()
     
-    console.info('Plugin system shutdown complete')
   } catch (error) {
-    console.error('Error during plugin system shutdown:', error)
     throw error
   }
 }

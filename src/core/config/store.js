@@ -17,7 +17,6 @@ if (isTauri) {
     ({ appDataDir, join } = await import("@tauri-apps/api/path"));
     ({ readTextFile, writeTextFile, mkdir, exists } = await import("@tauri-apps/plugin-fs"));
   } catch (e) {
-    console.warn('[config] Tauri APIs unavailable, falling back to browser storage:', e);
     isTauri = false;
   }
 }

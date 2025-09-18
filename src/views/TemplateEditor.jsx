@@ -85,7 +85,6 @@ export default function TemplateEditor({
       setAllTags(getTags());
       setBuiltinVariables(getVariablesByCategory());
     } catch (err) {
-      console.error('Failed to load template data:', err);
     }
   }, [getCategories, getTags, getVariablesByCategory]);
 
@@ -600,7 +599,6 @@ Author: {{user}}
           open={showPreview}
           onClose={() => setShowPreview(false)}
           onInsert={(result, variables) => {
-            console.log('Preview insert:', result, variables);
             setShowPreview(false);
           }}
         />

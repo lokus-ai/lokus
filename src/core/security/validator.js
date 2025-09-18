@@ -50,7 +50,6 @@ export function isValidFilePath(filePath, basePath = '') {
       }
     } catch (error) {
       // Path module not available in browser
-      console.warn('Path validation limited in browser environment');
     }
   }
 

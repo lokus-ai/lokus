@@ -29,10 +29,8 @@ export class FileServer {
       await this.ensureDirectory(this.baseDirectory)
       
       this.isActive = true
-      console.log('FileServer initialized successfully')
       
     } catch (error) {
-      console.error('Failed to initialize FileServer:', error)
       throw error
     }
   }
@@ -177,12 +175,10 @@ export class FileServer {
     try {
       // In a real implementation, this would notify MCP clients
       // about resource changes and update the resource catalog
-      console.log('Refreshing file resources...')
       
       // Scan base directory for changes
       const entries = await this.scanDirectory(this.baseDirectory, true, false)
       
-      console.log(`Found ${entries.length} files and directories`)
       return {
         success: true,
         resourcesFound: entries.length,
@@ -190,7 +186,6 @@ export class FileServer {
       }
       
     } catch (error) {
-      console.error('Failed to refresh resources:', error)
       return {
         success: false,
         error: error.message
@@ -221,13 +216,11 @@ export class FileServer {
           watcher.close()
         }
       } catch (error) {
-        console.error('Error closing file watcher:', error)
       }
     }
     
     this.watchedPaths.clear()
     this.isActive = false
-    console.log('FileServer shut down')
   }
 
   /**

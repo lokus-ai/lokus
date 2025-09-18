@@ -79,7 +79,6 @@ export default function PluginPanel({
 
   // Handle plugin errors
   const handlePluginError = (pluginId, error) => {
-    console.error(`Plugin ${pluginId} error:`, error);
     setErrors(prev => ({ ...prev, [pluginId]: error.message }));
   };
 

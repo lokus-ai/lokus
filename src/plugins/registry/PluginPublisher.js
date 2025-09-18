@@ -898,12 +898,10 @@ export default class {{manifest.name}}Plugin {
   }
 
   async activate() {
-    console.log('Plugin activated:', this.name)
     // Plugin activation logic here
   }
 
   async deactivate() {
-    console.log('Plugin deactivated:', this.name)
     // Plugin cleanup logic here
   }
 }
