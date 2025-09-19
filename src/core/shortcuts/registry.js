@@ -33,6 +33,12 @@ export const ACTIONS = [
   { id: "refresh-files",    name: "Refresh File Tree",   event: "lokus:refresh-files",    default: "F5" },
   { id: "new-canvas",       name: "New Canvas",          event: "lokus:new-canvas",       default: "CommandOrControl+Shift+C" },
   { id: "open-kanban",      name: "Open Kanban Board",   event: "lokus:open-kanban",      default: "CommandOrControl+Shift+K" },
+  { id: "toggle-split-view", name: "Toggle Split View",   event: "lokus:toggle-split-view", default: "CommandOrControl+\\" },
+  { id: "split-vertical",   name: "Split Vertical",      event: "lokus:split-vertical",   default: "CommandOrControl+Shift+\\" },
+  { id: "split-horizontal", name: "Split Horizontal",    event: "lokus:split-horizontal", default: "CommandOrControl+Alt+\\" },
+  { id: "close-pane",       name: "Close Current Pane",  event: "lokus:close-pane",       default: "CommandOrControl+Shift+W" },
+  { id: "focus-next-pane",  name: "Focus Next Pane",     event: "lokus:focus-next-pane",  default: "CommandOrControl+1" },
+  { id: "focus-prev-pane",  name: "Focus Previous Pane", event: "lokus:focus-prev-pane",  default: "CommandOrControl+2" },
 ];
 
 export function listActions() { return ACTIONS.map(a => ({ id: a.id, name: a.name })); }

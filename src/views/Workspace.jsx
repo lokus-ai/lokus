@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
-import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
+import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
 import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network } from "lucide-react";
 import LokusLogo from "../components/LokusLogo.jsx";
@@ -36,6 +36,7 @@ import { getMarkdownCompiler } from "../core/markdown/compiler.js";
 import CreateTemplate from "../components/CreateTemplate.jsx";
 import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
 import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
+import SplitEditor from "../components/SplitEditor/SplitEditor.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -346,7 +347,10 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
 }
 
 // --- Tab Bar Component ---
-function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDragEnd, onNewTab }) {
+function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDragEnd, onNewTab, onSplitDragStart, onSplitDragEnd, useSplitView, onToggleSplitView, splitDirection, onToggleSplitDirection, syncScrolling, onToggleSyncScrolling, onResetPaneSize, isLeftPane = true }) {
+  const [activeId, setActiveId] = useState(null);
+  const [draggedTab, setDraggedTab] = useState(null);
+  
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -355,8 +359,23 @@ function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDra
     })
   );
 
+  const handleDragStart = (event) => {
+    const { active } = event;
+    setActiveId(active.id);
+    const tab = tabs.find(t => t.path === active.id);
+    setDraggedTab(tab);
+    onSplitDragStart?.(tab);
+  };
+
+  const handleDragEnd = (event) => {
+    setActiveId(null);
+    setDraggedTab(null);
+    onSplitDragEnd?.(draggedTab);
+    onDragEnd(event);
+  };
+
   return (
-    <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="h-12 shrink-0 flex items-end bg-app-panel border-b border-app-border px-0">
         <div className="flex-1 flex items-center overflow-x-auto no-scrollbar">
           {tabs.map(tab => (
@@ -367,20 +386,121 @@ function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDra
               isUnsaved={unsavedChanges.has(tab.path)}
               onTabClick={onTabClick}
               onTabClose={onTabClose}
+              onSplitDragStart={onSplitDragStart}
+              onSplitDragEnd={onSplitDragEnd}
             />
           ))}
         </div>
-        <button
-          onClick={onNewTab}
-          title="New file (⌘N)"
-          className="obsidian-button icon-only ml-2 mb-1"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onToggleSplitView}
+            title={useSplitView ? "Exit split view" : "Enter split view"}
+            className={`obsidian-button icon-only mb-1 ${useSplitView ? 'active' : ''}`}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+            </svg>
+          </button>
+          
+          {/* Split direction toggle - only show in split view and on left pane */}
+          {useSplitView && isLeftPane && (
+            <>
+              <button
+                onClick={onToggleSplitDirection}
+                title={`Switch to ${splitDirection === 'vertical' ? 'horizontal' : 'vertical'} split`}
+                className="obsidian-button icon-only mb-1"
+              >
+                {splitDirection === 'vertical' ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6-6 6 6" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 15l6 6 6-6" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l-6 6 6 6" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 6l6 6-6 6" />
+                  </svg>
+                )}
+              </button>
+              
+              <button
+                onClick={onResetPaneSize}
+                title="Reset pane sizes (50/50)"
+                className="obsidian-button icon-only mb-1"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                </svg>
+              </button>
+              
+              <button
+                onClick={onToggleSyncScrolling}
+                title={`${syncScrolling ? 'Disable' : 'Enable'} synchronized scrolling`}
+                className={`obsidian-button icon-only mb-1 ${syncScrolling ? 'active' : ''}`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                </svg>
+              </button>
+            </>
+          )}
+          
+          <button
+            onClick={onNewTab}
+            title="New file (⌘N)"
+            className="obsidian-button icon-only mb-1"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+          </button>
+        </div>
       </div>
+      
+      <DragOverlay dropAnimation={null}>
+        {activeId && draggedTab ? (
+          <div className="dragging-tab-preview" style={{ 
+            opacity: 0.9,
+            transform: 'rotate(-2deg)',
+            zIndex: 99999
+          }}>
+            <div className="flex items-center gap-2 px-3 py-1 bg-app-surface border border-app-border rounded-md shadow-lg">
+              <svg className="w-4 h-4 text-app-muted" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+              </svg>
+              <span className="text-sm font-medium text-app-text">
+                {draggedTab.name.replace(/\.(md|txt|json|js|jsx|ts|tsx|py|html|css|canvas)$/, "") || draggedTab.name}
+              </span>
+            </div>
+          </div>
+        ) : null}
+      </DragOverlay>
     </DndContext>
+  );
+}
+
+// --- Editor Drop Zone Component ---
+function EditorDropZone({ children }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'editor-drop-zone',
+    data: { type: 'editor-area' }
+  });
+
+  return (
+    <div 
+      ref={setNodeRef}
+      className={`relative w-full h-full ${isOver ? 'bg-app-accent bg-opacity-10' : ''}`}
+      style={{ position: 'relative' }}
+    >
+      {children}
+      {isOver && (
+        <div className="absolute inset-4 border-2 border-dashed border-app-accent bg-app-accent bg-opacity-5 rounded-lg flex items-center justify-center pointer-events-none z-10">
+          <div className="text-app-accent font-medium text-lg">
+            Drop here to create split view
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -432,9 +552,22 @@ export default function Workspace({ initialPath = "" }) {
   // Graph data processor instance
   const graphProcessorRef = useRef(null);
   
+  // Split editor state
+  const [useSplitView, setUseSplitView] = useState(false);
+  const [splitDirection, setSplitDirection] = useState('vertical'); // 'vertical' or 'horizontal'
+  const [leftPaneSize, setLeftPaneSize] = useState(50); // percentage
+  const [draggedTabForSplit, setDraggedTabForSplit] = useState(null);
+  const [splitInitData, setSplitInitData] = useState(null);
+  const [rightPaneFile, setRightPaneFile] = useState(null);
+  const [rightPaneContent, setRightPaneContent] = useState('');
+  const [rightPaneTitle, setRightPaneTitle] = useState('');
+  const [syncScrolling, setSyncScrolling] = useState(false);
+  
   // --- Refs for stable callbacks ---
   const stateRef = useRef({});
   const editorRef = useRef(null);
+  const leftPaneScrollRef = useRef(null);
+  const rightPaneScrollRef = useRef(null);
   stateRef.current = {
     activeFile,
     openTabs,
@@ -831,6 +964,26 @@ export default function Workspace({ initialPath = "" }) {
 
   const handleTabClick = (path) => {
     setActiveFile(path);
+    
+    // If split view is active, update the right pane to show the next tab
+    if (useSplitView) {
+      const currentIndex = openTabs.findIndex(t => t.path === path);
+      const nextTab = openTabs[currentIndex + 1] || openTabs[0];
+      if (nextTab && nextTab.path !== path) {
+        setRightPaneFile(nextTab.path);
+        setRightPaneTitle(nextTab.name);
+        if (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt')) {
+          invoke("read_file_content", { path: nextTab.path })
+            .then(content => {
+              setRightPaneContent(content || '');
+            })
+            .catch(err => {
+              console.error('Failed to load right pane content:', err);
+              setRightPaneContent('');
+            });
+        }
+      }
+    }
   };
 
   // Ref to track last close timestamp for debouncing (global for any tab)
@@ -1183,8 +1336,136 @@ export default function Workspace({ initialPath = "" }) {
     };
   }, []);
 
+  // Split editor handlers
+  const handleSplitDragStart = useCallback((tab) => {
+    setDraggedTabForSplit(tab);
+  }, []);
+
+  const handleSplitDragEnd = useCallback((tab) => {
+    setDraggedTabForSplit(null);
+  }, []);
+
+  const handleToggleSplitView = useCallback(async () => {
+    setUseSplitView(prev => {
+      const newSplitView = !prev;
+      if (newSplitView) {
+        // When enabling split view, load the next tab in right pane
+        const currentIndex = openTabs.findIndex(t => t.path === activeFile);
+        const nextTab = openTabs[currentIndex + 1] || openTabs[0];
+        if (nextTab && nextTab.path !== activeFile) {
+          setRightPaneFile(nextTab.path);
+          setRightPaneTitle(nextTab.name);
+          
+          // Load the content for the right pane asynchronously
+          setTimeout(async () => {
+            const isSpecialView = nextTab.path === '__kanban__' || 
+                                nextTab.path.startsWith('__graph__') || 
+                                nextTab.path.startsWith('__plugin_') || 
+                                nextTab.path.endsWith('.canvas');
+            
+            if (!isSpecialView && (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt'))) {
+              try {
+                const content = await invoke("read_file_content", { path: nextTab.path });
+                setRightPaneContent(content || '');
+              } catch (err) {
+                console.error('Failed to load right pane content:', err);
+                setRightPaneContent('');
+              }
+            } else {
+              // For special views, just clear content
+              setRightPaneContent('');
+            }
+          }, 0);
+        }
+      } else {
+        // Clear right pane when disabling split view
+        setRightPaneFile(null);
+        setRightPaneContent('');
+        setRightPaneTitle('');
+      }
+      return newSplitView;
+    });
+  }, [openTabs, activeFile]);
+
+  // Pane resize handlers
+  const handlePaneResize = useCallback((e) => {
+    if (!useSplitView) return;
+    
+    const container = e.currentTarget.parentElement;
+    const rect = container.getBoundingClientRect();
+    
+    let newSize;
+    if (splitDirection === 'vertical') {
+      const mouseX = e.clientX - rect.left;
+      newSize = (mouseX / rect.width) * 100;
+    } else {
+      const mouseY = e.clientY - rect.top;
+      newSize = (mouseY / rect.height) * 100;
+    }
+    
+    // Clamp between 20% and 80%
+    newSize = Math.max(20, Math.min(80, newSize));
+    setLeftPaneSize(newSize);
+  }, [useSplitView, splitDirection]);
+
+  const handleMouseDown = useCallback((e) => {
+    e.preventDefault();
+    const handleMouseMove = (e) => handlePaneResize(e);
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [handlePaneResize]);
+
+  const resetPaneSize = useCallback(() => {
+    setLeftPaneSize(50);
+  }, []);
+
+  const toggleSplitDirection = useCallback(() => {
+    setSplitDirection(prev => prev === 'vertical' ? 'horizontal' : 'vertical');
+  }, []);
+
+  // Synchronized scrolling handlers
+  const handleLeftPaneScroll = useCallback((e) => {
+    if (!syncScrolling || !rightPaneScrollRef.current) return;
+    
+    const scrollTop = e.target.scrollTop;
+    const scrollHeight = e.target.scrollHeight;
+    const clientHeight = e.target.clientHeight;
+    const scrollPercent = scrollTop / (scrollHeight - clientHeight);
+    
+    const rightPane = rightPaneScrollRef.current;
+    const rightScrollTop = scrollPercent * (rightPane.scrollHeight - rightPane.clientHeight);
+    rightPane.scrollTop = rightScrollTop;
+  }, [syncScrolling]);
+
+  const handleRightPaneScroll = useCallback((e) => {
+    if (!syncScrolling || !leftPaneScrollRef.current) return;
+    
+    const scrollTop = e.target.scrollTop;
+    const scrollHeight = e.target.scrollHeight;
+    const clientHeight = e.target.clientHeight;
+    const scrollPercent = scrollTop / (scrollHeight - clientHeight);
+    
+    const leftPane = leftPaneScrollRef.current;
+    const leftScrollTop = scrollPercent * (leftPane.scrollHeight - leftPane.clientHeight);
+    leftPane.scrollTop = leftScrollTop;
+  }, [syncScrolling]);
+
   const handleTabDragEnd = (event) => {
     const { active, over } = event;
+    
+    // Handle split creation if dragged to editor area
+    if (over && over.id === 'editor-drop-zone') {
+      console.log('Tab dragged to editor area, enabling simple split view');
+      setUseSplitView(true);
+      return;
+    }
+    
+    // Handle tab reordering
     if (over && active.id !== over.id) {
       setOpenTabs((tabs) => {
         const oldIndex = tabs.findIndex((t) => t.path === active.id);
@@ -1222,6 +1503,12 @@ export default function Workspace({ initialPath = "" }) {
     const unlistenOpenKanban = isTauri ? listen("lokus:open-kanban", handleOpenFullKanban) : Promise.resolve(addDom('lokus:open-kanban', handleOpenFullKanban));
     const unlistenReopenClosedTab = isTauri ? listen("lokus:reopen-closed-tab", handleReopenClosedTab) : Promise.resolve(addDom('lokus:reopen-closed-tab', handleReopenClosedTab));
     
+    // Split editor shortcuts
+    const unlistenToggleSplitView = isTauri ? listen("lokus:toggle-split-view", handleToggleSplitView) : Promise.resolve(addDom('lokus:toggle-split-view', handleToggleSplitView));
+    const unlistenToggleSplitDirection = isTauri ? listen("lokus:toggle-split-direction", toggleSplitDirection) : Promise.resolve(addDom('lokus:toggle-split-direction', toggleSplitDirection));
+    const unlistenResetPaneSize = isTauri ? listen("lokus:reset-pane-size", resetPaneSize) : Promise.resolve(addDom('lokus:reset-pane-size', resetPaneSize));
+    const unlistenToggleSyncScrolling = isTauri ? listen("lokus:toggle-sync-scrolling", () => setSyncScrolling(prev => !prev)) : Promise.resolve(addDom('lokus:toggle-sync-scrolling', () => setSyncScrolling(prev => !prev)));
+    
     // Template picker event listener
     const handleTemplatePicker = (event) => {
       setTemplatePickerData(event.detail);
@@ -1244,9 +1531,13 @@ export default function Workspace({ initialPath = "" }) {
       unlistenNewCanvas.then(f => { if (typeof f === 'function') f(); });
       unlistenOpenKanban.then(f => { if (typeof f === 'function') f(); });
       unlistenReopenClosedTab.then(f => { if (typeof f === 'function') f(); });
+      unlistenToggleSplitView.then(f => { if (typeof f === 'function') f(); });
+      unlistenToggleSplitDirection.then(f => { if (typeof f === 'function') f(); });
+      unlistenResetPaneSize.then(f => { if (typeof f === 'function') f(); });
+      unlistenToggleSyncScrolling.then(f => { if (typeof f === 'function') f(); });
       unlistenTemplatePicker.then(f => { if (typeof f === 'function') f(); });
     };
-  }, [handleSave, handleTabClose, handleReopenClosedTab]);
+  }, [handleSave, handleTabClose, handleReopenClosedTab, handleToggleSplitView, toggleSplitDirection, resetPaneSize]);
 
   const cols = (() => {
     const mainContent = `minmax(0,1fr)`;
@@ -1485,15 +1776,239 @@ export default function Workspace({ initialPath = "" }) {
         <main className="min-w-0 min-h-0 flex flex-col bg-app-bg">
           {/* Main content area */}
           <>
-              <TabBar 
-                tabs={openTabs}
-                activeTab={activeFile}
-                onTabClick={handleTabClick}
-                onTabClose={handleTabClose}
-                unsavedChanges={unsavedChanges}
-                onDragEnd={handleTabDragEnd}
-                onNewTab={handleCreateFile}
-              />
+            {useSplitView ? (
+              /* Split View - Two Complete Panes */
+              <div className={`h-full overflow-hidden ${splitDirection === 'vertical' ? 'flex' : 'flex flex-col'}`}>
+                {/* Left/Top Pane */}
+                <div 
+                  className={`flex flex-col overflow-hidden ${
+                    splitDirection === 'vertical' 
+                      ? 'border-r border-app-border' 
+                      : 'border-b border-app-border'
+                  }`}
+                  style={{
+                    [splitDirection === 'vertical' ? 'width' : 'height']: `${leftPaneSize}%`
+                  }}
+                >
+                  <TabBar 
+                    tabs={openTabs}
+                    activeTab={activeFile}
+                    onTabClick={(path) => {
+                      // In split view, only change the left pane, don't auto-update right pane
+                      setActiveFile(path);
+                    }}
+                    onTabClose={handleTabClose}
+                    unsavedChanges={unsavedChanges}
+                    onDragEnd={handleTabDragEnd}
+                    onNewTab={handleCreateFile}
+                    onSplitDragStart={handleSplitDragStart}
+                    onSplitDragEnd={handleSplitDragEnd}
+                    useSplitView={useSplitView}
+                    onToggleSplitView={handleToggleSplitView}
+                    splitDirection={splitDirection}
+                    onToggleSplitDirection={toggleSplitDirection}
+                    syncScrolling={syncScrolling}
+                    onToggleSyncScrolling={() => setSyncScrolling(prev => !prev)}
+                    onResetPaneSize={resetPaneSize}
+                    isLeftPane={true}
+                  />
+                  {/* Left/Top Pane Content */}
+                  {activeFile ? (
+                    <div 
+                      ref={leftPaneScrollRef}
+                      className="flex-1 p-4 overflow-y-auto"
+                      onScroll={handleLeftPaneScroll}
+                    >
+                      <input
+                        type="text"
+                        value={editorTitle}
+                        onChange={(e) => setEditorTitle(e.target.value)}
+                        className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
+                      />
+                      <Editor
+                        key={`left-pane-${activeFile}`}
+                        ref={editorRef}
+                        content={editorContent}
+                        onContentChange={handleEditorChange}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center text-app-muted">
+                      No file selected
+                    </div>
+                  )}
+                </div>
+                
+                {/* Resizer */}
+                <div 
+                  className={`${
+                    splitDirection === 'vertical' 
+                      ? 'w-1 cursor-col-resize hover:bg-app-accent' 
+                      : 'h-1 cursor-row-resize hover:bg-app-accent'
+                  } bg-app-border transition-colors duration-200 flex-shrink-0`}
+                  onMouseDown={handleMouseDown}
+                  onDoubleClick={resetPaneSize}
+                />
+                
+                {/* Right/Bottom Pane */}
+                <div 
+                  className="flex flex-col overflow-hidden"
+                  style={{
+                    [splitDirection === 'vertical' ? 'width' : 'height']: `${100 - leftPaneSize}%`
+                  }}
+                >
+                  <TabBar 
+                    tabs={openTabs}
+                    activeTab={rightPaneFile}
+                    onTabClick={(path) => {
+                      // Prevent scroll jumping when switching tabs
+                      const currentScrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+                      
+                      setRightPaneFile(path);
+                      const tab = openTabs.find(t => t.path === path);
+                      setRightPaneTitle(tab?.name || '');
+                      
+                      // Only load file content for actual files, not special views
+                      const isSpecialView = path === '__kanban__' || path.startsWith('__graph__') || path.startsWith('__plugin_') || path.endsWith('.canvas');
+                      
+                      if (!isSpecialView && (path.endsWith('.md') || path.endsWith('.txt'))) {
+                        invoke("read_file_content", { path })
+                          .then(content => {
+                            setRightPaneContent(content || '');
+                            
+                            // Restore scroll position after state update
+                            requestAnimationFrame(() => {
+                              if (document.documentElement.scrollTop !== currentScrollTop) {
+                                document.documentElement.scrollTop = currentScrollTop;
+                                document.body.scrollTop = currentScrollTop;
+                              }
+                            });
+                          })
+                          .catch(err => {
+                            console.error('Failed to load content:', err);
+                            setRightPaneContent('');
+                          });
+                      } else {
+                        // For special views, clear content and restore scroll
+                        setRightPaneContent('');
+                        requestAnimationFrame(() => {
+                          if (document.documentElement.scrollTop !== currentScrollTop) {
+                            document.documentElement.scrollTop = currentScrollTop;
+                            document.body.scrollTop = currentScrollTop;
+                          }
+                        });
+                      }
+                    }}
+                    onTabClose={handleTabClose}
+                    unsavedChanges={unsavedChanges}
+                    onDragEnd={handleTabDragEnd}
+                    onNewTab={handleCreateFile}
+                    onSplitDragStart={handleSplitDragStart}
+                    onSplitDragEnd={handleSplitDragEnd}
+                    useSplitView={useSplitView}
+                    onToggleSplitView={handleToggleSplitView}
+                    splitDirection={splitDirection}
+                    onToggleSplitDirection={toggleSplitDirection}
+                    syncScrolling={syncScrolling}
+                    onToggleSyncScrolling={() => setSyncScrolling(prev => !prev)}
+                    onResetPaneSize={resetPaneSize}
+                    isLeftPane={false}
+                  />
+                  {/* Right/Bottom Pane Content */}
+                  {rightPaneFile ? (
+                    rightPaneFile === '__kanban__' ? (
+                      <div className="flex-1 bg-app-panel overflow-hidden">
+                        <FullKanban 
+                          workspacePath={path}
+                          onFileOpen={handleFileOpen}
+                        />
+                      </div>
+                    ) : rightPaneFile && rightPaneFile.endsWith('.canvas') ? (
+                      <div className="flex-1 overflow-hidden">
+                        <Canvas
+                          canvasPath={rightPaneFile}
+                          canvasName={openTabs.find(tab => tab.path === rightPaneFile)?.name}
+                          onSave={async (canvasData) => {
+                            try {
+                              await canvasManager.saveCanvas(rightPaneFile, canvasData);
+                              setUnsavedChanges(prev => {
+                                const newSet = new Set(prev);
+                                newSet.delete(rightPaneFile);
+                                return newSet;
+                              });
+                            } catch (error) {
+                              console.error('Failed to save canvas:', error);
+                            }
+                          }}
+                          onChange={() => {
+                            setUnsavedChanges(prev => new Set(prev).add(rightPaneFile));
+                          }}
+                        />
+                      </div>
+                    ) : rightPaneFile.startsWith('__graph__') ? (
+                      <div className="h-full">
+                        <ProfessionalGraphView 
+                          fileTree={fileTree}
+                          activeFile={rightPaneFile}
+                          onFileOpen={handleFileOpen}
+                          workspacePath={path}
+                        />
+                      </div>
+                    ) : rightPaneFile.startsWith('__plugin_') ? (
+                      <div className="flex-1 overflow-hidden">
+                        {(() => {
+                          const activeTab = openTabs.find(tab => tab.path === rightPaneFile);
+                          return activeTab?.plugin ? <PluginDetail plugin={activeTab.plugin} /> : <div>Plugin not found</div>;
+                        })()}
+                      </div>
+                    ) : (
+                      <div 
+                        ref={rightPaneScrollRef}
+                        className="flex-1 p-4 overflow-y-auto"
+                        onScroll={handleRightPaneScroll}
+                      >
+                        <input
+                          type="text"
+                          value={rightPaneTitle}
+                          onChange={(e) => setRightPaneTitle(e.target.value)}
+                          className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
+                        />
+                        <Editor
+                          key={`right-pane-${rightPaneFile}`}
+                          content={rightPaneContent}
+                          onContentChange={(content) => setRightPaneContent(content)}
+                        />
+                      </div>
+                    )
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center text-app-muted">
+                      Click a tab to open file in this pane
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* Single View */
+              <>
+                <TabBar 
+                  tabs={openTabs}
+                  activeTab={activeFile}
+                  onTabClick={handleTabClick}
+                  onTabClose={handleTabClose}
+                  unsavedChanges={unsavedChanges}
+                  onDragEnd={handleTabDragEnd}
+                  onNewTab={handleCreateFile}
+                  onSplitDragStart={handleSplitDragStart}
+                  onSplitDragEnd={handleSplitDragEnd}
+                  useSplitView={useSplitView}
+                  onToggleSplitView={handleToggleSplitView}
+                  splitDirection={splitDirection}
+                  onToggleSplitDirection={toggleSplitDirection}
+                  syncScrolling={syncScrolling}
+                  onToggleSyncScrolling={() => setSyncScrolling(prev => !prev)}
+                  onResetPaneSize={resetPaneSize}
+                  isLeftPane={true}
+                />
               {activeFile === '__kanban__' ? (
             <div className="flex-1 bg-app-panel overflow-hidden">
               <FullKanban 
@@ -1585,36 +2100,38 @@ export default function Workspace({ initialPath = "" }) {
                     })()}
                   </div>
                 ) : activeFile ? (
-                <ContextMenu>
-                  <ContextMenuTrigger asChild>
-                    <div>
-                      <input
-                        type="text"
-                        value={editorTitle}
-                        onChange={(e) => setEditorTitle(e.target.value)}
-                        className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
-                      />
-                      <Editor
-                        ref={editorRef}
-                        content={editorContent}
-                        onContentChange={handleEditorChange}
-                      />
-                    </div>
-                  </ContextMenuTrigger>
-                  <ContextMenuContent>
-                    <ContextMenuItem onClick={handleSave}>
-                      Save
-                      <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['save-file'])}</span>
-                    </ContextMenuItem>
-                    <ContextMenuItem onClick={() => stateRef.current.activeFile && handleTabClose(stateRef.current.activeFile)}>
-                      Close Tab
-                      <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['close-tab'])}</span>
-                    </ContextMenuItem>
-                    <ContextMenuSeparator />
-                    <ContextMenuItem onClick={() => document.execCommand && document.execCommand('selectAll')}>Select All</ContextMenuItem>
-                  </ContextMenuContent>
-                </ContextMenu>
-              ) : (
+                  <EditorDropZone>
+                    <ContextMenu>
+                      <ContextMenuTrigger asChild>
+                        <div>
+                          <input
+                            type="text"
+                            value={editorTitle}
+                            onChange={(e) => setEditorTitle(e.target.value)}
+                            className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
+                          />
+                          <Editor
+                            ref={editorRef}
+                            content={editorContent}
+                            onContentChange={handleEditorChange}
+                          />
+                        </div>
+                      </ContextMenuTrigger>
+                    <ContextMenuContent>
+                      <ContextMenuItem onClick={handleSave}>
+                        Save
+                        <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['save-file'])}</span>
+                      </ContextMenuItem>
+                      <ContextMenuItem onClick={() => stateRef.current.activeFile && handleTabClose(stateRef.current.activeFile)}>
+                        Close Tab
+                        <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['close-tab'])}</span>
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem onClick={() => document.execCommand && document.execCommand('selectAll')}>Select All</ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                  </EditorDropZone>
+                ) : (
                 <>
                   {/* Modern Welcome Screen - VS Code Inspired */}
                   <div className="h-full flex flex-col">
@@ -1727,6 +2244,8 @@ export default function Workspace({ initialPath = "" }) {
               </div>
             </div>
           )}
+              </>
+            )}
           </>
         </main>
         {showRight && <div onMouseDown={startRightDrag} className="cursor-col-resize bg-app-border hover:bg-app-accent transition-colors duration-300 w-1 min-h-full" />}
