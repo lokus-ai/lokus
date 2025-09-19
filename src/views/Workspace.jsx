@@ -6,7 +6,6 @@ import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerS
 import { DraggableTab } from "./DraggableTab";
 import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network } from "lucide-react";
 import LokusLogo from "../components/LokusLogo.jsx";
-import GraphView from "./GraphView.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
 import Editor from "../editor";
 import StatusBar from "../components/StatusBar.jsx";
@@ -25,6 +24,8 @@ import { getActiveShortcuts, formatAccelerator } from "../core/shortcuts/registr
 import CommandPalette from "../components/CommandPalette.jsx";
 import InFileSearch from "../components/InFileSearch.jsx";
 import SearchPanel from "../components/SearchPanel.jsx";
+import ShortcutHelpModal from "../components/ShortcutHelpModal.jsx";
+import GlobalContextMenu from "../components/GlobalContextMenu.jsx";
 import MiniKanban from "../components/MiniKanban.jsx";
 import FullKanban from "../components/FullKanban.jsx";
 import PluginSettings from "./PluginSettings.jsx";
@@ -403,12 +404,15 @@ export default function Workspace({ initialPath = "" }) {
   const [openTabs, setOpenTabs] = useState([]);
   const [activeFile, setActiveFile] = useState(null);
   const [unsavedChanges, setUnsavedChanges] = useState(new Set());
+  const [recentlyClosedTabs, setRecentlyClosedTabs] = useState([]);
   
   const [editorContent, setEditorContent] = useState("");
   const [editorTitle, setEditorTitle] = useState("");
   const [savedContent, setSavedContent] = useState("");
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showInFileSearch, setShowInFileSearch] = useState(false);
+  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
+  const [contextMenu, setContextMenu] = useState({ isOpen: false, position: { x: 0, y: 0 }, targetElement: null, contextType: "default" });
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [templatePickerData, setTemplatePickerData] = useState(null);
   const [showCreateTemplate, setShowCreateTemplate] = useState(false);
@@ -627,21 +631,37 @@ export default function Workspace({ initialPath = "" }) {
     };
   }, [activeFile]);
 
-  // Tab navigation shortcuts (Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W)
+  // Tab navigation shortcuts with throttling
   useEffect(() => {
-    const handleNextTab = () => {
+    // Throttle utility function - executes immediately but prevents rapid successive calls
+    const throttle = (func, wait) => {
+      let lastTime = 0;
+      return function executedFunction(...args) {
+        const now = Date.now();
+        if (now - lastTime >= wait) {
+          lastTime = now;
+          func(...args);
+        }
+      };
+    };
+
+    const handleNextTabImmediate = () => {
       if (openTabs.length <= 1) return;
       const currentIndex = openTabs.findIndex(tab => tab.path === activeFile);
       const nextIndex = (currentIndex + 1) % openTabs.length;
       setActiveFile(openTabs[nextIndex].path);
     };
 
-    const handlePrevTab = () => {
+    const handlePrevTabImmediate = () => {
       if (openTabs.length <= 1) return;
       const currentIndex = openTabs.findIndex(tab => tab.path === activeFile);
       const prevIndex = currentIndex === 0 ? openTabs.length - 1 : currentIndex - 1;
       setActiveFile(openTabs[prevIndex].path);
     };
+
+    // Throttled versions with 200ms cooldown
+    const handleNextTab = throttle(handleNextTabImmediate, 200);
+    const handlePrevTab = throttle(handlePrevTabImmediate, 200);
 
 
     let isTauri = false; 
@@ -667,6 +687,41 @@ export default function Workspace({ initialPath = "" }) {
       };
     }
   }, [openTabs, activeFile]);
+
+  // Global right-click context menu
+  useEffect(() => {
+    const handleContextMenu = (e) => {
+      // Allow default context menu in development mode (when holding Shift)
+      if (e.shiftKey) {
+        return; // Let browser's default context menu show
+      }
+      
+      e.preventDefault();
+      
+      // Determine context type based on the target element
+      let contextType = "default";
+      const target = e.target.closest('[data-context]');
+      if (target) {
+        contextType = target.getAttribute('data-context');
+      } else if (e.target.closest('.editor-content, .ProseMirror')) {
+        contextType = "editor";
+      } else if (e.target.closest('.file-tree, .folder-item, .file-item')) {
+        contextType = "file";
+      } else if (e.target.closest('.sidebar')) {
+        contextType = "sidebar";
+      }
+
+      setContextMenu({
+        isOpen: true,
+        position: { x: e.clientX, y: e.clientY },
+        targetElement: e.target,
+        contextType
+      });
+    };
+
+    document.addEventListener('contextmenu', handleContextMenu);
+    return () => document.removeEventListener('contextmenu', handleContextMenu);
+  }, []);
 
   const handleRefreshFiles = () => setRefreshId(id => id + 1);
 
@@ -746,6 +801,18 @@ export default function Workspace({ initialPath = "" }) {
     setActiveFile(file.path);
   };
 
+  const handleReopenClosedTab = useCallback(() => {
+    if (recentlyClosedTabs.length === 0) return;
+    
+    const [mostRecentTab, ...remaining] = recentlyClosedTabs;
+    
+    // Remove from recently closed list
+    setRecentlyClosedTabs(remaining);
+    
+    // Reopen the tab
+    handleFileOpen(mostRecentTab);
+  }, [recentlyClosedTabs]);
+
   const handleOpenFullKanban = () => {
     const kanbanPath = '__kanban__';
     const kanbanName = 'Task Board';
@@ -780,7 +847,16 @@ export default function Workspace({ initialPath = "" }) {
     const closeTab = () => {
       setOpenTabs(prevTabs => {
         const tabIndex = prevTabs.findIndex(t => t.path === path);
+        const closedTab = prevTabs.find(t => t.path === path);
         const newTabs = prevTabs.filter(t => t.path !== path);
+        
+        // Save the closed tab to recently closed list (max 10 items)
+        if (closedTab && !closedTab.path.startsWith('__')) { // Don't track special tabs like graph, kanban
+          setRecentlyClosedTabs(prev => {
+            const newClosed = [{ ...closedTab, closedAt: Date.now() }, ...prev.slice(0, 9)];
+            return newClosed;
+          });
+        }
         
         if (stateRef.current.activeFile === path) {
           if (newTabs.length === 0) {
@@ -1140,6 +1216,11 @@ export default function Workspace({ initialPath = "" }) {
     const unlistenInFileSearch = isTauri ? listen("lokus:in-file-search", () => setShowInFileSearch(true)) : Promise.resolve(addDom('lokus:in-file-search', () => setShowInFileSearch(true)));
     const unlistenGlobalSearch = isTauri ? listen("lokus:global-search", () => setShowGlobalSearch(true)) : Promise.resolve(addDom('lokus:global-search', () => setShowGlobalSearch(true)));
     const unlistenGraphView = isTauri ? listen("lokus:graph-view", handleOpenGraphView) : Promise.resolve(addDom('lokus:graph-view', handleOpenGraphView));
+    const unlistenShortcutHelp = isTauri ? listen("lokus:shortcut-help", () => setShowShortcutHelp(true)) : Promise.resolve(addDom('lokus:shortcut-help', () => setShowShortcutHelp(true)));
+    const unlistenRefreshFiles = isTauri ? listen("lokus:refresh-files", handleRefreshFiles) : Promise.resolve(addDom('lokus:refresh-files', handleRefreshFiles));
+    const unlistenNewCanvas = isTauri ? listen("lokus:new-canvas", handleCreateCanvas) : Promise.resolve(addDom('lokus:new-canvas', handleCreateCanvas));
+    const unlistenOpenKanban = isTauri ? listen("lokus:open-kanban", handleOpenFullKanban) : Promise.resolve(addDom('lokus:open-kanban', handleOpenFullKanban));
+    const unlistenReopenClosedTab = isTauri ? listen("lokus:reopen-closed-tab", handleReopenClosedTab) : Promise.resolve(addDom('lokus:reopen-closed-tab', handleReopenClosedTab));
     
     // Template picker event listener
     const handleTemplatePicker = (event) => {
@@ -1158,9 +1239,14 @@ export default function Workspace({ initialPath = "" }) {
       unlistenInFileSearch.then(f => { if (typeof f === 'function') f(); });
       unlistenGlobalSearch.then(f => { if (typeof f === 'function') f(); });
       unlistenGraphView.then(f => { if (typeof f === 'function') f(); });
+      unlistenShortcutHelp.then(f => { if (typeof f === 'function') f(); });
+      unlistenRefreshFiles.then(f => { if (typeof f === 'function') f(); });
+      unlistenNewCanvas.then(f => { if (typeof f === 'function') f(); });
+      unlistenOpenKanban.then(f => { if (typeof f === 'function') f(); });
+      unlistenReopenClosedTab.then(f => { if (typeof f === 'function') f(); });
       unlistenTemplatePicker.then(f => { if (typeof f === 'function') f(); });
     };
-  }, [handleSave, handleTabClose]);
+  }, [handleSave, handleTabClose, handleReopenClosedTab]);
 
   const cols = (() => {
     const mainContent = `minmax(0,1fr)`;
@@ -1184,9 +1270,17 @@ export default function Workspace({ initialPath = "" }) {
           <button
             onClick={() => setShowLeft(v => !v)}
             title={showLeft ? "Hide sidebar" : "Show sidebar"}
-            className={`obsidian-button icon-only mb-2 ${showLeft ? 'primary' : ''}`}
+            className="obsidian-button icon-only mb-2"
+            onMouseEnter={(e) => {
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) icon.style.color = 'rgb(var(--accent))';
+            }}
+            onMouseLeave={(e) => {
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) icon.style.color = showLeft ? 'white' : 'black';
+            }}
           >
-            <LokusLogo className="w-6 h-6" />
+            <LokusLogo className="w-6 h-6" style={{ color: showLeft ? 'white' : 'black' }} />
           </button>
           
           {/* Activity Bar - VS Code Style */}
@@ -1199,9 +1293,17 @@ export default function Workspace({ initialPath = "" }) {
                 setShowLeft(true);
               }}
               title="Explorer"
-              className={`obsidian-button icon-only w-full mb-1 ${!showKanban && !showPlugins && !showGraphView && showLeft ? 'primary' : ''}`}
+              className="obsidian-button icon-only w-full mb-1"
+              onMouseEnter={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = 'rgb(var(--accent))';
+              }}
+              onMouseLeave={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = (!showKanban && !showPlugins && !showGraphView && showLeft) ? 'rgb(var(--accent))' : '';
+              }}
             >
-              <FolderOpen className="w-5 h-5" />
+              <FolderOpen className="w-5 h-5" style={!showKanban && !showPlugins && !showGraphView && showLeft ? { color: 'rgb(var(--accent))' } : {}} />
             </button>
             
             <button
@@ -1212,9 +1314,17 @@ export default function Workspace({ initialPath = "" }) {
                 setShowLeft(true);
               }}
               title="Task Board"
-              className={`obsidian-button icon-only w-full mb-1 ${showKanban && !showPlugins && !showGraphView ? 'primary' : ''}`}
+              className="obsidian-button icon-only w-full mb-1"
+              onMouseEnter={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = 'rgb(var(--accent))';
+              }}
+              onMouseLeave={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = (showKanban && !showPlugins && !showGraphView) ? 'rgb(var(--accent))' : '';
+              }}
             >
-              <LayoutGrid className="w-5 h-5" />
+              <LayoutGrid className="w-5 h-5" style={showKanban && !showPlugins && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
             </button>
             
             <button
@@ -1225,9 +1335,17 @@ export default function Workspace({ initialPath = "" }) {
                 setShowLeft(true);
               }}
               title="Extensions"
-              className={`obsidian-button icon-only w-full mb-1 ${showPlugins && !showKanban && !showGraphView ? 'primary' : ''}`}
+              className="obsidian-button icon-only w-full mb-1"
+              onMouseEnter={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = 'rgb(var(--accent))';
+              }}
+              onMouseLeave={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = (showPlugins && !showKanban && !showGraphView) ? 'rgb(var(--accent))' : '';
+              }}
             >
-              <Puzzle className="w-5 h-5" />
+              <Puzzle className="w-5 h-5" style={showPlugins && !showKanban && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
             </button>
             
             <button
@@ -1238,26 +1356,31 @@ export default function Workspace({ initialPath = "" }) {
                 setShowLeft(true);
               }}
               title="Plugin Marketplace"
-              className={`obsidian-button icon-only w-full mb-1 ${showMarketplace ? 'primary' : ''}`}
+              className="obsidian-button icon-only w-full mb-1"
+              onMouseEnter={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = 'rgb(var(--accent))';
+              }}
+              onMouseLeave={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = showMarketplace ? 'rgb(var(--accent))' : '';
+              }}
             >
-              <Package className="w-5 h-5" />
+              <Package className="w-5 h-5" style={showMarketplace ? { color: 'rgb(var(--accent))' } : {}} />
             </button>
             
             <button
-              onClick={() => {
-                const graphPath = '__professional_graph__';
-                const graphName = 'Professional Graph';
-                
-                setOpenTabs(prevTabs => {
-                  const newTabs = prevTabs.filter(t => t.path !== graphPath);
-                  newTabs.unshift({ path: graphPath, name: graphName });
-                  if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
-                  return newTabs;
-                });
-                setActiveFile(graphPath);
+              onClick={handleOpenGraphView}
+              title="Graph View"
+              className="obsidian-button icon-only w-full"
+              onMouseEnter={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = 'rgb(var(--accent))';
               }}
-              title="Professional Graph View"
-              className={`obsidian-button icon-only w-full`}
+              onMouseLeave={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = '';
+              }}
             >
               <Network className="w-5 h-5" />
             </button>
@@ -1318,7 +1441,7 @@ export default function Workspace({ initialPath = "" }) {
                 </div>
                 <div className="text-sm text-app-muted">
                   <p className="mb-2">The graph view shows the connections between your notes.</p>
-                  <p>Use Cmd+Shift+G to quickly open the graph view.</p>
+                  <p>Use <kbd className="px-1 py-0.5 text-xs bg-app-panel rounded">Cmd+Shift+G</kbd> to quickly open the graph view.</p>
                 </div>
               </div>
             ) : (
@@ -1378,14 +1501,6 @@ export default function Workspace({ initialPath = "" }) {
                 onFileOpen={handleFileOpen}
               />
             </div>
-          ) : activeFile === '__professional_graph__' ? (
-            <div className="flex-1 h-full overflow-hidden">
-              <ProfessionalGraphView 
-                isVisible={true}
-                workspacePath={path}
-                onOpenFile={handleFileOpen}
-              />
-            </div>
           ) : activeFile && activeFile.endsWith('.canvas') ? (
             <div className="flex-1 overflow-hidden">
               <Canvas
@@ -1412,10 +1527,22 @@ export default function Workspace({ initialPath = "" }) {
                 initialData={null} // Will be loaded by Canvas component
               />
             </div>
+          ) : activeFile === '__graph__' ? (
+            <div className="flex-1 h-full overflow-hidden">
+              <ProfessionalGraphView 
+                isVisible={true}
+                workspacePath={path}
+                onOpenFile={handleFileOpen}
+              />
+            </div>
           ) : (
             <div className="flex-1 p-8 md:p-12 overflow-y-auto">
               <div className="max-w-full mx-auto h-full">
-                {activeFile === '__graph__' ? (
+                {false ? (
+                  <div className="h-full flex flex-col">
+                    {/* Graph view moved above */}
+                  </div>
+                ) : activeFile === '__old_graph__' ? (
                   <div className="h-full flex flex-col">
                     {isLoadingGraph ? (
                       <div className="flex-1 flex items-center justify-center">
@@ -1427,18 +1554,7 @@ export default function Workspace({ initialPath = "" }) {
                       </div>
                     ) : graphData ? (
                       <div className="flex-1 h-full">
-                        <GraphView 
-                          data={graphData}
-                          onNodeClick={handleGraphNodeClick}
-                          onEdgeClick={(event) => {}}
-                          options={{
-                            enableWorkerLayout: true,
-                            autoStart: true
-                          }}
-                          className="h-full"
-                          graphEngine={persistentGraphEngineRef.current}
-                          isVisible={activeFile === '__graph__'}
-                        />
+                        <div>Old Graph View - REMOVED</div>
                       </div>
                     ) : (
                       <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
@@ -1837,6 +1953,11 @@ export default function Workspace({ initialPath = "" }) {
         onFileOpen={handleFileOpen}
         workspacePath={path}
       />
+
+      <ShortcutHelpModal
+        isOpen={showShortcutHelp}
+        onClose={() => setShowShortcutHelp(false)}
+      />
       
       <CreateTemplate
         open={showCreateTemplate}
@@ -1850,6 +1971,15 @@ export default function Workspace({ initialPath = "" }) {
         activeFile={activeFile} 
         unsavedChanges={unsavedChanges} 
         openTabs={openTabs}
+      />
+      
+      {/* Global Context Menu */}
+      <GlobalContextMenu
+        isOpen={contextMenu.isOpen}
+        position={contextMenu.position}
+        targetElement={contextMenu.targetElement}
+        contextType={contextMenu.contextType}
+        onClose={() => setContextMenu(prev => ({ ...prev, isOpen: false }))}
       />
     </div>
     </PanelManager>

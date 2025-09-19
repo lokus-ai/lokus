@@ -3,7 +3,6 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { homeDir } from "@tauri-apps/api/path";
 import { invoke } from "@tauri-apps/api/core";
 import { readRecents, addRecent, removeRecent, shortenPath } from "../lib/recents.js";
-import { testWorkspaceManager } from "../utils/test-workspace.js";
 import { WorkspaceManager } from "../core/workspace/manager.js";
 import LokusLogo from "../components/LokusLogo.jsx";
 
@@ -49,31 +48,7 @@ export default function Launcher() {
     // The ThemeProvider now handles initial theme loading.
     setRecents(readRecents());
     
-    // Check for test mode and auto-create workspace
-    const initializeTestMode = async () => {
-      if (testWorkspaceManager.detectTestMode()) {
-        setIsTestMode(true);
-        
-        try {
-          // Create test workspace with files
-          const testWorkspacePath = await testWorkspaceManager.createTestWorkspace();
-          
-          if (testWorkspacePath) {
-            
-            // Add to recents for consistency
-            addRecent(testWorkspacePath);
-            setRecents(readRecents());
-            
-            // Open the test workspace
-            await openWorkspace(testWorkspacePath);
-          }
-        } catch (error) {
-        }
-      }
-    };
-    
-    // Small delay to ensure app is ready
-    setTimeout(initializeTestMode, 500);
+    // Test mode functionality removed - no initialization needed
   }, []);
 
   const handleSelectWorkspace = async () => {

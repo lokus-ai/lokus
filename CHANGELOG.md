@@ -5,6 +5,87 @@ All notable changes to Lokus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2025-09-18
+
+### ⌨️ New Keyboard Shortcuts
+
+All shortcuts work on both Mac and Windows (Cmd on Mac = Ctrl on Windows):
+
+#### Tab Management
+- **`Cmd+Alt+Right`** - Next Tab (changed from Cmd+Tab for Mac compatibility)
+- **`Cmd+Alt+Left`** - Previous Tab  
+- **`Cmd+Shift+T`** - Reopen Recently Closed Tab (Chrome-style)
+- **`Cmd+W`** - Close Current Tab
+- **`Cmd+Shift+W`** - Close All Tabs
+
+#### File Operations  
+- **`Cmd+S`** - Save File
+- **`Cmd+N`** - New File
+- **`Cmd+Shift+N`** - New Folder
+- **`F5`** - Refresh File Tree
+
+#### Navigation
+- **`Cmd+K`** - Command Palette
+- **`Cmd+B`** - Toggle Sidebar
+- **`Cmd+F`** - Find in Note
+- **`Cmd+Shift+F`** - Global Search
+- **`Cmd+L`** - Insert WikiLink
+- **`Cmd+,`** - Open Preferences
+
+#### Views & Tools
+- **`Cmd+Shift+G`** - Open Graph View
+- **`Cmd+Shift+K`** - Open Kanban Board
+- **`Cmd+Shift+C`** - New Canvas
+- **`Cmd+/`** - Show Keyboard Shortcuts Help
+
+#### Graph View (when graph is active)
+- **`Cmd+K`** - Search Nodes
+- **`Cmd+R`** - Reset View
+- **`Cmd+1`** - 2D View Mode
+- **`Cmd+2`** - 3D View Mode  
+- **`Cmd+3`** - Force Layout Mode
+- **`Space`** - Toggle Layout
+- **`Escape`** - Close Graph
+
+#### Modal Controls
+- **`Escape`** - Close Modal/Dialog
+- **`Enter`** - Confirm Action
+
+### 🖱️ Context Menu System
+
+#### Right-click Menus
+- **Right-click anywhere** - Show context menu with:
+  - Inspect Element (for debugging)
+  - Copy Element Info
+  - Clear Console
+  - Reload Page
+  - Context-specific options
+
+#### Developer Tools
+- **Shift + Right-click** - Show browser's native context menu
+- **Right-click → Inspect Element** - Highlight element and log to console as `$0`
+
+### 🔄 Tab Management Features
+
+#### Reopen Closed Tabs
+- Remembers up to 10 recently closed tabs
+- Excludes special tabs (Graph, Kanban, Plugins)
+- Use `Cmd+Shift+T` to reopen most recent
+
+#### Smart Tab Navigation  
+- Throttled switching prevents UI issues
+- Cycles through all open tabs
+- Works with mouse and keyboard
+
+### ⚠️ Breaking Changes
+- **Tab Navigation**: `Cmd+Tab` changed to `Cmd+Alt+Right/Left` (Mac system conflict fix)
+- **Context Menu**: Right-click now shows custom menu (use `Shift+Right-click` for browser menu)
+
+### 🐛 Bug Fixes
+- Fixed `Cmd+Shift+G` to open correct Graph View
+- Resolved Mac keyboard shortcut conflicts  
+- Fixed shortcut help modal theming
+
 ## [1.0.3] - 2025-09-15
 
 ### 🎯 Major Features
