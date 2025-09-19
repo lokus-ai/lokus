@@ -1,27 +1,66 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, fireEvent } from '@testing-library/react'
+import React from 'react'
 import FileContextMenu from './FileContextMenu.jsx'
 
 // Mock context menu UI components
 vi.mock('./ui/context-menu', () => ({
-  ContextMenu: ({ children, ...props }) => <div data-testid="context-menu" {...props}>{children}</div>,
-  ContextMenuTrigger: ({ children, ...props }) => <div data-testid="context-menu-trigger" {...props}>{children}</div>,
-  ContextMenuContent: ({ children, ...props }) => <div data-testid="context-menu-content" {...props}>{children}</div>,
-  ContextMenuItem: ({ children, onClick, disabled, ...props }) => (
-    <div 
-      data-testid="context-menu-item" 
-      onClick={disabled ? undefined : onClick}
-      data-disabled={disabled || undefined}
-      {...props}
-    >
-      {children}
-    </div>
-  ),
-  ContextMenuSeparator: (props) => <div data-testid="context-menu-separator" {...props} />,
-  ContextMenuSub: ({ children, ...props }) => <div data-testid="context-menu-sub" {...props}>{children}</div>,
-  ContextMenuSubTrigger: ({ children, ...props }) => <div data-testid="context-menu-sub-trigger" {...props}>{children}</div>,
-  ContextMenuSubContent: ({ children, ...props }) => <div data-testid="context-menu-sub-content" {...props}>{children}</div>,
-  ContextMenuShortcut: ({ children, ...props }) => <span data-testid="context-menu-shortcut" {...props}>{children}</span>
+  ContextMenu: ({ children, ...props }) => {
+    const { asChild, ...safeProps } = props
+    return <div data-testid="context-menu" {...safeProps}>{children}</div>
+  },
+  ContextMenuTrigger: ({ children, asChild, ...props }) => {
+    // Handle asChild prop by rendering children directly if asChild is true
+    if (asChild) {
+      return React.cloneElement(children, { 
+        ...props,
+        'data-testid': 'context-menu-trigger',
+        onContextMenu: (e) => {
+          // Simulate context menu opening
+          e.preventDefault()
+          // Trigger the context menu content to show
+        }
+      })
+    }
+    return <div data-testid="context-menu-trigger" {...props}>{children}</div>
+  },
+  ContextMenuContent: ({ children, ...props }) => {
+    const { asChild, ...safeProps } = props
+    return <div data-testid="context-menu-content" {...safeProps}>{children}</div>
+  },
+  ContextMenuItem: ({ children, onClick, disabled, ...props }) => {
+    const { asChild, ...safeProps } = props
+    return (
+      <div 
+        data-testid="context-menu-item" 
+        onClick={disabled ? undefined : onClick}
+        data-disabled={disabled || undefined}
+        {...safeProps}
+      >
+        {children}
+      </div>
+    )
+  },
+  ContextMenuSeparator: (props) => {
+    const { asChild, ...safeProps } = props
+    return <div data-testid="context-menu-separator" {...safeProps} />
+  },
+  ContextMenuSub: ({ children, ...props }) => {
+    const { asChild, ...safeProps } = props
+    return <div data-testid="context-menu-sub" {...safeProps}>{children}</div>
+  },
+  ContextMenuSubTrigger: ({ children, ...props }) => {
+    const { asChild, ...safeProps } = props
+    return <div data-testid="context-menu-sub-trigger" {...safeProps}>{children}</div>
+  },
+  ContextMenuSubContent: ({ children, ...props }) => {
+    const { asChild, ...safeProps } = props
+    return <div data-testid="context-menu-sub-content" {...safeProps}>{children}</div>
+  },
+  ContextMenuShortcut: ({ children, ...props }) => {
+    const { asChild, ...safeProps } = props
+    return <span data-testid="context-menu-shortcut" {...safeProps}>{children}</span>
+  }
 }))
 
 // Mock Lucide React icons

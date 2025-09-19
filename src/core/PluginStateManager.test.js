@@ -3,6 +3,7 @@
  * Tests the critical enable/disable functionality and state consistency
  */
 
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { pluginStateManager, PluginState } from './PluginStateManager.js';
 
 // Mock Tauri functions
@@ -60,211 +61,136 @@ global.window = {
   }
 };
 
-/**
- * Test suite runner
- */
-class PluginStateManagerTests {
-  constructor() {
-    this.tests = [];
-    this.passed = 0;
-    this.failed = 0;
-  }
 
-  test(name, testFn) {
-    this.tests.push({ name, testFn });
-  }
+describe('PluginStateManager', () => {
+  beforeEach(async () => {
+    // Reset the plugin state manager before each test
+    await pluginStateManager.initialize();
+  });
 
-  async runAllTests() {
+  it('should initialize state manager', async () => {
+    await pluginStateManager.initialize();
+    expect(pluginStateManager.isInitialized).toBe(true);
+  });
 
-    for (const { name, testFn } of this.tests) {
-      try {
-        await testFn();
-        this.passed++;
-      } catch (error) {
-        this.failed++;
-      }
-    }
+  it('should load plugins with correct enabled states', async () => {
+    const plugins = pluginStateManager.getPlugins();
+    
+    expect(Array.isArray(plugins)).toBe(true);
+    expect(plugins.length).toBe(2);
+    
+    // Check plugin 1 (should be enabled)
+    const plugin1 = plugins.find(p => p.id === 'test-plugin-1');
+    expect(plugin1).toBeTruthy();
+    expect(plugin1.enabled).toBe(true);
+    expect(typeof plugin1.enabled).toBe('boolean');
+    
+    // Check plugin 2 (should be disabled)
+    const plugin2 = plugins.find(p => p.id === 'test-plugin-2');
+    expect(plugin2).toBeTruthy();
+    expect(plugin2.enabled).toBe(false);
+    expect(typeof plugin2.enabled).toBe('boolean');
+  });
 
-    this.printSummary();
-  }
+  it('should enable plugin functionality', async () => {
+    // Enable plugin 2
+    await pluginStateManager.togglePlugin('test-plugin-2', true);
+    
+    const plugin2 = pluginStateManager.getPlugin('test-plugin-2');
+    expect(plugin2).toBeTruthy();
+    expect(plugin2.enabled).toBe(true);
+    expect(typeof plugin2.enabled).toBe('boolean');
+    
+    const enabledPlugins = pluginStateManager.getEnabledPlugins();
+    expect(enabledPlugins.has('test-plugin-2')).toBe(true);
+  });
 
-  printSummary() {
-  }
+  it('should disable plugin functionality', async () => {
+    // Disable plugin 1
+    await pluginStateManager.togglePlugin('test-plugin-1', false);
+    
+    const plugin1 = pluginStateManager.getPlugin('test-plugin-1');
+    expect(plugin1).toBeTruthy();
+    expect(plugin1.enabled).toBe(false);
+    expect(typeof plugin1.enabled).toBe('boolean');
+    
+    const enabledPlugins = pluginStateManager.getEnabledPlugins();
+    expect(enabledPlugins.has('test-plugin-1')).toBe(false);
+  });
 
-  assert(condition, message) {
-    if (!condition) {
-      throw new Error(message);
-    }
-  }
+  it('should handle invalid inputs gracefully', async () => {
+    // Test undefined enabled state
+    await expect(
+      pluginStateManager.togglePlugin('test-plugin-1', undefined)
+    ).rejects.toThrow(/must be boolean/);
 
-  assertEqual(actual, expected, message) {
-    if (actual !== expected) {
-      throw new Error(`${message}: Expected ${expected}, got ${actual}`);
-    }
-  }
+    // Test invalid plugin ID
+    await expect(
+      pluginStateManager.togglePlugin('', true)
+    ).rejects.toThrow(/Plugin ID is required/);
 
-  assertType(value, expectedType, message) {
-    if (typeof value !== expectedType) {
-      throw new Error(`${message}: Expected ${expectedType}, got ${typeof value}`);
-    }
-  }
-}
+    // Test non-existent plugin
+    await expect(
+      pluginStateManager.togglePlugin('non-existent-plugin', true)
+    ).rejects.toThrow(/Plugin not found/);
+  });
 
-// Initialize test runner
-const tests = new PluginStateManagerTests();
+  it('should maintain state consistency after multiple operations', async () => {
+    // Perform multiple toggle operations
+    await pluginStateManager.togglePlugin('test-plugin-1', true);
+    await pluginStateManager.togglePlugin('test-plugin-2', false);
+    await pluginStateManager.togglePlugin('test-plugin-1', false);
+    await pluginStateManager.togglePlugin('test-plugin-2', true);
+    
+    const plugins = pluginStateManager.getPlugins();
+    const enabledPlugins = pluginStateManager.getEnabledPlugins();
+    
+    // Check final state
+    const plugin1 = plugins.find(p => p.id === 'test-plugin-1');
+    const plugin2 = plugins.find(p => p.id === 'test-plugin-2');
+    
+    expect(plugin1.enabled).toBe(false);
+    expect(plugin2.enabled).toBe(true);
+    
+    expect(enabledPlugins.has('test-plugin-1')).toBe(false);
+    expect(enabledPlugins.has('test-plugin-2')).toBe(true);
+  });
 
-// Test 1: Initialize state manager
-tests.test('Initialize state manager', async () => {
-  await pluginStateManager.initialize();
-  tests.assert(pluginStateManager.isInitialized, 'State manager should be initialized');
+  it('should provide statistics and debugging information', async () => {
+    const stats = pluginStateManager.getStats();
+    
+    expect(typeof stats).toBe('object');
+    expect(typeof stats.total).toBe('number');
+    expect(typeof stats.enabled).toBe('number');
+    expect(Array.isArray(stats.plugins)).toBe(true);
+    
+    expect(stats.total).toBe(2);
+    expect(stats.enabled).toBe(1);
+    
+    // Check plugin details in stats
+    const plugin1Stats = stats.plugins.find(p => p.id === 'test-plugin-1');
+    const plugin2Stats = stats.plugins.find(p => p.id === 'test-plugin-2');
+    
+    expect(plugin1Stats).toBeTruthy();
+    expect(plugin2Stats).toBeTruthy();
+    expect(plugin1Stats.enabled).toBe(false);
+    expect(plugin2Stats.enabled).toBe(true);
+  });
+
+  it('should prevent race conditions', async () => {
+    // Start multiple toggle operations simultaneously
+    const promises = [
+      pluginStateManager.togglePlugin('test-plugin-1', true),
+      pluginStateManager.togglePlugin('test-plugin-1', false),
+      pluginStateManager.togglePlugin('test-plugin-1', true)
+    ];
+    
+    // Wait for all to complete
+    await Promise.all(promises);
+    
+    // Final state should be consistent
+    const plugin1 = pluginStateManager.getPlugin('test-plugin-1');
+    expect(typeof plugin1.enabled).toBe('boolean');
+  });
 });
 
-// Test 2: Load plugins with correct enabled states
-tests.test('Load plugins with correct enabled states', async () => {
-  const plugins = pluginStateManager.getPlugins();
-  
-  tests.assert(Array.isArray(plugins), 'Plugins should be an array');
-  tests.assertEqual(plugins.length, 2, 'Should have 2 plugins');
-  
-  // Check plugin 1 (should be enabled)
-  const plugin1 = plugins.find(p => p.id === 'test-plugin-1');
-  tests.assert(plugin1, 'Plugin 1 should exist');
-  tests.assertEqual(plugin1.enabled, true, 'Plugin 1 should be enabled');
-  tests.assertType(plugin1.enabled, 'boolean', 'Plugin 1 enabled state should be boolean');
-  
-  // Check plugin 2 (should be disabled)
-  const plugin2 = plugins.find(p => p.id === 'test-plugin-2');
-  tests.assert(plugin2, 'Plugin 2 should exist');
-  tests.assertEqual(plugin2.enabled, false, 'Plugin 2 should be disabled');
-  tests.assertType(plugin2.enabled, 'boolean', 'Plugin 2 enabled state should be boolean');
-  
-});
-
-// Test 3: Test enable plugin functionality
-tests.test('Enable plugin functionality', async () => {
-  // Enable plugin 2
-  await pluginStateManager.togglePlugin('test-plugin-2', true);
-  
-  const plugin2 = pluginStateManager.getPlugin('test-plugin-2');
-  tests.assert(plugin2, 'Plugin 2 should exist after toggle');
-  tests.assertEqual(plugin2.enabled, true, 'Plugin 2 should now be enabled');
-  tests.assertType(plugin2.enabled, 'boolean', 'Enabled state should be boolean');
-  
-  const enabledPlugins = pluginStateManager.getEnabledPlugins();
-  tests.assert(enabledPlugins.has('test-plugin-2'), 'Plugin 2 should be in enabled set');
-  
-});
-
-// Test 4: Test disable plugin functionality
-tests.test('Disable plugin functionality', async () => {
-  // Disable plugin 1
-  await pluginStateManager.togglePlugin('test-plugin-1', false);
-  
-  const plugin1 = pluginStateManager.getPlugin('test-plugin-1');
-  tests.assert(plugin1, 'Plugin 1 should exist after toggle');
-  tests.assertEqual(plugin1.enabled, false, 'Plugin 1 should now be disabled');
-  tests.assertType(plugin1.enabled, 'boolean', 'Enabled state should be boolean');
-  
-  const enabledPlugins = pluginStateManager.getEnabledPlugins();
-  tests.assert(!enabledPlugins.has('test-plugin-1'), 'Plugin 1 should not be in enabled set');
-  
-});
-
-// Test 5: Test invalid inputs are handled
-tests.test('Handle invalid inputs gracefully', async () => {
-  // Test undefined enabled state
-  try {
-    await pluginStateManager.togglePlugin('test-plugin-1', undefined);
-    tests.assert(false, 'Should have thrown error for undefined enabled state');
-  } catch (error) {
-    tests.assert(error.message.includes('must be boolean'), 'Should reject undefined enabled state');
-  }
-
-  // Test invalid plugin ID
-  try {
-    await pluginStateManager.togglePlugin('', true);
-    tests.assert(false, 'Should have thrown error for empty plugin ID');
-  } catch (error) {
-    tests.assert(error.message.includes('Plugin ID is required'), 'Should reject empty plugin ID');
-  }
-
-  // Test non-existent plugin
-  try {
-    await pluginStateManager.togglePlugin('non-existent-plugin', true);
-    tests.assert(false, 'Should have thrown error for non-existent plugin');
-  } catch (error) {
-    tests.assert(error.message.includes('Plugin not found'), 'Should reject non-existent plugin');
-  }
-});
-
-// Test 6: Test state consistency
-tests.test('State consistency after multiple operations', async () => {
-  // Perform multiple toggle operations
-  await pluginStateManager.togglePlugin('test-plugin-1', true);
-  await pluginStateManager.togglePlugin('test-plugin-2', false);
-  await pluginStateManager.togglePlugin('test-plugin-1', false);
-  await pluginStateManager.togglePlugin('test-plugin-2', true);
-  
-  const plugins = pluginStateManager.getPlugins();
-  const enabledPlugins = pluginStateManager.getEnabledPlugins();
-  
-  // Check final state
-  const plugin1 = plugins.find(p => p.id === 'test-plugin-1');
-  const plugin2 = plugins.find(p => p.id === 'test-plugin-2');
-  
-  tests.assertEqual(plugin1.enabled, false, 'Plugin 1 should be disabled');
-  tests.assertEqual(plugin2.enabled, true, 'Plugin 2 should be enabled');
-  
-  tests.assert(!enabledPlugins.has('test-plugin-1'), 'Enabled set should not contain plugin 1');
-  tests.assert(enabledPlugins.has('test-plugin-2'), 'Enabled set should contain plugin 2');
-  
-});
-
-// Test 7: Test statistics and debugging info
-tests.test('Statistics and debugging information', async () => {
-  const stats = pluginStateManager.getStats();
-  
-  tests.assert(typeof stats === 'object', 'Stats should be an object');
-  tests.assert(typeof stats.total === 'number', 'Total should be a number');
-  tests.assert(typeof stats.enabled === 'number', 'Enabled count should be a number');
-  tests.assert(Array.isArray(stats.plugins), 'Plugins array should exist');
-  
-  tests.assertEqual(stats.total, 2, 'Should have 2 total plugins');
-  tests.assertEqual(stats.enabled, 1, 'Should have 1 enabled plugin');
-  
-  // Check plugin details in stats
-  const plugin1Stats = stats.plugins.find(p => p.id === 'test-plugin-1');
-  const plugin2Stats = stats.plugins.find(p => p.id === 'test-plugin-2');
-  
-  tests.assert(plugin1Stats, 'Plugin 1 should be in stats');
-  tests.assert(plugin2Stats, 'Plugin 2 should be in stats');
-  tests.assertEqual(plugin1Stats.enabled, false, 'Plugin 1 should be disabled in stats');
-  tests.assertEqual(plugin2Stats.enabled, true, 'Plugin 2 should be enabled in stats');
-  
-});
-
-// Test 8: Test race condition prevention
-tests.test('Race condition prevention', async () => {
-  // Start multiple toggle operations simultaneously
-  const promises = [
-    pluginStateManager.togglePlugin('test-plugin-1', true),
-    pluginStateManager.togglePlugin('test-plugin-1', false),
-    pluginStateManager.togglePlugin('test-plugin-1', true)
-  ];
-  
-  // Wait for all to complete
-  await Promise.all(promises);
-  
-  // Final state should be consistent
-  const plugin1 = pluginStateManager.getPlugin('test-plugin-1');
-  tests.assertType(plugin1.enabled, 'boolean', 'Final state should be boolean');
-  
-});
-
-// Export the test runner for manual execution
-export { tests as pluginStateManagerTests };
-
-// Auto-run tests if this file is executed directly
-if (typeof require !== 'undefined' && require.main === module) {
-  tests.runAllTests().catch(console.error);
-}

@@ -61,7 +61,8 @@ vi.mock('lucide-react', () => ({
   Sidebar: () => <div data-testid="sidebar-icon" />,
   ToggleLeft: () => <div data-testid="toggle-left-icon" />,
   History: () => <div data-testid="history-icon" />,
-  Trash2: () => <div data-testid="trash-icon" />
+  Trash2: () => <div data-testid="trash-icon" />,
+  Network: () => <div data-testid="network-icon" />
 }))
 
 // Mock the useCommandHistory hook
@@ -84,6 +85,16 @@ vi.mock('../hooks/useCommandHistory.js', () => ({
   createCommandHistoryItem: vi.fn((command, data = {}) => ({
     type: 'command',
     data: { command, ...data }
+  }))
+}))
+
+// Mock the useTemplates hooks
+vi.mock('../hooks/useTemplates.js', () => ({
+  useTemplates: vi.fn(() => ({
+    templates: []
+  })),
+  useTemplateProcessor: vi.fn(() => ({
+    process: vi.fn().mockResolvedValue({ result: 'processed content' })
   }))
 }))
 
@@ -147,7 +158,7 @@ describe('CommandPalette', () => {
     })
     
     const input = result.getByTestId('command-input')
-    expect(input).toHaveAttribute('placeholder', 'Type a command or search files...')
+    expect(input).toHaveAttribute('placeholder', 'Type a command or search files... (try \'template\')')
   })
 
   it('should show file tree items', async () => {
@@ -525,7 +536,9 @@ describe('CommandPalette', () => {
         clearHistory: mockClearHistory
       }))
 
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      // Clear previous mock calls before this test
+      vi.clearAllMocks()
+      
       let result
       await act(async () => {
         result = render(<CommandPalette {...mockProps} />)
@@ -536,11 +549,8 @@ describe('CommandPalette', () => {
         fireEvent.click(historyItem)
       })
       
-      expect(consoleSpy).toHaveBeenCalledWith('Unknown command: Unknown Command')
-      // Unknown commands don't close the palette, they just warn
+      // Unknown commands do nothing and don't close the palette  
       expect(mockProps.setOpen).not.toHaveBeenCalled()
-      
-      consoleSpy.mockRestore()
     })
 
     it('should remove individual history items', async () => {

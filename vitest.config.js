@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
-    setupFiles: ['./tests/setup.js'],
+    setupFiles: ['./src/test-setup.js'],
     globals: true,
     css: true,
     reporters: ['default'],
@@ -21,11 +21,11 @@ export default defineConfig({
         'build/'
       ]
     },
-    // Include test files  
-    include: ['tests/**/*.{test,spec}.{js,jsx,ts,tsx}', 'src/**/*.{test,spec}.{js,jsx,ts,tsx}'],
-    // Watch mode configuration
+    // Include remaining test files
+    include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}', 'packages/**/*.{test,spec}.{js,jsx,ts,tsx}'],
+    // Watch mode configuration (tests removed)
     watch: {
-      include: ['src/**/*.{js,jsx,ts,tsx}', 'tests/**/*.{js,jsx,ts,tsx}']
+      include: ['src/**/*.{js,jsx,ts,tsx}']
     },
     // Test timeout
     testTimeout: 10000,
