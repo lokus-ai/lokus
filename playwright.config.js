@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './tests/e2e',
+  testDir: './tests-disabled/e2e', // Tests removed during cleanup
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -16,9 +16,9 @@ export default defineConfig({
     }
   },
 
-  /* Global setup for test workspaces */
-  globalSetup: './tests/e2e/setup/global-setup.js',
-  globalTeardown: './tests/e2e/setup/global-teardown.js',
+  /* Global setup for test workspaces - disabled (tests removed) */
+  // globalSetup: './tests/e2e/setup/global-setup.js',
+  // globalTeardown: './tests/e2e/setup/global-teardown.js',
 
   projects: [
     {

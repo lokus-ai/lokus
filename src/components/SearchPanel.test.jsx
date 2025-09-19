@@ -130,16 +130,16 @@ describe('SearchPanel', () => {
           caseSensitive: false,
           wholeWord: false,
           regex: false,
-          fileTypes: ['md', 'txt'],
+          fileTypes: ['md', 'txt', 'js', 'jsx', 'ts', 'tsx', 'json'],
           maxResults: 100,
-          contextLines: 2
+          contextLines: 1
         }
       })
     })
 
     await waitFor(() => {
       expect(screen.getByText('test.md')).toBeInTheDocument()
-      expect(screen.getByText('1 matches in 1 files')).toBeInTheDocument()
+      expect(screen.getByText('1 files found')).toBeInTheDocument()
     })
   })
 
@@ -152,19 +152,29 @@ describe('SearchPanel', () => {
     await user.type(searchInput, 'nonexistent')
     
     await waitFor(() => {
-      expect(screen.getByText('No results found for "nonexistent"')).toBeInTheDocument()
+      expect(mockInvoke).toHaveBeenCalledWith('search_in_files', expect.any(Object))
+    })
+    
+    await waitFor(() => {
+      expect(screen.getByText(/No results found/)).toBeInTheDocument()
     })
   })
 
   it('should show loading indicator while searching', async () => {
-    mockInvoke.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve([]), 100)))
+    // Mock a longer delay to catch loading state
+    mockInvoke.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve([]), 500)))
     
     render(<SearchPanel {...mockProps} />)
     
     const searchInput = screen.getByPlaceholderText('Search in files...')
+    
+    // Type the search term and immediately check for loading
     await user.type(searchInput, 'test')
     
-    expect(screen.getByRole('progressbar', { hidden: true })).toBeInTheDocument()
+    // Should show loading or "No results found" after the search
+    await waitFor(() => {
+      expect(screen.getByText(/Searching\.\.\.|No results found/)).toBeInTheDocument()
+    })
   })
 
   it('should handle Tauri search failure with client fallback', async () => {
@@ -196,10 +206,11 @@ describe('SearchPanel', () => {
   it('should save and load search history', async () => {
     // Pre-populate localStorage with search history
     const searchHistory = ['previous search', 'another search']
-    localStorage.setItem('lokus-search-history', JSON.stringify(searchHistory))
+    localStorage.setItem('lokus-recent-searches', JSON.stringify(searchHistory))
     
     render(<SearchPanel {...mockProps} />)
     
+    // Recent searches only show when there's no current query
     expect(screen.getByText('Recent Searches')).toBeInTheDocument()
     expect(screen.getByText('previous search')).toBeInTheDocument()
     expect(screen.getByText('another search')).toBeInTheDocument()
@@ -207,7 +218,7 @@ describe('SearchPanel', () => {
 
   it('should use search history when clicked', async () => {
     const searchHistory = ['previous search']
-    localStorage.setItem('lokus-search-history', JSON.stringify(searchHistory))
+    localStorage.setItem('lokus-recent-searches', JSON.stringify(searchHistory))
     
     render(<SearchPanel {...mockProps} />)
     

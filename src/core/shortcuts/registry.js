@@ -24,10 +24,15 @@ export const ACTIONS = [
   { id: "global-search",    name: "Global Search",       event: "lokus:global-search",    default: "CommandOrControl+Shift+F" },
   { id: "command-palette",  name: "Command Palette",     event: "lokus:command-palette",  default: "CommandOrControl+K" },
   { id: "wikilink-modal",   name: "Insert WikiLink",     event: "lokus:wikilink-modal",   default: "CommandOrControl+L" },
-  { id: "next-tab",         name: "Next Tab",            event: "lokus:next-tab",         default: "CommandOrControl+Tab" },
-  { id: "prev-tab",         name: "Previous Tab",        event: "lokus:prev-tab",         default: "CommandOrControl+Shift+Tab" },
+  { id: "next-tab",         name: "Next Tab",            event: "lokus:next-tab",         default: "CommandOrControl+Alt+Right" },
+  { id: "prev-tab",         name: "Previous Tab",        event: "lokus:prev-tab",         default: "CommandOrControl+Alt+Left" },
   { id: "close-tab",        name: "Close Current Tab",   event: "lokus:close-tab",        default: "CommandOrControl+W" },
+  { id: "reopen-closed-tab", name: "Reopen Closed Tab",  event: "lokus:reopen-closed-tab", default: "CommandOrControl+Shift+T" },
   { id: "graph-view",       name: "Open Graph View",     event: "lokus:graph-view",       default: "CommandOrControl+Shift+G" },
+  { id: "shortcut-help",    name: "Show Keyboard Shortcuts", event: "lokus:shortcut-help", default: "CommandOrControl+/" },
+  { id: "refresh-files",    name: "Refresh File Tree",   event: "lokus:refresh-files",    default: "F5" },
+  { id: "new-canvas",       name: "New Canvas",          event: "lokus:new-canvas",       default: "CommandOrControl+Shift+C" },
+  { id: "open-kanban",      name: "Open Kanban Board",   event: "lokus:open-kanban",      default: "CommandOrControl+Shift+K" },
 ];
 
 export function listActions() { return ACTIONS.map(a => ({ id: a.id, name: a.name })); }

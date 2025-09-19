@@ -20,7 +20,6 @@ import { GraphRenderer } from '../core/graph/GraphRenderer.js';
 import { GraphData } from '../core/graph/GraphData.js';
 import { GraphUI } from '../components/graph/GraphUI.jsx';
 import '../components/graph/GraphUI.css';
-import './GraphView.css';
 import { invoke } from "@tauri-apps/api/core";
 
 export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile }) => {
