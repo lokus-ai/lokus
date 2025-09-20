@@ -1,0 +1,1045 @@
+openapi: 3.0.3
+info:
+  title: Lokus MCP Server API
+  description: |
+    Model Context Protocol (MCP) server implementation for Lokus.
+    
+    The MCP protocol enables AI assistants to integrate with external resources, tools, and services.
+    This API provides standardized access to Lokus's content management, plugin system, and knowledge base.
+    
+    **Key Features:**
+    - Resource discovery and access (files, workspace data)
+    - Tool execution (search, content manipulation)
+    - Prompt templates for AI interactions
+    - Real-time subscriptions for content updates
+    - Secure plugin ecosystem integration
+    
+    **Protocol:**
+    - Based on JSON-RPC 2.0
+    - WebSocket transport for real-time communication
+    - HTTP/REST endpoints for stateless operations
+    
+  version: 1.0.0
+  contact:
+    name: Lokus Development Team
+    url: https://github.com/lokus-ai/lokus
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: ws://localhost:3001/mcp
+    description: Local WebSocket MCP Server
+  - url: http://localhost:3001/api/mcp
+    description: Local HTTP MCP API
+  - url: https://api.lokus.ai/mcp
+    description: Production MCP Server
+
+paths:
+  /initialize:
+    post:
+      summary: Initialize MCP session
+      description: |
+        Initialize a new MCP session with client capabilities and authentication.
+        Must be called before any other MCP operations.
+      operationId: initializeMCP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitializeRequest'
+            examples:
+              basic:
+                summary: Basic initialization
+                value:
+                  protocolVersion: "2024-11-05"
+                  capabilities:
+                    resources:
+                      subscribe: true
+                    tools:
+                      listChanged: true
+                  clientInfo:
+                    name: "My AI Assistant"
+                    version: "1.0.0"
+      responses:
+        '200':
+          description: Initialization successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InitializeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /resources/list:
+    get:
+      summary: List available resources
+      description: |
+        Get a paginated list of all available resources.
+        Resources include files, database entries, API endpoints, and custom data sources.
+      operationId: listResources
+      parameters:
+        - name: cursor
+          in: query
+          description: Pagination cursor for next page
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: Filter by resource type
+          schema:
+            $ref: '#/components/schemas/ResourceType'
+        - name: search
+          in: query
+          description: Search query for resource names/descriptions
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Resource list retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /resources/read:
+    post:
+      summary: Read resource content
+      description: |
+        Read the content of one or more resources by URI.
+        Supports both text and binary content with appropriate MIME types.
+      operationId: readResources
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceReadRequest'
+            examples:
+              single_file:
+                summary: Read a single file
+                value:
+                  uri: "file:///workspace/notes/meeting-notes.md"
+              multiple_files:
+                summary: Read multiple files
+                value:
+                  uris:
+                    - "file:///workspace/notes/project-plan.md"
+                    - "file:///workspace/docs/api-spec.yaml"
+      responses:
+        '200':
+          description: Resource content retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceReadResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /resources/subscribe:
+    post:
+      summary: Subscribe to resource changes
+      description: |
+        Subscribe to receive notifications when a resource is updated.
+        Requires WebSocket connection for real-time updates.
+      operationId: subscribeToResource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceSubscribeRequest'
+      responses:
+        '200':
+          description: Subscription created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /resources/unsubscribe:
+    post:
+      summary: Unsubscribe from resource changes
+      description: Remove an existing resource subscription.
+      operationId: unsubscribeFromResource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceUnsubscribeRequest'
+      responses:
+        '200':
+          description: Unsubscribed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+
+  /tools/list:
+    get:
+      summary: List available tools
+      description: |
+        Get a list of all available tools that can be executed.
+        Tools include search functions, content manipulation, file operations, and plugin-provided capabilities.
+      operationId: listTools
+      parameters:
+        - name: cursor
+          in: query
+          description: Pagination cursor
+          schema:
+            type: string
+        - name: category
+          in: query
+          description: Filter by tool category
+          schema:
+            type: string
+            enum: [search, content, file, plugin, system]
+      responses:
+        '200':
+          description: Tool list retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolListResponse'
+
+  /tools/call:
+    post:
+      summary: Execute a tool
+      description: |
+        Execute a tool with the provided arguments.
+        Tool execution is sandboxed and subject to security policies.
+      operationId: callTool
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolCallRequest'
+            examples:
+              search_files:
+                summary: Search for files
+                value:
+                  name: "search_files"
+                  arguments:
+                    query: "meeting notes"
+                    path: "/workspace"
+                    file_types: ["md", "txt"]
+              create_note:
+                summary: Create a new note
+                value:
+                  name: "create_note"
+                  arguments:
+                    title: "Project Ideas"
+                    content: "## Ideas\n- Implement dark mode\n- Add keyboard shortcuts"
+                    tags: ["project", "ideas"]
+      responses:
+        '200':
+          description: Tool executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolCallResponse'
+        '400':
+          description: Invalid tool arguments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Tool not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /prompts/list:
+    get:
+      summary: List available prompt templates
+      description: |
+        Get a list of all available prompt templates.
+        Prompt templates provide pre-configured AI interactions for common tasks.
+      operationId: listPrompts
+      responses:
+        '200':
+          description: Prompt list retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptListResponse'
+
+  /prompts/get:
+    post:
+      summary: Get rendered prompt
+      description: |
+        Get a prompt template rendered with the provided arguments.
+        Returns ready-to-use messages for AI interaction.
+      operationId: getPrompt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromptGetRequest'
+            examples:
+              summarize_content:
+                summary: Summarize content prompt
+                value:
+                  name: "summarize_content"
+                  arguments:
+                    content: "Long article content here..."
+                    max_length: 200
+      responses:
+        '200':
+          description: Prompt rendered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptGetResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /completion/complete:
+    post:
+      summary: Get completion suggestions
+      description: |
+        Get auto-completion suggestions for resource references, tool names, or other contextual elements.
+      operationId: getCompletion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompletionRequest'
+      responses:
+        '200':
+          description: Completion suggestions retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompletionResponse'
+
+  /logging/setLevel:
+    post:
+      summary: Set logging level
+      description: Configure the logging level for the MCP server.
+      operationId: setLoggingLevel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoggingSetLevelRequest'
+      responses:
+        '200':
+          description: Logging level set successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+components:
+  schemas:
+    # Request/Response Schemas
+    InitializeRequest:
+      type: object
+      required:
+        - protocolVersion
+        - capabilities
+        - clientInfo
+      properties:
+        protocolVersion:
+          type: string
+          example: "2024-11-05"
+          description: MCP protocol version
+        capabilities:
+          $ref: '#/components/schemas/ClientCapabilities'
+        clientInfo:
+          $ref: '#/components/schemas/ClientInfo'
+
+    InitializeResponse:
+      type: object
+      required:
+        - protocolVersion
+        - capabilities
+        - serverInfo
+      properties:
+        protocolVersion:
+          type: string
+          example: "2024-11-05"
+        capabilities:
+          $ref: '#/components/schemas/ServerCapabilities'
+        serverInfo:
+          $ref: '#/components/schemas/ServerInfo'
+        instructions:
+          type: string
+          description: Optional usage instructions for the client
+
+    ResourceListResponse:
+      type: object
+      required:
+        - resources
+      properties:
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/Resource'
+        nextCursor:
+          type: string
+          description: Cursor for next page of results
+
+    ResourceReadRequest:
+      type: object
+      properties:
+        uri:
+          type: string
+          description: Single resource URI to read
+        uris:
+          type: array
+          items:
+            type: string
+          description: Multiple resource URIs to read
+      oneOf:
+        - required: [uri]
+        - required: [uris]
+
+    ResourceReadResponse:
+      type: object
+      required:
+        - contents
+      properties:
+        contents:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceContent'
+
+    ResourceSubscribeRequest:
+      type: object
+      required:
+        - uri
+      properties:
+        uri:
+          type: string
+          description: Resource URI to subscribe to
+
+    ResourceUnsubscribeRequest:
+      type: object
+      required:
+        - uri
+      properties:
+        uri:
+          type: string
+          description: Resource URI to unsubscribe from
+
+    SubscriptionResponse:
+      type: object
+      properties:
+        subscribed:
+          type: boolean
+        unsubscribed:
+          type: boolean
+
+    ToolListResponse:
+      type: object
+      required:
+        - tools
+      properties:
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tool'
+        nextCursor:
+          type: string
+
+    ToolCallRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Name of the tool to execute
+        arguments:
+          type: object
+          description: Arguments to pass to the tool
+          additionalProperties: true
+
+    ToolCallResponse:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolContent'
+        isError:
+          type: boolean
+          default: false
+
+    PromptListResponse:
+      type: object
+      required:
+        - prompts
+      properties:
+        prompts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Prompt'
+
+    PromptGetRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Name of the prompt template
+        arguments:
+          type: object
+          description: Arguments for template rendering
+          additionalProperties: true
+
+    PromptGetResponse:
+      type: object
+      required:
+        - messages
+      properties:
+        description:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromptMessage'
+
+    CompletionRequest:
+      type: object
+      required:
+        - ref
+      properties:
+        ref:
+          $ref: '#/components/schemas/CompletionReference'
+        argument:
+          $ref: '#/components/schemas/CompletionArgument'
+
+    CompletionResponse:
+      type: object
+      required:
+        - completion
+      properties:
+        completion:
+          $ref: '#/components/schemas/CompletionResult'
+
+    LoggingSetLevelRequest:
+      type: object
+      required:
+        - level
+      properties:
+        level:
+          type: string
+          enum: [debug, info, warn, error]
+
+    # Core Entity Schemas
+    Resource:
+      type: object
+      required:
+        - uri
+        - name
+        - type
+      properties:
+        uri:
+          type: string
+          description: Unique resource identifier
+          example: "file:///workspace/notes/meeting-notes.md"
+        name:
+          type: string
+          description: Human-readable resource name
+          example: "Meeting Notes"
+        description:
+          type: string
+          description: Resource description
+        type:
+          $ref: '#/components/schemas/ResourceType'
+        mimeType:
+          type: string
+          description: MIME type of the resource content
+          example: "text/markdown"
+        lastModified:
+          type: string
+          format: date-time
+          description: Last modification timestamp
+        metadata:
+          type: object
+          description: Additional resource metadata
+          additionalProperties: true
+
+    ResourceContent:
+      type: object
+      required:
+        - uri
+      properties:
+        uri:
+          type: string
+          description: Resource URI
+        mimeType:
+          type: string
+          description: Content MIME type
+        text:
+          type: string
+          description: Text content (for text resources)
+        blob:
+          type: string
+          format: base64
+          description: Binary content (for binary resources)
+        metadata:
+          type: object
+          additionalProperties: true
+
+    Tool:
+      type: object
+      required:
+        - name
+        - description
+        - inputSchema
+      properties:
+        name:
+          type: string
+          description: Unique tool identifier
+          example: "search_files"
+        description:
+          type: string
+          description: Tool description
+          example: "Search for files in the workspace"
+        inputSchema:
+          type: object
+          description: JSON Schema for tool input validation
+          example:
+            type: "object"
+            properties:
+              query:
+                type: "string"
+                description: "Search query"
+              path:
+                type: "string"
+                description: "Path to search in"
+            required: ["query"]
+
+    ToolContent:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum: [text, image, resource]
+        text:
+          type: string
+          description: Text content
+        data:
+          type: string
+          format: base64
+          description: Binary data (for image/resource content)
+        mimeType:
+          type: string
+          description: Content MIME type
+
+    Prompt:
+      type: object
+      required:
+        - name
+        - description
+      properties:
+        name:
+          type: string
+          description: Unique prompt identifier
+          example: "summarize_content"
+        description:
+          type: string
+          description: Prompt description
+          example: "Summarize the given content"
+        arguments:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromptArgument'
+
+    PromptArgument:
+      type: object
+      required:
+        - name
+        - description
+      properties:
+        name:
+          type: string
+          description: Argument name
+        description:
+          type: string
+          description: Argument description
+        required:
+          type: boolean
+          default: false
+
+    PromptMessage:
+      type: object
+      required:
+        - role
+        - content
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant]
+        content:
+          $ref: '#/components/schemas/PromptContent'
+
+    PromptContent:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum: [text, image]
+        text:
+          type: string
+          description: Text content
+        data:
+          type: string
+          format: base64
+          description: Image data (for image content)
+        mimeType:
+          type: string
+          description: Content MIME type
+
+    # Supporting Schemas
+    ResourceType:
+      type: string
+      enum:
+        - file
+        - directory
+        - database
+        - api
+        - memory
+        - web
+        - custom
+      description: Type of resource
+
+    ClientCapabilities:
+      type: object
+      properties:
+        resources:
+          type: object
+          properties:
+            subscribe:
+              type: boolean
+              description: Client supports resource subscriptions
+        tools:
+          type: object
+          properties:
+            listChanged:
+              type: boolean
+              description: Client wants tool list change notifications
+        prompts:
+          type: object
+          properties:
+            listChanged:
+              type: boolean
+              description: Client wants prompt list change notifications
+
+    ServerCapabilities:
+      type: object
+      properties:
+        resources:
+          type: object
+          properties:
+            subscribe:
+              type: boolean
+              description: Server supports resource subscriptions
+            listChanged:
+              type: boolean
+              description: Server sends resource list change notifications
+        tools:
+          type: object
+          properties:
+            listChanged:
+              type: boolean
+              description: Server sends tool list change notifications
+        prompts:
+          type: object
+          properties:
+            listChanged:
+              type: boolean
+              description: Server sends prompt list change notifications
+        logging:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              description: Server supports logging configuration
+
+    ClientInfo:
+      type: object
+      required:
+        - name
+        - version
+      properties:
+        name:
+          type: string
+          description: Client application name
+          example: "My AI Assistant"
+        version:
+          type: string
+          description: Client version
+          example: "1.0.0"
+        description:
+          type: string
+          description: Client description
+        author:
+          type: string
+          description: Client author
+        homepage:
+          type: string
+          format: uri
+          description: Client homepage URL
+
+    ServerInfo:
+      type: object
+      required:
+        - name
+        - version
+      properties:
+        name:
+          type: string
+          description: Server name
+          example: "Lokus MCP Server"
+        version:
+          type: string
+          description: Server version
+          example: "1.0.0"
+        description:
+          type: string
+          description: Server description
+        author:
+          type: string
+          description: Server author
+        homepage:
+          type: string
+          format: uri
+          description: Server homepage URL
+
+    CompletionReference:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum: [resource, tool, prompt]
+        name:
+          type: string
+          description: Name being completed
+
+    CompletionArgument:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Argument name being completed
+        value:
+          type: string
+          description: Partial argument value
+
+    CompletionResult:
+      type: object
+      required:
+        - values
+        - total
+        - hasMore
+      properties:
+        values:
+          type: array
+          items:
+            type: string
+          description: Completion suggestions
+        total:
+          type: integer
+          description: Total number of available completions
+        hasMore:
+          type: boolean
+          description: Whether more completions are available
+
+    # Standard Response Schemas
+    SuccessResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          description: Optional success message
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          description: Error code
+        message:
+          type: string
+          description: Error message
+        data:
+          type: object
+          description: Additional error data
+          additionalProperties: true
+
+    # WebSocket Event Schemas
+    ResourceUpdatedEvent:
+      type: object
+      required:
+        - uri
+        - content
+      properties:
+        uri:
+          type: string
+          description: Updated resource URI
+        content:
+          type: string
+          description: New resource content
+        metadata:
+          type: object
+          additionalProperties: true
+
+    ListChangedEvent:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum: [resources, tools, prompts]
+          description: Type of list that changed
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: Unauthorized - authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Forbidden:
+      description: Forbidden - insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication
+
+    Bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT bearer token
+
+    WebSocketAuth:
+      type: apiKey
+      in: query
+      name: token
+      description: Authentication token for WebSocket connections
+
+security:
+  - ApiKey: []
+  - Bearer: []
+
+# WebSocket Events Documentation
+x-websocket-events:
+  notifications/resources/updated:
+    summary: Resource content updated
+    description: Sent when a subscribed resource is updated
+    payload:
+      $ref: '#/components/schemas/ResourceUpdatedEvent'
+
+  notifications/resources/list_changed:
+    summary: Resource list changed
+    description: Sent when the list of available resources changes
+    payload:
+      $ref: '#/components/schemas/ListChangedEvent'
+
+  notifications/tools/list_changed:
+    summary: Tool list changed
+    description: Sent when the list of available tools changes
+    payload:
+      $ref: '#/components/schemas/ListChangedEvent'
+
+  notifications/prompts/list_changed:
+    summary: Prompt list changed
+    description: Sent when the list of available prompts changes
+    payload:
+      $ref: '#/components/schemas/ListChangedEvent'
+
+  notifications/logging/message:
+    summary: Log message
+    description: Server log message
+    payload:
+      type: object
+      properties:
+        level:
+          type: string
+          enum: [debug, info, warn, error]
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        data:
+          type: object
+          additionalProperties: true
+
+tags:
+  - name: Initialization
+    description: Session initialization and capabilities
+  - name: Resources
+    description: Resource discovery and access
+  - name: Tools
+    description: Tool listing and execution
+  - name: Prompts
+    description: Prompt templates
+  - name: Completion
+    description: Auto-completion support
+  - name: Logging
+    description: Logging configuration

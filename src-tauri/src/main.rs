@@ -10,6 +10,7 @@ mod tasks;
 mod search;
 mod plugins;
 mod platform;
+mod mcp;
 
 use windows::{open_workspace_window, open_preferences_window};
 use tauri::Manager;
@@ -233,7 +234,12 @@ fn main() {
       plugins::set_plugin_setting,
       plugins::get_plugin_setting,
       plugins::read_plugin_file,
-      plugins::get_plugin_manifest
+      plugins::get_plugin_manifest,
+      mcp::mcp_start,
+      mcp::mcp_stop,
+      mcp::mcp_status,
+      mcp::mcp_restart,
+      mcp::mcp_health_check
     ])
     .setup(|app| {
       menu::init(&app.handle())?;
@@ -246,6 +252,10 @@ fn main() {
       if let Err(e) = clipboard_platform::initialize() {
         eprintln!("Warning: Failed to initialize platform clipboard: {}", e);
       }
+      
+      // Initialize MCP Server Manager
+      let mcp_manager = mcp::MCPServerManager::new(app.handle().clone());
+      app.manage(mcp_manager);
       
       let app_handle = app.handle().clone();
       let store = StoreBuilder::new(app.handle(), PathBuf::from(".settings.dat")).build().unwrap();
