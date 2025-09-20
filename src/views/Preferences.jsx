@@ -5,6 +5,7 @@ import { readConfig, updateConfig } from "../core/config/store.js";
 import { formatAccelerator } from "../core/shortcuts/registry.js";
 import { Search, Pencil, RotateCcw } from "lucide-react";
 import liveEditorSettings from "../core/editor/live-settings.js";
+import AIAssistant from "./preferences/AIAssistant.jsx";
 
 export default function Preferences() {
   const [themes, setThemes] = useState([]);
@@ -229,6 +230,7 @@ export default function Preferences() {
             "Editor",
             "Markdown",
             "Shortcuts",
+            "AI Assistant",
           ].map((name) => (
             <button
               key={name}
@@ -580,6 +582,10 @@ export default function Preferences() {
                 </div>
               </div>
             </div>
+          )}
+
+          {section === "AI Assistant" && (
+            <AIAssistant />
           )}
         </main>
       </div>

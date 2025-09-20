@@ -43,8 +43,7 @@ export {
   MCPClientState
 } from './MCPClient.js'
 
-// Type definitions (for runtime usage)
-export * as MCPTypes from './types/mcp.d.ts'
+// Type definitions are available in ./types/mcp.d.ts for TypeScript projects
 
 /**
  * MCP Integration Helper
@@ -388,16 +387,7 @@ export function createMCPPluginAPI(pluginId, mcpIntegration = null) {
   return new MCPPluginAPI(pluginId, integration)
 }
 
-// Re-export types for convenience
-export { 
-  MCPPluginType, 
-  MCPPluginState, 
-  MCPServerType, 
-  MCPServerStatus, 
-  MCPClientState,
-  MCPResourceType,
-  MCPToolType
-} from './types/mcp.d.ts'
+// Types are exported from their respective modules to avoid duplicates
 
 export default {
   // Core classes
@@ -427,12 +417,5 @@ export default {
   MCP_PROTOCOL_VERSION,
   MCPMessageType,
   MCPMethod,
-  MCPErrorCode,
-  MCPResourceType,
-  MCPToolType,
-  MCPPluginType,
-  MCPPluginState,
-  MCPServerType,
-  MCPServerStatus,
-  MCPClientState
+  MCPErrorCode
 }
