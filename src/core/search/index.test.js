@@ -3,7 +3,8 @@ import {
   debounce, 
   highlightText, 
   createSearchDecorations,
-  searchCommands 
+  searchCommands,
+  searchPluginKey 
 } from './index.js'
 import { DecorationSet } from '@tiptap/pm/view'
 
@@ -191,7 +192,7 @@ describe('Search Utilities', () => {
         currentMatch: 0
       }
       
-      vi.mocked = vi.fn().mockReturnValue(mockSearchState)
+      vi.mocked(searchPluginKey.getState).mockReturnValue(mockSearchState)
       
       const result = searchCommands.nextMatch()({
         state: { ...mockState },
@@ -208,7 +209,7 @@ describe('Search Utilities', () => {
         currentMatch: 2
       }
       
-      vi.mocked = vi.fn().mockReturnValue(mockSearchState)
+      vi.mocked(searchPluginKey.getState).mockReturnValue(mockSearchState)
       
       const result = searchCommands.previousMatch()({
         state: { ...mockState },

@@ -8,7 +8,7 @@ import { TemplateSandbox } from './sandbox.js';
 
 export class TemplateProcessor {
   constructor(options = {}) {
-    this.sandbox = new TemplateSandbox(options.sandbox);
+    this.sandbox = options.sandbox || new TemplateSandbox(options.sandbox);
     this.filters = new Map();
     this.strictMode = options.strictMode !== false;
     this.maxIterations = options.maxIterations || 100;
