@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -8,15 +8,36 @@ const Icon = ({ path, className = "w-5 h-5" }) => (
   </svg>
 );
 
-export function DraggableTab({ tab, isActive, isUnsaved, onTabClick, onTabClose }) {
+export function DraggableTab({ tab, isActive, isUnsaved, onTabClick, onTabClose, onSplitDragStart, onSplitDragEnd }) {
+  const [isDraggedOverEditor, setIsDraggedOverEditor] = useState(false);
+  
   const { attributes, listeners, setNodeRef: draggableRef, transform, isDragging } = useDraggable({
     id: tab.path,
-    data: { type: "tab", path: tab.path },
+    data: { 
+      type: "tab", 
+      path: tab.path, 
+      name: tab.name,
+      tab: tab
+    },
   });
 
   const { setNodeRef: droppableRef, isOver } = useDroppable({
     id: tab.path,
   });
+
+  // Enhanced drag listeners to detect editor area drops
+  const enhancedListeners = {
+    ...listeners,
+    onDragStart: (event) => {
+      listeners?.onDragStart?.(event);
+      onSplitDragStart?.(tab);
+    },
+    onDragEnd: (event) => {
+      listeners?.onDragEnd?.(event);
+      onSplitDragEnd?.(tab);
+      setIsDraggedOverEditor(false);
+    },
+  };
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -26,7 +47,7 @@ export function DraggableTab({ tab, isActive, isUnsaved, onTabClick, onTabClose 
   // Obsidian-style tabs with proper spacing
   const baseClasses = "obsidian-tab group";
   const activeClasses = isActive ? "active" : "";
-  const draggingClasses = isDragging ? "opacity-50 z-10" : "";
+  const draggingClasses = isDragging ? "opacity-30" : "";
 
   return (
     <div ref={droppableRef} className="relative h-full flex items-center">
@@ -37,7 +58,7 @@ export function DraggableTab({ tab, isActive, isUnsaved, onTabClick, onTabClose 
         ref={draggableRef}
         style={style}
         {...attributes}
-        {...listeners}
+        {...enhancedListeners}
         onClick={() => onTabClick(tab.path)}
         className={`${baseClasses} ${activeClasses} ${draggingClasses}`}
       >

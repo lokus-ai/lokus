@@ -1,171 +1,22 @@
-# 🎨 Lokus Feature Overview
-
-This document showcases **every major feature** implemented in Lokus with real examples.
-
-## 🔗 WikiLink System
-
-The heart of Lokus - connecting knowledge through links:
-
-### Basic Links
-- [[Getting Started]] - Main introduction
-- [[Mathematics Showcase]] - Math examples
-- [[Programming Examples]] - Code samples
-
-### Complex Link Networks
-- [[Research/AI/Machine Learning Basics]] → [[Research/AI/Neural Networks]]
-- [[Projects/Web-Apps/E-commerce Platform]] ↔ [[Documentation/API/REST Endpoints]]
-- [[Notes/Daily/2024-01-15]] references [[Notes/Ideas/App Features]]
-
-## 📐 Advanced Mathematics
-
-### Calculus Examples
-
-Derivatives and limits:
-$$
-\lim_{h \to 0} \frac{f(x+h) - f(x)}{h} = f'(x)
-$$
-
-Integration by parts:
-$$
-\int u \, dv = uv - \int v \, du
-$$
-
-### Linear Algebra
-
-Matrix operations: $A \cdot B = C$ where $C_{ij} = \sum_{k} A_{ik} B_{kj}$
-
-Eigenvalue equation:
-$$
-A\mathbf{v} = \lambda\mathbf{v}
-$$
-
-### Statistics & Probability
-
-Normal distribution:
-$$
-f(x) = \frac{1}{\sigma\sqrt{2\pi}} e^{-\frac{1}{2}\left(\frac{x-\mu}{\sigma}\right)^2}
-$$
-
-## 📊 Complex Tables
-
-### Project Status Dashboard
-
-| Project | Team | Progress | Budget | Deadline | Links |
-|---------|------|----------|--------|----------|-------|
-| **Web Platform** | Frontend | 75% | $50k | Q2 2024 | [[Projects/Web-Apps/Main Platform]] |
-| **Mobile App** | Mobile | 45% | $30k | Q3 2024 | [[Projects/Mobile/iOS App]] |
-| **API Service** | Backend | 90% | $25k | Q1 2024 | [[Documentation/API/Overview]] |
-| **Database Migration** | DevOps | 60% | $15k | Q2 2024 | [[Research/Database/Migration Plan]] |
-
-### Feature Comparison
-
-| Feature | Lokus | Obsidian | Notion | Notes |
-|---------|-------|----------|--------|--------|
-| WikiLinks | ✅ | ✅ | ❌ | Core feature |
-| Math Rendering | ✅ | ✅ | ✅ | KaTeX powered |
-| Real-time Sync | 🚧 | ✅ | ✅ | In development |
-| Graph View | ✅ | ✅ | ❌ | Beautiful visualization |
-| Tables | ✅ | ✅ | ✅ | Resizable columns |
-
-## ✅ Advanced Task Management
-
-### Development Roadmap
-- [x] **Phase 1: Core Features**
-  - [x] Rich text editor (TipTap)
-  - [x] WikiLink system
-  - [x] Math rendering
-  - [x] File management
-- [ ] **Phase 2: Advanced Features**
-  - [x] Graph visualization
-  - [ ] Real-time collaboration
-  - [ ] Plugin system
-  - [ ] Mobile sync
-- [ ] **Phase 3: Enhancement**
-  - [ ] AI-powered features
-  - [ ] Advanced search
-  - [ ] Custom themes
-  - [ ] Performance optimization
-
-### Bug Tracking
-- [x] ~~Fix WikiLink autocomplete conflicts~~ (Resolved)
-- [x] ~~Math rendering issues~~ (Fixed with KaTeX)
-- [ ] Graph performance with 1000+ nodes
-- [ ] Table column resizing edge cases
-
-## 💻 Code Showcase
-
-### Frontend (React/TypeScript)
-```typescript
-interface WikiLinkProps {
+<h1>🎨 Lokus Feature Overview</h1><p>This document showcases <strong>every major feature</strong> implemented in Lokus with real examples.</p><h2>🔗 WikiLink System</h2><p>The heart of Lokus - connecting knowledge through links:</p><h3>Basic Links</h3><ul><li><p>[[Getting Started]] - Main introduction</p></li><li><p>[[Mathematics Showcase]] - Math examples</p></li><li><p>[[Programming Examples]] - Code samples</p></li></ul><h3>Complex Link Networks</h3><ul><li><p>[[Research/AI/Machine Learning Basics]] → [[Research/AI/Neural Networks]]</p></li><li><p>[[Projects/Web-Apps/E-commerce Platform]] ↔ [[Documentation/API/REST Endpoints]]</p></li><li><p>[[Notes/Daily/2024-01-15]] references [[Notes/Ideas/App Features]]</p></li></ul><h2>📐 Advanced Mathematics</h2><h3>Calculus Examples</h3><p>Derivatives and limits:<br></p><div src="\lim_{h \to 0} \frac{f(x+h) - f(x)}{h} = f’(x)" data-type="math-block" class="math-block" data-src="\lim_{h \to 0} \frac{f(x+h) - f(x)}{h} = f’(x)">\lim_{h \to 0} \frac{f(x+h) - f(x)}{h} = f’(x)</div><p>Integration by parts:<br></p><div src="\int u , dv = uv - \int v , du" data-type="math-block" class="math-block" data-src="\int u , dv = uv - \int v , du">\int u , dv = uv - \int v , du</div><h3>Linear Algebra</h3><p>Matrix operations: $A \cdot B = C$ where $C_{ij} = \sum_{k} A_{ik} B_{kj}$</p><p>Eigenvalue equation:<br></p><div src="A\mathbf{v} = \lambda\mathbf{v}" data-type="math-block" class="math-block" data-src="A\mathbf{v} = \lambda\mathbf{v}">A\mathbf{v} = \lambda\mathbf{v}</div><h3>Statistics &amp; Probability</h3><p>Normal distribution:<br></p><div src="f(x) = \frac{1}{\sigma\sqrt{2\pi}} e^{-\frac{1}{2}\left(\frac{x-\mu}{\sigma}\right)^2}" data-type="math-block" class="math-block" data-src="f(x) = \frac{1}{\sigma\sqrt{2\pi}} e^{-\frac{1}{2}\left(\frac{x-\mu}{\sigma}\right)^2}">f(x) = \frac{1}{\sigma\sqrt{2\pi}} e^{-\frac{1}{2}\left(\frac{x-\mu}{\sigma}\right)^2}</div><h2>📊 Complex Tables</h2><h3>Project Status Dashboard</h3><table style="min-width: 150px;"><colgroup><col style="min-width: 25px;"><col style="min-width: 25px;"><col style="min-width: 25px;"><col style="min-width: 25px;"><col style="min-width: 25px;"><col style="min-width: 25px;"></colgroup><tbody><tr><th colspan="1" rowspan="1"><p>Project</p></th><th colspan="1" rowspan="1"><p>Team</p></th><th colspan="1" rowspan="1"><p>Progress</p></th><th colspan="1" rowspan="1"><p>Budget</p></th><th colspan="1" rowspan="1"><p>Deadline</p></th><th colspan="1" rowspan="1"><p>Links</p></th></tr><tr><td colspan="1" rowspan="1"><p><strong>Web Platform</strong></p></td><td colspan="1" rowspan="1"><p>Frontend</p></td><td colspan="1" rowspan="1"><p>75%</p></td><td colspan="1" rowspan="1"><p>$50k</p></td><td colspan="1" rowspan="1"><p>Q2 2024</p></td><td colspan="1" rowspan="1"><p>[[Projects/Web-Apps/Main Platform]]</p></td></tr><tr><td colspan="1" rowspan="1"><p><strong>Mobile App</strong></p></td><td colspan="1" rowspan="1"><p>Mobile</p></td><td colspan="1" rowspan="1"><p>45%</p></td><td colspan="1" rowspan="1"><p>$30k</p></td><td colspan="1" rowspan="1"><p>Q3 2024</p></td><td colspan="1" rowspan="1"><p>[[Projects/Mobile/iOS App]]</p></td></tr><tr><td colspan="1" rowspan="1"><p><strong>API Service</strong></p></td><td colspan="1" rowspan="1"><p>Backend</p></td><td colspan="1" rowspan="1"><p>90%</p></td><td colspan="1" rowspan="1"><p>$25k</p></td><td colspan="1" rowspan="1"><p>Q1 2024</p></td><td colspan="1" rowspan="1"><p>[[Documentation/API/Overview]]</p></td></tr><tr><td colspan="1" rowspan="1"><p><strong>Database Migration</strong></p></td><td colspan="1" rowspan="1"><p>DevOps</p></td><td colspan="1" rowspan="1"><p>60%</p></td><td colspan="1" rowspan="1"><p>$15k</p></td><td colspan="1" rowspan="1"><p>Q2 2024</p></td><td colspan="1" rowspan="1"><p>[[Research/Database/Migration Plan]]</p></td></tr></tbody></table><h3>Feature Comparison</h3><table style="min-width: 125px;"><colgroup><col style="min-width: 25px;"><col style="min-width: 25px;"><col style="min-width: 25px;"><col style="min-width: 25px;"><col style="min-width: 25px;"></colgroup><tbody><tr><th colspan="1" rowspan="1"><p>Feature</p></th><th colspan="1" rowspan="1"><p>Lokus</p></th><th colspan="1" rowspan="1"><p>Obsidian</p></th><th colspan="1" rowspan="1"><p>Notion</p></th><th colspan="1" rowspan="1"><p>Notes</p></th></tr><tr><td colspan="1" rowspan="1"><p>WikiLinks</p></td><td colspan="1" rowspan="1"><p>✅</p></td><td colspan="1" rowspan="1"><p>✅</p></td><td colspan="1" rowspan="1"><p>❌</p></td><td colspan="1" rowspan="1"><p>Core feature</p></td></tr><tr><td colspan="1" rowspan="1"><p>Math Rendering</p></td><td colspan="1" rowspan="1"><p>✅</p></td><td colspan="1" rowspan="1"><p>✅</p></td><td colspan="1" rowspan="1"><p>✅</p></td><td colspan="1" rowspan="1"><p>KaTeX powered</p></td></tr><tr><td colspan="1" rowspan="1"><p>Real-time Sync</p></td><td colspan="1" rowspan="1"><p>🚧</p></td><td colspan="1" rowspan="1"><p>✅</p></td><td colspan="1" rowspan="1"><p>✅</p></td><td colspan="1" rowspan="1"><p>In development</p></td></tr><tr><td colspan="1" rowspan="1"><p>Graph View</p></td><td colspan="1" rowspan="1"><p>✅</p></td><td colspan="1" rowspan="1"><p>✅</p></td><td colspan="1" rowspan="1"><p>❌</p></td><td colspan="1" rowspan="1"><p>Beautiful visualization</p></td></tr><tr><td colspan="1" rowspan="1"><p>Tables</p></td><td colspan="1" rowspan="1"><p>✅</p></td><td colspan="1" rowspan="1"><p>✅</p></td><td colspan="1" rowspan="1"><p>✅</p></td><td colspan="1" rowspan="1"><p>Resizable columns</p></td></tr></tbody></table><h2>✅ Advanced Task Management</h2><h3>Development Roadmap</h3><ul><li><p>[x] <strong>Phase 1: Core Features</strong></p><ul><li><p>[x] Rich text editor (TipTap)</p></li><li><p>[x] WikiLink system</p></li><li><p>[x] Math rendering</p></li><li><p>[x] File management</p></li></ul></li><li><p>[ ] <strong>Phase 2: Advanced Features</strong></p><ul><li><p>[x] Graph visualization</p></li><li><p>[ ] Real-time collaboration</p></li><li><p>[ ] Plugin system</p></li><li><p>[ ] Mobile sync</p></li></ul></li><li><p>[ ] <strong>Phase 3: Enhancement</strong></p><ul><li><p>[ ] AI-powered features</p></li><li><p>[ ] Advanced search</p></li><li><p>[ ] Custom themes</p></li><li><p>[ ] Performance optimization</p></li></ul></li></ul><h3>Bug Tracking</h3><ul><li><p>[x] <s>Fix WikiLink autocomplete conflicts</s> (Resolved)</p></li><li><p>[x] <s>Math rendering issues</s> (Fixed with KaTeX)</p></li><li><p>[ ] Graph performance with 1000+ nodes</p></li><li><p>[ ] Table column resizing edge cases</p></li></ul><h2>💻 Code Showcase</h2><h3>Frontend (React/TypeScript)</h3><pre><code class="language-typescript">interface WikiLinkProps {
   target: string;
   display?: string;
-  onNavigate: (path: string) => void;
+  onNavigate: (path: string) =&gt; void;
 }
-
-const WikiLink: React.FC<WikiLinkProps> = ({ target, display, onNavigate }) => {
-  return (
-    <a 
-      className="wiki-link"
-      onClick={() => onNavigate(target)}
-    >
-      {display || target}
-    </a>
-  );
-};
-```
-
-### Backend (Rust/Tauri)
-```rust
-#[tauri::command]
-async fn save_file(path: String, content: String) -> Result<(), String> {
-    match fs::write(&path, content).await {
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("Failed to save file: {}", e))
+</code></pre><p></p><p><code>const WikiLink: React.FC&lt;WikiLinkProps&gt; = ({ target, display, onNavigate }) =&gt; {<br> return (<br> &lt;a<br> className="wiki-link"<br> onClick={() =&gt; onNavigate(target)}<br> &gt;<br> {display || target}<br> &lt;/a&gt;<br> );<br> };<br></code></p><p></p><h3>Backend (Rust/Tauri)</h3><pre><code class="language-rust">#[tauri::command]
+async fn save_file(path: String, content: String) -&gt; Result&lt;(), String&gt; {
+    match fs::write(&amp;path, content).await {
+        Ok(_) =&gt; Ok(()),
+        Err(e) =&gt; Err(format!("Failed to save file: {}", e))
     }
 }
-```
-
-### Algorithms & Data Structures
-```python
-def build_wiki_link_graph(documents):
+</code></pre><h3>Algorithms &amp; Data Structures</h3><pre><code class="language-python">def build_wiki_link_graph(documents):
     """Build a graph from WikiLink connections"""
     graph = defaultdict(list)
-    
-    for doc in documents:
-        links = extract_wiki_links(doc.content)
-        for link in links:
-            graph[doc.id].append(link.target)
-    
-    return graph
-```
+</code></pre><pre><code>for doc in documents:
+    links = extract_wiki_links(doc.content)
+    for link in links:
+        graph[doc.id].append(link.target)
 
-## 🎨 Rich Content
-
-### Chemistry Examples
-Water molecule: H~2~O
-Carbon dioxide: CO~2~
-Glucose: C~6~H~12~O~6~
-
-### Physics Formulas
-Einstein's equation: $E = mc^2$
-Kinetic energy: $KE = \frac{1}{2}mv^2$
-Wave equation: $v = f\lambda$
-
-### Mathematical Notation
-Quadratic formula: $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$
-Pythagorean theorem: $a^2 + b^2 = c^2$
-
-## 🔍 Cross-References
-
-This document connects to:
-- [[README]] - Main overview
-- [[Getting Started]] - Introduction
-- [[Research/AI/Overview]] - AI research
-- [[Projects/Main Dashboard]] - Project tracking
-- [[Documentation/Technical/Architecture]] - Technical details
-
----
-
-**Related:** [[Performance Tests]] | [[Advanced Features]] | [[User Guide]]
-
-*Comprehensive feature demonstration complete* ✨
+return graph
+</code></pre><p></p><p></p><h2>🎨 Rich Content</h2><h3>Chemistry Examples</h3><p>Water molecule: <span src="H~2~O" data-type="math-inline" class="math-inline" data-src="H~2~O">H~2~O</span> <br> Carbon dioxide: CO~2~<br> Glucose: C~6~H~12~O~6~</p><h3>Physics Formulas</h3><p>Einstein’s equation: <span src="E = mc^2" data-type="math-inline" class="math-inline" data-src="E = mc^2">E = mc^2</span><br> Kinetic energy: <span src="KE = \frac{1}{2}mv^2" data-type="math-inline" class="math-inline" data-src="KE = \frac{1}{2}mv^2">KE = \frac{1}{2}mv^2</span><br> Wave equation: <span src="v = f\lambda" data-type="math-inline" class="math-inline" data-src="v = f\lambda">v = f\lambda</span></p><h3>Mathematical Notation</h3><p>Quadratic formula: <span src="x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}" data-type="math-inline" class="math-inline" data-src="x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}">x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}</span><br> Pythagorean theorem: <span src="a^2 + b^2 = c^2" data-type="math-inline" class="math-inline" data-src="a^2 + b^2 = c^2">a^2 + b^2 = c^2</span></p><h2>🔍 Cross-References</h2><p>This document connects to:</p><ul><li><p>[[README]] - Main overview</p></li><li><p>[[Getting Started]] - Introduction</p></li><li><p>[[Research/AI/Overview]] - AI research</p></li><li><p>[[Projects/Main Dashboard]] - Project tracking</p></li><li><p>[[Documentation/Technical/Architecture]] - Technical details</p></li></ul><hr><p><strong>Related:</strong> [[Performance Tests]] | [[Advanced Features]] | [[User Guide]]</p><p><em>Comprehensive feature demonstration complete</em> ✨</p>
