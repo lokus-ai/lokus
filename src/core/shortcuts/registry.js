@@ -33,6 +33,10 @@ export const ACTIONS = [
   { id: "refresh-files",    name: "Refresh File Tree",   event: "lokus:refresh-files",    default: "F5" },
   { id: "new-canvas",       name: "New Canvas",          event: "lokus:new-canvas",       default: "CommandOrControl+Shift+C" },
   { id: "open-kanban",      name: "Open Kanban Board",   event: "lokus:open-kanban",      default: "CommandOrControl+Shift+K" },
+  { id: "toggle-split-view", name: "Toggle Split View",   event: "lokus:toggle-split-view", default: "CommandOrControl+\\" },
+  { id: "toggle-split-direction", name: "Toggle Split Direction", event: "lokus:toggle-split-direction", default: "CommandOrControl+Shift+\\" },
+  { id: "reset-pane-size",  name: "Reset Pane Size",     event: "lokus:reset-pane-size",  default: "CommandOrControl+Alt+\\" },
+  { id: "toggle-sync-scrolling", name: "Toggle Sync Scrolling", event: "lokus:toggle-sync-scrolling", default: "CommandOrControl+Alt+S" },
 ];
 
 export function listActions() { return ACTIONS.map(a => ({ id: a.id, name: a.name })); }
