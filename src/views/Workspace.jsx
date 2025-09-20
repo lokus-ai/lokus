@@ -1516,6 +1516,241 @@ export default function Workspace({ initialPath = "" }) {
     };
     const unlistenTemplatePicker = Promise.resolve(addDom('open-template-picker', handleTemplatePicker));
 
+    // Menu event handlers for editor formatting
+    const handleEditorFormat = (formatType) => {
+      if (!editorRef.current) return;
+      const editor = editorRef.current;
+      
+      switch (formatType) {
+        case 'bold':
+          editor.chain().focus().toggleBold().run();
+          break;
+        case 'italic':
+          editor.chain().focus().toggleItalic().run();
+          break;
+        case 'underline':
+          editor.chain().focus().toggleUnderline().run();
+          break;
+        case 'strikethrough':
+          editor.chain().focus().toggleStrike().run();
+          break;
+        case 'code':
+          editor.chain().focus().toggleCode().run();
+          break;
+        case 'highlight':
+          editor.chain().focus().toggleHighlight().run();
+          break;
+        case 'superscript':
+          editor.chain().focus().toggleSuperscript().run();
+          break;
+        case 'subscript':
+          editor.chain().focus().toggleSubscript().run();
+          break;
+        case 'clear-formatting':
+          editor.chain().focus().unsetAllMarks().run();
+          break;
+      }
+    };
+
+    const handleEditorEdit = (action) => {
+      if (!editorRef.current) return;
+      const editor = editorRef.current;
+      
+      switch (action) {
+        case 'undo':
+          editor.chain().focus().undo().run();
+          break;
+        case 'redo':
+          editor.chain().focus().redo().run();
+          break;
+        case 'cut':
+          document.execCommand('cut');
+          break;
+        case 'copy':
+          document.execCommand('copy');
+          break;
+        case 'paste':
+          document.execCommand('paste');
+          break;
+        case 'select-all':
+          editor.chain().focus().selectAll().run();
+          break;
+      }
+    };
+
+    const handleEditorInsert = (insertType) => {
+      if (!editorRef.current) return;
+      const editor = editorRef.current;
+      
+      switch (insertType) {
+        case 'wikilink':
+          setShowWikiLinkModal(true);
+          break;
+        case 'math-inline':
+          editor.chain().focus().insertContent('$  $').setTextSelection(editor.state.selection.from - 2).run();
+          break;
+        case 'math-block':
+          editor.chain().focus().insertContent('\n$$\n\n$$\n').setTextSelection(editor.state.selection.from - 4).run();
+          break;
+        case 'table':
+          if (editor.commands.insertTable) {
+            editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+          }
+          break;
+        case 'image':
+          const imageUrl = prompt('Enter image URL:');
+          if (imageUrl) {
+            editor.chain().focus().setImage({ src: imageUrl }).run();
+          }
+          break;
+        case 'code-block':
+          editor.chain().focus().setCodeBlock().run();
+          break;
+        case 'horizontal-rule':
+          editor.chain().focus().setHorizontalRule().run();
+          break;
+        case 'blockquote':
+          editor.chain().focus().toggleBlockquote().run();
+          break;
+        case 'bullet-list':
+          editor.chain().focus().toggleBulletList().run();
+          break;
+        case 'ordered-list':
+          editor.chain().focus().toggleOrderedList().run();
+          break;
+        case 'task-list':
+          editor.chain().focus().toggleTaskList().run();
+          break;
+      }
+    };
+
+    const handleViewAction = (action) => {
+      switch (action) {
+        case 'zoom-in':
+          // Implement zoom in functionality
+          const currentZoom = parseFloat(document.documentElement.style.zoom || '1');
+          document.documentElement.style.zoom = Math.min(currentZoom + 0.1, 2).toString();
+          break;
+        case 'zoom-out':
+          // Implement zoom out functionality
+          const currentZoomOut = parseFloat(document.documentElement.style.zoom || '1');
+          document.documentElement.style.zoom = Math.max(currentZoomOut - 0.1, 0.5).toString();
+          break;
+        case 'actual-size':
+          // Reset zoom to 100%
+          document.documentElement.style.zoom = '1';
+          break;
+        case 'fullscreen':
+          if (document.fullscreenElement) {
+            document.exitFullscreen();
+          } else {
+            document.documentElement.requestFullscreen();
+          }
+          break;
+      }
+    };
+
+    const handleWindowAction = (action) => {
+      switch (action) {
+        case 'minimize':
+          if (window.__TAURI__) {
+            import('@tauri-apps/api/window').then(({ appWindow }) => {
+              appWindow.minimize();
+            });
+          }
+          break;
+        case 'close':
+          if (window.__TAURI__) {
+            import('@tauri-apps/api/window').then(({ appWindow }) => {
+              appWindow.close();
+            });
+          }
+          break;
+      }
+    };
+
+    const handleHelpAction = (action) => {
+      switch (action) {
+        case 'help':
+          // Open help documentation
+          window.open('https://docs.lokus.dev', '_blank');
+          break;
+        case 'keyboard-shortcuts':
+          setShowShortcutHelp(true);
+          break;
+        case 'release-notes':
+          // Open release notes
+          window.open('https://github.com/lokus-app/lokus/releases', '_blank');
+          break;
+        case 'report-issue':
+          // Open issue tracker
+          window.open('https://github.com/lokus-app/lokus/issues', '_blank');
+          break;
+      }
+    };
+
+    // File menu events
+    const unlistenOpenFile = isTauri ? listen("lokus:file-open", () => {
+      // TODO: Implement file open dialog
+    }) : Promise.resolve(addDom('lokus:file-open', () => {}));
+    
+    const unlistenExportPdf = isTauri ? listen("lokus:export-pdf", () => {
+      // TODO: Implement PDF export
+    }) : Promise.resolve(addDom('lokus:export-pdf', () => {}));
+    
+    const unlistenPrint = isTauri ? listen("lokus:print", () => {
+      window.print();
+    }) : Promise.resolve(addDom('lokus:print', () => { window.print(); }));
+
+    // Edit menu events
+    const unlistenUndo = isTauri ? listen("lokus:edit-undo", () => handleEditorEdit('undo')) : Promise.resolve(addDom('lokus:edit-undo', () => handleEditorEdit('undo')));
+    const unlistenRedo = isTauri ? listen("lokus:edit-redo", () => handleEditorEdit('redo')) : Promise.resolve(addDom('lokus:edit-redo', () => handleEditorEdit('redo')));
+    const unlistenCut = isTauri ? listen("lokus:edit-cut", () => handleEditorEdit('cut')) : Promise.resolve(addDom('lokus:edit-cut', () => handleEditorEdit('cut')));
+    const unlistenCopy = isTauri ? listen("lokus:edit-copy", () => handleEditorEdit('copy')) : Promise.resolve(addDom('lokus:edit-copy', () => handleEditorEdit('copy')));
+    const unlistenPaste = isTauri ? listen("lokus:edit-paste", () => handleEditorEdit('paste')) : Promise.resolve(addDom('lokus:edit-paste', () => handleEditorEdit('paste')));
+    const unlistenSelectAll = isTauri ? listen("lokus:edit-select-all", () => handleEditorEdit('select-all')) : Promise.resolve(addDom('lokus:edit-select-all', () => handleEditorEdit('select-all')));
+    const unlistenFindReplace = isTauri ? listen("lokus:find-replace", () => setShowInFileSearch(true)) : Promise.resolve(addDom('lokus:find-replace', () => setShowInFileSearch(true)));
+
+    // View menu events
+    const unlistenZoomIn = isTauri ? listen("lokus:zoom-in", () => handleViewAction('zoom-in')) : Promise.resolve(addDom('lokus:zoom-in', () => handleViewAction('zoom-in')));
+    const unlistenZoomOut = isTauri ? listen("lokus:zoom-out", () => handleViewAction('zoom-out')) : Promise.resolve(addDom('lokus:zoom-out', () => handleViewAction('zoom-out')));
+    const unlistenActualSize = isTauri ? listen("lokus:actual-size", () => handleViewAction('actual-size')) : Promise.resolve(addDom('lokus:actual-size', () => handleViewAction('actual-size')));
+    const unlistenFullscreen = isTauri ? listen("lokus:toggle-fullscreen", () => handleViewAction('fullscreen')) : Promise.resolve(addDom('lokus:toggle-fullscreen', () => handleViewAction('fullscreen')));
+
+    // Insert menu events
+    const unlistenInsertWikiLink = isTauri ? listen("lokus:insert-wikilink", () => handleEditorInsert('wikilink')) : Promise.resolve(addDom('lokus:insert-wikilink', () => handleEditorInsert('wikilink')));
+    const unlistenInsertMathInline = isTauri ? listen("lokus:insert-math-inline", () => handleEditorInsert('math-inline')) : Promise.resolve(addDom('lokus:insert-math-inline', () => handleEditorInsert('math-inline')));
+    const unlistenInsertMathBlock = isTauri ? listen("lokus:insert-math-block", () => handleEditorInsert('math-block')) : Promise.resolve(addDom('lokus:insert-math-block', () => handleEditorInsert('math-block')));
+    const unlistenInsertTable = isTauri ? listen("lokus:insert-table", () => handleEditorInsert('table')) : Promise.resolve(addDom('lokus:insert-table', () => handleEditorInsert('table')));
+    const unlistenInsertImage = isTauri ? listen("lokus:insert-image", () => handleEditorInsert('image')) : Promise.resolve(addDom('lokus:insert-image', () => handleEditorInsert('image')));
+    const unlistenInsertCodeBlock = isTauri ? listen("lokus:insert-code-block", () => handleEditorInsert('code-block')) : Promise.resolve(addDom('lokus:insert-code-block', () => handleEditorInsert('code-block')));
+    const unlistenInsertHorizontalRule = isTauri ? listen("lokus:insert-horizontal-rule", () => handleEditorInsert('horizontal-rule')) : Promise.resolve(addDom('lokus:insert-horizontal-rule', () => handleEditorInsert('horizontal-rule')));
+    const unlistenInsertBlockquote = isTauri ? listen("lokus:insert-blockquote", () => handleEditorInsert('blockquote')) : Promise.resolve(addDom('lokus:insert-blockquote', () => handleEditorInsert('blockquote')));
+    const unlistenInsertBulletList = isTauri ? listen("lokus:insert-bullet-list", () => handleEditorInsert('bullet-list')) : Promise.resolve(addDom('lokus:insert-bullet-list', () => handleEditorInsert('bullet-list')));
+    const unlistenInsertOrderedList = isTauri ? listen("lokus:insert-ordered-list", () => handleEditorInsert('ordered-list')) : Promise.resolve(addDom('lokus:insert-ordered-list', () => handleEditorInsert('ordered-list')));
+    const unlistenInsertTaskList = isTauri ? listen("lokus:insert-task-list", () => handleEditorInsert('task-list')) : Promise.resolve(addDom('lokus:insert-task-list', () => handleEditorInsert('task-list')));
+
+    // Format menu events
+    const unlistenFormatBold = isTauri ? listen("lokus:format-bold", () => handleEditorFormat('bold')) : Promise.resolve(addDom('lokus:format-bold', () => handleEditorFormat('bold')));
+    const unlistenFormatItalic = isTauri ? listen("lokus:format-italic", () => handleEditorFormat('italic')) : Promise.resolve(addDom('lokus:format-italic', () => handleEditorFormat('italic')));
+    const unlistenFormatUnderline = isTauri ? listen("lokus:format-underline", () => handleEditorFormat('underline')) : Promise.resolve(addDom('lokus:format-underline', () => handleEditorFormat('underline')));
+    const unlistenFormatStrikethrough = isTauri ? listen("lokus:format-strikethrough", () => handleEditorFormat('strikethrough')) : Promise.resolve(addDom('lokus:format-strikethrough', () => handleEditorFormat('strikethrough')));
+    const unlistenFormatCode = isTauri ? listen("lokus:format-code", () => handleEditorFormat('code')) : Promise.resolve(addDom('lokus:format-code', () => handleEditorFormat('code')));
+    const unlistenFormatHighlight = isTauri ? listen("lokus:format-highlight", () => handleEditorFormat('highlight')) : Promise.resolve(addDom('lokus:format-highlight', () => handleEditorFormat('highlight')));
+    const unlistenFormatSuperscript = isTauri ? listen("lokus:format-superscript", () => handleEditorFormat('superscript')) : Promise.resolve(addDom('lokus:format-superscript', () => handleEditorFormat('superscript')));
+    const unlistenFormatSubscript = isTauri ? listen("lokus:format-subscript", () => handleEditorFormat('subscript')) : Promise.resolve(addDom('lokus:format-subscript', () => handleEditorFormat('subscript')));
+    const unlistenFormatClear = isTauri ? listen("lokus:format-clear", () => handleEditorFormat('clear-formatting')) : Promise.resolve(addDom('lokus:format-clear', () => handleEditorFormat('clear-formatting')));
+
+    // Window menu events
+    const unlistenWindowMinimize = isTauri ? listen("lokus:window-minimize", () => handleWindowAction('minimize')) : Promise.resolve(addDom('lokus:window-minimize', () => handleWindowAction('minimize')));
+    const unlistenWindowClose = isTauri ? listen("lokus:window-close", () => handleWindowAction('close')) : Promise.resolve(addDom('lokus:window-close', () => handleWindowAction('close')));
+
+    // Help menu events
+    const unlistenHelp = isTauri ? listen("lokus:help", () => handleHelpAction('help')) : Promise.resolve(addDom('lokus:help', () => handleHelpAction('help')));
+    const unlistenKeyboardShortcuts = isTauri ? listen("lokus:keyboard-shortcuts", () => handleHelpAction('keyboard-shortcuts')) : Promise.resolve(addDom('lokus:keyboard-shortcuts', () => handleHelpAction('keyboard-shortcuts')));
+    const unlistenReleaseNotes = isTauri ? listen("lokus:release-notes", () => handleHelpAction('release-notes')) : Promise.resolve(addDom('lokus:release-notes', () => handleHelpAction('release-notes')));
+    const unlistenReportIssue = isTauri ? listen("lokus:report-issue", () => handleHelpAction('report-issue')) : Promise.resolve(addDom('lokus:report-issue', () => handleHelpAction('report-issue')));
+
     return () => {
       unlistenSave.then(f => { if (typeof f === 'function') f(); });
       unlistenClose.then(f => { if (typeof f === 'function') f(); });
@@ -1536,6 +1771,48 @@ export default function Workspace({ initialPath = "" }) {
       unlistenResetPaneSize.then(f => { if (typeof f === 'function') f(); });
       unlistenToggleSyncScrolling.then(f => { if (typeof f === 'function') f(); });
       unlistenTemplatePicker.then(f => { if (typeof f === 'function') f(); });
+      
+      // Cleanup menu event listeners
+      unlistenOpenFile.then(f => { if (typeof f === 'function') f(); });
+      unlistenExportPdf.then(f => { if (typeof f === 'function') f(); });
+      unlistenPrint.then(f => { if (typeof f === 'function') f(); });
+      unlistenUndo.then(f => { if (typeof f === 'function') f(); });
+      unlistenRedo.then(f => { if (typeof f === 'function') f(); });
+      unlistenCut.then(f => { if (typeof f === 'function') f(); });
+      unlistenCopy.then(f => { if (typeof f === 'function') f(); });
+      unlistenPaste.then(f => { if (typeof f === 'function') f(); });
+      unlistenSelectAll.then(f => { if (typeof f === 'function') f(); });
+      unlistenFindReplace.then(f => { if (typeof f === 'function') f(); });
+      unlistenZoomIn.then(f => { if (typeof f === 'function') f(); });
+      unlistenZoomOut.then(f => { if (typeof f === 'function') f(); });
+      unlistenActualSize.then(f => { if (typeof f === 'function') f(); });
+      unlistenFullscreen.then(f => { if (typeof f === 'function') f(); });
+      unlistenInsertWikiLink.then(f => { if (typeof f === 'function') f(); });
+      unlistenInsertMathInline.then(f => { if (typeof f === 'function') f(); });
+      unlistenInsertMathBlock.then(f => { if (typeof f === 'function') f(); });
+      unlistenInsertTable.then(f => { if (typeof f === 'function') f(); });
+      unlistenInsertImage.then(f => { if (typeof f === 'function') f(); });
+      unlistenInsertCodeBlock.then(f => { if (typeof f === 'function') f(); });
+      unlistenInsertHorizontalRule.then(f => { if (typeof f === 'function') f(); });
+      unlistenInsertBlockquote.then(f => { if (typeof f === 'function') f(); });
+      unlistenInsertBulletList.then(f => { if (typeof f === 'function') f(); });
+      unlistenInsertOrderedList.then(f => { if (typeof f === 'function') f(); });
+      unlistenInsertTaskList.then(f => { if (typeof f === 'function') f(); });
+      unlistenFormatBold.then(f => { if (typeof f === 'function') f(); });
+      unlistenFormatItalic.then(f => { if (typeof f === 'function') f(); });
+      unlistenFormatUnderline.then(f => { if (typeof f === 'function') f(); });
+      unlistenFormatStrikethrough.then(f => { if (typeof f === 'function') f(); });
+      unlistenFormatCode.then(f => { if (typeof f === 'function') f(); });
+      unlistenFormatHighlight.then(f => { if (typeof f === 'function') f(); });
+      unlistenFormatSuperscript.then(f => { if (typeof f === 'function') f(); });
+      unlistenFormatSubscript.then(f => { if (typeof f === 'function') f(); });
+      unlistenFormatClear.then(f => { if (typeof f === 'function') f(); });
+      unlistenWindowMinimize.then(f => { if (typeof f === 'function') f(); });
+      unlistenWindowClose.then(f => { if (typeof f === 'function') f(); });
+      unlistenHelp.then(f => { if (typeof f === 'function') f(); });
+      unlistenKeyboardShortcuts.then(f => { if (typeof f === 'function') f(); });
+      unlistenReleaseNotes.then(f => { if (typeof f === 'function') f(); });
+      unlistenReportIssue.then(f => { if (typeof f === 'function') f(); });
     };
   }, [handleSave, handleTabClose, handleReopenClosedTab, handleToggleSplitView, toggleSplitDirection, resetPaneSize]);
 

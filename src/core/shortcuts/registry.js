@@ -37,6 +37,38 @@ export const ACTIONS = [
   { id: "toggle-split-direction", name: "Toggle Split Direction", event: "lokus:toggle-split-direction", default: "CommandOrControl+Shift+\\" },
   { id: "reset-pane-size",  name: "Reset Pane Size",     event: "lokus:reset-pane-size",  default: "CommandOrControl+Alt+\\" },
   { id: "toggle-sync-scrolling", name: "Toggle Sync Scrolling", event: "lokus:toggle-sync-scrolling", default: "CommandOrControl+Alt+S" },
+  
+  // Edit menu shortcuts
+  { id: "undo", name: "Undo", event: "lokus:edit-undo", default: "CommandOrControl+Z" },
+  { id: "redo", name: "Redo", event: "lokus:edit-redo", default: "CommandOrControl+Shift+Z" },
+  { id: "cut", name: "Cut", event: "lokus:edit-cut", default: "CommandOrControl+X" },
+  { id: "copy", name: "Copy", event: "lokus:edit-copy", default: "CommandOrControl+C" },
+  { id: "paste", name: "Paste", event: "lokus:edit-paste", default: "CommandOrControl+V" },
+  { id: "select-all", name: "Select All", event: "lokus:edit-select-all", default: "CommandOrControl+A" },
+  { id: "find-replace", name: "Find and Replace", event: "lokus:find-replace", default: "CommandOrControl+H" },
+  
+  // View menu shortcuts
+  { id: "zoom-in", name: "Zoom In", event: "lokus:zoom-in", default: "CommandOrControl+Plus" },
+  { id: "zoom-out", name: "Zoom Out", event: "lokus:zoom-out", default: "CommandOrControl+-" },
+  { id: "actual-size", name: "Actual Size", event: "lokus:actual-size", default: "CommandOrControl+0" },
+  { id: "toggle-fullscreen", name: "Toggle Fullscreen", event: "lokus:toggle-fullscreen", default: "F11" },
+  
+  // Format menu shortcuts
+  { id: "format-bold", name: "Bold", event: "lokus:format-bold", default: "CommandOrControl+B" },
+  { id: "format-italic", name: "Italic", event: "lokus:format-italic", default: "CommandOrControl+I" },
+  { id: "format-underline", name: "Underline", event: "lokus:format-underline", default: "CommandOrControl+U" },
+  { id: "format-strikethrough", name: "Strikethrough", event: "lokus:format-strikethrough", default: "CommandOrControl+Shift+X" },
+  { id: "format-code", name: "Inline Code", event: "lokus:format-code", default: "CommandOrControl+E" },
+  { id: "format-highlight", name: "Highlight", event: "lokus:format-highlight", default: "CommandOrControl+Shift+H" },
+  
+  // Insert menu shortcuts
+  { id: "insert-math-inline", name: "Insert Inline Math", event: "lokus:insert-math-inline", default: "CommandOrControl+M" },
+  { id: "insert-math-block", name: "Insert Math Block", event: "lokus:insert-math-block", default: "CommandOrControl+Shift+M" },
+  { id: "insert-table", name: "Insert Table", event: "lokus:insert-table", default: "CommandOrControl+Shift+T" },
+  { id: "insert-code-block", name: "Insert Code Block", event: "lokus:insert-code-block", default: "CommandOrControl+Shift+C" },
+  
+  // File menu shortcuts
+  { id: "print", name: "Print", event: "lokus:print", default: "CommandOrControl+P" },
 ];
 
 export function listActions() { return ACTIONS.map(a => ({ id: a.id, name: a.name })); }
