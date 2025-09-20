@@ -8,6 +8,8 @@ import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/short
 import { PluginProvider } from "./hooks/usePlugins.jsx";
 // Import workspace manager to expose developer utilities
 import "./core/workspace/manager.js";
+// Import MCP client for stdio-based connections
+import mcpClient from "./core/mcp/client.js";
 // Guard window access in non-Tauri environments
 import { emit } from "@tauri-apps/api/event";
 
@@ -40,6 +42,8 @@ function App() {
         if (document.hasFocus()) {
           registerAppShortcuts();
         }
+
+        // MCP client is ready for configuration instructions (no server management needed)
         
         return () => {
           window.removeEventListener('focus', onFocus);

@@ -12,22 +12,18 @@
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    
     "dev:windows": "node scripts/check-platform.js && tauri dev --config src-tauri/tauri.windows.conf.json",
     "dev:macos": "node scripts/check-platform.js && tauri dev --config src-tauri/tauri.macos.conf.json",
     "dev:linux": "node scripts/check-platform.js && tauri dev",
-    
     "build:windows": "node scripts/build-windows.js",
     "build:macos": "node scripts/build-macos.js",
     "build:linux": "node scripts/build-linux.js",
     "build:all": "node scripts/check-platform.js && npm run build:all:cross",
     "build:all:cross": "npm run build:windows && npm run build:macos && npm run build:linux",
-    
     "check-platform": "node scripts/check-platform.js",
     "deps:check": "node scripts/check-platform.js --verbose",
     "clean": "rimraf dist src-tauri/target dist-windows dist-macos dist-linux",
     "clean:build": "npm run clean && npm install",
-    
     "test": "vitest run",
     "test:watch": "vitest",
     "test:watch:silent": "vitest --reporter=basic --hideSkippedTests",
@@ -39,6 +35,7 @@
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
+    "@modelcontextprotocol/sdk": "^0.5.0",
     "@radix-ui/react-context-menu": "^2.2.16",
     "@radix-ui/react-dialog": "^1.1.15",
     "@react-sigma/core": "^5.0.4",
@@ -72,15 +69,21 @@
     "@tldraw/tldraw": "^3.15.4",
     "@types/d3-force": "^3.0.10",
     "@types/three": "^0.180.0",
+    "argon2": "^0.44.0",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "crypto-js": "^4.2.0",
     "d3-force": "^3.0.0",
     "dompurify": "^3.2.6",
+    "express-rate-limit": "^8.1.0",
     "framer-motion": "^12.23.14",
     "graphology": "^0.26.0",
     "graphology-layout-force": "^0.2.4",
     "graphology-layout-forceatlas2": "^0.10.1",
+    "helmet": "^8.1.0",
     "highlight.js": "^11.11.1",
+    "ioredis": "^5.7.0",
+    "jsonwebtoken": "^9.0.2",
     "katex": "^0.16.22",
     "lowlight": "^2.9.0",
     "lucide-react": "^0.542.0",
@@ -98,7 +101,9 @@
     "tippy.js": "^6.3.7",
     "tldraw": "^3.15.4",
     "uuid": "^11.1.0",
-    "validator": "^13.15.15"
+    "validator": "^13.15.15",
+    "winston": "^3.17.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",

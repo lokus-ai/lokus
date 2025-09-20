@@ -1,0 +1,266 @@
+{
+  "globalShortcut": "Cmd+Shift+C",
+  "menuBarIcon": true,
+  "mcpServers": {
+    "lokus": {
+      "command": "node",
+      "args": [
+        "/path/to/lokus-mcp-bridge.js"
+      ],
+      "env": {
+        "LOKUS_API_KEY": "your-lokus-api-key-here",
+        "LOKUS_MCP_URL": "ws://localhost:3001/mcp",
+        "LOKUS_WORKSPACE_PATH": "/Users/username/Documents/Lokus",
+        "MCP_LOG_LEVEL": "info"
+      }
+    },
+    "lokus-file-server": {
+      "command": "npx",
+      "args": [
+        "@lokus/mcp-file-server"
+      ],
+      "env": {
+        "WORKSPACE_ROOT": "/Users/username/Documents/Lokus",
+        "ALLOWED_EXTENSIONS": ".md,.txt,.json,.yaml,.js,.py",
+        "READ_ONLY": "false"
+      }
+    },
+    "lokus-search-server": {
+      "command": "python",
+      "args": [
+        "-m", "lokus_mcp_search_server"
+      ],
+      "env": {
+        "LOKUS_API_KEY": "your-lokus-api-key-here",
+        "SEARCH_INDEX_PATH": "/Users/username/.lokus/search-index",
+        "ENABLE_SEMANTIC_SEARCH": "true"
+      }
+    }
+  },
+  "serverSettings": {
+    "lokus": {
+      "description": "Full Lokus workspace integration with real-time updates",
+      "features": [
+        "File management",
+        "Content search",
+        "Real-time subscriptions", 
+        "Plugin ecosystem access",
+        "Workspace metadata"
+      ],
+      "permissions": {
+        "read": true,
+        "write": true,
+        "execute": true,
+        "subscribe": true
+      },
+      "rateLimit": {
+        "requestsPerMinute": 1000,
+        "toolCallsPerMinute": 500,
+        "subscriptionsPerClient": 100
+      }
+    },
+    "lokus-file-server": {
+      "description": "File-only access to Lokus workspace",
+      "features": [
+        "Read/write files",
+        "Directory listing",
+        "File watching"
+      ],
+      "permissions": {
+        "read": true,
+        "write": true,
+        "execute": false,
+        "subscribe": true
+      }
+    },
+    "lokus-search-server": {
+      "description": "Advanced search capabilities for Lokus content",
+      "features": [
+        "Full-text search",
+        "Semantic search",
+        "Content indexing",
+        "Search suggestions"
+      ],
+      "permissions": {
+        "read": true,
+        "write": false,
+        "execute": true,
+        "subscribe": false
+      }
+    }
+  },
+  "clientInfo": {
+    "name": "Claude Desktop with Lokus",
+    "version": "1.0.0",
+    "description": "Integrated knowledge workspace powered by Lokus"
+  },
+  "ui": {
+    "showServerStatus": true,
+    "enableNotifications": true,
+    "autoReconnect": true,
+    "theme": "auto"
+  },
+  "security": {
+    "requireConfirmation": {
+      "fileWrite": true,
+      "fileDelete": true,
+      "toolExecution": false,
+      "dangerousOperations": true
+    },
+    "sandboxed": true,
+    "allowedHosts": [
+      "localhost",
+      "127.0.0.1"
+    ]
+  },
+  "logging": {
+    "level": "info",
+    "file": "/Users/username/.claude/logs/mcp.log",
+    "maxSize": "10MB",
+    "retention": "7d"
+  },
+  "examples": {
+    "quickStart": {
+      "description": "Get started with Lokus in Claude Desktop",
+      "steps": [
+        "1. Install Lokus and ensure it's running",
+        "2. Generate an API key in Lokus Preferences",
+        "3. Update LOKUS_API_KEY in this config file",
+        "4. Update workspace path to your Lokus directory",
+        "5. Restart Claude Desktop",
+        "6. Try: 'List my recent notes from Lokus'"
+      ]
+    },
+    "commonQueries": [
+      "What notes have I created this week in Lokus?",
+      "Search my Lokus workspace for content about 'project planning'",
+      "Show me the latest changes to my meeting notes",
+      "Create a new note in Lokus about today's ideas",
+      "Summarize my project documentation from Lokus",
+      "Find all TODO items in my Lokus workspace",
+      "What are my most frequently accessed notes?",
+      "Show me notes that mention specific keywords"
+    ],
+    "advancedUseCases": [
+      "Content Analysis: 'Analyze the writing patterns in my journal entries'",
+      "Knowledge Mapping: 'Create a mind map of concepts from my research notes'",
+      "Automated Organization: 'Suggest tags for my untagged notes'",
+      "Cross-Reference: 'Find connections between my project notes'",
+      "Progress Tracking: 'Track progress mentioned in my weekly reviews'",
+      "Research Assistant: 'Compile information about X from my notes'"
+    ]
+  },
+  "troubleshooting": {
+    "common_issues": {
+      "connection_failed": {
+        "description": "Cannot connect to Lokus MCP server",
+        "solutions": [
+          "Verify Lokus is running and MCP server is enabled",
+          "Check that port 3001 is not blocked by firewall",
+          "Ensure API key is correct and has proper permissions",
+          "Try restarting both Lokus and Claude Desktop"
+        ]
+      },
+      "authentication_error": {
+        "description": "API key authentication failed",
+        "solutions": [
+          "Generate a new API key in Lokus Preferences",
+          "Verify the key is correctly set in LOKUS_API_KEY",
+          "Check that the API key hasn't expired",
+          "Ensure the key has necessary permissions"
+        ]
+      },
+      "permission_denied": {
+        "description": "Operations are being denied",
+        "solutions": [
+          "Check file permissions on workspace directory",
+          "Verify API key has write permissions if needed",
+          "Review security settings in Lokus",
+          "Check Claude Desktop security settings"
+        ]
+      },
+      "slow_performance": {
+        "description": "MCP operations are slow",
+        "solutions": [
+          "Reduce workspace size or use selective indexing",
+          "Check system resources (CPU, memory, disk)",
+          "Adjust rate limits in server settings",
+          "Enable caching in Lokus preferences"
+        ]
+      }
+    },
+    "debug_commands": [
+      "Enable debug logging: Set MCP_LOG_LEVEL=debug",
+      "Test connection: curl http://localhost:3001/api/mcp/health",
+      "Check server status: View Lokus preferences MCP tab",
+      "Validate config: Use Claude Desktop's MCP validation tool"
+    ]
+  },
+  "advanced": {
+    "custom_tools": {
+      "description": "How to add custom tools to your Lokus MCP server",
+      "steps": [
+        "1. Create a plugin in Lokus with MCP tool definitions",
+        "2. Register tools using the MCPProtocol.registerTool() method",
+        "3. Implement tool execution logic in your plugin",
+        "4. Test tools using the MCP client examples",
+        "5. Tools will automatically appear in Claude Desktop"
+      ]
+    },
+    "performance_tuning": {
+      "indexing": {
+        "enableSemanticSearch": true,
+        "indexBatchSize": 100,
+        "maxIndexSize": "1GB",
+        "updateInterval": "5m"
+      },
+      "caching": {
+        "enableResourceCache": true,
+        "cacheSize": "256MB",
+        "cacheTTL": "1h"
+      },
+      "networking": {
+        "connectionPoolSize": 10,
+        "requestTimeout": "30s",
+        "keepAliveInterval": "60s"
+      }
+    },
+    "monitoring": {
+      "metrics": {
+        "enabled": true,
+        "endpoint": "http://localhost:3001/metrics",
+        "format": "prometheus"
+      },
+      "health_check": {
+        "enabled": true,
+        "interval": "30s",
+        "endpoint": "http://localhost:3001/health"
+      }
+    }
+  },
+  "plugins": {
+    "recommended": [
+      {
+        "name": "lokus-git-integration",
+        "description": "Git operations and repository insights",
+        "url": "https://github.com/lokus-ai/lokus-git-plugin"
+      },
+      {
+        "name": "lokus-calendar-sync",
+        "description": "Calendar integration for meeting notes",
+        "url": "https://github.com/lokus-ai/lokus-calendar-plugin"
+      },
+      {
+        "name": "lokus-web-clipper",
+        "description": "Save web content to Lokus workspace",
+        "url": "https://github.com/lokus-ai/lokus-web-clipper"
+      }
+    ]
+  },
+  "updates": {
+    "autoUpdate": true,
+    "checkInterval": "24h",
+    "updateChannel": "stable",
+    "notifyOnUpdate": true
+  }
+}
