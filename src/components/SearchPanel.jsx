@@ -38,6 +38,7 @@ export default function SearchPanel({ isOpen, onClose, onFileOpen, workspacePath
   const [expandedFiles, setExpandedFiles] = useState(new Set())
   const [recentSearches, setRecentSearches] = useState([])
   const [showFilters, setShowFilters] = useState(false)
+  const [selectedResultIndex, setSelectedResultIndex] = useState(-1)
   const [searchOptions, setSearchOptions] = useState({
     caseSensitive: false,
     wholeWord: false,
@@ -83,6 +84,7 @@ export default function SearchPanel({ isOpen, onClose, onFileOpen, workspacePath
       })
 
       setResults(searchResults || [])
+      setSelectedResultIndex(-1) // Reset selection when results change
       saveRecentSearch(searchQuery)
       
       // Auto-expand files if there are few results
@@ -107,15 +109,6 @@ export default function SearchPanel({ isOpen, onClose, onFileOpen, workspacePath
     return () => clearTimeout(timeoutId)
   }, [performSearch])
 
-  // Handle keyboard shortcuts
-  const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Escape') {
-      onClose()
-    } else if (e.key === 'Enter') {
-      performSearch()
-    }
-  }, [onClose, performSearch])
-
   // Toggle file expansion
   const toggleFileExpansion = useCallback((filePath) => {
     setExpandedFiles(prev => {
@@ -131,13 +124,47 @@ export default function SearchPanel({ isOpen, onClose, onFileOpen, workspacePath
 
   // Handle file click to open
   const handleFileOpen = useCallback((filePath, lineNumber, column) => {
+    const fileName = filePath.split('/').pop()
     onFileOpen({ 
-      path: filePath, 
+      path: filePath,
+      name: fileName,
       lineNumber: lineNumber,
       column: column || 0
     })
     onClose()
   }, [onFileOpen, onClose])
+
+  // Handle keyboard shortcuts
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'Escape') {
+      onClose()
+    } else if (e.key === 'Enter') {
+      if (selectedResultIndex >= 0 && results.length > 0) {
+        // Open the selected result's first match
+        const selectedResult = results[selectedResultIndex]
+        if (selectedResult && selectedResult.matches.length > 0) {
+          const firstMatch = selectedResult.matches[0]
+          handleFileOpen(selectedResult.file, firstMatch.line, firstMatch.column)
+        }
+      } else {
+        performSearch()
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (results.length > 0) {
+        setSelectedResultIndex(prev => 
+          prev < results.length - 1 ? prev + 1 : 0
+        )
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (results.length > 0) {
+        setSelectedResultIndex(prev => 
+          prev > 0 ? prev - 1 : results.length - 1
+        )
+      }
+    }
+  }, [onClose, performSearch, selectedResultIndex, results, handleFileOpen])
 
   // Handle recent search click
   const handleRecentSearchClick = useCallback((searchQuery) => {
@@ -269,12 +296,17 @@ export default function SearchPanel({ isOpen, onClose, onFileOpen, workspacePath
                 </div>
                 
                 <div className="space-y-2">
-                  {results.map((result) => (
-                    <div key={result.file} className="border border-app-border rounded">
+                  {results.map((result, resultIndex) => (
+                    <div key={result.file} className={`border rounded ${
+                      selectedResultIndex === resultIndex 
+                        ? 'border-app-primary bg-app-primary bg-opacity-10' 
+                        : 'border-app-border'
+                    }`}>
                       {/* File header */}
                       <div 
                         className="flex items-center gap-2 p-3 cursor-pointer hover:bg-app-hover"
                         onClick={() => toggleFileExpansion(result.file)}
+                        title={expandedFiles.has(result.file) ? "Collapse matches" : "Expand matches"}
                       >
                         {expandedFiles.has(result.file) ? 
                           <ChevronDown className="w-4 h-4" /> : 
@@ -302,27 +334,47 @@ export default function SearchPanel({ isOpen, onClose, onFileOpen, workspacePath
                                 Line {match.line}:{match.column}
                               </div>
                               <div className="text-sm font-mono whitespace-pre-wrap">
-                                {match.context.map((contextLine, contextIndex) => (
-                                  <div 
-                                    key={contextIndex}
-                                    className={contextLine.isMatch ? 'bg-yellow-100 dark:bg-yellow-900 px-1 rounded' : ''}
-                                  >
+                                {match.context && match.context.length > 0 ? (
+                                  match.context.map((contextLine, contextIndex) => (
+                                    <div 
+                                      key={contextIndex}
+                                      className={contextLine.isMatch ? 'bg-yellow-100 dark:bg-yellow-900 px-1 rounded' : ''}
+                                    >
+                                      <span className="text-app-muted mr-2 select-none">
+                                        {contextLine.lineNumber}:
+                                      </span>
+                                      <span 
+                                        dangerouslySetInnerHTML={{
+                                          __html: highlightText(
+                                            contextLine.text.length > 80 ? 
+                                              contextLine.text.slice(0, 80) + '...' : 
+                                              contextLine.text, 
+                                            query, 
+                                            searchOptions
+                                          )
+                                        }}
+                                      />
+                                    </div>
+                                  ))
+                                ) : (
+                                  // Fallback to match.text when context is empty
+                                  <div className="bg-yellow-100 dark:bg-yellow-900 px-1 rounded">
                                     <span className="text-app-muted mr-2 select-none">
-                                      {contextLine.lineNumber}:
+                                      {match.line}:
                                     </span>
                                     <span 
                                       dangerouslySetInnerHTML={{
                                         __html: highlightText(
-                                          contextLine.text.length > 80 ? 
-                                            contextLine.text.slice(0, 80) + '...' : 
-                                            contextLine.text, 
+                                          match.text.length > 80 ? 
+                                            match.text.slice(0, 80) + '...' : 
+                                            match.text, 
                                           query, 
                                           searchOptions
                                         )
                                       }}
                                     />
                                   </div>
-                                ))}
+                                )}
                               </div>
                             </div>
                           ))}

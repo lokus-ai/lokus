@@ -141,6 +141,14 @@ describe('SearchPanel', () => {
       expect(screen.getByText('test.md')).toBeInTheDocument()
       expect(screen.getByText('1 files found')).toBeInTheDocument()
     })
+
+    // Check that highlighted content is displayed
+    await waitFor(() => {
+      const resultElement = screen.getByText((content, node) => {
+        return node && node.textContent === 'Hello world'
+      })
+      expect(resultElement).toBeInTheDocument()
+    })
   })
 
   it('should show no results message when no matches found', async () => {
@@ -257,7 +265,13 @@ describe('SearchPanel', () => {
       expect(screen.getByText('test.md')).toBeInTheDocument()
     })
 
-    const resultButton = screen.getByText('Hello world')
+    // Find the element containing "Hello world" (may be split across elements due to highlighting)
+    const resultButton = screen.getByText((content, node) => {
+      const hasText = node => node.textContent === 'Hello world'
+      const nodeHasText = hasText(node)
+      const childrenDontHaveText = Array.from(node?.children || []).every(child => !hasText(child))
+      return nodeHasText && childrenDontHaveText
+    })
     await user.click(resultButton)
     
     expect(mockProps.onFileOpen).toHaveBeenCalledWith({
@@ -331,7 +345,10 @@ describe('SearchPanel', () => {
     await user.type(searchInput, 'Hello')
     
     await waitFor(() => {
-      expect(screen.getByText('Hello world')).toBeInTheDocument()
+      const resultElement = screen.getByText((content, node) => {
+        return node && node.textContent === 'Hello world'
+      })
+      expect(resultElement).toBeInTheDocument()
     })
 
     // Arrow key navigation
@@ -376,11 +393,16 @@ describe('SearchPanel', () => {
     await user.type(searchInput, 'Hello')
     
     await waitFor(() => {
-      expect(screen.getByText('Hello world')).toBeInTheDocument()
+      const resultElement = screen.getByText((content, node) => {
+        return node && node.textContent === 'Hello world'
+      })
+      expect(resultElement).toBeInTheDocument()
     })
 
     // Should have highlighted text
-    const resultElement = screen.getByText('Hello world')
+    const resultElement = screen.getByText((content, node) => {
+      return node && node.textContent === 'Hello world'
+    })
     expect(resultElement.innerHTML).toContain('<mark>Hello</mark>')
   })
 })

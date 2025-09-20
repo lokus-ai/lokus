@@ -210,6 +210,7 @@ describe('Template System Integration', () => {
       sandbox.execute = vi.fn()
         .mockImplementationOnce(() => Promise.resolve('Mon Jan 15 2024'))
         .mockImplementationOnce(() => Promise.resolve('2 tasks pending'))
+        .mockImplementationOnce(() => Promise.resolve('- Review code (HIGH)\n- Update docs (MEDIUM)'))
 
       const variables = {
         user: {
@@ -431,6 +432,15 @@ describe('Template System Integration', () => {
       sandbox.execute = vi.fn().mockImplementation(async (code) => {
         if (code.includes('result.push')) {
           return Array(10).fill().map((_, i) => `Item ${i + 1}: 0.${Math.floor(Math.random() * 100)}`).join('\n')
+        }
+        if (code.includes('items.map')) {
+          return '- Item 0 (25.5)\n- Item 1 (50.2)\n- Item 2 (75.8)'
+        }
+        if (code.includes('items.length')) {
+          return '100'
+        }
+        if (code.includes('items.reduce')) {
+          return '2500'
         }
         return ''
       })
