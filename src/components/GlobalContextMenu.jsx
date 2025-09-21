@@ -124,7 +124,135 @@ export default function GlobalContextMenu({
       }}
     >
       <div className="py-2">
-        {/* Inspect Element - Always available for testing */}
+        {/* Browser-like Context Menu Items */}
+        <button
+          onClick={() => {
+            document.execCommand('cut');
+            onClose();
+          }}
+          className="flex items-center gap-3 w-full px-4 py-2 text-sm"
+          style={{ color: 'rgb(var(--text))' }}
+          onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--accent) / 0.1)'}
+          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+        >
+          <Copy className="w-4 h-4" />
+          Cut
+        </button>
+
+        <button
+          onClick={() => {
+            document.execCommand('copy');
+            onClose();
+          }}
+          className="flex items-center gap-3 w-full px-4 py-2 text-sm"
+          style={{ color: 'rgb(var(--text))' }}
+          onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--accent) / 0.1)'}
+          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+        >
+          <Copy className="w-4 h-4" />
+          Copy
+        </button>
+
+        <button
+          onClick={() => {
+            document.execCommand('paste');
+            onClose();
+          }}
+          className="flex items-center gap-3 w-full px-4 py-2 text-sm"
+          style={{ color: 'rgb(var(--text))' }}
+          onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--accent) / 0.1)'}
+          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+        >
+          <Clipboard className="w-4 h-4" />
+          Paste
+        </button>
+
+        <button
+          onClick={() => {
+            document.execCommand('selectAll');
+            onClose();
+          }}
+          className="flex items-center gap-3 w-full px-4 py-2 text-sm"
+          style={{ color: 'rgb(var(--text))' }}
+          onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--accent) / 0.1)'}
+          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+        >
+          <Search className="w-4 h-4" />
+          Select All
+        </button>
+
+        {/* Divider */}
+        <div className="h-px bg-gray-600 my-2 mx-4"></div>
+
+        <button
+          onClick={() => {
+            document.execCommand('undo');
+            onClose();
+          }}
+          className="flex items-center gap-3 w-full px-4 py-2 text-sm"
+          style={{ color: 'rgb(var(--text))' }}
+          onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--accent) / 0.1)'}
+          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+        >
+          <RotateCcw className="w-4 h-4" />
+          Undo
+        </button>
+
+        <button
+          onClick={() => {
+            document.execCommand('redo');
+            onClose();
+          }}
+          className="flex items-center gap-3 w-full px-4 py-2 text-sm"
+          style={{ color: 'rgb(var(--text))' }}
+          onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--accent) / 0.1)'}
+          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+        >
+          <RotateCcw className="w-4 h-4" />
+          Redo
+        </button>
+
+        {/* Divider */}
+        <div className="h-px bg-gray-600 my-2 mx-4"></div>
+
+        <button
+          onClick={() => {
+            const searchQuery = window.getSelection().toString() || 'find';
+            if (document.querySelector('[data-find-dialog]')) {
+              document.querySelector('[data-find-dialog]').click();
+            } else if (window.find) {
+              window.find(searchQuery);
+            }
+            onClose();
+          }}
+          className="flex items-center gap-3 w-full px-4 py-2 text-sm"
+          style={{ color: 'rgb(var(--text))' }}
+          onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--accent) / 0.1)'}
+          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+        >
+          <Search className="w-4 h-4" />
+          Find
+        </button>
+
+        <button
+          onClick={() => {
+            // Trigger find and replace functionality
+            console.log('🔍 Find and Replace triggered');
+            onClose();
+          }}
+          className="flex items-center gap-3 w-full px-4 py-2 text-sm"
+          style={{ color: 'rgb(var(--text))' }}
+          onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--accent) / 0.1)'}
+          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+        >
+          <Search className="w-4 h-4" />
+          Find and Replace
+        </button>
+
+        {/* Divider */}
+        <div className="h-px bg-gray-600 my-2 mx-4"></div>
+
+        {/* Developer Tools */}
         <button
           onClick={handleInspectElement}
           className="flex items-center gap-3 w-full px-4 py-2 text-sm hover:bg-opacity-10 transition-colors"
@@ -139,7 +267,6 @@ export default function GlobalContextMenu({
           Inspect Element
         </button>
 
-        {/* Copy Element Info */}
         <button
           onClick={handleCopyElementInfo}
           className="flex items-center gap-3 w-full px-4 py-2 text-sm hover:bg-opacity-10 transition-colors"
@@ -151,29 +278,6 @@ export default function GlobalContextMenu({
           Copy Element Info
         </button>
 
-        <div className="my-1 h-px" style={{ backgroundColor: 'rgb(var(--border))' }} />
-
-        {/* Context-specific options */}
-        {contextType === "editor" && (
-          <>
-            <button
-              onClick={() => {
-                // Editor specific actions
-                console.log('📝 Editor context action');
-                onClose();
-              }}
-              className="flex items-center gap-3 w-full px-4 py-2 text-sm"
-              style={{ color: 'rgb(var(--text))' }}
-              onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--accent) / 0.1)'}
-              onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
-            >
-              <Search className="w-4 h-4" />
-              Search in Editor
-            </button>
-          </>
-        )}
-
-        {/* Universal actions */}
         <button
           onClick={handleClearConsole}
           className="flex items-center gap-3 w-full px-4 py-2 text-sm"
@@ -196,12 +300,13 @@ export default function GlobalContextMenu({
           Reload Page
         </button>
 
-        <div className="my-1 h-px" style={{ backgroundColor: 'rgb(var(--border))' }} />
+        {/* Divider */}
+        <div className="h-px bg-gray-600 my-2 mx-4"></div>
 
+        {/* Keyboard Shortcuts */}
         <button
           onClick={() => {
             console.log('⌨️ Opening keyboard shortcuts');
-            // Could trigger the shortcut help modal here
             window.dispatchEvent(new CustomEvent('lokus:shortcut-help'));
             onClose();
           }}
