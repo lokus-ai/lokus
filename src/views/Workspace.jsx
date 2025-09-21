@@ -824,25 +824,17 @@ export default function Workspace({ initialPath = "" }) {
   // Global right-click context menu
   useEffect(() => {
     const handleContextMenu = (e) => {
-      // Allow default context menu in development mode (when holding Shift)
+      // Allow default context menu when holding Shift
       if (e.shiftKey) {
         return; // Let browser's default context menu show
       }
       
       e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
       
-      // Determine context type based on the target element
+      // Single context menu for all right-clicks
       let contextType = "default";
-      const target = e.target.closest('[data-context]');
-      if (target) {
-        contextType = target.getAttribute('data-context');
-      } else if (e.target.closest('.editor-content, .ProseMirror')) {
-        contextType = "editor";
-      } else if (e.target.closest('.file-tree, .folder-item, .file-item')) {
-        contextType = "file";
-      } else if (e.target.closest('.sidebar')) {
-        contextType = "sidebar";
-      }
 
       setContextMenu({
         isOpen: true,
@@ -850,10 +842,20 @@ export default function Workspace({ initialPath = "" }) {
         targetElement: e.target,
         contextType
       });
+      
+      return false;
     };
 
-    document.addEventListener('contextmenu', handleContextMenu);
-    return () => document.removeEventListener('contextmenu', handleContextMenu);
+    // Add multiple event listeners to ensure we catch all context menus
+    document.addEventListener('contextmenu', handleContextMenu, true);
+    document.addEventListener('contextmenu', handleContextMenu, false);
+    window.addEventListener('contextmenu', handleContextMenu, true);
+    
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu, true);
+      document.removeEventListener('contextmenu', handleContextMenu, false);
+      window.removeEventListener('contextmenu', handleContextMenu, true);
+    };
   }, []);
 
   const handleRefreshFiles = () => setRefreshId(id => id + 1);

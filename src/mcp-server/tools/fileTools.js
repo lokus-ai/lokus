@@ -9,6 +9,7 @@ import { readFile, writeFile, readdir, stat, mkdir } from 'fs/promises';
 import { join, dirname, basename, extname, resolve, relative, isAbsolute } from 'path';
 import { homedir } from 'os';
 import { EventEmitter } from 'events';
+import { WorkspaceManager } from '../utils/workspaceManager.js';
 
 export class FileTools extends EventEmitter {
   constructor(noteProvider, fileProvider, options = {}) {
@@ -17,7 +18,6 @@ export class FileTools extends EventEmitter {
     this.noteProvider = noteProvider;
     this.fileProvider = fileProvider;
     this.options = {
-      workspaceRoot: options.workspaceRoot || join(homedir(), 'Documents', 'Lokus-Workspace'),
       maxFileSize: options.maxFileSize || 10 * 1024 * 1024, // 10MB
       allowedExtensions: options.allowedExtensions || ['.md', '.txt', '.json', '.yaml', '.yml'],
       maxSearchResults: options.maxSearchResults || 100,
@@ -27,6 +27,7 @@ export class FileTools extends EventEmitter {
     
     this.workspacePath = null;
     this.logger = options.logger || console;
+    this.workspaceManager = new WorkspaceManager(this.logger);
   }
 
   /**
@@ -34,8 +35,15 @@ export class FileTools extends EventEmitter {
    */
   async initialize() {
     try {
-      // Set workspace path from options or use default
-      this.workspacePath = resolve(this.options.workspaceRoot);
+      // Use workspace manager to find current workspace
+      this.workspacePath = await this.workspaceManager.initialize();
+      
+      if (!this.workspacePath) {
+        this.logger.warn('No workspace found, creating default workspace directory');
+        this.workspacePath = join(homedir(), 'Documents', 'Lokus-Workspace');
+        await mkdir(this.workspacePath, { recursive: true });
+        await this.workspaceManager.setCurrentWorkspace(this.workspacePath);
+      }
       
       // Ensure workspace directory exists
       if (this.options.createWorkspaceIfMissing) {
@@ -212,6 +220,44 @@ export class FileTools extends EventEmitter {
           },
           required: ['path']
         }
+      },
+      {
+        name: 'list_workspaces',
+        description: 'List all available Lokus workspaces',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        }
+      },
+      {
+        name: 'get_current_workspace',
+        description: 'Get the currently active workspace',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        }
+      },
+      {
+        name: 'set_workspace',
+        description: 'Switch to a different workspace',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            path: {
+              type: 'string',
+              description: 'Path to the workspace to switch to'
+            }
+          },
+          required: ['path']
+        }
+      },
+      {
+        name: 'scan_workspaces',
+        description: 'Scan the system for Lokus workspaces',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        }
       }
     ];
   }
@@ -241,6 +287,18 @@ export class FileTools extends EventEmitter {
           break;
         case 'get_file_metadata':
           result = await this.getFileMetadata(args);
+          break;
+        case 'list_workspaces':
+          result = await this.listWorkspaces(args);
+          break;
+        case 'get_current_workspace':
+          result = await this.getCurrentWorkspace(args);
+          break;
+        case 'set_workspace':
+          result = await this.setWorkspace(args);
+          break;
+        case 'scan_workspaces':
+          result = await this.scanWorkspaces(args);
           break;
         default:
           throw new Error(`Unknown file tool: ${toolName}`);
@@ -790,6 +848,162 @@ created: ${now}
     }
     
     return `${size.toFixed(1)} ${units[unitIndex]}`;
+  }
+
+  /**
+   * List all available workspaces
+   */
+  async listWorkspaces(args) {
+    try {
+      const workspaces = await this.workspaceManager.getWorkspaces();
+      const current = await this.workspaceManager.getCurrentWorkspace();
+      
+      return {
+        content: [{
+          type: 'text',
+          text: `# Available Lokus Workspaces\n\n**Current workspace:** ${current || 'None'}\n\n**All workspaces:**\n${workspaces.map((w, i) => 
+            `${i + 1}. **${w.name}** ${w.path === current ? '(current)' : ''}\n   Path: ${w.path}\n   Last accessed: ${new Date(w.lastAccessed).toLocaleString()}`
+          ).join('\n\n')}`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Error listing workspaces: ${error.message}`
+        }]
+      };
+    }
+  }
+
+  /**
+   * Get current workspace info
+   */
+  async getCurrentWorkspace(args) {
+    try {
+      const current = await this.workspaceManager.getCurrentWorkspace();
+      
+      if (!current) {
+        return {
+          content: [{
+            type: 'text',
+            text: 'No current workspace set. Use `list_workspaces` to see available workspaces or `scan_workspaces` to find them.'
+          }]
+        };
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: `# Current Workspace\n\n**Path:** ${current}\n**Name:** ${current.split('/').pop()}\n**Status:** Active`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Error getting current workspace: ${error.message}`
+        }]
+      };
+    }
+  }
+
+  /**
+   * Switch to a different workspace
+   */
+  async setWorkspace(args) {
+    try {
+      const { path } = args;
+      
+      if (!path) {
+        return {
+          content: [{
+            type: 'text',
+            text: 'Error: Workspace path is required'
+          }]
+        };
+      }
+
+      const success = await this.workspaceManager.setCurrentWorkspace(path);
+      
+      if (success) {
+        // Update our current workspace path
+        this.workspacePath = path;
+        
+        return {
+          content: [{
+            type: 'text',
+            text: `✅ **Successfully switched to workspace**\n\nPath: ${path}\nName: ${path.split('/').pop()}\n\nAll future file operations will use this workspace.`
+          }]
+        };
+      } else {
+        return {
+          content: [{
+            type: 'text',
+            text: `❌ **Failed to switch workspace**\n\nThe path '${path}' is not a valid workspace. Please check:\n- The directory exists\n- You have read/write permissions\n- It's a valid Lokus workspace or can be initialized as one`
+          }]
+        };
+      }
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Error switching workspace: ${error.message}`
+        }]
+      };
+    }
+  }
+
+  /**
+   * Scan system for Lokus workspaces
+   */
+  async scanWorkspaces(args) {
+    try {
+      const foundWorkspaces = await this.workspaceManager.scanForWorkspaces();
+      
+      if (foundWorkspaces.length === 0) {
+        return {
+          content: [{
+            type: 'text',
+            text: 'No Lokus workspaces found on the system. You can create a new workspace by:\n1. Creating a folder\n2. Opening it in Lokus\n3. Or using the `write_file` tool to create files in a directory'
+          }]
+        };
+      }
+
+      // Add found workspaces to tracking
+      const state = await this.workspaceManager.readWorkspaceState() || { workspaces: [], current: null };
+      
+      for (const workspace of foundWorkspaces) {
+        const exists = state.workspaces.some(w => w.path === workspace.path);
+        if (!exists) {
+          state.workspaces.push(workspace);
+        }
+      }
+      
+      // Set first workspace as current if none is set
+      if (!state.current && foundWorkspaces.length > 0) {
+        state.current = foundWorkspaces[0].path;
+        this.workspacePath = foundWorkspaces[0].path;
+      }
+      
+      await this.workspaceManager.writeWorkspaceState(state);
+
+      return {
+        content: [{
+          type: 'text',
+          text: `# Workspace Scan Results\n\n**Found ${foundWorkspaces.length} workspace(s):**\n\n${foundWorkspaces.map((w, i) => 
+            `${i + 1}. **${w.name}**\n   Path: ${w.path}`
+          ).join('\n\n')}\n\n${foundWorkspaces.length > 0 ? 'These workspaces have been added to your available list.' : ''}`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Error scanning for workspaces: ${error.message}`
+        }]
+      };
+    }
   }
 
   /**
