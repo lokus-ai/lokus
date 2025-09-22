@@ -6,6 +6,7 @@ import { usePreferenceActivation } from "./hooks/usePreferenceActivation";
 import { useWorkspaceActivation } from "./hooks/useWorkspaceActivation";
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/shortcuts/registry.js";
 import { PluginProvider } from "./hooks/usePlugins.jsx";
+import { AuthProvider } from "./core/auth/AuthContext.jsx";
 // Import workspace manager to expose developer utilities
 import "./core/workspace/manager.js";
 // Import MCP client for stdio-based connections
@@ -65,15 +66,17 @@ function App() {
   }, []);
 
   return (
-    <PluginProvider>
-      {isPrefsWindow ? (
-        <Preferences />
-      ) : activePath ? (
-        <Workspace initialPath={activePath} />
-      ) : (
-        <Launcher />
-      )}
-    </PluginProvider>
+    <AuthProvider>
+      <PluginProvider>
+        {isPrefsWindow ? (
+          <Preferences />
+        ) : activePath ? (
+          <Workspace initialPath={activePath} />
+        ) : (
+          <Launcher />
+        )}
+      </PluginProvider>
+    </AuthProvider>
   );
 }
 

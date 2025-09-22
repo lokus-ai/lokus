@@ -52,6 +52,12 @@
     "shell": {
       "all": false,
       "open": "^https?://.*"
+    },
+    "deepLink": {
+      "mobile": [],
+      "desktop": {
+        "schemes": ["lokus"]
+      }
     }
   }
 }

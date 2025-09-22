@@ -11,6 +11,7 @@ mod search;
 mod plugins;
 mod platform;
 mod mcp;
+mod auth;
 
 use windows::{open_workspace_window, open_preferences_window};
 use tauri::Manager;
@@ -162,6 +163,7 @@ fn main() {
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_global_shortcut::Builder::new().build())
     .plugin(tauri_plugin_clipboard_manager::init())
+    .plugin(tauri_plugin_deep_link::init())
     .invoke_handler(tauri::generate_handler![
       open_workspace_window,
       open_preferences_window,
@@ -239,7 +241,15 @@ fn main() {
       mcp::mcp_stop,
       mcp::mcp_status,
       mcp::mcp_restart,
-      mcp::mcp_health_check
+      mcp::mcp_health_check,
+      auth::initiate_oauth_flow,
+      auth::handle_oauth_callback,
+      auth::is_authenticated,
+      auth::get_auth_token,
+      auth::get_user_profile,
+      auth::refresh_auth_token,
+      auth::logout,
+      auth::open_auth_url
     ])
     .setup(|app| {
       menu::init(&app.handle())?;
@@ -256,6 +266,13 @@ fn main() {
       // Initialize MCP Server Manager
       let mcp_manager = mcp::MCPServerManager::new(app.handle().clone());
       app.manage(mcp_manager);
+      
+      // Initialize auth state
+      let auth_state = auth::SharedAuthState::default();
+      app.manage(auth_state);
+      
+      // Register deep link handler for auth callbacks
+      auth::register_deep_link_handler(&app.handle());
       
       let app_handle = app.handle().clone();
       let store = StoreBuilder::new(app.handle(), PathBuf::from(".settings.dat")).build().unwrap();

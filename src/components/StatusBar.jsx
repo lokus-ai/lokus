@@ -1,5 +1,7 @@
 import React from 'react';
 import { useStatusBar } from '../hooks/useStatusBar';
+import AuthButton from './Auth/AuthButton.jsx';
+import SyncStatus from './Auth/SyncStatus.jsx';
 
 /**
  * Pluginable Status Bar Component
@@ -143,6 +145,12 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [] })
           </svg>
           <span>Settings</span>
         </div>
+        
+        {/* Auth and Sync Components */}
+        <div className="obsidian-status-bar-separator" />
+        <SyncStatus />
+        <div className="obsidian-status-bar-separator" />
+        <AuthButton />
       </div>
     </div>
   );
