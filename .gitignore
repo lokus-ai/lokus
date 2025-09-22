@@ -75,3 +75,26 @@ coverage/
 *.temp
 /tmp/
 temp/
+
+# Test workspace (user testing area - not part of codebase)
+Lokus-Full-Scale-Test/
+/Lokus-Full-Scale-Test/
+
+# MCP server test files
+test-mcp-server.js
+test-simple-mcp.js
+test-complete-mcp.js
+
+# Generated API documentation
+openapi.yaml
+
+# User workspace state file
+.lokus-active-workspaces.json
+
+
+# Personal files
+*_internship_emails.md
+*summer_*.md
+*personal*.md
+
+
