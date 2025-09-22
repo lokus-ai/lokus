@@ -40,6 +40,7 @@ import SplitEditor from "../components/SplitEditor/SplitEditor.jsx";
 
 const MAX_OPEN_TABS = 10;
 
+
 // --- Reusable Icon Component ---
 const Icon = ({ path, className = "w-5 h-5" }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
@@ -506,6 +507,10 @@ function EditorDropZone({ children }) {
 
 // --- Main Workspace Component ---
 export default function Workspace({ initialPath = "" }) {
+  // Debug: Alert to check if path is passed
+  if (initialPath) {
+    invoke("validate_workspace_path", { path: initialPath });
+  }
   const [path, setPath] = useState(initialPath);
   const { leftW, rightW, startLeftDrag, startRightDrag } = useDragColumns({});
   const [showLeft, setShowLeft] = useState(true);
@@ -631,6 +636,15 @@ export default function Workspace({ initialPath = "" }) {
   // Fetch file tree
   useEffect(() => {
     if (path) {
+      // Debug: Log to backend to see if this runs
+      invoke("validate_workspace_path", { path }).then(valid => {
+        if (valid) {
+          console.log("Path is valid, loading files...");
+        }
+      }).catch(err => {
+        console.error("Error validating path:", err);
+      });
+      
       try { window.__LOKUS_WORKSPACE_PATH__ = path; } catch {}
       invoke("read_workspace_files", { workspacePath: path })
         .then(files => {
@@ -658,7 +672,12 @@ export default function Workspace({ initialPath = "" }) {
           walk(tree);
           try { window.__LOKUS_FILE_INDEX__ = flat; } catch {}
         })
-        .catch(() => {});
+        .catch((error) => {
+          // Log to backend instead
+          invoke("get_validated_workspace_path").then(() => {
+            // Just trigger something to see the error in backend
+          });
+        });
     }
   }, [path, refreshId]);
 
@@ -1824,6 +1843,33 @@ export default function Workspace({ initialPath = "" }) {
     const rightPanel = showRight ? ` 1px ${rightW}px` : "";
     return `48px 1px ${leftPanel}${mainContent}${rightPanel}`;
   })();
+
+  // Add a simple fallback if path is not set
+  if (!path && !initialPath) {
+    return (
+      <div style={{ 
+        background: 'black', 
+        color: 'white', 
+        height: '100vh', 
+        display: 'flex', 
+        flexDirection: 'column',
+        alignItems: 'center', 
+        justifyContent: 'center',
+        fontSize: '20px',
+        fontFamily: 'monospace'
+      }}>
+        <div>NO PATH PROVIDED</div>
+        <div>initialPath: {String(initialPath)}</div>
+        <div>path: {String(path)}</div>
+        <div>URL: {window.location.href}</div>
+        <div>Search: {window.location.search}</div>
+        <div>Hash: {window.location.hash}</div>
+        <div style={{ marginTop: '20px', fontSize: '14px' }}>
+          This is the Workspace component but no path was provided
+        </div>
+      </div>
+    );
+  }
 
   return (
     <PanelManager>

@@ -76,23 +76,30 @@ const HELP_RELEASE_NOTES_ID: &str = "help-release-notes";
 const HELP_REPORT_ISSUE_ID: &str = "help-report-issue";
 
 pub fn init(app: &AppHandle) -> tauri::Result<()> {
-  // Lokus app menu (macOS-style)
-  let app_menu = SubmenuBuilder::new(app, "Lokus")
-    .item(&MenuItemBuilder::with_id(ABOUT_ID, "About Lokus")
-      .build(app)?)
-    .separator()
-    .item(&MenuItemBuilder::with_id(PREFERENCES_ID, "Preferences…")
-      .accelerator("CmdOrCtrl+,")
-      .build(app)?)
-    .separator()
-    .services()
-    .separator()
-    .hide()
-    .hide_others()
-    .show_all()
-    .separator()
-    .item(&PredefinedMenuItem::quit(app, None)?)
-    .build()?;
+  // Platform-specific app menu
+  #[cfg(target_os = "macos")]
+  let app_menu = {
+    SubmenuBuilder::new(app, "Lokus")
+      .item(&MenuItemBuilder::with_id(ABOUT_ID, "About Lokus")
+        .build(app)?)
+      .separator()
+      .item(&MenuItemBuilder::with_id(PREFERENCES_ID, "Preferences…")
+        .accelerator("CmdOrCtrl+,")
+        .build(app)?)
+      .separator()
+      .services()
+      .separator()
+      .hide()
+      .hide_others()
+      .show_all()
+      .separator()
+      .item(&PredefinedMenuItem::quit(app, None)?)
+      .build()?
+  };
+
+  // Windows doesn't have an app menu like macOS
+  #[cfg(not(target_os = "macos"))]
+  let app_menu = None::<tauri::menu::Submenu<tauri::Wry>>;
 
   // File menu
   let file_menu = SubmenuBuilder::new(app, "File")
@@ -262,15 +269,22 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     .build()?;
 
   // Window menu
-  let window_menu = SubmenuBuilder::new(app, "Window")
+  let mut window_builder = SubmenuBuilder::new(app, "Window")
     .item(&MenuItemBuilder::with_id(WINDOW_MINIMIZE_ID, "Minimize")
       .accelerator("CmdOrCtrl+M")
-      .build(app)?)
-    .item(&MenuItemBuilder::with_id(WINDOW_ZOOM_ID, "Zoom")
-      .build(app)?)
-    .separator()
-    .item(&MenuItemBuilder::with_id("window-bring-all-to-front", "Bring All to Front")
-      .build(app)?)
+      .build(app)?);
+  
+  #[cfg(target_os = "macos")]
+  {
+    window_builder = window_builder
+      .item(&MenuItemBuilder::with_id(WINDOW_ZOOM_ID, "Zoom")
+        .build(app)?)
+      .separator()
+      .item(&MenuItemBuilder::with_id("window-bring-all-to-front", "Bring All to Front")
+        .build(app)?);
+  }
+  
+  let window_menu = window_builder
     .separator()
     .item(&MenuItemBuilder::with_id(WINDOW_PREV_TAB_ID, "Show Previous Tab")
       .accelerator("Ctrl+Shift+Tab")
@@ -295,19 +309,83 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     .build()?;
 
   // Build the complete menu
-  let menu = MenuBuilder::new(app)
-    .items(&[
-      &app_menu, 
-      &file_menu, 
-      &edit_menu, 
-      &view_menu, 
-      &insert_menu, 
-      &format_menu, 
-      &window_menu, 
-      &help_menu
-    ])
-    .build()?;
-  app.set_menu(menu)?;
+  #[cfg(target_os = "macos")]
+  {
+    let menu = MenuBuilder::new(app)
+      .items(&[
+        &app_menu, 
+        &file_menu, 
+        &edit_menu, 
+        &view_menu, 
+        &insert_menu, 
+        &format_menu, 
+        &window_menu, 
+        &help_menu
+      ])
+      .build()?;
+    app.set_menu(menu)?;
+  }
+
+  #[cfg(not(target_os = "macos"))]
+  {
+    // On Windows, rebuild the file menu with Preferences and Quit added
+    let file_menu_with_prefs = SubmenuBuilder::new(app, "File")
+      .item(&MenuItemBuilder::with_id(FILE_NEW_NOTE_ID, "New Note")
+        .accelerator("CmdOrCtrl+N")
+        .build(app)?)
+      .item(&MenuItemBuilder::with_id(FILE_NEW_FOLDER_ID, "New Folder")
+        .accelerator("CmdOrCtrl+Shift+N")
+        .build(app)?)
+      .item(&MenuItemBuilder::with_id(FILE_NEW_CANVAS_ID, "New Canvas")
+        .build(app)?)
+      .separator()
+      .item(&MenuItemBuilder::with_id(FILE_OPEN_ID, "Open…")
+        .accelerator("CmdOrCtrl+O")
+        .build(app)?)
+      .separator()
+      .item(&MenuItemBuilder::with_id(FILE_CLOSE_TAB_ID, "Close Tab")
+        .accelerator("CmdOrCtrl+W")
+        .build(app)?)
+      .item(&MenuItemBuilder::with_id(FILE_CLOSE_WINDOW_ID, "Close Window")
+        .accelerator("CmdOrCtrl+Shift+W")
+        .build(app)?)
+      .separator()
+      .item(&MenuItemBuilder::with_id(FILE_SAVE_ID, "Save")
+        .accelerator("CmdOrCtrl+S")
+        .build(app)?)
+      .item(&MenuItemBuilder::with_id(FILE_SAVE_AS_ID, "Save As…")
+        .accelerator("CmdOrCtrl+Shift+S")
+        .build(app)?)
+      .separator()
+      .item(&MenuItemBuilder::with_id(FILE_EXPORT_PDF_ID, "Export to PDF…")
+        .build(app)?)
+      .item(&MenuItemBuilder::with_id(FILE_EXPORT_HTML_ID, "Export to HTML…")
+        .build(app)?)
+      .separator()
+      .item(&MenuItemBuilder::with_id(FILE_PRINT_ID, "Print…")
+        .accelerator("CmdOrCtrl+P")
+        .build(app)?)
+      .separator()
+      .item(&MenuItemBuilder::with_id(PREFERENCES_ID, "Preferences…")
+        .accelerator("CmdOrCtrl+,")
+        .build(app)?)
+      .separator()
+      .item(&PredefinedMenuItem::quit(app, None)?)
+      .build()?;
+      
+    let menu = MenuBuilder::new(app)
+      .items(&[
+        &file_menu_with_prefs, 
+        &edit_menu, 
+        &view_menu, 
+        &insert_menu, 
+        &format_menu, 
+        &window_menu, 
+        &help_menu
+      ])
+      .build()?;
+    app.set_menu(menu)?;
+  }
 
   // Comprehensive menu event handling
   app.on_menu_event(|app, event| {
