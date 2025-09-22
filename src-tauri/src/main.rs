@@ -242,12 +242,13 @@ fn main() {
       mcp::mcp_status,
       mcp::mcp_restart,
       mcp::mcp_health_check,
-      auth::store_auth_token,
-      auth::get_auth_token,
-      auth::store_user_profile,
-      auth::get_user_profile,
-      auth::logout,
+      auth::initiate_oauth_flow,
+      auth::handle_oauth_callback,
       auth::is_authenticated,
+      auth::get_auth_token,
+      auth::get_user_profile,
+      auth::refresh_auth_token,
+      auth::logout,
       auth::open_auth_url
     ])
     .setup(|app| {
@@ -265,6 +266,10 @@ fn main() {
       // Initialize MCP Server Manager
       let mcp_manager = mcp::MCPServerManager::new(app.handle().clone());
       app.manage(mcp_manager);
+      
+      // Initialize auth state
+      let auth_state = auth::SharedAuthState::default();
+      app.manage(auth_state);
       
       // Register deep link handler for auth callbacks
       auth::register_deep_link_handler(&app.handle());

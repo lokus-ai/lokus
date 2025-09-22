@@ -19,24 +19,40 @@ export const AuthProvider = ({ children }) => {
   });
 
   useEffect(() => {
+    console.log('🔄 AuthProvider: Setting up auth state subscription...');
+    
     // Subscribe to auth state changes
     const unsubscribe = authManager.onAuthStateChange((newState) => {
-      setAuthState(prev => ({
-        ...prev,
-        isAuthenticated: newState.isAuthenticated,
-        user: newState.user,
-        isLoading: false
-      }));
+      console.log('🔄 AuthProvider: Received auth state change:', newState);
+      setAuthState(prev => {
+        const newAuthState = {
+          ...prev,
+          isAuthenticated: newState.isAuthenticated,
+          user: newState.user,
+          isLoading: false
+        };
+        console.log('🔄 AuthProvider: Setting new auth state:', newAuthState);
+        return newAuthState;
+      });
     });
 
     // Initial state check
+    console.log('🔄 AuthProvider: Performing initial auth status check...');
     authManager.checkAuthStatus().then(() => {
-      setAuthState(prev => ({
-        ...prev,
-        isAuthenticated: authManager.isLoggedIn,
-        user: authManager.currentUser,
-        isLoading: false
-      }));
+      console.log('🔄 AuthProvider: Initial check complete. AuthManager state:', {
+        isLoggedIn: authManager.isLoggedIn,
+        currentUser: authManager.currentUser
+      });
+      setAuthState(prev => {
+        const newAuthState = {
+          ...prev,
+          isAuthenticated: authManager.isLoggedIn,
+          user: authManager.currentUser,
+          isLoading: false
+        };
+        console.log('🔄 AuthProvider: Setting initial auth state:', newAuthState);
+        return newAuthState;
+      });
     });
 
     return unsubscribe;

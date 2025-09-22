@@ -90,3 +90,8 @@ openapi.yaml
 
 # User workspace state file
 .lokus-active-workspaces.json
+
+# Personal files
+*_internship_emails.md
+*summer_*.md
+*personal*.md

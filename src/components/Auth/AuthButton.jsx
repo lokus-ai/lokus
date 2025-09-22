@@ -7,6 +7,9 @@ export default function AuthButton() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
+  // Debug logging
+  console.log('🔘 AuthButton render:', { isAuthenticated, user, isLoading });
+
   const handleSignIn = async () => {
     try {
       await signIn();
@@ -36,7 +39,7 @@ export default function AuthButton() {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !user) {
     return (
       <button
         onClick={handleSignIn}
