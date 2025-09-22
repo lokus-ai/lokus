@@ -12,15 +12,38 @@ pub struct FileEntry {
 
 // --- Private Helper ---
 fn read_directory_contents(path: &Path) -> Result<Vec<FileEntry>, String> {
+    read_directory_contents_with_depth(path, 0)
+}
+
+fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result<Vec<FileEntry>, String> {
+    // Limit recursion depth to prevent infinite loops
+    const MAX_DEPTH: usize = 10;
+    
+    if depth > MAX_DEPTH {
+        println!("[Backend] Max depth {} reached, stopping recursion at path: {:?}", MAX_DEPTH, path);
+        return Ok(vec![]);
+    }
+    
     let mut entries = vec![];
-    for entry in fs::read_dir(path).map_err(|e| e.to_string())? {
+    let dir_entries = fs::read_dir(path).map_err(|e| {
+        println!("[Backend] Error reading directory {:?}: {}", path, e);
+        e.to_string()
+    })?;
+    
+    for entry in dir_entries {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
         let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
         let is_directory = path.is_dir();
 
+        // Skip symbolic links to prevent infinite loops
+        if path.symlink_metadata().map(|m| m.file_type().is_symlink()).unwrap_or(false) {
+            println!("[Backend] Skipping symlink: {:?}", path);
+            continue;
+        }
+
         let children = if is_directory {
-            Some(read_directory_contents(&path)?)
+            Some(read_directory_contents_with_depth(&path, depth + 1)?)
         } else {
             None
         };
@@ -40,7 +63,13 @@ fn read_directory_contents(path: &Path) -> Result<Vec<FileEntry>, String> {
 
 #[tauri::command]
 pub fn read_workspace_files(workspace_path: String) -> Result<Vec<FileEntry>, String> {
-    read_directory_contents(Path::new(&workspace_path))
+    println!("[Backend] read_workspace_files called with path: {}", workspace_path);
+    let result = read_directory_contents(Path::new(&workspace_path));
+    match &result {
+        Ok(files) => println!("[Backend] Successfully read {} files/folders", files.len()),
+        Err(e) => println!("[Backend] Error reading workspace files: {}", e),
+    }
+    result
 }
 
 #[tauri::command]
