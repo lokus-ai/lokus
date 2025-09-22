@@ -76,10 +76,14 @@ impl FileSystemOperations for WindowsPlatform {
             ));
         }
         
+        // Windows Explorer requires specific formatting for the select command
         let path_str = path.display().to_string();
+        
+        // Build the command properly - /select,"path" needs to be a single argument
+        let select_arg = format!("/select,\"{}\"", path_str);
+        
         let result = Command::new("explorer")
-            .arg("/select,")
-            .arg(&path_str)
+            .arg(select_arg)
             .spawn();
             
         match result {
@@ -138,8 +142,9 @@ impl FileSystemOperations for WindowsPlatform {
         // Fall back to PowerShell
         if self.is_powershell_available() {
             let result = Command::new("powershell")
+                .arg("-NoExit")
                 .arg("-Command")
-                .arg(&format!("Set-Location '{}'; $Host.UI.RawUI.WindowTitle = 'PowerShell - {}'", path_str, path_str))
+                .arg(&format!("cd '{}'; $Host.UI.RawUI.WindowTitle = 'PowerShell - {}'", path_str, path.file_name().unwrap_or_default().to_string_lossy()))
                 .spawn();
                 
             if result.is_ok() {
