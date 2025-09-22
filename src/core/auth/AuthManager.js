@@ -1,5 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
-import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
+// Temporarily comment out deep-link plugin until npm install is fixed
+// import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
+const onOpenUrl = (callback) => {
+  console.warn('Deep-link plugin not available - using stub');
+  return () => {}; // Return empty cleanup function
+};
 import { listen } from '@tauri-apps/api/event';
 
 class AuthManager {

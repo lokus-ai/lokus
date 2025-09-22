@@ -42,15 +42,18 @@ fn clear_last_workspace(app: tauri::AppHandle) {
 
 #[tauri::command]
 fn validate_workspace_path(path: String) -> bool {
+    println!("[Backend] validate_workspace_path called with: {}", path);
     let workspace_path = std::path::Path::new(&path);
     
     // Check if path exists and is a directory
     if !workspace_path.exists() || !workspace_path.is_dir() {
+        println!("[Backend] Path validation failed: path doesn't exist or is not a directory");
         return false;
     }
     
     // Check if we can read the directory
     if workspace_path.read_dir().is_err() {
+        println!("[Backend] Path validation failed: cannot read directory");
         return false;
     }
     
@@ -58,7 +61,9 @@ fn validate_workspace_path(path: String) -> bool {
     let lokus_dir = workspace_path.join(".lokus");
     if lokus_dir.exists() {
         // It's already a Lokus workspace
-        return lokus_dir.is_dir();
+        let is_valid = lokus_dir.is_dir();
+        println!("[Backend] Path validation result: {} (has .lokus folder)", is_valid);
+        return is_valid;
     }
     
     // If no .lokus folder, check if we can create one (write permissions)
@@ -66,9 +71,13 @@ fn validate_workspace_path(path: String) -> bool {
         Ok(_) => {
             // Successfully created, remove it and return true
             let _ = std::fs::remove_dir(&lokus_dir);
+            println!("[Backend] Path validation passed: can create .lokus folder");
             true
         }
-        Err(_) => false
+        Err(e) => {
+            println!("[Backend] Path validation failed: cannot create .lokus folder - {}", e);
+            false
+        }
     }
 }
 

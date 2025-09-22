@@ -16,8 +16,7 @@
         "width": 800,
         "height": 600,
         "minWidth": 600,
-        "minHeight": 400,
-        "titleBarStyle": "default"
+        "minHeight": 400
       }
     ],
     "security": {
@@ -41,28 +40,10 @@
       "digestAlgorithm": "sha256",
       "timestampUrl": "http://timestamp.sectigo.com",
       "wix": {
-        "language": ["en-US"],
-        "template": "wix/main.wxs",
-        "fragmentPaths": ["wix/fragments"],
-        "componentGroupRefs": [],
-        "componentRefs": [],
-        "featureGroupRefs": [],
-        "featureRefs": [],
-        "mergeRefs": [],
-        "skipWebviewInstall": false,
-        "enableElevatedUpdateTask": false,
-        "banner": "icons/banner.bmp",
-        "dialogImage": "icons/dialog.bmp"
+        "language": ["en-US"]
       },
       "nsis": {
-        "license": "../LICENSE",
-        "headerImage": "icons/nsis-header.bmp",
-        "sidebarImage": "icons/nsis-sidebar.bmp",
         "installerIcon": "icons/icon.ico",
-        "install": true,
-        "uninstall": true,
-        "createDesktopShortcut": true,
-        "createStartMenuShortcut": true,
         "languages": ["English"],
         "displayLanguageSelector": false
       }
