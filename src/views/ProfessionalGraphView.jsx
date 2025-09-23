@@ -706,10 +706,10 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
                 linkDirectionalParticles={isLayoutRunning ? 4 : 0}
                 linkDirectionalParticleSpeed={0.005}
                 nodeCanvasObject={renderNode2D}
-                d3Force="charge"
-                d3ForceConfig={{ charge: { strength: -400 } }}
-                d3Force="link"
-                d3ForceConfig={{ link: { distance: 100, strength: 1 } }}
+                d3ForceConfig={{ 
+                  charge: { strength: -400 },
+                  link: { distance: 100, strength: 1 }
+                }}
               />
             </motion.div>
           )}
