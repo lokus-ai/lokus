@@ -11,6 +11,7 @@ import {
   RotateCw,
   Move3D
 } from 'lucide-react';
+import platformService from '../../services/platform/PlatformService';
 
 export default function CanvasToolbar({ 
   onSave, 
@@ -31,7 +32,7 @@ export default function CanvasToolbar({
       <div className="flex items-center gap-1 pr-2 border-r border-app-border/50">
         <button
           onClick={onSave}
-          title="Save Canvas (⌘S)"
+          title={`Save Canvas (${platformService.getModifierSymbol()}S)`}
           className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors"
         >
           <Save className="w-4 h-4" />
@@ -58,7 +59,7 @@ export default function CanvasToolbar({
       <div className="flex items-center gap-1 pr-2 border-r border-app-border/50">
         <button
           onClick={onUndo}
-          title="Undo (⌘Z)"
+          title={`Undo (${platformService.getModifierSymbol()}+Z)`}
           className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors"
         >
           <RotateCcw className="w-4 h-4" />
@@ -66,7 +67,7 @@ export default function CanvasToolbar({
         
         <button
           onClick={onRedo}
-          title="Redo (⌘⇧Z)"
+          title={`Redo (${platformService.getModifierSymbol()}+Shift+Z)`}
           className="p-1.5 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors"
         >
           <RotateCw className="w-4 h-4" />

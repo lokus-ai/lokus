@@ -21,11 +21,22 @@ import {
   Clock,
   History,
   Trash2,
-  Network
+  Network,
+  Mail,
+  Send,
+  Archive,
+  Star,
+  ArrowRight,
+  User,
+  File
 } from 'lucide-react'
 import { getActiveShortcuts, formatAccelerator } from '../core/shortcuts/registry'
 import { useCommandHistory, createFileHistoryItem, createCommandHistoryItem } from '../hooks/useCommandHistory.js'
 import { useTemplates, useTemplateProcessor } from '../hooks/useTemplates.js'
+import { joinPath } from '../utils/pathUtils.js'
+import { gmailEmails, gmailAuth } from '../services/gmail.js'
+import { saveEmailAsNote } from '../utils/emailToNote.js'
+import { invoke } from '@tauri-apps/api/core'
 
 export default function CommandPalette({ 
   open, 
@@ -40,12 +51,15 @@ export default function CommandPalette({
   onToggleSidebar, 
   onCloseTab,
   onOpenGraph,
+  onOpenGmail,
   onShowTemplatePicker,
   onCreateTemplate,
   activeFile 
 }) {
   const [shortcuts, setShortcuts] = useState({})
   const [recentFiles, setRecentFiles] = useState([])
+  const [recentEmails, setRecentEmails] = useState([])
+  const [isGmailAuthenticated, setIsGmailAuthenticated] = useState(false)
   const { formattedHistory, addToHistory, removeFromHistory, clearHistory } = useCommandHistory()
   const { templates } = useTemplates()
   const { process: processTemplate } = useTemplateProcessor()
@@ -59,6 +73,31 @@ export default function CommandPalette({
     const recent = openFiles.slice(0, 5)
     setRecentFiles(recent)
   }, [openFiles])
+
+  useEffect(() => {
+    // Check Gmail authentication status and load recent emails
+    const checkGmailAuth = async () => {
+      try {
+        const isAuth = await gmailAuth.isAuthenticated()
+        setIsGmailAuthenticated(isAuth)
+        
+        if (isAuth) {
+          // Load recent emails for quick access
+          const emailsResponse = await gmailEmails.listEmails(10)
+          // Handle response structure: { emails: [...], nextPageToken: ... }
+          const emailsArray = emailsResponse.emails || emailsResponse || []
+          setRecentEmails(emailsArray.slice(0, 5))
+        }
+      } catch (error) {
+        console.error('Failed to check Gmail auth:', error)
+        setIsGmailAuthenticated(false)
+      }
+    }
+    
+    if (open) {
+      checkGmailAuth()
+    }
+  }, [open])
 
   const runCommand = React.useCallback((command, historyItem = null) => {
     setOpen(false)
@@ -79,6 +118,364 @@ export default function CommandPalette({
     const historyItem = createCommandHistoryItem(commandName, commandData)
     runCommand(command, historyItem)
   }, [runCommand])
+
+  // Flatten file tree for search
+  const flattenFileTree = (entries, path = '') => {
+    let files = []
+    entries.forEach(entry => {
+      const fullPath = path ? joinPath(path, entry.name) : entry.name
+      if (entry.is_directory) {
+        if (entry.children) {
+          files = files.concat(flattenFileTree(entry.children, fullPath))
+        }
+      } else {
+        files.push({ ...entry, fullPath })
+      }
+    })
+    return files
+  }
+
+  const allFiles = flattenFileTree(fileTree)
+
+
+  // Helper function to ensure Gmail authentication
+  const ensureGmailAuth = async () => {
+    if (!isGmailAuthenticated) {
+      const isAuth = await gmailAuth.isAuthenticated()
+      if (!isAuth) {
+        const authUrl = await gmailAuth.initiateAuth()
+        // Open auth URL in default browser
+        window.open(authUrl, '_blank')
+        const authError = new Error('Please complete Gmail authentication in the opened browser window')
+        authError.isAuthRedirect = true
+        throw authError
+      }
+      setIsGmailAuthenticated(true)
+    }
+  }
+
+  const handleReadEmail = React.useCallback(async (email) => {
+    try {
+      await ensureGmailAuth()
+      
+      // Open Gmail tab and select the email
+      onOpenGmail()
+      
+      // Store the email ID for the Gmail component to open
+      sessionStorage.setItem('gmailOpenEmail', email.id)
+      
+    } catch (error) {
+      console.error('Failed to open email:', error)
+      alert(`Failed to open email: ${error.message}`)
+    }
+  }, [isGmailAuthenticated, onOpenGmail])
+
+  const handleGmailSearch = React.useCallback(async (query) => {
+    try {
+      await ensureGmailAuth()
+      
+      // Open Gmail with search query
+      onOpenGmail()
+      
+      // Store search query for Gmail component
+      sessionStorage.setItem('gmailSearch', query)
+      
+    } catch (error) {
+      console.error('Failed to search emails:', error)
+      alert(`Failed to search emails: ${error.message}`)
+    }
+  }, [isGmailAuthenticated, onOpenGmail])
+
+
+  // Parse Gmail template from file content (supports flexible YAML, simple field, and Markdown formats)
+  const parseGmailTemplate = (content) => {
+    try {
+      console.log('🔍 [DEBUG] Parsing template content...');
+      console.log('📄 [DEBUG] Content preview:', content.substring(0, 200) + '...');
+      
+      // Method 1: Try YAML frontmatter with flexible body handling
+      if (content.startsWith('---')) {
+        console.log('📋 [DEBUG] Detected YAML frontmatter format');
+        const frontmatterEnd = content.indexOf('---', 3);
+        if (frontmatterEnd !== -1) {
+          const frontmatterContent = content.slice(3, frontmatterEnd).trim();
+          const afterFrontmatter = content.slice(frontmatterEnd + 3).trim();
+          
+          const metadata = {};
+          const lines = frontmatterContent.split('\n');
+          let bodyBuffer = []; // For multi-line body field
+          let currentKey = null;
+          let inMultiLineBody = false;
+          
+          for (const line of lines) {
+            const colonIndex = line.indexOf(':');
+            
+            if (colonIndex > 0 && !inMultiLineBody) {
+              // New field
+              const key = line.slice(0, colonIndex).trim().toLowerCase();
+              const value = line.slice(colonIndex + 1).trim();
+              
+              if (key === 'body') {
+                if (value === '|' || value === '') {
+                  // Multi-line body starts
+                  inMultiLineBody = true;
+                  currentKey = 'body';
+                  bodyBuffer = [];
+                } else {
+                  // Single line body
+                  metadata[key] = value;
+                }
+              } else {
+                metadata[key] = value;
+              }
+            } else if (inMultiLineBody && currentKey === 'body') {
+              // Collecting multi-line body content
+              bodyBuffer.push(line);
+            } else if (colonIndex > 0) {
+              // Handle other fields while in multi-line mode
+              const key = line.slice(0, colonIndex).trim().toLowerCase();
+              const value = line.slice(colonIndex + 1).trim();
+              metadata[key] = value;
+            }
+          }
+          
+          // If we collected multi-line body content
+          if (bodyBuffer.length > 0) {
+            metadata.body = bodyBuffer.join('\n').trim();
+          }
+          
+          // Determine body content
+          let body = '';
+          if (metadata.body) {
+            // Use explicit body field
+            body = metadata.body;
+            console.log('📝 [DEBUG] Using explicit body field');
+          } else if (afterFrontmatter) {
+            // Use content after frontmatter
+            body = afterFrontmatter.replace(/<!--.*?-->/gs, '').trim();
+            console.log('📝 [DEBUG] Using content after frontmatter');
+          }
+          
+          console.log('📋 [DEBUG] Parsed metadata:', metadata);
+          console.log('📝 [DEBUG] Final body:', { length: body.length, preview: body.substring(0, 100) + '...' });
+          
+          if (metadata.to !== undefined && metadata.subject !== undefined) {
+            return {
+              to: metadata.to ? metadata.to.split(',').map(email => email.trim()).filter(email => email) : [],
+              cc: metadata.cc ? metadata.cc.split(',').map(email => email.trim()).filter(email => email) : [],
+              bcc: metadata.bcc ? metadata.bcc.split(',').map(email => email.trim()).filter(email => email) : [],
+              subject: metadata.subject || '',
+              body: body
+            };
+          }
+        }
+      }
+
+      // Method 2: Try simple field format (To:, Subject:, Body:)
+      console.log('📝 [DEBUG] Trying simple field format');
+      const lines = content.split('\n');
+      const fields = {};
+      let bodyStartIndex = -1;
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const colonIndex = line.indexOf(':');
+        
+        if (colonIndex > 0) {
+          const key = line.slice(0, colonIndex).trim().toLowerCase();
+          const value = line.slice(colonIndex + 1).trim();
+          
+          if (['to', 'subject', 'cc', 'bcc'].includes(key)) {
+            fields[key] = value;
+          } else if (key === 'body') {
+            if (value === '' || value === '|') {
+              // Multi-line body starts after this line
+              bodyStartIndex = i + 1;
+              break;
+            } else {
+              // Single line body
+              fields.body = value;
+            }
+          }
+        }
+      }
+      
+      // Extract multi-line body if we found a body start
+      if (bodyStartIndex > -1) {
+        const bodyLines = lines.slice(bodyStartIndex);
+        fields.body = bodyLines.join('\n').trim();
+      }
+      
+      console.log('📋 [DEBUG] Simple format fields:', fields);
+      
+      
+      if (fields.to && fields.subject) {
+        const result = {
+          to: fields.to.split(',').map(email => email.trim()).filter(email => email),
+          cc: fields.cc ? fields.cc.split(',').map(email => email.trim()).filter(email => email) : [],
+          bcc: fields.bcc ? fields.bcc.split(',').map(email => email.trim()).filter(email => email) : [],
+          subject: fields.subject,
+          body: fields.body || ''
+        };
+        return result;
+      }
+
+      // Method 3: Try Markdown bold format (**To:**, **Subject:**) - legacy support
+      console.log('📝 [DEBUG] Trying Markdown bold format');
+      const toMatch = content.match(/\*\*To:\*\*\s*(.+)/i);
+      const subjectMatch = content.match(/\*\*Subject:\*\*\s*(.+)/i);
+      const bodyMatch = content.match(/\*\*Body:\*\*\s*(.+)/is);
+      
+      if (toMatch && subjectMatch) {
+        console.log('✅ [DEBUG] Found To and Subject in Markdown format');
+        
+        let body = '';
+        if (bodyMatch) {
+          // Explicit body field
+          body = bodyMatch[1].trim();
+        } else {
+          // Look for content after separator
+          const contentLines = content.split('\n');
+          let bodyStartIndex = -1;
+          let foundMetadata = false;
+          
+          for (let i = 0; i < contentLines.length; i++) {
+            const line = contentLines[i].trim();
+            
+            if (line.match(/\*\*To:\*\*|\*\*Subject:\*\*/i)) {
+              foundMetadata = true;
+            }
+            
+            if (foundMetadata && line === '---') {
+              bodyStartIndex = i + 1;
+              while (bodyStartIndex < contentLines.length && !contentLines[bodyStartIndex].trim()) {
+                bodyStartIndex++;
+              }
+              break;
+            }
+          }
+          
+          if (bodyStartIndex > -1) {
+            const bodyLines = [];
+            for (let i = bodyStartIndex; i < contentLines.length; i++) {
+              const line = contentLines[i];
+              if (line.trim().match(/^\*\*.*:\*\*/) && i > bodyStartIndex + 3) {
+                break;
+              }
+              bodyLines.push(line);
+            }
+            body = bodyLines.join('\n').trim();
+          }
+        }
+        
+        console.log('📝 [DEBUG] Extracted body content:', { 
+          bodyLength: body.length, 
+          bodyPreview: body.substring(0, 100) + (body.length > 100 ? '...' : ''),
+          bodyFull: body
+        });
+        
+        return {
+          to: [toMatch[1].trim()],
+          cc: [],
+          bcc: [],
+          subject: subjectMatch[1].trim(),
+          body: body
+        };
+      }
+
+      console.log('❌ [DEBUG] No valid email template format found');
+    } catch (error) {
+      console.error('Error parsing Gmail template:', error);
+    }
+    return null;
+  };
+
+  // Handle sending Gmail from selected file
+  const handleSendGmailFromFile = React.useCallback(async (file) => {
+    console.log('🚀 [DEBUG] handleSendGmailFromFile called with file:', {
+      name: file.name,
+      path: file.path,
+      timestamp: new Date().toISOString()
+    });
+    console.log('🔍 [DEBUG] Current authentication state:', { isGmailAuthenticated });
+    
+    try {
+      console.log('🔐 [DEBUG] Checking Gmail authentication...', { isGmailAuthenticated });
+      
+      if (!isGmailAuthenticated) {
+        console.log('🔐 [DEBUG] Not authenticated, attempting to authenticate...');
+        await ensureGmailAuth()
+        console.log('✅ [DEBUG] Gmail authentication successful');
+      }
+      
+      console.log('📧 [DEBUG] Reading file for Gmail template:', file.path);
+      
+      // Read the file content using Tauri command
+      const fileContent = await invoke('read_file_content', { path: file.path });
+      console.log('📄 [DEBUG] File content read successfully, length:', fileContent.length);
+      
+      // Parse Gmail template
+      const gmailTemplate = parseGmailTemplate(fileContent);
+      console.log('📝 [DEBUG] Parsed Gmail template:', gmailTemplate);
+      
+      if (!gmailTemplate) {
+        console.log('❌ [DEBUG] Invalid Gmail template format');
+        console.error(`❌ [DEBUG] File "${file.name}" is not a valid Gmail template`);
+        return;
+      }
+      
+      // Validate required fields
+      if (gmailTemplate.to.length === 0) {
+        console.log('❌ [DEBUG] Missing "To" field');
+        console.error('❌ [DEBUG] Gmail template must have a "To:" field with at least one email address.');
+        return;
+      }
+      
+      if (!gmailTemplate.subject.trim()) {
+        console.log('❌ [DEBUG] Missing "Subject" field');
+        console.error('❌ [DEBUG] Gmail template must have a "Subject:" field.');
+        return;
+      }
+      
+      console.log('📧 [DEBUG] About to send email via Gmail with data:', {
+        to: gmailTemplate.to,
+        cc: gmailTemplate.cc,
+        bcc: gmailTemplate.bcc,
+        subject: gmailTemplate.subject,
+        bodyLength: gmailTemplate.body?.length || 0
+      });
+      
+      
+      console.log('🚀 [DEBUG] Calling gmailEmails.sendEmail...');
+      
+      // Send the email
+      const result = await gmailEmails.sendEmail({
+        to: gmailTemplate.to,
+        cc: gmailTemplate.cc,
+        bcc: gmailTemplate.bcc,
+        subject: gmailTemplate.subject,
+        body: gmailTemplate.body,
+        attachments: []
+      });
+      
+      console.log('✅ [DEBUG] Email sending completed, result:', result);
+      
+      console.log(`✅ [DEBUG] Email sent successfully! To: ${gmailTemplate.to.join(', ')}, Subject: ${gmailTemplate.subject}`);
+      
+    } catch (error) {
+      if (error.isAuthRedirect) {
+        console.log('🔐 [DEBUG] Authentication required - browser window opened for OAuth');
+        console.log('ℹ️ [DEBUG] Please complete authentication in the browser and try sending the email again');
+        // Show user-friendly message instead of error
+        alert('Please complete Gmail authentication in the opened browser window, then try sending the email again.');
+      } else {
+        console.error('❌ [DEBUG] Failed to send Gmail from file:', error);
+        console.error('❌ [DEBUG] Error stack:', error.stack);
+        console.error(`❌ [DEBUG] Failed to send email: ${error.message}`);
+        alert(`Failed to send email: ${error.message}`);
+      }
+    }
+  }, [isGmailAuthenticated, parseGmailTemplate])
 
   // Handle template selection
   const handleTemplateSelect = React.useCallback(async (template) => {
@@ -115,29 +512,720 @@ export default function CommandPalette({
     }
   }, [processTemplate, onShowTemplatePicker, setOpen])
 
-  // Flatten file tree for search
-  const flattenFileTree = (entries, path = '') => {
-    let files = []
-    entries.forEach(entry => {
-      const fullPath = path ? `${path}/${entry.name}` : entry.name
-      if (entry.is_directory) {
-        if (entry.children) {
-          files = files.concat(flattenFileTree(entry.children, fullPath))
-        }
-      } else {
-        files.push({ ...entry, fullPath })
+  // Parse Gmail commands from input
+  const [inputValue, setInputValue] = React.useState('')
+  const [parsedCommand, setParsedCommand] = React.useState(null)
+  const [commandMode, setCommandMode] = useState(null) // 'send_email', 'search_emails', 'save_note', etc.
+  const [commandParams, setCommandParams] = useState({}) // Parameters for current command
+  const [filteredOptions, setFilteredOptions] = useState([]) // Options to show based on current input
+  
+  // Email templates
+  const emailTemplates = {
+    meeting: {
+      subject: "Meeting Follow-up",
+      body: `Hi {{name}},
+
+Thank you for taking the time to meet with me today. I wanted to follow up on our discussion about {{topic}}.
+
+Key points from our meeting:
+- {{point1}}
+- {{point2}}
+- {{point3}}
+
+Next steps:
+- {{action1}}
+- {{action2}}
+
+Please let me know if you have any questions or if there's anything else I can help with.
+
+Best regards,
+{{sender}}`
+    },
+    proposal: {
+      subject: "Project Proposal - {{project_name}}",
+      body: `Dear {{client_name}},
+
+I hope this email finds you well. I'm writing to present a proposal for {{project_name}}.
+
+Project Overview:
+{{project_description}}
+
+Timeline: {{timeline}}
+Budget: {{budget}}
+
+I believe this project aligns perfectly with your goals and would love to discuss it further.
+
+Please let me know if you'd like to schedule a call to go over the details.
+
+Best regards,
+{{sender}}`
+    },
+    followup: {
+      subject: "Following up on {{topic}}",
+      body: `Hi {{name}},
+
+I wanted to follow up on {{topic}} that we discussed {{when}}.
+
+{{details}}
+
+Looking forward to hearing from you.
+
+Best regards,
+{{sender}}`
+    }
+  }
+  
+  const parseGmailCommand = (input) => {
+    const trimmedInput = input.trim()
+    if (!trimmedInput) return null
+    
+    // Email pattern for auto-detection
+    const emailPattern = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g
+    const emails = trimmedInput.match(emailPattern) || []
+    
+    // File extension pattern
+    const filePattern = /(\w+\.\w+)/g
+    const files = trimmedInput.match(filePattern) || []
+    
+    // Subject extraction patterns
+    const subjectPatterns = [
+      /(?:subject:?\s*["']?([^"']+)["']?)/i,
+      /(?:re:?\s*["']?([^"']+)["']?)/i,
+      /(?:about\s+["']?([^"']+)["']?)/i,
+      /(?:regarding\s+["']?([^"']+)["']?)/i
+    ]
+    
+    let subject = null
+    for (const pattern of subjectPatterns) {
+      const match = trimmedInput.match(pattern)
+      if (match) {
+        subject = match[1].trim()
+        break
       }
-    })
-    return files
+    }
+    
+    // Command type detection
+    const lowerInput = trimmedInput.toLowerCase()
+    
+    // Send email patterns
+    const sendPatterns = [
+      /^(?:send|email|compose)\s+(?:email\s+)?(?:to\s+)?/i,
+      /^(?:email|send)\s+(\S+)\s+to\s+/i, // "email filename to recipient"
+      /^(?:send|email)\s+.*?(?:to|@)/i
+    ]
+    
+    const isSendCommand = sendPatterns.some(pattern => pattern.test(trimmedInput))
+    
+    if (isSendCommand && emails.length > 0) {
+      // Extract file content if file is mentioned
+      const fileName = files.length > 0 ? files[0] : null
+      
+      // Auto-generate subject if not provided
+      if (!subject && fileName) {
+        subject = `Content from ${fileName}`
+      } else if (!subject) {
+        subject = 'Email from Lokus'
+      }
+      
+      return {
+        type: 'send',
+        recipients: emails,
+        fileName: fileName,
+        subject: subject,
+        originalCommand: trimmedInput
+      }
+    }
+    
+    // Search email patterns
+    const searchPatterns = [
+      /^(?:search|find|read)\s+(?:email|mail)s?\s+(?:about\s+|for\s+|from\s+)?(.+)/i,
+      /^(?:read|show)\s+(?:email|mail)s?\s+(.+)/i,
+      /^(?:email|mail)s?\s+(?:about|from|with)\s+(.+)/i
+    ]
+    
+    for (const pattern of searchPatterns) {
+      const match = trimmedInput.match(pattern)
+      if (match) {
+        return {
+          type: 'search',
+          query: match[1].trim(),
+          originalCommand: trimmedInput
+        }
+      }
+    }
+    
+    // Legacy exact patterns (for backward compatibility)
+    const legacyPatterns = [
+      { pattern: /^send\s+email:\s*([^:]+)\s+to:\s*(.+)$/i, type: 'send' },
+      { pattern: /^(?:read|search)\s+email:\s*(.+)$/i, type: 'search' }
+    ]
+    
+    for (const { pattern, type } of legacyPatterns) {
+      const match = trimmedInput.match(pattern)
+      if (match) {
+        if (type === 'send') {
+          return {
+            type: 'send',
+            fileName: match[1].trim(),
+            recipients: [match[2].trim()],
+            subject: `Content from ${match[1].trim()}`,
+            originalCommand: trimmedInput
+          }
+        } else {
+          return {
+            type: 'search',
+            query: match[1].trim(),
+            originalCommand: trimmedInput
+          }
+        }
+      }
+    }
+    
+    return null
   }
 
-  const allFiles = flattenFileTree(fileTree)
+  // Structured command handling
+  const detectStructuredCommands = (input) => {
+    const trimmed = input.trim().toLowerCase()
+    
+    // Commands that should enter structured mode
+    const structuredCommands = {
+      'search emails': 'search_emails',
+      'gmail search': 'search_emails',
+      'save email': 'save_note',
+      'note email': 'save_note',
+      'send gmail': 'send_gmail'
+    }
+    
+    for (const [command, mode] of Object.entries(structuredCommands)) {
+      if (trimmed === command || trimmed.startsWith(command + ' ')) {
+        return mode
+      }
+    }
+    
+    return null
+  }
+
+  const getFilteredFiles = React.useCallback((query) => {
+    if (!allFiles || allFiles.length === 0) return []
+    
+    const searchTerm = query.toLowerCase()
+    return allFiles
+      .filter(file => {
+        const fileName = file.name.toLowerCase()
+        const path = file.path.toLowerCase()
+        return fileName.includes(searchTerm) || path.includes(searchTerm)
+      })
+      .slice(0, 10) // Show top 10 matches
+  }, [allFiles])
+
+  const getFilteredEmails = React.useCallback((query) => {
+    if (!recentEmails || recentEmails.length === 0) return []
+    
+    const searchTerm = query.toLowerCase()
+    return recentEmails
+      .filter(email => {
+        const subject = (email.subject || '').toLowerCase()
+        const from = Array.isArray(email.from) 
+          ? (email.from[0]?.name || email.from[0]?.email || '').toLowerCase()
+          : (email.from || '').toLowerCase()
+        const snippet = (email.snippet || '').toLowerCase()
+        
+        return subject.includes(searchTerm) || 
+               from.includes(searchTerm) || 
+               snippet.includes(searchTerm)
+      })
+      .slice(0, 8) // Show top 8 matches
+  }, [recentEmails])
+
+  // Update filtered options based on current command mode and input
+  useEffect(() => {
+    if (!commandMode) {
+      setFilteredOptions([])
+      return
+    }
+
+    const query = inputValue.toLowerCase()
+    
+    switch (commandMode) {
+      case 'send_gmail':
+        // Show files to select from for Gmail sending
+        const filteredGmailFiles = getFilteredFiles(query)
+        setFilteredOptions(filteredGmailFiles)
+        break
+        
+      case 'search_emails':
+        // Show recent search terms or email previews
+        setFilteredOptions([])
+        break
+        
+      case 'save_note':
+        // Show emails to save as notes
+        const filteredEmails = getFilteredEmails(query)
+        setFilteredOptions(filteredEmails)
+        break
+        
+      default:
+        setFilteredOptions([])
+    }
+  }, [commandMode, inputValue, commandParams.file])
+
+  // Real-time command parsing as user types
+  React.useEffect(() => {
+    // Check for structured commands first
+    const structuredMode = detectStructuredCommands(inputValue)
+    if (structuredMode && !commandMode) {
+      setCommandMode(structuredMode)
+      setCommandParams({})
+      setInputValue('') // Clear input for parameter entry
+      return
+    }
+    
+    // If not in command mode, do regular parsing
+    if (!commandMode) {
+      const gmailCommand = parseGmailCommand(inputValue)
+      const emailNoteCommand = parseEmailNoteCommand(inputValue)
+      
+      // Prioritize email-note commands over regular Gmail commands
+      setParsedCommand(emailNoteCommand || gmailCommand)
+    }
+  }, [inputValue, commandMode])
+
+  const handleSaveEmailAsNote = async (emailId, options = {}) => {
+    try {
+      // Get email details first
+      const email = recentEmails.find(e => e.id === emailId) || await gmailEmails.getEmailById(emailId)
+      if (!email) {
+        throw new Error('Email not found')
+      }
+
+      // Save email as note
+      const filePath = await saveEmailAsNote(email, currentWorkspace?.path, {
+        includeHeaders: true,
+        includeThreadInfo: true,
+        includeAttachments: true,
+        subfolder: 'emails',
+        ...options
+      })
+
+      const fileName = filePath.split('/').pop()
+      console.log('Email saved as note:', filePath)
+      
+      // Return success info for the command history
+      return {
+        fileName,
+        filePath,
+        email: {
+          subject: email.subject,
+          from: email.from,
+          id: email.id
+        }
+      }
+    } catch (error) {
+      console.error('Failed to save email as note:', error)
+      throw new Error(`Failed to save email as note: ${error.message}`)
+    }
+  }
+
+  const parseEmailNoteCommand = (input) => {
+    const trimmedInput = input.trim().toLowerCase()
+    
+    // Commands for saving emails as notes
+    const saveNotePatterns = [
+      /^save\s+email\s+(.+?)\s+as\s+note$/i,
+      /^email\s+(.+?)\s+to\s+note$/i,
+      /^convert\s+email\s+(.+?)\s+to\s+note$/i,
+      /^note\s+email\s+(.+?)$/i,
+      /^save\s+(.+?)\s+email\s+as\s+note$/i
+    ]
+    
+    for (const pattern of saveNotePatterns) {
+      const match = input.match(pattern)
+      if (match) {
+        const emailIdentifier = match[1].trim()
+        
+        // Try to find email by subject, sender, or partial content
+        const foundEmail = recentEmails.find(email => {
+          const subject = email.subject?.toLowerCase() || ''
+          const from = (Array.isArray(email.from) ? email.from[0]?.email || email.from[0]?.name : email.from)?.toLowerCase() || ''
+          const snippet = email.snippet?.toLowerCase() || ''
+          
+          return subject.includes(emailIdentifier.toLowerCase()) ||
+                 from.includes(emailIdentifier.toLowerCase()) ||
+                 snippet.includes(emailIdentifier.toLowerCase())
+        })
+        
+        return {
+          type: 'saveAsNote',
+          emailIdentifier,
+          email: foundEmail,
+          confidence: foundEmail ? 0.9 : 0.6,
+          originalCommand: input
+        }
+      }
+    }
+    
+    return null
+  }
+
+  const handleInputKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      if (commandMode) {
+        // Remove last parameter first, then exit command mode
+        const paramKeys = Object.keys(commandParams)
+        if (paramKeys.length > 0) {
+          // Remove the last parameter
+          const newParams = { ...commandParams }
+          delete newParams[paramKeys[paramKeys.length - 1]]
+          setCommandParams(newParams)
+          setInputValue('')
+          setFilteredOptions([])
+          return
+        } else {
+          // No parameters left, exit command mode completely
+          setCommandMode(null)
+          setCommandParams({})
+          setInputValue('')
+          setFilteredOptions([])
+          return
+        }
+      } else {
+        // Not in command mode, close palette
+        setInputValue('')
+        setFilteredOptions([])
+        return
+      }
+    }
+
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      
+      // Handle structured command mode
+      if (commandMode) {
+        if (commandMode === 'send_gmail') {
+          if (filteredOptions.length > 0) {
+            // Send Gmail from first matching file
+            const selectedFile = filteredOptions[0]
+            console.log('🎯 [DEBUG] Command mode "send_gmail" triggered with file:', selectedFile);
+            runCommandWithHistory(
+              () => handleSendGmailFromFile(selectedFile), 
+              `Send Gmail: ${selectedFile.name}`, 
+              { 
+                fileName: selectedFile.name,
+                filePath: selectedFile.path,
+                originalCommand: `send gmail ${selectedFile.name}`
+              }
+            )
+            
+            // Reset command mode
+            setCommandMode(null)
+            setCommandParams({})
+            setInputValue('')
+            return
+          }
+        } else if (commandMode === 'save_note') {
+          if (filteredOptions.length > 0) {
+            // Save first matching email as note
+            const selectedEmail = filteredOptions[0]
+            runCommandWithHistory(
+              () => handleSaveEmailAsNote(selectedEmail.id), 
+              `Save Email as Note: "${selectedEmail.subject || 'No Subject'}"`, 
+              { 
+                emailSubject: selectedEmail.subject,
+                emailId: selectedEmail.id,
+                originalCommand: `save email "${selectedEmail.subject}" as note`
+              }
+            )
+            
+            // Reset command mode
+            setCommandMode(null)
+            setCommandParams({})
+            setInputValue('')
+            return
+          }
+        } else if (commandMode === 'search_emails') {
+          if (inputValue.trim()) {
+            runCommandWithHistory(
+              () => handleGmailSearch(inputValue.trim()), 
+              `Search Gmail: ${inputValue.trim()}`, 
+              { 
+                query: inputValue.trim(),
+                originalCommand: `search emails ${inputValue.trim()}`
+              }
+            )
+            
+            // Reset command mode
+            setCommandMode(null)
+            setCommandParams({})
+            setInputValue('')
+            return
+          }
+        }
+      }
+
+      // Fallback to legacy parsing for non-structured commands
+      if (!commandMode) {
+        // Check for email-note commands first
+        const emailNoteCommand = parseEmailNoteCommand(inputValue)
+        if (emailNoteCommand) {
+          if (emailNoteCommand.type === 'saveAsNote') {
+            if (emailNoteCommand.email) {
+              runCommandWithHistory(
+                () => handleSaveEmailAsNote(emailNoteCommand.email.id), 
+                `Save Email as Note: "${emailNoteCommand.email.subject || 'No Subject'}"`, 
+                { 
+                  emailSubject: emailNoteCommand.email.subject,
+                  emailId: emailNoteCommand.email.id,
+                  originalCommand: emailNoteCommand.originalCommand 
+                }
+              )
+            } else {
+              console.warn('No email found matching:', emailNoteCommand.emailIdentifier)
+            }
+          }
+          setInputValue('')
+          return
+        }
+
+        // Fallback to regular Gmail commands
+        const gmailCommand = parseGmailCommand(inputValue)
+        if (gmailCommand) {
+          if (gmailCommand.type === 'send') {
+            const recipients = Array.isArray(gmailCommand.recipients) 
+              ? gmailCommand.recipients.join(', ') 
+              : gmailCommand.recipients || gmailCommand.recipient
+            const fileName = gmailCommand.fileName || 'content'
+            const subject = gmailCommand.subject || `Email from Lokus`
+            
+            runCommandWithHistory(
+              () => handleSendEmailSmart(gmailCommand), 
+              `Send Email: ${fileName} → ${recipients}`, 
+              { 
+                fileName, 
+                recipients, 
+                subject,
+                originalCommand: gmailCommand.originalCommand 
+              }
+            )
+          } else if (gmailCommand.type === 'search') {
+            runCommandWithHistory(
+              () => handleGmailSearch(gmailCommand.query), 
+              `Search Gmail: ${gmailCommand.query}`, 
+              { 
+                query: gmailCommand.query,
+                originalCommand: gmailCommand.originalCommand 
+              }
+            )
+          }
+          setInputValue('')
+        }
+      }
+    }
+  }
+
+  const getCommandModePlaceholder = (mode, params) => {
+    switch (mode) {
+      case 'send_gmail':
+        return "Select a file to send via Gmail (type filename to search)"
+      case 'search_emails':
+        return "Enter search query for emails"
+      case 'save_note':
+        return "Type to find email to save as note"
+      default:
+        return "Enter command parameters"
+    }
+  }
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Type a command or search files... (try 'template')" />
+      <CommandInput 
+        placeholder={
+          commandMode 
+            ? getCommandModePlaceholder(commandMode, commandParams)
+            : "Type command: 'send gmail', 'search emails', 'save email' or direct commands"
+        }
+        value={inputValue}
+        onValueChange={setInputValue}
+        onKeyDown={handleInputKeyDown}
+      />
+      
+      {/* Real-time Command Interpretation Display */}
+      {parsedCommand && inputValue && (
+        <div className="px-3 py-2 border-b border-gray-200 bg-gray-50/50 text-sm">
+          <div className="flex items-center gap-2 text-gray-600">
+            {parsedCommand.type === 'send' ? (
+              <>
+                <Send className="w-4 h-4 text-blue-500" />
+                <span>Send email:</span>
+                {parsedCommand.fileName && (
+                  <>
+                    <File className="w-3 h-3" />
+                    <span className="font-medium text-blue-600">{parsedCommand.fileName}</span>
+                  </>
+                )}
+                <ArrowRight className="w-3 h-3" />
+                <User className="w-3 h-3" />
+                <span className="font-medium text-green-600">
+                  {Array.isArray(parsedCommand.recipients) 
+                    ? parsedCommand.recipients.join(', ')
+                    : parsedCommand.recipients || parsedCommand.recipient || 'No recipient detected'
+                  }
+                </span>
+                {parsedCommand.subject && (
+                  <>
+                    <span className="text-gray-400">•</span>
+                    <span className="text-gray-700">Subject: "{parsedCommand.subject}"</span>
+                  </>
+                )}
+              </>
+            ) : parsedCommand.type === 'saveAsNote' ? (
+              <>
+                <FileText className="w-4 h-4 text-orange-500" />
+                <span>Save email as note:</span>
+                {parsedCommand.email ? (
+                  <>
+                    <Mail className="w-3 h-3" />
+                    <span className="font-medium text-orange-600">
+                      "{parsedCommand.email.subject || 'No Subject'}"
+                    </span>
+                    <span className="text-gray-400">•</span>
+                    <span className="text-gray-600">
+                      from {Array.isArray(parsedCommand.email.from) 
+                        ? (parsedCommand.email.from[0]?.name || parsedCommand.email.from[0]?.email)
+                        : parsedCommand.email.from
+                      }
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-amber-600">Email not found: "{parsedCommand.emailIdentifier}"</span>
+                  </>
+                )}
+              </>
+            ) : parsedCommand.type === 'search' ? (
+              <>
+                <Search className="w-4 h-4 text-purple-500" />
+                <span>Search Gmail for:</span>
+                <span className="font-medium text-purple-600">"{parsedCommand.query}"</span>
+              </>
+            ) : (
+              <>
+                <Mail className="w-4 h-4 text-gray-500" />
+                <span>Gmail command detected</span>
+              </>
+            )}
+          </div>
+          {parsedCommand.confidence && parsedCommand.confidence < 0.8 && (
+            <div className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+              <span>⚠️ Low confidence - please check command details</span>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Command Mode Status */}
+      {commandMode && (
+        <div className="px-3 py-2 border-b border-blue-200 bg-blue-50/50 text-sm">
+          <div className="flex items-center gap-2 text-blue-800">
+            {commandMode === 'search_emails' && (
+              <>
+                <Search className="w-4 h-4 text-purple-600" />
+                <span className="font-medium">Email Search Mode</span>
+              </>
+            )}
+            {commandMode === 'send_gmail' && (
+              <>
+                <Send className="w-4 h-4 text-green-600" />
+                <span className="font-medium">Send Gmail Mode</span>
+              </>
+            )}
+            {commandMode === 'save_note' && (
+              <>
+                <FileText className="w-4 h-4 text-orange-600" />
+                <span className="font-medium">Save Email as Note Mode</span>
+              </>
+            )}
+            <span className="text-xs text-blue-600 ml-auto">Press Esc to exit</span>
+          </div>
+        </div>
+      )}
+      
       <CommandList>
-        <CommandEmpty>No results found.</CommandEmpty>
+        <CommandEmpty>
+          {commandMode 
+            ? `No ${commandMode === 'send_gmail' ? 'files' : commandMode === 'save_note' ? 'emails' : 'results'} found.`
+            : 'No results found.'
+          }
+        </CommandEmpty>
+        
+        {/* Filtered Options for Command Mode */}
+        {commandMode && filteredOptions.length > 0 && (
+          <CommandGroup heading={
+            commandMode === 'send_gmail' ? 'Choose File to Send' :
+            commandMode === 'save_note' ? 'Select Email to Save as Note' :
+            'Options'
+          }>
+            {filteredOptions.map((option, index) => (
+              <CommandItem
+                key={option.id || option.path || index}
+                onSelect={() => {
+                  if (commandMode === 'send_gmail') {
+                    console.log('🎯 [DEBUG] File selected in send_gmail mode:', option);
+                    runCommandWithHistory(
+                      () => handleSendGmailFromFile(option), 
+                      `Send Gmail: ${option.name}`, 
+                      { 
+                        fileName: option.name,
+                        filePath: option.path,
+                        originalCommand: `send gmail ${option.name}`
+                      }
+                    )
+                    setCommandMode(null)
+                    setCommandParams({})
+                    setInputValue('')
+                  } else if (commandMode === 'save_note') {
+                    runCommandWithHistory(
+                      () => handleSaveEmailAsNote(option.id), 
+                      `Save Email as Note: "${option.subject || 'No Subject'}"`, 
+                      { 
+                        emailSubject: option.subject,
+                        emailId: option.id,
+                        originalCommand: `save email "${option.subject}" as note`
+                      }
+                    )
+                    setCommandMode(null)
+                    setCommandParams({})
+                    setInputValue('')
+                  }
+                }}
+                className="group"
+              >
+                {commandMode === 'send_gmail' ? (
+                  <>
+                    <File className="mr-2 h-4 w-4 opacity-60" />
+                    <span className="flex-1">{option.name}</span>
+                    <span className="text-xs text-app-muted">{option.path}</span>
+                  </>
+                ) : commandMode === 'save_note' ? (
+                  <>
+                    <Mail className="mr-2 h-4 w-4 opacity-60" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{option.subject || 'No Subject'}</div>
+                      <div className="text-xs text-app-muted truncate">
+                        from {Array.isArray(option.from) 
+                          ? (option.from[0]?.name || option.from[0]?.email)
+                          : option.from
+                        }
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <span>{option.name || option.subject || 'Unknown'}</span>
+                )}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
         
         {/* Command History */}
         {formattedHistory.length > 0 && (
@@ -170,6 +1258,9 @@ export default function CommandPalette({
                           break
                         case 'Open Graph View':
                           runCommand(onOpenGraph)
+                          break
+                        case 'Open Gmail':
+                          runCommand(onOpenGmail)
                           break
                         case 'Insert Template':
                           if (onShowTemplatePicker) {
@@ -280,6 +1371,55 @@ export default function CommandPalette({
             <span>Professional Graph View</span>
             <CommandShortcut>⌘G</CommandShortcut>
           </CommandItem>
+          <CommandItem onSelect={() => runCommandWithHistory(onOpenGmail, 'Open Gmail')}>
+            <Mail className="mr-2 h-4 w-4" />
+            <span>Gmail</span>
+            <CommandShortcut>⌘M</CommandShortcut>
+          </CommandItem>
+        </CommandGroup>
+
+        <CommandSeparator />
+
+        {/* Gmail Commands */}
+        <CommandGroup heading="Gmail">
+          {!isGmailAuthenticated ? (
+            <CommandItem onSelect={() => runCommandWithHistory(async () => {
+              try {
+                await ensureGmailAuth()
+              } catch (error) {
+                console.error('Gmail auth failed:', error)
+                alert('Gmail authentication failed')
+              }
+            }, 'Authenticate Gmail')}>
+              <Mail className="mr-2 h-4 w-4" />
+              <span>Authenticate Gmail</span>
+              <CommandShortcut>Auth</CommandShortcut>
+            </CommandItem>
+          ) : (
+            <>
+              <CommandItem 
+                onSelect={() => runCommandWithHistory(() => handleGmailSearch(''), 'Search Gmail')}
+                disabled={!isGmailAuthenticated}
+              >
+                <Search className="mr-2 h-4 w-4" />
+                <span>Search Gmail</span>
+                <CommandShortcut>Find</CommandShortcut>
+              </CommandItem>
+
+              <CommandItem 
+                onSelect={() => {
+                  setCommandMode('send_gmail');
+                  setCommandParams({});
+                  setInputValue('');
+                }}
+                disabled={!isGmailAuthenticated}
+              >
+                <Send className="mr-2 h-4 w-4" />
+                <span>Send Gmail</span>
+                <CommandShortcut>Send</CommandShortcut>
+              </CommandItem>
+            </>
+          )}
         </CommandGroup>
 
         {/* Recent Files */}

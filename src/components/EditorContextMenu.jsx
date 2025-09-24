@@ -24,8 +24,10 @@ import {
   Download,
   Upload
 } from 'lucide-react';
+import platformService from '../services/platform/PlatformService';
 
 export default function EditorContextMenu({ children, onAction, hasSelection = false, canUndo = false, canRedo = false }) {
+  const isWindows = platformService.isWindows();
   const handleAction = (action, data = {}) => {
     if (onAction) {
       onAction(action, data);
@@ -44,7 +46,7 @@ export default function EditorContextMenu({ children, onAction, hasSelection = f
         >
           <Scissors className="mr-2 h-4 w-4" />
           Cut
-          <ContextMenuShortcut>⌘X</ContextMenuShortcut>
+          <ContextMenuShortcut>{isWindows ? 'Ctrl+X' : '⌘X'}</ContextMenuShortcut>
         </ContextMenuItem>
         
         <ContextMenuItem 
@@ -53,19 +55,19 @@ export default function EditorContextMenu({ children, onAction, hasSelection = f
         >
           <Copy className="mr-2 h-4 w-4" />
           Copy
-          <ContextMenuShortcut>⌘C</ContextMenuShortcut>
+          <ContextMenuShortcut>{isWindows ? 'Ctrl+C' : '⌘C'}</ContextMenuShortcut>
         </ContextMenuItem>
         
         <ContextMenuItem onClick={() => handleAction('paste')}>
           <Clipboard className="mr-2 h-4 w-4" />
           Paste
-          <ContextMenuShortcut>⌘V</ContextMenuShortcut>
+          <ContextMenuShortcut>{isWindows ? 'Ctrl+V' : '⌘V'}</ContextMenuShortcut>
         </ContextMenuItem>
         
         <ContextMenuItem onClick={() => handleAction('selectAll')}>
           <MousePointer className="mr-2 h-4 w-4" />
           Select All
-          <ContextMenuShortcut>⌘A</ContextMenuShortcut>
+          <ContextMenuShortcut>{isWindows ? 'Ctrl+A' : '⌘A'}</ContextMenuShortcut>
         </ContextMenuItem>
         
         <ContextMenuSeparator />
@@ -76,7 +78,7 @@ export default function EditorContextMenu({ children, onAction, hasSelection = f
         >
           <RotateCcw className="mr-2 h-4 w-4" />
           Undo
-          <ContextMenuShortcut>⌘Z</ContextMenuShortcut>
+          <ContextMenuShortcut>{isWindows ? 'Ctrl+Z' : '⌘Z'}</ContextMenuShortcut>
         </ContextMenuItem>
         
         <ContextMenuItem 
@@ -85,7 +87,7 @@ export default function EditorContextMenu({ children, onAction, hasSelection = f
         >
           <RotateCw className="mr-2 h-4 w-4" />
           Redo
-          <ContextMenuShortcut>⌘⇧Z</ContextMenuShortcut>
+          <ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+Z' : '⌘⇧Z'}</ContextMenuShortcut>
         </ContextMenuItem>
         
         <ContextMenuSeparator />
@@ -93,13 +95,13 @@ export default function EditorContextMenu({ children, onAction, hasSelection = f
         <ContextMenuItem onClick={() => handleAction('find')}>
           <Search className="mr-2 h-4 w-4" />
           Find
-          <ContextMenuShortcut>⌘F</ContextMenuShortcut>
+          <ContextMenuShortcut>{isWindows ? 'Ctrl+F' : '⌘F'}</ContextMenuShortcut>
         </ContextMenuItem>
         
         <ContextMenuItem onClick={() => handleAction('findAndReplace')}>
           <SearchX className="mr-2 h-4 w-4" />
           Find and Replace
-          <ContextMenuShortcut>⌘⌥F</ContextMenuShortcut>
+          <ContextMenuShortcut>{isWindows ? 'Ctrl+H' : '⌘⌥F'}</ContextMenuShortcut>
         </ContextMenuItem>
         
         <ContextMenuSeparator />
@@ -112,7 +114,7 @@ export default function EditorContextMenu({ children, onAction, hasSelection = f
           <ContextMenuSubContent>
             <ContextMenuItem onClick={() => handleAction('commandPalette')}>
               Command Palette
-              <ContextMenuShortcut>⌘K</ContextMenuShortcut>
+              <ContextMenuShortcut>{isWindows ? 'Ctrl+K' : '⌘K'}</ContextMenuShortcut>
             </ContextMenuItem>
             <ContextMenuItem onClick={() => handleAction('insertTable')}>
               Insert Table

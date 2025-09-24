@@ -28,8 +28,10 @@ pub enum PlatformErrorKind {
     /// Required application or tool not found
     ApplicationNotFound,
     /// Network or external service error
+    #[allow(dead_code)]
     Network,
     /// Platform feature not supported
+    #[allow(dead_code)]
     Unsupported,
     /// Generic system error
     System,
@@ -49,6 +51,7 @@ impl PlatformError {
     }
     
     /// Create a platform error with a specific error code
+    #[allow(dead_code)]
     pub fn with_code(
         kind: PlatformErrorKind, 
         message: impl Into<String>, 
@@ -89,6 +92,7 @@ impl PlatformError {
     }
     
     /// Create an unsupported feature error
+    #[allow(dead_code)]
     pub fn unsupported(feature: impl Into<String>) -> Self {
         let feat = feature.into();
         Self::new(
@@ -181,6 +185,7 @@ impl ErrorMessages {
     }
     
     /// Get platform-appropriate permission denied message
+    #[allow(dead_code)]
     pub fn permission_denied_for_path(path: &str) -> String {
         #[cfg(target_os = "windows")]
         return format!("Access to the path '{}' is denied", path);

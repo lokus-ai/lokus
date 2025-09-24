@@ -108,6 +108,7 @@ pub struct PlatformFileError {
 }
 
 impl PlatformFileError {
+    #[allow(dead_code)]
     pub fn from_platform_error(err: crate::platform::errors::PlatformError) -> Self {
         let suggestions = match err.kind {
             crate::platform::errors::PlatformErrorKind::PermissionDenied => {
@@ -194,6 +195,7 @@ pub fn initialize() -> Result<(), String> {
 }
 
 /// Cleanup platform-specific resources
+#[allow(dead_code)]
 pub fn cleanup() -> Result<(), String> {
     // Currently, the platform provider is static and can't be easily cleaned up
     // This could be enhanced in the future if needed
@@ -203,7 +205,6 @@ pub fn cleanup() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     
     #[test]
     fn test_platform_info_retrieval() {

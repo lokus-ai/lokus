@@ -5,7 +5,7 @@
 
 use super::{
     FileSystemOperations, SystemIntegration, PlatformProvider, PlatformFeature, PlatformConfig,
-    errors::{PlatformError, PlatformErrorKind, ErrorMessages}
+    errors::{PlatformError, ErrorMessages}
 };
 use std::path::Path;
 use std::process::Command;
@@ -238,6 +238,7 @@ impl Default for MacOsPlatform {
 /// macOS-specific utility functions
 impl MacOsPlatform {
     /// Open a file with QuickLook
+    #[allow(dead_code)]
     pub fn quick_look(&self, path: &Path) -> Result<(), PlatformError> {
         if !path.exists() {
             return Err(PlatformError::file_system(
@@ -267,6 +268,7 @@ impl MacOsPlatform {
     }
     
     /// Get system information using macOS tools
+    #[allow(dead_code)]
     pub fn get_system_info(&self) -> Result<String, PlatformError> {
         let output = Command::new("sw_vers")
             .output();
@@ -305,6 +307,7 @@ impl MacOsPlatform {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use crate::platform::errors::PlatformErrorKind;
     
     #[test]
     fn test_macos_platform_creation() {

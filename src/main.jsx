@@ -4,6 +4,7 @@ import App from "./App";
 import { ThemeProvider } from "./hooks/theme.jsx";
 import "./styles/globals.css";
 import "./styles/kanban.css";
+import "./styles/windows.css";
 
 // Load KaTeX for math rendering
 import katex from "katex";
