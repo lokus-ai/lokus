@@ -20,6 +20,8 @@ import {
   Minus,
   FileText,
   Link,
+  Mail,
+  Send,
 } from "lucide-react";
 import tippy from "tippy.js/dist/tippy.esm.js";
 
@@ -116,6 +118,36 @@ function openFileLinkPicker({ editor, range }) {
     } catch (fallbackError) {
     }
   }
+}
+
+function getCurrentFileName() {
+  // Get the current file name from the workspace context
+  try {
+    const activeFile = window.__LOKUS_ACTIVE_FILE__;
+    if (activeFile) {
+      // Extract filename from full path and remove extension
+      const fileName = activeFile.split('/').pop() || 'Untitled';
+      return fileName.replace(/\.[^/.]+$/, ''); // Remove extension (.md, .txt, etc.)
+    }
+    return 'Untitled';
+  } catch (error) {
+    return 'Untitled';
+  }
+}
+
+function createGmailTemplate({ editor, range }) {
+  const fileName = getCurrentFileName();
+  
+  const template = `---
+To: 
+Subject: ${fileName}
+---
+
+<!-- Write your email body here -->
+
+`;
+
+  editor.chain().focus().deleteRange(range).insertContent(template).run();
 }
 
 function createFilePicker(files, onSelect) {
@@ -433,6 +465,14 @@ const commandItems = [
         icon: <Link size={18} />,
         command: ({ editor, range }) => {
           openFileLinkPicker({ editor, range });
+        },
+      },
+      {
+        title: "Load Gmail",
+        description: "Create an email template with file name as subject.",
+        icon: <Mail size={18} />,
+        command: ({ editor, range }) => {
+          createGmailTemplate({ editor, range });
         },
       },
       {

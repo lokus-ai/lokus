@@ -1,15 +1,13 @@
 {
-  "nodes": [],
-  "edges": [],
-  "metadata": {
-    "version": "1.0.0",
-    "created": "2025-09-22T04:30:59.777Z",
-    "modified": "2025-09-22T04:30:59.777Z",
-    "createdWith": "Lokus",
-    "viewport": {
-      "x": 0,
-      "y": 0,
-      "zoom": 1
-    }
-  }
+	"nodes":[
+		{"id":"d3a19d5b604a3e2f","x":-125,"y":-30,"width":250,"height":60,"type":"text","text":""}
+	],
+	"edges":[],
+	"metadata":{
+		"version":"1.0.0",
+		"created":"2025-09-22T04:30:59.777Z",
+		"modified":"2025-09-22T04:30:59.777Z",
+		"createdWith":"Lokus",
+		"viewport":{"x":0,"y":0,"zoom":1}
+	}
 }

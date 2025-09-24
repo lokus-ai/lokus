@@ -7,11 +7,10 @@
 
 use super::{
     get_platform_provider, 
-    PlatformProvider, 
     PlatformFeature,
     errors::{PlatformError, PlatformErrorKind},
     system_info::SystemInfoCollector,
-    clipboard::{ClipboardUtils, ClipboardPlatformInfo},
+    clipboard::ClipboardUtils,
 };
 use std::path::Path;
 

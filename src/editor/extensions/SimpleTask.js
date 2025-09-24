@@ -613,9 +613,18 @@ export const SimpleTask = Extension.create({
     this.storage.editorInstance = this.editor
     
     // Add click handlers for task elements immediately and with delay
-    this.addTaskClickHandlers()
-    setTimeout(() => {
+    try {
       this.addTaskClickHandlers()
+    } catch (error) {
+      // Method might not be available yet
+    }
+    
+    setTimeout(() => {
+      try {
+        this.addTaskClickHandlers()
+      } catch (error) {
+        // Method might not be available yet
+      }
     }, 1000)
     
     // Test if tasks exist on page

@@ -230,6 +230,7 @@ export default function Preferences() {
             "Editor",
             "Markdown",
             "Shortcuts",
+            "Gmail",
             "AI Assistant",
           ].map((name) => (
             <button
@@ -579,6 +580,162 @@ export default function Preferences() {
                         </div>
                       );
                     })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {section === "Gmail" && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold mb-4 text-app-text">Gmail Settings</h2>
+                <p className="text-app-text-secondary mb-6">
+                  Configure Gmail integration settings for email management and synchronization.
+                </p>
+              </div>
+
+              {/* Authentication Status */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium text-app-text">Authentication</h3>
+                <div className="bg-app-panel border border-app-border rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-app-text">Gmail Account</p>
+                      <p className="text-sm text-app-text-secondary">
+                        Connect your Gmail account to access emails
+                      </p>
+                    </div>
+                    <button className="obsidian-button">
+                      Connect Account
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Email Management */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium text-app-text">Email Management</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-app-text">Auto-sync emails</p>
+                      <p className="text-sm text-app-text-secondary">
+                        Automatically synchronize emails in the background
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" defaultChecked />
+                      <div className="w-11 h-6 bg-app-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-app-accent"></div>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-app-text">Email notifications</p>
+                      <p className="text-sm text-app-text-secondary">
+                        Show notifications for new emails
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" defaultChecked />
+                      <div className="w-11 h-6 bg-app-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-app-accent"></div>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-app-text">Sync frequency</p>
+                      <p className="text-sm text-app-text-secondary">
+                        How often to check for new emails
+                      </p>
+                    </div>
+                    <select className="obsidian-select min-w-32">
+                      <option value="300000">5 minutes</option>
+                      <option value="600000">10 minutes</option>
+                      <option value="1800000">30 minutes</option>
+                      <option value="3600000">1 hour</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Note Conversion */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium text-app-text">Note Conversion</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-app-text">Default save location</p>
+                      <p className="text-sm text-app-text-secondary">
+                        Folder where email notes are saved
+                      </p>
+                    </div>
+                    <input 
+                      type="text" 
+                      defaultValue="emails"
+                      className="obsidian-input min-w-32"
+                      placeholder="emails"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-app-text">Include email headers</p>
+                      <p className="text-sm text-app-text-secondary">
+                        Include sender, recipient, and date information
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" defaultChecked />
+                      <div className="w-11 h-6 bg-app-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-app-accent"></div>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-app-text">Include attachments info</p>
+                      <p className="text-sm text-app-text-secondary">
+                        List attachment details in the note
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" defaultChecked />
+                      <div className="w-11 h-6 bg-app-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-app-accent"></div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Privacy & Security */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium text-app-text">Privacy & Security</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-app-text">Offline mode</p>
+                      <p className="text-sm text-app-text-secondary">
+                        Allow Gmail access when offline
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" defaultChecked />
+                      <div className="w-11 h-6 bg-app-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-app-accent"></div>
+                    </label>
+                  </div>
+
+                  <div className="bg-app-panel border border-app-border rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-app-text">Clear cached data</p>
+                        <p className="text-sm text-app-text-secondary">
+                          Remove all cached emails and attachments
+                        </p>
+                      </div>
+                      <button className="obsidian-button secondary">
+                        Clear Cache
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

@@ -67,6 +67,7 @@ pub struct InstallationLog {
 }
 
 #[derive(Serialize, Debug)]
+#[allow(dead_code)]
 pub struct GitHubRepoInfo {
     pub owner: String,
     pub repo: String,
@@ -76,6 +77,7 @@ pub struct GitHubRepoInfo {
 }
 
 #[derive(Serialize, Debug)]
+#[allow(dead_code)]
 pub struct InstallResult {
     pub success: bool,
     pub message: String,

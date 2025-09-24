@@ -12,6 +12,8 @@ mod plugins;
 mod platform;
 mod mcp;
 mod auth;
+mod connections;
+mod oauth_server;
 
 use windows::{open_workspace_window, open_preferences_window};
 use tauri::Manager;
@@ -64,8 +66,7 @@ fn validate_workspace_path(path: String) -> bool {
     // If no .lokus folder, check if we can create one (write permissions)
     match std::fs::create_dir(&lokus_dir) {
         Ok(_) => {
-            // Successfully created, remove it and return true
-            let _ = std::fs::remove_dir(&lokus_dir);
+            // Successfully created, keep it for workspace initialization
             true
         }
         Err(_) => false
@@ -249,7 +250,29 @@ fn main() {
       auth::get_user_profile,
       auth::refresh_auth_token,
       auth::logout,
-      auth::open_auth_url
+      auth::open_auth_url,
+      connections::gmail_initiate_auth,
+      connections::gmail_complete_auth,
+      connections::gmail_check_auth_callback,
+      connections::gmail_is_authenticated,
+      connections::gmail_logout,
+      connections::gmail_get_profile,
+      connections::gmail_list_emails,
+      connections::gmail_search_emails,
+      connections::gmail_get_email,
+      connections::gmail_send_email,
+      connections::gmail_reply_email,
+      connections::gmail_forward_email,
+      connections::gmail_mark_as_read,
+      connections::gmail_mark_as_unread,
+      connections::gmail_star_emails,
+      connections::gmail_unstar_emails,
+      connections::gmail_archive_emails,
+      connections::gmail_delete_emails,
+      connections::gmail_get_labels,
+      connections::gmail_get_queue_stats,
+      connections::gmail_force_process_queue,
+      connections::gmail_clear_queue
     ])
     .setup(|app| {
       menu::init(&app.handle())?;
@@ -270,6 +293,34 @@ fn main() {
       // Initialize auth state
       let auth_state = auth::SharedAuthState::default();
       app.manage(auth_state);
+      
+      // Initialize OAuth Server
+      let oauth_server = oauth_server::OAuthServer::new();
+      app.manage(oauth_server.clone());
+      
+      // Start OAuth server after the app is fully initialized
+      let oauth_server_clone = oauth_server.clone();
+      tauri::async_runtime::spawn(async move {
+        if let Err(e) = oauth_server_clone.start().await {
+          eprintln!("[OAUTH SERVER] ❌ Failed to start OAuth server: {}", e);
+        }
+      });
+      
+      // Initialize Gmail Connection Manager - always manage even if initialization fails
+      match connections::ConnectionManager::new(app.handle().clone()) {
+        Ok(connection_manager) => {
+          println!("[GMAIL] 🚀 Connection Manager initialized successfully");
+          app.manage(connection_manager);
+        }
+        Err(e) => {
+          eprintln!("[GMAIL] ❌ Failed to initialize Connection Manager: {}", e);
+          eprintln!("[GMAIL] ℹ️  Creating fallback Connection Manager for graceful error handling");
+          // Create a fallback connection manager to prevent "state not managed" errors
+          if let Ok(fallback_manager) = connections::ConnectionManager::new_fallback() {
+            app.manage(fallback_manager);
+          }
+        }
+      }
       
       // Register deep link handler for auth callbacks
       auth::register_deep_link_handler(&app.handle());
@@ -304,3 +355,4 @@ fn main() {
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
+

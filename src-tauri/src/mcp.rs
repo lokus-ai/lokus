@@ -9,7 +9,7 @@
 
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 use serde::{Deserialize, Serialize};
 use tokio::time::Duration;
 
@@ -26,7 +26,7 @@ pub struct MCPServerStatus {
 pub struct MCPServerManager {
     process: Arc<Mutex<Option<Child>>>,
     status: Arc<Mutex<MCPServerStatus>>,
-    app_handle: AppHandle,
+    _app_handle: AppHandle,
 }
 
 impl MCPServerManager {
@@ -40,7 +40,7 @@ impl MCPServerManager {
                 url: None,
                 last_error: None,
             })),
-            app_handle,
+            _app_handle: app_handle,
         }
     }
 
