@@ -1,0 +1,226 @@
+/**
+ * Windows-specific styles
+ * 
+ * Implements Windows 11 Fluent Design System
+ */
+
+/* Windows 11 Fluent Design Variables */
+.windows {
+  /* Acrylic effect colors */
+  --windows-acrylic-tint: rgba(255, 255, 255, 0.05);
+  --windows-acrylic-blur: 20px;
+  
+  /* Windows 11 border radius */
+  --windows-border-radius: 8px;
+  --windows-border-radius-small: 4px;
+  
+  /* Windows shadows */
+  --windows-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.04);
+  --windows-shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
+  --windows-shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.12);
+  
+  /* Windows accent color (default blue) */
+  --windows-accent: #0078D4;
+  --windows-accent-hover: #106EBE;
+  --windows-accent-active: #005A9E;
+}
+
+/* Windows 11 Acrylic Effect */
+.windows .acrylic {
+  background: var(--windows-acrylic-tint);
+  backdrop-filter: blur(var(--windows-acrylic-blur));
+  -webkit-backdrop-filter: blur(var(--windows-acrylic-blur));
+}
+
+/* Windows 11 Mica Effect (for sidebars) */
+.windows .mica {
+  background: rgba(var(--bg-rgb), 0.8);
+  backdrop-filter: blur(60px) saturate(150%);
+  -webkit-backdrop-filter: blur(60px) saturate(150%);
+}
+
+/* Windows 11 rounded corners */
+.windows .window-frame {
+  border-radius: var(--windows-border-radius);
+  overflow: hidden;
+}
+
+/* Windows-style buttons */
+.windows .obsidian-button {
+  border-radius: var(--windows-border-radius-small);
+  transition: all 0.1s ease;
+}
+
+.windows .obsidian-button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--windows-shadow-sm);
+}
+
+.windows .obsidian-button:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+/* Windows-style context menus */
+.windows [data-radix-popper-content-wrapper] {
+  animation: windows-fade-in 0.15s ease-out;
+}
+
+@keyframes windows-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Windows-style scrollbars */
+.windows ::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+.windows ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.windows ::-webkit-scrollbar-thumb {
+  background: rgba(var(--text-rgb), 0.2);
+  border: 3px solid transparent;
+  border-radius: 7px;
+  background-clip: padding-box;
+}
+
+.windows ::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--text-rgb), 0.3);
+  background-clip: padding-box;
+}
+
+.windows ::-webkit-scrollbar-thumb:active {
+  background: rgba(var(--text-rgb), 0.4);
+  background-clip: padding-box;
+}
+
+/* Windows-style tabs */
+.windows .obsidian-tab {
+  border-radius: var(--windows-border-radius-small) var(--windows-border-radius-small) 0 0;
+  transition: all 0.2s ease;
+}
+
+.windows .obsidian-tab:hover {
+  background: rgba(var(--text-rgb), 0.05);
+}
+
+.windows .obsidian-tab.active {
+  background: rgba(var(--accent-rgb), 0.1);
+  box-shadow: inset 0 -2px 0 rgb(var(--accent));
+}
+
+/* Windows-style sidebar */
+.windows .obsidian-sidebar {
+  background: var(--bg);
+  border-right: 1px solid rgba(var(--border-rgb), 0.6);
+}
+
+.windows.mica-enabled .obsidian-sidebar {
+  background: rgba(var(--bg-rgb), 0.8);
+  backdrop-filter: blur(60px) saturate(150%);
+  -webkit-backdrop-filter: blur(60px) saturate(150%);
+}
+
+/* Windows-style tooltips */
+.windows .tooltip {
+  background: rgba(50, 50, 50, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: var(--windows-border-radius-small);
+  box-shadow: var(--windows-shadow-md);
+  animation: windows-tooltip-appear 0.15s ease-out;
+}
+
+@keyframes windows-tooltip-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Windows-style dialogs */
+.windows .dialog-content {
+  border-radius: var(--windows-border-radius);
+  box-shadow: var(--windows-shadow-lg);
+  animation: windows-dialog-appear 0.2s ease-out;
+}
+
+@keyframes windows-dialog-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Windows-style focus rings */
+.windows *:focus-visible {
+  outline: 2px solid var(--windows-accent);
+  outline-offset: 2px;
+  border-radius: var(--windows-border-radius-small);
+}
+
+/* Windows-style selection */
+.windows ::selection {
+  background: rgba(var(--accent-rgb), 0.3);
+  color: rgb(var(--text));
+}
+
+/* Windows Snap Layouts hint */
+.windows .window-controls:hover::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 200px;
+  height: 100px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: var(--windows-border-radius-small);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.windows .window-controls:hover::after {
+  opacity: 1;
+}
+
+/* Windows dark mode adjustments */
+.windows.theme-dark {
+  --windows-acrylic-tint: rgba(0, 0, 0, 0.3);
+}
+
+.windows.theme-dark .mica {
+  background: rgba(32, 32, 32, 0.8);
+}
+
+/* Windows high contrast mode support */
+@media (prefers-contrast: high) {
+  .windows {
+    --windows-border-radius: 0;
+    --windows-border-radius-small: 0;
+  }
+  
+  .windows .acrylic,
+  .windows .mica {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}

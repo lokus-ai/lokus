@@ -37,6 +37,8 @@ import CreateTemplate from "../components/CreateTemplate.jsx";
 import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
 import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
 import SplitEditor from "../components/SplitEditor/SplitEditor.jsx";
+import { getFilename, getBasename } from '../utils/pathUtils.js';
+import platformService from "../services/platform/PlatformService.js";
 
 const MAX_OPEN_TABS = 10;
 
@@ -198,15 +200,17 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         break;
       case 'revealInFinder':
         try {
-          await invoke('reveal_in_finder', { path: file.path });
+          await invoke('platform_reveal_in_file_manager', { path: file.path });
         } catch (e) {
+          console.error('Failed to reveal in file manager:', e);
         }
         break;
       case 'openInTerminal':
         try {
           const terminalPath = file.is_directory ? file.path : file.path.split("/").slice(0, -1).join("/");
-          await invoke('open_terminal', { path: terminalPath });
+          await invoke('platform_open_terminal', { path: terminalPath });
         } catch (e) {
+          console.error('Failed to open terminal:', e);
         }
         break;
       case 'cut':
@@ -448,7 +452,7 @@ function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDra
           
           <button
             onClick={onNewTab}
-            title="New file (⌘N)"
+            title={`New file (${platformService.getModifierSymbol()}+N)`}
             className="obsidian-button icon-only mb-1"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
@@ -700,7 +704,9 @@ export default function Workspace({ initialPath = "" }) {
             }
             
             setEditorContent(processedContent);
-            setEditorTitle(activeTab.name.replace(/\.md$/, ""));
+            // Extract just the filename from the tab name (in case it contains a path)
+            const fileName = getFilename(activeTab.name);
+            setEditorTitle(fileName.replace(/\.md$/, ""));
             setSavedContent(content); // Keep original content for saving
           })
           .catch(() => {});
@@ -725,7 +731,7 @@ export default function Workspace({ initialPath = "" }) {
     const openPath = (p) => {
       if (!p) return;
       setOpenTabs(prevTabs => {
-        const name = p.split('/').pop();
+        const name = getFilename(p);
         const newTabs = prevTabs.filter(t => t.path !== p);
         newTabs.unshift({ path: p, name });
         if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
@@ -912,7 +918,7 @@ export default function Workspace({ initialPath = "" }) {
     // Handle search result format with line numbers
     if (file.path && file.lineNumber !== undefined) {
       const filePath = file.path;
-      const fileName = filePath.split('/').pop();
+      const fileName = getFilename(filePath);
       
       setOpenTabs(prevTabs => {
         const newTabs = prevTabs.filter(t => t.path !== filePath);
@@ -946,7 +952,9 @@ export default function Workspace({ initialPath = "" }) {
 
     setOpenTabs(prevTabs => {
       const newTabs = prevTabs.filter(t => t.path !== file.path);
-      newTabs.unshift({ path: file.path, name: file.name });
+      // Ensure we only use the filename, not a full path
+      const fileName = getFilename(file.name);
+      newTabs.unshift({ path: file.path, name: fileName });
       if (newTabs.length > MAX_OPEN_TABS) {
         newTabs.pop();
       }
@@ -992,7 +1000,9 @@ export default function Workspace({ initialPath = "" }) {
       const nextTab = openTabs[currentIndex + 1] || openTabs[0];
       if (nextTab && nextTab.path !== path) {
         setRightPaneFile(nextTab.path);
-        setRightPaneTitle(nextTab.name);
+        // Extract just the filename in case name contains a path
+        const fileName = getFilename(nextTab.name);
+        setRightPaneTitle(fileName.replace(/\.md$/, ""));
         if (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt')) {
           invoke("read_file_content", { path: nextTab.path })
             .then(content => {
@@ -1375,7 +1385,9 @@ export default function Workspace({ initialPath = "" }) {
         const nextTab = openTabs[currentIndex + 1] || openTabs[0];
         if (nextTab && nextTab.path !== activeFile) {
           setRightPaneFile(nextTab.path);
-          setRightPaneTitle(nextTab.name);
+          // Extract just the filename in case name contains a path
+        const fileName = getFilename(nextTab.name);
+        setRightPaneTitle(fileName.replace(/\.md$/, ""));
           
           // Load the content for the right pane asynchronously
           setTimeout(async () => {
@@ -1518,7 +1530,13 @@ export default function Workspace({ initialPath = "" }) {
     const unlistenInFileSearch = isTauri ? listen("lokus:in-file-search", () => setShowInFileSearch(true)) : Promise.resolve(addDom('lokus:in-file-search', () => setShowInFileSearch(true)));
     const unlistenGlobalSearch = isTauri ? listen("lokus:global-search", () => setShowGlobalSearch(true)) : Promise.resolve(addDom('lokus:global-search', () => setShowGlobalSearch(true)));
     const unlistenGraphView = isTauri ? listen("lokus:graph-view", handleOpenGraphView) : Promise.resolve(addDom('lokus:graph-view', handleOpenGraphView));
-    const unlistenShortcutHelp = isTauri ? listen("lokus:shortcut-help", () => setShowShortcutHelp(true)) : Promise.resolve(addDom('lokus:shortcut-help', () => setShowShortcutHelp(true)));
+    const unlistenShortcutHelp = isTauri ? listen("lokus:shortcut-help", () => {
+      console.log('[Workspace] Help shortcut triggered - opening help modal');
+      setShowShortcutHelp(true);
+    }) : Promise.resolve(addDom('lokus:shortcut-help', () => {
+      console.log('[Workspace] Help shortcut triggered (DOM) - opening help modal');
+      setShowShortcutHelp(true);
+    }));
     const unlistenRefreshFiles = isTauri ? listen("lokus:refresh-files", handleRefreshFiles) : Promise.resolve(addDom('lokus:refresh-files', handleRefreshFiles));
     const unlistenNewCanvas = isTauri ? listen("lokus:new-canvas", handleCreateCanvas) : Promise.resolve(addDom('lokus:new-canvas', handleCreateCanvas));
     const unlistenOpenKanban = isTauri ? listen("lokus:open-kanban", handleOpenFullKanban) : Promise.resolve(addDom('lokus:open-kanban', handleOpenFullKanban));
@@ -2485,7 +2503,7 @@ export default function Workspace({ initialPath = "" }) {
                             </div>
                             <h3 className="font-medium text-app-text mb-2">New Note</h3>
                             <p className="text-sm text-app-muted">Create your first note and start writing</p>
-                            <div className="mt-3 text-xs text-app-muted/70">⌘N</div>
+                            <div className="mt-3 text-xs text-app-muted/70">{platformService.formatShortcut("CommandOrControl+N")}</div>
                           </button>
                           
                           <button
@@ -2508,7 +2526,7 @@ export default function Workspace({ initialPath = "" }) {
                             </div>
                             <h3 className="font-medium text-app-text mb-2">New Folder</h3>
                             <p className="text-sm text-app-muted">Organize your notes with folders</p>
-                            <div className="mt-3 text-xs text-app-muted/70">⌘⇧N</div>
+                            <div className="mt-3 text-xs text-app-muted/70">{platformService.formatShortcut("CommandOrControl+Shift+N")}</div>
                           </button>
                           
                           <button
@@ -2520,7 +2538,7 @@ export default function Workspace({ initialPath = "" }) {
                             </div>
                             <h3 className="font-medium text-app-text mb-2">Command Palette</h3>
                             <p className="text-sm text-app-muted">Quick access to all commands</p>
-                            <div className="mt-3 text-xs text-app-muted/70">⌘K</div>
+                            <div className="mt-3 text-xs text-app-muted/70">{platformService.formatShortcut("CommandOrControl+K")}</div>
                           </button>
                         </div>
                       </div>
@@ -2552,9 +2570,9 @@ export default function Workspace({ initialPath = "" }) {
                             <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
                               <h3 className="font-medium text-app-text text-sm mb-2">⌨️ Quick Tips</h3>
                               <ul className="text-sm text-app-muted space-y-1">
-                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">⌘K</kbd> Command palette</li>
-                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">⌘S</kbd> Save current file</li>
-                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">⌘P</kbd> Quick file open</li>
+                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+K</kbd> Command palette</li>
+                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+S</kbd> Save current file</li>
+                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+P</kbd> Quick file open</li>
                                 <li>• Drag files to move them between folders</li>
                               </ul>
                             </div>

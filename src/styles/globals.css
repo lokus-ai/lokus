@@ -854,3 +854,128 @@ html {
 .time-tracker-status:hover {
   color: rgb(var(--text));
 }
+
+/* Windows Platform-Specific Styles */
+/* Windows 11 Fluent Design Enhancements */
+@media (prefers-color-scheme: dark) {
+  .windows-platform {
+    --windows-acrylic-tint: rgba(32, 32, 32, 0.8);
+    --windows-acrylic-blur: 30px;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  .windows-platform {
+    --windows-acrylic-tint: rgba(243, 243, 243, 0.8);
+    --windows-acrylic-blur: 30px;
+  }
+}
+
+/* Windows 11 Acrylic effect */
+.windows-platform .obsidian-sidebar,
+.windows-platform .obsidian-panel {
+  backdrop-filter: blur(var(--windows-acrylic-blur));
+  background-color: var(--windows-acrylic-tint);
+}
+
+/* Windows 11 rounded corners */
+.windows-platform {
+  --radius: 8px; /* Windows 11 uses 8px corners */
+}
+
+.windows-platform .obsidian-window {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Windows 11 context menus */
+.windows-platform [data-radix-popper-content-wrapper] {
+  border-radius: 8px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05) !important;
+  backdrop-filter: blur(20px);
+}
+
+/* Windows 11 hover effects */
+.windows-platform .obsidian-button:hover,
+.windows-platform .obsidian-file-item:hover {
+  background-color: rgb(var(--panel-secondary) / 0.6);
+  backdrop-filter: brightness(1.1);
+}
+
+/* Windows snap layout indicator */
+.windows-platform .window-snap-indicator {
+  position: absolute;
+  top: 0;
+  right: 48px;
+  width: 40px;
+  height: 40px;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.windows-platform .window-controls:hover .window-snap-indicator {
+  opacity: 1;
+}
+
+/* Windows 11 animations */
+.windows-platform * {
+  transition-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* Windows taskbar integration styles */
+.windows-platform .taskbar-progress {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(to right, rgb(var(--accent)), rgb(var(--accent-hover)));
+  transform-origin: left;
+  transition: transform 300ms ease;
+}
+
+/* Windows notification badge styles */
+.windows-platform .notification-badge {
+  background: #FF4B4B;
+  color: white;
+  border-radius: 10px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Remove unwanted focus outlines globally */
+*:focus,
+*:focus-visible {
+  outline: none !important;
+}
+
+/* Remove blue borders and focus styles from common elements */
+button:focus,
+button:focus-visible,
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+div:focus,
+div:focus-visible,
+[tabindex]:focus,
+[tabindex]:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: initial !important;
+}
+
+/* Specifically target Radix UI components */
+[data-radix-context-menu-trigger]:focus,
+[data-radix-context-menu-trigger]:focus-visible,
+[data-state]:focus,
+[data-state]:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}

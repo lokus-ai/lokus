@@ -23,10 +23,13 @@ import {
   Trash2,
   ExternalLink
 } from 'lucide-react';
+import platformService from '../services/platform/PlatformService';
 
 export default function FileContextMenu({ children, file, onAction }) {
   const isFile = file?.type === 'file';
   const isFolder = file?.type === 'folder';
+  const isWindows = platformService.isWindows();
+  const isMac = platformService.isMacOS();
 
   const handleAction = (action, data = {}) => {
     if (onAction) {
@@ -49,7 +52,7 @@ export default function FileContextMenu({ children, file, onAction }) {
             <ContextMenuItem onClick={() => handleAction('openToSide')}>
               <FolderOpen className="mr-2 h-4 w-4" />
               Open to the Side
-              <ContextMenuShortcut>⌘⇧Enter</ContextMenuShortcut>
+              <ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+Enter' : '⌘⇧Enter'}</ContextMenuShortcut>
             </ContextMenuItem>
             <ContextMenuItem onClick={() => handleAction('openWith')}>
               <ExternalLink className="mr-2 h-4 w-4" />
@@ -61,8 +64,8 @@ export default function FileContextMenu({ children, file, onAction }) {
         
         <ContextMenuItem onClick={() => handleAction('revealInFinder')}>
           <Eye className="mr-2 h-4 w-4" />
-          Reveal in Finder
-          <ContextMenuShortcut>⌥⌘R</ContextMenuShortcut>
+          {isWindows ? 'Reveal in Explorer' : 'Reveal in Finder'}
+          <ContextMenuShortcut>{isWindows ? 'Ctrl+Alt+R' : '⌥⌘R'}</ContextMenuShortcut>
         </ContextMenuItem>
         
         <ContextMenuItem onClick={() => handleAction('openInTerminal')}>
@@ -102,25 +105,25 @@ export default function FileContextMenu({ children, file, onAction }) {
         <ContextMenuItem onClick={() => handleAction('cut')}>
           <Scissors className="mr-2 h-4 w-4" />
           Cut
-          <ContextMenuShortcut>⌘X</ContextMenuShortcut>
+          <ContextMenuShortcut>{isWindows ? 'Ctrl+X' : '⌘X'}</ContextMenuShortcut>
         </ContextMenuItem>
         
         <ContextMenuItem onClick={() => handleAction('copy')}>
           <Copy className="mr-2 h-4 w-4" />
           Copy
-          <ContextMenuShortcut>⌘C</ContextMenuShortcut>
+          <ContextMenuShortcut>{isWindows ? 'Ctrl+C' : '⌘C'}</ContextMenuShortcut>
         </ContextMenuItem>
         
         <ContextMenuItem onClick={() => handleAction('copyPath')}>
           <FileText className="mr-2 h-4 w-4" />
           Copy Path
-          <ContextMenuShortcut>⌥⌘C</ContextMenuShortcut>
+          <ContextMenuShortcut>{isWindows ? 'Ctrl+Alt+C' : '⌥⌘C'}</ContextMenuShortcut>
         </ContextMenuItem>
         
         <ContextMenuItem onClick={() => handleAction('copyRelativePath')}>
           <FileText className="mr-2 h-4 w-4" />
           Copy Relative Path
-          <ContextMenuShortcut>⌥⌘⇧C</ContextMenuShortcut>
+          <ContextMenuShortcut>{isWindows ? 'Ctrl+Alt+Shift+C' : '⌥⌘⇧C'}</ContextMenuShortcut>
         </ContextMenuItem>
         
         <ContextMenuSeparator />
@@ -128,7 +131,7 @@ export default function FileContextMenu({ children, file, onAction }) {
         <ContextMenuItem onClick={() => handleAction('rename')}>
           <Edit3 className="mr-2 h-4 w-4" />
           Rename...
-          <ContextMenuShortcut>⌘⇧R</ContextMenuShortcut>
+          <ContextMenuShortcut>{isWindows ? 'F2' : '⌘⇧R'}</ContextMenuShortcut>
         </ContextMenuItem>
         
         <ContextMenuItem 
@@ -137,7 +140,7 @@ export default function FileContextMenu({ children, file, onAction }) {
         >
           <Trash2 className="mr-2 h-4 w-4" />
           Delete
-          <ContextMenuShortcut>⌘⌫</ContextMenuShortcut>
+          <ContextMenuShortcut>{isWindows ? 'Delete' : '⌘⌫'}</ContextMenuShortcut>
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

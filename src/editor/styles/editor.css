@@ -10,6 +10,23 @@
     outline: none;
 }
 
+/* Remove focus outlines from context menu trigger wrapper */
+[data-radix-context-menu-trigger]:focus,
+[data-radix-context-menu-trigger]:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+
+/* Ensure editor container doesn't show focus styles */
+.ProseMirror-focused,
+.ProseMirror-focused:focus,
+.ProseMirror-focused:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+
 /* Smooth typing aesthetics */
 .smooth-type {
     /* Prefer modern UI font with good hinting */
