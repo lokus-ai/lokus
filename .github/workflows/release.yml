@@ -41,8 +41,16 @@ jobs:
           node-version: 'lts/*'
           cache: 'npm'
 
+      - name: Clean npm cache (Windows fix)
+        if: runner.os == 'Windows'
+        run: |
+          Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
+          Remove-Item -Force package-lock.json -ErrorAction SilentlyContinue
+          npm cache clean --force
+        shell: powershell
+        
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
