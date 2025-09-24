@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Search, X, ChevronDown, ChevronRight, Settings, Clock } from 'lucide-react'
 import { sanitizeSearchHighlight, isValidSearchQuery } from '../core/security/index.js'
+import { getFilename } from '../utils/pathUtils.js'
 
 // Utility function to highlight search matches in text (XSS-safe)
 const highlightText = (text, query, options) => {
@@ -124,7 +125,7 @@ export default function SearchPanel({ isOpen, onClose, onFileOpen, workspacePath
 
   // Handle file click to open
   const handleFileOpen = useCallback((filePath, lineNumber, column) => {
-    const fileName = filePath.split('/').pop()
+    const fileName = getFilename(filePath)
     onFileOpen({ 
       path: filePath,
       name: fileName,

@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { isValidCanvasData, isValidFilePath, sanitizeUserInput } from '../security/index.js';
+import { joinPath, ensureExtension } from '../../utils/pathUtils.js';
 
 /**
  * Canvas File Manager
@@ -31,8 +32,8 @@ export class CanvasManager {
         throw new Error('Invalid canvas name');
       }
       
-      const fileName = sanitizedName.endsWith('.canvas') ? sanitizedName : `${sanitizedName}.canvas`;
-      const canvasPath = `${workspacePath}/${fileName}`;
+      const fileName = ensureExtension(sanitizedName, '.canvas');
+      const canvasPath = joinPath(workspacePath, fileName);
       
       // Validate final path
       if (!isValidFilePath(canvasPath)) {

@@ -2,6 +2,8 @@ import { register, unregisterAll } from "@tauri-apps/plugin-global-shortcut";
 import { emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { readConfig, updateConfig } from "../config/store.js";
+import platformService from "../../services/platform/PlatformService.js";
+
 let isTauri = false; try {
   const w = typeof window !== 'undefined' ? window : undefined;
   isTauri = !!(
@@ -29,7 +31,7 @@ export const ACTIONS = [
   { id: "close-tab",        name: "Close Current Tab",   event: "lokus:close-tab",        default: "CommandOrControl+W" },
   { id: "reopen-closed-tab", name: "Reopen Closed Tab",  event: "lokus:reopen-closed-tab", default: "CommandOrControl+Shift+T" },
   { id: "graph-view",       name: "Open Graph View",     event: "lokus:graph-view",       default: "CommandOrControl+Shift+G" },
-  { id: "shortcut-help",    name: "Show Keyboard Shortcuts", event: "lokus:shortcut-help", default: "CommandOrControl+/" },
+  { id: "shortcut-help",    name: "Show Keyboard Shortcuts", event: "lokus:shortcut-help", default: "F1" },
   { id: "refresh-files",    name: "Refresh File Tree",   event: "lokus:refresh-files",    default: "F5" },
   { id: "new-canvas",       name: "New Canvas",          event: "lokus:new-canvas",       default: "CommandOrControl+Shift+C" },
   { id: "open-kanban",      name: "Open Kanban Board",   event: "lokus:open-kanban",      default: "CommandOrControl+Shift+K" },
@@ -77,10 +79,39 @@ export async function getActiveShortcuts() {
   const cfg = await readConfig();
   const overrides = cfg.shortcuts || {};
   const map = {};
+  
+  // Get platform-specific shortcuts
+  const platformShortcuts = await platformService.getShortcuts();
+  
   for (const a of ACTIONS) {
-    map[a.id] = overrides[a.id] || a.default;
+    // Check for user override first
+    if (overrides[a.id]) {
+      map[a.id] = overrides[a.id];
+    } else {
+      // Check if platform has specific shortcut for this action
+      const platformKey = a.id.replace(/-/g, '');
+      if (platformShortcuts && platformShortcuts[platformKey]) {
+        // Convert platform-specific shortcut to generic format
+        map[a.id] = convertPlatformShortcut(platformShortcuts[platformKey]);
+      } else {
+        // Use default shortcut
+        map[a.id] = a.default;
+      }
+    }
   }
   return map;
+}
+
+// Convert platform-specific shortcuts to generic CommandOrControl format
+function convertPlatformShortcut(shortcut) {
+  if (platformService.isWindows()) {
+    // Windows shortcuts are already in Ctrl format
+    return shortcut.replace(/Ctrl/g, 'CommandOrControl');
+  } else if (platformService.isMacOS()) {
+    // Convert Cmd to CommandOrControl
+    return shortcut.replace(/Cmd/g, 'CommandOrControl');
+  }
+  return shortcut;
 }
 
 export async function setShortcut(actionId, accelerator) {
@@ -108,28 +139,50 @@ export async function resetShortcuts() {
 }
 
 export async function registerGlobalShortcuts() {
-  if (!isTauri) return; // no-op in browser
+  if (!isTauri) {
+    console.log('[Shortcuts] Skipping global shortcuts registration - not in Tauri environment');
+    return; // no-op in browser
+  }
+  
+  console.log('[Shortcuts] Starting global shortcuts registration...');
   await unregisterAll();
   const map = await getActiveShortcuts();
+  console.log('[Shortcuts] Active shortcuts map:', map);
+  
   for (const a of ACTIONS) {
     const accel = map[a.id];
-    if (!accel) continue;
+    if (!accel) {
+      console.log(`[Shortcuts] Skipping ${a.id} - no accelerator defined`);
+      continue;
+    }
+    
     try {
+      console.log(`[Shortcuts] Registering ${a.id}: ${accel} -> ${a.event}`);
       await register(accel, async () => {
+        console.log(`[Shortcuts] Shortcut triggered: ${a.id} (${accel})`);
         if (a.id === 'open-preferences') {
-          try { await invoke('open_preferences_window'); } catch (e) { }
+          try { await invoke('open_preferences_window'); } catch (e) { console.error('Failed to open preferences:', e); }
         } else {
           // Use Tauri events in Tauri environment, DOM events otherwise
           if (isTauri) {
-            try { await emit(a.event); } catch (e) { console.warn('Failed to emit Tauri event:', e); }
+            try { 
+              console.log(`[Shortcuts] Emitting Tauri event: ${a.event}`);
+              await emit(a.event); 
+            } catch (e) { console.warn('Failed to emit Tauri event:', e); }
           } else {
-            try { window.dispatchEvent(new CustomEvent(a.event)); } catch (e) { console.warn('Failed to dispatch DOM event:', e); }
+            try { 
+              console.log(`[Shortcuts] Dispatching DOM event: ${a.event}`);
+              window.dispatchEvent(new CustomEvent(a.event)); 
+            } catch (e) { console.warn('Failed to dispatch DOM event:', e); }
           }
         }
       });
+      console.log(`[Shortcuts] Successfully registered: ${a.id}`);
     } catch (e) {
+      console.error(`[Shortcuts] Failed to register ${a.id} (${accel}):`, e);
     }
   }
+  console.log('[Shortcuts] Global shortcuts registration completed');
 }
 
 export async function unregisterGlobalShortcuts() {
@@ -159,19 +212,40 @@ function normalizeKey(k) {
   return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
-// Pretty print accelerator for UI, using mac symbols when appropriate
+// Pretty print accelerator for UI, using platform-aware symbols
 export function formatAccelerator(accel) {
   if (!accel) return "";
-  const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || navigator.userAgent || "");
+  
+  // Use platform service for accurate detection
+  const isMac = platformService.isMacOS();
+  const isWin = platformService.isWindows();
+  
   const parts = accel.split('+');
   const out = [];
+  
   for (const p of parts) {
-    if (p === 'CommandOrControl') out.push(isMac ? '⌘' : 'Ctrl');
-    else if (p === 'Control') out.push(isMac ? '⌃' : 'Ctrl');
-    else if (p === 'Shift') out.push(isMac ? '⇧' : 'Shift');
-    else if (p === 'Alt' || p === 'Option') out.push(isMac ? '⌥' : 'Alt');
-    else if (p === 'Comma') out.push(',');
-    else out.push(p);
+    if (p === 'CommandOrControl') {
+      out.push(isMac ? '⌘' : 'Ctrl');
+    } else if (p === 'Control') {
+      out.push(isMac ? '⌃' : 'Ctrl');
+    } else if (p === 'Shift') {
+      out.push(isMac ? '⇧' : 'Shift');
+    } else if (p === 'Alt' || p === 'Option') {
+      out.push(isMac ? '⌥' : 'Alt');
+    } else if (p === 'Cmd') {
+      out.push(isMac ? '⌘' : 'Win');
+    } else if (p === 'Win' || p === 'Super') {
+      out.push(isWin ? '⊞' : 'Super');
+    } else if (p === 'Comma') {
+      out.push(',');
+    } else if (p === 'Plus') {
+      out.push('+');
+    } else if (p === 'Minus') {
+      out.push('-');
+    } else {
+      out.push(p);
+    }
   }
+  
   return isMac ? out.join('') : out.join('+');
 }

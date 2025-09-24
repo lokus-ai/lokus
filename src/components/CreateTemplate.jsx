@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog.jsx';
+import platformService from '../services/platform/PlatformService.js';
 
 export default function CreateTemplate({ 
   open, 
@@ -230,7 +231,7 @@ Add your template content here. Use {{variable}} for dynamic values.`}
         {/* Footer */}
         <div className="flex justify-between items-center pt-4 border-t border-app-border">
           <div className="text-sm text-app-muted">
-            Template will be available in Command Palette (Cmd+K)
+            Template will be available in Command Palette ({platformService.getModifierSymbol()}+K)
           </div>
           
           <div className="flex gap-2">

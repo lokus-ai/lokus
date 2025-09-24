@@ -7,6 +7,7 @@ import { useWorkspaceActivation } from "./hooks/useWorkspaceActivation";
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/shortcuts/registry.js";
 import { PluginProvider } from "./hooks/usePlugins.jsx";
 import { AuthProvider } from "./core/auth/AuthContext.jsx";
+import platformService from "./services/platform/PlatformService.js";
 // Import workspace manager to expose developer utilities
 import "./core/workspace/manager.js";
 // Import MCP client for stdio-based connections
@@ -18,6 +19,21 @@ function App() {
   // Use the hooks' values directly (no setter param expected)
   const { isPrefsWindow } = usePreferenceActivation();
   const activePath = useWorkspaceActivation();
+
+  useEffect(() => {
+    // Add platform class to document body
+    if (platformService.isWindows()) {
+      document.body.classList.add('windows');
+      // Check if Windows 11 for additional styling
+      if (navigator.userAgent.includes('Windows NT 10.0')) {
+        document.body.classList.add('windows-11');
+      }
+    } else if (platformService.isMacOS()) {
+      document.body.classList.add('macos');
+    } else if (platformService.isLinux()) {
+      document.body.classList.add('linux');
+    }
+  }, []);
 
   useEffect(() => {
     let isSubscribed = true;

@@ -26,6 +26,7 @@ import {
 import { getActiveShortcuts, formatAccelerator } from '../core/shortcuts/registry'
 import { useCommandHistory, createFileHistoryItem, createCommandHistoryItem } from '../hooks/useCommandHistory.js'
 import { useTemplates, useTemplateProcessor } from '../hooks/useTemplates.js'
+import { joinPath } from '../utils/pathUtils.js'
 
 export default function CommandPalette({ 
   open, 
@@ -119,7 +120,7 @@ export default function CommandPalette({
   const flattenFileTree = (entries, path = '') => {
     let files = []
     entries.forEach(entry => {
-      const fullPath = path ? `${path}/${entry.name}` : entry.name
+      const fullPath = path ? joinPath(path, entry.name) : entry.name
       if (entry.is_directory) {
         if (entry.children) {
           files = files.concat(flattenFileTree(entry.children, fullPath))

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Search, File, Folder, FolderOpen, Clock, ArrowRight, X } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
+import { joinPath } from '../utils/pathUtils.js'
+import platformService from '../services/platform/PlatformService.js'
 
 export default function WikiLinkModal({ 
   isOpen, 
@@ -99,7 +101,7 @@ export default function WikiLinkModal({
       const extractFiles = (entries, path = '') => {
         entries.forEach(entry => {
           if (!entry.is_directory && entry.name.endsWith('.md')) {
-            const fullPath = path ? `${path}/${entry.name}` : entry.name
+            const fullPath = path ? joinPath(path, entry.name) : entry.name
             allFiles.push({
               name: entry.name.replace('.md', ''),
               path: fullPath,
@@ -108,7 +110,7 @@ export default function WikiLinkModal({
               isMarkdown: true
             })
           } else if (entry.is_directory && entry.children) {
-            const folderPath = path ? `${path}/${entry.name}` : entry.name
+            const folderPath = path ? joinPath(path, entry.name) : entry.name
             extractFiles(entry.children, folderPath)
           }
         })
@@ -240,7 +242,7 @@ export default function WikiLinkModal({
             <span>Esc Close</span>
           </div>
           <div>
-            Cmd+K to open
+            {platformService.getModifierSymbol()}+K to open
           </div>
         </div>
       </div>
