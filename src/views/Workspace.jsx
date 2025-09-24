@@ -4,11 +4,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail } from "lucide-react";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
 import Editor from "../editor";
 import StatusBar from "../components/StatusBar.jsx";
+import ConnectionStatus from "../components/ConnectionStatus.jsx";
 import Canvas from "./Canvas.jsx";
 import { GraphDataProcessor } from "../core/graph/GraphDataProcessor.js";
 import { GraphEngine } from "../core/graph/GraphEngine.js";
@@ -37,6 +38,10 @@ import CreateTemplate from "../components/CreateTemplate.jsx";
 import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
 import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
 import SplitEditor from "../components/SplitEditor/SplitEditor.jsx";
+import { getFilename, getBasename } from '../utils/pathUtils.js';
+import platformService from "../services/platform/PlatformService.js";
+import Gmail from "./Gmail.jsx";
+import { gmailAuth, gmailEmails } from '../services/gmail.js';
 
 const MAX_OPEN_TABS = 10;
 
@@ -198,15 +203,17 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         break;
       case 'revealInFinder':
         try {
-          await invoke('reveal_in_finder', { path: file.path });
+          await invoke('platform_reveal_in_file_manager', { path: file.path });
         } catch (e) {
+          console.error('Failed to reveal in file manager:', e);
         }
         break;
       case 'openInTerminal':
         try {
           const terminalPath = file.is_directory ? file.path : file.path.split("/").slice(0, -1).join("/");
-          await invoke('open_terminal', { path: terminalPath });
+          await invoke('platform_open_terminal', { path: terminalPath });
         } catch (e) {
+          console.error('Failed to open terminal:', e);
         }
         break;
       case 'cut':
@@ -448,7 +455,7 @@ function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDra
           
           <button
             onClick={onNewTab}
-            title="New file (⌘N)"
+            title={`New file (${platformService.getModifierSymbol()}+N)`}
             className="obsidian-button icon-only mb-1"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
@@ -546,6 +553,7 @@ export default function Workspace({ initialPath = "" }) {
   const [showKanban, setShowKanban] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
   const [showMarketplace, setShowMarketplace] = useState(false);
+  const [showGmail, setShowGmail] = useState(false);
   // Graph view now opens as a tab instead of sidebar panel
   const [showGraphView, setShowGraphView] = useState(false);
   const [graphData, setGraphData] = useState(null);
@@ -700,7 +708,9 @@ export default function Workspace({ initialPath = "" }) {
             }
             
             setEditorContent(processedContent);
-            setEditorTitle(activeTab.name.replace(/\.md$/, ""));
+            // Extract just the filename from the tab name (in case it contains a path)
+            const fileName = getFilename(activeTab.name);
+            setEditorTitle(fileName.replace(/\.md$/, ""));
             setSavedContent(content); // Keep original content for saving
           })
           .catch(() => {});
@@ -725,7 +735,7 @@ export default function Workspace({ initialPath = "" }) {
     const openPath = (p) => {
       if (!p) return;
       setOpenTabs(prevTabs => {
-        const name = p.split('/').pop();
+        const name = getFilename(p);
         const newTabs = prevTabs.filter(t => t.path !== p);
         newTabs.unshift({ path: p, name });
         if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
@@ -912,7 +922,7 @@ export default function Workspace({ initialPath = "" }) {
     // Handle search result format with line numbers
     if (file.path && file.lineNumber !== undefined) {
       const filePath = file.path;
-      const fileName = filePath.split('/').pop();
+      const fileName = getFilename(filePath);
       
       setOpenTabs(prevTabs => {
         const newTabs = prevTabs.filter(t => t.path !== filePath);
@@ -946,7 +956,9 @@ export default function Workspace({ initialPath = "" }) {
 
     setOpenTabs(prevTabs => {
       const newTabs = prevTabs.filter(t => t.path !== file.path);
-      newTabs.unshift({ path: file.path, name: file.name });
+      // Ensure we only use the filename, not a full path
+      const fileName = getFilename(file.name);
+      newTabs.unshift({ path: file.path, name: fileName });
       if (newTabs.length > MAX_OPEN_TABS) {
         newTabs.pop();
       }
@@ -992,7 +1004,9 @@ export default function Workspace({ initialPath = "" }) {
       const nextTab = openTabs[currentIndex + 1] || openTabs[0];
       if (nextTab && nextTab.path !== path) {
         setRightPaneFile(nextTab.path);
-        setRightPaneTitle(nextTab.name);
+        // Extract just the filename in case name contains a path
+        const fileName = getFilename(nextTab.name);
+        setRightPaneTitle(fileName.replace(/\.md$/, ""));
         if (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt')) {
           invoke("read_file_content", { path: nextTab.path })
             .then(content => {
@@ -1076,6 +1090,53 @@ export default function Workspace({ initialPath = "" }) {
     });
   }, []);
 
+  // Gmail template detection and parsing
+  const parseGmailTemplate = (content) => {
+    try {
+      // Check if content starts with YAML frontmatter
+      if (!content.startsWith('---')) {
+        return null;
+      }
+
+      // Extract frontmatter and body
+      const frontmatterEnd = content.indexOf('---', 3);
+      if (frontmatterEnd === -1) {
+        return null;
+      }
+
+      const frontmatterContent = content.slice(3, frontmatterEnd).trim();
+      const body = content.slice(frontmatterEnd + 3).trim();
+
+      // Parse the YAML-like frontmatter
+      const metadata = {};
+      const lines = frontmatterContent.split('\n');
+      
+      for (const line of lines) {
+        const colonIndex = line.indexOf(':');
+        if (colonIndex > 0) {
+          const key = line.slice(0, colonIndex).trim().toLowerCase();
+          const value = line.slice(colonIndex + 1).trim();
+          metadata[key] = value;
+        }
+      }
+
+      // Check if this looks like a Gmail template
+      if (metadata.to !== undefined && metadata.subject !== undefined) {
+        return {
+          to: metadata.to ? metadata.to.split(',').map(email => email.trim()).filter(email => email) : [],
+          cc: metadata.cc ? metadata.cc.split(',').map(email => email.trim()).filter(email => email) : [],
+          bcc: metadata.bcc ? metadata.bcc.split(',').map(email => email.trim()).filter(email => email) : [],
+          subject: metadata.subject || '',
+          body: body.replace(/<!--.*?-->/gs, '').trim() // Remove HTML comments
+        };
+      }
+    } catch (error) {
+      console.error('Error parsing Gmail template:', error);
+    }
+    
+    return null;
+  };
+
   const handleSave = useCallback(async () => {
     const { activeFile, openTabs, editorContent, editorTitle } = stateRef.current;
     if (!activeFile) return;
@@ -1111,6 +1172,46 @@ export default function Workspace({ initialPath = "" }) {
         newSet.delete(path_to_save);
         return newSet;
       });
+
+      // Check if this is a Gmail template and send email
+      const gmailTemplate = parseGmailTemplate(contentToSave);
+      if (gmailTemplate) {
+        try {
+          console.log('📧 Detected Gmail template, checking authentication...');
+          
+          // Check if user is authenticated with Gmail
+          const isAuthenticated = await gmailAuth.isAuthenticated();
+          if (isAuthenticated && gmailTemplate.to.length > 0 && gmailTemplate.subject) {
+            console.log('📧 Sending email via Gmail:', {
+              to: gmailTemplate.to,
+              subject: gmailTemplate.subject
+            });
+            
+            // Send the email
+            await gmailEmails.sendEmail({
+              to: gmailTemplate.to,
+              cc: gmailTemplate.cc,
+              bcc: gmailTemplate.bcc,
+              subject: gmailTemplate.subject,
+              body: gmailTemplate.body,
+              attachments: [] // For future implementation
+            });
+
+            console.log('✅ Email sent successfully via Gmail');
+            
+            // Optional: Show success notification to user
+            // You could add a toast notification here
+          } else if (!isAuthenticated) {
+            console.log('⚠️ Gmail template detected but user not authenticated');
+            // Optional: Show authentication prompt
+          } else {
+            console.log('⚠️ Gmail template detected but missing required fields (to/subject)');
+          }
+        } catch (emailError) {
+          console.error('❌ Failed to send Gmail:', emailError);
+          // Optional: Show error notification to user
+        }
+      }
 
       if (needsStateUpdate) {
         const newName = path_to_save.split("/").pop();
@@ -1310,6 +1411,21 @@ export default function Workspace({ initialPath = "" }) {
     setActiveFile(graphPath);
   }, []);
 
+  const handleOpenGmail = useCallback(() => {
+    const gmailPath = '__gmail__';
+    const gmailName = 'Gmail';
+    
+    setOpenTabs(prevTabs => {
+      const newTabs = prevTabs.filter(t => t.path !== gmailPath);
+      newTabs.unshift({ path: gmailPath, name: gmailName });
+      if (newTabs.length > MAX_OPEN_TABS) {
+        newTabs.pop();
+      }
+      return newTabs;
+    });
+    setActiveFile(gmailPath);
+  }, []);
+
   // Initialize graph processor when workspace path changes
   useEffect(() => {
     if (path) {
@@ -1375,11 +1491,14 @@ export default function Workspace({ initialPath = "" }) {
         const nextTab = openTabs[currentIndex + 1] || openTabs[0];
         if (nextTab && nextTab.path !== activeFile) {
           setRightPaneFile(nextTab.path);
-          setRightPaneTitle(nextTab.name);
+          // Extract just the filename in case name contains a path
+        const fileName = getFilename(nextTab.name);
+        setRightPaneTitle(fileName.replace(/\.md$/, ""));
           
           // Load the content for the right pane asynchronously
           setTimeout(async () => {
             const isSpecialView = nextTab.path === '__kanban__' || 
+                                nextTab.path === '__gmail__' ||
                                 nextTab.path.startsWith('__graph__') || 
                                 nextTab.path.startsWith('__plugin_') || 
                                 nextTab.path.endsWith('.canvas');
@@ -1518,7 +1637,13 @@ export default function Workspace({ initialPath = "" }) {
     const unlistenInFileSearch = isTauri ? listen("lokus:in-file-search", () => setShowInFileSearch(true)) : Promise.resolve(addDom('lokus:in-file-search', () => setShowInFileSearch(true)));
     const unlistenGlobalSearch = isTauri ? listen("lokus:global-search", () => setShowGlobalSearch(true)) : Promise.resolve(addDom('lokus:global-search', () => setShowGlobalSearch(true)));
     const unlistenGraphView = isTauri ? listen("lokus:graph-view", handleOpenGraphView) : Promise.resolve(addDom('lokus:graph-view', handleOpenGraphView));
-    const unlistenShortcutHelp = isTauri ? listen("lokus:shortcut-help", () => setShowShortcutHelp(true)) : Promise.resolve(addDom('lokus:shortcut-help', () => setShowShortcutHelp(true)));
+    const unlistenShortcutHelp = isTauri ? listen("lokus:shortcut-help", () => {
+      console.log('[Workspace] Help shortcut triggered - opening help modal');
+      setShowShortcutHelp(true);
+    }) : Promise.resolve(addDom('lokus:shortcut-help', () => {
+      console.log('[Workspace] Help shortcut triggered (DOM) - opening help modal');
+      setShowShortcutHelp(true);
+    }));
     const unlistenRefreshFiles = isTauri ? listen("lokus:refresh-files", handleRefreshFiles) : Promise.resolve(addDom('lokus:refresh-files', handleRefreshFiles));
     const unlistenNewCanvas = isTauri ? listen("lokus:new-canvas", handleCreateCanvas) : Promise.resolve(addDom('lokus:new-canvas', handleCreateCanvas));
     const unlistenOpenKanban = isTauri ? listen("lokus:open-kanban", handleOpenFullKanban) : Promise.resolve(addDom('lokus:open-kanban', handleOpenFullKanban));
@@ -1988,7 +2113,7 @@ export default function Workspace({ initialPath = "" }) {
             <button
               onClick={handleOpenGraphView}
               title="Graph View"
-              className="obsidian-button icon-only w-full"
+              className="obsidian-button icon-only w-full mb-1"
               onMouseEnter={(e) => {
                 const icon = e.currentTarget.querySelector('svg');
                 if (icon) icon.style.color = 'rgb(var(--accent))';
@@ -1999,6 +2124,22 @@ export default function Workspace({ initialPath = "" }) {
               }}
             >
               <Network className="w-5 h-5" />
+            </button>
+            
+            <button
+              onClick={handleOpenGmail}
+              title="Gmail"
+              className="obsidian-button icon-only w-full"
+              onMouseEnter={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = 'rgb(var(--accent))';
+              }}
+              onMouseLeave={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = '';
+              }}
+            >
+              <Mail className="w-5 h-5" />
             </button>
             
           </div>
@@ -2194,7 +2335,7 @@ export default function Workspace({ initialPath = "" }) {
                       setRightPaneTitle(tab?.name || '');
                       
                       // Only load file content for actual files, not special views
-                      const isSpecialView = path === '__kanban__' || path.startsWith('__graph__') || path.startsWith('__plugin_') || path.endsWith('.canvas');
+                      const isSpecialView = path === '__kanban__' || path === '__gmail__' || path.startsWith('__graph__') || path.startsWith('__plugin_') || path.endsWith('.canvas');
                       
                       if (!isSpecialView && (path.endsWith('.md') || path.endsWith('.txt'))) {
                         invoke("read_file_content", { path })
@@ -2278,6 +2419,10 @@ export default function Workspace({ initialPath = "" }) {
                           onFileOpen={handleFileOpen}
                           workspacePath={path}
                         />
+                      </div>
+                    ) : rightPaneFile === '__gmail__' ? (
+                      <div className="h-full">
+                        <Gmail workspacePath={path} />
                       </div>
                     ) : rightPaneFile.startsWith('__plugin_') ? (
                       <div className="flex-1 overflow-hidden">
@@ -2374,6 +2519,10 @@ export default function Workspace({ initialPath = "" }) {
                 workspacePath={path}
                 onOpenFile={handleFileOpen}
               />
+            </div>
+          ) : activeFile === '__gmail__' ? (
+            <div className="flex-1 h-full overflow-hidden">
+              <Gmail workspacePath={path} />
             </div>
           ) : (
             <div className="flex-1 p-8 md:p-12 overflow-y-auto">
@@ -2485,7 +2634,7 @@ export default function Workspace({ initialPath = "" }) {
                             </div>
                             <h3 className="font-medium text-app-text mb-2">New Note</h3>
                             <p className="text-sm text-app-muted">Create your first note and start writing</p>
-                            <div className="mt-3 text-xs text-app-muted/70">⌘N</div>
+                            <div className="mt-3 text-xs text-app-muted/70">{platformService.formatShortcut("CommandOrControl+N")}</div>
                           </button>
                           
                           <button
@@ -2508,7 +2657,7 @@ export default function Workspace({ initialPath = "" }) {
                             </div>
                             <h3 className="font-medium text-app-text mb-2">New Folder</h3>
                             <p className="text-sm text-app-muted">Organize your notes with folders</p>
-                            <div className="mt-3 text-xs text-app-muted/70">⌘⇧N</div>
+                            <div className="mt-3 text-xs text-app-muted/70">{platformService.formatShortcut("CommandOrControl+Shift+N")}</div>
                           </button>
                           
                           <button
@@ -2520,7 +2669,7 @@ export default function Workspace({ initialPath = "" }) {
                             </div>
                             <h3 className="font-medium text-app-text mb-2">Command Palette</h3>
                             <p className="text-sm text-app-muted">Quick access to all commands</p>
-                            <div className="mt-3 text-xs text-app-muted/70">⌘K</div>
+                            <div className="mt-3 text-xs text-app-muted/70">{platformService.formatShortcut("CommandOrControl+K")}</div>
                           </button>
                         </div>
                       </div>
@@ -2552,9 +2701,9 @@ export default function Workspace({ initialPath = "" }) {
                             <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
                               <h3 className="font-medium text-app-text text-sm mb-2">⌨️ Quick Tips</h3>
                               <ul className="text-sm text-app-muted space-y-1">
-                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">⌘K</kbd> Command palette</li>
-                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">⌘S</kbd> Save current file</li>
-                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">⌘P</kbd> Quick file open</li>
+                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+K</kbd> Command palette</li>
+                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+S</kbd> Save current file</li>
+                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+P</kbd> Quick file open</li>
                                 <li>• Drag files to move them between folders</li>
                               </ul>
                             </div>
@@ -2764,6 +2913,7 @@ export default function Workspace({ initialPath = "" }) {
           });
         }}
         onCreateTemplate={handleCreateTemplate}
+        onOpenGmail={handleOpenGmail}
         activeFile={activeFile}
       />
       

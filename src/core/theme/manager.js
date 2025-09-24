@@ -1,5 +1,6 @@
 import { emit } from "@tauri-apps/api/event";
 import { readConfig, updateConfig } from "../config/store.js";
+import platformService from "../../services/platform/PlatformService.js";
 
 // --- Constants ---
 const APP_DIR = "Lokus";
@@ -233,9 +234,55 @@ export async function loadThemeForWorkspace(workspacePath) {
 }
 
 export async function applyInitialTheme() {
-  const { theme } = await readGlobalVisuals();
+  let { theme } = await readGlobalVisuals();
+  
+  // Check if we should sync with system dark mode
+  if (theme === 'system' || theme === 'auto') {
+    theme = getSystemPreferredTheme();
+  }
   
   const manifest = await loadThemeManifestById(theme);
   const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
   applyTokens(tokensToApply);
+  
+  // Set up system theme listener if using auto mode
+  if (theme === 'system' || theme === 'auto') {
+    setupSystemThemeListener();
+  }
+}
+
+// Get system preferred theme
+export function getSystemPreferredTheme() {
+  if (typeof window === 'undefined') return 'light';
+  
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  
+  // On Windows, we could also check registry for specific Windows theme
+  // For now, we'll use the standard media query
+  return prefersDark ? 'dark' : 'light';
+}
+
+// Set up listener for system theme changes
+export function setupSystemThemeListener() {
+  if (typeof window === 'undefined' || !window.matchMedia) return;
+  
+  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  
+  const handleChange = async (e) => {
+    const newTheme = e.matches ? 'dark' : 'light';
+    await setGlobalActiveTheme(newTheme);
+    
+    // Emit theme change event
+    if (isTauri) {
+      await emit("theme:changed", { theme: newTheme });
+    }
+  };
+  
+  // Modern browsers
+  if (mediaQuery.addEventListener) {
+    mediaQuery.addEventListener('change', handleChange);
+  } else {
+    // Fallback for older browsers
+    mediaQuery.addListener(handleChange);
+  }
 }

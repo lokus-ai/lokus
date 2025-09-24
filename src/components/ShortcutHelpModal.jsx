@@ -48,6 +48,7 @@ export default function ShortcutHelpModal({ isOpen, onClose }) {
         { action: "Find in Note", shortcut: "CommandOrControl+F" },
         { action: "Global Search", shortcut: "CommandOrControl+Shift+F" },
         { action: "Insert WikiLink", shortcut: "CommandOrControl+L" },
+        { action: "Show Keyboard Shortcuts", shortcut: "F1" },
         { action: "Open Graph View", shortcut: "CommandOrControl+Shift+G" },
         { action: "Open Kanban Board", shortcut: "CommandOrControl+Shift+K" },
         { action: "Refresh File Tree", shortcut: "F5" },

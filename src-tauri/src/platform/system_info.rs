@@ -606,7 +606,7 @@ impl SystemInfoCollector {
     }
     
     fn get_network_interfaces() -> Vec<String> {
-        let mut interfaces = Vec::new();
+        let interfaces = Vec::new();
         
         #[cfg(target_os = "linux")]
         {
@@ -676,7 +676,7 @@ mod tests {
     
     #[test]
     fn test_capability_detection() {
-        let caps = SystemInfoCollector::collect_system_capabilities();
+        let _caps = SystemInfoCollector::collect_system_capabilities();
         
         // At least some capabilities should be supported on most platforms
         // This is a basic smoke test

@@ -97,6 +97,7 @@ pub trait PlatformProvider: FileSystemOperations + SystemIntegration + Send + Sy
     fn initialize(&mut self) -> Result<(), PlatformError>;
     
     /// Clean up platform-specific resources
+    #[allow(dead_code)]
     fn cleanup(&mut self) -> Result<(), PlatformError>;
 }
 

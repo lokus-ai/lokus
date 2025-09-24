@@ -19,7 +19,10 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(gh pr create:*)",
-      "Bash(start:*)"
+      "Bash(start:*)",
+      "Bash(gh pr:*)",
+      "Bash(git checkout:*)",
+      "Read(//tmp/**)"
     ],
     "deny": []
   }

@@ -213,9 +213,9 @@ mod tests {
     
     #[test]
     fn test_usage_tips() {
-        let tips = clipboard_get_usage_tips();
+        let _tips = clipboard_get_usage_tips();
         // Tips may be empty for some platforms, which is valid
-        assert!(tips.len() >= 0);
+        // Length check is redundant since Vec::len() is always >= 0
     }
     
     #[test]

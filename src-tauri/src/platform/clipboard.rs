@@ -1,7 +1,9 @@
-/// Platform-specific clipboard operations for Lokus
-/// 
-/// This module provides clipboard functionality that respects platform-specific
-/// behaviors and limitations while maintaining a consistent API.
+//! Platform-specific clipboard operations for Lokus
+//! 
+//! This module provides clipboard functionality that respects platform-specific
+//! behaviors and limitations while maintaining a consistent API.
+
+#![allow(dead_code)]
 
 use super::errors::{PlatformError, PlatformErrorKind};
 use std::time::Duration;
@@ -385,10 +387,10 @@ mod tests {
     
     #[test]
     fn test_usage_recommendations() {
-        let recommendations = ClipboardUtils::get_usage_recommendations();
+        let _recommendations = ClipboardUtils::get_usage_recommendations();
         
         // Should have some recommendations for any platform
         // (may be empty for some platforms, which is valid)
-        assert!(recommendations.len() >= 0);
+        // Length check is redundant since Vec::len() is always >= 0
     }
 }
