@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use keyring::Entry;
-use tauri::{State, AppHandle, Manager, Emitter};
+use tauri::{State, AppHandle, Emitter};
 use uuid::Uuid;
 use base64::{Engine as _, engine::general_purpose};
 use sha2::{Sha256, Digest};
@@ -35,6 +35,7 @@ pub struct UserProfile {
 #[derive(Debug, Clone)]
 pub struct PKCEData {
     pub code_verifier: String,
+    #[allow(dead_code)]
     pub code_challenge: String,
     pub state: String,
     pub redirect_uri: String,
@@ -763,6 +764,7 @@ pub async fn open_auth_url(auth_url: String) -> Result<(), String> {
 }
 
 // For backwards compatibility with existing deep link handling
+#[allow(dead_code)]
 pub fn handle_deep_link(app: &AppHandle, url: String) -> Result<(), String> {
     println!("Received deep link: {}", url);
     
@@ -783,6 +785,6 @@ pub fn handle_deep_link(app: &AppHandle, url: String) -> Result<(), String> {
     Ok(())
 }
 
-pub fn register_deep_link_handler(app: &AppHandle) {
+pub fn register_deep_link_handler(_app: &AppHandle) {
     println!("Deep link handler registered for lokus:// scheme");
 }

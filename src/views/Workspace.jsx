@@ -4,11 +4,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail } from "lucide-react";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
 import Editor from "../editor";
 import StatusBar from "../components/StatusBar.jsx";
+import ConnectionStatus from "../components/ConnectionStatus.jsx";
 import Canvas from "./Canvas.jsx";
 import { GraphDataProcessor } from "../core/graph/GraphDataProcessor.js";
 import { GraphEngine } from "../core/graph/GraphEngine.js";
@@ -39,6 +40,8 @@ import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
 import SplitEditor from "../components/SplitEditor/SplitEditor.jsx";
 import { getFilename, getBasename } from '../utils/pathUtils.js';
 import platformService from "../services/platform/PlatformService.js";
+import Gmail from "./Gmail.jsx";
+import { gmailAuth, gmailEmails } from '../services/gmail.js';
 
 const MAX_OPEN_TABS = 10;
 
@@ -550,6 +553,7 @@ export default function Workspace({ initialPath = "" }) {
   const [showKanban, setShowKanban] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
   const [showMarketplace, setShowMarketplace] = useState(false);
+  const [showGmail, setShowGmail] = useState(false);
   // Graph view now opens as a tab instead of sidebar panel
   const [showGraphView, setShowGraphView] = useState(false);
   const [graphData, setGraphData] = useState(null);
@@ -1086,6 +1090,53 @@ export default function Workspace({ initialPath = "" }) {
     });
   }, []);
 
+  // Gmail template detection and parsing
+  const parseGmailTemplate = (content) => {
+    try {
+      // Check if content starts with YAML frontmatter
+      if (!content.startsWith('---')) {
+        return null;
+      }
+
+      // Extract frontmatter and body
+      const frontmatterEnd = content.indexOf('---', 3);
+      if (frontmatterEnd === -1) {
+        return null;
+      }
+
+      const frontmatterContent = content.slice(3, frontmatterEnd).trim();
+      const body = content.slice(frontmatterEnd + 3).trim();
+
+      // Parse the YAML-like frontmatter
+      const metadata = {};
+      const lines = frontmatterContent.split('\n');
+      
+      for (const line of lines) {
+        const colonIndex = line.indexOf(':');
+        if (colonIndex > 0) {
+          const key = line.slice(0, colonIndex).trim().toLowerCase();
+          const value = line.slice(colonIndex + 1).trim();
+          metadata[key] = value;
+        }
+      }
+
+      // Check if this looks like a Gmail template
+      if (metadata.to !== undefined && metadata.subject !== undefined) {
+        return {
+          to: metadata.to ? metadata.to.split(',').map(email => email.trim()).filter(email => email) : [],
+          cc: metadata.cc ? metadata.cc.split(',').map(email => email.trim()).filter(email => email) : [],
+          bcc: metadata.bcc ? metadata.bcc.split(',').map(email => email.trim()).filter(email => email) : [],
+          subject: metadata.subject || '',
+          body: body.replace(/<!--.*?-->/gs, '').trim() // Remove HTML comments
+        };
+      }
+    } catch (error) {
+      console.error('Error parsing Gmail template:', error);
+    }
+    
+    return null;
+  };
+
   const handleSave = useCallback(async () => {
     const { activeFile, openTabs, editorContent, editorTitle } = stateRef.current;
     if (!activeFile) return;
@@ -1121,6 +1172,46 @@ export default function Workspace({ initialPath = "" }) {
         newSet.delete(path_to_save);
         return newSet;
       });
+
+      // Check if this is a Gmail template and send email
+      const gmailTemplate = parseGmailTemplate(contentToSave);
+      if (gmailTemplate) {
+        try {
+          console.log('📧 Detected Gmail template, checking authentication...');
+          
+          // Check if user is authenticated with Gmail
+          const isAuthenticated = await gmailAuth.isAuthenticated();
+          if (isAuthenticated && gmailTemplate.to.length > 0 && gmailTemplate.subject) {
+            console.log('📧 Sending email via Gmail:', {
+              to: gmailTemplate.to,
+              subject: gmailTemplate.subject
+            });
+            
+            // Send the email
+            await gmailEmails.sendEmail({
+              to: gmailTemplate.to,
+              cc: gmailTemplate.cc,
+              bcc: gmailTemplate.bcc,
+              subject: gmailTemplate.subject,
+              body: gmailTemplate.body,
+              attachments: [] // For future implementation
+            });
+
+            console.log('✅ Email sent successfully via Gmail');
+            
+            // Optional: Show success notification to user
+            // You could add a toast notification here
+          } else if (!isAuthenticated) {
+            console.log('⚠️ Gmail template detected but user not authenticated');
+            // Optional: Show authentication prompt
+          } else {
+            console.log('⚠️ Gmail template detected but missing required fields (to/subject)');
+          }
+        } catch (emailError) {
+          console.error('❌ Failed to send Gmail:', emailError);
+          // Optional: Show error notification to user
+        }
+      }
 
       if (needsStateUpdate) {
         const newName = path_to_save.split("/").pop();
@@ -1320,6 +1411,21 @@ export default function Workspace({ initialPath = "" }) {
     setActiveFile(graphPath);
   }, []);
 
+  const handleOpenGmail = useCallback(() => {
+    const gmailPath = '__gmail__';
+    const gmailName = 'Gmail';
+    
+    setOpenTabs(prevTabs => {
+      const newTabs = prevTabs.filter(t => t.path !== gmailPath);
+      newTabs.unshift({ path: gmailPath, name: gmailName });
+      if (newTabs.length > MAX_OPEN_TABS) {
+        newTabs.pop();
+      }
+      return newTabs;
+    });
+    setActiveFile(gmailPath);
+  }, []);
+
   // Initialize graph processor when workspace path changes
   useEffect(() => {
     if (path) {
@@ -1392,6 +1498,7 @@ export default function Workspace({ initialPath = "" }) {
           // Load the content for the right pane asynchronously
           setTimeout(async () => {
             const isSpecialView = nextTab.path === '__kanban__' || 
+                                nextTab.path === '__gmail__' ||
                                 nextTab.path.startsWith('__graph__') || 
                                 nextTab.path.startsWith('__plugin_') || 
                                 nextTab.path.endsWith('.canvas');
@@ -2006,7 +2113,7 @@ export default function Workspace({ initialPath = "" }) {
             <button
               onClick={handleOpenGraphView}
               title="Graph View"
-              className="obsidian-button icon-only w-full"
+              className="obsidian-button icon-only w-full mb-1"
               onMouseEnter={(e) => {
                 const icon = e.currentTarget.querySelector('svg');
                 if (icon) icon.style.color = 'rgb(var(--accent))';
@@ -2017,6 +2124,22 @@ export default function Workspace({ initialPath = "" }) {
               }}
             >
               <Network className="w-5 h-5" />
+            </button>
+            
+            <button
+              onClick={handleOpenGmail}
+              title="Gmail"
+              className="obsidian-button icon-only w-full"
+              onMouseEnter={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = 'rgb(var(--accent))';
+              }}
+              onMouseLeave={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = '';
+              }}
+            >
+              <Mail className="w-5 h-5" />
             </button>
             
           </div>
@@ -2212,7 +2335,7 @@ export default function Workspace({ initialPath = "" }) {
                       setRightPaneTitle(tab?.name || '');
                       
                       // Only load file content for actual files, not special views
-                      const isSpecialView = path === '__kanban__' || path.startsWith('__graph__') || path.startsWith('__plugin_') || path.endsWith('.canvas');
+                      const isSpecialView = path === '__kanban__' || path === '__gmail__' || path.startsWith('__graph__') || path.startsWith('__plugin_') || path.endsWith('.canvas');
                       
                       if (!isSpecialView && (path.endsWith('.md') || path.endsWith('.txt'))) {
                         invoke("read_file_content", { path })
@@ -2296,6 +2419,10 @@ export default function Workspace({ initialPath = "" }) {
                           onFileOpen={handleFileOpen}
                           workspacePath={path}
                         />
+                      </div>
+                    ) : rightPaneFile === '__gmail__' ? (
+                      <div className="h-full">
+                        <Gmail workspacePath={path} />
                       </div>
                     ) : rightPaneFile.startsWith('__plugin_') ? (
                       <div className="flex-1 overflow-hidden">
@@ -2392,6 +2519,10 @@ export default function Workspace({ initialPath = "" }) {
                 workspacePath={path}
                 onOpenFile={handleFileOpen}
               />
+            </div>
+          ) : activeFile === '__gmail__' ? (
+            <div className="flex-1 h-full overflow-hidden">
+              <Gmail workspacePath={path} />
             </div>
           ) : (
             <div className="flex-1 p-8 md:p-12 overflow-y-auto">
@@ -2782,6 +2913,7 @@ export default function Workspace({ initialPath = "" }) {
           });
         }}
         onCreateTemplate={handleCreateTemplate}
+        onOpenGmail={handleOpenGmail}
         activeFile={activeFile}
       />
       

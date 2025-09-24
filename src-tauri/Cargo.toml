@@ -50,5 +50,19 @@ uuid = { version = "1.0", features = ["v4"] }
 tokio-util = "0.7"
 hyper = { version = "1.0", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
+http-body-util = "0.1"
 tower = "0.4"
 tower-service = "0.3"
+# Gmail integration dependencies
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "tokio1-rustls-tls"] }
+mail-parser = "0.9"
+mime = "0.3"
+mailparse = "0.15"
+quoted_printable = "0.5"
+flate2 = "1.0"
+async-trait = "0.1"
+futures = "0.3"
+once_cell = "1.19"
+parking_lot = "0.12"
+bincode = "1.3"
+thiserror = "1.0"
