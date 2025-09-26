@@ -98,18 +98,33 @@ export default function GlobalContextMenu({
 
   if (!isOpen) return null;
 
-  // Adjust menu position to stay within viewport
+  // Smart positioning to stay within viewport bounds
   const adjustedPosition = { ...position };
   const menuWidth = 200;
-  const menuHeight = 250;
-  
-  if (position.x + menuWidth > window.innerWidth) {
-    adjustedPosition.x = window.innerWidth - menuWidth - 10;
+  const menuHeight = 320; // Updated to account for all menu items
+  const margin = 10; // Margin from screen edges
+
+  // Horizontal positioning
+  if (position.x + menuWidth > window.innerWidth - margin) {
+    // Try to place to the left of cursor
+    adjustedPosition.x = Math.max(margin, position.x - menuWidth);
+  } else {
+    // Place to the right of cursor (default)
+    adjustedPosition.x = Math.max(margin, position.x);
   }
-  
-  if (position.y + menuHeight > window.innerHeight) {
-    adjustedPosition.y = window.innerHeight - menuHeight - 10;
+
+  // Vertical positioning
+  if (position.y + menuHeight > window.innerHeight - margin) {
+    // Try to place above cursor
+    adjustedPosition.y = Math.max(margin, position.y - menuHeight);
+  } else {
+    // Place below cursor (default)
+    adjustedPosition.y = Math.max(margin, position.y);
   }
+
+  // Ensure menu doesn't go off-screen in any direction
+  adjustedPosition.x = Math.min(adjustedPosition.x, window.innerWidth - menuWidth - margin);
+  adjustedPosition.y = Math.min(adjustedPosition.y, window.innerHeight - menuHeight - margin);
 
   return (
     <div

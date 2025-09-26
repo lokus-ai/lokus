@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
 import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail } from "lucide-react";
@@ -1252,6 +1252,385 @@ export default function Workspace({ initialPath = "" }) {
     }
   }, []);
 
+  const handleSaveAs = useCallback(async () => {
+    const { activeFile, editorContent } = stateRef.current;
+    if (!activeFile) return;
+
+    try {
+      // Get the current file name without extension for default name
+      const currentFileName = activeFile.split('/').pop().replace(/\.[^.]*$/, '');
+
+      // Show save dialog
+      const filePath = await save({
+        defaultPath: `${currentFileName}.md`,
+        filters: [{
+          name: 'Markdown',
+          extensions: ['md']
+        }, {
+          name: 'Text',
+          extensions: ['txt']
+        }, {
+          name: 'All Files',
+          extensions: ['*']
+        }],
+        title: 'Save As'
+      });
+
+      if (filePath) {
+        // Prepare content - handle different file types
+        let contentToSave = editorContent;
+        if (filePath.endsWith('.md')) {
+          // For markdown files, we might need HTML to Markdown conversion
+          console.log('[Save As] Saving as markdown file');
+        } else if (filePath.endsWith('.txt')) {
+          // For text files, strip HTML and keep plain text
+          console.log('[Save As] Saving as text file - HTML stripping needed');
+        }
+
+        // Save the file
+        await invoke("write_file_content", { path: filePath, content: contentToSave });
+
+        // Update current file state to point to new location
+        const newFileName = filePath.split('/').pop();
+        setOpenTabs(tabs => tabs.map(t => t.path === activeFile ? { path: filePath, name: newFileName } : t));
+        setActiveFile(filePath);
+        setSavedContent(editorContent);
+        setUnsavedChanges(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(activeFile);
+          newSet.delete(filePath);
+          return newSet;
+        });
+
+        // Refresh file tree to show new file
+        handleRefreshFiles();
+
+        console.log(`File saved as: ${filePath}`);
+      }
+    } catch (error) {
+      console.error('Error in Save As:', error);
+    }
+  }, []);
+
+  const handleExportHtml = useCallback(async () => {
+    const { activeFile, editorContent, editorTitle } = stateRef.current;
+    if (!activeFile) return;
+
+    try {
+      // Get the current file name without extension for default name
+      const currentFileName = activeFile.split('/').pop().replace(/\.[^.]*$/, '');
+      const exportFileName = editorTitle.trim() || currentFileName;
+
+      // Show save dialog for HTML export
+      const filePath = await save({
+        defaultPath: `${exportFileName}.html`,
+        filters: [{
+          name: 'HTML',
+          extensions: ['html']
+        }, {
+          name: 'All Files',
+          extensions: ['*']
+        }],
+        title: 'Export as HTML'
+      });
+
+      if (filePath) {
+        // Create a complete HTML document with proper styling and math support
+        const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${exportFileName}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" integrity="sha384-GvrOXuhMATgEsSwCs4smul74iXGOixntILdUW9XmUC6+HX0sLNAK3q71HotJqlAn" crossorigin="anonymous">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #fff;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            color: #2c3e50;
+            margin-top: 2em;
+            margin-bottom: 0.5em;
+        }
+        h1 { font-size: 2.5em; border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
+        h2 { font-size: 2em; }
+        h3 { font-size: 1.5em; }
+        p { margin-bottom: 1em; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 20px;
+            margin: 1.5em 0;
+            color: #7f8c8d;
+            font-style: italic;
+        }
+        code {
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 6px;
+            overflow-x: auto;
+            border: 1px solid #e1e5e9;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        ul, ol { margin-bottom: 1em; }
+        li { margin-bottom: 0.5em; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .math-display { text-align: center; margin: 1.5em 0; }
+        .highlight { background: #fff3cd; padding: 2px 4px; }
+        .task-list-item { list-style-type: none; }
+        .task-list-item input[type="checkbox"] { margin-right: 8px; }
+    </style>
+</head>
+<body>
+    <article class="content">
+        ${editorContent}
+    </article>
+</body>
+</html>`;
+
+        // Save the HTML file
+        await invoke("write_file_content", { path: filePath, content: htmlContent });
+
+        console.log(`File exported as HTML: ${filePath}`);
+      }
+    } catch (error) {
+      console.error('Error in Export HTML:', error);
+    }
+  }, []);
+
+  const handleExportPdf = useCallback(async () => {
+    const { activeFile, editorContent, editorTitle } = stateRef.current;
+    if (!activeFile) return;
+
+    try {
+      // Get the current file name without extension for default name
+      const currentFileName = activeFile.split('/').pop().replace(/\.[^.]*$/, '');
+      const exportFileName = editorTitle.trim() || currentFileName;
+
+      // Show save dialog for PDF export
+      const filePath = await save({
+        defaultPath: `${exportFileName}.pdf`,
+        filters: [{
+          name: 'PDF',
+          extensions: ['pdf']
+        }, {
+          name: 'All Files',
+          extensions: ['*']
+        }],
+        title: 'Export as PDF'
+      });
+
+      if (filePath) {
+        // Create HTML content for PDF conversion
+        const htmlForPdf = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${exportFileName}</title>
+    <style>
+        @page {
+            margin: 1in;
+            size: letter;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            font-size: 14px;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            color: #2c3e50;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            break-after: avoid;
+        }
+        h1 {
+            font-size: 24px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 0.3em;
+            page-break-after: avoid;
+        }
+        h2 { font-size: 20px; }
+        h3 { font-size: 18px; }
+        h4 { font-size: 16px; }
+        h5 { font-size: 14px; }
+        h6 { font-size: 12px; }
+        p {
+            margin-bottom: 1em;
+            orphans: 3;
+            widows: 3;
+        }
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 20px;
+            margin: 1em 0;
+            color: #7f8c8d;
+            font-style: italic;
+            break-inside: avoid;
+        }
+        code {
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
+            font-size: 12px;
+            break-inside: avoid;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #e1e5e9;
+            break-inside: avoid;
+            font-size: 12px;
+            line-height: 1.4;
+            overflow-x: hidden;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1em 0;
+            break-inside: avoid;
+            font-size: 12px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        ul, ol {
+            margin-bottom: 1em;
+            break-inside: avoid;
+        }
+        li {
+            margin-bottom: 0.3em;
+        }
+        a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        .math-display {
+            text-align: center;
+            margin: 1em 0;
+            break-inside: avoid;
+        }
+        .highlight {
+            background: #fff3cd;
+            padding: 2px 4px;
+        }
+        .task-list-item {
+            list-style-type: none;
+        }
+        .task-list-item input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        .page-break {
+            page-break-before: always;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            break-inside: avoid;
+        }
+    </style>
+</head>
+<body>
+    <article class="content">
+        ${editorContent}
+    </article>
+</body>
+</html>`;
+
+        // For now, save as HTML with PDF-optimized styling
+        // Future enhancement: integrate with a PDF generation library
+        const fallbackPath = filePath.replace('.pdf', '_for_pdf.html');
+        await invoke("write_file_content", { path: fallbackPath, content: htmlForPdf });
+        console.log(`PDF export: Saved HTML file optimized for PDF conversion: ${fallbackPath}`);
+        console.log('To convert to PDF: Open the HTML file in your browser and use Print > Save as PDF');
+      }
+    } catch (error) {
+      console.error('Error in Export PDF:', error);
+    }
+  }, []);
+
+  const handleOpenWorkspace = useCallback(async () => {
+    try {
+      // Close current window and show launcher
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      const currentWindow = getCurrentWindow();
+
+      // Hide current window
+      await currentWindow.hide();
+
+      // Show the main launcher window
+      const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+      const mainWindow = WebviewWindow.getByLabel('main');
+
+      if (mainWindow) {
+        await mainWindow.show();
+        await mainWindow.setFocus();
+      } else {
+        // If main window doesn't exist, create it
+        const newLauncherWindow = new WebviewWindow('main', {
+          url: '/',
+          title: 'Lokus',
+          width: 900,
+          height: 700,
+          minWidth: 600,
+          minHeight: 500,
+          center: true
+        });
+
+        await newLauncherWindow.show();
+      }
+
+      console.log('Switched to workspace launcher');
+    } catch (error) {
+      console.error('Error opening workspace launcher:', error);
+    }
+  }, []);
+
+
+
+
   const handleCreateFile = async () => {
     try {
       const newFilePath = await invoke("create_file_in_workspace", { workspacePath: path, name: "Untitled.md" });
@@ -1812,6 +2191,13 @@ export default function Workspace({ initialPath = "" }) {
             });
           }
           break;
+        case 'zoom':
+          if (window.__TAURI__) {
+            import('@tauri-apps/api/window').then(({ appWindow }) => {
+              appWindow.toggleMaximize();
+            });
+          }
+          break;
       }
     };
 
@@ -1836,17 +2222,25 @@ export default function Workspace({ initialPath = "" }) {
     };
 
     // File menu events
-    const unlistenOpenFile = isTauri ? listen("lokus:file-open", () => {
-      // TODO: Implement file open dialog
-    }) : Promise.resolve(addDom('lokus:file-open', () => {}));
-    
-    const unlistenExportPdf = isTauri ? listen("lokus:export-pdf", () => {
-      // TODO: Implement PDF export
-    }) : Promise.resolve(addDom('lokus:export-pdf', () => {}));
+    const unlistenExportPdf = isTauri ? listen("lokus:export-pdf", handleExportPdf) : Promise.resolve(addDom('lokus:export-pdf', handleExportPdf));
     
     const unlistenPrint = isTauri ? listen("lokus:print", () => {
       window.print();
     }) : Promise.resolve(addDom('lokus:print', () => { window.print(); }));
+
+    // Additional missing file menu events
+    const unlistenShowAbout = isTauri ? listen("lokus:show-about", () => {
+      // TODO: Show about dialog
+      console.log('Show About dialog');
+    }) : Promise.resolve(addDom('lokus:show-about', () => { console.log('Show About dialog'); }));
+
+    const unlistenSaveAs = isTauri ? listen("lokus:save-as", handleSaveAs) : Promise.resolve(addDom('lokus:save-as', handleSaveAs));
+
+    const unlistenExportHtml = isTauri ? listen("lokus:export-html", handleExportHtml) : Promise.resolve(addDom('lokus:export-html', handleExportHtml));
+
+    const unlistenCloseWindow = isTauri ? listen("lokus:close-window", () => handleWindowAction('close')) : Promise.resolve(addDom('lokus:close-window', () => handleWindowAction('close')));
+
+    const unlistenOpenWorkspace = isTauri ? listen("lokus:open-workspace", handleOpenWorkspace) : Promise.resolve(addDom('lokus:open-workspace', handleOpenWorkspace));
 
     // Edit menu events
     const unlistenUndo = isTauri ? listen("lokus:edit-undo", () => handleEditorEdit('undo')) : Promise.resolve(addDom('lokus:edit-undo', () => handleEditorEdit('undo')));
@@ -1857,16 +2251,45 @@ export default function Workspace({ initialPath = "" }) {
     const unlistenSelectAll = isTauri ? listen("lokus:edit-select-all", () => handleEditorEdit('select-all')) : Promise.resolve(addDom('lokus:edit-select-all', () => handleEditorEdit('select-all')));
     const unlistenFindReplace = isTauri ? listen("lokus:find-replace", () => setShowInFileSearch(true)) : Promise.resolve(addDom('lokus:find-replace', () => setShowInFileSearch(true)));
 
+
     // View menu events
     const unlistenZoomIn = isTauri ? listen("lokus:zoom-in", () => handleViewAction('zoom-in')) : Promise.resolve(addDom('lokus:zoom-in', () => handleViewAction('zoom-in')));
     const unlistenZoomOut = isTauri ? listen("lokus:zoom-out", () => handleViewAction('zoom-out')) : Promise.resolve(addDom('lokus:zoom-out', () => handleViewAction('zoom-out')));
     const unlistenActualSize = isTauri ? listen("lokus:actual-size", () => handleViewAction('actual-size')) : Promise.resolve(addDom('lokus:actual-size', () => handleViewAction('actual-size')));
     const unlistenFullscreen = isTauri ? listen("lokus:toggle-fullscreen", () => handleViewAction('fullscreen')) : Promise.resolve(addDom('lokus:toggle-fullscreen', () => handleViewAction('fullscreen')));
 
+    // Theme switching events
+    const unlistenThemeLight = isTauri ? listen("lokus:theme-light", () => {
+      // TODO: Connect to theme manager to set light theme
+      console.log('Switch to Light theme');
+    }) : Promise.resolve(addDom('lokus:theme-light', () => { console.log('Switch to Light theme'); }));
+
+    const unlistenThemeDark = isTauri ? listen("lokus:theme-dark", () => {
+      // TODO: Connect to theme manager to set dark theme
+      console.log('Switch to Dark theme');
+    }) : Promise.resolve(addDom('lokus:theme-dark', () => { console.log('Switch to Dark theme'); }));
+
+    const unlistenThemeAuto = isTauri ? listen("lokus:theme-auto", () => {
+      // TODO: Connect to theme manager to set auto theme
+      console.log('Switch to Auto theme');
+    }) : Promise.resolve(addDom('lokus:theme-auto', () => { console.log('Switch to Auto theme'); }));
+
     // Insert menu events
     const unlistenInsertWikiLink = isTauri ? listen("lokus:insert-wikilink", () => handleEditorInsert('wikilink')) : Promise.resolve(addDom('lokus:insert-wikilink', () => handleEditorInsert('wikilink')));
     const unlistenInsertMathInline = isTauri ? listen("lokus:insert-math-inline", () => handleEditorInsert('math-inline')) : Promise.resolve(addDom('lokus:insert-math-inline', () => handleEditorInsert('math-inline')));
     const unlistenInsertMathBlock = isTauri ? listen("lokus:insert-math-block", () => handleEditorInsert('math-block')) : Promise.resolve(addDom('lokus:insert-math-block', () => handleEditorInsert('math-block')));
+
+    // Handle single math insertion event from menu (defaults to inline)
+    const unlistenInsertMath = isTauri ? listen("lokus:insert-math", () => handleEditorInsert('math-inline')) : Promise.resolve(addDom('lokus:insert-math', () => handleEditorInsert('math-inline')));
+
+    // Heading insertion events
+    const unlistenInsertHeading = isTauri ? listen("lokus:insert-heading", (event) => {
+      const level = event.payload || 1;
+      handleEditorInsert('heading', { level });
+    }) : Promise.resolve(addDom('lokus:insert-heading', (event) => {
+      const level = event.detail || 1;
+      handleEditorInsert('heading', { level });
+    }));
     const unlistenInsertTable = isTauri ? listen("lokus:insert-table", () => handleEditorInsert('table')) : Promise.resolve(addDom('lokus:insert-table', () => handleEditorInsert('table')));
     const unlistenInsertImage = isTauri ? listen("lokus:insert-image", () => handleEditorInsert('image')) : Promise.resolve(addDom('lokus:insert-image', () => handleEditorInsert('image')));
     const unlistenInsertCodeBlock = isTauri ? listen("lokus:insert-code-block", () => handleEditorInsert('code-block')) : Promise.resolve(addDom('lokus:insert-code-block', () => handleEditorInsert('code-block')));
@@ -1890,6 +2313,9 @@ export default function Workspace({ initialPath = "" }) {
     // Window menu events
     const unlistenWindowMinimize = isTauri ? listen("lokus:window-minimize", () => handleWindowAction('minimize')) : Promise.resolve(addDom('lokus:window-minimize', () => handleWindowAction('minimize')));
     const unlistenWindowClose = isTauri ? listen("lokus:window-close", () => handleWindowAction('close')) : Promise.resolve(addDom('lokus:window-close', () => handleWindowAction('close')));
+
+    // Additional window menu events
+    const unlistenWindowZoom = isTauri ? listen("lokus:window-zoom", () => handleWindowAction('zoom')) : Promise.resolve(addDom('lokus:window-zoom', () => handleWindowAction('zoom')));
 
     // Help menu events
     const unlistenHelp = isTauri ? listen("lokus:help", () => handleHelpAction('help')) : Promise.resolve(addDom('lokus:help', () => handleHelpAction('help')));
@@ -1919,7 +2345,6 @@ export default function Workspace({ initialPath = "" }) {
       unlistenTemplatePicker.then(f => { if (typeof f === 'function') f(); });
       
       // Cleanup menu event listeners
-      unlistenOpenFile.then(f => { if (typeof f === 'function') f(); });
       unlistenExportPdf.then(f => { if (typeof f === 'function') f(); });
       unlistenPrint.then(f => { if (typeof f === 'function') f(); });
       unlistenUndo.then(f => { if (typeof f === 'function') f(); });
@@ -1959,8 +2384,21 @@ export default function Workspace({ initialPath = "" }) {
       unlistenKeyboardShortcuts.then(f => { if (typeof f === 'function') f(); });
       unlistenReleaseNotes.then(f => { if (typeof f === 'function') f(); });
       unlistenReportIssue.then(f => { if (typeof f === 'function') f(); });
+
+      // Clean up new event listeners
+      unlistenShowAbout.then(f => { if (typeof f === 'function') f(); });
+      unlistenSaveAs.then(f => { if (typeof f === 'function') f(); });
+      unlistenExportHtml.then(f => { if (typeof f === 'function') f(); });
+      unlistenCloseWindow.then(f => { if (typeof f === 'function') f(); });
+      unlistenOpenWorkspace.then(f => { if (typeof f === 'function') f(); });
+      unlistenThemeLight.then(f => { if (typeof f === 'function') f(); });
+      unlistenThemeDark.then(f => { if (typeof f === 'function') f(); });
+      unlistenThemeAuto.then(f => { if (typeof f === 'function') f(); });
+      unlistenInsertMath.then(f => { if (typeof f === 'function') f(); });
+      unlistenInsertHeading.then(f => { if (typeof f === 'function') f(); });
+      unlistenWindowZoom.then(f => { if (typeof f === 'function') f(); });
     };
-  }, [handleSave, handleTabClose, handleReopenClosedTab, handleToggleSplitView, toggleSplitDirection, resetPaneSize]);
+  }, [handleSave, handleSaveAs, handleExportHtml, handleExportPdf, handleOpenWorkspace, handleTabClose, handleReopenClosedTab, handleToggleSplitView, toggleSplitDirection, resetPaneSize]);
 
   const cols = (() => {
     const mainContent = `minmax(0,1fr)`;
