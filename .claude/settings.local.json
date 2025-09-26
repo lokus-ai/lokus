@@ -33,7 +33,8 @@
       "mcp__lokus__readNote",
       "mcp__lokus__searchNotes",
       "Read(//Users/pratham/Downloads/**)",
-      "WebFetch(domain:admission.gatech.edu)"
+      "WebFetch(domain:admission.gatech.edu)",
+      "WebFetch(domain:catalog.gatech.edu)"
     ],
     "deny": []
   }

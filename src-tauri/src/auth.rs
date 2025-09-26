@@ -14,6 +14,7 @@ use hyper_util::rt::TokioIo;
 use hyper_util::server::conn::auto::Builder;
 use url::Url;
 use serde_json;
+use crate::secure_storage::{SecureStorage, SessionInfo};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthToken {
@@ -219,116 +220,118 @@ impl AuthService {
     }
 
     pub fn store_token(token: &AuthToken) -> Result<(), String> {
-        println!("🔑 Storing token: service={}, key={}", SERVICE_NAME, TOKEN_KEY);
-        
-        // In development mode, use file storage as fallback due to keychain issues
-        if cfg!(debug_assertions) {
-            println!("🔑 Using file storage for development mode");
-            return Self::store_token_to_file(token);
+        println!("🔑 Storing token securely with encryption");
+
+        // Use secure storage for both development and production
+        let storage = SecureStorage::new()
+            .map_err(|e| format!("Failed to initialize secure storage: {}", e))?;
+
+        // Store token with encryption
+        storage.store(TOKEN_KEY, token)
+            .map_err(|e| format!("Failed to store encrypted token: {}", e))?;
+
+        // Create or update session
+        if !storage.is_session_valid().unwrap_or(false) {
+            storage.create_session()
+                .map_err(|e| format!("Failed to create session: {}", e))?;
+        } else {
+            storage.update_session_access()
+                .map_err(|e| format!("Failed to update session: {}", e))?;
         }
-        
-        let entry = Self::get_keyring_entry(TOKEN_KEY)?;
-        println!("🔑 Keyring entry created for storage");
-        
-        let token_json = serde_json::to_string(token)
-            .map_err(|e| format!("Failed to serialize token: {}", e))?;
-        println!("🔑 Token serialized, length: {} chars", token_json.len());
-        
-        match entry.set_password(&token_json) {
-            Ok(_) => {
-                println!("🔑 Token stored in keyring successfully");
-                Ok(())
-            },
-            Err(e) => {
-                println!("🔑 Failed to store token: {:?}", e);
-                Err(format!("Failed to store token: {}", e))
-            }
-        }
+
+        println!("🔑 Token stored securely with session management");
+        Ok(())
     }
 
     pub fn get_token() -> Result<Option<AuthToken>, String> {
-        println!("🔑 Getting keyring entry for token: service={}, key={}", SERVICE_NAME, TOKEN_KEY);
-        
-        // In development mode, use file storage as fallback due to keychain issues
-        if cfg!(debug_assertions) {
-            println!("🔑 Using file storage for development mode");
-            return Self::get_token_from_file();
+        println!("🔑 Retrieving token from secure storage");
+
+        let storage = SecureStorage::new()
+            .map_err(|e| format!("Failed to initialize secure storage: {}", e))?;
+
+        // Check if session is valid first
+        if !storage.is_session_valid().unwrap_or(false) {
+            println!("🔑 Session expired or invalid - clearing tokens");
+            let _ = storage.delete(TOKEN_KEY);
+            let _ = storage.delete(PROFILE_KEY);
+            return Ok(None);
         }
-        
-        let entry = Self::get_keyring_entry(TOKEN_KEY)?;
-        println!("🔑 Keyring entry created successfully");
-        
-        match entry.get_password() {
-            Ok(token_json) => {
-                println!("🔑 Token found in keyring");
-                let token: AuthToken = serde_json::from_str(&token_json)
-                    .map_err(|e| format!("Failed to deserialize token: {}", e))?;
-                println!("🔑 Token deserialized successfully");
-                Ok(Some(token))
-            }
-            Err(keyring::Error::NoEntry) => {
-                println!("🔑 No token entry found in keyring");
-                Ok(None)
-            },
-            Err(e) => {
-                println!("🔑 Keyring error: {:?}", e);
-                Err(format!("Failed to retrieve token: {}", e))
-            },
+
+        // Retrieve encrypted token
+        let token: Option<AuthToken> = storage.retrieve(TOKEN_KEY)
+            .map_err(|e| format!("Failed to retrieve encrypted token: {}", e))?;
+
+        if token.is_some() {
+            // Update session access time
+            storage.update_session_access()
+                .map_err(|e| format!("Failed to update session access: {}", e))?;
+            println!("🔑 Token retrieved successfully from secure storage");
+        } else {
+            println!("🔑 No token found in secure storage");
         }
+
+        Ok(token)
     }
 
     pub fn delete_token() -> Result<(), String> {
-        // In development mode, delete from file storage
-        if cfg!(debug_assertions) {
-            let token_path = Self::get_dev_token_path()?;
-            if token_path.exists() {
-                std::fs::remove_file(&token_path)
-                    .map_err(|e| format!("Failed to delete token file: {}", e))?;
-                println!("🔑 Token file deleted: {}", token_path.display());
-            }
-            return Ok(());
-        }
-        
-        let entry = Self::get_keyring_entry(TOKEN_KEY)?;
-        entry.delete_credential()
-            .map_err(|e| format!("Failed to delete token: {}", e))
+        println!("🔑 Deleting token from secure storage");
+
+        let storage = SecureStorage::new()
+            .map_err(|e| format!("Failed to initialize secure storage: {}", e))?;
+
+        storage.delete(TOKEN_KEY)
+            .map_err(|e| format!("Failed to delete encrypted token: {}", e))?;
+
+        println!("🔑 Token deleted from secure storage");
+        Ok(())
     }
 
     pub fn store_user_profile(profile: &UserProfile) -> Result<(), String> {
-        // In development mode, use file storage
-        if cfg!(debug_assertions) {
-            return Self::store_profile_to_file(profile);
-        }
-        
-        let entry = Self::get_keyring_entry(PROFILE_KEY)?;
-        let profile_json = serde_json::to_string(profile)
-            .map_err(|e| format!("Failed to serialize profile: {}", e))?;
-        entry.set_password(&profile_json)
-            .map_err(|e| format!("Failed to store profile: {}", e))
+        println!("🔑 Storing user profile securely");
+
+        let storage = SecureStorage::new()
+            .map_err(|e| format!("Failed to initialize secure storage: {}", e))?;
+
+        storage.store(PROFILE_KEY, profile)
+            .map_err(|e| format!("Failed to store encrypted profile: {}", e))?;
+
+        println!("🔑 User profile stored securely");
+        Ok(())
     }
 
     pub fn get_user_profile() -> Result<Option<UserProfile>, String> {
-        // In development mode, use file storage
-        if cfg!(debug_assertions) {
-            return Self::get_profile_from_file();
+        println!("🔑 Retrieving user profile from secure storage");
+
+        let storage = SecureStorage::new()
+            .map_err(|e| format!("Failed to initialize secure storage: {}", e))?;
+
+        // Check session validity
+        if !storage.is_session_valid().unwrap_or(false) {
+            println!("🔑 Session invalid - profile access denied");
+            return Ok(None);
         }
-        
-        let entry = Self::get_keyring_entry(PROFILE_KEY)?;
-        match entry.get_password() {
-            Ok(profile_json) => {
-                let profile: UserProfile = serde_json::from_str(&profile_json)
-                    .map_err(|e| format!("Failed to deserialize profile: {}", e))?;
-                Ok(Some(profile))
-            }
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(format!("Failed to retrieve profile: {}", e)),
+
+        let profile: Option<UserProfile> = storage.retrieve(PROFILE_KEY)
+            .map_err(|e| format!("Failed to retrieve encrypted profile: {}", e))?;
+
+        if profile.is_some() {
+            println!("🔑 User profile retrieved successfully");
         }
+
+        Ok(profile)
     }
 
     pub fn delete_user_profile() -> Result<(), String> {
-        let entry = Self::get_keyring_entry(PROFILE_KEY)?;
-        entry.delete_credential()
-            .map_err(|e| format!("Failed to delete profile: {}", e))
+        println!("🔑 Deleting user profile from secure storage");
+
+        let storage = SecureStorage::new()
+            .map_err(|e| format!("Failed to initialize secure storage: {}", e))?;
+
+        storage.delete(PROFILE_KEY)
+            .map_err(|e| format!("Failed to delete encrypted profile: {}", e))?;
+
+        println!("🔑 User profile deleted from secure storage");
+        Ok(())
     }
 
     pub fn is_token_expired(token: &AuthToken) -> bool {
@@ -343,85 +346,18 @@ impl AuthService {
         }
     }
 
-    // File-based storage for development mode (keychain workaround)
-    fn get_dev_token_path() -> Result<std::path::PathBuf, String> {
-        let home_dir = dirs::home_dir().ok_or("Failed to get home directory")?;
-        let app_dir = home_dir.join(".lokus");
-        if !app_dir.exists() {
-            std::fs::create_dir_all(&app_dir)
-                .map_err(|e| format!("Failed to create app directory: {}", e))?;
-        }
-        Ok(app_dir.join("auth_token.json"))
-    }
+    /// Clear all secure storage (for complete logout)
+    pub fn clear_all_secure_data() -> Result<(), String> {
+        println!("🧹 Clearing all secure authentication data");
 
-    fn store_token_to_file(token: &AuthToken) -> Result<(), String> {
-        let token_path = Self::get_dev_token_path()?;
-        let token_json = serde_json::to_string(token)
-            .map_err(|e| format!("Failed to serialize token: {}", e))?;
-        
-        std::fs::write(&token_path, token_json)
-            .map_err(|e| format!("Failed to write token file: {}", e))?;
-        
-        println!("🔑 Token stored to file: {}", token_path.display());
+        let storage = SecureStorage::new()
+            .map_err(|e| format!("Failed to initialize secure storage: {}", e))?;
+
+        storage.clear_all()
+            .map_err(|e| format!("Failed to clear secure storage: {}", e))?;
+
+        println!("🧹 All secure authentication data cleared");
         Ok(())
-    }
-
-    fn get_token_from_file() -> Result<Option<AuthToken>, String> {
-        let token_path = Self::get_dev_token_path()?;
-        
-        if !token_path.exists() {
-            println!("🔑 Token file does not exist: {}", token_path.display());
-            return Ok(None);
-        }
-
-        let token_json = std::fs::read_to_string(&token_path)
-            .map_err(|e| format!("Failed to read token file: {}", e))?;
-        
-        let token: AuthToken = serde_json::from_str(&token_json)
-            .map_err(|e| format!("Failed to deserialize token: {}", e))?;
-        
-        println!("🔑 Token loaded from file: {}", token_path.display());
-        Ok(Some(token))
-    }
-
-    fn get_dev_profile_path() -> Result<std::path::PathBuf, String> {
-        let home_dir = dirs::home_dir().ok_or("Failed to get home directory")?;
-        let app_dir = home_dir.join(".lokus");
-        if !app_dir.exists() {
-            std::fs::create_dir_all(&app_dir)
-                .map_err(|e| format!("Failed to create app directory: {}", e))?;
-        }
-        Ok(app_dir.join("user_profile.json"))
-    }
-
-    fn store_profile_to_file(profile: &UserProfile) -> Result<(), String> {
-        let profile_path = Self::get_dev_profile_path()?;
-        let profile_json = serde_json::to_string(profile)
-            .map_err(|e| format!("Failed to serialize profile: {}", e))?;
-        
-        std::fs::write(&profile_path, profile_json)
-            .map_err(|e| format!("Failed to write profile file: {}", e))?;
-        
-        println!("🔑 Profile stored to file: {}", profile_path.display());
-        Ok(())
-    }
-
-    fn get_profile_from_file() -> Result<Option<UserProfile>, String> {
-        let profile_path = Self::get_dev_profile_path()?;
-        
-        if !profile_path.exists() {
-            println!("🔑 Profile file does not exist: {}", profile_path.display());
-            return Ok(None);
-        }
-
-        let profile_json = std::fs::read_to_string(&profile_path)
-            .map_err(|e| format!("Failed to read profile file: {}", e))?;
-        
-        let profile: UserProfile = serde_json::from_str(&profile_json)
-            .map_err(|e| format!("Failed to deserialize profile: {}", e))?;
-        
-        println!("🔑 Profile loaded from file: {}", profile_path.display());
-        Ok(Some(profile))
     }
 
     async fn handle_oauth_callback_internal(
@@ -729,8 +665,16 @@ pub async fn refresh_auth_token() -> Result<(), String> {
 
 #[tauri::command]
 pub fn logout() -> Result<(), String> {
-    AuthService::delete_token()?;
-    AuthService::delete_user_profile()?;
+    println!("👋 Logging out user");
+
+    // Clear all secure storage instead of individual deletions
+    AuthService::clear_all_secure_data()?;
+
+    // Also clear Gmail secure storage
+    use crate::connections::gmail::storage::GmailStorage;
+    let _ = GmailStorage::clear_all(); // Don't fail logout if Gmail clear fails
+
+    println!("👋 User logged out successfully");
     Ok(())
 }
 

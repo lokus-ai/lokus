@@ -14,6 +14,7 @@ mod mcp;
 mod auth;
 mod connections;
 mod oauth_server;
+mod secure_storage;
 
 use windows::{open_workspace_window, open_preferences_window};
 use tauri::Manager;
