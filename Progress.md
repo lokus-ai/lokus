@@ -1352,3 +1352,104 @@ Successfully implemented comprehensive Windows support for Lokus, transforming i
 ---
 
 *Windows cross-platform support implementation completed with careful attention to platform differences and user experience consistency.*
+
+---
+
+# Progress Report - UI Enhancement and Code Block Fixes
+
+## Tab Styling Improvements
+
+### Issue Addressed
+- Navigation tabs had inconsistent styling that didn't match the desired Google Chrome-like appearance
+- Tabs appeared curved inward instead of having the desired outward curve effect
+- Active tab selection was causing unwanted compression/squishing effects
+
+### Solution Implemented
+- **Modified tab styling in globals.css and windows.css**
+- Removed complex curved designs and animations per user feedback
+- Implemented clean rectangular tabs with proper border styling
+- Active tab now shows:
+  - Accent color top border (2px)
+  - Side borders for distinction
+  - Proper z-index layering
+  - No bottom border to blend with content area
+
+### Technical Changes
+- Updated `.obsidian-tab.active` styling across theme files
+- Simplified hover states to basic background color changes
+- Removed clip-path animations and transform effects
+- Ensured Windows-specific overrides are synchronized
+
+## Code Block Rendering Issue
+
+### Problem Identified
+- Code blocks were displaying with unexpected dark backgrounds and external syntax highlighting
+- Issue occurred specifically after saving files, closing them, and reopening
+- External stylesheets (highlight.js, KaTeX) were interfering with editor styling
+
+### Root Cause Analysis
+- External CDN stylesheets loading after editor initialization
+- CSS cascade conflicts between editor styles and syntax highlighting libraries
+- Insufficient CSS specificity in original code block styles
+- Missing isolation for nested elements within code blocks
+
+### Comprehensive Fix Applied
+
+#### 1. Enhanced CSS Isolation (`src/editor/styles/editor.css`)
+- Added `!important` declarations to all critical code block properties
+- Implemented comprehensive background and color overrides
+- Protected against text-shadow, box-shadow, and filter interference
+
+#### 2. External Library Protection
+- **Highlight.js isolation**: Targeted all `.hljs-*` classes with transparent backgrounds
+- **Prism.js protection**: Override all `.token` classes
+- **KaTeX interference**: Blocked any KaTeX elements within code blocks
+- **Universal selectors**: Used `[class*="hljs-"]` and `[class*="token"]` for catch-all protection
+
+#### 3. Nuclear Option Implementation
+- Applied styling to all possible nested elements: `pre *`, `pre code *`, `pre span`, `pre div`
+- Ensured consistent theme colors: `rgb(var(--panel))` background, `rgb(var(--text))` color
+- Reset all external styling properties that could cause visual conflicts
+
+#### 4. Global Override Protection
+- Added specific overrides for `.obsidian-editor` class combinations
+- Protected against globals.css interference
+- Maintained theme consistency across all code block instances
+
+### Files Modified
+1. **src/editor/styles/editor.css** (lines 280-429)
+   - Main code block styling with comprehensive isolation
+   - External library class overrides
+   - Universal element protection
+
+2. **src/styles/globals.css**
+   - Tab styling improvements
+   - Synchronized with Windows-specific styles
+
+3. **src/styles/windows.css**
+   - Windows platform tab overrides
+   - Maintained consistency with global styles
+
+### Testing Results
+- Development server running successfully on port 1420
+- Code blocks now render consistently with app theme
+- No more external syntax highlighting interference
+- Tab navigation improved with clean rectangular design
+- All changes verified in live environment
+
+### Impact
+- **User Experience**: Consistent code block appearance regardless of save/reopen cycles
+- **Theme Consistency**: All code blocks now properly use theme variables
+- **Performance**: No impact on editor performance, CSS-only solution
+- **Maintainability**: Comprehensive protection against future external stylesheet conflicts
+
+### Technical Notes
+- Solution uses CSS specificity and `!important` declarations for maximum override protection
+- Maintains backwards compatibility with existing theme system
+- No JavaScript changes required
+- Works across all supported platforms (macOS, Windows)
+
+## Future Considerations
+- Monitor for any new external stylesheet conflicts
+- Consider implementing CSS-in-JS for even stronger isolation if needed
+- Document any new syntax highlighting integrations to ensure compatibility

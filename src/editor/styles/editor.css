@@ -276,26 +276,156 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
 .ProseMirror mark[data-color="purple"] { background: rgba(147, 51, 234, 0.2); }
 .ProseMirror mark[data-color="pink"] { background: rgba(236, 72, 153, 0.2); }
 
-/* Enhanced code blocks with syntax highlighting */
+/* Enhanced code blocks with syntax highlighting - isolated from external stylesheets */
 .ProseMirror pre {
-    background: rgb(var(--panel));
-    border: 1px solid rgb(var(--border));
-    border-radius: 0.5rem;
-    padding: 1rem;
-    margin: 1rem 0;
+    background: rgb(var(--panel)) !important;
+    border: 1px solid rgb(var(--border)) !important;
+    border-radius: 0.5rem !important;
+    padding: 1rem !important;
+    margin: 1rem 0 !important;
     overflow-x: auto;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    font-size: 0.875em;
-    line-height: 1.5;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+    font-size: 0.875em !important;
+    line-height: 1.5 !important;
     position: relative;
+    color: rgb(var(--text)) !important;
+    /* Reset any external stylesheet interference */
+    box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
+    backdrop-filter: none !important;
 }
 
 .ProseMirror pre code {
-    background: none;
-    padding: 0;
-    border-radius: 0;
-    font-size: inherit;
-    color: inherit;
+    background: transparent !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    border: none !important;
+    font-size: inherit !important;
+    color: inherit !important;
+    font-family: inherit !important;
+    line-height: inherit !important;
+    /* Prevent highlight.js or other external styling */
+    text-shadow: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+}
+
+/* Isolate all code block children from external styling */
+.ProseMirror pre *,
+.ProseMirror pre code * {
+    background: transparent !important;
+    border: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+    font-family: inherit !important;
+    font-size: inherit !important;
+    line-height: inherit !important;
+}
+
+/* Override any global .obsidian-editor code/pre styles within ProseMirror */
+.ProseMirror.obsidian-editor pre,
+.obsidian-editor .ProseMirror pre {
+    background: rgb(var(--panel)) !important;
+    border: 1px solid rgb(var(--border)) !important;
+    border-radius: 0.5rem !important;
+    padding: 1rem !important;
+    margin: 1rem 0 !important;
+    color: rgb(var(--text)) !important;
+}
+
+.ProseMirror.obsidian-editor pre code,
+.obsidian-editor .ProseMirror pre code {
+    background: transparent !important;
+    padding: 0 !important;
+    color: inherit !important;
+    border: none !important;
+}
+
+/* Block external highlight.js or other syntax highlighting interference */
+.ProseMirror pre .hljs,
+.ProseMirror pre code .hljs,
+.ProseMirror pre .hljs *,
+.ProseMirror pre code .hljs * {
+    background: transparent !important;
+    color: inherit !important;
+    text-shadow: none !important;
+    font-weight: inherit !important;
+}
+
+/* Reset any katex interference with code blocks */
+.ProseMirror pre .katex,
+.ProseMirror pre code .katex {
+    display: none !important;
+}
+
+/* Nuclear option: override ALL possible external syntax highlighting */
+.ProseMirror pre,
+.ProseMirror pre *,
+.ProseMirror code,
+.ProseMirror pre code,
+.ProseMirror pre code *,
+.ProseMirror pre span,
+.ProseMirror pre div {
+    background: rgb(var(--panel)) !important;
+    color: rgb(var(--text)) !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+    font-weight: inherit !important;
+    font-style: inherit !important;
+}
+
+/* Specifically target highlight.js classes */
+.ProseMirror pre .hljs-keyword,
+.ProseMirror pre .hljs-string,
+.ProseMirror pre .hljs-comment,
+.ProseMirror pre .hljs-number,
+.ProseMirror pre .hljs-function,
+.ProseMirror pre .hljs-class,
+.ProseMirror pre .hljs-variable,
+.ProseMirror pre .hljs-attribute,
+.ProseMirror pre .hljs-tag,
+.ProseMirror pre .hljs-name,
+.ProseMirror pre .hljs-selector-tag,
+.ProseMirror pre .hljs-selector-class,
+.ProseMirror pre .hljs-selector-id,
+.ProseMirror pre .hljs-property,
+.ProseMirror pre .hljs-value,
+.ProseMirror pre .hljs-type,
+.ProseMirror pre .hljs-built_in,
+.ProseMirror pre .hljs-literal,
+.ProseMirror pre .hljs-title,
+.ProseMirror pre .hljs-meta,
+.ProseMirror pre [class*="hljs-"] {
+    background: transparent !important;
+    color: inherit !important;
+    text-shadow: none !important;
+    font-weight: inherit !important;
+    font-style: inherit !important;
+}
+
+/* Override any prism.js or other syntax highlighters */
+.ProseMirror pre .token,
+.ProseMirror pre .token.keyword,
+.ProseMirror pre .token.string,
+.ProseMirror pre .token.comment,
+.ProseMirror pre .token.number,
+.ProseMirror pre .token.function,
+.ProseMirror pre .token.class-name,
+.ProseMirror pre .token.variable,
+.ProseMirror pre .token.property,
+.ProseMirror pre .token.operator,
+.ProseMirror pre .token.punctuation,
+.ProseMirror pre [class*="token"] {
+    background: transparent !important;
+    color: inherit !important;
+    text-shadow: none !important;
+    font-weight: inherit !important;
+    font-style: inherit !important;
 }
 
 /* Language label for code blocks */

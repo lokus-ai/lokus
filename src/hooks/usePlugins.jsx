@@ -1,26 +1,38 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
-import { PluginLoader } from "../plugins/PluginLoader.js";
+import pluginManager from "../core/plugins/PluginManager.js";
 
 const PluginContext = createContext(null);
 
 export function PluginProvider({ children }) {
-  const [plugins, setPlugins] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [installingPlugins, setInstallingPlugins] = useState(new Set());
-  const [enabledPlugins, setEnabledPlugins] = useState(new Set());
-  const [pluginLoader] = useState(() => new PluginLoader());
+  const [plugins, setPlugins] = useState(pluginManager.allPlugins);
+  const [loading, setLoading] = useState(pluginManager.isLoading);
+  const [error, setError] = useState(pluginManager.currentError);
+  const [installingPlugins, setInstallingPlugins] = useState(pluginManager.installingPluginIds);
+  const [enabledPlugins, setEnabledPlugins] = useState(pluginManager.enabledPluginIds);
 
-  // Load plugins on mount
+  // Subscribe to plugin manager state changes
   useEffect(() => {
-    loadPlugins();
+    console.log('🔧 usePlugins: Setting up state subscription');
+    const unsubscribe = pluginManager.onPluginStateChange((state) => {
+      console.log('🔧 usePlugins: Received state update', state);
+      setPlugins(state.plugins);
+      setLoading(state.loading);
+      setError(state.error);
+      setInstallingPlugins(state.installingPlugins);
+      setEnabledPlugins(state.enabledPlugins);
+    });
+
+    // Trigger initial load
+    console.log('🔧 usePlugins: Triggering initial load');
+    pluginManager.loadPlugins();
+
+    return unsubscribe;
   }, []);
 
   // Listen for plugin system events
   useEffect(() => {
-    let isTauri = false; 
+    let isTauri = false;
     try {
       const w = window;
       isTauri = !!(
@@ -29,230 +41,51 @@ export function PluginProvider({ children }) {
         (navigator?.userAgent || '').includes('Tauri')
       );
     } catch {}
-    
+
     if (isTauri) {
       const unlistenPromise = listen("plugins:updated", () => {
-        loadPlugins();
+        pluginManager.loadPlugins(true); // Force reload on external updates
       });
       return () => { unlistenPromise.then(unlisten => unlisten()); };
     } else {
-      const onDom = () => loadPlugins();
+      const onDom = () => pluginManager.loadPlugins(true);
       window.addEventListener('plugins:updated', onDom);
       return () => window.removeEventListener('plugins:updated', onDom);
     }
   }, []);
 
-  const loadEnabledPlugins = useCallback(async (allPlugins, enabledPluginNames) => {
-    for (const pluginInfo of allPlugins) {
-      if (enabledPluginNames.includes(pluginInfo.id)) {
-        try {
-          await pluginLoader.loadPlugin(pluginInfo);
-          await pluginLoader.activatePlugin(pluginInfo.id);
-        } catch (error) {
-        }
-      }
-    }
-  }, [pluginLoader]);
+  // Delegate methods to plugin manager
+  const loadPlugins = useCallback((forceReload = false) => {
+    return pluginManager.loadPlugins(forceReload);
+  }, []);
 
-  const loadPlugins = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      let isTauri = false; 
-      try {
-        const w = window;
-        isTauri = !!(
-          (w.__TAURI_INTERNALS__ && typeof w.__TAURI_INTERNALS__.invoke === 'function') ||
-          w.__TAURI_METADATA__ ||
-          (navigator?.userAgent || '').includes('Tauri')
-        );
-      } catch {}
-      
-      if (isTauri) {
-        // Load real plugins from Tauri backend
-        const [pluginInfos, enabledPluginNames] = await Promise.all([
-          invoke('list_plugins'),
-          invoke('get_enabled_plugins')
-        ]);
-        
-        
-        // Convert backend format to frontend format
-        const convertedPlugins = pluginInfos.map(pluginInfo => {
-          // The backend uses directory name as plugin ID, extract from path
-          const pluginId = pluginInfo.manifest.id || pluginInfo.path.split('/').pop();
-          const pluginName = pluginInfo.manifest.name;
-          const isEnabled = enabledPluginNames.includes(pluginId);
-          
-          
-          return {
-            id: pluginId,
-            name: pluginName,
-            version: pluginInfo.manifest.version,
-            description: pluginInfo.manifest.description,
-            author: pluginInfo.manifest.author,
-            enabled: isEnabled,
-            permissions: pluginInfo.manifest.permissions,
-            lastUpdated: pluginInfo.installed_at,
-            path: pluginInfo.path,
-            size: pluginInfo.size,
-            main: pluginInfo.manifest.main,
-            dependencies: pluginInfo.manifest.dependencies || {},
-            keywords: pluginInfo.manifest.keywords || [],
-            repository: pluginInfo.manifest.repository,
-            homepage: pluginInfo.manifest.homepage,
-            license: pluginInfo.manifest.license,
-            // Default UI properties
-            rating: 0,
-            downloads: 0,
-            settings: {},
-            conflicts: [],
-            ui: {
-              panels: []
-            }
-          };
-        });
-        
-        
-        setPlugins(convertedPlugins);
-        setEnabledPlugins(new Set(enabledPluginNames));
-        
-        // Load and activate enabled plugins
-        await loadEnabledPlugins(convertedPlugins, enabledPluginNames);
-      } else {
-        // Browser mode - empty list
-        setPlugins([]);
-        setEnabledPlugins(new Set());
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [loadEnabledPlugins]);
+  const installPlugin = useCallback((pluginId, pluginData) => {
+    return pluginManager.installPlugin(pluginId, pluginData);
+  }, []);
 
-  const installPlugin = useCallback(async (pluginId, pluginData) => {
-    try {
-      setInstallingPlugins(prev => new Set(prev).add(pluginId));
-      
-      // Call Tauri backend to install plugin
-      await invoke('install_plugin', { path: pluginData.path });
-      
-      // Reload plugins to get updated state
-      await loadPlugins();
-      
-      return true;
-    } catch (err) {
-      throw err;
-    } finally {
-      setInstallingPlugins(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(pluginId);
-        return newSet;
-      });
-    }
-  }, [loadPlugins]);
+  const uninstallPlugin = useCallback((pluginId) => {
+    return pluginManager.uninstallPlugin(pluginId);
+  }, []);
 
-  const uninstallPlugin = useCallback(async (pluginId) => {
-    try {
-      // Call Tauri backend to uninstall plugin
-      await invoke('uninstall_plugin', { name: pluginId });
-      
-      // Reload plugins to get updated state
-      await loadPlugins();
-      
-      return true;
-    } catch (err) {
-      throw err;
-    }
-  }, [loadPlugins]);
+  const togglePlugin = useCallback((pluginId, enabled) => {
+    return pluginManager.togglePlugin(pluginId, enabled);
+  }, []);
 
-  const togglePlugin = useCallback(async (pluginId, enabled) => {
-    try {
-      
-      // CRITICAL FIX: Validate input parameters
-      if (!pluginId || typeof pluginId !== 'string') {
-        throw new Error(`Invalid pluginId: ${pluginId} (type: ${typeof pluginId})`);
-      }
-      
-      if (typeof enabled !== 'boolean') {
-        throw new Error(`Invalid enabled parameter: ${enabled} (type: ${typeof enabled}) - must be boolean`);
-      }
-      
-      let isTauri = false; 
-      try {
-        const w = window;
-        isTauri = !!(
-          (w.__TAURI_INTERNALS__ && typeof w.__TAURI_INTERNALS__.invoke === 'function') ||
-          w.__TAURI_METADATA__ ||
-          (navigator?.userAgent || '').includes('Tauri')
-        );
-      } catch {}
-      
-      if (isTauri) {
-        // Use real Tauri commands
-        if (enabled) {
-          const result = await invoke('enable_plugin', { name: pluginId });
-        } else {
-          const result = await invoke('disable_plugin', { name: pluginId });
-        }
-        
-        // Reload plugins from backend to get the correct state
-        await loadPlugins();
-      } else {
-        // Browser mode fallback
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        setPlugins(prev => prev.map(plugin => 
-          plugin.id === pluginId ? { ...plugin, enabled } : plugin
-        ));
-        
-        setEnabledPlugins(prev => {
-          const newSet = new Set(prev);
-          if (enabled) {
-            newSet.add(pluginId);
-          } else {
-            newSet.delete(pluginId);
-          }
-          return newSet;
-        });
-      }
-      
-      return true;
-    } catch (err) {
-      throw err;
-    }
-  }, [loadPlugins]);
-
-  const updatePluginSettings = useCallback(async (pluginId, settings) => {
-    try {
-      // In a real implementation, this would call the Tauri backend
-      await new Promise(resolve => setTimeout(resolve, 300)); // Simulate save
-      
-      // Update plugin settings
-      setPlugins(prev => prev.map(plugin => 
-        plugin.id === pluginId ? { ...plugin, settings: { ...plugin.settings, ...settings } } : plugin
-      ));
-      
-      return true;
-    } catch (err) {
-      throw err;
-    }
+  const updatePluginSettings = useCallback((pluginId, settings) => {
+    return pluginManager.updatePluginSettings(pluginId, settings);
   }, []);
 
   const getPlugin = useCallback((pluginId) => {
-    return plugins.find(p => p.id === pluginId);
-  }, [plugins]);
+    return pluginManager.getPlugin(pluginId);
+  }, []);
 
   const getEnabledPlugins = useCallback(() => {
-    return plugins.filter(p => p.enabled);
-  }, [plugins]);
+    return pluginManager.getEnabledPlugins();
+  }, []);
 
   const getPluginPanels = useCallback(() => {
-    return plugins
-      .filter(p => p.enabled && p.ui?.panels?.length > 0)
-      .flatMap(p => p.ui.panels.map(panel => ({ ...panel, pluginId: p.id, pluginName: p.name })));
-  }, [plugins]);
+    return pluginManager.getPluginPanels();
+  }, []);
 
   const value = {
     plugins,
