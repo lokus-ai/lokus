@@ -458,45 +458,46 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   margin: 0 4px;
 }
 
-/* Enhanced Tab Styling - Obsidian-like */
+/* Enhanced Tab Styling - Clean Rectangle with Rounded Top */
 .obsidian-tab {
   display: flex;
   align-items: center;
-  padding: 8px 16px;
+  padding: 8px 20px;
   background-color: transparent;
-  border: none;
+  border: 1px solid transparent;
   border-radius: 0;
   color: rgb(var(--text-secondary));
-  font-size: var(--text-sm);
+  font-size: 14px;
   cursor: pointer;
   transition: all 150ms ease;
   position: relative;
   min-width: 120px;
-  max-width: 240px;
+  max-width: 280px;
   height: 36px;
-  border-top: 2px solid transparent;
-  border-left: 1px solid rgb(var(--border) / 0.5);
-  border-right: 1px solid rgb(var(--border) / 0.5);
-  background-color: rgb(var(--panel) / 0.8);
+  margin-right: 2px;
 }
 
 .obsidian-tab:first-child {
-  border-left: none;
+  margin-left: 8px;
 }
 
+
 .obsidian-tab:hover {
-  background-color: rgb(var(--panel-secondary));
+  background-color: rgb(var(--panel-secondary) / 0.5);
   color: rgb(var(--text));
-  border-top-color: rgb(var(--accent) / 0.3);
 }
 
 .obsidian-tab.active {
-  background-color: rgb(var(--bg));
+  background-color: rgb(var(--panel));
   color: rgb(var(--text));
-  border-top-color: rgb(var(--accent));
-  border-left-color: rgb(var(--border));
-  border-right-color: rgb(var(--border));
-  z-index: 2;
+  border-top: 2px solid rgb(var(--accent));
+  border-left: 2px solid rgb(var(--border));
+  border-right: 2px solid rgb(var(--border));
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  font-weight: 500;
+  z-index: 10;
+  position: relative;
 }
 
 /* Remove the old ::after pseudo element */
@@ -729,9 +730,6 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   transform: translateX(2px);
 }
 
-.obsidian-tab:hover {
-  transform: translateY(-1px);
-}
 
 .obsidian-button:hover {
   transform: translateY(-1px);
