@@ -1,7 +1,7 @@
 {
   "name": "lokus",
   "private": true,
-  "version": "1.0.3",
+  "version": "1.2.0",
   "type": "module",
   "workspaces": [
     "packages/*"

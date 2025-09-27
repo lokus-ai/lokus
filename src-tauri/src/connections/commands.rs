@@ -14,21 +14,15 @@ pub async fn gmail_initiate_auth(
 ) -> Result<String, String> {
     println!("[GMAIL COMMAND] 🔥 gmail_initiate_auth command called from frontend!");
     
-    // Get the connection manager - safely handle case where it's not initialized
-    match app.try_state::<ConnectionManager>() {
-        Some(connection_manager) => {
-            let result = connection_manager
-                .initiate_gmail_auth()
-                .await
-                .map_err(|e| e.to_string());
-            println!("[GMAIL COMMAND] 🔥 gmail_initiate_auth command completed, result: {:?}", result);
-            result
-        }
-        None => {
-            eprintln!("[GMAIL] ❌ ConnectionManager not initialized");
-            Err("Gmail ConnectionManager not initialized. Please check GOOGLE_CLIENT_ID environment variable.".to_string())
-        }
-    }
+    // Get the connection manager - it should always be available if properly initialized
+    let connection_manager = app.state::<ConnectionManager>();
+    
+    let result = connection_manager
+        .initiate_gmail_auth()
+        .await
+        .map_err(|e| e.to_string());
+    println!("[GMAIL COMMAND] 🔥 gmail_initiate_auth command completed, result: {:?}", result);
+    result
 }
 
 #[tauri::command]
@@ -331,18 +325,9 @@ pub async fn gmail_get_labels(
 // Queue management commands
 #[tauri::command]
 pub fn gmail_get_queue_stats(
-    app: tauri::AppHandle,
+    connection_manager: State<'_, ConnectionManager>,
 ) -> Result<HashMap<String, u32>, String> {
-    match app.try_state::<ConnectionManager>() {
-        Some(connection_manager) => Ok(connection_manager.get_queue_stats()),
-        None => {
-            eprintln!("[GMAIL] ⚠️ ConnectionManager not initialized, returning empty stats");
-            // Return empty stats if ConnectionManager is not available
-            let mut empty_stats = HashMap::new();
-            empty_stats.insert("total".to_string(), 0);
-            Ok(empty_stats)
-        }
-    }
+    Ok(connection_manager.get_queue_stats())
 }
 
 #[tauri::command]

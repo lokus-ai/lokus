@@ -22,19 +22,7 @@
       "Bash(start:*)",
       "Bash(gh pr:*)",
       "Bash(git checkout:*)",
-      "Read(//tmp/**)",
-      "mcp__lokus__get_workspace_info",
-      "mcp__lokus__list_workspaces",
-      "WebSearch",
-      "mcp__lokus__get_current_workspace",
-      "mcp__lokus__list_files",
-      "mcp__lokus__create_note",
-      "mcp__lokus__write_file",
-      "mcp__lokus__readNote",
-      "mcp__lokus__searchNotes",
-      "Read(//Users/pratham/Downloads/**)",
-      "WebFetch(domain:admission.gatech.edu)",
-      "WebFetch(domain:catalog.gatech.edu)"
+      "Read(//tmp/**)"
     ],
     "deny": []
   }

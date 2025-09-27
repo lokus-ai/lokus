@@ -1,24 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { setGlobalActiveTheme, listAvailableThemes, readGlobalVisuals, previewTheme, validateThemeFile, invalidateThemeCache } from "../core/theme/manager.js";
+import { setGlobalActiveTheme, listAvailableThemes, readGlobalVisuals } from "../core/theme/manager.js";
 import { listActions, getActiveShortcuts, setShortcut, resetShortcuts } from "../core/shortcuts/registry.js";
 import { readConfig, updateConfig } from "../core/config/store.js";
 import { formatAccelerator } from "../core/shortcuts/registry.js";
 import { Search, Pencil, RotateCcw } from "lucide-react";
 import liveEditorSettings from "../core/editor/live-settings.js";
 import AIAssistant from "./preferences/AIAssistant.jsx";
-import ConnectionStatus from "../components/ConnectionStatus.jsx";
-import GmailLogin from "../components/gmail/GmailLogin.jsx";
-import { useAuth } from "../core/auth/AuthContext";
-import { User, LogIn, LogOut, Crown, Shield, Settings as SettingsIcon } from "lucide-react";
 
 export default function Preferences() {
   const [themes, setThemes] = useState([]);
   const [activeTheme, setActiveTheme] = useState("");
   const [section, setSection] = useState("Appearance");
-  const [previewController, setPreviewController] = useState(null);
-  const [importStatus, setImportStatus] = useState('');
-  const { isAuthenticated, user, signIn, signOut, isLoading } = useAuth();
-  const [isSigningOut, setIsSigningOut] = useState(false);
   // Removed mode/accent complexity - themes handle everything now
   const actions = useMemo(() => listActions(), []);
   const [keymap, setKeymap] = useState({});
@@ -223,15 +215,6 @@ export default function Preferences() {
     setEditorSettings(defaultSettings);
   };
 
-  const setMdPref = async (key, value) => {
-    const next = { ...md, [key]: value };
-    setMd(next);
-    try {
-      const { updateConfig } = await import("../core/config/store.js");
-      await updateConfig({ markdown: next });
-    } catch (e) { }
-  };
-
   return (
     <div className="h-screen bg-app-bg text-app-text flex flex-col">
       <header className="h-12 px-4 flex items-center border-b border-app-border bg-app-panel">
@@ -242,13 +225,12 @@ export default function Preferences() {
         {/* Sidebar */}
         <aside className="bg-app-panel/50 p-3">
           {[
-            // "General",
-            "Appearance",
-            // "Editor",
+            "General",
+            "Appearance", 
+            "Editor",
             "Markdown",
             "Shortcuts",
-            "Connections",
-            "Account",
+            "Gmail",
             "AI Assistant",
           ].map((name) => (
             <button
@@ -271,134 +253,21 @@ export default function Preferences() {
 
               <section>
                 <h2 className="text-sm uppercase tracking-wide text-app-muted mb-3">Theme</h2>
-                <div className="space-y-3">
-                  <select
-                    className="h-9 px-3 w-full rounded-md bg-app-panel border border-app-border outline-none"
-                    value={activeTheme}
-                    onChange={handleThemeChange}
-                  >
-                    <option value="">Built-in</option>
-                    {themes.map((theme) => (
-                      <option key={theme.id} value={theme.id}>
-                        {theme.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={async () => {
-                        try {
-                          setImportStatus('Selecting file...');
-                          const { open } = await import('@tauri-apps/plugin-dialog');
-                          const selected = await open({
-                            multiple: false,
-                            filters: [{
-                              name: 'Theme Files',
-                              extensions: ['json']
-                            }]
-                          });
-
-                          if (selected) {
-                            setImportStatus('Reading theme file...');
-                            const { readTextFile } = await import('@tauri-apps/plugin-fs');
-                            const fileContent = await readTextFile(selected);
-
-                            setImportStatus('Validating theme...');
-                            const themeData = JSON.parse(fileContent);
-                            const validation = validateThemeFile(themeData);
-
-                            if (!validation.valid) {
-                              setImportStatus(`Validation failed: ${validation.errors.join(', ')}`);
-                              setTimeout(() => setImportStatus(''), 5000);
-                              return;
-                            }
-
-                            // Show validation warnings if any
-                            if (validation.warnings.length > 0) {
-                              console.warn('Theme validation warnings:', validation.warnings);
-                            }
-
-                            setImportStatus('Importing theme...');
-
-                            // Import the theme using backend
-                            const { invoke } = await import('@tauri-apps/api/core');
-                            const themeId = await invoke('import_theme_file', {
-                              filePath: selected,
-                              overwrite: false
-                            });
-
-                            setImportStatus(`Theme "${themeData.name}" imported successfully!`);
-                            console.log('Theme imported with ID:', themeId);
-
-                            // Invalidate cache and refresh the themes list
-                            invalidateThemeCache();
-                            const available = await listAvailableThemes();
-                            setThemes(available);
-
-                            setTimeout(() => setImportStatus(''), 3000);
-
-                          } else {
-                            setImportStatus('');
-                          }
-                        } catch (error) {
-                          console.error('Failed to import theme:', error);
-                          setImportStatus(`Import failed: ${error.message}`);
-                          setTimeout(() => setImportStatus(''), 5000);
-                        }
-                      }}
-                      className="px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg rounded-md hover:bg-app-accent/90 transition-colors"
-                    >
-                      Import Theme
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        const sampleTheme = {
-                          name: "Sample Dark Theme",
-                          tokens: {
-                            "--bg": "18 18 18",
-                            "--text": "255 255 255",
-                            "--panel": "32 32 32",
-                            "--border": "64 64 64",
-                            "--muted": "128 128 128",
-                            "--accent": "0 122 255",
-                            "--accent-fg": "255 255 255"
-                          }
-                        };
-
-                        const blob = new Blob([JSON.stringify(sampleTheme, null, 2)], { type: 'application/json' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = 'sample-theme.json';
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                      }}
-                      className="px-3 py-1.5 text-sm bg-app-panel text-app-text border border-app-border rounded-md hover:bg-app-bg transition-colors"
-                    >
-                      Download Sample
-                    </button>
-                  </div>
-
-                  {importStatus && (
-                    <div className={`text-xs p-2 rounded-md ${
-                      importStatus.includes('failed') || importStatus.includes('Validation failed')
-                        ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-                        : importStatus.includes('successfully')
-                        ? 'bg-green-500/10 text-green-400 border border-green-500/20'
-                        : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                    }`}>
-                      {importStatus}
-                    </div>
-                  )}
-
-                  <p className="text-xs text-app-muted">
-                    Import custom theme files or download a sample to get started. Themes are stored securely in your user directory.
-                  </p>
-                </div>
+                <select
+                  className="h-9 px-3 w-full rounded-md bg-app-panel border border-app-border outline-none"
+                  value={activeTheme}
+                  onChange={handleThemeChange}
+                >
+                  <option value="">Built-in</option>
+                  {themes.map((theme) => (
+                    <option key={theme.id} value={theme.id}>
+                      {theme.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-app-muted mt-2">
+                  Add more themes to <code>~/Library/Application Support/Lokus/themes/</code>
+                </p>
               </section>
 
             </div>
@@ -716,213 +585,159 @@ export default function Preferences() {
             </div>
           )}
 
-          {section === "Connections" && (
+          {section === "Gmail" && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-semibold mb-4 text-app-text">Connections</h2>
+                <h2 className="text-xl font-semibold mb-4 text-app-text">Gmail Settings</h2>
                 <p className="text-app-text-secondary mb-6">
-                  Connect external services and manage integrations with your workspace.
+                  Configure Gmail integration settings for email management and synchronization.
                 </p>
               </div>
 
-              {/* Available Connections */}
+              {/* Authentication Status */}
               <div className="space-y-4">
-                <h3 className="text-lg font-medium text-app-text">Available Services</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Gmail - Real connection */}
-                  <div className="bg-app-panel border border-app-border rounded-lg p-4 hover:bg-app-panel/80 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-red-500 rounded-lg flex items-center justify-center text-white font-semibold">
-                          G
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-app-text">Gmail</h4>
-                          <p className="text-xs text-app-text-secondary">Email integration</p>
-                        </div>
-                      </div>
-                      <ConnectionStatus />
+                <h3 className="text-lg font-medium text-app-text">Authentication</h3>
+                <div className="bg-app-panel border border-app-border rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-app-text">Gmail Account</p>
+                      <p className="text-sm text-app-text-secondary">
+                        Connect your Gmail account to access emails
+                      </p>
                     </div>
-                  </div>
-
-                  {/* Outlook - Disabled */}
-                  <div className="bg-app-panel border border-app-border rounded-lg p-4 opacity-50 cursor-not-allowed">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center text-white font-semibold">
-                          O
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-app-text-secondary">Outlook</h4>
-                          <p className="text-xs text-app-text-secondary">Coming soon</p>
-                        </div>
-                      </div>
-                      <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-                    </div>
-                  </div>
-
-                  {/* Jira - Disabled */}
-                  <div className="bg-app-panel border border-app-border rounded-lg p-4 opacity-50 cursor-not-allowed">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-semibold">
-                          J
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-app-text-secondary">Jira</h4>
-                          <p className="text-xs text-app-text-secondary">Coming soon</p>
-                        </div>
-                      </div>
-                      <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-                    </div>
-                  </div>
-
-                  {/* Slack - Disabled */}
-                  <div className="bg-app-panel border border-app-border rounded-lg p-4 opacity-50 cursor-not-allowed">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center text-white font-semibold">
-                          S
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-app-text-secondary">Slack</h4>
-                          <p className="text-xs text-app-text-secondary">Coming soon</p>
-                        </div>
-                      </div>
-                      <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Gmail Connection Component */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-app-text">Gmail Integration</h3>
-                <GmailLogin />
-              </div>
-            </div>
-          )}
-
-          {section === "Account" && (
-            <div className="space-y-8 max-w-2xl">
-              {/* Account Header */}
-              <div>
-                <h1 className="text-2xl font-bold text-app-text mb-2">Account</h1>
-                <p className="text-app-text-secondary">
-                  Manage your account settings, authentication, and profile.
-                </p>
-              </div>
-
-              {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="w-6 h-6 border-2 border-app-accent border-t-transparent rounded-full animate-spin"></div>
-                </div>
-              ) : !isAuthenticated ? (
-                /* Sign In State */
-                <div className="bg-app-panel border border-app-border rounded-xl p-8">
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-app-accent rounded-full flex items-center justify-center mx-auto mb-6">
-                      <LogIn className="w-8 h-8 text-white" />
-                    </div>
-                    <h2 className="text-xl font-semibold text-app-text mb-3">Sign in to Lokus</h2>
-                    <p className="text-app-text-secondary mb-8 max-w-md mx-auto">
-                      Sync your notes across devices and access your account.
-                    </p>
-                    <button
-                      onClick={async () => {
-                        try {
-                          await signIn();
-                        } catch (error) {
-                          console.error('Sign in failed:', error);
-                        }
-                      }}
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-app-accent text-white font-medium rounded-lg hover:bg-app-accent/90 transition-colors"
-                    >
-                      <LogIn className="w-4 h-4" />
-                      Sign In
+                    <button className="obsidian-button">
+                      Connect Account
                     </button>
                   </div>
                 </div>
-              ) : (
-                /* Signed In State - Arc-like Dashboard */
-                <div className="space-y-6">
-                  {/* Profile Section */}
-                  <div className="bg-app-panel border border-app-border rounded-xl p-6">
-                    <div className="flex items-center gap-4">
-                      {user?.avatar_url ? (
-                        <img
-                          src={user.avatar_url}
-                          alt="Profile"
-                          className="w-16 h-16 rounded-full border-2 border-app-border"
-                        />
-                      ) : (
-                        <div className="w-16 h-16 bg-app-accent rounded-full flex items-center justify-center">
-                          <User className="w-8 h-8 text-white" />
-                        </div>
-                      )}
-                      <div className="flex-1">
-                        <h2 className="text-lg font-semibold text-app-text">
-                          {user?.name || 'User'}
-                        </h2>
-                        <p className="text-app-text-secondary text-sm">
-                          {user?.email || 'No email available'}
+              </div>
+
+              {/* Email Management */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium text-app-text">Email Management</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-app-text">Auto-sync emails</p>
+                      <p className="text-sm text-app-text-secondary">
+                        Automatically synchronize emails in the background
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" defaultChecked />
+                      <div className="w-11 h-6 bg-app-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-app-accent"></div>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-app-text">Email notifications</p>
+                      <p className="text-sm text-app-text-secondary">
+                        Show notifications for new emails
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" defaultChecked />
+                      <div className="w-11 h-6 bg-app-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-app-accent"></div>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-app-text">Sync frequency</p>
+                      <p className="text-sm text-app-text-secondary">
+                        How often to check for new emails
+                      </p>
+                    </div>
+                    <select className="obsidian-select min-w-32">
+                      <option value="300000">5 minutes</option>
+                      <option value="600000">10 minutes</option>
+                      <option value="1800000">30 minutes</option>
+                      <option value="3600000">1 hour</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Note Conversion */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium text-app-text">Note Conversion</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-app-text">Default save location</p>
+                      <p className="text-sm text-app-text-secondary">
+                        Folder where email notes are saved
+                      </p>
+                    </div>
+                    <input 
+                      type="text" 
+                      defaultValue="emails"
+                      className="obsidian-input min-w-32"
+                      placeholder="emails"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-app-text">Include email headers</p>
+                      <p className="text-sm text-app-text-secondary">
+                        Include sender, recipient, and date information
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" defaultChecked />
+                      <div className="w-11 h-6 bg-app-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-app-accent"></div>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-app-text">Include attachments info</p>
+                      <p className="text-sm text-app-text-secondary">
+                        List attachment details in the note
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" defaultChecked />
+                      <div className="w-11 h-6 bg-app-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-app-accent"></div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Privacy & Security */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium text-app-text">Privacy & Security</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-app-text">Offline mode</p>
+                      <p className="text-sm text-app-text-secondary">
+                        Allow Gmail access when offline
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" defaultChecked />
+                      <div className="w-11 h-6 bg-app-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-app-accent"></div>
+                    </label>
+                  </div>
+
+                  <div className="bg-app-panel border border-app-border rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-app-text">Clear cached data</p>
+                        <p className="text-sm text-app-text-secondary">
+                          Remove all cached emails and attachments
                         </p>
                       </div>
-                      <button
-                        onClick={async () => {
-                          try {
-                            setIsSigningOut(true);
-                            await signOut();
-                          } catch (error) {
-                            console.error('Sign out failed:', error);
-                          } finally {
-                            setIsSigningOut(false);
-                          }
-                        }}
-                        disabled={isSigningOut}
-                        className="px-4 py-2 text-app-text-secondary hover:text-app-text border border-app-border rounded-lg hover:bg-app-bg transition-colors disabled:opacity-50"
-                      >
-                        {isSigningOut ? 'Signing out...' : 'Sign Out'}
+                      <button className="obsidian-button secondary">
+                        Clear Cache
                       </button>
                     </div>
                   </div>
-
-                  {/* Stats Grid */}
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-app-panel border border-app-border rounded-xl p-4 text-center">
-                      <div className="text-2xl font-bold text-app-text">247</div>
-                      <div className="text-sm text-app-text-secondary">Notes</div>
-                    </div>
-                    <div className="bg-app-panel border border-app-border rounded-xl p-4 text-center">
-                      <div className="text-2xl font-bold text-app-text">12</div>
-                      <div className="text-sm text-app-text-secondary">Days</div>
-                    </div>
-                    <div className="bg-app-panel border border-app-border rounded-xl p-4 text-center">
-                      <div className="text-2xl font-bold text-app-text">1.2GB</div>
-                      <div className="text-sm text-app-text-secondary">Storage</div>
-                    </div>
-                  </div>
-
-                  {/* Features */}
-                  <div className="bg-app-panel border border-app-border rounded-xl p-6">
-                    <h3 className="text-lg font-semibold text-app-text mb-4">Account Features</h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 bg-app-accent rounded-full"></div>
-                        <span className="text-app-text">Cross-device sync</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 bg-app-accent rounded-full"></div>
-                        <span className="text-app-text">Cloud backup</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 bg-app-accent rounded-full"></div>
-                        <span className="text-app-text">Collaboration tools</span>
-                      </div>
-                    </div>
-                  </div>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -934,3 +749,11 @@ export default function Preferences() {
     </div>
   );
 }
+  const setMdPref = async (key, value) => {
+    const next = { ...md, [key]: value };
+    setMd(next);
+    try {
+      const { updateConfig } = await import("../core/config/store.js");
+      await updateConfig({ markdown: next });
+    } catch (e) { }
+  };

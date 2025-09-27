@@ -35,13 +35,6 @@ impl OAuthServer {
             return Ok(());
         }
 
-        // Check if another OAuth server is already running
-        if self.is_oauth_server_running().await {
-            println!("[OAUTH SERVER] ✅ Another OAuth server already running on port {}, using existing server", OAUTH_PORT);
-            *running = true;
-            return Ok(());
-        }
-
         println!("[OAUTH SERVER] 🚀 Starting Gmail OAuth callback server on port {}", OAUTH_PORT);
 
         let addr = std::net::SocketAddr::from(([127, 0, 0, 1], OAUTH_PORT));
@@ -89,26 +82,6 @@ impl OAuthServer {
     #[allow(dead_code)]
     pub async fn is_running(&self) -> bool {
         *self.running.lock().await
-    }
-
-    async fn is_oauth_server_running(&self) -> bool {
-        // Test if the OAuth server is responding on the expected port
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_millis(1000))
-            .build()
-            .unwrap_or_default();
-
-        match client.get(&format!("http://localhost:{}/health", OAUTH_PORT)).send().await {
-            Ok(response) => {
-                if response.status().is_success() {
-                    println!("[OAUTH SERVER] 🔍 Found existing OAuth server responding on port {}", OAUTH_PORT);
-                    true
-                } else {
-                    false
-                }
-            }
-            Err(_) => false,
-        }
     }
 
     #[allow(dead_code)]

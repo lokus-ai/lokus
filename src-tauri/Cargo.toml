@@ -1,6 +1,6 @@
 [package]
 name = "lokus"
-version = "1.0.3"
+version = "1.2.0"
 description = "Lokus - Modern Knowledge Management and Writing Platform"
 authors = ["you"]
 edition = "2021"
@@ -66,8 +66,3 @@ once_cell = "1.19"
 parking_lot = "0.12"
 bincode = "1.3"
 thiserror = "1.0"
-# Encryption dependencies for secure storage
-aes-gcm = "0.10"
-argon2 = "0.5"
-rand = "0.8"
-machine-uid = "0.5"
