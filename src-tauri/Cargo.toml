@@ -48,6 +48,10 @@ base64 = "0.22"
 hex = "0.4"
 uuid = { version = "1.0", features = ["v4"] }
 tokio-util = "0.7"
+aes-gcm = "0.10"
+argon2 = "0.5"
+rand = "0.8"
+machine-uid = "0.4"
 hyper = { version = "1.0", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"

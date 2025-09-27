@@ -14,6 +14,7 @@ mod mcp;
 mod auth;
 mod connections;
 mod oauth_server;
+mod secure_storage;
 
 use windows::{open_workspace_window, open_preferences_window};
 use tauri::Manager;
@@ -46,25 +47,25 @@ fn clear_last_workspace(app: tauri::AppHandle) {
 fn validate_workspace_path(path: String) -> bool {
     println!("[Backend] validate_workspace_path called with: {}", path);
     let workspace_path = std::path::Path::new(&path);
-    
+
     // Check if path exists and is a directory
     if !workspace_path.exists() || !workspace_path.is_dir() {
         println!("[Backend] Path validation failed: path doesn't exist or is not a directory");
         return false;
     }
-    
+
     // Check if we can read the directory
     if workspace_path.read_dir().is_err() {
         return false;
     }
-    
+
     // Check if it's a valid Lokus workspace or can be initialized as one
     let lokus_dir = workspace_path.join(".lokus");
     if lokus_dir.exists() {
         // It's already a Lokus workspace
         return lokus_dir.is_dir();
     }
-    
+
     // If no .lokus folder, check if we can create one (write permissions)
     match std::fs::create_dir(&lokus_dir) {
         Ok(_) => {
@@ -75,11 +76,11 @@ fn validate_workspace_path(path: String) -> bool {
     }
 }
 
-#[tauri::command] 
+#[tauri::command]
 fn get_validated_workspace_path(app: tauri::AppHandle) -> Option<String> {
     let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
     let _ = store.reload();
-    
+
     if let Some(path) = store.get("last_workspace_path") {
         if let Some(path_str) = path.as_str() {
             if validate_workspace_path(path_str.to_string()) {
@@ -98,10 +99,10 @@ fn get_validated_workspace_path(app: tauri::AppHandle) -> Option<String> {
 fn clear_all_workspace_data(app: tauri::AppHandle) {
     let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
     let _ = store.reload();
-    
+
     // Clear all workspace-related keys
     let _ = store.delete("last_workspace_path".to_string());
-    
+
     // Clear all session states
     let keys = store.keys();
     for key in keys {
@@ -109,7 +110,7 @@ fn clear_all_workspace_data(app: tauri::AppHandle) {
             let _ = store.delete(key.to_string());
         }
     }
-    
+
     let _ = store.save();
     println!("Cleared all workspace data for development");
 }
@@ -131,14 +132,14 @@ fn save_session_state(app: tauri::AppHandle, workspace_path: String, open_tabs: 
     let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
     let _ = store.reload();
     let session = SessionState { open_tabs, expanded_folders };
-    
+
     // Create workspace-specific key by hashing the path
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
     let mut hasher = DefaultHasher::new();
     workspace_path.hash(&mut hasher);
     let workspace_key = format!("session_state_{}", hasher.finish());
-    
+
     let _ = store.set(workspace_key, serde_json::to_value(session).unwrap());
     let _ = store.save();
 }
@@ -147,14 +148,14 @@ fn save_session_state(app: tauri::AppHandle, workspace_path: String, open_tabs: 
 fn load_session_state(app: tauri::AppHandle, workspace_path: String) -> Option<SessionState> {
     let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
     let _ = store.reload();
-    
+
     // Create workspace-specific key by hashing the path
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
     let mut hasher = DefaultHasher::new();
     workspace_path.hash(&mut hasher);
     let workspace_key = format!("session_state_{}", hasher.finish());
-    
+
     store.get(&workspace_key).and_then(|value| serde_json::from_value(value.clone()).ok())
 }
 
@@ -278,28 +279,28 @@ fn main() {
     ])
     .setup(|app| {
       menu::init(&app.handle())?;
-      
+
       // Initialize platform-specific systems
       if let Err(e) = handlers::platform_files::initialize() {
         eprintln!("Warning: Failed to initialize platform file operations: {}", e);
       }
-      
+
       if let Err(e) = clipboard_platform::initialize() {
         eprintln!("Warning: Failed to initialize platform clipboard: {}", e);
       }
-      
+
       // Initialize MCP Server Manager
       let mcp_manager = mcp::MCPServerManager::new(app.handle().clone());
       app.manage(mcp_manager);
-      
+
       // Initialize auth state
       let auth_state = auth::SharedAuthState::default();
       app.manage(auth_state);
-      
+
       // Initialize OAuth Server
       let oauth_server = oauth_server::OAuthServer::new();
       app.manage(oauth_server.clone());
-      
+
       // Start OAuth server after the app is fully initialized
       let oauth_server_clone = oauth_server.clone();
       tauri::async_runtime::spawn(async move {
@@ -307,7 +308,7 @@ fn main() {
           eprintln!("[OAUTH SERVER] ❌ Failed to start OAuth server: {}", e);
         }
       });
-      
+
       // Initialize Gmail Connection Manager - always manage even if initialization fails
       match connections::ConnectionManager::new(app.handle().clone()) {
         Ok(connection_manager) => {
@@ -323,10 +324,10 @@ fn main() {
           }
         }
       }
-      
+
       // Register deep link handler for auth callbacks
       auth::register_deep_link_handler(&app.handle());
-      
+
       let app_handle = app.handle().clone();
       let store = StoreBuilder::new(app.handle(), PathBuf::from(".settings.dat")).build().unwrap();
       let _ = store.reload();
@@ -357,4 +358,3 @@ fn main() {
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
-
