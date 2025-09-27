@@ -28,6 +28,7 @@ import SearchPanel from "../components/SearchPanel.jsx";
 import ShortcutHelpModal from "../components/ShortcutHelpModal.jsx";
 import GlobalContextMenu from "../components/GlobalContextMenu.jsx";
 import MiniKanban from "../components/MiniKanban.jsx";
+import { WorkspaceManager } from "../core/workspace/manager.js";
 import FullKanban from "../components/FullKanban.jsx";
 import PluginSettings from "./PluginSettings.jsx";
 import PluginDetail from "./PluginDetail.jsx";
@@ -1592,39 +1593,17 @@ export default function Workspace({ initialPath = "" }) {
   }, []);
 
   const handleOpenWorkspace = useCallback(async () => {
+    console.log('🚀 handleOpenWorkspace called!');
     try {
-      // Close current window and show launcher
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
-      const currentWindow = getCurrentWindow();
+      // First clear the saved workspace to ensure launcher shows
+      await invoke('clear_last_workspace');
+      console.log('✅ Cleared saved workspace');
 
-      // Hide current window
-      await currentWindow.hide();
-
-      // Show the main launcher window
-      const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-      const mainWindow = WebviewWindow.getByLabel('main');
-
-      if (mainWindow) {
-        await mainWindow.show();
-        await mainWindow.setFocus();
-      } else {
-        // If main window doesn't exist, create it
-        const newLauncherWindow = new WebviewWindow('main', {
-          url: '/',
-          title: 'Lokus',
-          width: 900,
-          height: 700,
-          minWidth: 600,
-          minHeight: 500,
-          center: true
-        });
-
-        await newLauncherWindow.show();
-      }
-
-      console.log('Switched to workspace launcher');
+      // Use backend command to create launcher window (same approach as preferences)
+      await invoke('open_launcher_window');
+      console.log('✅ Created new launcher window via backend command');
     } catch (error) {
-      console.error('Error opening workspace launcher:', error);
+      console.error('❌ Error opening workspace launcher:', error);
     }
   }, []);
 
@@ -2240,7 +2219,10 @@ export default function Workspace({ initialPath = "" }) {
 
     const unlistenCloseWindow = isTauri ? listen("lokus:close-window", () => handleWindowAction('close')) : Promise.resolve(addDom('lokus:close-window', () => handleWindowAction('close')));
 
-    const unlistenOpenWorkspace = isTauri ? listen("lokus:open-workspace", handleOpenWorkspace) : Promise.resolve(addDom('lokus:open-workspace', handleOpenWorkspace));
+    const unlistenOpenWorkspace = isTauri ? listen("lokus:open-workspace", (event) => {
+      console.log('🎯 Received lokus:open-workspace event:', event);
+      handleOpenWorkspace();
+    }) : Promise.resolve(addDom('lokus:open-workspace', handleOpenWorkspace));
 
     // Edit menu events
     const unlistenUndo = isTauri ? listen("lokus:edit-undo", () => handleEditorEdit('undo')) : Promise.resolve(addDom('lokus:edit-undo', () => handleEditorEdit('undo')));

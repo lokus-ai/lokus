@@ -28,9 +28,19 @@ export function useWorkspaceActivation() {
         
         // Strategy 1: Check URL on initial load
         const params = new URLSearchParams(window.location.search);
+        const forceWelcome = params.get("forceWelcome");
         const workspacePath = params.get("workspacePath");
+        console.log(`[Attempt ${attempt + 1}] Force welcome:`, forceWelcome);
         console.log(`[Attempt ${attempt + 1}] Workspace path from URL:`, workspacePath);
-      
+
+        // If forceWelcome is set, skip workspace loading and show launcher
+        if (forceWelcome === "true") {
+          console.log("Force welcome parameter detected, showing launcher");
+          setPath(null);
+          setIsInitialized(true);
+          return;
+        }
+
         if (workspacePath) {
           const decodedPath = decodeURIComponent(workspacePath);
           console.log("Decoded path:", decodedPath);
@@ -74,7 +84,8 @@ export function useWorkspaceActivation() {
       );
     } catch {}
     
-    const unlistenPromise = isTauri
+    // Listen for workspace activation and force welcome events
+    const unlistenWorkspacePromise = isTauri
       ? listen("workspace:activate", async (event) => {
           console.log("Received workspace:activate event:", event);
           const p = event.payload;
@@ -92,8 +103,17 @@ export function useWorkspaceActivation() {
         })
       : Promise.resolve(() => {});
 
+    const unlistenForceWelcomePromise = isTauri
+      ? listen("lokus:force-welcome", () => {
+          console.log("Received force welcome event, clearing workspace");
+          setPath(null);
+          setIsInitialized(true);
+        })
+      : Promise.resolve(() => {});
+
     return () => {
-      unlistenPromise.then(unlisten => unlisten());
+      unlistenWorkspacePromise.then(unlisten => unlisten());
+      unlistenForceWelcomePromise.then(unlisten => unlisten());
     };
   }, []); // Runs once on component mount.
 

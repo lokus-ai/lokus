@@ -16,7 +16,7 @@ mod connections;
 mod oauth_server;
 mod secure_storage;
 
-use windows::{open_workspace_window, open_preferences_window};
+use windows::{open_workspace_window, open_preferences_window, open_launcher_window};
 use tauri::Manager;
 use tauri_plugin_store::{StoreBuilder, JsonValue};
 use std::path::PathBuf;
@@ -171,6 +171,7 @@ fn main() {
     .invoke_handler(tauri::generate_handler![
       open_workspace_window,
       open_preferences_window,
+      open_launcher_window,
       save_last_workspace,
       clear_last_workspace,
       validate_workspace_path,
@@ -275,7 +276,12 @@ fn main() {
       connections::gmail_get_labels,
       connections::gmail_get_queue_stats,
       connections::gmail_force_process_queue,
-      connections::gmail_clear_queue
+      connections::gmail_clear_queue,
+      theme::validate_theme_file,
+      theme::import_theme_file,
+      theme::export_theme,
+      theme::delete_custom_theme,
+      theme::list_custom_themes
     ])
     .setup(|app| {
       menu::init(&app.handle())?;

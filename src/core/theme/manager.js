@@ -2,6 +2,11 @@ import { emit } from "@tauri-apps/api/event";
 import { readConfig, updateConfig } from "../config/store.js";
 import platformService from "../../services/platform/PlatformService.js";
 
+// Cache for custom themes to prevent repeated backend calls
+let customThemesCache = null;
+let customThemesCacheTime = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 // --- Constants ---
 const APP_DIR = "Lokus";
 const GLOBAL_CONFIG = "config.json";
@@ -152,41 +157,106 @@ export async function installDefaultThemes() {
   }
 }
 
+// Cached function to get custom themes from backend
+async function getCachedCustomThemes() {
+  const now = Date.now();
+
+  // Return cached data if still valid
+  if (customThemesCache && (now - customThemesCacheTime) < CACHE_DURATION) {
+    return customThemesCache;
+  }
+
+  // Fetch fresh data from backend
+  if (isTauri) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const customThemes = await invoke('list_custom_themes');
+
+      // Update cache
+      customThemesCache = customThemes;
+      customThemesCacheTime = now;
+
+      return customThemes;
+    } catch (e) {
+      console.warn('Failed to load custom themes:', e);
+      return [];
+    }
+  }
+
+  return [];
+}
+
+// Function to invalidate cache when themes are imported/deleted
+export function invalidateThemeCache() {
+  customThemesCache = null;
+  customThemesCacheTime = 0;
+}
+
 export async function loadThemeManifestById(id) {
   if (!id) return null;
-  await initializeTauri();
-  const userThemePath = await join(await getGlobalThemesDir(), `${id}.json`);
-  if (await exists(userThemePath)) {
-    const j = await readJson(userThemePath);
-    if (j?.tokens) return j;
-  }
+
+  // Check built-in themes first
   if (DEFAULT_THEME_CONTENT[id]) {
-    try { return JSON.parse(DEFAULT_THEME_CONTENT[id]); }
-    catch (e) { }
+    try {
+      return JSON.parse(DEFAULT_THEME_CONTENT[id]);
+    } catch (e) {
+      console.warn(`Failed to parse built-in theme ${id}:`, e);
+    }
   }
+
+  // Check custom themes from backend (cached)
+  const customThemes = await getCachedCustomThemes();
+
+  // Find theme by matching the generated ID
+  for (const manifest of customThemes) {
+    if (manifest?.name) {
+      const themeId = manifest.name
+        .toLowerCase()
+        .replace(/[^a-z0-9-_]/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, '');
+
+      if (themeId === id && manifest.tokens) {
+        return manifest;
+      }
+    }
+  }
+
   return null;
 }
 
 export async function listAvailableThemes() {
   const themeMap = new Map();
+
+  // Add built-in themes
   for (const themeId of DEFAULT_THEMES) {
     try {
       const manifest = JSON.parse(DEFAULT_THEME_CONTENT[themeId]);
       themeMap.set(themeId, { id: themeId, name: manifest.name });
     } catch { themeMap.set(themeId, { id: themeId, name: themeId }); }
   }
-  if (isTauri) try {
-    const themesDir = await getGlobalThemesDir();
-    if (await exists(themesDir)) {
-      for (const file of await readDir(themesDir)) {
-        if (file.name.endsWith(".json")) {
-          const themeId = file.name.replace(".json", "");
-          const manifest = await readJson(file.path);
-          if (manifest?.name) themeMap.set(themeId, { id: themeId, name: manifest.name });
-        }
-      }
+
+  // Add custom themes from backend (cached)
+  const customThemes = await getCachedCustomThemes();
+
+  for (const manifest of customThemes) {
+    if (manifest?.name) {
+      // Create safe theme ID from name
+      const themeId = manifest.name
+        .toLowerCase()
+        .replace(/[^a-z0-9-_]/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, '');
+
+      themeMap.set(themeId, {
+        id: themeId,
+        name: manifest.name,
+        isCustom: true,
+        manifest: manifest
+      });
     }
-  } catch (e) { }
+  }
+
   return Array.from(themeMap.values());
 }
 
@@ -199,20 +269,137 @@ export async function readGlobalVisuals() {
 }
 
 export async function setGlobalActiveTheme(id) {
-  try { 
-    await updateConfig({ theme: id }); 
-  } catch (e) { 
+  try {
+    await updateConfig({ theme: id });
+  } catch (e) {
     return;
   }
-  
+
   const manifest = await loadThemeManifestById(id);
   const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
   console.log(`[theme] Applying tokens for theme "${id}"`);
   console.log(`[theme] Manifest loaded:`, manifest);
   console.log(`[theme] Tokens to apply:`, tokensToApply);
   applyTokens(tokensToApply);
-  
+
   await broadcastTheme({ tokens: tokensToApply, visuals: { theme: id } });
+}
+
+// Preview theme without saving
+export async function previewTheme(id, onRevert) {
+  const originalTheme = await readGlobalVisuals();
+
+  const manifest = await loadThemeManifestById(id);
+  const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
+  console.log(`[theme] Previewing theme "${id}"`);
+  applyTokens(tokensToApply);
+
+  // Set up auto-revert timer
+  const revertTimer = setTimeout(async () => {
+    console.log(`[theme] Auto-reverting from preview of "${id}"`);
+    const originalManifest = await loadThemeManifestById(originalTheme.theme);
+    const originalTokens = originalManifest?.tokens || BUILT_IN_THEME_TOKENS;
+    applyTokens(originalTokens);
+    if (onRevert) onRevert();
+  }, 10000); // 10 seconds preview
+
+  return {
+    revert: async () => {
+      clearTimeout(revertTimer);
+      console.log(`[theme] Manually reverting from preview of "${id}"`);
+      const originalManifest = await loadThemeManifestById(originalTheme.theme);
+      const originalTokens = originalManifest?.tokens || BUILT_IN_THEME_TOKENS;
+      applyTokens(originalTokens);
+      if (onRevert) onRevert();
+    },
+    apply: async () => {
+      clearTimeout(revertTimer);
+      console.log(`[theme] Applying previewed theme "${id}"`);
+      await setGlobalActiveTheme(id);
+    }
+  };
+}
+
+// Validate theme structure
+export function validateThemeFile(themeData) {
+  const errors = [];
+  const warnings = [];
+
+  try {
+    if (typeof themeData !== 'object' || !themeData) {
+      errors.push('Theme must be a valid JSON object');
+      return { valid: false, errors, warnings };
+    }
+
+    if (!themeData.name || typeof themeData.name !== 'string' || themeData.name.trim() === '') {
+      errors.push('Theme must have a non-empty name');
+    }
+
+    if (!themeData.tokens || typeof themeData.tokens !== 'object') {
+      errors.push('Theme must have a tokens object');
+      return { valid: false, errors, warnings };
+    }
+
+    // Check required tokens
+    const requiredTokens = ['--bg', '--text', '--panel', '--border', '--muted', '--accent', '--accent-fg'];
+    for (const token of requiredTokens) {
+      if (!themeData.tokens[token]) {
+        errors.push(`Missing required token: ${token}`);
+      }
+    }
+
+    // Check recommended tokens
+    const recommendedTokens = ['--task-todo', '--task-progress', '--task-urgent', '--task-question', '--task-completed', '--task-cancelled', '--task-delegated', '--danger', '--success', '--warning', '--info', '--editor-placeholder'];
+    for (const token of recommendedTokens) {
+      if (!themeData.tokens[token]) {
+        warnings.push(`Missing recommended token: ${token}`);
+      }
+    }
+
+    // Validate color values
+    for (const [token, value] of Object.entries(themeData.tokens)) {
+      if (!validateColorValue(value)) {
+        warnings.push(`Potentially invalid color value for ${token}: ${value}`);
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings
+    };
+
+  } catch (e) {
+    errors.push(`Failed to validate theme: ${e.message}`);
+    return { valid: false, errors, warnings };
+  }
+}
+
+function validateColorValue(value) {
+  if (typeof value !== 'string') return false;
+
+  // RGB space-separated (e.g., "255 128 0")
+  if (/^\d{1,3}\s+\d{1,3}\s+\d{1,3}$/.test(value)) {
+    const parts = value.split(/\s+/).map(Number);
+    return parts.every(p => p >= 0 && p <= 255);
+  }
+
+  // Hex colors
+  if (/^#?[0-9a-fA-F]{6}$/.test(value)) {
+    return true;
+  }
+
+  // CSS keywords and functions
+  const cssKeywords = ['inherit', 'transparent', 'currentColor'];
+  if (cssKeywords.includes(value)) {
+    return true;
+  }
+
+  if (/^(rgb|rgba|hsl|hsla)\(.+\)$/.test(value)) {
+    return true;
+  }
+
+  return false;
 }
 
 // Removed setGlobalVisuals - themes now handle everything

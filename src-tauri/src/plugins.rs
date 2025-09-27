@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use std::io::Read;
+// Removed unused imports for performance optimization
 use tauri_plugin_store::{StoreBuilder, JsonValue};
 use tauri::AppHandle;
 use zip::ZipArchive;
@@ -36,12 +37,14 @@ pub struct PluginInfo {
     pub size: u64, // Size in bytes
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PluginSettings {
     pub enabled_plugins: Vec<String>,
     pub plugin_permissions: HashMap<String, Vec<String>>,
     pub plugin_settings: HashMap<String, JsonValue>,
 }
+
+// Removed cache for simpler implementation
 
 #[derive(Serialize, Debug)]
 pub struct ValidationError {
@@ -582,14 +585,14 @@ impl Default for PluginSettings {
 
 fn get_plugin_settings(app: &AppHandle) -> Result<PluginSettings, String> {
     println!("📖 Loading plugin settings from store...");
-    
+
     let store = StoreBuilder::new(app, PathBuf::from(".settings.dat")).build()
         .map_err(|e| {
             let error = format!("Failed to create store: {}", e);
             println!("❌ Store creation error: {}", error);
             error
         })?;
-    
+
     println!("🔄 Reloading store...");
     store.reload()
         .map_err(|e| {
@@ -597,31 +600,23 @@ fn get_plugin_settings(app: &AppHandle) -> Result<PluginSettings, String> {
             println!("❌ Store reload error: {}", error);
             error
         })?;
-    
-    // Add small delay to ensure the reload completes
-    std::thread::sleep(std::time::Duration::from_millis(10));
-    
+
     println!("🔍 Looking for plugin_settings in store...");
     if let Some(settings_value) = store.get("plugin_settings") {
-        println!("✅ Found plugin_settings in store: {}", serde_json::to_string_pretty(&settings_value).unwrap_or_default());
-        
+        println!("✅ Found plugin_settings in store");
+
         let settings: PluginSettings = serde_json::from_value(settings_value.clone())
             .map_err(|e| {
                 let error = format!("Failed to parse plugin settings: {}", e);
                 println!("❌ Parse error: {}", error);
                 error
             })?;
-        
-        println!("📖 Successfully loaded plugin settings: enabled_plugins={:?}, permissions_count={}, settings_count={}", 
-                 settings.enabled_plugins, 
-                 settings.plugin_permissions.len(), 
-                 settings.plugin_settings.len());
+
+        println!("📖 Plugin settings loaded: enabled_plugins={:?}", settings.enabled_plugins);
         Ok(settings)
     } else {
         println!("📖 No existing plugin settings found in store, using defaults");
-        let default_settings = PluginSettings::default();
-        println!("📝 Default settings: {:?}", default_settings);
-        Ok(default_settings)
+        Ok(PluginSettings::default())
     }
 }
 
@@ -679,8 +674,7 @@ fn save_plugin_settings(app: &AppHandle, settings: &PluginSettings) -> Result<()
             error
         })?;
     
-    // Add a small delay to ensure the file system has time to write
-    std::thread::sleep(std::time::Duration::from_millis(50));
+    // Remove unnecessary delay for better performance
     
     // Force reload the store to verify the save was successful
     println!("🔄 Force reloading store to verify save...");
@@ -709,7 +703,7 @@ fn save_plugin_settings(app: &AppHandle, settings: &PluginSettings) -> Result<()
     }
     
     println!("✅ Plugin settings saved and verified successfully: enabled={:?}", settings.enabled_plugins);
-    
+
     Ok(())
 }
 

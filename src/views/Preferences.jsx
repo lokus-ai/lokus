@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { setGlobalActiveTheme, listAvailableThemes, readGlobalVisuals } from "../core/theme/manager.js";
+import { setGlobalActiveTheme, listAvailableThemes, readGlobalVisuals, previewTheme, validateThemeFile, invalidateThemeCache } from "../core/theme/manager.js";
 import { listActions, getActiveShortcuts, setShortcut, resetShortcuts } from "../core/shortcuts/registry.js";
 import { readConfig, updateConfig } from "../core/config/store.js";
 import { formatAccelerator } from "../core/shortcuts/registry.js";
@@ -15,6 +15,8 @@ export default function Preferences() {
   const [themes, setThemes] = useState([]);
   const [activeTheme, setActiveTheme] = useState("");
   const [section, setSection] = useState("Appearance");
+  const [previewController, setPreviewController] = useState(null);
+  const [importStatus, setImportStatus] = useState('');
   const { isAuthenticated, user, signIn, signOut, isLoading } = useAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
   // Removed mode/accent complexity - themes handle everything now
@@ -269,21 +271,134 @@ export default function Preferences() {
 
               <section>
                 <h2 className="text-sm uppercase tracking-wide text-app-muted mb-3">Theme</h2>
-                <select
-                  className="h-9 px-3 w-full rounded-md bg-app-panel border border-app-border outline-none"
-                  value={activeTheme}
-                  onChange={handleThemeChange}
-                >
-                  <option value="">Built-in</option>
-                  {themes.map((theme) => (
-                    <option key={theme.id} value={theme.id}>
-                      {theme.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-app-muted mt-2">
-                  Add more themes to <code>~/Library/Application Support/Lokus/themes/</code>
-                </p>
+                <div className="space-y-3">
+                  <select
+                    className="h-9 px-3 w-full rounded-md bg-app-panel border border-app-border outline-none"
+                    value={activeTheme}
+                    onChange={handleThemeChange}
+                  >
+                    <option value="">Built-in</option>
+                    {themes.map((theme) => (
+                      <option key={theme.id} value={theme.id}>
+                        {theme.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => {
+                        try {
+                          setImportStatus('Selecting file...');
+                          const { open } = await import('@tauri-apps/plugin-dialog');
+                          const selected = await open({
+                            multiple: false,
+                            filters: [{
+                              name: 'Theme Files',
+                              extensions: ['json']
+                            }]
+                          });
+
+                          if (selected) {
+                            setImportStatus('Reading theme file...');
+                            const { readTextFile } = await import('@tauri-apps/plugin-fs');
+                            const fileContent = await readTextFile(selected);
+
+                            setImportStatus('Validating theme...');
+                            const themeData = JSON.parse(fileContent);
+                            const validation = validateThemeFile(themeData);
+
+                            if (!validation.valid) {
+                              setImportStatus(`Validation failed: ${validation.errors.join(', ')}`);
+                              setTimeout(() => setImportStatus(''), 5000);
+                              return;
+                            }
+
+                            // Show validation warnings if any
+                            if (validation.warnings.length > 0) {
+                              console.warn('Theme validation warnings:', validation.warnings);
+                            }
+
+                            setImportStatus('Importing theme...');
+
+                            // Import the theme using backend
+                            const { invoke } = await import('@tauri-apps/api/core');
+                            const themeId = await invoke('import_theme_file', {
+                              filePath: selected,
+                              overwrite: false
+                            });
+
+                            setImportStatus(`Theme "${themeData.name}" imported successfully!`);
+                            console.log('Theme imported with ID:', themeId);
+
+                            // Invalidate cache and refresh the themes list
+                            invalidateThemeCache();
+                            const available = await listAvailableThemes();
+                            setThemes(available);
+
+                            setTimeout(() => setImportStatus(''), 3000);
+
+                          } else {
+                            setImportStatus('');
+                          }
+                        } catch (error) {
+                          console.error('Failed to import theme:', error);
+                          setImportStatus(`Import failed: ${error.message}`);
+                          setTimeout(() => setImportStatus(''), 5000);
+                        }
+                      }}
+                      className="px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg rounded-md hover:bg-app-accent/90 transition-colors"
+                    >
+                      Import Theme
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const sampleTheme = {
+                          name: "Sample Dark Theme",
+                          tokens: {
+                            "--bg": "18 18 18",
+                            "--text": "255 255 255",
+                            "--panel": "32 32 32",
+                            "--border": "64 64 64",
+                            "--muted": "128 128 128",
+                            "--accent": "0 122 255",
+                            "--accent-fg": "255 255 255"
+                          }
+                        };
+
+                        const blob = new Blob([JSON.stringify(sampleTheme, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'sample-theme.json';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="px-3 py-1.5 text-sm bg-app-panel text-app-text border border-app-border rounded-md hover:bg-app-bg transition-colors"
+                    >
+                      Download Sample
+                    </button>
+                  </div>
+
+                  {importStatus && (
+                    <div className={`text-xs p-2 rounded-md ${
+                      importStatus.includes('failed') || importStatus.includes('Validation failed')
+                        ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                        : importStatus.includes('successfully')
+                        ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                        : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                    }`}>
+                      {importStatus}
+                    </div>
+                  )}
+
+                  <p className="text-xs text-app-muted">
+                    Import custom theme files or download a sample to get started. Themes are stored securely in your user directory.
+                  </p>
+                </div>
               </section>
 
             </div>

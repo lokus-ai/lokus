@@ -115,3 +115,24 @@ pub fn open_preferences_window(app: AppHandle) -> Result<(), String> {
     .map_err(|e| e.to_string())?;
   Ok(())
 }
+
+#[tauri::command]
+pub fn open_launcher_window(app: AppHandle) -> Result<(), String> {
+  // Generate unique label with timestamp
+  let timestamp = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap()
+    .as_millis();
+  let label = format!("launcher-{}", timestamp);
+
+  // Pass forceWelcome parameter so the frontend shows welcome screen
+  let url = WebviewUrl::App("index.html?forceWelcome=true".into());
+  let _win = WebviewWindowBuilder::new(&app, &label, url)
+    .title("Lokus")
+    .inner_size(900.0, 700.0)
+    .min_inner_size(600.0, 500.0)
+    .center()
+    .build()
+    .map_err(|e| e.to_string())?;
+  Ok(())
+}

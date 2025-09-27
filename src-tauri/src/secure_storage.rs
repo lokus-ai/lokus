@@ -114,7 +114,8 @@ impl SecureStorage {
 
         // Encrypt
         let cipher = Aes256Gcm::new(key.into());
-        let ciphertext = cipher.encrypt(aes_gcm::Nonce::from_slice(&nonce_bytes), plaintext.as_ref())
+        let nonce = aes_gcm::Nonce::from_slice(&nonce_bytes);
+        let ciphertext = cipher.encrypt(nonce, plaintext.as_ref())
             .map_err(|e| SecureStorageError::Encryption(format!("Encryption failed: {}", e)))?;
 
         // Package encrypted data
@@ -141,7 +142,8 @@ impl SecureStorage {
 
         // Decrypt
         let cipher = Aes256Gcm::new(key.into());
-        let plaintext = cipher.decrypt(aes_gcm::Nonce::from_slice(&encrypted_data.nonce), encrypted_data.ciphertext.as_ref())
+        let nonce = aes_gcm::Nonce::from_slice(&encrypted_data.nonce);
+        let plaintext = cipher.decrypt(nonce, encrypted_data.ciphertext.as_ref())
             .map_err(|e| SecureStorageError::Encryption(format!("Decryption failed: {}", e)))?;
 
         // Deserialize decrypted data

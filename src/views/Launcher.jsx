@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { homeDir } from "@tauri-apps/api/path";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { readRecents, addRecent, removeRecent, shortenPath } from "../lib/recents.js";
 import { WorkspaceManager } from "../core/workspace/manager.js";
 import LokusLogo from "../components/LokusLogo.jsx";
@@ -47,8 +48,24 @@ export default function Launcher() {
   useEffect(() => {
     // The ThemeProvider now handles initial theme loading.
     setRecents(readRecents());
-    
-    // Test mode functionality removed - no initialization needed
+
+    // Listen for open workspace menu events
+    const isTauri = typeof window !== 'undefined' && (
+      (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function') ||
+      window.__TAURI_METADATA__ ||
+      (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.includes('Tauri'))
+    );
+
+    const unlistenPromise = isTauri
+      ? listen("lokus:open-workspace", () => {
+          console.log('🎯 Launcher received lokus:open-workspace event - already showing welcome screen!');
+          // Already showing the launcher/welcome screen, so just log
+        })
+      : Promise.resolve(() => {});
+
+    return () => {
+      unlistenPromise.then(unlisten => unlisten());
+    };
   }, []);
 
   const handleSelectWorkspace = async () => {
