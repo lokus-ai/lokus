@@ -23,6 +23,7 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
     }
   }, [isVisible])
 
+
   // Perform search
   const performSearch = useCallback(() => {
     if (!editor || !query.trim()) {

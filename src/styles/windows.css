@@ -106,8 +106,8 @@
 
 /* Windows-style tabs */
 .windows .obsidian-tab {
-  border-radius: var(--windows-border-radius-small) var(--windows-border-radius-small) 0 0;
-  transition: all 0.2s ease;
+  border-radius: 0;
+  transition: all 150ms ease;
 }
 
 .windows .obsidian-tab:hover {
@@ -115,8 +115,15 @@
 }
 
 .windows .obsidian-tab.active {
-  background: rgba(var(--accent-rgb), 0.1);
-  box-shadow: inset 0 -2px 0 rgb(var(--accent));
+  background: rgb(var(--panel));
+  border-top: 2px solid rgb(var(--accent));
+  border-left: 2px solid rgb(var(--border));
+  border-right: 2px solid rgb(var(--border));
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  font-weight: 500;
+  z-index: 10;
+  position: relative;
 }
 
 /* Windows-style sidebar */

@@ -7,10 +7,15 @@ class AuthManager {
     this.listeners = new Set();
     this.user = null;
     this.isAuthenticated = false;
-    this.authBaseUrl = process.env.NODE_ENV === 'development' 
-      ? 'http://localhost:3000' 
+    this.authBaseUrl = process.env.NODE_ENV === 'development'
+      ? 'http://localhost:3000'
       : 'https://lokus-web.vercel.app';
-    
+
+    // Throttling for auth checks to prevent excessive calls
+    this.checkInProgress = false;
+    this.lastCheckTime = 0;
+    this.CHECK_THROTTLE = 1000; // Minimum 1 second between checks
+
     this.initialize();
   }
 
@@ -49,12 +54,23 @@ class AuthManager {
   }
 
   async checkAuthStatus() {
+    const now = Date.now();
+
+    // Throttle auth checks to prevent excessive calls
+    if (this.checkInProgress || (now - this.lastCheckTime) < this.CHECK_THROTTLE) {
+      console.log('🔍 Auth check throttled, returning cached state');
+      return this.isAuthenticated;
+    }
+
+    this.checkInProgress = true;
+    this.lastCheckTime = now;
+
     try {
       console.log('🔍 Checking auth status...');
       const isAuth = await invoke('is_authenticated');
       console.log('🔍 Is authenticated:', isAuth);
       this.isAuthenticated = isAuth;
-      
+
       if (isAuth) {
         const userProfile = await invoke('get_user_profile');
         console.log('👤 User profile:', userProfile);
@@ -62,7 +78,7 @@ class AuthManager {
       } else {
         this.user = null;
       }
-      
+
       console.log('📢 Notifying listeners - Auth state:', { isAuthenticated: this.isAuthenticated, user: this.user });
       this.notifyListeners();
     } catch (error) {
@@ -70,6 +86,8 @@ class AuthManager {
       this.isAuthenticated = false;
       this.user = null;
       this.notifyListeners();
+    } finally {
+      this.checkInProgress = false;
     }
   }
 

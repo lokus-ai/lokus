@@ -14,6 +14,8 @@ const ContextMenuContent = React.forwardRef(({ className, align = "start", sideO
     ref={ref}
     align={align}
     sideOffset={sideOffset}
+    collisionPadding={10}
+    avoidCollisions={true}
     className={cn(
       "z-50 min-w-[180px] overflow-hidden rounded-md border border-app-border bg-app-panel p-1 text-app-text shadow-md",
       className
@@ -67,6 +69,8 @@ ContextMenuSubTrigger.displayName = ContextMenuPrimitive.SubTrigger.displayName
 const ContextMenuSubContent = React.forwardRef(({ className, ...props }, ref) => (
   <ContextMenuPrimitive.SubContent
     ref={ref}
+    collisionPadding={10}
+    avoidCollisions={true}
     className={cn(
       "z-50 min-w-[180px] overflow-hidden rounded-md border border-app-border bg-app-panel p-1 text-app-text shadow-md",
       className

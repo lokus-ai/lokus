@@ -13,6 +13,7 @@ const FILE_NEW_NOTE_ID: &str = "file-new-note";
 const FILE_NEW_FOLDER_ID: &str = "file-new-folder";
 const FILE_NEW_CANVAS_ID: &str = "file-new-canvas";
 const FILE_OPEN_ID: &str = "file-open";
+const FILE_OPEN_WORKSPACE_ID: &str = "file-open-workspace";
 const FILE_CLOSE_TAB_ID: &str = "file-close-tab";
 const FILE_CLOSE_WINDOW_ID: &str = "file-close-window";
 const FILE_SAVE_ID: &str = "file-save";
@@ -115,6 +116,9 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     .separator()
     .item(&MenuItemBuilder::with_id(FILE_OPEN_ID, "Open…")
       .accelerator("CmdOrCtrl+O")
+      .build(app)?)
+    .item(&MenuItemBuilder::with_id(FILE_OPEN_WORKSPACE_ID, "Open Workspace…")
+      .accelerator("CmdOrCtrl+Shift+O")
       .build(app)?)
     // TODO: Add "Open Recent" submenu
     .separator()
@@ -342,6 +346,9 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
       .item(&MenuItemBuilder::with_id(FILE_OPEN_ID, "Open…")
         .accelerator("CmdOrCtrl+O")
         .build(app)?)
+      .item(&MenuItemBuilder::with_id(FILE_OPEN_WORKSPACE_ID, "Open Workspace…")
+        .accelerator("CmdOrCtrl+Shift+O")
+        .build(app)?)
       .separator()
       .item(&MenuItemBuilder::with_id(FILE_CLOSE_TAB_ID, "Close Tab")
         .accelerator("CmdOrCtrl+W")
@@ -413,6 +420,9 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
       FILE_OPEN_ID => {
         let _ = app.emit("lokus:open-file", ());
       }
+      FILE_OPEN_WORKSPACE_ID => {
+        let _ = app.emit("lokus:open-workspace", ());
+      }
       FILE_CLOSE_TAB_ID => {
         let _ = app.emit("lokus:close-tab", ());
       }
@@ -463,7 +473,7 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         let _ = app.emit("lokus:toggle-fullscreen", ());
       }
       VIEW_ACTUAL_SIZE_ID => {
-        let _ = app.emit("lokus:zoom-reset", ());
+        let _ = app.emit("lokus:actual-size", ());
       }
       VIEW_ZOOM_IN_ID => {
         let _ = app.emit("lokus:zoom-in", ());
@@ -492,7 +502,7 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
       
       // Insert menu
       INSERT_WIKILINK_ID => {
-        let _ = app.emit("lokus:wikilink-modal", ());
+        let _ = app.emit("lokus:insert-wikilink", ());
       }
       INSERT_MATH_ID => {
         let _ = app.emit("lokus:insert-math", ());
@@ -507,7 +517,7 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         let _ = app.emit("lokus:insert-code-block", ());
       }
       INSERT_HORIZONTAL_RULE_ID => {
-        let _ = app.emit("lokus:insert-hr", ());
+        let _ = app.emit("lokus:insert-horizontal-rule", ());
       }
       INSERT_TASK_LIST_ID => {
         let _ = app.emit("lokus:insert-task-list", ());
@@ -547,10 +557,10 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
       
       // Window menu
       WINDOW_MINIMIZE_ID => {
-        let _ = app.emit("lokus:minimize-window", ());
+        let _ = app.emit("lokus:window-minimize", ());
       }
       WINDOW_ZOOM_ID => {
-        let _ = app.emit("lokus:zoom-window", ());
+        let _ = app.emit("lokus:window-zoom", ());
       }
       WINDOW_PREV_TAB_ID => {
         let _ = app.emit("lokus:prev-tab", ());
@@ -561,13 +571,13 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
       
       // Help menu
       HELP_HELP_ID => {
-        let _ = app.emit("lokus:show-help", ());
+        let _ = app.emit("lokus:help", ());
       }
       HELP_SHORTCUTS_ID => {
         let _ = app.emit("lokus:shortcut-help", ());
       }
       HELP_RELEASE_NOTES_ID => {
-        let _ = app.emit("lokus:show-release-notes", ());
+        let _ = app.emit("lokus:release-notes", ());
       }
       HELP_REPORT_ISSUE_ID => {
         let _ = app.emit("lokus:report-issue", ());
