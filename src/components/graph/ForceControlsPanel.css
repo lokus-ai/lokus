@@ -1,0 +1,200 @@
+/**
+ * ForceControlsPanel Styles
+ * Glassmorphism design with smooth animations
+ */
+
+.force-controls-panel {
+  position: relative;
+  background: rgba(var(--app-panel-rgb), 0.7);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(var(--app-border-rgb), 0.5);
+  border-radius: 12px;
+  padding: 16px;
+  min-width: 280px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.force-controls-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.force-controls-content {
+  overflow: hidden;
+}
+
+/* Force Parameter Styles */
+.force-param {
+  margin-bottom: 12px;
+}
+
+.force-param:last-child {
+  margin-bottom: 0;
+}
+
+/* Custom Slider Styles */
+.force-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: rgba(var(--app-border-rgb), 0.3);
+  border-radius: 3px;
+  outline: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.force-slider:hover {
+  background: rgba(var(--app-border-rgb), 0.4);
+}
+
+.force-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--app-accent);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.force-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.force-slider::-webkit-slider-thumb:active {
+  transform: scale(0.95);
+}
+
+.force-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--app-accent);
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.force-slider::-moz-range-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.force-slider::-moz-range-thumb:active {
+  transform: scale(0.95);
+}
+
+.force-slider::-moz-range-track {
+  height: 6px;
+  background: rgba(var(--app-border-rgb), 0.3);
+  border-radius: 3px;
+  border: none;
+}
+
+/* Preset Buttons */
+.force-controls-panel button {
+  transition: all 0.2s ease;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.force-controls-panel button:hover {
+  transform: translateY(-1px);
+}
+
+.force-controls-panel button:active {
+  transform: translateY(0);
+}
+
+/* Animation States */
+.force-controls-panel .force-param {
+  opacity: 0;
+  animation: slideInUp 0.3s ease forwards;
+}
+
+.force-controls-panel .force-param:nth-child(1) { animation-delay: 0ms; }
+.force-controls-panel .force-param:nth-child(2) { animation-delay: 50ms; }
+.force-controls-panel .force-param:nth-child(3) { animation-delay: 100ms; }
+.force-controls-panel .force-param:nth-child(4) { animation-delay: 150ms; }
+.force-controls-panel .force-param:nth-child(5) { animation-delay: 200ms; }
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .force-controls-panel {
+    min-width: 240px;
+    padding: 12px;
+  }
+
+  .force-controls-header {
+    margin-bottom: 10px;
+  }
+
+  .force-param {
+    margin-bottom: 10px;
+  }
+}
+
+/* Dark Mode Adjustments */
+@media (prefers-color-scheme: dark) {
+  .force-slider {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .force-slider:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  .force-controls-panel {
+    border-width: 2px;
+    backdrop-filter: none;
+    background: var(--app-panel);
+  }
+
+  .force-slider::-webkit-slider-thumb {
+    border: 2px solid var(--app-text);
+  }
+
+  .force-slider::-moz-range-thumb {
+    border: 2px solid var(--app-text);
+  }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .force-controls-panel,
+  .force-controls-panel *,
+  .force-slider::-webkit-slider-thumb,
+  .force-slider::-moz-range-thumb {
+    transition: none;
+    animation: none;
+  }
+
+  .force-controls-panel .force-param {
+    opacity: 1;
+    transform: none;
+  }
+}
