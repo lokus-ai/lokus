@@ -239,4 +239,10 @@ impl GmailStorage {
         // println!("[GMAIL] 🔑 Gmail profile loaded from file: {}", profile_path.display());
         Ok(Some(profile))
     }
+
+    pub fn clear_all() -> Result<(), GmailError> {
+        let _ = Self::delete_token();
+        let _ = Self::delete_profile();
+        Ok(())
+    }
 }
