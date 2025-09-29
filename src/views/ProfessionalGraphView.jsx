@@ -22,7 +22,7 @@ import { GraphUI } from '../components/graph/GraphUI.jsx';
 import '../components/graph/GraphUI.css';
 import { invoke } from "@tauri-apps/api/core";
 
-export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile }) => {
+export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile, fileTree = [] }) => {
   // Core state
   const [viewMode, setViewMode] = useState('2d'); // '2d', '3d', 'force'
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
@@ -89,7 +89,10 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         setGraphDataManager(dataManager);
         
         // Load real workspace data
-        if (workspacePath) {
+        if (workspacePath && fileTree.length > 0) {
+          await loadWorkspaceData(dataManager, workspacePath, fileTree);
+        } else if (workspacePath) {
+          // Fall back to scanning entire workspace if no fileTree provided
           await loadWorkspaceData(dataManager, workspacePath);
         } else {
           // Initialize with sample data for demonstration
@@ -149,10 +152,37 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         clearInterval(performanceTimerRef.current);
       }
     };
-  }, [isVisible, workspacePath]); // Reload when workspace changes
-  
+  }, [isVisible, workspacePath]); // Initialize once when component mounts
+
+  // Reload data when fileTree changes (separate effect)
+  useEffect(() => {
+    if (!isVisible || !graphDataManager || !workspacePath) return;
+
+    const reloadData = async () => {
+      try {
+        // console.log('🔄 ProfessionalGraph: Reloading data due to fileTree change');
+
+        if (fileTree.length > 0) {
+          await loadWorkspaceData(graphDataManager, workspacePath, fileTree);
+        } else {
+          await loadWorkspaceData(graphDataManager, workspacePath);
+        }
+
+        // Get updated graph data
+        const updatedData = graphDataManager.getGraphData();
+        setGraphData(updatedData);
+        updateStats(graphDataManager);
+
+      } catch (error) {
+        console.error('Failed to reload graph data:', error);
+      }
+    };
+
+    reloadData();
+  }, [fileTree, workspacePath, graphDataManager]); // Reload when fileTree changes
+
   // Load real workspace data
-  const loadWorkspaceData = async (dataManager, workspacePath) => {
+  const loadWorkspaceData = async (dataManager, workspacePath, providedFileTree = null) => {
     try {
       
       // Clear all existing data first to prevent stale cache
@@ -170,10 +200,19 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       dataManager.stats.linkCount = 0;
       dataManager.stats.wikiLinkCount = 0;
       
-      
-      // Read all files from the workspace
-      const files = await invoke("read_workspace_files", { workspacePath });
-      
+
+      let files;
+
+      // Use provided file tree if available, otherwise scan workspace
+      if (providedFileTree && providedFileTree.length > 0) {
+        files = providedFileTree;
+        // console.log(`🎯 ProfessionalGraph using filtered file tree with ${files.length} entries`);
+      } else {
+        // Fall back to scanning entire workspace
+        files = await invoke("read_workspace_files", { workspacePath });
+        // console.log(`📂 ProfessionalGraph scanning entire workspace with ${files.length} entries`);
+      }
+
       // Filter for markdown files
       const markdownFiles = [];
       const extractMarkdownFiles = (entries) => {
@@ -185,7 +224,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
           }
         }
       };
-      
+
       extractMarkdownFiles(files);
       
       // Process each markdown file
@@ -193,7 +232,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         try {
           // Read file content
           const content = await invoke("read_file_content", { path: file.path });
-          console.log(`🔎 ProfessionalGraph reading "${file.name}": ${content.length} chars, type: ${content.includes('<') ? 'HTML' : 'Markdown'}`);
+          // console.log(`🔎 ProfessionalGraph reading "${file.name}": ${content.length} chars, type: ${content.includes('<') ? 'HTML' : 'Markdown'}`);
           
           // Look for WikiLinks in both Markdown and HTML formats
           const markdownWikiLinks = content.match(/\[\[([^\]]+)\]\]/g) || [];
