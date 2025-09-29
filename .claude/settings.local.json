@@ -22,7 +22,10 @@
       "Bash(start:*)",
       "Bash(gh pr:*)",
       "Bash(git checkout:*)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "WebSearch",
+      "WebFetch(domain:cs.ucdavis.edu)",
+      "WebFetch(domain:www.ucdavis.edu)"
     ],
     "deny": []
   }

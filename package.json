@@ -80,6 +80,7 @@
     "graphology-layout-force": "^0.2.4",
     "graphology-layout-forceatlas2": "^0.10.1",
     "highlight.js": "^11.11.1",
+    "js-yaml": "^4.1.0",
     "katex": "^0.16.22",
     "lowlight": "^2.9.0",
     "lucide-react": "^0.542.0",
