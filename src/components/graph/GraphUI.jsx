@@ -12,14 +12,14 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Search, 
-  Filter, 
-  Play, 
-  Pause, 
-  RotateCcw, 
-  ZoomIn, 
-  ZoomOut, 
+import {
+  Search,
+  Filter,
+  Play,
+  Pause,
+  RotateCcw,
+  ZoomIn,
+  ZoomOut,
   Maximize2,
   Settings,
   Eye,
@@ -29,8 +29,11 @@ import {
   Download,
   Info,
   Target,
-  Hash
+  Hash,
+  Zap
 } from 'lucide-react';
+import ForceControlsPanel from './ForceControlsPanel.jsx';
+import './ForceControlsPanel.css';
 
 export const GraphUI = ({
   graphData,
@@ -42,6 +45,8 @@ export const GraphUI = ({
   onReset,
   onExport,
   onSettingsChange,
+  onForceChange,
+  onPresetSelect,
   stats = {},
   isLayoutRunning = false,
   viewMode = '2d',
@@ -135,6 +140,7 @@ export const GraphUI = ({
   // Panel configurations
   const panels = [
     { id: 'controls', icon: Settings, label: 'Controls' },
+    { id: 'forces', icon: Zap, label: 'Forces' },
     { id: 'search', icon: Search, label: 'Search' },
     { id: 'stats', icon: Info, label: 'Statistics' },
     { id: 'filters', icon: Filter, label: 'Filters' }
@@ -187,7 +193,16 @@ export const GraphUI = ({
                 onExport={onExport}
               />
             )}
-            
+
+            {activePanel === 'forces' && (
+              <ForceControlsPanel
+                onForceChange={onForceChange}
+                onPresetSelect={onPresetSelect}
+                isAnimationRunning={isLayoutRunning}
+                onAnimationToggle={() => onLayoutControl?.(isLayoutRunning ? 'stop' : 'start')}
+              />
+            )}
+
             {activePanel === 'search' && (
               <SearchPanel
                 searchQuery={searchQuery}
@@ -198,11 +213,11 @@ export const GraphUI = ({
                 searchInputRef={searchInputRef}
               />
             )}
-            
+
             {activePanel === 'stats' && (
               <StatsPanel stats={stats} />
             )}
-            
+
             {activePanel === 'filters' && (
               <FiltersPanel
                 filters={filters}

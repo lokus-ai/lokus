@@ -9,10 +9,10 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from './ui/command'
-import { 
-  FileText, 
-  FolderPlus, 
-  Settings, 
+import {
+  FileText,
+  FolderPlus,
+  Settings,
   Search,
   Save,
   Plus,
@@ -28,7 +28,9 @@ import {
   Star,
   ArrowRight,
   User,
-  File
+  File,
+  Target,
+  Globe
 } from 'lucide-react'
 import { getActiveShortcuts, formatAccelerator } from '../core/shortcuts/registry'
 import { useCommandHistory, createFileHistoryItem, createCommandHistoryItem } from '../hooks/useCommandHistory.js'
@@ -37,6 +39,8 @@ import { joinPath } from '../utils/pathUtils.js'
 import { gmailEmails, gmailAuth } from '../services/gmail.js'
 import { saveEmailAsNote } from '../utils/emailToNote.js'
 import { invoke } from '@tauri-apps/api/core'
+import { useFolderScope } from '../contexts/FolderScopeContext'
+import FolderSelector from './FolderSelector.jsx'
 
 export default function CommandPalette({ 
   open, 
@@ -60,9 +64,11 @@ export default function CommandPalette({
   const [recentFiles, setRecentFiles] = useState([])
   const [recentEmails, setRecentEmails] = useState([])
   const [isGmailAuthenticated, setIsGmailAuthenticated] = useState(false)
+  const [showFolderSelector, setShowFolderSelector] = useState(false)
   const { formattedHistory, addToHistory, removeFromHistory, clearHistory } = useCommandHistory()
   const { templates } = useTemplates()
   const { process: processTemplate } = useTemplateProcessor()
+  const { scopeMode, setLocalScope, setGlobalScope, getScopeStatus } = useFolderScope()
 
   useEffect(() => {
     getActiveShortcuts().then(setShortcuts)
@@ -173,18 +179,42 @@ export default function CommandPalette({
   const handleGmailSearch = React.useCallback(async (query) => {
     try {
       await ensureGmailAuth()
-      
+
       // Open Gmail with search query
       onOpenGmail()
-      
+
       // Store search query for Gmail component
       sessionStorage.setItem('gmailSearch', query)
-      
+
     } catch (error) {
       console.error('Failed to search emails:', error)
       alert(`Failed to search emails: ${error.message}`)
     }
   }, [isGmailAuthenticated, onOpenGmail])
+
+  // Folder scope handlers
+  const handleOpenFolderSelector = React.useCallback(() => {
+    setShowFolderSelector(true)
+    setOpen(false)
+  }, [setOpen])
+
+  const handleFolderSelectorConfirm = React.useCallback((selectedFolders) => {
+    if (selectedFolders.length === 0) {
+      setGlobalScope()
+    } else {
+      setLocalScope(selectedFolders)
+    }
+    setShowFolderSelector(false)
+  }, [setLocalScope, setGlobalScope])
+
+  const handleToggleScope = React.useCallback(() => {
+    if (scopeMode === 'global') {
+      // Can't toggle to local without selecting folders
+      handleOpenFolderSelector()
+    } else {
+      setGlobalScope()
+    }
+  }, [scopeMode, setGlobalScope, handleOpenFolderSelector])
 
 
   // Parse Gmail template from file content (supports flexible YAML, simple field, and Markdown formats)
@@ -1037,6 +1067,7 @@ Best regards,
   }
 
   return (
+    <>
     <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput 
         placeholder={
@@ -1380,6 +1411,26 @@ Best regards,
 
         <CommandSeparator />
 
+        {/* Folder Scope */}
+        <CommandGroup heading="Folder Scope">
+          <CommandItem onSelect={() => runCommandWithHistory(handleOpenFolderSelector, 'Switch to Local View')}>
+            <Target className="mr-2 h-4 w-4" />
+            <span>Switch to Local View</span>
+            <CommandShortcut>⌘⇧L</CommandShortcut>
+          </CommandItem>
+          {scopeMode === 'local' && (
+            <CommandItem onSelect={() => runCommandWithHistory(setGlobalScope, 'Switch to Global View')}>
+              <Globe className="mr-2 h-4 w-4" />
+              <span>Switch to Global View</span>
+              <div className="ml-auto text-xs text-app-muted">
+                {getScopeStatus().description}
+              </div>
+            </CommandItem>
+          )}
+        </CommandGroup>
+
+        <CommandSeparator />
+
         {/* Gmail Commands */}
         <CommandGroup heading="Gmail">
           {!isGmailAuthenticated ? (
@@ -1466,5 +1517,14 @@ Best regards,
         )}
       </CommandList>
     </CommandDialog>
+
+    {/* Folder Selector Modal */}
+    <FolderSelector
+      fileTree={fileTree}
+      isOpen={showFolderSelector}
+      onClose={() => setShowFolderSelector(false)}
+      onConfirm={handleFolderSelectorConfirm}
+    />
+  </>
   )
 }

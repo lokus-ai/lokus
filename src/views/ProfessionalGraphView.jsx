@@ -22,7 +22,7 @@ import { GraphUI } from '../components/graph/GraphUI.jsx';
 import '../components/graph/GraphUI.css';
 import { invoke } from "@tauri-apps/api/core";
 
-export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile }) => {
+export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile, fileTree = [] }) => {
   // Core state
   const [viewMode, setViewMode] = useState('2d'); // '2d', '3d', 'force'
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
@@ -37,6 +37,23 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   const [selectedNodes, setSelectedNodes] = useState([]);
   const [hoveredNode, setHoveredNode] = useState(null);
   const [zoomLevel, setZoomLevel] = useState(1);
+
+  // Force configuration state
+  const [forceConfig, setForceConfig] = useState({
+    charge: { strength: -400 },
+    link: { distance: 100, strength: 1 },
+    center: { strength: 0.3 },
+    collision: { radius: 8 },
+    alphaDecay: 0.02,
+    velocityDecay: 0.3
+  });
+
+  // Color and grouping configuration
+  const [colorScheme, setColorScheme] = useState('type'); // 'type', 'folder', 'tag', 'creation-date', 'modification-date', 'custom'
+  const [nodeGroups, setNodeGroups] = useState({});
+  const [showOrphans, setShowOrphans] = useState(true);
+  const [showTags, setShowTags] = useState(true);
+  const [showAttachments, setShowAttachments] = useState(true);
   
   // Stats and monitoring
   const [stats, setStats] = useState({
@@ -72,7 +89,10 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         setGraphDataManager(dataManager);
         
         // Load real workspace data
-        if (workspacePath) {
+        if (workspacePath && fileTree.length > 0) {
+          await loadWorkspaceData(dataManager, workspacePath, fileTree);
+        } else if (workspacePath) {
+          // Fall back to scanning entire workspace if no fileTree provided
           await loadWorkspaceData(dataManager, workspacePath);
         } else {
           // Initialize with sample data for demonstration
@@ -132,10 +152,37 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         clearInterval(performanceTimerRef.current);
       }
     };
-  }, [isVisible, workspacePath]); // Reload when workspace changes
-  
+  }, [isVisible, workspacePath]); // Initialize once when component mounts
+
+  // Reload data when fileTree changes (separate effect)
+  useEffect(() => {
+    if (!isVisible || !graphDataManager || !workspacePath) return;
+
+    const reloadData = async () => {
+      try {
+        // console.log('🔄 ProfessionalGraph: Reloading data due to fileTree change');
+
+        if (fileTree.length > 0) {
+          await loadWorkspaceData(graphDataManager, workspacePath, fileTree);
+        } else {
+          await loadWorkspaceData(graphDataManager, workspacePath);
+        }
+
+        // Get updated graph data
+        const updatedData = graphDataManager.getGraphData();
+        setGraphData(updatedData);
+        updateStats(graphDataManager);
+
+      } catch (error) {
+        console.error('Failed to reload graph data:', error);
+      }
+    };
+
+    reloadData();
+  }, [fileTree, workspacePath, graphDataManager]); // Reload when fileTree changes
+
   // Load real workspace data
-  const loadWorkspaceData = async (dataManager, workspacePath) => {
+  const loadWorkspaceData = async (dataManager, workspacePath, providedFileTree = null) => {
     try {
       
       // Clear all existing data first to prevent stale cache
@@ -153,10 +200,19 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       dataManager.stats.linkCount = 0;
       dataManager.stats.wikiLinkCount = 0;
       
-      
-      // Read all files from the workspace
-      const files = await invoke("read_workspace_files", { workspacePath });
-      
+
+      let files;
+
+      // Use provided file tree if available, otherwise scan workspace
+      if (providedFileTree && providedFileTree.length > 0) {
+        files = providedFileTree;
+        // console.log(`🎯 ProfessionalGraph using filtered file tree with ${files.length} entries`);
+      } else {
+        // Fall back to scanning entire workspace
+        files = await invoke("read_workspace_files", { workspacePath });
+        // console.log(`📂 ProfessionalGraph scanning entire workspace with ${files.length} entries`);
+      }
+
       // Filter for markdown files
       const markdownFiles = [];
       const extractMarkdownFiles = (entries) => {
@@ -168,7 +224,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
           }
         }
       };
-      
+
       extractMarkdownFiles(files);
       
       // Process each markdown file
@@ -176,7 +232,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         try {
           // Read file content
           const content = await invoke("read_file_content", { path: file.path });
-          console.log(`🔎 ProfessionalGraph reading "${file.name}": ${content.length} chars, type: ${content.includes('<') ? 'HTML' : 'Markdown'}`);
+          // console.log(`🔎 ProfessionalGraph reading "${file.name}": ${content.length} chars, type: ${content.includes('<') ? 'HTML' : 'Markdown'}`);
           
           // Look for WikiLinks in both Markdown and HTML formats
           const markdownWikiLinks = content.match(/\[\[([^\]]+)\]\]/g) || [];
@@ -464,30 +520,164 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   
   const updateStats = useCallback((dataManager) => {
     if (!dataManager) return;
-    
+
     const dataStats = dataManager.getStats();
     setStats(prevStats => ({
       ...prevStats,
       ...dataStats
     }));
   }, []);
+
+  // Force configuration handlers
+  const handleForceChange = useCallback((newForceConfig) => {
+    setForceConfig(newForceConfig);
+
+    // Apply force changes to the active graph
+    const currentRef = viewMode === '3d' ? forceGraph3DRef.current : forceGraph2DRef.current;
+    if (!currentRef) return;
+
+    // Update D3 forces dynamically
+    try {
+      if (newForceConfig.charge) {
+        currentRef.d3Force('charge')?.strength(newForceConfig.charge.strength);
+      }
+      if (newForceConfig.link) {
+        const linkForce = currentRef.d3Force('link');
+        if (linkForce) {
+          linkForce.distance(newForceConfig.link.distance);
+          linkForce.strength(newForceConfig.link.strength);
+        }
+      }
+      if (newForceConfig.center) {
+        currentRef.d3Force('center')?.strength(newForceConfig.center.strength);
+      }
+      if (newForceConfig.collision) {
+        currentRef.d3Force('collision')?.radius(newForceConfig.collision.radius);
+      }
+
+      // Update simulation parameters
+      const simulation = currentRef.d3Force('simulation');
+      if (simulation) {
+        if (newForceConfig.alphaDecay !== undefined) {
+          simulation.alphaDecay(newForceConfig.alphaDecay);
+        }
+        if (newForceConfig.velocityDecay !== undefined) {
+          simulation.velocityDecay(newForceConfig.velocityDecay);
+        }
+
+        // Restart simulation to apply changes
+        simulation.alpha(0.3).restart();
+      }
+    } catch (error) {
+      console.warn('Failed to update forces:', error);
+    }
+  }, [viewMode]);
+
+  const handlePresetSelect = useCallback((presetName, presetConfig) => {
+    console.log(`Applied preset: ${presetName}`, presetConfig);
+    // Additional preset-specific logic can be added here
+  }, []);
   
+  // Enhanced color schemes
+  const colorSchemes = {
+    type: {
+      document: '#10b981',    // Green
+      placeholder: '#6b7280',  // Gray
+      tag: '#ef4444',         // Red
+      folder: '#f59e0b',      // Amber
+      attachment: '#8b5cf6'   // Violet
+    },
+    folder: {
+      // Dynamic colors based on folder depth/path
+      default: '#6366f1',     // Indigo
+      depth1: '#10b981',      // Green
+      depth2: '#f59e0b',      // Amber
+      depth3: '#ef4444',      // Red
+      depth4: '#8b5cf6',      // Violet
+      depth5: '#06b6d4'       // Cyan
+    },
+    tag: {
+      // Colors based on common tag categories
+      research: '#10b981',    // Green
+      project: '#f59e0b',     // Amber
+      idea: '#8b5cf6',        // Violet
+      note: '#6366f1',        // Indigo
+      todo: '#ef4444',        // Red
+      archive: '#6b7280'      // Gray
+    },
+    date: {
+      // Colors based on creation/modification date
+      recent: '#10b981',      // Green (< 7 days)
+      week: '#f59e0b',        // Amber (< 30 days)
+      month: '#6366f1',       // Indigo (< 90 days)
+      old: '#6b7280'          // Gray (> 90 days)
+    },
+    custom: nodeGroups // User-defined color groups
+  };
+
   // Node styling functions
   const getNodeColor = useCallback((node) => {
     if (selectedNodes.includes(node.id)) {
       return '#ff6b6b'; // Highlight selected nodes
     }
-    
-    // Color by type
-    const typeColors = {
-      document: '#10b981',
-      placeholder: '#6b7280',
-      tag: '#ef4444',
-      folder: '#f59e0b'
-    };
-    
-    return node.color || typeColors[node.type] || '#6366f1';
-  }, [selectedNodes]);
+
+    const scheme = colorSchemes[colorScheme] || colorSchemes.type;
+
+    switch (colorScheme) {
+      case 'type':
+        return scheme[node.type] || scheme.document || '#6366f1';
+
+      case 'folder':
+        if (node.metadata?.path) {
+          const depth = node.metadata.path.split('/').length - 1;
+          return scheme[`depth${Math.min(depth, 5)}`] || scheme.default;
+        }
+        return scheme.default;
+
+      case 'tag':
+        if (node.metadata?.tags && node.metadata.tags.length > 0) {
+          const primaryTag = node.metadata.tags[0].toLowerCase();
+          for (const [category, color] of Object.entries(scheme)) {
+            if (primaryTag.includes(category)) {
+              return color;
+            }
+          }
+        }
+        return scheme.note;
+
+      case 'creation-date':
+      case 'modification-date':
+        if (node.metadata?.created || node.metadata?.modified) {
+          const date = new Date(node.metadata.created || node.metadata.modified);
+          const now = new Date();
+          const daysDiff = (now - date) / (1000 * 60 * 60 * 24);
+
+          if (daysDiff < 7) return scheme.recent;
+          if (daysDiff < 30) return scheme.week;
+          if (daysDiff < 90) return scheme.month;
+          return scheme.old;
+        }
+        return scheme.old;
+
+      case 'custom':
+        // Check if node belongs to any custom group
+        for (const [groupName, groupNodes] of Object.entries(scheme)) {
+          if (groupNodes.includes(node.id)) {
+            // Generate consistent color based on group name
+            const hash = groupName.split('').reduce((a, b) => {
+              a = ((a << 5) - a) + b.charCodeAt(0);
+              return a & a;
+            }, 0);
+            const hue = Math.abs(hash) % 360;
+            return `hsl(${hue}, 70%, 50%)`;
+          }
+        }
+        return '#6366f1';
+
+      default:
+        return colorSchemes.type[node.type] || '#6366f1';
+    }
+  }, [selectedNodes, colorScheme, nodeGroups]);
   
   const getNodeSize = useCallback((node) => {
     let baseSize = node.size || 8;
@@ -706,10 +896,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
                 linkDirectionalParticles={isLayoutRunning ? 4 : 0}
                 linkDirectionalParticleSpeed={0.005}
                 nodeCanvasObject={renderNode2D}
-                d3ForceConfig={{ 
-                  charge: { strength: -400 },
-                  link: { distance: 100, strength: 1 }
-                }}
+                d3ForceConfig={forceConfig}
               />
             </motion.div>
           )}
@@ -725,6 +912,8 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         onZoom={handleZoom}
         onReset={handleReset}
         onExport={handleExport}
+        onForceChange={handleForceChange}
+        onPresetSelect={handlePresetSelect}
         stats={stats}
         isLayoutRunning={isLayoutRunning}
         searchQuery={searchQuery}

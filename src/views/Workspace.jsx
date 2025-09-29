@@ -43,6 +43,7 @@ import { getFilename, getBasename } from '../utils/pathUtils.js';
 import platformService from "../services/platform/PlatformService.js";
 import Gmail from "./Gmail.jsx";
 import { gmailAuth, gmailEmails } from '../services/gmail.js';
+import { FolderScopeProvider, useFolderScope } from "../contexts/FolderScopeContext.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -513,13 +514,9 @@ function EditorDropZone({ children }) {
   );
 }
 
-// --- Main Workspace Component ---
-export default function Workspace({ initialPath = "" }) {
-  // Debug: Alert to check if path is passed
-  if (initialPath) {
-    invoke("validate_workspace_path", { path: initialPath });
-  }
-  const [path, setPath] = useState(initialPath);
+// --- Inner Workspace Component (with folder scope) ---
+function WorkspaceWithScope({ path }) {
+  const { filterFileTree } = useFolderScope();
   const { leftW, rightW, startLeftDrag, startRightDrag } = useDragColumns({});
   const [showLeft, setShowLeft] = useState(true);
   const [showRight, setShowRight] = useState(false);
@@ -2416,6 +2413,9 @@ export default function Workspace({ initialPath = "" }) {
     );
   }
 
+  // Filter file tree based on folder scope
+  const filteredFileTree = filterFileTree(fileTree);
+
   return (
     <PanelManager>
       <div className="h-screen bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select">
@@ -2625,8 +2625,8 @@ export default function Workspace({ initialPath = "" }) {
               <ContextMenu>
                 <ContextMenuTrigger asChild>
                   <div className="p-2 flex-1 overflow-y-auto">
-                    <FileTreeView 
-                      entries={fileTree}
+                    <FileTreeView
+                      entries={filteredFileTree}
                       onFileClick={handleFileOpen} 
                       activeFile={activeFile}
                       onRefresh={handleRefreshFiles}
@@ -2833,8 +2833,8 @@ export default function Workspace({ initialPath = "" }) {
                       </div>
                     ) : rightPaneFile.startsWith('__graph__') ? (
                       <div className="h-full">
-                        <ProfessionalGraphView 
-                          fileTree={fileTree}
+                        <ProfessionalGraphView
+                          fileTree={filteredFileTree}
                           activeFile={rightPaneFile}
                           onFileOpen={handleFileOpen}
                           workspacePath={path}
@@ -2934,8 +2934,9 @@ export default function Workspace({ initialPath = "" }) {
             </div>
           ) : activeFile === '__graph__' ? (
             <div className="flex-1 h-full overflow-hidden">
-              <ProfessionalGraphView 
+              <ProfessionalGraphView
                 isVisible={true}
+                fileTree={filteredFileTree}
                 workspacePath={path}
                 onOpenFile={handleFileOpen}
               />
@@ -3162,7 +3163,7 @@ export default function Workspace({ initialPath = "" }) {
       <CommandPalette
         open={showCommandPalette}
         setOpen={setShowCommandPalette}
-        fileTree={fileTree}
+        fileTree={filteredFileTree}
         openFiles={openTabs}
         onFileOpen={handleFileOpen}
         onCreateFile={handleCreateFile}
@@ -3397,5 +3398,47 @@ export default function Workspace({ initialPath = "" }) {
       />
     </div>
     </PanelManager>
+  );
+}
+
+// --- Main Workspace Component ---
+export default function Workspace({ initialPath = "" }) {
+  // Debug: Alert to check if path is passed
+  if (initialPath) {
+    invoke("validate_workspace_path", { path: initialPath });
+  }
+  const [path, setPath] = useState(initialPath);
+
+  // Add a simple fallback if path is not set
+  if (!path && !initialPath) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'column',
+        gap: '20px',
+        backgroundColor: 'var(--app-panel)',
+        color: 'var(--app-text)',
+        padding: '20px'
+      }}>
+        <h2>No Workspace Path</h2>
+        <div>initialPath: {String(initialPath)}</div>
+        <div>path: {String(path)}</div>
+        <div>URL: {window.location.href}</div>
+        <div>Search: {window.location.search}</div>
+        <div>Hash: {window.location.hash}</div>
+        <div style={{ marginTop: '20px', fontSize: '14px' }}>
+          This is the Workspace component but no path was provided
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <FolderScopeProvider workspacePath={path}>
+      <WorkspaceWithScope path={path} />
+    </FolderScopeProvider>
   );
 }
