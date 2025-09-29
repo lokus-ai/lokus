@@ -65,6 +65,7 @@ const RECOMMENDED_TOKENS: &[&str] = &[
     "--editor-placeholder"
 ];
 
+#[allow(dead_code)]
 pub fn get_themes_directory() -> Result<PathBuf, ThemeError> {
     let home_dir = dirs::home_dir()
         .ok_or_else(|| ThemeError::Validation("Could not find home directory".to_string()))?;

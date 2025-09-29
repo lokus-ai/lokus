@@ -30,7 +30,8 @@ import {
   User,
   File,
   Target,
-  Globe
+  Globe,
+  Database
 } from 'lucide-react'
 import { getActiveShortcuts, formatAccelerator } from '../core/shortcuts/registry'
 import { useCommandHistory, createFileHistoryItem, createCommandHistoryItem } from '../hooks/useCommandHistory.js'
@@ -40,6 +41,7 @@ import { gmailEmails, gmailAuth } from '../services/gmail.js'
 import { saveEmailAsNote } from '../utils/emailToNote.js'
 import { invoke } from '@tauri-apps/api/core'
 import { useFolderScope } from '../contexts/FolderScopeContext'
+import { useBases } from '../bases/BasesContext.jsx'
 import FolderSelector from './FolderSelector.jsx'
 
 export default function CommandPalette({ 
@@ -69,6 +71,7 @@ export default function CommandPalette({
   const { templates } = useTemplates()
   const { process: processTemplate } = useTemplateProcessor()
   const { scopeMode, setLocalScope, setGlobalScope, getScopeStatus } = useFolderScope()
+  const { createBase, bases, loadBase } = useBases()
 
   useEffect(() => {
     getActiveShortcuts().then(setShortcuts)
@@ -1429,6 +1432,39 @@ Best regards,
           )}
         </CommandGroup>
 
+        <CommandSeparator />
+
+        {/* Bases Commands */}
+        <CommandGroup heading="Bases">
+          <CommandItem onSelect={() => runCommandWithHistory(async () => {
+            try {
+              const result = await createBase('New Base', {
+                description: 'A new base for organizing notes'
+              });
+              if (result.success) {
+                console.log('Created base:', result.base.name);
+              }
+            } catch (error) {
+              console.error('Failed to create base:', error);
+            }
+          }, 'Create New Base')}>
+            <Database className="mr-2 h-4 w-4" />
+            <span>Create New Base</span>
+            <CommandShortcut>⌘⇧B</CommandShortcut>
+          </CommandItem>
+          {bases && bases.length > 0 && bases.map((base) => (
+            <CommandItem
+              key={base.path}
+              onSelect={() => runCommandWithHistory(() => {
+                loadBase(base.path);
+              }, `Open Base: ${base.name}`)}
+            >
+              <Database className="mr-2 h-4 w-4" />
+              <span>Open {base.name}</span>
+              <CommandShortcut className="text-xs">{base.description || 'Base'}</CommandShortcut>
+            </CommandItem>
+          ))}
+        </CommandGroup>
         <CommandSeparator />
 
         {/* Gmail Commands */}

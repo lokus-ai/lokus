@@ -15,6 +15,28 @@ let isTauri = false; try {
   );
 } catch {}
 
+// Debug mode for shortcuts - set to false to disable verbose logging
+const DEBUG_SHORTCUTS = false;
+
+// In development, disable global shortcuts to avoid conflicts
+const DISABLE_GLOBAL_SHORTCUTS_IN_DEV = true;
+
+// CRITICAL: System shortcuts that should NEVER be registered globally
+// These are essential macOS/Windows system functions
+const DANGEROUS_GLOBAL_SHORTCUTS = [
+  'CommandOrControl+C',  // Copy - system critical
+  'CommandOrControl+V',  // Paste - system critical
+  'CommandOrControl+A',  // Select All - system critical
+  'CommandOrControl+X',  // Cut - system critical
+  'CommandOrControl+Z',  // Undo - system critical
+  'CommandOrControl+Shift+Z', // Redo - system critical
+];
+
+// Action IDs that should not be registered as global shortcuts
+const NON_GLOBAL_ACTIONS = [
+  'copy', 'paste', 'cut', 'select-all', 'undo', 'redo'
+];
+
 // Action catalog: add here as you grow
 export const ACTIONS = [
   { id: "save-file",        name: "Save File",           event: "lokus:save-file",        default: "CommandOrControl+S" },
@@ -140,49 +162,68 @@ export async function resetShortcuts() {
 
 export async function registerGlobalShortcuts() {
   if (!isTauri) {
-    console.log('[Shortcuts] Skipping global shortcuts registration - not in Tauri environment');
+    if (DEBUG_SHORTCUTS) console.log('[Shortcuts] Skipping global shortcuts registration - not in Tauri environment');
     return; // no-op in browser
   }
-  
-  console.log('[Shortcuts] Starting global shortcuts registration...');
+
+  // Skip global shortcuts in development to avoid conflicts
+  if (DISABLE_GLOBAL_SHORTCUTS_IN_DEV && typeof window !== 'undefined' && window.location?.hostname === 'localhost') {
+    console.log('[Shortcuts] Skipping global shortcuts registration in development mode to avoid conflicts');
+    return;
+  }
+
+  if (DEBUG_SHORTCUTS) console.log('[Shortcuts] Starting global shortcuts registration...');
   await unregisterAll();
   const map = await getActiveShortcuts();
-  console.log('[Shortcuts] Active shortcuts map:', map);
-  
+  if (DEBUG_SHORTCUTS) console.log('[Shortcuts] Active shortcuts map:', map);
+
+  let registeredCount = 0;
+  let skippedCount = 0;
+
   for (const a of ACTIONS) {
     const accel = map[a.id];
     if (!accel) {
-      console.log(`[Shortcuts] Skipping ${a.id} - no accelerator defined`);
+      if (DEBUG_SHORTCUTS) console.log(`[Shortcuts] Skipping ${a.id} - no accelerator defined`);
+      skippedCount++;
       continue;
     }
-    
+
+    // CRITICAL SAFETY CHECK: Skip dangerous system shortcuts
+    if (DANGEROUS_GLOBAL_SHORTCUTS.includes(accel) || NON_GLOBAL_ACTIONS.includes(a.id)) {
+      console.warn(`[Shortcuts] SKIPPED DANGEROUS GLOBAL SHORTCUT: ${a.id} (${accel}) - this would break system functionality`);
+      skippedCount++;
+      continue;
+    }
+
     try {
-      console.log(`[Shortcuts] Registering ${a.id}: ${accel} -> ${a.event}`);
+      if (DEBUG_SHORTCUTS) console.log(`[Shortcuts] Registering ${a.id}: ${accel} -> ${a.event}`);
       await register(accel, async () => {
-        console.log(`[Shortcuts] Shortcut triggered: ${a.id} (${accel})`);
+        if (DEBUG_SHORTCUTS) console.log(`[Shortcuts] Shortcut triggered: ${a.id} (${accel})`);
         if (a.id === 'open-preferences') {
           try { await invoke('open_preferences_window'); } catch (e) { console.error('Failed to open preferences:', e); }
         } else {
           // Use Tauri events in Tauri environment, DOM events otherwise
           if (isTauri) {
-            try { 
-              console.log(`[Shortcuts] Emitting Tauri event: ${a.event}`);
-              await emit(a.event); 
+            try {
+              if (DEBUG_SHORTCUTS) console.log(`[Shortcuts] Emitting Tauri event: ${a.event}`);
+              await emit(a.event);
             } catch (e) { console.warn('Failed to emit Tauri event:', e); }
           } else {
-            try { 
-              console.log(`[Shortcuts] Dispatching DOM event: ${a.event}`);
-              window.dispatchEvent(new CustomEvent(a.event)); 
+            try {
+              if (DEBUG_SHORTCUTS) console.log(`[Shortcuts] Dispatching DOM event: ${a.event}`);
+              window.dispatchEvent(new CustomEvent(a.event));
             } catch (e) { console.warn('Failed to dispatch DOM event:', e); }
           }
         }
       });
-      console.log(`[Shortcuts] Successfully registered: ${a.id}`);
+      if (DEBUG_SHORTCUTS) console.log(`[Shortcuts] Successfully registered: ${a.id}`);
+      registeredCount++;
     } catch (e) {
       console.error(`[Shortcuts] Failed to register ${a.id} (${accel}):`, e);
+      skippedCount++;
     }
   }
-  console.log('[Shortcuts] Global shortcuts registration completed');
+  console.log(`[Shortcuts] Registration completed - ${registeredCount} registered, ${skippedCount} skipped (including ${NON_GLOBAL_ACTIONS.length} system shortcuts for safety)`);
 }
 
 export async function unregisterGlobalShortcuts() {
