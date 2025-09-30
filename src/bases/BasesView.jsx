@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useBases } from './BasesContext.jsx';
 import { useFolderScope } from '../contexts/FolderScopeContext.jsx';
 import BaseTableView from './ui/BaseTableView.jsx';
+import BaseListView from './ui/BaseListView.jsx';
+import BaseGridView from './ui/BaseGridView.jsx';
 import BaseSidebar from './ui/BaseSidebar.jsx';
 import PropertyEditor from './ui/PropertyEditor.jsx';
 import ColumnManager from './ui/ColumnManager.jsx';
 import FilterBuilder from './ui/FilterBuilder.jsx';
 import CustomSelect from './ui/CustomSelect.jsx';
-import { Settings, Filter, Columns, Download, RefreshCw, AlertCircle, Table, ArrowUpDown, ChevronDown, Folder, FolderOpen } from 'lucide-react';
+import { Settings, Filter, Columns, Download, RefreshCw, AlertCircle, Table, ArrowUpDown, ChevronDown, Folder, FolderOpen, Search, List, Grid, MoreVertical } from 'lucide-react';
 
 export default function BasesView({ isVisible, onFileOpen }) {
   const {
@@ -48,7 +50,12 @@ export default function BasesView({ isVisible, onFileOpen }) {
   const [currentColumns, setCurrentColumns] = useState([]);
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [showPropertiesDropdown, setShowPropertiesDropdown] = useState(false);
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [filterRules, setFilterRules] = useState([]);
   const [baseScopeMode, setBaseScopeMode] = useState('all'); // 'all' or 'current'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewType, setViewType] = useState('table'); // 'table', 'list', 'grid'
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   // Load data when view changes
   useEffect(() => {
@@ -111,6 +118,11 @@ export default function BasesView({ isVisible, onFileOpen }) {
     setRefreshKey(prev => prev + 1);
   };
 
+  // Handle filter rules update from BaseTableView
+  const handleFilterRulesChange = (rules) => {
+    setFilterRules(rules);
+  };
+
   // Handle adding columns
   const handleAddColumn = (property) => {
     setCurrentColumns(prev => [...prev, property]);
@@ -125,17 +137,38 @@ export default function BasesView({ isVisible, onFileOpen }) {
   const handleExport = () => {
     if (viewData.length === 0) return;
 
-    const headers = activeView.columns || ['title', 'created', 'modified'];
+    const headers = activeView.columns || ['name', 'created', 'modified'];
     const csvContent = [
       headers.join(','),
-      ...viewData.map(row =>
-        headers.map(col => {
-          const value = row[col] || '';
-          return typeof value === 'string' && value.includes(',')
-            ? `"${value.replace(/"/g, '""')}"`
-            : value;
-        }).join(',')
-      )
+      ...viewData.map(row => {
+        return headers.map(col => {
+          let value = row[col] || row.properties?.[col] || '';
+
+          // Handle special columns
+          if (col === 'name' && row.path) {
+            const parts = row.path.split('/');
+            value = parts[parts.length - 1].replace(/\.md$/, '');
+          }
+
+          // Handle arrays (like tags)
+          if (Array.isArray(value)) {
+            value = value.join('; ');
+          }
+
+          // Handle dates
+          if (col === 'created' || col === 'modified') {
+            if (typeof value === 'number') {
+              value = new Date(value * 1000).toISOString();
+            }
+          }
+
+          // Escape CSV values
+          const stringValue = String(value);
+          return stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')
+            ? `"${stringValue.replace(/"/g, '""')}"`
+            : stringValue;
+        }).join(',');
+      })
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -212,22 +245,17 @@ export default function BasesView({ isVisible, onFileOpen }) {
             </div>
           )}
 
-          {/* Folder scope toggle */}
-          <button
-            onClick={() => {
-              const newMode = baseScopeMode === 'all' ? 'current' : 'all';
-              setBaseScopeMode(newMode);
-              if (newMode === 'all') {
-                setGlobalScope();
-              }
-              handleRefresh();
-            }}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors"
-            title={baseScopeMode === 'all' ? 'Showing all folders' : 'Showing current folder only'}
-          >
-            {baseScopeMode === 'all' ? <FolderOpen className="w-3.5 h-3.5" /> : <Folder className="w-3.5 h-3.5" />}
-            {baseScopeMode === 'all' ? 'All Folders' : 'Current Folder'}
-          </button>
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-app-muted pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search..."
+              className="pl-8 pr-3 py-1.5 text-xs bg-app-bg border border-app-border rounded text-app-text placeholder-app-muted focus:outline-none focus:border-app-accent transition-colors w-48"
+            />
+          </div>
 
           <span className="text-xs text-app-muted border-l border-app-border pl-3 ml-1">
             {filteredCount} of {totalCount} items
@@ -235,75 +263,207 @@ export default function BasesView({ isVisible, onFileOpen }) {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Sort Button */}
-          <button
-            onClick={() => setShowSortDropdown(!showSortDropdown)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors"
-            title="Sort"
-          >
-            <ArrowUpDown className="w-3.5 h-3.5" />
-            Sort
-            <ChevronDown className={`w-3 h-3 transition-transform ${showSortDropdown ? 'rotate-180' : ''}`} />
-          </button>
+          {/* View Type Switcher - Always visible */}
+          <div className="flex items-center bg-app-surface border border-app-border rounded">
+            <button
+              onClick={() => setViewType('table')}
+              className={`p-1.5 transition-colors ${
+                viewType === 'table'
+                  ? 'bg-app-accent text-white'
+                  : 'text-app-muted hover:text-app-text hover:bg-app-accent/10'
+              }`}
+              title="Table view"
+            >
+              <Table className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewType('list')}
+              className={`p-1.5 transition-colors ${
+                viewType === 'list'
+                  ? 'bg-app-accent text-white'
+                  : 'text-app-muted hover:text-app-text hover:bg-app-accent/10'
+              }`}
+              title="List view"
+            >
+              <List className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewType('grid')}
+              className={`p-1.5 transition-colors ${
+                viewType === 'grid'
+                  ? 'bg-app-accent text-white'
+                  : 'text-app-muted hover:text-app-text hover:bg-app-accent/10'
+              }`}
+              title="Grid view"
+            >
+              <Grid className="w-4 h-4" />
+            </button>
+          </div>
 
-          {/* Properties Button */}
-          <button
-            onClick={() => setShowPropertiesDropdown(!showPropertiesDropdown)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors"
-            title="Properties"
-          >
-            <Settings className="w-3.5 h-3.5" />
-            Properties
-            <ChevronDown className={`w-3 h-3 transition-transform ${showPropertiesDropdown ? 'rotate-180' : ''}`} />
-          </button>
+          {/* Desktop buttons - hidden on small screens */}
+          <div className="hidden lg:flex items-center gap-2">
+            <div className="w-px h-4 bg-app-border" />
 
-          <div className="w-px h-4 bg-app-border mx-1" />
+            <button
+              onClick={() => setShowSortDropdown(!showSortDropdown)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors"
+              title="Sort"
+            >
+              <ArrowUpDown className="w-3.5 h-3.5" />
+              Sort
+              <ChevronDown className={`w-3 h-3 transition-transform ${showSortDropdown ? 'rotate-180' : ''}`} />
+            </button>
 
-          <button
-            onClick={() => setShowFilterBuilder(true)}
-            className="p-2 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors"
-            title="Filter"
-          >
-            <Filter className="w-4 h-4" />
-          </button>
+            <button
+              onClick={() => setShowPropertiesDropdown(!showPropertiesDropdown)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors"
+              title="Properties"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Properties
+              <ChevronDown className={`w-3 h-3 transition-transform ${showPropertiesDropdown ? 'rotate-180' : ''}`} />
+            </button>
 
-          <button
-            onClick={handleRefresh}
-            className="p-2 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors"
-            title="Refresh"
-            disabled={isLoading}
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
+            <div className="w-px h-4 bg-app-border mx-1" />
 
-          <button
-            onClick={handleExport}
-            className="p-2 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors"
-            title="Export CSV"
-            disabled={viewData.length === 0}
-          >
-            <Download className="w-4 h-4" />
-          </button>
+            <button
+              onClick={() => setShowFilterDropdown(prev => !prev)}
+              className="p-2 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors relative"
+              title={filterRules.length > 0 ? `${filterRules.length} filter${filterRules.length !== 1 ? 's' : ''} active` : "Filter"}
+            >
+              <Filter className="w-4 h-4" />
+              {filterRules.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-app-accent text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                  {filterRules.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={handleRefresh}
+              className="p-2 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors"
+              title="Refresh"
+              disabled={isLoading}
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+
+            <button
+              onClick={handleExport}
+              className="p-2 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors"
+              title="Export CSV"
+              disabled={viewData.length === 0}
+            >
+              <Download className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Mobile overflow menu - shown on small screens */}
+          <div className="lg:hidden relative">
+            <button
+              onClick={() => setShowMoreMenu(!showMoreMenu)}
+              className="p-2 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors"
+              title="More options"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            {showMoreMenu && (
+              <div className="absolute right-0 top-full mt-2 w-48 bg-app-bg border border-app-border rounded-lg shadow-2xl z-50">
+                <div className="py-1">
+                  <button
+                    onClick={() => { setShowSortDropdown(!showSortDropdown); setShowMoreMenu(false); }}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-app-text hover:bg-app-accent/10 transition-colors"
+                  >
+                    <ArrowUpDown className="w-4 h-4" />
+                    Sort
+                  </button>
+                  <button
+                    onClick={() => { setShowPropertiesDropdown(!showPropertiesDropdown); setShowMoreMenu(false); }}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-app-text hover:bg-app-accent/10 transition-colors"
+                  >
+                    <Settings className="w-4 h-4" />
+                    Properties
+                  </button>
+                  <button
+                    onClick={() => { setShowFilterDropdown(!showFilterDropdown); setShowMoreMenu(false); }}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-app-text hover:bg-app-accent/10 transition-colors"
+                  >
+                    <Filter className="w-4 h-4" />
+                    Filter {filterRules.length > 0 && `(${filterRules.length})`}
+                  </button>
+                  <div className="border-t border-app-border my-1" />
+                  <button
+                    onClick={() => { handleRefresh(); setShowMoreMenu(false); }}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-app-text hover:bg-app-accent/10 transition-colors"
+                    disabled={isLoading}
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </button>
+                  <button
+                    onClick={() => { handleExport(); setShowMoreMenu(false); }}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-app-text hover:bg-app-accent/10 transition-colors"
+                    disabled={viewData.length === 0}
+                  >
+                    <Download className="w-4 h-4" />
+                    Export CSV
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Main content - Full width table */}
+      {/* Main content - Conditional rendering based on view type */}
       <div className="flex-1 overflow-hidden">
-        <BaseTableView
-          data={viewData}
-          base={activeBase}
-          columns={currentColumns}
-          onPropertyEdit={handlePropertyEdit}
-          onAddColumn={handleAddColumn}
-          onColumnResize={handleColumnsChange}
-          isLoading={isLoading}
-          showSortDropdown={showSortDropdown}
-          setShowSortDropdown={setShowSortDropdown}
-          showPropertiesDropdown={showPropertiesDropdown}
-          setShowPropertiesDropdown={setShowPropertiesDropdown}
-          ignoreScope={baseScopeMode === 'all'}
-          onFileOpen={onFileOpen}
-        />
+        {/* Always render BaseTableView for dropdown functionality */}
+        <div style={{ display: viewType === 'table' ? 'flex' : 'none' }} className="flex-1 h-full">
+          <BaseTableView
+            data={viewData}
+            base={activeBase}
+            columns={currentColumns}
+            onPropertyEdit={handlePropertyEdit}
+            onAddColumn={handleAddColumn}
+            onColumnResize={handleColumnsChange}
+            isLoading={isLoading}
+            showSortDropdown={showSortDropdown}
+            setShowSortDropdown={setShowSortDropdown}
+            showPropertiesDropdown={showPropertiesDropdown}
+            setShowPropertiesDropdown={setShowPropertiesDropdown}
+            showFilterDropdown={showFilterDropdown}
+            setShowFilterDropdown={setShowFilterDropdown}
+            onFilterRulesChange={handleFilterRulesChange}
+            ignoreScope={baseScopeMode === 'all'}
+            onFileOpen={onFileOpen}
+            searchQuery={searchQuery}
+            folderScope={baseScopeMode}
+            onFolderScopeChange={(newScope) => {
+              setBaseScopeMode(newScope);
+              if (newScope === 'all') {
+                setGlobalScope();
+              }
+              handleRefresh();
+            }}
+          />
+        </div>
+
+        {viewType === 'list' && (
+          <BaseListView
+            data={viewData}
+            onFileOpen={onFileOpen}
+            searchQuery={searchQuery}
+          />
+        )}
+
+        {viewType === 'grid' && (
+          <BaseGridView
+            data={viewData}
+            onFileOpen={onFileOpen}
+            searchQuery={searchQuery}
+          />
+        )}
       </div>
 
       {/* Modals */}
