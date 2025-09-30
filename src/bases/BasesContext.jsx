@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { BaseManager } from './core/BaseManager.js';
 import { BasesDataManager } from './data/index.js';
+import { BaseConfigManager } from './core/BaseConfigManager.js';
 
 const BasesContext = createContext();
 
@@ -9,6 +10,7 @@ export function BasesProvider({ children, workspacePath }) {
 
   const [baseManager] = useState(() => new BaseManager());
   const [dataManager] = useState(() => new BasesDataManager());
+  const [configManager] = useState(() => workspacePath ? new BaseConfigManager(workspacePath) : null);
   const [bases, setBases] = useState([]);
   const [activeBase, setActiveBase] = useState(null);
   const [activeView, setActiveView] = useState(null);
@@ -26,6 +28,12 @@ export function BasesProvider({ children, workspacePath }) {
       setError(null);
 
       try {
+        // Initialize config manager
+        if (configManager) {
+          console.log('⚙️ BasesContext: Loading config manager...');
+          await configManager.load();
+        }
+
         // Initialize data manager with workspace
         console.log('🔧 BasesContext: Initializing data manager...');
         await dataManager.initialize(workspacePath);
@@ -315,6 +323,7 @@ export function BasesProvider({ children, workspacePath }) {
     isLoading,
     error,
     workspacePath,
+    configManager,
 
     // Base management
     createBase,

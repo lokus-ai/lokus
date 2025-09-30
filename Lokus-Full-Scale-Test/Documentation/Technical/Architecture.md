@@ -20,4 +20,6 @@ User Input → Editor → Parser → Graph → Database
 
 Connected: [[Projects/Desktop/Lokus App]], [[Research/Frontend/React Performance]]
 
-Architectural complexity: $maintainability = \frac{modularity}{coupling}$
+Architectural complexity: $maintainability = \frac{modularity}{coupling}$ 
+
+

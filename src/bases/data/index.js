@@ -11,6 +11,7 @@ export { PropertyScanner } from './PropertyScanner.js';
 // Import these individually to avoid any circular dependency issues
 import { FileMetadata as FileMetadataClass } from './FileMetadata.js';
 import { PropertyIndexer as PropertyIndexerClass } from './PropertyIndexer.js';
+import { FrontmatterParser } from './FrontmatterParser.js';
 export { PropertyIndex } from './PropertyIndexer.js';
 export const PropertyIndexer = PropertyIndexerClass;
 export const FileMetadata = FileMetadataClass;
@@ -29,6 +30,8 @@ export class BasesDataManager {
 
     this.propertyIndexer = null;
     this.fileMetadata = null;
+    this.frontmatterParser = null;
+    this.frontmatterCache = new Map(); // Cache for parsed frontmatter
     this.isInitialized = false;
     this.workspacePath = null;
   }
@@ -51,6 +54,7 @@ export class BasesDataManager {
       // Initialize components
       this.propertyIndexer = new PropertyIndexerClass();
       this.fileMetadata = new FileMetadataClass();
+      this.frontmatterParser = new FrontmatterParser();
 
       // Build initial indexes
       await this.propertyIndexer.initialize(workspacePath, {
@@ -250,15 +254,45 @@ export class BasesDataManager {
       const mdFiles = flatFiles.filter(file => file.name.endsWith('.md') || file.name.endsWith('.markdown'));
       console.log('📂 BasesDataManager: Markdown files found:', mdFiles.length);
 
-      const results = mdFiles
-        .map(file => {
+      // Parse frontmatter for each file
+      const results = await Promise.all(
+        mdFiles.map(async (file) => {
           const filename = file.name;
+          const filePath = file.path || `${this.workspacePath}/${filename}`;
           // Remove .md or .markdown extension to get title
           const title = filename.replace(/\.md$/, '').replace(/\.markdown$/, '');
 
+          // Parse frontmatter
+          let frontmatterProperties = {};
+          try {
+            // Check cache first
+            if (this.frontmatterCache.has(filePath)) {
+              const cached = this.frontmatterCache.get(filePath);
+              frontmatterProperties = cached.properties || {};
+            } else {
+              // Read file content using Tauri
+              const fileContent = await invoke('read_file_content', { path: filePath });
+
+              // Parse frontmatter
+              const parsed = this.frontmatterParser.parseFile(filePath, fileContent);
+              frontmatterProperties = parsed.properties || {};
+
+              // Cache the result
+              this.frontmatterCache.set(filePath, parsed);
+
+              // Limit cache size
+              if (this.frontmatterCache.size > this.options.maxCacheSize) {
+                const firstKey = this.frontmatterCache.keys().next().value;
+                this.frontmatterCache.delete(firstKey);
+              }
+            }
+          } catch (error) {
+            console.warn(`Failed to parse frontmatter for ${filePath}:`, error.message);
+          }
+
           return {
-            path: file.path || `${this.workspacePath}/${filename}`,
-            properties: {},
+            path: filePath,
+            properties: frontmatterProperties,
             name: filename,
             title: title,
             created: file.created ? new Date(file.created) : new Date(),
@@ -266,7 +300,8 @@ export class BasesDataManager {
             size: file.size || 0,
             isDirectory: file.is_directory || false
           };
-        });
+        })
+      );
 
       console.log('✅ BasesDataManager: Processed files:', results.length);
       console.log('📂 BasesDataManager: Sample file:', results[0]);
@@ -532,6 +567,15 @@ export class BasesDataManager {
     if (this.fileMetadata) {
       this.fileMetadata.dispose();
       this.fileMetadata = null;
+    }
+
+    if (this.frontmatterParser) {
+      this.frontmatterParser.clearCache();
+      this.frontmatterParser = null;
+    }
+
+    if (this.frontmatterCache) {
+      this.frontmatterCache.clear();
     }
 
     this.isInitialized = false;
