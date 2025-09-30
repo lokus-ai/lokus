@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database } from "lucide-react";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
 import Editor from "../editor";
@@ -44,6 +44,8 @@ import platformService from "../services/platform/PlatformService.js";
 import Gmail from "./Gmail.jsx";
 import { gmailAuth, gmailEmails } from '../services/gmail.js';
 import { FolderScopeProvider, useFolderScope } from "../contexts/FolderScopeContext.jsx";
+import { BasesProvider } from "../bases/BasesContext.jsx";
+import BasesView from "../bases/BasesView.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -550,6 +552,7 @@ function WorkspaceWithScope({ path }) {
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showKanban, setShowKanban] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
+  const [showBases, setShowBases] = useState(false);
   const [showMarketplace, setShowMarketplace] = useState(false);
   const [showGmail, setShowGmail] = useState(false);
   // Graph view now opens as a tab instead of sidebar panel
@@ -1754,7 +1757,7 @@ function WorkspaceWithScope({ path }) {
   const handleOpenGraphView = useCallback(() => {
     const graphPath = '__graph__';
     const graphName = 'Graph View';
-    
+
     setOpenTabs(prevTabs => {
       const newTabs = prevTabs.filter(t => t.path !== graphPath);
       newTabs.unshift({ path: graphPath, name: graphName });
@@ -1764,6 +1767,21 @@ function WorkspaceWithScope({ path }) {
       return newTabs;
     });
     setActiveFile(graphPath);
+  }, []);
+
+  const handleOpenBasesTab = useCallback(() => {
+    const basesPath = '__bases__';
+    const basesName = 'Bases';
+
+    setOpenTabs(prevTabs => {
+      const newTabs = prevTabs.filter(t => t.path !== basesPath);
+      newTabs.unshift({ path: basesPath, name: basesName });
+      if (newTabs.length > MAX_OPEN_TABS) {
+        newTabs.pop();
+      }
+      return newTabs;
+    });
+    setActiveFile(basesPath);
   }, []);
 
   const handleOpenGmail = useCallback(() => {
@@ -1852,10 +1870,11 @@ function WorkspaceWithScope({ path }) {
           
           // Load the content for the right pane asynchronously
           setTimeout(async () => {
-            const isSpecialView = nextTab.path === '__kanban__' || 
+            const isSpecialView = nextTab.path === '__kanban__' ||
                                 nextTab.path === '__gmail__' ||
-                                nextTab.path.startsWith('__graph__') || 
-                                nextTab.path.startsWith('__plugin_') || 
+                                nextTab.path === '__bases__' ||
+                                nextTab.path.startsWith('__graph__') ||
+                                nextTab.path.startsWith('__plugin_') ||
                                 nextTab.path.endsWith('.canvas');
             
             if (!isSpecialView && (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt'))) {
@@ -2448,8 +2467,9 @@ function WorkspaceWithScope({ path }) {
           <div className="w-full border-t border-app-border/50 pt-2">
             <button
               onClick={() => { 
-                setShowKanban(false); 
+                setShowKanban(false);
                 setShowPlugins(false);
+                setShowBases(false);
                 setShowGraphView(false);
                 setShowLeft(true);
               }}
@@ -2461,16 +2481,17 @@ function WorkspaceWithScope({ path }) {
               }}
               onMouseLeave={(e) => {
                 const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = (!showKanban && !showPlugins && !showGraphView && showLeft) ? 'rgb(var(--accent))' : '';
+                if (icon) icon.style.color = (!showKanban && !showPlugins && !showBases && !showGraphView && showLeft) ? 'rgb(var(--accent))' : '';
               }}
             >
-              <FolderOpen className="w-5 h-5" style={!showKanban && !showPlugins && !showGraphView && showLeft ? { color: 'rgb(var(--accent))' } : {}} />
+              <FolderOpen className="w-5 h-5" style={!showKanban && !showPlugins && !showBases && !showGraphView && showLeft ? { color: 'rgb(var(--accent))' } : {}} />
             </button>
             
             <button
-              onClick={() => { 
-                setShowKanban(true); 
+              onClick={() => {
+                setShowKanban(true);
                 setShowPlugins(false);
+                setShowBases(false);
                 setShowGraphView(false);
                 setShowLeft(true);
               }}
@@ -2482,16 +2503,17 @@ function WorkspaceWithScope({ path }) {
               }}
               onMouseLeave={(e) => {
                 const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = (showKanban && !showPlugins && !showGraphView) ? 'rgb(var(--accent))' : '';
+                if (icon) icon.style.color = (showKanban && !showPlugins && !showBases && !showGraphView) ? 'rgb(var(--accent))' : '';
               }}
             >
-              <LayoutGrid className="w-5 h-5" style={showKanban && !showPlugins && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
+              <LayoutGrid className="w-5 h-5" style={showKanban && !showPlugins && !showBases && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
             </button>
             
             <button
-              onClick={() => { 
-                setShowPlugins(true); 
+              onClick={() => {
+                setShowPlugins(true);
                 setShowKanban(false);
+                setShowBases(false);
                 setShowGraphView(false);
                 setShowLeft(true);
               }}
@@ -2503,12 +2525,30 @@ function WorkspaceWithScope({ path }) {
               }}
               onMouseLeave={(e) => {
                 const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = (showPlugins && !showKanban && !showGraphView) ? 'rgb(var(--accent))' : '';
+                if (icon) icon.style.color = (showPlugins && !showKanban && !showBases && !showGraphView) ? 'rgb(var(--accent))' : '';
               }}
             >
-              <Puzzle className="w-5 h-5" style={showPlugins && !showKanban && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
+              <Puzzle className="w-5 h-5" style={showPlugins && !showKanban && !showBases && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
             </button>
-            
+
+            <button
+              onClick={() => {
+                handleOpenBasesTab();
+              }}
+              title="Bases"
+              className="obsidian-button icon-only w-full mb-1"
+              onMouseEnter={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = 'rgb(var(--accent))';
+              }}
+              onMouseLeave={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = (showBases && !showKanban && !showPlugins && !showGraphView) ? 'rgb(var(--accent))' : '';
+              }}
+            >
+              <Database className="w-5 h-5" style={showBases && !showKanban && !showPlugins && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
+            </button>
+
             <button
               onClick={() => { 
                 setShowMarketplace(true); 
@@ -2572,15 +2612,15 @@ function WorkspaceWithScope({ path }) {
               <div className="h-12 shrink-0 px-4 flex items-center justify-between gap-2 border-b border-app-border">
                 <div className="flex items-center gap-3">
                   <h2 className="text-sm font-medium text-app-text">
-                    {showPlugins ? 'Extensions' : showGraphView ? 'Graph View' : 'Explorer'}
+                    {showPlugins ? 'Extensions' : showBases ? 'Bases' : showGraphView ? 'Graph View' : 'Explorer'}
                   </h2>
-                  {!showPlugins && !showGraphView && (
+                  {!showPlugins && !showBases && !showGraphView && (
                     <button onClick={closeAllFolders} title="Close all folders" className="obsidian-button small icon-only">
                       <FolderMinus className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
-                {!showPlugins && !showGraphView && (
+                {!showPlugins && !showBases && !showGraphView && (
                   <div className="flex items-center gap-1">
                     <button onClick={handleCreateFile} title="New File" className="obsidian-button small icon-only">
                       <FilePlus className="w-4 h-4" />
@@ -2598,6 +2638,10 @@ function WorkspaceWithScope({ path }) {
             {showPlugins ? (
               <div className="flex-1 overflow-hidden">
                 <PluginSettings onOpenPluginDetail={handleOpenPluginDetail} />
+              </div>
+            ) : showBases ? (
+              <div className="flex-1 overflow-hidden">
+                <BasesView isVisible={true} onFileOpen={handleFileOpen} />
               </div>
             ) : showKanban ? (
               <div className="flex-1 overflow-hidden">
@@ -2755,7 +2799,7 @@ function WorkspaceWithScope({ path }) {
                       setRightPaneTitle(tab?.name || '');
                       
                       // Only load file content for actual files, not special views
-                      const isSpecialView = path === '__kanban__' || path === '__gmail__' || path.startsWith('__graph__') || path.startsWith('__plugin_') || path.endsWith('.canvas');
+                      const isSpecialView = path === '__kanban__' || path === '__gmail__' || path === '__bases__' || path.startsWith('__graph__') || path.startsWith('__plugin_') || path.endsWith('.canvas');
                       
                       if (!isSpecialView && (path.endsWith('.md') || path.endsWith('.txt'))) {
                         invoke("read_file_content", { path })
@@ -2843,6 +2887,10 @@ function WorkspaceWithScope({ path }) {
                     ) : rightPaneFile === '__gmail__' ? (
                       <div className="h-full">
                         <Gmail workspacePath={path} />
+                      </div>
+                    ) : rightPaneFile === '__bases__' ? (
+                      <div className="h-full">
+                        <BasesView isVisible={true} onFileOpen={handleFileOpen} />
                       </div>
                     ) : rightPaneFile.startsWith('__plugin_') ? (
                       <div className="flex-1 overflow-hidden">
@@ -2944,6 +2992,10 @@ function WorkspaceWithScope({ path }) {
           ) : activeFile === '__gmail__' ? (
             <div className="flex-1 h-full overflow-hidden">
               <Gmail workspacePath={path} />
+            </div>
+          ) : activeFile === '__bases__' ? (
+            <div className="flex-1 h-full overflow-hidden">
+              <BasesView isVisible={true} onFileOpen={handleFileOpen} />
             </div>
           ) : (
             <div className="flex-1 p-8 md:p-12 overflow-y-auto">
@@ -3437,8 +3489,10 @@ export default function Workspace({ initialPath = "" }) {
   }
 
   return (
-    <FolderScopeProvider workspacePath={path}>
-      <WorkspaceWithScope path={path} />
-    </FolderScopeProvider>
+    <BasesProvider workspacePath={path}>
+      <FolderScopeProvider workspacePath={path}>
+        <WorkspaceWithScope path={path} />
+      </FolderScopeProvider>
+    </BasesProvider>
   );
 }

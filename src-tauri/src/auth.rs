@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
-use keyring::Entry;
+// use keyring::Entry;
 use tauri::{State, AppHandle, Emitter};
 use uuid::Uuid;
 use base64::{Engine as _, engine::general_purpose};
@@ -14,7 +14,7 @@ use hyper_util::rt::TokioIo;
 use hyper_util::server::conn::auto::Builder;
 use url::Url;
 use serde_json;
-use crate::secure_storage::{SecureStorage, SessionInfo};
+use crate::secure_storage::SecureStorage;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthToken {
@@ -63,15 +63,15 @@ pub type SharedAuthState = Arc<Mutex<AuthState>>;
 
 const TOKEN_KEY: &str = "lokus_auth_token";
 const PROFILE_KEY: &str = "lokus_user_profile";
-const SERVICE_NAME: &str = "com.pratham.lokus";
+// const SERVICE_NAME: &str = "com.pratham.lokus";
 
 pub struct AuthService;
 
 impl AuthService {
-    fn get_keyring_entry(key: &str) -> Result<Entry, String> {
-        Entry::new(SERVICE_NAME, key)
-            .map_err(|e| format!("Failed to create keyring entry: {}", e))
-    }
+    // fn get_keyring_entry(key: &str) -> Result<Entry, String> {
+    //     Entry::new(SERVICE_NAME, key)
+    //         .map_err(|e| format!("Failed to create keyring entry: {}", e))
+    // }
 
     fn generate_pkce_pair() -> (String, String) {
         // Generate code verifier (43-128 chars, URL-safe)

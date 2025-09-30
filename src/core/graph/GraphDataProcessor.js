@@ -219,7 +219,7 @@ export class GraphDataProcessor {
       return true;
     });
     
-    console.log(`🚀 Starting graph processing: ${filesToProcess.length} files to process`);
+    // console.log(`🚀 Starting graph processing: ${filesToProcess.length} files to process`);
     
     // Process in batches
     for (let i = 0; i < filesToProcess.length; i += this.batchSize) {
@@ -267,16 +267,16 @@ export class GraphDataProcessor {
       let content;
       try {
         content = await invoke('read_file_content', { path: file.path });
-        console.log(`📖 Read file "${file.name}": ${content.length} chars, preview: "${content.substring(0, 100)}..."`);
+    // console.log(`📖 Read file "${file.name}": ${content.length} chars, preview: "${content.substring(0, 100)}..."`);
       } catch (error) {
-        console.log(`❌ Failed to read file "${file.name}": ${error}`);
+    // console.log(`❌ Failed to read file "${file.name}": ${error}`);
         this.processingStats.errors++;
         return;
       }
       
       // Skip very large files
       if (content.length > this.maxFileSize) {
-        console.log(`📏 Skipping large file "${file.name}": ${content.length} > ${this.maxFileSize}`);
+    // console.log(`📏 Skipping large file "${file.name}": ${content.length} > ${this.maxFileSize}`);
         return;
       }
       
@@ -284,9 +284,9 @@ export class GraphDataProcessor {
       const links = this.extractWikiLinks(content);
       
       if (links.length > 0) {
-        console.log(`📝 Found ${links.length} WikiLinks in "${file.name}": [${links.map(l => l.target).join(', ')}]`);
+    // console.log(`📝 Found ${links.length} WikiLinks in "${file.name}": [${links.map(l => l.target).join(', ')}]`);
       } else {
-        console.log(`🔍 No WikiLinks found in "${file.name}" (content type: ${content.includes('<') ? 'HTML' : 'Markdown'})`);
+    // console.log(`🔍 No WikiLinks found in "${file.name}" (content type: ${content.includes('<') ? 'HTML' : 'Markdown'})`);
       }
       
       // Create edges for each link
@@ -389,7 +389,7 @@ export class GraphDataProcessor {
     const nodeId = createNodeId(file.path); // Use centralized node ID generation
     const fileType = file.isDirectory ? 'folder' : file.extension;
     
-    console.log(`📄 Created node: "${file.name}" → ID: "${nodeId}"`);
+    // console.log(`📄 Created node: "${file.name}" → ID: "${nodeId}"`);
     
     const nodeData = {
       title: file.name,
@@ -422,9 +422,9 @@ export class GraphDataProcessor {
       this.createPhantomNode(link.target);
       // Still create connection to phantom node
       targetPath = createPhantomNodeId(link.target);
-      console.log(`👻 WikiLink "${link.target}" unresolved → phantom node: "${targetPath}"`);
+    // console.log(`👻 WikiLink "${link.target}" unresolved → phantom node: "${targetPath}"`);
     } else {
-      console.log(`✅ WikiLink "${link.target}" resolved → file: "${targetPath}"`);
+    // console.log(`✅ WikiLink "${link.target}" resolved → file: "${targetPath}"`);
     }
     
     const sourceId = createNodeId(sourceFile.path);
@@ -432,11 +432,11 @@ export class GraphDataProcessor {
     
     // Skip self-references
     if (sourceId === targetId) {
-      console.log(`⚠️  Skipping self-reference: "${sourceFile.name}" → "${link.target}"`);
+    // console.log(`⚠️  Skipping self-reference: "${sourceFile.name}" → "${link.target}"`);
       return;
     }
     
-    console.log(`🔗 Connected: "${sourceFile.name}" (${sourceId}) → "${link.target}" (${targetId})`);
+    // console.log(`🔗 Connected: "${sourceFile.name}" (${sourceId}) → "${link.target}" (${targetId})`);
     
     const connectionMetadata = {
       type: link.type,
