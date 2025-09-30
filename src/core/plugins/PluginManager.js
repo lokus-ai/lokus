@@ -306,7 +306,7 @@ class PluginManager {
 }
 
 // Create singleton instance
-console.log('🔧 Creating PluginManager singleton');
+// console.log('🔧 Creating PluginManager singleton');
 const pluginManager = new PluginManager();
 console.log('🔧 PluginManager singleton created');
 

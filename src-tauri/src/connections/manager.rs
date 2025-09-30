@@ -40,7 +40,7 @@ impl ConnectionManager {
     }
 
     pub fn new_fallback() -> Result<Self, GmailError> {
-        println!("[GMAIL] 🔧 Creating fallback Connection Manager");
+        // println!("[GMAIL] 🔧 Creating fallback Connection Manager");
         
         // Initialize minimal components for graceful error handling
         let gmail_queue = Arc::new(OfflineQueue::new()?);

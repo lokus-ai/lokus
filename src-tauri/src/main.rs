@@ -160,6 +160,12 @@ fn load_session_state(app: tauri::AppHandle, workspace_path: String) -> Option<S
 }
 
 fn main() {
+  // Load environment variables from .env file
+  if let Err(e) = dotenvy::from_filename("../.env") {
+    println!("Warning: Failed to load .env file: {}", e);
+    println!("This is expected in production builds or if .env file doesn't exist");
+  }
+
   tauri::Builder::default()
     .plugin(tauri_plugin_store::Builder::new().build())
     .plugin(tauri_plugin_dialog::init())

@@ -270,7 +270,7 @@ export class GraphDatabase extends EventEmitter {
    */
   addConnection(sourceFile, targetFile, metadata = {}) {
     const startTime = performance.now();
-    console.log('🔗 GraphDatabase.addConnection called:', { sourceFile, targetFile, metadata });
+    // console.log('🔗 GraphDatabase.addConnection called:', { sourceFile, targetFile, metadata });
     
     try {
       this._validateNodeId(sourceFile);
@@ -329,11 +329,11 @@ export class GraphDatabase extends EventEmitter {
         isNew
       });
       
-      console.log('✅ GraphDatabase connection created successfully:', { 
-        edgeId, 
-        isNew, 
-        totalEdges: this.edgeCount 
-      });
+    // console.log('✅ GraphDatabase connection created successfully:', {
+      //  edgeId,
+      //  isNew,
+      //  totalEdges: this.edgeCount
+      // });
       
       return isNew;
       

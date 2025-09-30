@@ -7,6 +7,9 @@ pub struct FileEntry {
     name: String,
     path: String,
     is_directory: bool,
+    size: u64,
+    created: Option<i64>,
+    modified: Option<i64>,
     children: Option<Vec<FileEntry>>,
 }
 
@@ -48,10 +51,27 @@ fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result<Vec<F
             None
         };
 
+        // Get file metadata
+        let metadata = fs::metadata(&path).ok();
+        let size = metadata.as_ref().and_then(|m| if !is_directory { Some(m.len()) } else { None }).unwrap_or(0);
+        let created = metadata.as_ref().and_then(|m|
+            m.created().ok().and_then(|t|
+                t.duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs() as i64)
+            )
+        );
+        let modified = metadata.as_ref().and_then(|m|
+            m.modified().ok().and_then(|t|
+                t.duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs() as i64)
+            )
+        );
+
         entries.push(FileEntry {
             name,
             path: path.to_string_lossy().to_string(),
             is_directory,
+            size,
+            created,
+            modified,
             children,
         });
     }

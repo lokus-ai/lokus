@@ -157,6 +157,7 @@ pub async fn gmail_get_email(
 
 // Email composition commands
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn gmail_send_email(
     to: Vec<EmailAddress>,
     subject: String,
@@ -191,6 +192,7 @@ pub async fn gmail_send_email(
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn gmail_reply_email(
     message_id: String,
     to: Vec<EmailAddress>,
@@ -219,6 +221,7 @@ pub async fn gmail_reply_email(
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn gmail_forward_email(
     message_id: String,
     to: Vec<EmailAddress>,
