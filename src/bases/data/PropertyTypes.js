@@ -194,7 +194,6 @@ export class PropertyTypes {
           return value;
       }
     } catch (error) {
-      console.warn(`Failed to convert value to ${targetType}:`, error);
       return this.getDefaultValue(targetType);
     }
   }

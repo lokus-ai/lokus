@@ -44,7 +44,6 @@ export class BasesDataManager {
    */
   async initialize(workspacePath, options = {}) {
     if (this.isInitialized) {
-      console.warn('BasesDataManager is already initialized');
       return;
     }
 
@@ -65,7 +64,6 @@ export class BasesDataManager {
       });
 
       this.isInitialized = true;
-      console.log('BasesDataManager initialized successfully');
 
     } catch (error) {
       console.error('Failed to initialize BasesDataManager:', error);
@@ -198,7 +196,6 @@ export class BasesDataManager {
       throw new Error('BasesDataManager not initialized');
     }
 
-    console.log('🔍 BasesDataManager: Getting all files from workspace:', this.workspacePath);
 
     try {
       // Use Tauri backend to get workspace files
@@ -207,7 +204,6 @@ export class BasesDataManager {
         workspacePath: this.workspacePath
       });
 
-      console.log('📂 BasesDataManager: Got files from backend:', files?.length || 0);
 
       // Flatten nested file structure (backend returns nested children)
       const flattenFiles = (fileList) => {
@@ -226,10 +222,8 @@ export class BasesDataManager {
       };
 
       const flatFiles = flattenFiles(files);
-      console.log('📂 BasesDataManager: Flattened files:', flatFiles?.length || 0);
 
       if (!flatFiles || flatFiles.length === 0) {
-        console.log('⚠️ BasesDataManager: No files from backend, returning test data');
         return [
           {
             path: `${this.workspacePath}/Test File 1.md`,
@@ -252,7 +246,6 @@ export class BasesDataManager {
 
       // Convert backend format to our format
       const mdFiles = flatFiles.filter(file => file.name.endsWith('.md') || file.name.endsWith('.markdown'));
-      console.log('📂 BasesDataManager: Markdown files found:', mdFiles.length);
 
       // Parse frontmatter for each file
       const results = await Promise.all(
@@ -287,24 +280,31 @@ export class BasesDataManager {
               }
             }
           } catch (error) {
-            console.warn(`Failed to parse frontmatter for ${filePath}:`, error.message);
           }
+
+          // Convert timestamps to milliseconds if needed (backend might return seconds)
+          const parseTimestamp = (timestamp) => {
+            if (!timestamp) return new Date();
+            // If timestamp is in seconds (less than a reasonable millisecond timestamp)
+            // multiply by 1000 to convert to milliseconds
+            const ts = typeof timestamp === 'number' ? timestamp : timestamp.secs || timestamp;
+            const multiplier = ts < 10000000000 ? 1000 : 1;
+            return new Date(ts * multiplier);
+          };
 
           return {
             path: filePath,
             properties: frontmatterProperties,
             name: filename,
             title: title,
-            created: file.created ? new Date(file.created) : new Date(),
-            modified: file.modified ? new Date(file.modified) : new Date(),
+            created: parseTimestamp(file.created),
+            modified: parseTimestamp(file.modified),
             size: file.size || 0,
             isDirectory: file.is_directory || false
           };
         })
       );
 
-      console.log('✅ BasesDataManager: Processed files:', results.length);
-      console.log('📂 BasesDataManager: Sample file:', results[0]);
 
       return results;
     } catch (error) {
@@ -343,7 +343,6 @@ export class BasesDataManager {
       throw new Error('BasesDataManager not initialized');
     }
 
-    console.log('⚡ BasesDataManager: Executing query with config:', viewConfig);
 
     try {
       // Get base file list
@@ -352,25 +351,20 @@ export class BasesDataManager {
         fileList = await this.getAllFiles();
       }
 
-      console.log('⚡ BasesDataManager: Starting with files:', fileList.length);
 
       // Apply filters if specified
       let filteredFiles = fileList;
       if (viewConfig.filters && viewConfig.filters.length > 0) {
-        console.log('🔍 BasesDataManager: Applying filters:', viewConfig.filters.length);
         filteredFiles = this.applyFilters(fileList, viewConfig.filters);
-        console.log('🔍 BasesDataManager: Files after filtering:', filteredFiles.length);
       }
 
       // Apply sorting if specified
       if (viewConfig.sortBy) {
-        console.log('📊 BasesDataManager: Applying sort by:', viewConfig.sortBy);
         filteredFiles = this.applySorting(filteredFiles, viewConfig.sortBy, viewConfig.sortOrder);
       }
 
       // Apply limit if specified
       if (viewConfig.limit) {
-        console.log('📊 BasesDataManager: Applying limit:', viewConfig.limit);
         filteredFiles = filteredFiles.slice(0, viewConfig.limit);
       }
 
@@ -380,11 +374,6 @@ export class BasesDataManager {
         filteredCount: filteredFiles.length,
         viewConfig: viewConfig
       };
-
-      console.log('✅ BasesDataManager: Query executed successfully:', {
-        total: result.totalCount,
-        filtered: result.filteredCount
-      });
 
       return result;
     } catch (error) {
@@ -472,7 +461,6 @@ export class BasesDataManager {
       case 'less_than_or_equal':
         return value <= filterValue;
       default:
-        console.warn('Unknown filter operator:', operator);
         return true;
     }
   }
@@ -486,7 +474,6 @@ export class BasesDataManager {
       throw new Error('BasesDataManager not properly initialized');
     }
 
-    console.log('Rebuilding indexes...');
 
     // Clear existing data
     this.propertyIndexer.getIndex().clearIndex();
@@ -495,7 +482,6 @@ export class BasesDataManager {
     // Rebuild
     await this.propertyIndexer.initialize(this.workspacePath);
 
-    console.log('Indexes rebuilt successfully');
   }
 
   /**
@@ -607,20 +593,17 @@ export const examples = {
       await manager.initialize('/path/to/workspace');
 
       // Search for files with specific properties
-      const results = await manager.searchFiles([
+      const _results = await manager.searchFiles([
         { key: 'status', operator: 'equals', value: 'published' },
         { key: 'tags', operator: 'contains', value: 'important' }
       ]);
 
-      console.log('Found files:', results);
 
       // Get comprehensive info for a specific file
-      const fileInfo = await manager.getFileInfo('/path/to/file.md');
-      console.log('File info:', fileInfo);
+      const _fileInfo = await manager.getFileInfo('/path/to/file.md');
 
       // Get available properties
-      const properties = manager.getAvailableProperties();
-      console.log('Available properties:', properties);
+      const _properties = manager.getAvailableProperties();
 
     } finally {
       manager.dispose();
@@ -636,14 +619,13 @@ export const examples = {
 
     try {
       // Complex search with multiple criteria
-      const results = await manager.searchFiles([
+      const _results = await manager.searchFiles([
         { key: 'created', operator: 'greater_than', value: '2024-01-01', type: 'date' },
         { key: 'wordCount', operator: 'greater_than', value: 1000, type: 'number' },
         { key: 'tags', operator: 'in', value: ['research', 'analysis'], type: 'tags' },
         { key: 'hasYamlFrontmatter', operator: 'equals', value: true, type: 'boolean' }
       ]);
 
-      console.log('Advanced search results:', results);
     } finally {
       manager.dispose();
     }
@@ -660,18 +642,11 @@ export const examples = {
       // Analyze property usage
       const properties = manager.getAvailableProperties();
 
-      for (const prop of properties) {
-        console.log(`Property: ${prop.key}`);
-        console.log(`  Type: ${prop.type}`);
-        console.log(`  Files: ${prop.count}`);
-        console.log(`  Unique values: ${prop.uniqueValueCount}`);
-        console.log(`  Sample values:`, prop.uniqueValues.slice(0, 3));
-        console.log();
+      for (const _prop of properties) {
       }
 
       // Get statistics
-      const stats = manager.getStats();
-      console.log('System stats:', stats);
+      const _stats = manager.getStats();
 
     } finally {
       manager.dispose();

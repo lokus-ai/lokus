@@ -184,7 +184,6 @@ ${replyToEmail.textContent || replyToEmail.content || ''}`;
 
   const handleAttachment = () => {
     // TODO: Implement file picker and attachment upload
-    console.log('Attachment feature not yet implemented');
   };
 
   const insertFormatting = (tag) => {

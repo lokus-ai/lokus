@@ -19,10 +19,8 @@ export class BaseConfigManager {
     try {
       const content = await invoke('read_file_content', { path: this.configPath });
       this.config = JSON.parse(content);
-      console.log('✅ Loaded base config:', this.config);
       return this.config;
     } catch (error) {
-      console.log('📝 No existing base config, creating new one');
       // Create default config
       this.config = {
         bases: {},
@@ -53,7 +51,6 @@ export class BaseConfigManager {
         path: this.configPath,
         content: content,
       });
-      console.log('💾 Saved base config');
       return true;
     } catch (error) {
       console.error('Failed to save base config:', error);

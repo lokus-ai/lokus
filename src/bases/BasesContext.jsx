@@ -6,7 +6,6 @@ import { BaseConfigManager } from './core/BaseConfigManager.js';
 const BasesContext = createContext();
 
 export function BasesProvider({ children, workspacePath }) {
-  console.log('🏗️ BasesProvider: Rendering with workspacePath:', workspacePath);
 
   const [baseManager] = useState(() => new BaseManager());
   const [dataManager] = useState(() => new BasesDataManager());
@@ -19,46 +18,35 @@ export function BasesProvider({ children, workspacePath }) {
 
   // Initialize the system
   useEffect(() => {
-    console.log('🚀 BasesContext: Initialize effect triggered with:', { workspacePath });
     if (!workspacePath) return;
 
     const initializeBases = async () => {
-      console.log('📋 BasesContext: Starting initialization...');
       setIsLoading(true);
       setError(null);
 
       try {
         // Initialize config manager
         if (configManager) {
-          console.log('⚙️ BasesContext: Loading config manager...');
           await configManager.load();
         }
 
         // Initialize data manager with workspace
-        console.log('🔧 BasesContext: Initializing data manager...');
         await dataManager.initialize(workspacePath);
 
         // Load all existing bases
-        console.log('📚 BasesContext: Loading bases...');
         const result = await baseManager.listBases(workspacePath);
-        console.log('📋 BasesContext: Raw listBases result:', result);
 
         const existingBases = result?.success ? result.bases : [];
-        console.log('📋 BasesContext: Setting bases array:', existingBases);
         setBases(existingBases);
 
         // Auto-select the first base if available
         if (existingBases.length > 0 && !activeBase) {
           const firstBase = existingBases[0];
-          console.log('🎯 BasesContext: Auto-selecting first base:', firstBase.name);
-          console.log('🔍 BasesContext: First base has views:', firstBase.views);
-          console.log('🔍 BasesContext: Full first base object:', firstBase);
 
           // Fix: Convert views object to array if needed
           let views = firstBase.views;
           if (views && typeof views === 'object' && !Array.isArray(views)) {
             views = Object.values(views);
-            console.log('🔧 BasesContext: Converted first base views object to array:', views.length);
           }
 
           const baseWithFixedViews = {
@@ -69,15 +57,11 @@ export function BasesProvider({ children, workspacePath }) {
           setActiveBase(baseWithFixedViews);
           if (views && views.length > 0) {
             setActiveView(views[0]);
-            console.log('📋 BasesContext: Auto-selected view:', views[0].name);
           } else {
-            console.log('⚠️ BasesContext: No views found in first base during auto-selection');
           }
         }
 
-        console.log(`✅ BasesContext: Initialized Bases system with ${existingBases.length} bases`);
       } catch (err) {
-        console.error('❌ BasesContext: Failed to initialize Bases system:', err);
         setError(err.message);
       } finally {
         setIsLoading(false);
@@ -110,7 +94,6 @@ export function BasesProvider({ children, workspacePath }) {
         throw new Error(result.error);
       }
     } catch (err) {
-      console.error('Failed to create base:', err);
       setError(err.message);
       return { success: false, error: err.message };
     } finally {
@@ -120,7 +103,6 @@ export function BasesProvider({ children, workspacePath }) {
 
   // Load a base
   const loadBase = useCallback(async (basePath) => {
-    console.log('🚀 BasesContext: Loading base with path:', basePath);
     setIsLoading(true);
     setError(null);
 
@@ -128,14 +110,11 @@ export function BasesProvider({ children, workspacePath }) {
       const result = await baseManager.loadBase(basePath);
 
       if (result.success) {
-        console.log('✅ BasesContext: Base loaded successfully:', result.base.name);
-        console.log('🔍 BasesContext: Base has views:', result.base.views);
 
         // Fix: Convert views object to array if needed
         let views = result.base.views;
         if (views && typeof views === 'object' && !Array.isArray(views)) {
           views = Object.values(views);
-          console.log('🔧 BasesContext: Converted views object to array:', views.length);
         }
 
         const baseWithFixedViews = {
@@ -146,17 +125,13 @@ export function BasesProvider({ children, workspacePath }) {
         setActiveBase(baseWithFixedViews);
         if (views && views.length > 0) {
           setActiveView(views[0]);
-          console.log('📋 BasesContext: Set active view:', views[0].name);
         } else {
-          console.log('⚠️ BasesContext: No views found in base');
         }
         return { success: true, base: baseWithFixedViews };
       } else {
-        console.error('❌ BasesContext: Load base failed:', result.error);
         throw new Error(result.error);
       }
     } catch (err) {
-      console.error('Failed to load base:', err);
       setError(err.message);
       return { success: false, error: err.message };
     } finally {
@@ -238,14 +213,7 @@ export function BasesProvider({ children, workspacePath }) {
 
   // Execute a query on current base
   const executeQuery = useCallback(async (queryConfig = {}) => {
-    console.log('📊 BasesContext: executeQuery called with:', {
-      activeBase: activeBase?.name || 'none',
-      activeView: activeView?.name || 'none',
-      queryConfig
-    });
-
     if (!activeBase || !activeView) {
-      console.log('❌ BasesContext: No active base or view');
       return { success: false, error: 'No active base or view' };
     }
 
@@ -254,16 +222,13 @@ export function BasesProvider({ children, workspacePath }) {
 
     try {
       // Get all files from workspace
-      console.log('📂 BasesContext: Getting all files...');
       const files = await dataManager.getAllFiles();
-      console.log('📂 BasesContext: Got files:', files?.length || 0);
 
       // Apply base-level filters
       let filteredFiles = files;
       if (activeBase.filters && activeBase.filters.length > 0) {
         // Apply global base filters
         // This will be handled by the QueryExecutor
-        console.log('🔍 BasesContext: Applying base filters');
       }
 
       // Apply view-level filters
@@ -271,12 +236,9 @@ export function BasesProvider({ children, workspacePath }) {
         ...activeView,
         ...queryConfig
       };
-      console.log('🔧 BasesContext: View config:', viewConfig);
 
       // Execute the query
-      console.log('⚡ BasesContext: Executing query...');
       const result = await dataManager.executeQuery(viewConfig, filteredFiles);
-      console.log('⚡ BasesContext: Query execution result:', result);
 
       return {
         success: true,
@@ -285,7 +247,6 @@ export function BasesProvider({ children, workspacePath }) {
         filteredCount: result.filteredCount
       };
     } catch (err) {
-      console.error('❌ BasesContext: Failed to execute query:', err);
       setError(err.message);
       return { success: false, error: err.message };
     } finally {

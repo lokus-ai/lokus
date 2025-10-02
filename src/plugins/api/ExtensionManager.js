@@ -68,11 +68,9 @@ export class ExtensionManager extends EventEmitter {
     const startTime = performance.now()
     
     try {
-      console.log('[ExtensionManager] Loading extensions from all enabled plugins...')
       
       // Get enabled plugins
       const enabledPlugins = await this.getEnabledPlugins()
-      console.log(`[ExtensionManager] Found ${enabledPlugins.length} enabled plugins`)
       
       // Load extensions from each plugin
       const loadPromises = enabledPlugins.map(plugin => this.loadPluginExtensions(plugin))
@@ -86,7 +84,6 @@ export class ExtensionManager extends EventEmitter {
         const pluginId = enabledPlugins[index].id || enabledPlugins[index]
         if (result.status === 'fulfilled') {
           successCount++
-          console.log(`[ExtensionManager] ✅ Successfully loaded extensions for ${pluginId}`)
         } else {
           errorCount++
           console.error(`[ExtensionManager] ❌ Failed to load extensions for ${pluginId}:`, result.reason)
@@ -94,7 +91,6 @@ export class ExtensionManager extends EventEmitter {
       })
       
       const loadTime = performance.now() - startTime
-      console.log(`[ExtensionManager] Extension loading completed in ${loadTime.toFixed(2)}ms - ${successCount} success, ${errorCount} errors`)
       
       this.emit('extensions-loaded', {
         successCount,
@@ -125,7 +121,6 @@ export class ExtensionManager extends EventEmitter {
     const startTime = performance.now()
     
     try {
-      console.log(`[ExtensionManager] Loading extensions for plugin: ${pluginId}`)
       
       // Check if plugin is quarantined
       if (errorHandler.quarantinedPlugins.has(pluginId)) {
@@ -143,7 +138,6 @@ export class ExtensionManager extends EventEmitter {
       
       // Check if plugin has editor extensions
       if (!pluginInstance.editorExtensions && !pluginInstance.registerEditorExtensions) {
-        console.log(`[ExtensionManager] Plugin ${pluginId} has no editor extensions`)
         return { extensionCount: 0 }
       }
       
@@ -152,13 +146,11 @@ export class ExtensionManager extends EventEmitter {
       
       // Call plugin's extension registration method
       if (typeof pluginInstance.registerEditorExtensions === 'function') {
-        console.log(`[ExtensionManager] Calling registerEditorExtensions for ${pluginId}`)
         await pluginInstance.registerEditorExtensions(editorAPI)
       }
       
       // Process static extensions if available
       if (pluginInstance.editorExtensions) {
-        console.log(`[ExtensionManager] Processing static extensions for ${pluginId}`)
         await this.processStaticExtensions(pluginId, pluginInstance.editorExtensions, extensionIds)
       }
       
@@ -173,7 +165,6 @@ export class ExtensionManager extends EventEmitter {
         extensionCount: extensionIds.size
       })
       
-      console.log(`[ExtensionManager] ✅ Loaded ${extensionIds.size} extensions for ${pluginId} in ${loadTime.toFixed(2)}ms`)
       
       this.emit('plugin-extensions-loaded', {
         pluginId,
@@ -235,7 +226,6 @@ export class ExtensionManager extends EventEmitter {
         })
         
         if (securityViolations.length > 0) {
-          console.warn(`[ExtensionManager] Security violations for ${extension.type} in ${pluginId}:`, securityViolations)
         }
         
         if (extension.type === 'node') {
@@ -253,7 +243,6 @@ export class ExtensionManager extends EventEmitter {
         } else if (extension.type === 'keyboard-shortcut') {
           extensionId = editorAPI.registerKeyboardShortcut(pluginId, extension)
         } else {
-          console.warn(`[ExtensionManager] Unknown extension type: ${extension.type} for plugin ${pluginId}`)
           continue
         }
         
@@ -287,7 +276,6 @@ export class ExtensionManager extends EventEmitter {
    * Unload extensions from a specific plugin
    */
   async unloadPluginExtensions(pluginId) {
-    console.log(`[ExtensionManager] Unloading extensions for plugin: ${pluginId}`)
     
     // Remove from editor API
     editorAPI.unregisterPlugin(pluginId)
@@ -311,7 +299,6 @@ export class ExtensionManager extends EventEmitter {
    */
   async hotReloadPlugin(pluginId) {
     if (this.isHotReloading) {
-      console.log(`[ExtensionManager] Hot reload already in progress, queueing ${pluginId}`)
       this.hotReloadQueue.push(pluginId)
       return
     }
@@ -319,7 +306,6 @@ export class ExtensionManager extends EventEmitter {
     this.isHotReloading = true
     
     try {
-      console.log(`[ExtensionManager] Hot reloading plugin: ${pluginId}`)
       
       // Unload current extensions
       await this.unloadPluginExtensions(pluginId)
@@ -327,7 +313,6 @@ export class ExtensionManager extends EventEmitter {
       // Reload extensions
       await this.loadPluginExtensions(pluginId)
       
-      console.log(`[ExtensionManager] ✅ Hot reload completed for ${pluginId}`)
       
       this.emit('hot-reload-completed', { pluginId })
       
@@ -349,7 +334,6 @@ export class ExtensionManager extends EventEmitter {
    * Hot reload all extensions
    */
   async hotReloadAll() {
-    console.log('[ExtensionManager] Hot reloading all extensions...')
     
     try {
       // Get all loaded plugins
@@ -360,7 +344,6 @@ export class ExtensionManager extends EventEmitter {
         await this.hotReloadPlugin(pluginId)
       }
       
-      console.log('[ExtensionManager] ✅ Hot reload completed for all plugins')
       this.emit('hot-reload-all-completed')
       
     } catch (error) {
@@ -385,7 +368,6 @@ export class ExtensionManager extends EventEmitter {
       return module.default || module
       
     } catch (error) {
-      console.warn(`[ExtensionManager] Could not get plugin instance for ${pluginId}:`, error)
       return null
     }
   }
@@ -403,7 +385,6 @@ export class ExtensionManager extends EventEmitter {
       return []
       
     } catch (error) {
-      console.warn('[ExtensionManager] Could not get enabled plugins:', error)
       return []
     }
   }
@@ -414,7 +395,6 @@ export class ExtensionManager extends EventEmitter {
    * Handle plugin enabled event
    */
   async handlePluginEnabled({ pluginId }) {
-    console.log(`[ExtensionManager] Plugin enabled: ${pluginId}`)
     
     try {
       await this.loadPluginExtensions(pluginId)
@@ -428,7 +408,6 @@ export class ExtensionManager extends EventEmitter {
    * Handle disable plugin request from error handler
    */
   async handleDisablePluginRequest({ pluginId, reason }) {
-    console.warn(`[ExtensionManager] Disabling plugin ${pluginId} due to: ${reason}`)
     
     try {
       // Unload extensions
@@ -472,7 +451,6 @@ export class ExtensionManager extends EventEmitter {
    * Handle reload plugin request from error handler
    */
   async handleReloadPluginRequest({ pluginId, useFallback }) {
-    console.log(`[ExtensionManager] Reloading plugin ${pluginId} (fallback: ${useFallback})`)
     
     try {
       // Hot reload the specific plugin
@@ -489,7 +467,6 @@ export class ExtensionManager extends EventEmitter {
    * Handle clear plugin caches request from error handler
    */
   async handleClearPluginCachesRequest({ pluginId }) {
-    console.log(`[ExtensionManager] Clearing caches for plugin ${pluginId}`)
     
     try {
       // Get plugin instance and clear its caches if possible
@@ -513,7 +490,6 @@ export class ExtensionManager extends EventEmitter {
    * Handle optimize plugin request from error handler
    */
   async handleOptimizePluginRequest({ pluginId }) {
-    console.log(`[ExtensionManager] Optimizing plugin ${pluginId}`)
     
     try {
       // Get plugin instance and optimize if possible
@@ -534,7 +510,6 @@ export class ExtensionManager extends EventEmitter {
    * Handle plugin disabled event
    */
   async handlePluginDisabled({ pluginId }) {
-    console.log(`[ExtensionManager] Plugin disabled: ${pluginId}`)
     
     try {
       await this.unloadPluginExtensions(pluginId)
@@ -547,7 +522,6 @@ export class ExtensionManager extends EventEmitter {
    * Handle extension registered event
    */
   handleExtensionRegistered({ pluginId, extensionId }) {
-    console.log(`[ExtensionManager] Extension registered: ${extensionId} (plugin: ${pluginId})`)
     
     // Track in load order
     if (!this.loadOrder.includes(pluginId)) {

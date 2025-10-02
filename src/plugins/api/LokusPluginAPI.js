@@ -246,7 +246,6 @@ export class EditorAPI extends EventEmitter {
   // Cleanup methods for plugin deactivation
   async removeAllExtensions(pluginId) {
     if (!this.bridgedAPI) {
-      console.warn('EditorAPI not initialized for cleanup');
       return;
     }
 

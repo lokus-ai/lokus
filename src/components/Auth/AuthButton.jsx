@@ -8,7 +8,6 @@ export default function AuthButton() {
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   // Debug logging
-  console.log('🔘 AuthButton render:', { isAuthenticated, user, isLoading });
 
   const handleSignIn = async () => {
     try {

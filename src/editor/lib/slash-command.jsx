@@ -652,7 +652,6 @@ const slashCommand = {
     // Combine core commands with plugin commands
     const allCommandGroups = [...commandItems, ...pluginCommandGroups];
     
-    console.log(`[SlashCommand] Processing ${allCommandGroups.length} command groups (${pluginCommandGroups.length} from plugins)`);
 
     return allCommandGroups
       .map((group) => ({

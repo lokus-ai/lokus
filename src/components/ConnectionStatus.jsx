@@ -29,7 +29,6 @@ export default function ConnectionStatus({ className = '' }) {
         try {
           queueStats = await gmailQueue.getQueueStats();
         } catch (error) {
-          console.warn('Could not fetch queue stats:', error);
         }
       }
       

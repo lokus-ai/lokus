@@ -52,16 +52,26 @@ export class FileMetadata {
         try {
           const fileStats = await stat(filePath);
           metadata.size = fileStats.size;
-          metadata.created = fileStats.birthtime ? new Date(fileStats.birthtime) : null;
-          metadata.modified = fileStats.mtime ? new Date(fileStats.mtime) : null;
-          metadata.accessed = fileStats.atime ? new Date(fileStats.atime) : null;
+
+          // Convert timestamps to milliseconds if needed (Tauri might return seconds)
+          const parseTimestamp = (timestamp) => {
+            if (!timestamp) return null;
+            // If timestamp is in seconds (less than a reasonable millisecond timestamp)
+            // multiply by 1000 to convert to milliseconds
+            const ts = typeof timestamp === 'number' ? timestamp : timestamp.secs || timestamp;
+            const multiplier = ts < 10000000000 ? 1000 : 1;
+            return new Date(ts * multiplier);
+          };
+
+          metadata.created = parseTimestamp(fileStats.birthtime || fileStats.createdAt || fileStats.created);
+          metadata.modified = parseTimestamp(fileStats.mtime || fileStats.modifiedAt || fileStats.modified);
+          metadata.accessed = parseTimestamp(fileStats.atime || fileStats.accessedAt || fileStats.accessed);
           metadata.isDirectory = fileStats.isDirectory;
           metadata.isFile = fileStats.isFile;
 
           // Calculate human-readable size
           metadata.sizeHuman = this.formatFileSize(fileStats.size);
         } catch (error) {
-          console.warn(`Failed to get file stats for ${filePath}:`, error);
           metadata.size = 0;
           metadata.sizeHuman = '0 B';
         }
@@ -97,7 +107,6 @@ export class FileMetadata {
             }
           }
         } catch (error) {
-          console.warn(`Failed to read content for ${filePath}:`, error);
           metadata.encoding = 'unknown';
           metadata.lineCount = 0;
           metadata.characterCount = 0;
@@ -120,7 +129,6 @@ export class FileMetadata {
       try {
         metadata.hash = await this.calculateFileHash(filePath);
       } catch (error) {
-        console.warn(`Failed to calculate hash for ${filePath}:`, error);
         metadata.hash = null;
       }
 
@@ -687,7 +695,6 @@ export class FileMetadata {
       try {
         callback(event);
       } catch (error) {
-        console.warn('Error in file metadata listener:', error);
       }
     }
   }

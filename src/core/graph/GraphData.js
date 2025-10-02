@@ -433,7 +433,6 @@ export class GraphData {
    */
   createDocumentNode(documentId, metadata = {}) {
     const nodeId = createNodeId(documentId); // Use deterministic ID
-    // console.log(`📄 Creating document node: "${documentId}" → ID: "${nodeId}"`);
     const now = Date.now();
     
     const node = {
@@ -462,7 +461,6 @@ export class GraphData {
     this.persistNode(node);
     this.emit('nodeCreated', { node });
     
-    // console.log(`✨ Document node created: "${node.title}" (${node.id})`);
     
     // Clean up any existing placeholder for this document
     this.cleanupPlaceholderForDocument(documentId, metadata.title);
@@ -537,7 +535,6 @@ export class GraphData {
    * Get or create node for a WikiLink target
    */
   async getOrCreateWikiLinkNode(pageName) {
-    // console.log(`🔍 getOrCreateWikiLinkNode: searching for "${pageName}"`);
     
     // Handle full path vs filename scenarios
     let expectedNodeId;
@@ -547,18 +544,15 @@ export class GraphData {
       // This is a full path, use it directly
       expectedNodeId = createNodeId(pageName);
       normalizedPageName = pageName;
-      // console.log(`📁 Full path detected: "${pageName}" → ID: "${expectedNodeId}"`);
     } else {
       // This is just a filename, normalize it
       normalizedPageName = pageName.endsWith('.md') ? pageName : pageName + '.md';
       expectedNodeId = createNodeId(normalizedPageName);
-      // console.log(`📄 Filename detected: "${pageName}" → normalized: "${normalizedPageName}" → ID: "${expectedNodeId}"`);
     }
     
     // First, check if we already have a document node with this exact ID
     if (this.nodes.has(expectedNodeId)) {
       const existingNode = this.nodes.get(expectedNodeId);
-      // console.log(`✅ Found existing node with exact ID match: "${existingNode.id}"`);
       // Update wikiLinks mapping to point to this document node
       this.wikiLinks.set(pageName, existingNode.id);
       return existingNode;
@@ -566,18 +560,15 @@ export class GraphData {
     
     // If we have a filename but nodes are stored with full paths, search for any node ending with this filename
     if (!pageName.includes('/')) {
-      // console.log(`🔎 Searching for nodes ending with filename: "${normalizedPageName}"`);
       for (const node of this.nodes.values()) {
         if (node.type === 'document') {
           // Check if the node's documentId ends with our filename
           if (node.documentId && node.documentId.endsWith(normalizedPageName)) {
-            // console.log(`✅ Found node by filename match: "${node.documentId}" matches "${normalizedPageName}"`);
             this.wikiLinks.set(pageName, node.id);
             return node;
           }
           // Also check by title
           if (node.title === pageName || node.title === normalizedPageName || node.title + '.md' === normalizedPageName) {
-            // console.log(`✅ Found node by title match: "${node.title}" matches "${pageName}"`);
             this.wikiLinks.set(pageName, node.id);
             return node;
           }
@@ -588,10 +579,8 @@ export class GraphData {
     // If we have a full path but nodes might be stored with filenames, extract filename and search
     if (pageName.includes('/')) {
       const filename = pageName.split('/').pop();
-      // console.log(`🔎 Searching for nodes with filename extracted from path: "${filename}"`);
       for (const node of this.nodes.values()) {
         if (node.type === 'document' && (node.title === filename || node.title === filename.replace('.md', ''))) {
-          // console.log(`✅ Found node by extracted filename: "${node.title}" matches "${filename}"`);
           this.wikiLinks.set(pageName, node.id);
           return node;
         }
@@ -607,7 +596,6 @@ export class GraphData {
     
     // Create new placeholder node with the SAME ID that the document would have
     nodeId = expectedNodeId; // Use the same ID generation as document nodes!
-    // console.log(`🆕 Creating placeholder node for "${pageName}" with ID: "${nodeId}"`);
     const now = Date.now();
     
     const node = {
@@ -636,7 +624,6 @@ export class GraphData {
     this.persistNode(node);
     this.emit('nodeCreated', { node });
     
-    // console.log(`✨ Created placeholder node: "${node.title}" (${node.id})`);
     
     return node;
   }
@@ -714,7 +701,6 @@ export class GraphData {
     const linkId = options.id || `${sourceId}-${targetId}`;
     
     if (this.links.has(linkId)) {
-      // console.log(`🔗 Link already exists: "${sourceId}" → "${targetId}"`);
       return this.links.get(linkId); // Link already exists
     }
     
@@ -724,7 +710,6 @@ export class GraphData {
     const sourceTitle = sourceNode ? sourceNode.title : sourceId;
     const targetTitle = targetNode ? targetNode.title : targetId;
     
-    // console.log(`🚀 Creating link: "${sourceTitle}" (${sourceId}) → "${targetTitle}" (${targetId}) [${options.type || 'default'}]`);
     
     const link = {
       id: linkId,
@@ -739,7 +724,6 @@ export class GraphData {
     };
     
     this.links.set(linkId, link);
-    // console.log(`✅ Link created successfully: "${linkId}"`);
     this.stats.linkCount++;
     
     // Update backlinks and forward links

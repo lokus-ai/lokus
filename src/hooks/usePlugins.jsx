@@ -13,9 +13,7 @@ export function PluginProvider({ children }) {
 
   // Subscribe to plugin manager state changes
   useEffect(() => {
-    console.log('🔧 usePlugins: Setting up state subscription');
     const unsubscribe = pluginManager.onPluginStateChange((state) => {
-      console.log('🔧 usePlugins: Received state update', state);
       setPlugins(state.plugins);
       setLoading(state.loading);
       setError(state.error);
@@ -24,7 +22,6 @@ export function PluginProvider({ children }) {
     });
 
     // Trigger initial load
-    console.log('🔧 usePlugins: Triggering initial load');
     pluginManager.loadPlugins();
 
     return unsubscribe;

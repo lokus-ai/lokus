@@ -86,7 +86,6 @@ export class ProviderRegistry extends EventEmitter {
       this.metrics.totalProviders++
       this.emit('providerRegistered', { type, providerId, provider })
       
-      console.log(`✅ Registered ${type} provider: ${providerId}`)
       return providerId
 
     } catch (error) {
@@ -139,7 +138,6 @@ export class ProviderRegistry extends EventEmitter {
       this.metrics.totalProviders--
       this.emit('providerUnregistered', { providerId, provider })
       
-      console.log(`✅ Unregistered provider: ${providerId}`)
 
     } catch (error) {
       console.error(`❌ Failed to unregister provider ${providerId}:`, error)
@@ -180,7 +178,6 @@ export class ProviderRegistry extends EventEmitter {
       this.activeProviders.set(type, providerId)
 
       this.emit('activeProviderChanged', { type, providerId, provider })
-      console.log(`✅ Set active ${type} provider: ${providerId}`)
 
     } catch (error) {
       console.error(`❌ Failed to set active provider ${providerId}:`, error)
@@ -228,7 +225,6 @@ export class ProviderRegistry extends EventEmitter {
 
     this.fallbackProviders.set(type, providerId)
     this.emit('fallbackProviderSet', { type, providerId })
-    console.log(`✅ Set fallback ${type} provider: ${providerId}`)
   }
 
   /**
@@ -270,7 +266,6 @@ export class ProviderRegistry extends EventEmitter {
       // Try with active provider
       return await operation(provider, ...args)
     } catch (error) {
-      console.warn(`Active ${type} provider failed, trying fallback:`, error)
       
       // Try with fallback provider
       const fallbackProviderId = this.fallbackProviders.get(type)
@@ -410,7 +405,6 @@ export class ProviderRegistry extends EventEmitter {
     if (fallbackProviderId) {
       try {
         await this.setActiveProvider(type, fallbackProviderId)
-        console.log(`✅ Activated fallback ${type} provider: ${fallbackProviderId}`)
       } catch (error) {
         console.error(`❌ Failed to activate fallback ${type} provider:`, error)
       }
@@ -421,7 +415,6 @@ export class ProviderRegistry extends EventEmitter {
         if (provider.isConnected) {
           try {
             await this.setActiveProvider(type, provider.id)
-            console.log(`✅ Activated available ${type} provider: ${provider.id}`)
             break
           } catch (error) {
             console.error(`❌ Failed to activate ${type} provider ${provider.id}:`, error)
@@ -444,9 +437,7 @@ export class ProviderRegistry extends EventEmitter {
         this.providerConfigs.set(providerId, config)
       }
 
-      console.log('✅ Loaded provider configurations')
     } catch (error) {
-      console.warn('⚠️ Failed to load provider configurations:', error)
     }
   }
 
@@ -459,7 +450,6 @@ export class ProviderRegistry extends EventEmitter {
       // In a real implementation, this would save to persistent storage
       // localStorage.setItem('lokus-provider-configs', JSON.stringify(configs))
       
-      console.log('✅ Saved provider configurations')
     } catch (error) {
       console.error('❌ Failed to save provider configurations:', error)
     }
@@ -550,7 +540,6 @@ export class ProviderRegistry extends EventEmitter {
 
     this.isInitialized = false
     this.emit('destroyed')
-    console.log('✅ Provider registry destroyed')
   }
 }
 

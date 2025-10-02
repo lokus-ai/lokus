@@ -50,7 +50,6 @@ export function parseFile(content) {
     const parsed = yaml.load(frontmatterContent);
     return parsed || {};
   } catch (error) {
-    console.warn('Failed to parse YAML frontmatter:', error.message);
     return null;
   }
 }
