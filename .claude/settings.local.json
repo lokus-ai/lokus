@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git fetch:*)",
+      "Bash(git merge:*)",
+      "Bash(cargo check:*)",
+      "Bash(npm run tauri:*)",
+      "Bash(npm install:*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd /c:*)",
+      "Bash(npm run dev:windows:*)",
+      "Bash(cargo run:*)",
+      "Bash(npm ls:*)",
+      "Bash(wc:*)",
+      "Bash(tail:*)",
+      "Bash(cargo:*)",
+      "Bash(grep:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr create:*)",
+      "Bash(start:*)",
+      "Bash(gh pr:*)",
+      "Bash(git checkout:*)",
+      "Read(//tmp/**)",
+      "WebSearch",
+      "WebFetch(domain:cs.ucdavis.edu)",
+      "WebFetch(domain:www.ucdavis.edu)"
+    ],
+    "deny": []
+  }
+}

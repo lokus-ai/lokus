@@ -98,7 +98,6 @@ openapi.yaml
 *personal*.md
 *internship*.md
 
-# AI Assistant (Claude Code)
 .claude/
 *.claude
 
