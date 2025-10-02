@@ -36,7 +36,28 @@ export function BasesProvider({ children, workspacePath }) {
         // Load all existing bases
         const result = await baseManager.listBases(workspacePath);
 
-        const existingBases = result?.success ? result.bases : [];
+        let existingBases = result?.success ? result.bases : [];
+
+        // Auto-create a default base if none exists
+        if (existingBases.length === 0) {
+          const defaultBase = {
+            name: 'All Notes',
+            sourceFolder: workspacePath,
+            views: [{
+              name: 'Table',
+              type: 'table',
+              columns: ['name', 'created', 'modified'],
+              filters: [],
+              sortBy: []
+            }]
+          };
+
+          const createResult = await baseManager.createBase(workspacePath, defaultBase);
+          if (createResult?.success) {
+            existingBases = [createResult.base];
+          }
+        }
+
         setBases(existingBases);
 
         // Auto-select the first base if available
