@@ -23,19 +23,14 @@ export function useWorkspaceActivation() {
         await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
         
         // Debug: Check current URL
-        console.log(`[Attempt ${attempt + 1}] Current URL:`, window.location.href);
-        console.log(`[Attempt ${attempt + 1}] Current search:`, window.location.search);
         
         // Strategy 1: Check URL on initial load
         const params = new URLSearchParams(window.location.search);
         const forceWelcome = params.get("forceWelcome");
         const workspacePath = params.get("workspacePath");
-        console.log(`[Attempt ${attempt + 1}] Force welcome:`, forceWelcome);
-        console.log(`[Attempt ${attempt + 1}] Workspace path from URL:`, workspacePath);
 
         // If forceWelcome is set, skip workspace loading and show launcher
         if (forceWelcome === "true") {
-          console.log("Force welcome parameter detected, showing launcher");
           setPath(null);
           setIsInitialized(true);
           return;
@@ -43,10 +38,8 @@ export function useWorkspaceActivation() {
 
         if (workspacePath) {
           const decodedPath = decodeURIComponent(workspacePath);
-          console.log("Decoded path:", decodedPath);
           // Validate the URL parameter workspace path
           const isValid = await WorkspaceManager.validatePath(decodedPath);
-          console.log("Is valid:", isValid);
           if (isValid) {
             setPath(decodedPath);
             setIsInitialized(true);
@@ -64,7 +57,6 @@ export function useWorkspaceActivation() {
           return;
         }
       } catch (error) {
-        console.log("Error getting validated workspace path:", error);
       }
 
       // Strategy 3: No valid workspace found, path remains null (shows launcher)
@@ -87,17 +79,14 @@ export function useWorkspaceActivation() {
     // Listen for workspace activation and force welcome events
     const unlistenWorkspacePromise = isTauri
       ? listen("workspace:activate", async (event) => {
-          console.log("Received workspace:activate event:", event);
           const p = event.payload;
           if (typeof p === 'string' && p) {
             // Validate the activated workspace path
             const isValid = await WorkspaceManager.validatePath(p);
             if (isValid) {
-              console.log("Setting path from workspace:activate event:", p);
               setPath(p);
               setIsInitialized(true);
             } else {
-              console.log("Invalid path from workspace:activate event:", p);
             }
           }
         })
@@ -105,7 +94,6 @@ export function useWorkspaceActivation() {
 
     const unlistenForceWelcomePromise = isTauri
       ? listen("lokus:force-welcome", () => {
-          console.log("Received force welcome event, clearing workspace");
           setPath(null);
           setIsInitialized(true);
         })

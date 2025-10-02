@@ -648,10 +648,8 @@ function WorkspaceWithScope({ path }) {
       // Debug: Log to backend to see if this runs
       invoke("validate_workspace_path", { path }).then(valid => {
         if (valid) {
-          console.log("Path is valid, loading files...");
         }
       }).catch(err => {
-        console.error("Error validating path:", err);
       });
       
       try { window.__LOKUS_WORKSPACE_PATH__ = path; } catch {}
@@ -704,7 +702,6 @@ function WorkspaceWithScope({ path }) {
             
             // If this is a markdown file and the content looks like markdown, process it
             if (activeTab.name.endsWith('.md') && compiler.isMarkdown(content)) {
-              console.log('[Workspace] Processing loaded markdown content');
               processedContent = compiler.compile(content);
             }
             
@@ -1132,7 +1129,6 @@ function WorkspaceWithScope({ path }) {
         };
       }
     } catch (error) {
-      console.error('Error parsing Gmail template:', error);
     }
     
     return null;
@@ -1162,7 +1158,6 @@ function WorkspaceWithScope({ path }) {
         // TODO: Implement HTML to Markdown conversion
         // For now, we'll save the HTML content as-is
         // This should be replaced with proper HTML->Markdown conversion
-        console.log('[Save] Saving markdown file - HTML to Markdown conversion needed');
       }
       
       await invoke("write_file_content", { path: path_to_save, content: contentToSave });
@@ -1178,16 +1173,10 @@ function WorkspaceWithScope({ path }) {
       const gmailTemplate = parseGmailTemplate(contentToSave);
       if (gmailTemplate) {
         try {
-          console.log('📧 Detected Gmail template, checking authentication...');
           
           // Check if user is authenticated with Gmail
           const isAuthenticated = await gmailAuth.isAuthenticated();
           if (isAuthenticated && gmailTemplate.to.length > 0 && gmailTemplate.subject) {
-            console.log('📧 Sending email via Gmail:', {
-              to: gmailTemplate.to,
-              subject: gmailTemplate.subject
-            });
-            
             // Send the email
             await gmailEmails.sendEmail({
               to: gmailTemplate.to,
@@ -1198,18 +1187,14 @@ function WorkspaceWithScope({ path }) {
               attachments: [] // For future implementation
             });
 
-            console.log('✅ Email sent successfully via Gmail');
             
             // Optional: Show success notification to user
             // You could add a toast notification here
           } else if (!isAuthenticated) {
-            console.log('⚠️ Gmail template detected but user not authenticated');
             // Optional: Show authentication prompt
           } else {
-            console.log('⚠️ Gmail template detected but missing required fields (to/subject)');
           }
         } catch (emailError) {
-          console.error('❌ Failed to send Gmail:', emailError);
           // Optional: Show error notification to user
         }
       }
@@ -1282,10 +1267,8 @@ function WorkspaceWithScope({ path }) {
         let contentToSave = editorContent;
         if (filePath.endsWith('.md')) {
           // For markdown files, we might need HTML to Markdown conversion
-          console.log('[Save As] Saving as markdown file');
         } else if (filePath.endsWith('.txt')) {
           // For text files, strip HTML and keep plain text
-          console.log('[Save As] Saving as text file - HTML stripping needed');
         }
 
         // Save the file
@@ -1306,10 +1289,8 @@ function WorkspaceWithScope({ path }) {
         // Refresh file tree to show new file
         handleRefreshFiles();
 
-        console.log(`File saved as: ${filePath}`);
       }
     } catch (error) {
-      console.error('Error in Save As:', error);
     }
   }, []);
 
@@ -1421,10 +1402,8 @@ function WorkspaceWithScope({ path }) {
         // Save the HTML file
         await invoke("write_file_content", { path: filePath, content: htmlContent });
 
-        console.log(`File exported as HTML: ${filePath}`);
       }
     } catch (error) {
-      console.error('Error in Export HTML:', error);
     }
   }, []);
 
@@ -1584,26 +1563,19 @@ function WorkspaceWithScope({ path }) {
         // Future enhancement: integrate with a PDF generation library
         const fallbackPath = filePath.replace('.pdf', '_for_pdf.html');
         await invoke("write_file_content", { path: fallbackPath, content: htmlForPdf });
-        console.log(`PDF export: Saved HTML file optimized for PDF conversion: ${fallbackPath}`);
-        console.log('To convert to PDF: Open the HTML file in your browser and use Print > Save as PDF');
       }
     } catch (error) {
-      console.error('Error in Export PDF:', error);
     }
   }, []);
 
   const handleOpenWorkspace = useCallback(async () => {
-    console.log('🚀 handleOpenWorkspace called!');
     try {
       // First clear the saved workspace to ensure launcher shows
       await invoke('clear_last_workspace');
-      console.log('✅ Cleared saved workspace');
 
       // Use backend command to create launcher window (same approach as preferences)
       await invoke('open_launcher_window');
-      console.log('✅ Created new launcher window via backend command');
     } catch (error) {
-      console.error('❌ Error opening workspace launcher:', error);
     }
   }, []);
 
@@ -1717,7 +1689,6 @@ function WorkspaceWithScope({ path }) {
 
   // OLD SYSTEM - Commented out since ProfessionalGraphView has its own data loading
   // const buildGraphData = useCallback(async () => {
-  //   console.log('🔥 buildGraphData called! processor=', !!graphProcessorRef.current, 'isLoadingGraph=', isLoadingGraph);
   //   if (!graphProcessorRef.current || isLoadingGraph) return;
   //   
   //   setIsLoadingGraph(true);
@@ -1818,10 +1789,8 @@ function WorkspaceWithScope({ path }) {
   // OLD SYSTEM - Commented out since ProfessionalGraphView has its own data loading
   // Auto-build graph when graph view is opened
   // useEffect(() => {
-  //   console.log(`🎯 Graph useEffect triggered: activeFile=${activeFile}, graphData=${!!graphData}, isLoadingGraph=${isLoadingGraph}, processor=${!!graphProcessorRef.current}`);
   //   const isGraphView = activeFile === '__graph__' || activeFile === '__professional_graph__';
   //   if (isGraphView && !graphData && !isLoadingGraph && graphProcessorRef.current) {
-  //     console.log('🚀 Triggering buildGraphData()...');
   //     buildGraphData();
   //   }
   // }, [activeFile, graphData, isLoadingGraph, buildGraphData]);
@@ -1974,7 +1943,6 @@ function WorkspaceWithScope({ path }) {
     
     // Handle split creation if dragged to editor area
     if (over && over.id === 'editor-drop-zone') {
-      console.log('Tab dragged to editor area, enabling simple split view');
       setUseSplitView(true);
       return;
     }
@@ -2012,10 +1980,8 @@ function WorkspaceWithScope({ path }) {
     const unlistenGlobalSearch = isTauri ? listen("lokus:global-search", () => setShowGlobalSearch(true)) : Promise.resolve(addDom('lokus:global-search', () => setShowGlobalSearch(true)));
     const unlistenGraphView = isTauri ? listen("lokus:graph-view", handleOpenGraphView) : Promise.resolve(addDom('lokus:graph-view', handleOpenGraphView));
     const unlistenShortcutHelp = isTauri ? listen("lokus:shortcut-help", () => {
-      console.log('[Workspace] Help shortcut triggered - opening help modal');
       setShowShortcutHelp(true);
     }) : Promise.resolve(addDom('lokus:shortcut-help', () => {
-      console.log('[Workspace] Help shortcut triggered (DOM) - opening help modal');
       setShowShortcutHelp(true);
     }));
     const unlistenRefreshFiles = isTauri ? listen("lokus:refresh-files", handleRefreshFiles) : Promise.resolve(addDom('lokus:refresh-files', handleRefreshFiles));
@@ -2226,8 +2192,7 @@ function WorkspaceWithScope({ path }) {
     // Additional missing file menu events
     const unlistenShowAbout = isTauri ? listen("lokus:show-about", () => {
       // TODO: Show about dialog
-      console.log('Show About dialog');
-    }) : Promise.resolve(addDom('lokus:show-about', () => { console.log('Show About dialog'); }));
+    }) : Promise.resolve(addDom('lokus:show-about', () => {}));
 
     const unlistenSaveAs = isTauri ? listen("lokus:save-as", handleSaveAs) : Promise.resolve(addDom('lokus:save-as', handleSaveAs));
 
@@ -2236,7 +2201,6 @@ function WorkspaceWithScope({ path }) {
     const unlistenCloseWindow = isTauri ? listen("lokus:close-window", () => handleWindowAction('close')) : Promise.resolve(addDom('lokus:close-window', () => handleWindowAction('close')));
 
     const unlistenOpenWorkspace = isTauri ? listen("lokus:open-workspace", (event) => {
-      console.log('🎯 Received lokus:open-workspace event:', event);
       handleOpenWorkspace();
     }) : Promise.resolve(addDom('lokus:open-workspace', handleOpenWorkspace));
 
@@ -2259,18 +2223,15 @@ function WorkspaceWithScope({ path }) {
     // Theme switching events
     const unlistenThemeLight = isTauri ? listen("lokus:theme-light", () => {
       // TODO: Connect to theme manager to set light theme
-      console.log('Switch to Light theme');
-    }) : Promise.resolve(addDom('lokus:theme-light', () => { console.log('Switch to Light theme'); }));
+    }) : Promise.resolve(addDom('lokus:theme-light', () => {}));
 
     const unlistenThemeDark = isTauri ? listen("lokus:theme-dark", () => {
       // TODO: Connect to theme manager to set dark theme
-      console.log('Switch to Dark theme');
-    }) : Promise.resolve(addDom('lokus:theme-dark', () => { console.log('Switch to Dark theme'); }));
+    }) : Promise.resolve(addDom('lokus:theme-dark', () => {}));
 
     const unlistenThemeAuto = isTauri ? listen("lokus:theme-auto", () => {
       // TODO: Connect to theme manager to set auto theme
-      console.log('Switch to Auto theme');
-    }) : Promise.resolve(addDom('lokus:theme-auto', () => { console.log('Switch to Auto theme'); }));
+    }) : Promise.resolve(addDom('lokus:theme-auto', () => {}));
 
     // Insert menu events
     const unlistenInsertWikiLink = isTauri ? listen("lokus:insert-wikilink", () => handleEditorInsert('wikilink')) : Promise.resolve(addDom('lokus:insert-wikilink', () => handleEditorInsert('wikilink')));
@@ -2464,7 +2425,7 @@ function WorkspaceWithScope({ path }) {
           </button>
           
           {/* Activity Bar - VS Code Style */}
-          <div className="w-full border-t border-app-border/50 pt-2">
+          <div className="w-full pt-2">
             <button
               onClick={() => { 
                 setShowKanban(false);
@@ -2549,27 +2510,6 @@ function WorkspaceWithScope({ path }) {
               <Database className="w-5 h-5" style={showBases && !showKanban && !showPlugins && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
             </button>
 
-            <button
-              onClick={() => { 
-                setShowMarketplace(true); 
-                setShowPlugins(false); 
-                setShowKanban(false);
-                setShowLeft(true);
-              }}
-              title="Plugin Marketplace"
-              className="obsidian-button icon-only w-full mb-1"
-              onMouseEnter={(e) => {
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = 'rgb(var(--accent))';
-              }}
-              onMouseLeave={(e) => {
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = showMarketplace ? 'rgb(var(--accent))' : '';
-              }}
-            >
-              <Package className="w-5 h-5" style={showMarketplace ? { color: 'rgb(var(--accent))' } : {}} />
-            </button>
-            
             <button
               onClick={handleOpenGraphView}
               title="Graph View"

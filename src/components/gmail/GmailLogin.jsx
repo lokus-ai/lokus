@@ -17,7 +17,6 @@ export default function GmailLogin({ onLoginSuccess }) {
       if (polling) return;
       polling = true;
       
-      console.log('[GMAIL LOGIN] Starting auth callback polling...');
       
       pollInterval = setInterval(async () => {
         try {
@@ -25,7 +24,6 @@ export default function GmailLogin({ onLoginSuccess }) {
           
           if (result) {
             const [code, state] = result;
-            console.log('[GMAIL LOGIN] Auth callback received!');
             
             clearInterval(pollInterval);
             polling = false;
@@ -62,14 +60,11 @@ export default function GmailLogin({ onLoginSuccess }) {
   }, [loginState, onLoginSuccess]);
 
   const handleLogin = async () => {
-    console.log('[GMAIL LOGIN] Button clicked, starting authentication...');
     try {
       setLoginState('loading');
       setError(null);
       
-      console.log('[GMAIL LOGIN] Calling gmailAuth.initiateAuth()...');
       const url = await gmailAuth.initiateAuth();
-      console.log('[GMAIL LOGIN] Auth URL received:', url);
       setAuthUrl(url);
       setLoginState('waiting');
       
@@ -175,7 +170,6 @@ export default function GmailLogin({ onLoginSuccess }) {
             
             <button
               onClick={() => {
-                console.log('[GMAIL LOGIN] Button clicked directly');
                 handleLogin();
               }}
               className="obsidian-button flex items-center gap-2 px-6 py-3 mx-auto mb-8"

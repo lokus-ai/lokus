@@ -126,7 +126,6 @@ export default function EmailViewer({ email, onCompose, onRefresh, workspacePath
         subfolder: 'emails'
       });
       
-      console.log('Email saved as note:', filePath);
       
       // Show success message (you could implement a toast notification here)
       const fileName = filePath.split('/').pop();

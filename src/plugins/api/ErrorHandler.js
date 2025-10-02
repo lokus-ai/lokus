@@ -45,7 +45,6 @@ export class EditorPluginErrorHandler extends EventEmitter {
       storageAccess: 20   // Max 20 storage violations
     }
     
-    console.log('[EditorPluginErrorHandler] Initialized')
   }
 
   // === ERROR HANDLING ===
@@ -170,7 +169,6 @@ export class EditorPluginErrorHandler extends EventEmitter {
     const strategy = this.getRecoveryStrategy(errorInfo.type, errorInfo.context)
     
     if (strategy) {
-      console.log(`[ErrorHandler] Attempting recovery for ${pluginId} using strategy: ${strategy.name}`)
       
       try {
         strategy.execute(pluginId, errorInfo)
@@ -276,7 +274,6 @@ export class EditorPluginErrorHandler extends EventEmitter {
         severity: duration > threshold * 2 ? 'high' : 'medium'
       }
       
-      console.warn(`[ErrorHandler] Performance warning for ${pluginId}: ${operation} took ${duration}ms (threshold: ${threshold}ms)`)
       this.emit('performance-warning', warning)
       
       // Take action for severe performance issues
@@ -290,7 +287,6 @@ export class EditorPluginErrorHandler extends EventEmitter {
    * Handle performance issues
    */
   handlePerformanceIssue(pluginId, warning) {
-    console.log(`[ErrorHandler] Handling performance issue for ${pluginId}`)
     
     // Optimize plugin automatically
     this.optimizePlugin(pluginId)
@@ -496,7 +492,6 @@ export class EditorPluginErrorHandler extends EventEmitter {
    * Disable plugin due to issues
    */
   disablePlugin(pluginId, reason) {
-    console.warn(`[ErrorHandler] Disabling plugin ${pluginId} due to: ${reason}`)
     
     try {
       // Emit disable event for plugin system to handle
@@ -526,7 +521,6 @@ export class EditorPluginErrorHandler extends EventEmitter {
    * Warn plugin about issues
    */
   warnPlugin(pluginId, reason) {
-    console.warn(`[ErrorHandler] Warning plugin ${pluginId} about: ${reason}`)
     
     this.emit('plugin-warning', { pluginId, reason })
   }
@@ -535,7 +529,6 @@ export class EditorPluginErrorHandler extends EventEmitter {
    * Reload plugin with fallback configuration
    */
   reloadPluginWithFallback(pluginId) {
-    console.log(`[ErrorHandler] Reloading plugin ${pluginId} with fallback configuration`)
     
     this.emit('reload-plugin-request', { pluginId, useFallback: true })
   }
@@ -544,7 +537,6 @@ export class EditorPluginErrorHandler extends EventEmitter {
    * Clear plugin caches
    */
   clearPluginCaches(pluginId) {
-    console.log(`[ErrorHandler] Clearing caches for plugin ${pluginId}`)
     
     this.emit('clear-plugin-caches-request', { pluginId })
   }
@@ -553,7 +545,6 @@ export class EditorPluginErrorHandler extends EventEmitter {
    * Optimize plugin performance
    */
   optimizePlugin(pluginId) {
-    console.log(`[ErrorHandler] Optimizing plugin ${pluginId}`)
     
     this.emit('optimize-plugin-request', { pluginId })
   }
@@ -562,7 +553,6 @@ export class EditorPluginErrorHandler extends EventEmitter {
    * Retry network operation with backoff
    */
   retryNetworkOperation(pluginId, errorInfo) {
-    console.log(`[ErrorHandler] Retrying network operation for plugin ${pluginId}`)
     
     this.emit('retry-network-request', { pluginId, errorInfo })
   }
@@ -571,7 +561,6 @@ export class EditorPluginErrorHandler extends EventEmitter {
    * Reset editor state
    */
   resetEditorState(pluginId) {
-    console.log(`[ErrorHandler] Resetting editor state for plugin ${pluginId}`)
     
     this.emit('reset-editor-request', { pluginId })
   }

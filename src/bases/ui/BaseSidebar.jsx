@@ -353,7 +353,6 @@ export default function BaseSidebar({
 
   const scopeStatus = getScopeStatus()
 
-  console.log('BaseSidebar rendering with:', { bases, activeBase, onCreateBase: !!onCreateBase })
 
   return (
     <div className={`flex flex-col bg-rgb(var(--panel)) border-r border-rgb(var(--border)) ${className}`}>
@@ -402,7 +401,6 @@ export default function BaseSidebar({
                 isActive={activeBase?.id === base.id}
                 isExpanded={expandedBases.has(base.id)}
                 onSelect={() => {
-                  console.log('🔘 Base clicked:', base.name, 'path:', base.path);
                   onBaseSelect(base.path);
                 }}
                 onToggleExpanded={() => handleToggleExpanded(base.id)}

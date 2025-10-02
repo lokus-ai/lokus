@@ -27,6 +27,7 @@ import MarkdownPaste from "../extensions/MarkdownPaste.js";
 import MarkdownTablePaste from "../extensions/MarkdownTablePaste.js";
 import SmartTask from "../extensions/SmartTask.js";
 import SimpleTask from "../extensions/SimpleTask.js";
+import CodeBlockIndent from "../extensions/CodeBlockIndent.js";
 import liveEditorSettings from "../../core/editor/live-settings.js";
 import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import { editorAPI } from "../../plugins/api/EditorAPI.js";
@@ -45,7 +46,6 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
   useEffect(() => {
     const handlePluginUpdate = () => {
       const pluginExts = editorAPI.getAllExtensions();
-      console.log(`[Editor] Plugin extensions updated: ${pluginExts.length} extensions`);
       setPluginExtensions(pluginExts);
       setLastPluginUpdate(Date.now());
     };
@@ -56,7 +56,6 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
     const unsubscribeExt = editorAPI.on('extension-registered', handlePluginUpdate);
     const unsubscribeUnregister = editorAPI.on('plugin-unregistered', handlePluginUpdate);
     const unsubscribeHotReload = editorAPI.on('hot-reload-requested', ({ extensions, content: newContent }) => {
-      console.log('[Editor] Hot reload requested');
       // Recreate editor with new extensions - this will be handled by the editor recreation logic
       setLastPluginUpdate(Date.now());
     });
@@ -64,7 +63,6 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
     // Initial load of plugin extensions
     const initialPluginExts = editorAPI.getAllExtensions();
     if (initialPluginExts.length > 0) {
-      console.log(`[Editor] Initial plugin extensions loaded: ${initialPluginExts.length}`);
       setPluginExtensions(initialPluginExts);
     }
 
@@ -95,7 +93,11 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
     const Highlight = pick(HighlightExt, 'Highlight');
     const HorizontalRule = pick(HorizontalRuleExt, 'HorizontalRule');
 
-    const exts = [StarterKit];
+    const exts = [
+      StarterKit.configure({
+        // Use default codeBlock
+      })
+    ];
     if (Link) exts.push(Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true }));
     if (TaskList && TaskItem) exts.push(TaskList, TaskItem);
     if (Image) {
@@ -196,8 +198,10 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
     // Simple task management with unique patterns
     exts.push(SimpleTask);
 
+    // Code block indentation support (Tab, Shift+Tab, Enter)
+    exts.push(CodeBlockIndent);
+
     // Add plugin extensions
-    console.log(`[Editor] Adding ${pluginExtensions.length} plugin extensions`);
     exts.push(...pluginExtensions);
 
     // Load markdown shortcut prefs and editor settings
@@ -323,7 +327,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     onCreate: ({ editor }) => {
       // Update editor instance reference
       editorAPI.setEditorInstance(editor);
-      console.log(`[Editor] Created with ${extensions?.length || 0} extensions`);
     },
     onDestroy: () => {
       // Clear editor instance reference
@@ -385,7 +388,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           
           // Check if content looks like markdown and process it
           if (compiler.isMarkdown(content)) {
-            console.log('[Editor] Processing markdown content for display');
             const htmlContent = compiler.compile(content);
             editor.commands.setContent(htmlContent);
           } else {
@@ -393,7 +395,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           }
         } catch (error) {
           // Fallback if markdown compiler fails
-          console.warn('[Editor] Markdown compiler failed, using content as-is:', error);
           editor.commands.setContent(content);
         }
       })();

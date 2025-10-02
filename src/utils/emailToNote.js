@@ -264,7 +264,6 @@ export function generateEmailFilename(email, options = {}) {
       const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
       filename += `${dateStr}-`;
     } catch (error) {
-      console.warn('Error parsing email date for filename:', error);
     }
   }
   
@@ -343,7 +342,6 @@ export async function saveEmailAsNote(email, workspacePath, options = {}) {
           await invoke('create_directory', { path: `${workspacePath}/${subfolder}` });
         } catch (error) {
           // Directory might already exist, which is fine
-          console.debug('Directory creation result:', error);
         }
       } else {
         filePath = `${workspacePath}/${filename}`;

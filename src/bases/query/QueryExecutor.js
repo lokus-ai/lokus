@@ -308,7 +308,6 @@ export class QueryExecutor {
         }
       } catch (error) {
         // Log error but continue processing other items
-        console.warn(`Filter evaluation error for item:`, error.message);
       }
     }
 

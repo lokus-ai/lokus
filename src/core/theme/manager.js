@@ -103,7 +103,6 @@ function normalize(val) {
 }
 
 export function applyTokens(tokens) {
-  // console.log('[theme] applyTokens called with:', tokens);
   const root = document.documentElement;
   
   // Map app-prefixed tokens to correct CSS variable names
@@ -113,7 +112,6 @@ export function applyTokens(tokens) {
       // Map --app-bg to --bg, etc.
       const mappedKey = key.replace('--app-', '--');
       mappedTokens[mappedKey] = value;
-      // console.log(`[theme] Mapping ${key} -> ${mappedKey}: ${value}`);
     }
     mappedTokens[key] = value;
   }
@@ -122,14 +120,11 @@ export function applyTokens(tokens) {
     const value = mappedTokens[key];
     if (value) {
       const normalizedValue = normalize(value);
-      // console.log(`[theme] Setting ${key}: ${value} -> ${normalizedValue}`);
       root.style.setProperty(key, normalizedValue);
     } else {
-      // console.log(`[theme] Removing ${key} (no value)`);
       root.style.removeProperty(key);
     }
   }
-  // console.log('[theme] applyTokens completed');
 }
 
 export async function broadcastTheme(payload) {
@@ -207,9 +202,6 @@ export async function setGlobalActiveTheme(id) {
   
   const manifest = await loadThemeManifestById(id);
   const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
-  // console.log(`[theme] Applying tokens for theme "${id}"`);
-  // console.log(`[theme] Manifest loaded:`, manifest);
-  // console.log(`[theme] Tokens to apply:`, tokensToApply);
   applyTokens(tokensToApply);
   
   await broadcastTheme({ tokens: tokensToApply, visuals: { theme: id } });

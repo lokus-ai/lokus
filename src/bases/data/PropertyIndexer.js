@@ -31,7 +31,6 @@ export class PropertyIndex {
    */
   async buildIndex(workspacePath, options = {}) {
     if (this.isIndexing) {
-      console.warn('Index building already in progress');
       return;
     }
 
@@ -532,7 +531,6 @@ export class PropertyIndex {
           return false;
       }
     } catch (error) {
-      console.warn('Error evaluating filter condition:', error);
       return false;
     }
   }
@@ -704,7 +702,6 @@ export class PropertyIndex {
       try {
         callback(event);
       } catch (error) {
-        console.warn('Error in property indexer listener:', error);
       }
     }
   }

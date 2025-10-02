@@ -39,16 +39,13 @@ class PluginManager {
 
   async loadPlugins(forceReload = false) {
     const now = Date.now();
-    console.log(`🔧 PluginManager.loadPlugins called - forceReload: ${forceReload}, plugins.length: ${this.plugins.length}, lastLoadTime: ${now - this.lastLoadTime}ms ago`);
 
     // Check cache unless forced reload
     if (!forceReload && this.loadInProgress) {
-      console.log('📦 Plugin loading already in progress, skipping...');
       return this.plugins;
     }
 
     if (!forceReload && this.plugins.length > 0 && (now - this.lastLoadTime) < this.CACHE_DURATION) {
-      console.log('📦 Using cached plugin data');
       return this.plugins;
     }
 
@@ -70,7 +67,6 @@ class PluginManager {
       } catch {}
 
       if (isTauri) {
-        console.log('📦 Loading plugins from backend...');
         // Load real plugins from Tauri backend
         const [pluginInfos, enabledPluginNames] = await Promise.all([
           invoke('list_plugins'),
@@ -119,7 +115,6 @@ class PluginManager {
 
         // Update cache time
         this.lastLoadTime = now;
-        console.log('📦 Plugins loaded and cached');
       } else {
         // Browser mode - empty list
         this.plugins = [];
@@ -306,8 +301,6 @@ class PluginManager {
 }
 
 // Create singleton instance
-// console.log('🔧 Creating PluginManager singleton');
 const pluginManager = new PluginManager();
-console.log('🔧 PluginManager singleton created');
 
 export default pluginManager;

@@ -29,7 +29,6 @@ class PlatformService {
     try {
       this.platformModule = await getPlatformModule();
       this.initialized = true;
-      console.log(`Platform Service initialized for ${this.platform}`);
     } catch (error) {
       console.error('Failed to initialize platform service:', error);
     }
@@ -62,7 +61,6 @@ class PlatformService {
     await this.initialize();
     
     if (!this.platformModule) {
-      console.warn('Platform module not initialized');
       return {};
     }
     
@@ -102,7 +100,6 @@ class PlatformService {
     await this.initialize();
     
     if (!this.platformModule) {
-      console.warn('Platform module not initialized');
       return {};
     }
     
@@ -132,7 +129,6 @@ class PlatformService {
     await this.initialize();
     
     if (!this.platformModule) {
-      console.warn('Platform module not initialized');
       return { isValidFilename: () => true };
     }
     
@@ -155,7 +151,6 @@ class PlatformService {
     await this.initialize();
     
     if (!this.platformModule) {
-      console.warn('Platform module not initialized');
       return {
         isDarkModeEnabled: () => window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
       };
@@ -193,7 +188,6 @@ class PlatformService {
     await this.initialize();
     
     if (!this.platformModule) {
-      console.warn('Platform module not initialized');
       return null;
     }
     
@@ -251,7 +245,6 @@ class PlatformService {
   // Check if event matches a shortcut
   matchesShortcut(event, shortcut) {
     if (!this.platformModule) {
-      console.warn('Platform module not initialized');
       return false;
     }
     

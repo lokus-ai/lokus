@@ -58,7 +58,6 @@ export default function Launcher() {
 
     const unlistenPromise = isTauri
       ? listen("lokus:open-workspace", () => {
-          console.log('🎯 Launcher received lokus:open-workspace event - already showing welcome screen!');
           // Already showing the launcher/welcome screen, so just log
         })
       : Promise.resolve(() => {});

@@ -414,9 +414,7 @@ export class BaseParser {
 
       // Validate if requested
       if ((this.validateOnParse || options.validate) && options.validate !== false) {
-        console.log('🔍 Validating base definition:', baseDefinition)
         const validation = baseValidator.validateBase(baseDefinition)
-        console.log('📋 Validation result:', validation)
         if (!validation.isValid) {
           console.error('❌ Base validation errors:', validation.errors)
           validation.errors.forEach((error, index) => {
@@ -426,7 +424,6 @@ export class BaseParser {
           error.validationResult = validation
           throw error
         }
-        console.log('✅ Base validation passed')
       }
 
       return {

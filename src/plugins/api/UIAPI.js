@@ -626,7 +626,6 @@ export class UIAPI extends EventEmitter {
     try {
       localStorage.setItem('lokus-ui-layout', JSON.stringify(layout));
     } catch (error) {
-      console.warn('Failed to save UI layout:', error);
     }
   }
 
@@ -653,7 +652,6 @@ export class UIAPI extends EventEmitter {
         }
       }
     } catch (error) {
-      console.warn('Failed to load UI layout:', error);
     }
   }
 
@@ -743,7 +741,6 @@ export class UIAPI extends EventEmitter {
       const key = `lokus-panel-${panelId}`;
       localStorage.setItem(key, JSON.stringify(state));
     } catch (error) {
-      console.warn(`Failed to save panel state for ${panelId}:`, error);
     }
   }
 
@@ -756,7 +753,6 @@ export class UIAPI extends EventEmitter {
       const saved = localStorage.getItem(key);
       return saved ? JSON.parse(saved) : null;
     } catch (error) {
-      console.warn(`Failed to load panel state for ${panelId}:`, error);
       return null;
     }
   }

@@ -376,7 +376,6 @@ export class EditorPluginAPI extends EventEmitter {
     })
     
     if (securityViolations.length > 0) {
-      console.warn(`[EditorAPI] Security violations detected for node ${config.name}:`, securityViolations)
     }
     
     try {
@@ -910,14 +909,12 @@ export class EditorPluginAPI extends EventEmitter {
    */
   async hotReloadExtensions() {
     if (!this.editorInstance) {
-      console.warn('[EditorAPI] No editor instance available for hot reload')
       return
     }
 
     const startTime = performance.now()
     
     try {
-      console.log('[EditorAPI] Hot reloading extensions...')
       
       // Get current content
       const content = this.editorInstance.getHTML()
@@ -948,7 +945,6 @@ export class EditorPluginAPI extends EventEmitter {
       // Emit event for editor recreation
       this.emit('hot-reload-requested', { extensions: validExtensions, content })
       
-      console.log(`[EditorAPI] Hot reload completed with ${validExtensions.length} extensions`)
       
     } catch (error) {
       // Handle error with context
@@ -970,20 +966,17 @@ export class EditorPluginAPI extends EventEmitter {
       try {
         // Basic validation - ensure extension has required properties
         if (!extension || typeof extension !== 'object') {
-          console.warn('[EditorAPI] Invalid extension object detected during hot reload')
           return false
         }
         
         // Check if plugin is quarantined
         const pluginId = extension.pluginId
         if (pluginId && errorHandler.quarantinedPlugins.has(pluginId)) {
-          console.warn(`[EditorAPI] Skipping quarantined plugin ${pluginId} during hot reload`)
           return false
         }
         
         return true
       } catch (error) {
-        console.warn('[EditorAPI] Error validating extension during hot reload:', error)
         return false
       }
     })
@@ -1141,7 +1134,6 @@ export class EditorPluginAPI extends EventEmitter {
     // Validate attribute definitions
     for (const [name, config] of Object.entries(attributes)) {
       if (typeof config !== 'object') {
-        console.warn(`[EditorAPI] Invalid attribute config for ${name}`)
         continue
       }
     }

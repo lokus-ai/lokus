@@ -46,7 +46,6 @@ async function initializeTauriAPIs() {
       readTextFile: tauriFs.readTextFile
     };
   } catch (error) {
-    console.warn('Failed to load Tauri APIs, running in browser mode:', error);
     return { isTauri: false };
   }
 }
