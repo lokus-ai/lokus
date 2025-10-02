@@ -354,7 +354,6 @@ export default function EnhancedSearchPanel({
           }
 
         } catch (providerError) {
-          console.warn('Provider search failed, falling back to local:', providerError)
         }
       }
 
@@ -437,7 +436,6 @@ export default function EnhancedSearchPanel({
       )
       return suggestions || []
     } catch (error) {
-      console.warn('Failed to get search suggestions:', error)
       return []
     }
   }, [currentProvider, searchCapabilities])

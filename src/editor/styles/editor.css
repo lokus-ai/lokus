@@ -866,3 +866,105 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
     border-color: rgba(107, 114, 128, 0.3);
   }
 }
+
+/* Syntax Highlighting for Code Blocks */
+.ProseMirror pre {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Consolas', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.ProseMirror pre code {
+  background: none;
+  color: inherit;
+  font-size: inherit;
+  padding: 0;
+}
+
+/* Syntax Highlighting Tokens */
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in {
+  color: #0033B3; /* Keywords: public, class, function */
+}
+
+.hljs-string, .hljs-attr {
+  color: #067D17; /* Strings and attributes */
+}
+
+.hljs-number, .hljs-literal {
+  color: #1750EB; /* Numbers and literals: true, false, null */
+}
+
+.hljs-comment {
+  color: #8C8C8C;
+  font-style: italic;
+}
+
+.hljs-title, .hljs-class .hljs-title, .hljs-function .hljs-title {
+  color: #00627A; /* Function and class names */
+}
+
+.hljs-variable, .hljs-template-variable {
+  color: #660E7A; /* Variables */
+}
+
+.hljs-type, .hljs-class {
+  color: #000000;
+  font-weight: bold;
+}
+
+.hljs-meta {
+  color: #9E880D; /* Annotations: @Override, decorators */
+}
+
+.hljs-params {
+  color: #000000;
+}
+
+/* Dark mode syntax highlighting */
+@media (prefers-color-scheme: dark) {
+  .ProseMirror pre {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .hljs-keyword, .hljs-selector-tag, .hljs-built_in {
+    color: #CF8E6D; /* Keywords in dark mode */
+  }
+
+  .hljs-string, .hljs-attr {
+    color: #6AAB73; /* Strings in dark mode */
+  }
+
+  .hljs-number, .hljs-literal {
+    color: #2AACB8; /* Numbers in dark mode */
+  }
+
+  .hljs-comment {
+    color: #7A7E85;
+  }
+
+  .hljs-title, .hljs-class .hljs-title, .hljs-function .hljs-title {
+    color: #56A8F5; /* Function names in dark mode */
+  }
+
+  .hljs-variable, .hljs-template-variable {
+    color: #C77DBB;
+  }
+
+  .hljs-type, .hljs-class {
+    color: #CF8E6D;
+  }
+
+  .hljs-meta {
+    color: #BBB529;
+  }
+
+  .hljs-params {
+    color: #A1C17E;
+  }
+}

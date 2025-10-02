@@ -219,7 +219,11 @@ export default function BaseTableView({
     modified: false,
     size: false,
     path: false,
-    tags: false
+    extension: false,
+    tags: false,
+    links: false,
+    embeds: false,
+    aliases: false
   })
 
   const [columnWidths, setColumnWidths] = useState({})
@@ -278,6 +282,10 @@ export default function BaseTableView({
   const displayColumns = useMemo(() => {
     const defaultOrder = ['name', ...Object.keys(enabledColumns).filter(col => col !== 'name' && enabledColumns[col])]
 
+    console.log('[BaseTableView] Enabled columns:', enabledColumns)
+    console.log('[BaseTableView] Default order:', defaultOrder)
+    console.log('[BaseTableView] Saved column order:', columnOrder)
+
     if (!columnOrder) {
       return defaultOrder
     }
@@ -290,7 +298,10 @@ export default function BaseTableView({
     // Add any new enabled columns that aren't in the saved order
     const newColumns = defaultOrder.filter(col => !orderedColumns.includes(col))
 
-    return [...orderedColumns, ...newColumns]
+    const finalColumns = [...orderedColumns, ...newColumns]
+    console.log('[BaseTableView] Final display columns:', finalColumns)
+
+    return finalColumns
   }, [enabledColumns, columnOrder])
 
   // Filter items based on folder scope and apply sorting
@@ -454,9 +465,14 @@ export default function BaseTableView({
 
     const loadConfig = async () => {
       const settings = configManager.getBaseSettings(base.name)
-      console.log('📥 Loading saved config for base:', base.name, settings)
 
-      if (settings.enabledColumns) setEnabledColumns(settings.enabledColumns)
+      // Merge saved enabledColumns with defaults to ensure all columns are present
+      if (settings.enabledColumns) {
+        setEnabledColumns(prev => ({
+          ...prev, // Keep defaults
+          ...settings.enabledColumns // Override with saved settings
+        }))
+      }
       if (settings.pinnedColumns) setPinnedColumns(settings.pinnedColumns)
       if (settings.columnWidths) setColumnWidths(settings.columnWidths)
       if (settings.columnOrder) setColumnOrder(settings.columnOrder)
@@ -626,7 +642,6 @@ export default function BaseTableView({
       // Trigger refresh
       window.location.reload();
     } catch (err) {
-      console.error('Failed to delete files:', err);
       alert('Failed to delete some files');
     }
   };
@@ -646,7 +661,6 @@ export default function BaseTableView({
       // Trigger refresh
       window.location.reload();
     } catch (err) {
-      console.error('Failed to edit files:', err);
       alert('Failed to edit some files');
     }
   };
@@ -872,7 +886,6 @@ export default function BaseTableView({
       }, 2000)
 
     } catch (error) {
-      console.error('Failed to save cell:', error)
       setSaveStatus('error')
       setTimeout(() => setSaveStatus(null), 3000)
     }
@@ -964,7 +977,6 @@ export default function BaseTableView({
     event.preventDefault();
 
     if (!onFileOpen) {
-      console.warn('onFileOpen prop not provided');
       return;
     }
 
@@ -978,11 +990,9 @@ export default function BaseTableView({
     if (event.metaKey || event.ctrlKey) {
       // Cmd/Ctrl + click = new tab
       // For now, just open in same tab (we can implement new tab later)
-      console.log('Opening file (cmd+click):', filePath);
       onFileOpen(fileObject);
     } else {
       // Normal click = same tab
-      console.log('Opening file:', filePath);
       onFileOpen(fileObject);
     }
   };
@@ -1029,8 +1039,9 @@ export default function BaseTableView({
       )}
 
       {/* Clean table with proper dark theme colors */}
-      <div className="flex-1 bg-app-bg relative" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '100%', paddingRight: '1px' }}>
-        <table style={{ width: '100%', minWidth: 'max-content', marginRight: '40px' }}>
+      <div className="flex-1 bg-app-bg relative" style={{ overflow: 'auto' }}>
+        <div style={{ display: 'inline-block', minWidth: '100%' }}>
+          <table style={{ width: 'fit-content' }}>
           {/* Table header */}
           <thead className="sticky top-0 z-10 bg-app-bg">
             <tr className="border-b border-app-border">
@@ -1392,6 +1403,7 @@ export default function BaseTableView({
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* Sort Dropdown Portal */}

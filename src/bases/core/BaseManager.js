@@ -161,17 +161,14 @@ export class BaseManager {
       }
 
       // Check if file exists
-      console.log('📂 Loading base from path:', basePath)
       const exists = await this.fileExists(basePath)
       if (!exists) {
         console.error('❌ Base file not found at path:', basePath)
         throw new Error(`Base file not found: ${basePath}`)
       }
-      console.log('✅ Base file exists, proceeding to read content')
 
       // Read file content
       const content = await invoke('read_file_content', { path: basePath })
-      console.log('📄 Read base file content, length:', content?.length)
 
       // Parse content
       const parseResult = baseParser.parse(content, {
@@ -184,9 +181,6 @@ export class BaseManager {
       }
 
       const baseDefinition = parseResult.data
-      console.log('✅ Successfully parsed base definition:', baseDefinition.name)
-      console.log('🔍 BaseManager: Parsed base definition keys:', Object.keys(baseDefinition))
-      console.log('🔍 BaseManager: Views in parsed definition:', baseDefinition.views)
       const metadata = {
         id: baseId,
         name: baseDefinition.name,
@@ -375,17 +369,14 @@ export class BaseManager {
   async listBases(directory = null, options = {}) {
     try {
       const basesDir = directory ? directory + '/.lokus/bases' : await this.getBasesDirectory(directory)
-      console.log('Looking for bases in directory:', basesDir)
 
       // Get all .base files in directory
       const allFiles = await invoke('read_workspace_files', { workspacePath: basesDir })
-      console.log('Files found in bases directory:', allFiles)
 
       const files = allFiles
         .filter(file => file.name.endsWith('.base'))
         .map(file => file.path)
 
-      console.log('Filtered .base files:', files)
 
       const bases = []
 
@@ -741,12 +732,9 @@ export class BaseManager {
 
   async fileExists(path) {
     try {
-      console.log('🔍 Checking if file exists:', path)
       const content = await invoke('read_file_content', { path: path })
-      console.log('✅ File exists and is readable:', path)
       return true
     } catch (error) {
-      console.log('❌ File check failed:', path, error)
       return false
     }
   }

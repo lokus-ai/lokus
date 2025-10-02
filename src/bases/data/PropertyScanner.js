@@ -55,7 +55,6 @@ export class PropertyScanner {
     try {
       return this.parseSimpleYaml(yamlContent);
     } catch (error) {
-      console.warn('Failed to parse YAML frontmatter:', error);
       return {};
     }
   }
@@ -226,7 +225,6 @@ export class PropertyScanner {
 
       return properties;
     } catch (error) {
-      console.warn(`Failed to scan file ${filePath}:`, error);
       return {};
     }
   }
@@ -319,7 +317,6 @@ export class PropertyScanner {
         }
       }
     } catch (error) {
-      console.warn(`Failed to read directory ${dirPath}:`, error);
     }
   }
 
@@ -389,7 +386,6 @@ export class PropertyScanner {
 
       return false;
     } catch (error) {
-      console.warn(`Failed to check file changes for ${filePath}:`, error);
       return false;
     }
   }
@@ -480,7 +476,6 @@ export class PropertyScanner {
       try {
         callback(event);
       } catch (error) {
-        console.warn('Error in property scanner listener:', error);
       }
     }
   }

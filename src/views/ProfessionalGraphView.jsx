@@ -160,7 +160,6 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
 
     const reloadData = async () => {
       try {
-        // console.log('🔄 ProfessionalGraph: Reloading data due to fileTree change');
 
         if (fileTree.length > 0) {
           await loadWorkspaceData(graphDataManager, workspacePath, fileTree);
@@ -206,11 +205,9 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       // Use provided file tree if available, otherwise scan workspace
       if (providedFileTree && providedFileTree.length > 0) {
         files = providedFileTree;
-        // console.log(`🎯 ProfessionalGraph using filtered file tree with ${files.length} entries`);
       } else {
         // Fall back to scanning entire workspace
         files = await invoke("read_workspace_files", { workspacePath });
-        // console.log(`📂 ProfessionalGraph scanning entire workspace with ${files.length} entries`);
       }
 
       // Filter for markdown files
@@ -232,14 +229,12 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         try {
           // Read file content
           const content = await invoke("read_file_content", { path: file.path });
-          // console.log(`🔎 ProfessionalGraph reading "${file.name}": ${content.length} chars, type: ${content.includes('<') ? 'HTML' : 'Markdown'}`);
           
           // Look for WikiLinks in both Markdown and HTML formats
           const markdownWikiLinks = content.match(/\[\[([^\]]+)\]\]/g) || [];
           const htmlWikiLinks = content.match(/<a[^>]+target="([^"]+)"[^>]*>/g) || [];
           
           const allWikiLinks = [...markdownWikiLinks, ...htmlWikiLinks];
-          console.log(`🔗 ProfessionalGraph found ${allWikiLinks.length} WikiLinks in "${file.name}": [${allWikiLinks.join(', ')}]`);
           
           if (allWikiLinks.length > 0) {
           } else {
@@ -569,12 +564,10 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         simulation.alpha(0.3).restart();
       }
     } catch (error) {
-      console.warn('Failed to update forces:', error);
     }
   }, [viewMode]);
 
   const handlePresetSelect = useCallback((presetName, presetConfig) => {
-    console.log(`Applied preset: ${presetName}`, presetConfig);
     // Additional preset-specific logic can be added here
   }, []);
   

@@ -61,7 +61,6 @@ export function useGmailAuth() {
     const setupListener = async () => {
       try {
         unsubscribe = await listen('gmail-auth-changed', () => {
-          console.log('Gmail auth state changed, refreshing...');
           checkAuthStatus();
         });
       } catch (error) {
@@ -681,7 +680,6 @@ export function useGmailQueue() {
     const setupListener = async () => {
       try {
         unsubscribe = await listen('gmail-queue-changed', () => {
-          console.log('Gmail queue changed, refreshing stats...');
           loadQueueStats();
         });
       } catch (error) {

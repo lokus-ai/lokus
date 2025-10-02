@@ -32,7 +32,6 @@ export class PluginCompatibilityTester extends EventEmitter {
       stressTests: false // Disabled by default
     }
     
-    console.log('[PluginCompatibilityTester] Initialized')
   }
 
   // === MAIN TEST SUITES ===
@@ -43,7 +42,6 @@ export class PluginCompatibilityTester extends EventEmitter {
   async runAllTests(config = {}) {
     this.config = { ...this.config, ...config }
     
-    console.log('[PluginCompatibilityTester] Starting comprehensive test suite...')
     const startTime = performance.now()
     
     const testSuites = []
@@ -74,7 +72,6 @@ export class PluginCompatibilityTester extends EventEmitter {
     // Compile final report
     const report = this.compileTestReport(results, performance.now() - startTime)
     
-    console.log('[PluginCompatibilityTester] Test suite completed')
     this.emit('tests-completed', report)
     
     return report
@@ -84,7 +81,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    * Test backward compatibility with existing extensions
    */
   async runBackwardCompatibilityTests() {
-    console.log('[PluginCompatibilityTester] Running backward compatibility tests...')
     
     const tests = [
       this.testExistingExtensionsStillWork(),
@@ -112,7 +108,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    * Test hot-reloading functionality
    */
   async runHotReloadTests() {
-    console.log('[PluginCompatibilityTester] Running hot-reload tests...')
     
     const tests = [
       this.testBasicHotReload(),
@@ -140,7 +135,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    * Test performance under various conditions
    */
   async runPerformanceTests() {
-    console.log('[PluginCompatibilityTester] Running performance tests...')
     
     const tests = [
       this.testExtensionLoadPerformance(),
@@ -167,7 +161,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    * Test error recovery mechanisms
    */
   async runErrorRecoveryTests() {
-    console.log('[PluginCompatibilityTester] Running error recovery tests...')
     
     const tests = [
       this.testPluginErrorRecovery(),
@@ -194,7 +187,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    * Test system under stress conditions
    */
   async runStressTests() {
-    console.log('[PluginCompatibilityTester] Running stress tests...')
     
     const tests = [
       this.testManyPluginsSimultaneously(),
@@ -224,7 +216,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    */
   async testExistingExtensionsStillWork() {
     const testName = 'Existing Extensions Compatibility'
-    console.log(`[Test] ${testName}`)
     
     try {
       // Test that core extensions are still working
@@ -261,7 +252,6 @@ export class PluginCompatibilityTester extends EventEmitter {
         success: issues.length === 0
       }
       
-      console.log(`[Test] ${testName} - ${result.success ? 'PASSED' : 'FAILED'}:`, result)
       return result
       
     } catch (error) {
@@ -275,7 +265,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    */
   async testOldAPIMethodsStillWork() {
     const testName = 'Legacy API Methods'
-    console.log(`[Test] ${testName}`)
     
     try {
       const results = {}
@@ -318,7 +307,6 @@ export class PluginCompatibilityTester extends EventEmitter {
         success: allMethodsWork
       }
       
-      console.log(`[Test] ${testName} - ${result.success ? 'PASSED' : 'FAILED'}:`, result)
       return result
       
     } catch (error) {
@@ -332,7 +320,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    */
   async testLegacyPluginFormats() {
     const testName = 'Legacy Plugin Formats'
-    console.log(`[Test] ${testName}`)
     
     try {
       // Create a mock legacy plugin
@@ -372,7 +359,6 @@ export class PluginCompatibilityTester extends EventEmitter {
         success: !!legacyExtension && loadTime < 1000
       }
       
-      console.log(`[Test] ${testName} - ${result.success ? 'PASSED' : 'FAILED'}:`, result)
       return result
       
     } catch (error) {
@@ -386,7 +372,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    */
   async testExistingSlashCommands() {
     const testName = 'Existing Slash Commands'
-    console.log(`[Test] ${testName}`)
     
     try {
       const slashCommands = editorAPI.getSlashCommands()
@@ -422,7 +407,6 @@ export class PluginCompatibilityTester extends EventEmitter {
         success: issues.length === 0 && validCommands > 0
       }
       
-      console.log(`[Test] ${testName} - ${result.success ? 'PASSED' : 'FAILED'}:`, result)
       return result
       
     } catch (error) {
@@ -436,7 +420,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    */
   async testExistingToolbarItems() {
     const testName = 'Existing Toolbar Items'
-    console.log(`[Test] ${testName}`)
     
     try {
       const toolbarItems = editorAPI.getToolbarItems()
@@ -465,7 +448,6 @@ export class PluginCompatibilityTester extends EventEmitter {
         success: issues.length === 0
       }
       
-      console.log(`[Test] ${testName} - ${result.success ? 'PASSED' : 'FAILED'}:`, result)
       return result
       
     } catch (error) {
@@ -479,7 +461,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    */
   async testExistingInputRules() {
     const testName = 'Existing Input Rules'
-    console.log(`[Test] ${testName}`)
     
     try {
       // Input rules are internal to extensions, so we test that extensions with input rules work
@@ -502,7 +483,6 @@ export class PluginCompatibilityTester extends EventEmitter {
         success: extensionsWithInputRules > 0
       }
       
-      console.log(`[Test] ${testName} - ${result.success ? 'PASSED' : 'FAILED'}:`, result)
       return result
       
     } catch (error) {
@@ -518,7 +498,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    */
   async testBasicHotReload() {
     const testName = 'Basic Hot Reload'
-    console.log(`[Test] ${testName}`)
     
     try {
       // Create mock plugin
@@ -550,7 +529,6 @@ export class PluginCompatibilityTester extends EventEmitter {
         success: afterCount === initialCount && reloadTime < 2000
       }
       
-      console.log(`[Test] ${testName} - ${result.success ? 'PASSED' : 'FAILED'}:`, result)
       return result
       
     } catch (error) {
@@ -564,7 +542,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    */
   async testHotReloadWithContent() {
     const testName = 'Hot Reload Content Preservation'
-    console.log(`[Test] ${testName}`)
     
     try {
       // This test would require a real editor instance
@@ -593,7 +570,6 @@ export class PluginCompatibilityTester extends EventEmitter {
         success: reloadTime < 1000
       }
       
-      console.log(`[Test] ${testName} - ${result.success ? 'PASSED' : 'FAILED'}:`, result)
       return result
       
     } catch (error) {
@@ -607,7 +583,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    */
   async testHotReloadWithErrors() {
     const testName = 'Hot Reload Error Handling'
-    console.log(`[Test] ${testName}`)
     
     try {
       // Create mock plugin with potential error
@@ -640,7 +615,6 @@ export class PluginCompatibilityTester extends EventEmitter {
         success: errorCaught && systemStillWorks
       }
       
-      console.log(`[Test] ${testName} - ${result.success ? 'PASSED' : 'FAILED'}:`, result)
       return result
       
     } catch (error) {
@@ -654,7 +628,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    */
   async testMultipleHotReloads() {
     const testName = 'Multiple Hot Reloads'
-    console.log(`[Test] ${testName}`)
     
     try {
       const reloadCount = 5
@@ -681,7 +654,6 @@ export class PluginCompatibilityTester extends EventEmitter {
         success: averageReloadTime < 1000 && maxReloadTime < 2000
       }
       
-      console.log(`[Test] ${testName} - ${result.success ? 'PASSED' : 'FAILED'}:`, result)
       return result
       
     } catch (error) {
@@ -695,7 +667,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    */
   async testHotReloadPerformance() {
     const testName = 'Hot Reload Performance'
-    console.log(`[Test] ${testName}`)
     
     try {
       const iterations = 10
@@ -720,7 +691,6 @@ export class PluginCompatibilityTester extends EventEmitter {
         success: averageTime < 500 && maxTime < 1000
       }
       
-      console.log(`[Test] ${testName} - ${result.success ? 'PASSED' : 'FAILED'}:`, result)
       return result
       
     } catch (error) {
@@ -734,7 +704,6 @@ export class PluginCompatibilityTester extends EventEmitter {
    */
   async testHotReloadEditorState() {
     const testName = 'Hot Reload Editor State'
-    console.log(`[Test] ${testName}`)
     
     try {
       // This would require a real editor instance to test properly
@@ -760,7 +729,6 @@ export class PluginCompatibilityTester extends EventEmitter {
         success: true
       }
       
-      console.log(`[Test] ${testName} - ${result.success ? 'PASSED' : 'FAILED'}:`, result)
       return result
       
     } catch (error) {
@@ -797,7 +765,6 @@ export class PluginCompatibilityTester extends EventEmitter {
           title: 'Mock Command',
           description: 'A mock command for testing',
           icon: '🧪',
-          handler: () => console.log('Mock command executed')
         })
       }
     }
@@ -870,13 +837,11 @@ export class PluginCompatibilityTester extends EventEmitter {
    * Clean up mock plugins
    */
   async cleanup() {
-    console.log('[PluginCompatibilityTester] Cleaning up mock plugins...')
     
     for (const [pluginId, plugin] of this.mockPlugins) {
       try {
         await extensionManager.unloadPluginExtensions(pluginId)
       } catch (error) {
-        console.warn(`Failed to cleanup mock plugin ${pluginId}:`, error)
       }
     }
     
@@ -889,91 +854,76 @@ export class PluginCompatibilityTester extends EventEmitter {
   
   async testExtensionLoadPerformance() {
     const testName = 'Extension Load Performance'
-    console.log(`[Test] ${testName} - PLACEHOLDER`)
     return { success: true, placeholder: true }
   }
   
   async testLargeDocumentPerformance() {
     const testName = 'Large Document Performance'
-    console.log(`[Test] ${testName} - PLACEHOLDER`)
     return { success: true, placeholder: true }
   }
   
   async testMultiplePluginsPerformance() {
     const testName = 'Multiple Plugins Performance'
-    console.log(`[Test] ${testName} - PLACEHOLDER`)
     return { success: true, placeholder: true }
   }
   
   async testMemoryUsage() {
     const testName = 'Memory Usage'
-    console.log(`[Test] ${testName} - PLACEHOLDER`)
     return { success: true, placeholder: true }
   }
   
   async testRenderingPerformance() {
     const testName = 'Rendering Performance'
-    console.log(`[Test] ${testName} - PLACEHOLDER`)
     return { success: true, placeholder: true }
   }
   
   async testPluginErrorRecovery() {
     const testName = 'Plugin Error Recovery'
-    console.log(`[Test] ${testName} - PLACEHOLDER`)
     return { success: true, placeholder: true }
   }
   
   async testQuarantineSystem() {
     const testName = 'Quarantine System'
-    console.log(`[Test] ${testName} - PLACEHOLDER`)
     return { success: true, placeholder: true }
   }
   
   async testFallbackMechanisms() {
     const testName = 'Fallback Mechanisms'
-    console.log(`[Test] ${testName} - PLACEHOLDER`)
     return { success: true, placeholder: true }
   }
   
   async testErrorThresholds() {
     const testName = 'Error Thresholds'
-    console.log(`[Test] ${testName} - PLACEHOLDER`)
     return { success: true, placeholder: true }
   }
   
   async testSecurityValidation() {
     const testName = 'Security Validation'
-    console.log(`[Test] ${testName} - PLACEHOLDER`)
     return { success: true, placeholder: true }
   }
   
   async testManyPluginsSimultaneously() {
     const testName = 'Many Plugins Simultaneously'
-    console.log(`[Test] ${testName} - PLACEHOLDER`)
     return { success: true, placeholder: true }
   }
   
   async testRapidHotReloads() {
     const testName = 'Rapid Hot Reloads'
-    console.log(`[Test] ${testName} - PLACEHOLDER`)
     return { success: true, placeholder: true }
   }
   
   async testMemoryLeaks() {
     const testName = 'Memory Leaks'
-    console.log(`[Test] ${testName} - PLACEHOLDER`)
     return { success: true, placeholder: true }
   }
   
   async testLongRunningOperations() {
     const testName = 'Long Running Operations'
-    console.log(`[Test] ${testName} - PLACEHOLDER`)
     return { success: true, placeholder: true }
   }
   
   async testConcurrentExtensions() {
     const testName = 'Concurrent Extensions'
-    console.log(`[Test] ${testName} - PLACEHOLDER`)
     return { success: true, placeholder: true }
   }
 }

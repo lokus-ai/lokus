@@ -15,9 +15,7 @@ export const gmailAuth = {
    */
   async initiateAuth() {
     try {
-      console.log('🔐 Gmail: Initiating authentication...');
       const authUrl = await invoke('gmail_initiate_auth');
-      console.log('🔗 Gmail: Generated auth URL');
       return authUrl;
     } catch (error) {
       console.error('❌ Gmail: Failed to initiate auth:', error);
@@ -33,9 +31,7 @@ export const gmailAuth = {
    */
   async completeAuth(code, state) {
     try {
-      console.log('🔐 Gmail: Completing authentication...');
       const profile = await invoke('gmail_complete_auth', { code, state });
-      console.log('✅ Gmail: Authentication completed successfully');
       return profile;
     } catch (error) {
       console.error('❌ Gmail: Failed to complete auth:', error);
@@ -50,7 +46,6 @@ export const gmailAuth = {
   async isAuthenticated() {
     try {
       const isAuth = await invoke('gmail_is_authenticated');
-      console.log('🔍 Gmail: Authentication status:', isAuth);
       return isAuth;
     } catch (error) {
       console.error('❌ Gmail: Failed to check auth status:', error);
@@ -64,9 +59,7 @@ export const gmailAuth = {
    */
   async logout() {
     try {
-      console.log('🔐 Gmail: Logging out...');
       await invoke('gmail_logout');
-      console.log('✅ Gmail: Logged out successfully');
     } catch (error) {
       console.error('❌ Gmail: Failed to logout:', error);
       throw new Error(`Gmail logout failed: ${error.message}`);
@@ -79,9 +72,7 @@ export const gmailAuth = {
    */
   async getUserProfile() {
     try {
-      console.log('👤 Gmail: Fetching user profile...');
       const profile = await invoke('gmail_get_profile');
-      console.log('✅ Gmail: Profile fetched successfully');
       return profile;
     } catch (error) {
       console.error('❌ Gmail: Failed to get profile:', error);
@@ -118,7 +109,6 @@ export const gmailEmails = {
         labelIds = []
       } = options;
 
-      console.log('📧 Gmail: Listing emails with options:', options);
       const emails = await invoke('gmail_list_emails', 
         maxResults,
         pageToken,
@@ -126,7 +116,6 @@ export const gmailEmails = {
         false // include_spam_trash
       );
       const result = { emails };
-      console.log(`✅ Gmail: Listed ${result.emails?.length || 0} emails`);
       return result;
     } catch (error) {
       console.error('❌ Gmail: Failed to list emails:', error);
@@ -143,7 +132,6 @@ export const gmailEmails = {
   async searchEmails(query, options = {}) {
     try {
       const { maxResults = 50, pageToken = null, includeSpamTrash = false } = options;
-      console.log('🔍 Gmail: Searching emails with query:', query);
       const emails = await invoke('gmail_search_emails', 
         query,
         maxResults,
@@ -151,7 +139,6 @@ export const gmailEmails = {
         includeSpamTrash
       );
       const result = { emails };
-      console.log(`✅ Gmail: Found ${result.emails?.length || 0} emails`);
       return result;
     } catch (error) {
       console.error('❌ Gmail: Failed to search emails:', error);
@@ -167,9 +154,7 @@ export const gmailEmails = {
    */
   async getEmail(messageId, format = 'full') {
     try {
-      console.log('📧 Gmail: Fetching email:', messageId);
       const email = await invoke('gmail_get_email', messageId);
-      console.log('✅ Gmail: Email fetched successfully');
       return email;
     } catch (error) {
       console.error('❌ Gmail: Failed to get email:', error);
@@ -190,7 +175,6 @@ export const gmailEmails = {
    */
   async sendEmail(emailData) {
     try {
-      console.log('📤 Gmail: Sending email to:', emailData.to, `(${emailData.to.length})`);
       
       // Convert email addresses to proper format for Rust backend
       const toAddresses = Array.isArray(emailData.to) ? emailData.to.map(email => ({ email })) : [{ email: emailData.to }];
@@ -205,21 +189,7 @@ export const gmailEmails = {
         cc: ccAddresses,
         bcc: bccAddresses
       };
-      
-      console.log('📧 [DEBUG] Sending to Rust backend:', {
-        to: emailPayload.to,
-        subject: emailPayload.subject,
-        bodyTextLength: emailPayload.body_text ? emailPayload.body_text.length : 0,
-        bodyTextPreview: emailPayload.body_text ? emailPayload.body_text.substring(0, 100) + '...' : 'null',
-        bodyTextActual: emailPayload.body_text,
-        bodyTextType: typeof emailPayload.body_text
-      });
-      
-      console.log('🔍 [DEBUG] Raw emailPayload being sent to invoke:', emailPayload);
-      console.log('🔍 [DEBUG] emailPayload.body_text type:', typeof emailPayload.body_text);
-      console.log('🔍 [DEBUG] emailPayload.body_text is null?', emailPayload.body_text === null);
-      console.log('🔍 [DEBUG] emailPayload.body_text stringified:', JSON.stringify(emailPayload.body_text));
-      
+
       const result = await invoke('gmail_send_email', {
         to: emailPayload.to,
         subject: emailPayload.subject,
@@ -229,7 +199,6 @@ export const gmailEmails = {
         bcc: emailPayload.bcc && emailPayload.bcc.length > 0 ? emailPayload.bcc : null
       });
       
-      console.log('✅ Gmail: Email sent successfully');
       return result;
     } catch (error) {
       console.error('❌ Gmail: Failed to send email:', error);
@@ -245,9 +214,7 @@ export const gmailEmails = {
    */
   async replyEmail(messageId, replyData) {
     try {
-      console.log('↩️ Gmail: Replying to email:', messageId);
       const result = await invoke('gmail_reply_email', { messageId, ...replyData });
-      console.log('✅ Gmail: Reply sent successfully');
       return result;
     } catch (error) {
       console.error('❌ Gmail: Failed to reply to email:', error);
@@ -263,9 +230,7 @@ export const gmailEmails = {
    */
   async forwardEmail(messageId, forwardData) {
     try {
-      console.log('➡️ Gmail: Forwarding email:', messageId);
       const result = await invoke('gmail_forward_email', { messageId, ...forwardData });
-      console.log('✅ Gmail: Email forwarded successfully');
       return result;
     } catch (error) {
       console.error('❌ Gmail: Failed to forward email:', error);
@@ -398,9 +363,7 @@ export const gmailActions = {
    */
   async markAsRead(messageIds) {
     try {
-      console.log('📖 Gmail: Marking emails as read:', messageIds.length);
       await invoke('gmail_mark_as_read', { messageIds });
-      console.log('✅ Gmail: Emails marked as read');
     } catch (error) {
       console.error('❌ Gmail: Failed to mark emails as read:', error);
       throw new Error(`Gmail mark as read failed: ${error.message}`);
@@ -414,9 +377,7 @@ export const gmailActions = {
    */
   async markAsUnread(messageIds) {
     try {
-      console.log('📩 Gmail: Marking emails as unread:', messageIds.length);
       await invoke('gmail_mark_as_unread', { messageIds });
-      console.log('✅ Gmail: Emails marked as unread');
     } catch (error) {
       console.error('❌ Gmail: Failed to mark emails as unread:', error);
       throw new Error(`Gmail mark as unread failed: ${error.message}`);
@@ -430,9 +391,7 @@ export const gmailActions = {
    */
   async starEmails(messageIds) {
     try {
-      console.log('⭐ Gmail: Starring emails:', messageIds.length);
       await invoke('gmail_star_emails', { messageIds });
-      console.log('✅ Gmail: Emails starred');
     } catch (error) {
       console.error('❌ Gmail: Failed to star emails:', error);
       throw new Error(`Gmail star emails failed: ${error.message}`);
@@ -446,9 +405,7 @@ export const gmailActions = {
    */
   async unstarEmails(messageIds) {
     try {
-      console.log('☆ Gmail: Unstarring emails:', messageIds.length);
       await invoke('gmail_unstar_emails', { messageIds });
-      console.log('✅ Gmail: Emails unstarred');
     } catch (error) {
       console.error('❌ Gmail: Failed to unstar emails:', error);
       throw new Error(`Gmail unstar emails failed: ${error.message}`);
@@ -462,9 +419,7 @@ export const gmailActions = {
    */
   async archiveEmails(messageIds) {
     try {
-      console.log('📦 Gmail: Archiving emails:', messageIds.length);
       await invoke('gmail_archive_emails', { messageIds });
-      console.log('✅ Gmail: Emails archived');
     } catch (error) {
       console.error('❌ Gmail: Failed to archive emails:', error);
       throw new Error(`Gmail archive emails failed: ${error.message}`);
@@ -478,9 +433,7 @@ export const gmailActions = {
    */
   async deleteEmails(messageIds) {
     try {
-      console.log('🗑️ Gmail: Deleting emails:', messageIds.length);
       await invoke('gmail_delete_emails', { messageIds });
-      console.log('✅ Gmail: Emails deleted');
     } catch (error) {
       console.error('❌ Gmail: Failed to delete emails:', error);
       throw new Error(`Gmail delete emails failed: ${error.message}`);
@@ -496,9 +449,7 @@ export const gmailLabels = {
    */
   async getLabels() {
     try {
-      console.log('🏷️ Gmail: Fetching labels...');
       const labels = await invoke('gmail_get_labels');
-      console.log(`✅ Gmail: Fetched ${labels.length} labels`);
       return labels;
     } catch (error) {
       console.error('❌ Gmail: Failed to get labels:', error);
@@ -515,9 +466,7 @@ export const gmailQueue = {
    */
   async getQueueStats() {
     try {
-      console.log('📊 Gmail: Fetching queue stats...');
       const stats = await invoke('gmail_get_queue_stats');
-      console.log('✅ Gmail: Queue stats fetched');
       return stats;
     } catch (error) {
       console.error('❌ Gmail: Failed to get queue stats:', error);
@@ -531,9 +480,7 @@ export const gmailQueue = {
    */
   async forceProcessQueue() {
     try {
-      console.log('⚡ Gmail: Force processing queue...');
       const result = await invoke('gmail_force_process_queue');
-      console.log('✅ Gmail: Queue processed');
       return result;
     } catch (error) {
       console.error('❌ Gmail: Failed to process queue:', error);
@@ -547,9 +494,7 @@ export const gmailQueue = {
    */
   async clearQueue() {
     try {
-      console.log('🗑️ Gmail: Clearing queue...');
       await invoke('gmail_clear_queue');
-      console.log('✅ Gmail: Queue cleared');
     } catch (error) {
       console.error('❌ Gmail: Failed to clear queue:', error);
       throw new Error(`Gmail queue clearing failed: ${error.message}`);

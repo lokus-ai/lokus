@@ -39,7 +39,6 @@ export function GmailProvider({ children }) {
   useEffect(() => {
     const handleOnline = () => {
       setGlobalState(prev => ({ ...prev, isOnline: true }));
-      console.log('📶 Gmail: Network connection restored');
       
       // Trigger queue processing when coming back online
       if (gmailAuth.isAuthenticated) {
@@ -49,7 +48,6 @@ export function GmailProvider({ children }) {
 
     const handleOffline = () => {
       setGlobalState(prev => ({ ...prev, isOnline: false }));
-      console.log('📴 Gmail: Network connection lost - switching to offline mode');
     };
 
     window.addEventListener('online', handleOnline);
@@ -119,7 +117,6 @@ export function GmailProvider({ children }) {
 
         // Listen for authentication token refresh
         const tokenRefreshListener = await listen('gmail-token-refreshed', () => {
-          console.log('Gmail access token refreshed');
           gmailAuth.refreshAuth();
         });
         listeners.push(tokenRefreshListener);
@@ -215,7 +212,6 @@ export function GmailProvider({ children }) {
       
       // This would trigger a background sync operation
       // The actual implementation would depend on the backend capabilities
-      console.log('🔄 Gmail: Triggering background sync...');
       
       // Process any queued operations
       await gmailQueue.processQueue();

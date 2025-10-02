@@ -474,7 +474,6 @@ export default function EnhancedKanbanBoard({
           finalTask.last_synced = Date.now()
           
         } catch (providerError) {
-          console.warn('Failed to sync task to provider:', providerError)
           // Task is still created locally
         }
       }
@@ -523,7 +522,6 @@ export default function EnhancedKanbanBoard({
           ))
           
         } catch (providerError) {
-          console.warn('Failed to sync task update to provider:', providerError)
           // Keep local changes
           setTasks(prev => prev.map(t => 
             t.id === taskId ? { ...t, ...updates } : t
@@ -550,7 +548,6 @@ export default function EnhancedKanbanBoard({
             async (kanbanProvider) => await kanbanProvider.deleteTask(task.external_id)
           )
         } catch (providerError) {
-          console.warn('Failed to delete task from provider:', providerError)
         }
       }
 

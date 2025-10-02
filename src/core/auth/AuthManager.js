@@ -26,7 +26,6 @@ class AuthManager {
     // Listen for deep links using the plugin
     try {
       await onOpenUrl((urls) => {
-        console.log('Deep link received:', urls);
         for (const url of urls) {
           if (url.startsWith('lokus://auth-callback')) {
             this.handleDeepLinkCallback(url);
@@ -40,7 +39,6 @@ class AuthManager {
     // Listen for localhost auth completion events
     try {
       await listen('auth-success', (event) => {
-        console.log('✅ Authentication successful!');
         this.checkAuthStatus(); // Refresh auth state
       });
       
@@ -58,7 +56,6 @@ class AuthManager {
 
     // Throttle auth checks to prevent excessive calls
     if (this.checkInProgress || (now - this.lastCheckTime) < this.CHECK_THROTTLE) {
-      console.log('🔍 Auth check throttled, returning cached state');
       return this.isAuthenticated;
     }
 
@@ -66,20 +63,16 @@ class AuthManager {
     this.lastCheckTime = now;
 
     try {
-      console.log('🔍 Checking auth status...');
       const isAuth = await invoke('is_authenticated');
-      console.log('🔍 Is authenticated:', isAuth);
       this.isAuthenticated = isAuth;
 
       if (isAuth) {
         const userProfile = await invoke('get_user_profile');
-        console.log('👤 User profile:', userProfile);
         this.user = userProfile;
       } else {
         this.user = null;
       }
 
-      console.log('📢 Notifying listeners - Auth state:', { isAuthenticated: this.isAuthenticated, user: this.user });
       this.notifyListeners();
     } catch (error) {
       console.error('Failed to check auth status:', error);
@@ -101,7 +94,6 @@ class AuthManager {
         params[key] = value;
       }
       
-      console.log('Auth callback params:', params);
       this.handleAuthCallback(params);
     } catch (error) {
       console.error('Failed to parse deep link URL:', error);
@@ -127,7 +119,6 @@ class AuthManager {
       this.isAuthenticated = true;
       await this.checkAuthStatus(); // Refresh user profile
       
-      console.log('Authentication successful');
     } catch (error) {
       console.error('Auth callback failed:', error);
       this.notifyListeners();
@@ -137,12 +128,9 @@ class AuthManager {
 
   async signIn() {
     try {
-      console.log('🔐 Starting OAuth sign in flow...');
       // Initiate OAuth flow with PKCE
       const authUrl = await invoke('initiate_oauth_flow');
-      console.log('🔗 Generated auth URL:', authUrl);
       await invoke('open_auth_url', { authUrl });
-      console.log('🌐 Opened auth URL in browser');
     } catch (error) {
       console.error('❌ Failed to initiate OAuth flow:', error);
       throw error;
@@ -192,7 +180,6 @@ class AuthManager {
     try {
       await invoke('refresh_auth_token');
       await this.checkAuthStatus(); // Refresh auth state
-      console.log('Token refreshed successfully');
     } catch (error) {
       console.error('Failed to refresh token:', error);
       // If refresh fails, sign out the user

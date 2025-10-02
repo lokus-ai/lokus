@@ -52,7 +52,6 @@ const SplitEditor = ({
   // Handle initial split creation when a tab is dragged to create split
   useEffect(() => {
     if (splitInitData && splitInitData.draggedTab && onSplitInitComplete) {
-      console.log('Creating split with dragged tab:', splitInitData.draggedTab);
       createSplit(splitInitData.draggedTab.path, 'vertical', 'after');
       onSplitInitComplete();
     }

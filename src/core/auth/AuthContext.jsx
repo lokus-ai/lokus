@@ -19,11 +19,9 @@ export const AuthProvider = ({ children }) => {
   });
 
   useEffect(() => {
-    console.log('🔄 AuthProvider: Setting up auth state subscription...');
     
     // Subscribe to auth state changes
     const unsubscribe = authManager.onAuthStateChange((newState) => {
-      console.log('🔄 AuthProvider: Received auth state change:', newState);
       setAuthState(prev => {
         const newAuthState = {
           ...prev,
@@ -31,18 +29,12 @@ export const AuthProvider = ({ children }) => {
           user: newState.user,
           isLoading: false
         };
-        console.log('🔄 AuthProvider: Setting new auth state:', newAuthState);
         return newAuthState;
       });
     });
 
     // Initial state check
-    console.log('🔄 AuthProvider: Performing initial auth status check...');
     authManager.checkAuthStatus().then(() => {
-      console.log('🔄 AuthProvider: Initial check complete. AuthManager state:', {
-        isLoggedIn: authManager.isLoggedIn,
-        currentUser: authManager.currentUser
-      });
       setAuthState(prev => {
         const newAuthState = {
           ...prev,
@@ -50,7 +42,6 @@ export const AuthProvider = ({ children }) => {
           user: authManager.currentUser,
           isLoading: false
         };
-        console.log('🔄 AuthProvider: Setting initial auth state:', newAuthState);
         return newAuthState;
       });
     });

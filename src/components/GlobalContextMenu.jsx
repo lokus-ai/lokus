@@ -46,9 +46,6 @@ export default function GlobalContextMenu({
       
       // Open console with element details
       console.clear();
-      console.log('%c🔍 ELEMENT INSPECTOR', 'color: #ff0080; font-size: 14px; font-weight: bold;');
-      console.log('Selected element:', targetElement);
-      console.log('Available as $0 and $lokusElement');
       
       if (typeof window.inspect === 'function') {
         window.inspect(targetElement);
@@ -80,7 +77,6 @@ export default function GlobalContextMenu({
       };
       
       navigator.clipboard.writeText(JSON.stringify(info, null, 2));
-      console.log('📋 Copied element info:', info);
     }
     onClose();
   };
@@ -92,7 +88,6 @@ export default function GlobalContextMenu({
 
   const handleClearConsole = () => {
     console.clear();
-    console.log('🧹 Console cleared');
     onClose();
   };
 
@@ -252,7 +247,6 @@ export default function GlobalContextMenu({
         <button
           onClick={() => {
             // Trigger find and replace functionality
-            console.log('🔍 Find and Replace triggered');
             onClose();
           }}
           className="flex items-center gap-3 w-full px-4 py-2 text-sm"
@@ -321,7 +315,6 @@ export default function GlobalContextMenu({
         {/* Keyboard Shortcuts */}
         <button
           onClick={() => {
-            console.log('⌨️ Opening keyboard shortcuts');
             window.dispatchEvent(new CustomEvent('lokus:shortcut-help'));
             onClose();
           }}

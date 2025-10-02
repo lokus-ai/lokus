@@ -223,12 +223,9 @@ export default function CommandPalette({
   // Parse Gmail template from file content (supports flexible YAML, simple field, and Markdown formats)
   const parseGmailTemplate = (content) => {
     try {
-      console.log('🔍 [DEBUG] Parsing template content...');
-      console.log('📄 [DEBUG] Content preview:', content.substring(0, 200) + '...');
       
       // Method 1: Try YAML frontmatter with flexible body handling
       if (content.startsWith('---')) {
-        console.log('📋 [DEBUG] Detected YAML frontmatter format');
         const frontmatterEnd = content.indexOf('---', 3);
         if (frontmatterEnd !== -1) {
           const frontmatterContent = content.slice(3, frontmatterEnd).trim();
@@ -282,15 +279,11 @@ export default function CommandPalette({
           if (metadata.body) {
             // Use explicit body field
             body = metadata.body;
-            console.log('📝 [DEBUG] Using explicit body field');
           } else if (afterFrontmatter) {
             // Use content after frontmatter
             body = afterFrontmatter.replace(/<!--.*?-->/gs, '').trim();
-            console.log('📝 [DEBUG] Using content after frontmatter');
           }
           
-          console.log('📋 [DEBUG] Parsed metadata:', metadata);
-          console.log('📝 [DEBUG] Final body:', { length: body.length, preview: body.substring(0, 100) + '...' });
           
           if (metadata.to !== undefined && metadata.subject !== undefined) {
             return {
@@ -305,7 +298,6 @@ export default function CommandPalette({
       }
 
       // Method 2: Try simple field format (To:, Subject:, Body:)
-      console.log('📝 [DEBUG] Trying simple field format');
       const lines = content.split('\n');
       const fields = {};
       let bodyStartIndex = -1;
@@ -339,7 +331,6 @@ export default function CommandPalette({
         fields.body = bodyLines.join('\n').trim();
       }
       
-      console.log('📋 [DEBUG] Simple format fields:', fields);
       
       
       if (fields.to && fields.subject) {
@@ -354,13 +345,11 @@ export default function CommandPalette({
       }
 
       // Method 3: Try Markdown bold format (**To:**, **Subject:**) - legacy support
-      console.log('📝 [DEBUG] Trying Markdown bold format');
       const toMatch = content.match(/\*\*To:\*\*\s*(.+)/i);
       const subjectMatch = content.match(/\*\*Subject:\*\*\s*(.+)/i);
       const bodyMatch = content.match(/\*\*Body:\*\*\s*(.+)/is);
       
       if (toMatch && subjectMatch) {
-        console.log('✅ [DEBUG] Found To and Subject in Markdown format');
         
         let body = '';
         if (bodyMatch) {
@@ -400,13 +389,7 @@ export default function CommandPalette({
             body = bodyLines.join('\n').trim();
           }
         }
-        
-        console.log('📝 [DEBUG] Extracted body content:', { 
-          bodyLength: body.length, 
-          bodyPreview: body.substring(0, 100) + (body.length > 100 ? '...' : ''),
-          bodyFull: body
-        });
-        
+
         return {
           to: [toMatch[1].trim()],
           cc: [],
@@ -416,7 +399,6 @@ export default function CommandPalette({
         };
       }
 
-      console.log('❌ [DEBUG] No valid email template format found');
     } catch (error) {
       console.error('Error parsing Gmail template:', error);
     }
@@ -425,61 +407,36 @@ export default function CommandPalette({
 
   // Handle sending Gmail from selected file
   const handleSendGmailFromFile = React.useCallback(async (file) => {
-    console.log('🚀 [DEBUG] handleSendGmailFromFile called with file:', {
-      name: file.name,
-      path: file.path,
-      timestamp: new Date().toISOString()
-    });
-    console.log('🔍 [DEBUG] Current authentication state:', { isGmailAuthenticated });
-    
     try {
-      console.log('🔐 [DEBUG] Checking Gmail authentication...', { isGmailAuthenticated });
       
       if (!isGmailAuthenticated) {
-        console.log('🔐 [DEBUG] Not authenticated, attempting to authenticate...');
         await ensureGmailAuth()
-        console.log('✅ [DEBUG] Gmail authentication successful');
       }
       
-      console.log('📧 [DEBUG] Reading file for Gmail template:', file.path);
       
       // Read the file content using Tauri command
       const fileContent = await invoke('read_file_content', { path: file.path });
-      console.log('📄 [DEBUG] File content read successfully, length:', fileContent.length);
       
       // Parse Gmail template
       const gmailTemplate = parseGmailTemplate(fileContent);
-      console.log('📝 [DEBUG] Parsed Gmail template:', gmailTemplate);
       
       if (!gmailTemplate) {
-        console.log('❌ [DEBUG] Invalid Gmail template format');
         console.error(`❌ [DEBUG] File "${file.name}" is not a valid Gmail template`);
         return;
       }
       
       // Validate required fields
       if (gmailTemplate.to.length === 0) {
-        console.log('❌ [DEBUG] Missing "To" field');
         console.error('❌ [DEBUG] Gmail template must have a "To:" field with at least one email address.');
         return;
       }
       
       if (!gmailTemplate.subject.trim()) {
-        console.log('❌ [DEBUG] Missing "Subject" field');
         console.error('❌ [DEBUG] Gmail template must have a "Subject:" field.');
         return;
       }
+
       
-      console.log('📧 [DEBUG] About to send email via Gmail with data:', {
-        to: gmailTemplate.to,
-        cc: gmailTemplate.cc,
-        bcc: gmailTemplate.bcc,
-        subject: gmailTemplate.subject,
-        bodyLength: gmailTemplate.body?.length || 0
-      });
-      
-      
-      console.log('🚀 [DEBUG] Calling gmailEmails.sendEmail...');
       
       // Send the email
       const result = await gmailEmails.sendEmail({
@@ -491,14 +448,10 @@ export default function CommandPalette({
         attachments: []
       });
       
-      console.log('✅ [DEBUG] Email sending completed, result:', result);
       
-      console.log(`✅ [DEBUG] Email sent successfully! To: ${gmailTemplate.to.join(', ')}, Subject: ${gmailTemplate.subject}`);
       
     } catch (error) {
       if (error.isAuthRedirect) {
-        console.log('🔐 [DEBUG] Authentication required - browser window opened for OAuth');
-        console.log('ℹ️ [DEBUG] Please complete authentication in the browser and try sending the email again');
         // Show user-friendly message instead of error
         alert('Please complete Gmail authentication in the opened browser window, then try sending the email again.');
       } else {
@@ -842,7 +795,6 @@ Best regards,
       })
 
       const fileName = filePath.split('/').pop()
-      console.log('Email saved as note:', filePath)
       
       // Return success info for the command history
       return {
@@ -939,7 +891,6 @@ Best regards,
           if (filteredOptions.length > 0) {
             // Send Gmail from first matching file
             const selectedFile = filteredOptions[0]
-            console.log('🎯 [DEBUG] Command mode "send_gmail" triggered with file:', selectedFile);
             runCommandWithHistory(
               () => handleSendGmailFromFile(selectedFile), 
               `Send Gmail: ${selectedFile.name}`, 
@@ -1013,7 +964,6 @@ Best regards,
                 }
               )
             } else {
-              console.warn('No email found matching:', emailNoteCommand.emailIdentifier)
             }
           }
           setInputValue('')
@@ -1204,7 +1154,6 @@ Best regards,
                 key={option.id || option.path || index}
                 onSelect={() => {
                   if (commandMode === 'send_gmail') {
-                    console.log('🎯 [DEBUG] File selected in send_gmail mode:', option);
                     runCommandWithHistory(
                       () => handleSendGmailFromFile(option), 
                       `Send Gmail: ${option.name}`, 
@@ -1259,82 +1208,6 @@ Best regards,
               </CommandItem>
             ))}
           </CommandGroup>
-        )}
-        
-        {/* Command History */}
-        {formattedHistory.length > 0 && (
-          <>
-            <CommandGroup heading="History">
-              {formattedHistory.slice(0, 8).map((historyItem) => (
-                <CommandItem
-                  key={historyItem.id}
-                  onSelect={() => {
-                    if (historyItem.type === 'file') {
-                      runCommand(() => onFileOpen(historyItem.data))
-                    } else if (historyItem.type === 'command') {
-                      // Re-execute the command from history
-                      const commandName = historyItem.data.command
-                      switch (commandName) {
-                        case 'New File':
-                          runCommand(onCreateFile)
-                          break
-                        case 'New Folder':
-                          runCommand(onCreateFolder)
-                          break
-                        case 'Save File':
-                          runCommand(onSave)
-                          break
-                        case 'Toggle Sidebar':
-                          runCommand(onToggleSidebar)
-                          break
-                        case 'Open Preferences':
-                          runCommand(onOpenPreferences)
-                          break
-                        case 'Open Graph View':
-                          runCommand(onOpenGraph)
-                          break
-                        case 'Open Gmail':
-                          runCommand(onOpenGmail)
-                          break
-                        case 'Insert Template':
-                          if (onShowTemplatePicker) {
-                            runCommand(onShowTemplatePicker)
-                          }
-                          break
-                        default:
-                      }
-                    }
-                  }}
-                  className="group"
-                >
-                  <History className="mr-2 h-4 w-4 opacity-60" />
-                  <span className="flex-1">{historyItem.displayName}</span>
-                  <span className="text-xs text-app-muted mr-2">{historyItem.relativeTime}</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      removeFromHistory(historyItem.id)
-                    }}
-                    className="opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all p-1 rounded"
-                    title="Remove from history"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </CommandItem>
-              ))}
-              {formattedHistory.length > 8 && (
-                <CommandItem disabled>
-                  <span className="text-app-muted">...and {formattedHistory.length - 8} more items</span>
-                </CommandItem>
-              )}
-              <CommandSeparator />
-              <CommandItem onSelect={() => runCommand(clearHistory)}>
-                <Trash2 className="mr-2 h-4 w-4 opacity-60" />
-                <span className="text-app-muted">Clear History</span>
-              </CommandItem>
-            </CommandGroup>
-            <CommandSeparator />
-          </>
         )}
         
         {/* File Actions */}
@@ -1442,7 +1315,6 @@ Best regards,
                 description: 'A new base for organizing notes'
               });
               if (result.success) {
-                console.log('Created base:', result.base.name);
               }
             } catch (error) {
               console.error('Failed to create base:', error);
@@ -1548,6 +1420,84 @@ Best regards,
                   <span className="text-app-muted">...and {allFiles.length - 10} more files</span>
                 </CommandItem>
               )}
+            </CommandGroup>
+          </>
+        )}
+
+        {/* Command History */}
+        {formattedHistory.length > 0 && (
+          <>
+            <CommandSeparator />
+            <CommandGroup heading="History">
+              {formattedHistory.slice(0, 8).map((historyItem) => (
+                <CommandItem
+                  key={historyItem.id}
+                  onSelect={() => {
+                    if (historyItem.type === 'file') {
+                      runCommand(() => onFileOpen(historyItem.data))
+                    } else if (historyItem.type === 'command') {
+                      // Re-execute the command from history
+                      const commandName = historyItem.data.command
+                      switch (commandName) {
+                        case 'New File':
+                          runCommand(onCreateFile)
+                          break
+                        case 'New Folder':
+                          runCommand(onCreateFolder)
+                          break
+                        case 'Save File':
+                          runCommand(onSave)
+                          break
+                        case 'Toggle Sidebar':
+                          runCommand(onToggleSidebar)
+                          break
+                        case 'Open Preferences':
+                          runCommand(onOpenPreferences)
+                          break
+                        case 'Open Graph View':
+                          runCommand(onOpenGraph)
+                          break
+                        case 'Open Gmail':
+                          runCommand(onOpenGmail)
+                          break
+                        case 'Insert Template':
+                          if (onShowTemplatePicker) {
+                            runCommand(onShowTemplatePicker)
+                          }
+                          break
+                        default:
+                      }
+                    }
+                  }}
+                  className="group"
+                >
+                  <History className="mr-2 h-4 w-4 opacity-60" />
+                  <span className="flex-1">{historyItem.displayName}</span>
+                  <span className="text-xs text-app-muted mr-2">{historyItem.relativeTime}</span>
+                  <button
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      removeFromHistory(historyItem.id)
+                    }}
+                    tabIndex={-1}
+                    className="opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all p-1 rounded"
+                    title="Remove from history"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </CommandItem>
+              ))}
+              {formattedHistory.length > 8 && (
+                <CommandItem disabled>
+                  <span className="text-app-muted">...and {formattedHistory.length - 8} more items</span>
+                </CommandItem>
+              )}
+              <CommandSeparator />
+              <CommandItem onSelect={() => runCommand(clearHistory)}>
+                <Trash2 className="mr-2 h-4 w-4 opacity-60" />
+                <span className="text-app-muted">Clear History</span>
+              </CommandItem>
             </CommandGroup>
           </>
         )}

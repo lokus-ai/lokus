@@ -27,14 +27,6 @@ export default function BasesView({ isVisible, onFileOpen }) {
     deleteBase
   } = useBases();
 
-  console.log('🔥 BasesView render:', {
-    isVisible,
-    activeBase: activeBase?.name || 'none',
-    activeView: activeView?.name || 'none',
-    basesCount: bases?.length || 0,
-    isLoading,
-    error
-  });
 
   const { filterFileTree, scopeMode, setGlobalScope, setLocalScope } = useFolderScope();
 
@@ -59,36 +51,14 @@ export default function BasesView({ isVisible, onFileOpen }) {
 
   // Load data when view changes
   useEffect(() => {
-    console.log('🔄 BasesView: Load data effect triggered:', {
-      isVisible,
-      activeBase: activeBase?.name || 'none',
-      activeView: activeView?.name || 'none'
-    });
-
-    if (!isVisible || !activeBase || !activeView) {
-      console.log('🔄 BasesView: Skipping data load - missing requirements');
-      return;
-    }
+    if (!isVisible || !activeBase || !activeView) return;
 
     const loadData = async () => {
-      console.log('📊 BasesView: Starting data load... baseScopeMode:', baseScopeMode);
       const result = await executeQuery();
-      console.log('📊 BasesView: Query result:', result);
-      console.log('📊 BasesView: Raw data count from backend:', result.data?.length);
-
       if (result.success) {
         setViewData(result.data || []);
         setTotalCount(result.totalCount || 0);
         setFilteredCount(result.filteredCount || 0);
-        console.log('✅ BasesView: Data loaded successfully:', {
-          dataCount: result.data?.length || 0,
-          totalCount: result.totalCount || 0,
-          filteredCount: result.filteredCount || 0,
-          baseScopeMode
-        });
-        console.log('📊 BasesView: First few items:', result.data?.slice(0, 3));
-      } else {
-        console.error('❌ BasesView: Data load failed:', result.error);
       }
     };
 
@@ -417,7 +387,7 @@ export default function BasesView({ isVisible, onFileOpen }) {
       </div>
 
       {/* Main content - Conditional rendering based on view type */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         {/* Always render BaseTableView for dropdown functionality */}
         <div style={{ display: viewType === 'table' ? 'flex' : 'none' }} className="flex-1 h-full">
           <BaseTableView
