@@ -96,5 +96,14 @@ openapi.yaml
 *_internship_emails.md
 *summer_*.md
 *personal*.md
+*internship*.md
+
+# AI Assistant
+.claude/
+*.claude
+
+# Personal VS Code settings (keep only extensions.json)
+.vscode/*
+!.vscode/extensions.json
 
 
