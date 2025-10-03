@@ -4,9 +4,9 @@
 
 # Lokus
 
-**A lightning-fast, privacy-first knowledge management system built with Tauri and React**
+**A fast, extensible markdown editor built with Tauri and React**
 
-*Why settle for 10+ plugins when you can have everything built-in?*
+I got tired of installing 10+ Obsidian plugins just to get basic features working. So I built Lokus with everything you need already included.
 
 [![GitHub Stars](https://img.shields.io/github/stars/lokus-ai/lokus?style=for-the-badge&logo=github&color=yellow)](https://github.com/lokus-ai/lokus/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/lokus-ai/lokus?style=for-the-badge&logo=github&color=blue)](https://github.com/lokus-ai/lokus/network/members)
@@ -18,239 +18,297 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Us-7289DA?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/lokus)
 
-[🚀 Quick Start](#-quick-start) • [✨ Features](#-features) • [📸 Screenshots](#-screenshots) • [🗺️ Roadmap](#️-roadmap) • [🤝 Contributing](#-contributing)
+[Quick Start](#quick-start) • [Features](#what-makes-it-different) • [Screenshots](#screenshots) • [Roadmap](#roadmap) • [Contributing](#contributing)
 
 </div>
 
 ---
 
-## 🎯 Why Lokus?
+## Why I Built This
 
-Built by an Obsidian user who got tired of plugin dependencies. Lokus gives you **everything you need out of the box**:
+I used Obsidian for 2 years. It's great, but I kept hitting the same frustrations:
 
-| Obsidian | Lokus |
-|----------|-------|
-| ❌ Requires Dataview plugin | ✅ Built-in database views |
-| ❌ Basic graph view | ✅ 2D/3D interactive graphs |
-| ❌ Canvas via plugin | ✅ Infinite canvas built-in |
-| ❌ $10/month for sync | ✅ Free sync via your cloud |
-| ⚡ ~100MB download | ⚡ ~10MB download |
-| 🐌 Electron-based | 🚀 Rust-powered (Tauri) |
+- Need database views? Install Dataview plugin
+- Want better graphs? Install another plugin
+- Canvas mode? Yet another plugin
+- Sync costs $10/month (or configure Syncthing manually)
+- Graph view works, but it's pretty basic
+- 100MB+ download size
+
+After installing my 15th plugin, I thought: why isn't this stuff just built-in?
+
+So I spent 6 months building Lokus. Same philosophy (local markdown files, privacy-first), but with the features you actually want included from day one.
+
+## What Makes It Different
+
+Here's what you get without installing any plugins:
+
+### The Basics (That Should Be Built-In)
+
+**Rich Markdown Editor**
+- Everything you'd expect: headings, lists, tables, code blocks
+- LaTeX math rendering: `$x^2$` for inline, `$$E=mc^2$$` for blocks
+- Syntax highlighting for 100+ languages
+- Real-time preview
+
+**Wiki Links**
+- Type `[[` and autocomplete pops up
+- Bidirectional linking works like you'd expect
+- Backlinks panel shows what links to current note
+
+**Knowledge Graph**
+- Both 2D and 3D views (toggle with one click)
+- Actually interactive - click nodes to jump to notes
+- Filter by tags
+- Shows link strength visually
+
+### The Good Stuff (That's Actually Built-In)
+
+**Database Views (Bases)**
+- Think Notion, but for your local markdown files
+- Create table views of your notes
+- Sort, filter, group by properties
+- Add custom metadata without touching frontmatter
+- Multiple views per base (table, gallery, calendar coming soon)
+- Automatically creates an "All Notes" base when you first open a workspace
+
+**Canvas Mode**
+- Infinite whiteboard for visual thinking
+- Drag files onto it
+- Draw connections between ideas
+- No plugin needed
+
+**Kanban Boards**
+- Built-in task management
+- Drag and drop between columns
+- Markdown-based (can edit in any text editor)
+
+**Gmail Integration**
+- Import emails as markdown notes
+- Send emails from notes (write in markdown, send as formatted email)
+- Keep attachments with notes
+- Track email threads
+
+### Performance Stuff
+
+**Why It's Fast**
+- Built with Rust (Tauri framework) instead of Electron
+- ~10MB download vs Obsidian's ~100MB
+- Starts in under a second
+- Full-text search is instant (powered by Rust)
+
+**Local-First**
+- Everything stays on your computer
+- Use your own cloud storage for sync (Dropbox, Google Drive, iCloud, Syncthing - whatever you want)
+- No vendor lock-in
+- Your files are just markdown
+
+### Customization
+
+**Themes**
+- Built-in theme editor with live preview
+- Dark/light mode
+- Custom color schemes
+- Change fonts, spacing, colors - everything
+
+**Plugin System**
+- VS Code-style extension API
+- Hot reload during development
+- Add custom commands and shortcuts
+- Create custom markdown syntax
 
 ---
 
-## 📸 Screenshots
+## Screenshots
 
 <div align="center">
 
-### 📝 Rich Markdown Editor with Real-time Preview
+### Rich Markdown Editor
 ![Editor View](assets/screenshots/screenshot-1.png)
 
-### 🕸️ 3D Knowledge Graph Visualization
+### 3D Knowledge Graph
 ![Graph View](assets/screenshots/screenshot-2.png)
 
-### 📊 Bases - Notion-like Database Views
+### Database Views (Bases)
 ![Bases Database](assets/screenshots/screenshot-3.png)
 
-### 🎨 Interactive Graph Navigation
+### Interactive Graph
 ![Graph View 2](assets/screenshots/screenshot-4.png)
 
-### ✍️ Advanced Markdown Editing
+### Advanced Editing
 ![Markdown Editing](assets/screenshots/screenshot-5.png)
 
 </div>
 
 ---
 
-## ✨ Features
+## Quick Start
 
-### 📝 **Core Writing**
-- **Rich Markdown Editor** - Full GitHub Flavored Markdown support
-- **Wiki Links** - Bidirectional linking with `[[Note Name]]` syntax
-- **LaTeX Math** - Inline `$x^2$` and block `$$E=mc^2$$` equations
-- **Code Blocks** - Syntax highlighting for 100+ languages
-- **Tables** - Sortable, resizable tables with CSV export
-- **Task Lists** - `- [ ]` checkbox support with progress tracking
-
-### 📊 **Database Views (Bases)**
-- **Notion-like Tables** - Sort, filter, and group your notes
-- **Multiple Views** - Table, Gallery, Calendar (coming soon)
-- **Custom Properties** - Add metadata without frontmatter
-- **Smart Filters** - Query notes by tags, dates, properties
-- **Auto-create** - Default "All Notes" base on first use
-
-### 🕸️ **Knowledge Graph**
-- **2D & 3D Graphs** - Toggle between flat and spatial views
-- **Interactive Navigation** - Click nodes to open notes
-- **Link Strength** - Visual weight based on connections
-- **Filter by Tags** - Focus on specific topics
-- **Export** - Save graph as PNG/SVG
-
-### 🎨 **Customization**
-- **Theme Editor** - Real-time theme customization
-- **Dark/Light Mode** - With custom color schemes
-- **Font Control** - Choose your preferred fonts
-- **Layout Options** - Sidebar positions, panel sizes
-
-### 📧 **Gmail Integration**
-- **Import Emails** - Save emails as markdown notes
-- **Send from Notes** - Compose emails in markdown
-- **Attachment Support** - Keep email attachments
-- **Thread Tracking** - Maintain email context
-
-### 🚀 **Performance**
-- **Rust Backend** - Native performance with Tauri
-- **Instant Search** - Fast full-text search
-- **Small Footprint** - ~10MB vs Obsidian's ~100MB
-- **Quick Launch** - Sub-second startup time
-- **Local-First** - All data stays on your device
-
-### 🔌 **Extensibility**
-- **Plugin System** - VS Code-like extension API
-- **Hot Reload** - Develop plugins without restart
-- **Custom Commands** - Add keyboard shortcuts
-- **Editor Extensions** - Create custom markdown syntax
-
----
-
-## 🚀 Quick Start
-
-### 📦 Download Pre-built Binaries
+### Download
 
 **macOS** (Apple Silicon & Intel)
-```bash
-# Download latest .dmg from releases
-# Or install via Homebrew (coming soon)
-```
+- Download the latest `.dmg` from [releases](https://github.com/lokus-ai/lokus/releases)
+- Drag to Applications folder
+- First time: Right-click → Open (to bypass Gatekeeper)
 
 **Windows**
-```bash
-# Download installer from releases
-# Portable version available
-```
+- Download the installer from [releases](https://github.com/lokus-ai/lokus/releases)
+- Run the installer
+- Note: Windows Defender might complain (code isn't signed yet - working on it)
+- Portable version also available if you prefer
 
 **Linux**
-```bash
-# AppImage (universal)
-wget https://github.com/lokus-ai/lokus/releases/latest/download/lokus.AppImage
-chmod +x lokus.AppImage
-./lokus.AppImage
+- Download the `.AppImage` from [releases](https://github.com/lokus-ai/lokus/releases)
+- Make it executable: `chmod +x lokus.AppImage`
+- Run it: `./lokus.AppImage`
+- Flatpak coming soon
 
-# Flatpak (coming soon)
-```
+### Build from Source
 
-### 🛠️ Build from Source
-
-**Prerequisites**
-- [Node.js](https://nodejs.org/) v18+
-- [Rust](https://rustup.rs/) (latest stable)
+Need Node.js 18+ and Rust installed.
 
 ```bash
-# Clone the repository
 git clone https://github.com/lokus-ai/lokus.git
 cd lokus
-
-# Install dependencies
 npm install
-
-# Run in development mode
 npm run tauri dev
+```
 
-# Build for production
+For production build:
+```bash
 npm run tauri build
 ```
 
 ---
 
-## 🗺️ Roadmap
+## Comparison with Obsidian
 
-### ✅ **v1.0 - Current** (Released)
-- [x] Rich markdown editor
-- [x] Wiki links & backlinks
-- [x] 2D/3D knowledge graph
-- [x] Database views (Bases)
-- [x] Theme customization
-- [x] Gmail integration
-- [x] Plugin system
+Look, Obsidian is great. This isn't meant to replace it for everyone. But here's how they differ:
 
-### 🚧 **v1.1 - Next** (In Progress)
-- [ ] Mobile apps (iOS & Android)
-- [ ] Calendar view for Bases
-- [ ] Kanban board improvements
-- [ ] PDF annotations
-- [ ] Vim mode
-- [ ] Frontmatter support for Bases
+| Feature | Obsidian | Lokus |
+|---------|----------|-------|
+| Database views | Need Dataview plugin | Built-in |
+| Canvas mode | Need Excalidraw plugin | Built-in |
+| Graph view | 2D only | 2D and 3D |
+| Kanban boards | Need plugin | Built-in |
+| Sync | $10/month OR configure Syncthing | Use any cloud storage |
+| Download size | ~100MB | ~10MB |
+| Technology | Electron | Tauri (Rust) |
+| Plugin ecosystem | Huge (3000+) | Growing (new) |
+| Mobile apps | Yes | Coming in v1.1 |
+| Stability | Very stable | Stable, but newer |
 
-### 🔮 **v1.2 - Future**
-- [ ] End-to-end encryption
-- [ ] Web clipper extension
-- [ ] Collaboration features
-- [ ] AI-powered search
-- [ ] Template marketplace
-- [ ] Multi-vault support
-
-### 💡 **Community Requests**
-- [ ] Portable Windows version
-- [ ] Flatpak distribution
-- [ ] Obsidian plugin compatibility layer
-- [ ] Export to PDF/DOCX
-
-[📋 View Full Roadmap & Vote on Features](https://github.com/lokus-ai/lokus/discussions/categories/roadmap)
+**Should you switch?**
+- If you're happy with Obsidian: probably not
+- If you're tired of plugin management: try Lokus
+- If you want built-in database views: try Lokus
+- If you need mobile apps right now: stick with Obsidian (for now)
 
 ---
 
-## 🏗️ Tech Stack
+## Roadmap
 
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | React 19, TipTap Editor, Tailwind CSS |
-| **Backend** | Tauri 2.0 (Rust), Tokio (async runtime) |
-| **Database** | JSON-based (local files) |
-| **Graph** | react-force-graph, Three.js |
-| **Math** | KaTeX |
-| **Testing** | Vitest (unit), Playwright (E2E) |
-| **Build** | Vite, Cargo |
+### What's Working Now (v1.0)
+- Rich markdown editor
+- Wiki links and backlinks
+- 2D/3D knowledge graph
+- Database views (Bases)
+- Canvas mode
+- Kanban boards
+- Gmail integration
+- Theme customization
+- Plugin system
+- Full-text search
 
----
+### Coming Soon (v1.1 - Next 2-3 Months)
+- Mobile apps (iOS and Android)
+- Calendar view for Bases
+- Improved Kanban boards
+- PDF annotations
+- Vim mode
+- Frontmatter support in Bases
+- Better graph performance
 
-## 📖 Documentation
+### Future Plans (v1.2+)
+- End-to-end encryption
+- Browser extension for web clipping
+- Collaboration features (maybe - needs thought)
+- AI-powered search
+- Template marketplace
+- Multi-vault support
 
-- 📚 [**User Guide**](https://docs.lokus.ai) - Learn how to use Lokus
-- 🔧 [**Installation Guide**](INSTALLATION.md) - Platform-specific setup
-- 💻 [**Developer Guide**](CONTRIBUTING.md) - Build and contribute
-- 🔌 [**Plugin API**](docs/PLUGIN_API.md) - Create extensions
-- 🎨 [**Theme Guide**](docs/THEMES.md) - Customize appearance
+### Community Requests
+Things people have asked for:
+- Portable Windows version (working on it)
+- Flatpak distribution (planned)
+- Obsidian plugin compatibility layer (investigating)
+- Export to PDF/DOCX (planned)
 
----
-
-## 🤝 Contributing
-
-We love contributions! Whether it's:
-
-- 🐛 **Bug reports** - Help us squash bugs
-- 💡 **Feature requests** - Share your ideas
-- 📝 **Documentation** - Improve our docs
-- 🔧 **Code** - Submit a PR
-- 🎨 **Themes** - Design new themes
-- 🔌 **Plugins** - Build extensions
-
-**Quick start for contributors:**
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-See our [Contributing Guide](CONTRIBUTING.md) for detailed instructions.
+Want to vote on features or suggest new ones? Check out the [discussions](https://github.com/lokus-ai/lokus/discussions).
 
 ---
 
-## 📊 Project Stats
+## Tech Stack
+
+**Frontend**
+- React 19 for the UI
+- TipTap for the editor (it's really good)
+- Tailwind CSS for styling
+- react-force-graph for the graph views
+
+**Backend**
+- Tauri 2.0 (Rust)
+- Tokio for async operations
+- File-based storage (plain JSON and markdown files)
+
+**Testing**
+- Vitest for unit tests
+- Playwright for end-to-end tests
+
+**Math & Graphs**
+- KaTeX for LaTeX rendering
+- Three.js for 3D graphs
+
+---
+
+## Documentation
+
+- [Installation Guide](INSTALLATION.md) - Detailed setup instructions
+- [Contributing Guide](CONTRIBUTING.md) - How to contribute
+- [Platform Guide](docs/PLATFORM_GUIDE.md) - Platform-specific info
+- [Build Guide](docs/BUILD_GUIDE.md) - Building from source
+- [Plugin API](docs/PLUGIN_API.md) - Creating plugins
+
+---
+
+## Contributing
+
+I'd love your help! Whether that's:
+
+- Reporting bugs
+- Suggesting features
+- Writing documentation
+- Fixing bugs
+- Adding features
+- Creating themes
+- Building plugins
+
+To contribute code:
+1. Fork the repo
+2. Create a branch: `git checkout -b my-feature`
+3. Make your changes
+4. Test everything
+5. Push and open a PR
+
+Check [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
+
+---
+
+## Project Stats
 
 <div align="center">
 
-### 🌟 Real-time GitHub Stats
+### Real-time GitHub Stats
 
 <a href="https://github.com/lokus-ai/lokus/stargazers">
   <img src="https://img.shields.io/github/stars/lokus-ai/lokus?style=for-the-badge&logo=github&label=Stars&color=yellow" alt="GitHub stars">
@@ -276,61 +334,81 @@ See our [Contributing Guide](CONTRIBUTING.md) for detailed instructions.
 
 <br/>
 
-### 📈 Growth Tracker
+### Growth Over Time
 
 [![Star History Chart](https://api.star-history.com/svg?repos=lokus-ai/lokus&type=Timeline)](https://star-history.com/#lokus-ai/lokus&Timeline)
 
-*All stats update automatically in real-time • Last cache: ~5 minutes*
+*Stats update every ~5 minutes*
 
 </div>
 
 ---
 
-## ❓ FAQ
+## FAQ
 
-**Q: Is Lokus compatible with Obsidian vaults?**
-A: Yes! Lokus uses standard markdown files. You can open existing Obsidian vaults.
+**Q: Will my Obsidian vault work in Lokus?**
+A: Yes! Lokus uses standard markdown files. Just point it at your existing Obsidian vault folder and everything should work. Your files won't be modified in any way that breaks Obsidian compatibility.
 
-**Q: Will my Obsidian plugins work?**
-A: Not directly, but we're building a compatibility layer. Core features (Dataview, Canvas, Graph) are built-in.
+**Q: What about my Obsidian plugins?**
+A: They won't work directly. But the most popular ones (Dataview, Canvas, Kanban) are built into Lokus. For others, we're working on a compatibility layer. You can also build equivalent plugins using our plugin API.
 
-**Q: Is sync really free?**
-A: Yes! Use any cloud storage (Dropbox, Google Drive, iCloud, Syncthing). No lock-in.
+**Q: How do I sync between devices?**
+A: Use any cloud storage service. Put your vault folder in Dropbox, Google Drive, iCloud Drive, or use Syncthing for more control. No proprietary sync needed.
 
-**Q: Why not just use Obsidian?**
-A: If Obsidian works for you, great! Lokus is for those who want built-in features without plugin dependencies.
+**Q: Is it stable enough for daily use?**
+A: I use it daily. That said, it's newer than Obsidian (6 months vs 5+ years). Make backups. Use version control if you want extra safety.
 
-**Q: How do I migrate from Obsidian?**
-A: Just point Lokus at your existing vault folder. All notes work immediately.
+**Q: When will mobile apps be ready?**
+A: iOS and Android apps are in development. Target: 2-3 months. They're taking longer than expected because I want them to be actually good, not just a webview wrapper.
 
-**Q: Mobile apps?**
-A: Coming in v1.1! iOS and Android in development.
+**Q: Why not just contribute to Obsidian?**
+A: Obsidian isn't open source. I wanted something the community could modify, fork, and improve together.
+
+**Q: Can I use this for my novel/thesis/work?**
+A: Yes, but make backups. It's stable, but it's still relatively new software.
+
+**Q: How do I migrate from Notion/Evernote/etc?**
+A: Export to markdown, put files in a folder, point Lokus at it. That's it. There's no import process because it just works with regular markdown files.
 
 ---
 
-## 📄 License
+## Known Issues
 
-Licensed under the [MIT License](LICENSE). Free to use, modify, and distribute.
+- Windows Defender flags the installer (code isn't signed yet - costs $400/year)
+- Graph can get slow with 1000+ notes (working on it)
+- Some keyboard shortcuts conflict with system shortcuts on Windows (mostly fixed)
+- Bases doesn't support all frontmatter formats yet
+
+See [open issues](https://github.com/lokus-ai/lokus/issues) for the full list.
 
 ---
 
-## 🙏 Acknowledgments
+## License
 
-Built with inspiration from:
-- [Obsidian](https://obsidian.md/) - For pioneering local-first knowledge management
-- [Notion](https://notion.so/) - For database views UX
-- [TipTap](https://tiptap.dev/) - For the amazing editor framework
-- [Tauri](https://tauri.app/) - For making desktop apps lightweight
-- [KaTeX](https://katex.org/) - For beautiful math rendering
+MIT License - see [LICENSE](LICENSE) file.
+
+Free to use, modify, and distribute. Commercial use is fine. Just keep the license notice.
+
+---
+
+## Acknowledgments
+
+Built with help from:
+- [Obsidian](https://obsidian.md/) for the inspiration and proving local-first can work
+- [Notion](https://notion.so/) for showing how good database views can be
+- [TipTap](https://tiptap.dev/) for the excellent editor framework
+- [Tauri](https://tauri.app/) for making it possible to build small, fast desktop apps
+- [KaTeX](https://katex.org/) for beautiful math rendering
+- Everyone who's contributed, reported bugs, or suggested features
 
 ---
 
 <div align="center">
 
-### **Made with ❤️ by developers who love note-taking**
+### Built by someone who loves note-taking
 
-[⭐ Star this repo](https://github.com/lokus-ai/lokus) • [🐛 Report Bug](https://github.com/lokus-ai/lokus/issues) • [💡 Request Feature](https://github.com/lokus-ai/lokus/discussions) • [💬 Join Discord](https://discord.gg/lokus)
+[⭐ Star this repo](https://github.com/lokus-ai/lokus) • [🐛 Report Bug](https://github.com/lokus-ai/lokus/issues) • [💡 Request Feature](https://github.com/lokus-ai/lokus/discussions) • [💬 Discord](https://discord.gg/lokus)
 
-**Don't forget to star the repo if you find it useful! ⭐**
+**If this helps you, star it! More stars = more motivation to keep building**
 
 </div>
