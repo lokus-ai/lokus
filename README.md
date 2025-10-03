@@ -45,24 +45,50 @@ Here's what you get without installing any plugins:
 
 ### The Basics (That Should Be Built-In)
 
+<div align="center">
+
+![Rich Markdown Editor](assets/screenshots/screenshot-1.png)
+*Clean, distraction-free markdown editor with live preview*
+
+</div>
+
 **Rich Markdown Editor**
 - Everything you'd expect: headings, lists, tables, code blocks
 - LaTeX math rendering: `$x^2$` for inline, `$$E=mc^2$$` for blocks
 - Syntax highlighting for 100+ languages
 - Real-time preview
+- No clutter - just your notes
 
 **Wiki Links**
 - Type `[[` and autocomplete pops up
 - Bidirectional linking works like you'd expect
 - Backlinks panel shows what links to current note
+- Navigate your knowledge like a web
+
+<div align="center">
+
+![Knowledge Graph](assets/screenshots/screenshot-2.png)
+*3D graph view - see how your notes connect*
+
+</div>
 
 **Knowledge Graph**
 - Both 2D and 3D views (toggle with one click)
 - Actually interactive - click nodes to jump to notes
 - Filter by tags
 - Shows link strength visually
+- Zoom, rotate, explore your knowledge spatially
+
+---
 
 ### The Good Stuff (That's Actually Built-In)
+
+<div align="center">
+
+![Database Views](assets/screenshots/screenshot-3.png)
+*Notion-like database views for your markdown files*
+
+</div>
 
 **Database Views (Bases)**
 - Think Notion, but for your local markdown files
@@ -71,23 +97,27 @@ Here's what you get without installing any plugins:
 - Add custom metadata without touching frontmatter
 - Multiple views per base (table, gallery, calendar coming soon)
 - Automatically creates an "All Notes" base when you first open a workspace
+- See all your notes at a glance, organize however you want
 
 **Canvas Mode**
 - Infinite whiteboard for visual thinking
 - Drag files onto it
 - Draw connections between ideas
 - No plugin needed
+- Perfect for brainstorming and planning
 
 **Kanban Boards**
 - Built-in task management
 - Drag and drop between columns
 - Markdown-based (can edit in any text editor)
+- Track projects without leaving your notes
 
 **Gmail Integration**
 - Import emails as markdown notes
 - Send emails from notes (write in markdown, send as formatted email)
 - Keep attachments with notes
 - Track email threads
+- Never lose important email context
 
 ### Performance Stuff
 
@@ -119,24 +149,17 @@ Here's what you get without installing any plugins:
 
 ---
 
-## Screenshots
+## More Screenshots
 
 <div align="center">
 
-### Rich Markdown Editor
-![Editor View](assets/screenshots/screenshot-1.png)
-
-### 3D Knowledge Graph
-![Graph View](assets/screenshots/screenshot-2.png)
-
-### Database Views (Bases)
-![Bases Database](assets/screenshots/screenshot-3.png)
-
-### Interactive Graph
+### Interactive Graph Navigation
 ![Graph View 2](assets/screenshots/screenshot-4.png)
+*Click and drag to explore - every node is a note you can open*
 
-### Advanced Editing
+### Advanced Markdown Features
 ![Markdown Editing](assets/screenshots/screenshot-5.png)
+*Math equations, code blocks, tables - everything renders beautifully*
 
 </div>
 
