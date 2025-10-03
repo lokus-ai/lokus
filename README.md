@@ -246,21 +246,41 @@ See our [Contributing Guide](CONTRIBUTING.md) for detailed instructions.
 
 ---
 
-## 📊 Star History
+## 📊 Project Stats
 
 <div align="center">
 
-### ⭐ Star Growth Over Time
+### 🌟 Real-time GitHub Stats
 
-![Star History Chart](https://api.star-history.com/svg?repos=lokus-ai/lokus&type=Date&theme=dark)
+<a href="https://github.com/lokus-ai/lokus/stargazers">
+  <img src="https://img.shields.io/github/stars/lokus-ai/lokus?style=for-the-badge&logo=github&label=Stars&color=yellow" alt="GitHub stars">
+</a>
+<a href="https://github.com/lokus-ai/lokus/network/members">
+  <img src="https://img.shields.io/github/forks/lokus-ai/lokus?style=for-the-badge&logo=github&label=Forks&color=blue" alt="GitHub forks">
+</a>
+<a href="https://github.com/lokus-ai/lokus/watchers">
+  <img src="https://img.shields.io/github/watchers/lokus-ai/lokus?style=for-the-badge&logo=github&label=Watchers&color=green" alt="GitHub watchers">
+</a>
 
-*Chart updates automatically as the project grows*
+<br/>
 
-**Current Stats:**
+<a href="https://github.com/lokus-ai/lokus/releases">
+  <img src="https://img.shields.io/github/downloads/lokus-ai/lokus/total?style=for-the-badge&logo=github&label=Downloads&color=brightgreen" alt="Total downloads">
+</a>
+<a href="https://github.com/lokus-ai/lokus/graphs/contributors">
+  <img src="https://img.shields.io/github/contributors/lokus-ai/lokus?style=for-the-badge&logo=github&label=Contributors&color=orange" alt="Contributors">
+</a>
+<a href="https://github.com/lokus-ai/lokus/graphs/commit-activity">
+  <img src="https://img.shields.io/github/commit-activity/m/lokus-ai/lokus?style=for-the-badge&logo=github&label=Commits&color=purple" alt="Commit activity">
+</a>
 
-![GitHub Repo stars](https://img.shields.io/github/stars/lokus-ai/lokus?style=social)
-![GitHub watchers](https://img.shields.io/github/watchers/lokus-ai/lokus?style=social)
-![GitHub forks](https://img.shields.io/github/forks/lokus-ai/lokus?style=social)
+<br/>
+
+### 📈 Growth Tracker
+
+[![Star History Chart](https://api.star-history.com/svg?repos=lokus-ai/lokus&type=Timeline)](https://star-history.com/#lokus-ai/lokus&Timeline)
+
+*All stats update automatically in real-time • Last cache: ~5 minutes*
 
 </div>
 
