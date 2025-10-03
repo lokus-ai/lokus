@@ -8,10 +8,15 @@
 
 *Why settle for 10+ plugins when you can have everything built-in?*
 
-[![GitHub Stars](https://img.shields.io/github/stars/lokus-ai/lokus?style=social)](https://github.com/lokus-ai/lokus/stargazers)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![Discord](https://img.shields.io/badge/Discord-Join%20Us-7289DA?logo=discord&logoColor=white)](https://discord.gg/lokus)
+[![GitHub Stars](https://img.shields.io/github/stars/lokus-ai/lokus?style=for-the-badge&logo=github&color=yellow)](https://github.com/lokus-ai/lokus/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/lokus-ai/lokus?style=for-the-badge&logo=github&color=blue)](https://github.com/lokus-ai/lokus/network/members)
+[![GitHub Issues](https://img.shields.io/github/issues/lokus-ai/lokus?style=for-the-badge&logo=github&color=red)](https://github.com/lokus-ai/lokus/issues)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+
+[![Downloads](https://img.shields.io/github/downloads/lokus-ai/lokus/total?style=flat-square&logo=github&color=brightgreen)](https://github.com/lokus-ai/lokus/releases)
+[![Latest Release](https://img.shields.io/github/v/release/lokus-ai/lokus?style=flat-square&logo=github)](https://github.com/lokus-ai/lokus/releases/latest)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Us-7289DA?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/lokus)
 
 [🚀 Quick Start](#-quick-start) • [✨ Features](#-features) • [📸 Screenshots](#-screenshots) • [🗺️ Roadmap](#️-roadmap) • [🤝 Contributing](#-contributing)
 
@@ -243,7 +248,21 @@ See our [Contributing Guide](CONTRIBUTING.md) for detailed instructions.
 
 ## 📊 Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=lokus-ai/lokus&type=Date)](https://star-history.com/#lokus-ai/lokus&Date)
+<div align="center">
+
+### ⭐ Star Growth Over Time
+
+![Star History Chart](https://api.star-history.com/svg?repos=lokus-ai/lokus&type=Date&theme=dark)
+
+*Chart updates automatically as the project grows*
+
+**Current Stats:**
+
+![GitHub Repo stars](https://img.shields.io/github/stars/lokus-ai/lokus?style=social)
+![GitHub watchers](https://img.shields.io/github/watchers/lokus-ai/lokus?style=social)
+![GitHub forks](https://img.shields.io/github/forks/lokus-ai/lokus?style=social)
+
+</div>
 
 ---
 
