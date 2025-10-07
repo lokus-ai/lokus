@@ -11,6 +11,8 @@ pnpm-lock.yaml
 .env.*
 !.env.example
 
+r/*
+
 # Build outputs
 dist/
 dist-ssr/
@@ -98,6 +100,7 @@ openapi.yaml
 *personal*.md
 *internship*.md
 
+# AI Assistant
 .claude/
 *.claude
 

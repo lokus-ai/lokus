@@ -378,11 +378,8 @@ impl AuthService {
         }
 
         // Exchange code for token
-        let auth_base_url = if cfg!(debug_assertions) {
-            "http://localhost:3000"
-        } else {
-            "https://lokus-web.vercel.app"
-        };
+        let auth_base_url = std::env::var("AUTH_BASE_URL")
+            .unwrap_or_else(|_| "https://lokusmd.com".to_string());
 
         println!("🔄 Starting token exchange with code: {}", code);
         println!("🔄 PKCE verifier: {}", pkce_data.code_verifier);
@@ -494,11 +491,8 @@ pub async fn initiate_oauth_flow(
     println!("✅ Localhost server started successfully on port {}", port);
 
     // Build OAuth URL
-    let auth_base_url = if cfg!(debug_assertions) {
-        "http://localhost:3000"
-    } else {
-        "https://lokus-web.vercel.app"
-    };
+    let auth_base_url = std::env::var("AUTH_BASE_URL")
+        .unwrap_or_else(|_| "https://lokusmd.com".to_string());
 
     let mut auth_url = Url::parse(&format!("{}/api/auth/authorize", auth_base_url))
         .map_err(|e| format!("Invalid auth URL: {}", e))?;
@@ -525,11 +519,8 @@ pub async fn handle_oauth_callback(
 }
 
 async fn fetch_and_store_user_profile(token: &AuthToken) -> Result<(), String> {
-    let auth_base_url = if cfg!(debug_assertions) {
-        "http://localhost:3000"
-    } else {
-        "https://lokus-web.vercel.app"
-    };
+    let auth_base_url = std::env::var("AUTH_BASE_URL")
+        .unwrap_or_else(|_| "https://lokusmd.com".to_string());
 
     let client = reqwest::Client::new();
     let profile_response = client
@@ -602,11 +593,8 @@ pub async fn refresh_auth_token() -> Result<(), String> {
     let refresh_token = current_token.refresh_token
         .ok_or("No refresh token available")?;
 
-    let auth_base_url = if cfg!(debug_assertions) {
-        "http://localhost:3000"
-    } else {
-        "https://lokus-web.vercel.app"
-    };
+    let auth_base_url = std::env::var("AUTH_BASE_URL")
+        .unwrap_or_else(|_| "https://lokusmd.com".to_string());
 
     let client = reqwest::Client::new();
     let refresh_response = client
