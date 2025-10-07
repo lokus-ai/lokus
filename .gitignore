@@ -11,6 +11,8 @@ pnpm-lock.yaml
 .env.*
 !.env.example
 
+r/*
+
 # Build outputs
 dist/
 dist-ssr/

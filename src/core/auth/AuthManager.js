@@ -7,9 +7,8 @@ class AuthManager {
     this.listeners = new Set();
     this.user = null;
     this.isAuthenticated = false;
-    this.authBaseUrl = process.env.NODE_ENV === 'development'
-      ? 'http://localhost:3000'
-      : 'https://lokus-web.vercel.app';
+    // Always use production backend (lokusmd.com)
+    this.authBaseUrl = import.meta.env.VITE_AUTH_BASE_URL || 'https://lokusmd.com';
 
     // Throttling for auth checks to prevent excessive calls
     this.checkInProgress = false;
