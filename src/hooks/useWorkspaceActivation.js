@@ -22,8 +22,6 @@ export function useWorkspaceActivation() {
       for (let attempt = 0; attempt < 3; attempt++) {
         await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
         
-        // Debug: Check current URL
-        
         // Strategy 1: Check URL on initial load
         const params = new URLSearchParams(window.location.search);
         const forceWelcome = params.get("forceWelcome");

@@ -2929,13 +2929,13 @@ function WorkspaceWithScope({ path }) {
                 onOpenFile={handleFileOpen}
               />
             </div>
-          ) : activeFile === '__gmail__' ? (
-            <div className="flex-1 h-full overflow-hidden">
-              <Gmail workspacePath={path} />
-            </div>
           ) : activeFile === '__bases__' ? (
             <div className="flex-1 h-full overflow-hidden">
               <BasesView isVisible={true} onFileOpen={handleFileOpen} />
+            </div>
+          ) : activeFile === '__gmail__' ? (
+            <div className="flex-1 h-full overflow-hidden">
+              <Gmail workspacePath={path} />
             </div>
           ) : (
             <div className="flex-1 p-8 md:p-12 overflow-y-auto">

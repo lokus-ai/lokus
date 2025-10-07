@@ -826,6 +826,14 @@ export class PropertyIndexer {
   }
 
   /**
+   * Get file count from index
+   * @returns {number} Number of indexed files
+   */
+  getFileCount() {
+    return this.index.fileMap.size;
+  }
+
+  /**
    * Dispose of indexer resources
    */
   dispose() {

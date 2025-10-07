@@ -19,7 +19,7 @@ let isTauri = false; try {
 const DEBUG_SHORTCUTS = false;
 
 // In development, disable global shortcuts to avoid conflicts
-const DISABLE_GLOBAL_SHORTCUTS_IN_DEV = true;
+const DISABLE_GLOBAL_SHORTCUTS_IN_DEV = false;
 
 // CRITICAL: System shortcuts that should NEVER be registered globally
 // These are essential macOS/Windows system functions

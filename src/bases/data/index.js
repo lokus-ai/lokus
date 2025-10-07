@@ -4,6 +4,8 @@
  * Provides a unified interface to the property and file data system
  */
 
+import { normalizePath } from '../../utils/pathUtils.js';
+
 
 export { PropertyTypes, PropertyType } from './PropertyTypes.js';
 export { PropertyScanner } from './PropertyScanner.js';
@@ -47,7 +49,7 @@ export class BasesDataManager {
       return;
     }
 
-    this.workspacePath = workspacePath;
+    this.workspacePath = normalizePath(workspacePath);
 
     try {
       // Initialize components
@@ -196,7 +198,6 @@ export class BasesDataManager {
       throw new Error('BasesDataManager not initialized');
     }
 
-
     try {
       // Use Tauri backend to get workspace files
       const { invoke } = await import('@tauri-apps/api/core');
@@ -251,7 +252,7 @@ export class BasesDataManager {
       const results = await Promise.all(
         mdFiles.map(async (file) => {
           const filename = file.name;
-          const filePath = file.path || `${this.workspacePath}/${filename}`;
+          const filePath = normalizePath(file.path || `${this.workspacePath}/${filename}`);
           // Remove .md or .markdown extension to get title
           const title = filename.replace(/\.md$/, '').replace(/\.markdown$/, '');
 

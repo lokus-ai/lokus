@@ -8,7 +8,8 @@ export const readRecents = () => {
 export const writeRecents = (list) => localStorage.setItem(KEY, JSON.stringify(list));
 
 export const addRecent = (path) => {
-  const name = path.split("/").filter(Boolean).pop() || path;
+  // Handle both Windows (\) and Unix (/) path separators
+  const name = path.split(/[/\\]/).filter(Boolean).pop() || path;
   const items = readRecents().filter((r) => r.path !== path);
   items.unshift({ name, path, at: Date.now() });
   writeRecents(items.slice(0, 12));
