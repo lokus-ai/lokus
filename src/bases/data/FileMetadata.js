@@ -7,6 +7,7 @@
 import { readTextFile, stat, readDir } from '@tauri-apps/plugin-fs';
 import { join, dirname, basename, extname } from '@tauri-apps/api/path';
 import { invoke } from '@tauri-apps/api/core';
+import { getFilename, getDirname, normalizePath, joinPath } from '../../utils/pathUtils.js';
 
 export class FileMetadata {
   constructor() {
@@ -332,10 +333,11 @@ export class FileMetadata {
 
     // For relative paths, resolve relative to source file
     if (this.isRelativeLink(target)) {
-      return join(dirname(sourcePath), target);
+      const sourceDir = getDirname(normalizePath(sourcePath));
+      return joinPath(sourceDir, target);
     }
 
-    return target;
+    return normalizePath(target);
   }
 
   /**
@@ -495,11 +497,12 @@ export class FileMetadata {
    * @private
    */
   getDefaultMetadata(filePath) {
+    const normalizedPath = normalizePath(filePath);
     return {
-      path: filePath,
-      name: filePath.split('/').pop() || filePath,
-      directory: filePath.substring(0, filePath.lastIndexOf('/')) || '/',
-      extension: filePath.includes('.') ? '.' + filePath.split('.').pop() : '',
+      path: normalizedPath,
+      name: getFilename(normalizedPath) || filePath,
+      directory: getDirname(normalizedPath) || '/',
+      extension: filePath.includes('.') ? '.' + getFilename(normalizedPath).split('.').pop() : '',
       size: 0,
       sizeHuman: '0 B',
       created: null,

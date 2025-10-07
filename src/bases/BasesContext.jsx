@@ -25,6 +25,7 @@ export function BasesProvider({ children, workspacePath }) {
       setError(null);
 
       try {
+
         // Initialize config manager
         if (configManager) {
           await configManager.load();
@@ -52,9 +53,25 @@ export function BasesProvider({ children, workspacePath }) {
             }]
           };
 
-          const createResult = await baseManager.createBase(workspacePath, defaultBase);
-          if (createResult?.success) {
-            existingBases = [createResult.base];
+          try {
+            const createResult = await baseManager.createBase(workspacePath, defaultBase);
+            if (createResult?.success) {
+              existingBases = [createResult.base];
+            } else {
+              // Fallback: create a temporary in-memory base
+              existingBases = [{
+                ...defaultBase,
+                id: 'temp-default',
+                path: null // Indicates this is a temporary base
+              }];
+            }
+          } catch (error) {
+            // Fallback: create a temporary in-memory base
+            existingBases = [{
+              ...defaultBase,
+              id: 'temp-default',
+              path: null // Indicates this is a temporary base
+            }];
           }
         }
 
@@ -83,6 +100,7 @@ export function BasesProvider({ children, workspacePath }) {
         }
 
       } catch (err) {
+        console.error('BasesContext initialization failed:', err);
         setError(err.message);
       } finally {
         setIsLoading(false);

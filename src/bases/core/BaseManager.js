@@ -8,6 +8,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { baseParser } from './BaseParser.js'
 import { baseValidator } from './BaseValidator.js'
 import { DEFAULT_BASE_TEMPLATE, VIEW_TYPES } from './BaseSchema.js'
+import { joinPath, normalizePath } from '../../utils/pathUtils.js'
 
 /**
  * Main BaseManager class
@@ -73,6 +74,10 @@ export class BaseManager {
       // Generate file path
       const fileName = this.sanitizeFileName(name) + '.base'
       const basePath = options.path || await this.getBasesDirectory()
+      
+      // Ensure the bases directory exists
+      await this.ensureBasesDirectory(basePath)
+      
       const fullPath = await this.resolvePath(basePath, fileName)
 
       // Check if file already exists
@@ -368,7 +373,10 @@ export class BaseManager {
    */
   async listBases(directory = null, options = {}) {
     try {
-      const basesDir = directory ? directory + '/.lokus/bases' : await this.getBasesDirectory(directory)
+      const basesDir = directory ? joinPath(directory, '.lokus', 'bases') : await this.getBasesDirectory(directory)
+
+      // Ensure the bases directory exists
+      await this.ensureBasesDirectory(basesDir)
 
       // Get all .base files in directory
       const allFiles = await invoke('read_workspace_files', { workspacePath: basesDir })
@@ -720,14 +728,51 @@ export class BaseManager {
 
   async getBasesDirectory(workspacePath = null) {
     if (workspacePath) {
-      return workspacePath + '/.lokus/bases'
+      return normalizePath(joinPath(workspacePath, '.lokus', 'bases'))
     }
-    // Default fallback - this should be overridden by passing workspacePath
-    return '/Users/pratham/Desktop/My Knowledge Base/.lokus/bases'
+    // Default fallback - use current working directory or user documents
+    // This should be overridden by passing workspacePath
+    try {
+      const homeDir = await invoke('get_home_directory') || 'C:\\Users\\Default\\Documents'
+      return normalizePath(joinPath(homeDir, 'Documents', 'Lokus', '.lokus', 'bases'))
+    } catch (error) {
+      return normalizePath(joinPath('C:', 'Users', 'Default', 'Documents', 'Lokus', '.lokus', 'bases'))
+    }
+  }
+
+  async ensureBasesDirectory(basesDir) {
+    try {
+      // Try to read the directory to see if it exists
+      await invoke('read_workspace_files', { workspacePath: basesDir })
+    } catch (error) {
+      // Directory doesn't exist, create it
+      try {
+        // Create the parent .lokus directory first
+        const parentDir = basesDir.replace(/[\/\\]bases$/, '')
+        await invoke('create_folder_in_workspace', { 
+          workspacePath: parentDir.replace(/[\/\\]\.lokus$/, ''), 
+          name: '.lokus' 
+        })
+        
+        // Then create the bases subdirectory
+        await invoke('create_folder_in_workspace', { 
+          workspacePath: parentDir, 
+          name: 'bases' 
+        })
+      } catch (createError) {
+        console.warn('Could not create bases directory:', createError)
+        // Continue anyway - maybe the directory exists but we can't read it
+      }
+    }
   }
 
   async resolvePath(directory, fileName) {
-    return await invoke('resolve_path', { directory, fileName })
+    try {
+      return await invoke('resolve_path', { directory, fileName })
+    } catch (error) {
+      // Fallback to manual path joining if Tauri command doesn't exist
+      return normalizePath(joinPath(directory, fileName))
+    }
   }
 
   async fileExists(path) {
