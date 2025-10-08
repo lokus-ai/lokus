@@ -57,8 +57,6 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           VITE_AUTH_BASE_URL: https://lokusmd.com
         with:
-          projectPath: .
-          configPath: src-tauri/tauri.conf.json
           tagName: ${{ github.ref_name }}
           releaseName: 'Lokus ${{ github.ref_name }}'
           releaseBody: |

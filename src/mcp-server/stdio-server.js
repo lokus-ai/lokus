@@ -86,10 +86,11 @@ let allTools = [];
 async function initializeTools() {
   try {
     // Create tool instances with basic configuration
+    // Use stderr for logging to avoid interfering with stdio protocol
     const logger = {
-      info: (msg, data) => console.log(`[INFO] ${msg}`, data || ''),
-      warn: (msg, data) => console.warn(`[WARN] ${msg}`, data || ''),
-      error: (msg, data) => console.error(`[ERROR] ${msg}`, data || '')
+      info: (msg, data) => console.error(`[INFO] ${msg}${data ? ' ' + JSON.stringify(data) : ''}`),
+      warn: (msg, data) => console.error(`[WARN] ${msg}${data ? ' ' + JSON.stringify(data) : ''}`),
+      error: (msg, data) => console.error(`[ERROR] ${msg}${data ? ' ' + JSON.stringify(data) : ''}`)
     };
 
     // Initialize each tool class
@@ -113,7 +114,7 @@ async function initializeTools() {
     for (const toolClass of allToolInstances) {
       try {
         await toolClass.instance.initialize();
-        console.log(`[SUCCESS] ${toolClass.name} initialized`);
+        console.error(`[SUCCESS] ${toolClass.name} initialized`);
       } catch (error) {
         console.warn(`[WARN] Failed to initialize ${toolClass.name}:`, error.message);
         // Continue with other tools even if one fails
@@ -178,14 +179,14 @@ async function initializeTools() {
             toolRouting[tool.name] = instanceName;
           });
           
-          console.log(`[SUCCESS] Added ${classTools.length} tools from ${toolClass.name}`);
+          console.error(`[SUCCESS] Added ${classTools.length} tools from ${toolClass.name}`);
         }
       } catch (error) {
         console.warn(`[WARN] Failed to get tools from ${toolClass.name}:`, error.message);
       }
     }
 
-    console.log(`[SUCCESS] Total tools available: ${allTools.length}`);
+    console.error(`[SUCCESS] Total tools available: ${allTools.length}`);
     
   } catch (error) {
     console.error('[ERROR] Failed to initialize tools:', error);
@@ -491,17 +492,17 @@ function formatToolResponse(toolName, result) {
 
 async function main() {
   try {
-    console.log('[INFO] Starting Lokus MCP Server...');
-    
+    console.error('[INFO] Starting Lokus MCP Server...');
+
     // Initialize all tools before connecting
     await initializeTools();
-    
-    console.log('[INFO] All tools initialized, connecting to transport...');
+
+    console.error('[INFO] All tools initialized, connecting to transport...');
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    
-    console.log('[SUCCESS] Lokus MCP Server connected and ready!');
-    
+
+    console.error('[SUCCESS] Lokus MCP Server connected and ready!');
+
   } catch (error) {
     console.error('[FATAL] Failed to start server:', error);
     process.exit(1);
@@ -510,8 +511,8 @@ async function main() {
 
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('[INFO] Shutting down gracefully...');
-  
+  console.error('[INFO] Shutting down gracefully...');
+
   // Clean up tool instances if needed
   try {
     for (const toolClass of allToolInstances) {
@@ -520,14 +521,14 @@ process.on('SIGINT', async () => {
       }
     }
   } catch (error) {
-    console.warn('[WARN] Error during cleanup:', error.message);
+    console.error('[WARN] Error during cleanup:', error.message);
   }
-  
+
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('[INFO] Received SIGTERM, shutting down...');
+  console.error('[INFO] Received SIGTERM, shutting down...');
   process.exit(0);
 });
 
