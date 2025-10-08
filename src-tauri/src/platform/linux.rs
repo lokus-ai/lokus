@@ -19,7 +19,7 @@ pub struct LinuxPlatform {
 
 /// Detected Linux desktop environment
 #[derive(Debug, Clone, PartialEq)]
-enum DesktopEnvironment {
+pub enum DesktopEnvironment {
     Gnome,
     Kde,
     Xfce,
