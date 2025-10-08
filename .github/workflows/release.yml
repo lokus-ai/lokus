@@ -25,7 +25,7 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
       - name: Rust setup
         uses: dtolnay/rust-toolchain@stable
@@ -56,19 +56,41 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          VITE_AUTH_BASE_URL: https://lokusmd.com
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Lokus ${{ github.ref_name }}'
           releaseBody: |
             🚀 **Lokus ${{ github.ref_name }}** is now available!
-            
+
+            ## What's New
+
+            ### 📊 Bases - Notion-like Database System
+            - **Table Views** - Organize notes in sortable, filterable tables
+            - **Custom Properties** - Add metadata to your notes (tags, dates, numbers, etc.)
+            - **Multiple Views** - Create different perspectives of the same data
+            - **Smart Filters** - Advanced filtering and sorting capabilities
+            - **Auto-sync** - Bases automatically sync with your workspace
+
+            ### 🔐 Authentication Improvements
+            - **Fixed OAuth URLs** - Email confirmation links now use production domain (lokusmd.com)
+            - **Improved Error Handling** - Better error messages and recovery
+            - **Token Management** - More reliable access token refresh
+
+            ### 🛠️ Build System
+            - **Local Multi-Platform Builds** - Docker-based Linux builds from macOS
+            - **Windows Cross-Compilation** - cargo-xwin support for Windows builds
+            - **Better CI/CD** - Improved GitHub Actions workflows
+
             ### 📦 Downloads
             Choose the appropriate installer for your platform:
             - **🍎 macOS**: Download the `.dmg` file
-            - **🪟 Windows**: Download the `.msi` installer  
+            - **🪟 Windows**: Download the `.msi` installer (or `.exe` portable)
             - **🐧 Linux**: Download the `.deb`, `.rpm`, or `.AppImage` file
-            
-            ### ✨ Features
+
+            ### ✨ Core Features
             - 🎨 Rich text editing with TipTap
             - 📝 Full Markdown support
             - 🔗 Wiki links with autocomplete
@@ -76,5 +98,6 @@ jobs:
             - 📧 Gmail integration with OAuth 2.0
             - 🧠 68 AI-powered MCP tools
             - 🎨 Advanced themes and customization
+            - 📊 Bases database system
           releaseDraft: false
           prerelease: false
