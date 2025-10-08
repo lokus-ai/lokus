@@ -527,7 +527,7 @@ export class BaseParser {
    * Prepare data for serialization
    */
   prepareForSerialization(data) {
-    const cleaned = { ...data }
+    let cleaned = { ...data }
 
     // Update modified timestamp
     cleaned.modified = new Date().toISOString()

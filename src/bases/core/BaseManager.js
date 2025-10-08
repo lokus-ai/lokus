@@ -681,7 +681,7 @@ export class BaseManager {
    */
   async exportBase(baseId, format, options = {}) {
     try {
-      const base = this.cache.get(baseId)
+      let base = this.cache.get(baseId)
       if (!base) {
         const loadResult = await this.loadBase(this.basesIndex.get(baseId)?.path)
         if (!loadResult.success) {
