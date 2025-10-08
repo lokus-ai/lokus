@@ -63,41 +63,62 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'Lokus ${{ github.ref_name }}'
           releaseBody: |
-            🚀 **Lokus ${{ github.ref_name }}** is now available!
+            🚀 **Lokus v1.3.0** - Major Feature Release
 
-            ## What's New
+            ## 🎯 What's New Since v1.2.3
 
             ### 📊 Bases - Notion-like Database System
-            - **Table Views** - Organize notes in sortable, filterable tables
-            - **Custom Properties** - Add metadata to your notes (tags, dates, numbers, etc.)
-            - **Multiple Views** - Create different perspectives of the same data
-            - **Smart Filters** - Advanced filtering and sorting capabilities
-            - **Auto-sync** - Bases automatically sync with your workspace
+            The biggest feature in this release! Create dynamic databases from your notes.
+            - **Table Views** - Sort, filter, and organize notes like spreadsheets
+            - **Custom Properties** - Add metadata (tags, dates, numbers, URLs, etc.)
+            - **Multiple Views** - Different perspectives of the same data
+            - **Smart Filters** - Advanced query capabilities
+            - **Auto-sync** - Real-time updates with your workspace
 
-            ### 🔐 Authentication Improvements
-            - **Fixed OAuth URLs** - Email confirmation links now use production domain (lokusmd.com)
-            - **Improved Error Handling** - Better error messages and recovery
-            - **Token Management** - More reliable access token refresh
+            ### 🔐 Authentication & Security
+            - Fixed OAuth email confirmation URLs (now use lokusmd.com)
+            - Improved token refresh and error handling
+            - Better secure storage system integration
+            - Windows compatibility improvements
 
-            ### 🛠️ Build System
-            - **Local Multi-Platform Builds** - Docker-based Linux builds from macOS
-            - **Windows Cross-Compilation** - cargo-xwin support for Windows builds
-            - **Better CI/CD** - Improved GitHub Actions workflows
+            ### 🛠️ Developer Experience
+            - Local cross-platform builds with Docker
+            - Windows build support via cargo-xwin
+            - Improved CI/CD workflows
+            - Fixed Windows Tauri CLI npm dependencies
 
-            ### 📦 Downloads
-            Choose the appropriate installer for your platform:
-            - **🍎 macOS**: Download the `.dmg` file
-            - **🪟 Windows**: Download the `.msi` installer (or `.exe` portable)
-            - **🐧 Linux**: Download the `.deb`, `.rpm`, or `.AppImage` file
+            ### 🎨 UI/UX Improvements
+            - Enhanced code block rendering
+            - Fixed launcher recent workspaces display
+            - Better styling and visual polish
+            - Improved workspace navigation
 
-            ### ✨ Core Features
-            - 🎨 Rich text editing with TipTap
-            - 📝 Full Markdown support
-            - 🔗 Wiki links with autocomplete
-            - 🧮 LaTeX math equations
-            - 📧 Gmail integration with OAuth 2.0
-            - 🧠 68 AI-powered MCP tools
-            - 🎨 Advanced themes and customization
-            - 📊 Bases database system
+            ### 🐛 Bug Fixes
+            - Fixed Cmd+W closing two tabs issue
+            - Resolved workspace persistence bugs
+            - Fixed theme persistence issues
+            - Better WikiLink graph connections
+            - Improved canvas save/load reliability
+
+            ---
+
+            ## 📦 Installation
+
+            **🍎 macOS**
+            - Download `Lokus_x64.app.tar.gz` or `.dmg`
+            - Apple Silicon: Universal binary included
+
+            **🪟 Windows**
+            - Download `.msi` for installer
+            - Or `.exe` for portable version
+
+            **🐧 Linux**
+            - Ubuntu/Debian: `.deb`
+            - Fedora/RHEL: `.rpm`
+            - Universal: `.AppImage`
+
+            ---
+
+            **Full Changelog**: https://github.com/lokus-ai/lokus/compare/v1.2.3...v1.3.0
           releaseDraft: false
           prerelease: false
