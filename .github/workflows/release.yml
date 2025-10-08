@@ -39,16 +39,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
-          cache: 'npm'
 
-      - name: Clean npm cache (Windows fix)
-        if: runner.os == 'Windows'
+      - name: Clean npm cache and dependencies
+        shell: bash
         run: |
-          Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
-          Remove-Item -Force package-lock.json -ErrorAction SilentlyContinue
+          rm -rf node_modules package-lock.json
           npm cache clean --force
-        shell: powershell
-        
+
       - name: Install frontend dependencies
         run: npm install
 
