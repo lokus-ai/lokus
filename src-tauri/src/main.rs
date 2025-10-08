@@ -16,7 +16,7 @@ mod connections;
 mod oauth_server;
 mod secure_storage;
 
-use windows::{open_workspace_window, open_preferences_window};
+use windows::{open_workspace_window, open_preferences_window, open_launcher_window};
 use tauri::Manager;
 use tauri_plugin_store::{StoreBuilder, JsonValue};
 use std::path::PathBuf;
@@ -177,6 +177,7 @@ fn main() {
     .invoke_handler(tauri::generate_handler![
       open_workspace_window,
       open_preferences_window,
+      open_launcher_window,
       save_last_workspace,
       clear_last_workspace,
       validate_workspace_path,

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm, save } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
 import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database } from "lucide-react";
@@ -1246,15 +1247,21 @@ function WorkspaceWithScope({ path }) {
       // Get the current file name without extension for default name
       const currentFileName = activeFile.split('/').pop().replace(/\.[^.]*$/, '');
 
-      // Show save dialog
+      // Show save dialog with more format options
       const filePath = await save({
         defaultPath: `${currentFileName}.md`,
         filters: [{
           name: 'Markdown',
           extensions: ['md']
         }, {
+          name: 'HTML',
+          extensions: ['html']
+        }, {
           name: 'Text',
           extensions: ['txt']
+        }, {
+          name: 'JSON',
+          extensions: ['json']
         }, {
           name: 'All Files',
           extensions: ['*']
@@ -1265,10 +1272,52 @@ function WorkspaceWithScope({ path }) {
       if (filePath) {
         // Prepare content - handle different file types
         let contentToSave = editorContent;
-        if (filePath.endsWith('.md')) {
-          // For markdown files, we might need HTML to Markdown conversion
+
+        if (filePath.endsWith('.html')) {
+          // For HTML files, wrap content in a complete HTML document
+          const { editorTitle } = stateRef.current;
+          const title = editorTitle || currentFileName;
+          contentToSave = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            color: #333;
+        }
+        pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+        blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; color: #666; }
+        table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #f4f4f4; }
+    </style>
+</head>
+<body>
+    ${editorContent}
+</body>
+</html>`;
+        } else if (filePath.endsWith('.json')) {
+          // For JSON files, create a structured export
+          const { editorTitle } = stateRef.current;
+          contentToSave = JSON.stringify({
+            title: editorTitle || currentFileName,
+            content: editorContent,
+            exported: new Date().toISOString(),
+            format: 'html'
+          }, null, 2);
         } else if (filePath.endsWith('.txt')) {
-          // For text files, strip HTML and keep plain text
+          // For text files, strip HTML tags
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = editorContent;
+          contentToSave = tempDiv.textContent || tempDiv.innerText || '';
         }
 
         // Save the file
@@ -1559,12 +1608,34 @@ function WorkspaceWithScope({ path }) {
 </body>
 </html>`;
 
-        // For now, save as HTML with PDF-optimized styling
-        // Future enhancement: integrate with a PDF generation library
-        const fallbackPath = filePath.replace('.pdf', '_for_pdf.html');
-        await invoke("write_file_content", { path: fallbackPath, content: htmlForPdf });
+        // Create a hidden iframe for PDF generation
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'absolute';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = 'none';
+        document.body.appendChild(iframe);
+
+        // Write content to iframe
+        iframe.contentDocument.write(htmlForPdf);
+        iframe.contentDocument.close();
+
+        // Wait for content to load
+        await new Promise(resolve => {
+          iframe.onload = resolve;
+          setTimeout(resolve, 500);
+        });
+
+        // Use browser print dialog to save as PDF
+        iframe.contentWindow.print();
+
+        // Cleanup after a delay
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+        }, 1000);
       }
     } catch (error) {
+      console.error('Failed to export PDF:', error);
     }
   }, []);
 
@@ -2137,27 +2208,18 @@ function WorkspaceWithScope({ path }) {
     };
 
     const handleWindowAction = (action) => {
+      if (!window.__TAURI__) return;
+
+      const currentWindow = getCurrentWindow();
       switch (action) {
         case 'minimize':
-          if (window.__TAURI__) {
-            import('@tauri-apps/api/window').then(({ appWindow }) => {
-              appWindow.minimize();
-            });
-          }
+          currentWindow.minimize();
           break;
         case 'close':
-          if (window.__TAURI__) {
-            import('@tauri-apps/api/window').then(({ appWindow }) => {
-              appWindow.close();
-            });
-          }
+          currentWindow.close();
           break;
         case 'zoom':
-          if (window.__TAURI__) {
-            import('@tauri-apps/api/window').then(({ appWindow }) => {
-              appWindow.toggleMaximize();
-            });
-          }
+          currentWindow.toggleMaximize();
           break;
       }
     };
