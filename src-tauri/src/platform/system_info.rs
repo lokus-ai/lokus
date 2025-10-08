@@ -606,7 +606,7 @@ impl SystemInfoCollector {
     }
     
     fn get_network_interfaces() -> Vec<String> {
-        let interfaces = Vec::new();
+        let mut interfaces = Vec::new();
         
         #[cfg(target_os = "linux")]
         {
