@@ -747,18 +747,42 @@ export class BaseManager {
     } catch (error) {
       // Directory doesn't exist, create it
       try {
-        // Create the parent .lokus directory first
-        const parentDir = basesDir.replace(/[\/\\]bases$/, '')
-        await invoke('create_folder_in_workspace', { 
-          workspacePath: parentDir.replace(/[\/\\]\.lokus$/, ''), 
-          name: '.lokus' 
-        })
+        // Split the path to find workspace root and create directories step by step
+        // basesDir should look like: "C:/Users/.../Desktop/Knowledge/.lokus/bases"
+        const normalizedPath = basesDir.replace(/\\/g, '/')
+        const pathParts = normalizedPath.split('/')
         
-        // Then create the bases subdirectory
-        await invoke('create_folder_in_workspace', { 
-          workspacePath: parentDir, 
-          name: 'bases' 
-        })
+        // Find the index of .lokus in the path
+        const lokusIndex = pathParts.findIndex(part => part === '.lokus')
+        
+        if (lokusIndex !== -1) {
+          // Get workspace root (everything before .lokus)
+          const workspaceRoot = pathParts.slice(0, lokusIndex).join('/')
+          
+          // First, try to create .lokus directory
+          try {
+            await invoke('create_folder_in_workspace', { 
+              workspacePath: workspaceRoot, 
+              name: '.lokus' 
+            })
+          } catch (lokusError) {
+            // .lokus might already exist, that's okay
+            console.log('Note: .lokus directory may already exist')
+          }
+          
+          // Then, create bases directory inside .lokus
+          const lokusPath = pathParts.slice(0, lokusIndex + 1).join('/')
+          try {
+            await invoke('create_folder_in_workspace', { 
+              workspacePath: lokusPath, 
+              name: 'bases' 
+            })
+          } catch (basesError) {
+            console.warn('Could not create bases directory:', basesError)
+          }
+        } else {
+          console.warn('Could not find .lokus in path:', basesDir)
+        }
       } catch (createError) {
         console.warn('Could not create bases directory:', createError)
         // Continue anyway - maybe the directory exists but we can't read it
