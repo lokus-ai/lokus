@@ -21,6 +21,56 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PROJECT_ROOT = join(__dirname, '..');
 
+/**
+ * Load environment variables from .env.production
+ */
+function loadProductionEnv() {
+  const envPath = join(PROJECT_ROOT, '.env.production');
+
+  if (!existsSync(envPath)) {
+    printColor('⚠️ .env.production not found, creating from .env...', 'yellow');
+    const defaultEnvPath = join(PROJECT_ROOT, '.env');
+    if (existsSync(defaultEnvPath)) {
+      copyFileSync(defaultEnvPath, envPath);
+    } else {
+      printColor('⚠️ No .env file found either, skipping environment variable loading', 'yellow');
+      return;
+    }
+  }
+
+  try {
+    const envContent = readFileSync(envPath, 'utf8');
+    const envVars = {};
+
+    // Parse .env file
+    envContent.split('\n').forEach(line => {
+      line = line.trim();
+      if (line && !line.startsWith('#')) {
+        const [key, ...valueParts] = line.split('=');
+        if (key && valueParts.length > 0) {
+          const value = valueParts.join('=').trim();
+          envVars[key.trim()] = value;
+          // Set in process.env so child processes inherit them
+          process.env[key.trim()] = value;
+        }
+      }
+    });
+
+    printColor('✅ Loaded environment variables from .env.production', 'green');
+    if (isVerbose) {
+      Object.keys(envVars).forEach(key => {
+        // Don't print sensitive values
+        const displayValue = key.includes('SECRET') || key.includes('PASSWORD')
+          ? '***REDACTED***'
+          : envVars[key];
+        printColor(`  ${key}=${displayValue}`, 'cyan');
+      });
+    }
+  } catch (error) {
+    printColor(`⚠️ Failed to load .env.production: ${error.message}`, 'yellow');
+  }
+}
+
 // Color codes for terminal output
 const colors = {
   reset: '\x1b[0m',
@@ -526,10 +576,13 @@ function handleError(error, context = '') {
 async function main() {
   try {
     printHeader('Lokus macOS Build Script');
-    
+
+    // Load environment variables FIRST (before any other steps)
+    loadProductionEnv();
+
     const totalSteps = 8;
     let currentStep = 1;
-    
+
     printStep(currentStep++, totalSteps, 'Validating platform');
     validatePlatform();
     

@@ -24,77 +24,63 @@ fn focus(win: &WebviewWindow) {
 #[tauri::command]
 pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(), String> {
   println!("[Backend] open_workspace_window called with path: {}", workspace_path);
-  
-  // On Windows, use the existing window instead of creating a new one
-  #[cfg(target_os = "windows")]
-  {
-    println!("[Backend] Windows: Using existing window for workspace");
-    // Find the main window (launcher)
-    if let Some(main_window) = app.get_webview_window("main") {
-      println!("[Backend] Found main window, emitting workspace:activate");
-      let _ = main_window.emit("workspace:activate", workspace_path);
-      focus(&main_window);
-      return Ok(());
-    }
-  }
-  
-  // On macOS and Linux, continue with the original multi-window approach
-  #[cfg(not(target_os = "windows"))]
-  {
-    let label = base_label_from_path(&workspace_path);
-    println!("[Backend] Generated window label: {}", label);
 
-    if let Some(win) = app.get_webview_window(&label) {
-      println!("[Backend] Window already exists, focusing and activating");
-      focus(&win);
-      // If the window already exists, we still need to tell it to activate the path.
-      // The URL method is only for creation.
-      let _ = win.emit("workspace:activate", workspace_path);
-      return Ok(());
-    }
+  // VSCode-style behavior: REPLACE current window instead of creating new ones
+  // This prevents duplicate workspaces and follows industry standard UX
+
+  // First, check if this workspace is already open in another window
+  let label = base_label_from_path(&workspace_path);
+  if let Some(existing_win) = app.get_webview_window(&label) {
+    println!("[Backend] Workspace already open in another window, focusing it");
+    focus(&existing_win);
+    // Re-activate just in case the workspace needs to refresh
+    let _ = existing_win.emit("workspace:activate", workspace_path);
+    return Ok(());
   }
 
-  // Only create new windows on non-Windows platforms
-  #[cfg(not(target_os = "windows"))]
-  {
-    let label = base_label_from_path(&workspace_path);
-    
-    // CORRECTED: Encode the path and add it as a query parameter to the URL.
-    let encoded_path = urlencoding::encode(&workspace_path);
-    // Try with absolute path starting with /
-    let url_string = format!("/index.html?workspacePath={}", encoded_path);
-    println!("[Backend] Creating new window with URL: {}", url_string);
-    println!("[Backend] Encoded path: {}", encoded_path);
-    println!("[Backend] Raw workspace path: {}", workspace_path);
-    let url = WebviewUrl::App(url_string.into());
+  // Find the current window (could be launcher or any window)
+  // Try common window labels in order of likelihood
+  let current_window = app.get_webview_window("main")
+    .or_else(|| {
+      // Try to find launcher windows (they have format "launcher-{timestamp}")
+      app.webview_windows().into_iter()
+        .find(|(label, _)| label.starts_with("launcher-"))
+        .map(|(_, win)| win)
+    });
 
-    // Use Path for cross-platform window title
-    let workspace_name = Path::new(&workspace_path)
-      .file_name()
-      .and_then(|n| n.to_str())
-      .unwrap_or("Workspace");
-      
-    let win = WebviewWindowBuilder::new(&app, &label, url)
-      .title(format!("Lokus — {}", workspace_name))
-      .inner_size(1200.0, 800.0)
-      .build()
-      .map_err(|e| e.to_string())?;
+  if let Some(win) = current_window {
+    println!("[Backend] Found current window, replacing with workspace (VSCode-style)");
+    let _ = win.emit("workspace:activate", workspace_path);
+    focus(&win);
+    return Ok(());
+  }
 
-    // Emit the workspace path immediately after window creation
-    // This provides a backup method if URL parameters fail
-    println!("[Backend] Emitting workspace:activate event to new window");
-    let _ = win.emit("workspace:activate", workspace_path.clone());
-    
-    // Also store the path in window's data (another backup method)
-    println!("[Backend] Window created successfully");
-  }
-  
-  // On Windows, if we couldn't find the main window, return an error
-  #[cfg(target_os = "windows")]
-  {
-    return Err("Could not find main window".to_string());
-  }
-  
+  // Fallback: If no existing window found, create a new one
+  // This only happens on app startup or if all windows were closed
+  println!("[Backend] No existing window found, creating new workspace window");
+  let encoded_path = urlencoding::encode(&workspace_path);
+  let url_string = format!("/index.html?workspacePath={}", encoded_path);
+  println!("[Backend] Creating new window with URL: {}", url_string);
+  let url = WebviewUrl::App(url_string.into());
+
+  // Use Path for cross-platform window title
+  let workspace_name = Path::new(&workspace_path)
+    .file_name()
+    .and_then(|n| n.to_str())
+    .unwrap_or("Workspace");
+
+  let win = WebviewWindowBuilder::new(&app, &label, url)
+    .title(format!("Lokus — {}", workspace_name))
+    .inner_size(1200.0, 800.0)
+    .build()
+    .map_err(|e| e.to_string())?;
+
+  // Emit workspace:activate as backup method
+  println!("[Backend] Emitting workspace:activate event to new window");
+  let _ = win.emit("workspace:activate", workspace_path.clone());
+
+  println!("[Backend] Window created successfully");
+
   Ok(())
 }
 

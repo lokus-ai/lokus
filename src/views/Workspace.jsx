@@ -47,6 +47,8 @@ import { gmailAuth, gmailEmails } from '../services/gmail.js';
 import { FolderScopeProvider, useFolderScope } from "../contexts/FolderScopeContext.jsx";
 import { BasesProvider } from "../bases/BasesContext.jsx";
 import BasesView from "../bases/BasesView.jsx";
+import DocumentOutline from "../components/DocumentOutline.jsx";
+import GraphSidebar from "../components/GraphSidebar.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -360,7 +362,7 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
 }
 
 // --- Tab Bar Component ---
-function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDragEnd, onNewTab, onSplitDragStart, onSplitDragEnd, useSplitView, onToggleSplitView, splitDirection, onToggleSplitDirection, syncScrolling, onToggleSyncScrolling, onResetPaneSize, isLeftPane = true }) {
+function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDragEnd, onNewTab, onSplitDragStart, onSplitDragEnd, useSplitView, onToggleSplitView, splitDirection, onToggleSplitDirection, syncScrolling, onToggleSyncScrolling, onResetPaneSize, isLeftPane = true, onToggleRightSidebar, showRightSidebar }) {
   const [activeId, setActiveId] = useState(null);
   const [draggedTab, setDraggedTab] = useState(null);
   
@@ -458,6 +460,19 @@ function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDra
             </>
           )}
           
+          {/* Outline toggle button - only show on main pane */}
+          {isLeftPane && onToggleRightSidebar && (
+            <button
+              onClick={onToggleRightSidebar}
+              title={showRightSidebar ? "Hide outline" : "Show outline"}
+              className={`obsidian-button icon-only mb-1 ${showRightSidebar ? 'active' : ''}`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+              </svg>
+            </button>
+          )}
+
           <button
             onClick={onNewTab}
             title={`New file (${platformService.getModifierSymbol()}+N)`}
@@ -526,6 +541,11 @@ function WorkspaceWithScope({ path }) {
   const [showMiniKanban, setShowMiniKanban] = useState(false);
   const [refreshId, setRefreshId] = useState(0);
 
+  // Toggle right sidebar (outline)
+  const toggleRightSidebar = useCallback(() => {
+    setShowRight(prev => !prev);
+  }, []);
+
   const [fileTree, setFileTree] = useState([]);
   const [expandedFolders, setExpandedFolders] = useState(new Set());
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
@@ -560,10 +580,18 @@ function WorkspaceWithScope({ path }) {
   const [showGraphView, setShowGraphView] = useState(false);
   const [graphData, setGraphData] = useState(null);
   const [isLoadingGraph, setIsLoadingGraph] = useState(false);
-  
+
+  // Graph sidebar state
+  const [graphSidebarData, setGraphSidebarData] = useState({
+    selectedNodes: [],
+    hoveredNode: null,
+    graphData: { nodes: [], links: [] },
+    stats: {}
+  });
+
   // Persistent GraphEngine instance that survives tab switches
   const persistentGraphEngineRef = useRef(null);
-  
+
   // Graph data processor instance
   const graphProcessorRef = useRef(null);
   
@@ -628,6 +656,26 @@ function WorkspaceWithScope({ path }) {
       const onDom = async () => { setKeymap(await getActiveShortcuts()); };
       window.addEventListener('shortcuts:updated', onDom);
       return () => window.removeEventListener('shortcuts:updated', onDom);
+    }
+  }, []);
+
+  // Listen for markdown config changes from Preferences window
+  useEffect(() => {
+    let isTauri = false;
+    try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
+
+    if (isTauri) {
+      const sub = listen('lokus:markdown-config-changed', async () => {
+        console.log('[Workspace] Received markdown config change event, reloading config...');
+        try {
+          const markdownSyntaxConfig = (await import('../core/markdown/syntax-config.js')).default;
+          await markdownSyntaxConfig.init();
+          console.log('[Workspace] Markdown config reloaded successfully');
+        } catch (e) {
+          console.error('[Workspace] Failed to reload markdown config:', e);
+        }
+      });
+      return () => { sub.then((un) => un()); };
     }
   }, []);
 
@@ -1022,14 +1070,31 @@ function WorkspaceWithScope({ path }) {
 
   // Ref to track last close timestamp for debouncing (global for any tab)
   const lastCloseTimeRef = useRef(0);
-  
+  const isShowingDialogRef = useRef(false);
+  const currentlyClosingPathRef = useRef(null);
+
   const handleTabClose = useCallback(async (path) => {
+    // Prevent closing the same tab multiple times
+    if (currentlyClosingPathRef.current === path) {
+      console.log('[TabClose] Already processing close for:', path);
+      return;
+    }
+
+    // Prevent multiple dialogs from showing
+    if (isShowingDialogRef.current) {
+      console.log('[TabClose] Dialog already showing, ignoring close request');
+      return;
+    }
+
     // Global debounce: ignore ANY tab close within 200ms of the last one
     const now = Date.now();
     if (now - lastCloseTimeRef.current < 200) {
+      console.log('[TabClose] Debounce: ignoring close within 200ms');
       return;
     }
     lastCloseTimeRef.current = now;
+
+    console.log('[TabClose] Starting close process for:', path);
     
     const closeTab = () => {
       setOpenTabs(prevTabs => {
@@ -1063,15 +1128,34 @@ function WorkspaceWithScope({ path }) {
     };
 
     if (stateRef.current.unsavedChanges.has(path)) {
-      const confirmed = await confirm("You have unsaved changes. Close without saving?", {
-        title: "Unsaved Changes",
-        type: "warning",
-      });
-      if (confirmed) {
-        closeTab();
+      try {
+        console.log('[TabClose] Showing unsaved changes dialog for:', path);
+        currentlyClosingPathRef.current = path;
+        isShowingDialogRef.current = true;
+
+        const confirmed = await confirm("You have unsaved changes. Close without saving?", {
+          title: "Unsaved Changes",
+          type: "warning",
+        });
+
+        console.log('[TabClose] Dialog result:', confirmed ? 'OK' : 'Cancel');
+        if (confirmed) {
+          console.log('[TabClose] User confirmed, closing tab');
+          closeTab();
+        } else {
+          console.log('[TabClose] User cancelled, keeping tab open');
+        }
+      } catch (error) {
+        console.error('[TabClose] Error showing dialog:', error);
+      } finally {
+        console.log('[TabClose] Resetting dialog flags');
+        isShowingDialogRef.current = false;
+        currentlyClosingPathRef.current = null;
       }
     } else {
+      currentlyClosingPathRef.current = path;
       closeTab();
+      currentlyClosingPathRef.current = null;
     }
   }, []);
 
@@ -1755,8 +1839,13 @@ function WorkspaceWithScope({ path }) {
       graphDatabase.off('connectionAdded', handleConnectionChanged);
       graphDatabase.off('connectionRemoved', handleConnectionChanged);
     };
-    
+
   }, [path, activeFile, graphData]);
+
+  // Handle graph state updates from ProfessionalGraphView
+  const handleGraphStateChange = useCallback((state) => {
+    setGraphSidebarData(state);
+  }, []);
 
   // OLD SYSTEM - Commented out since ProfessionalGraphView has its own data loading
   // const buildGraphData = useCallback(async () => {
@@ -2722,7 +2811,7 @@ function WorkspaceWithScope({ path }) {
                     [splitDirection === 'vertical' ? 'width' : 'height']: `${leftPaneSize}%`
                   }}
                 >
-                  <TabBar 
+                  <TabBar
                     tabs={openTabs}
                     activeTab={activeFile}
                     onTabClick={(path) => {
@@ -2743,6 +2832,8 @@ function WorkspaceWithScope({ path }) {
                     onToggleSyncScrolling={() => setSyncScrolling(prev => !prev)}
                     onResetPaneSize={resetPaneSize}
                     isLeftPane={true}
+                    onToggleRightSidebar={toggleRightSidebar}
+                    showRightSidebar={showRight}
                   />
                   {/* Left/Top Pane Content */}
                   {activeFile ? (
@@ -2930,7 +3021,7 @@ function WorkspaceWithScope({ path }) {
             ) : (
               /* Single View */
               <>
-                <TabBar 
+                <TabBar
                   tabs={openTabs}
                   activeTab={activeFile}
                   onTabClick={handleTabClick}
@@ -2948,6 +3039,8 @@ function WorkspaceWithScope({ path }) {
                   onToggleSyncScrolling={() => setSyncScrolling(prev => !prev)}
                   onResetPaneSize={resetPaneSize}
                   isLeftPane={true}
+                  onToggleRightSidebar={toggleRightSidebar}
+                  showRightSidebar={showRight}
                 />
               {activeFile === '__kanban__' ? (
             <div className="flex-1 bg-app-panel overflow-hidden">
@@ -2989,6 +3082,7 @@ function WorkspaceWithScope({ path }) {
                 fileTree={filteredFileTree}
                 workspacePath={path}
                 onOpenFile={handleFileOpen}
+                onGraphStateChange={handleGraphStateChange}
               />
             </div>
           ) : activeFile === '__bases__' ? (
@@ -3200,9 +3294,28 @@ function WorkspaceWithScope({ path }) {
         {showRight && <div onMouseDown={startRightDrag} className="cursor-col-resize bg-app-border hover:bg-app-accent transition-colors duration-300 w-1 min-h-full" />}
         {showRight && (
           <aside className="overflow-y-auto flex flex-col bg-app-panel border-l border-app-border">
-            <PanelRegion 
+            {/* Show GraphSidebar for graph view, DocumentOutline for editor */}
+            <div className="flex-1 overflow-hidden">
+              {activeFile === '__graph__' ? (
+                <GraphSidebar
+                  selectedNodes={graphSidebarData.selectedNodes}
+                  hoveredNode={graphSidebarData.hoveredNode}
+                  graphData={graphSidebarData.graphData}
+                  stats={graphSidebarData.stats}
+                  onNodeClick={(node) => {
+                    // Handle node click from sidebar - you can add focus/select logic here
+                    console.log('Node clicked from sidebar:', node);
+                  }}
+                />
+              ) : (
+                <DocumentOutline editor={editorRef.current?.editor} />
+              )}
+            </div>
+
+            {/* Plugin Panels */}
+            <PanelRegion
               position={PANEL_POSITIONS.SIDEBAR_RIGHT}
-              className="h-full"
+              className="border-t border-app-border"
             />
           </aside>
         )}
@@ -3462,6 +3575,16 @@ export default function Workspace({ initialPath = "" }) {
     invoke("validate_workspace_path", { path: initialPath });
   }
   const [path, setPath] = useState(initialPath);
+
+  // Save workspace path to localStorage on mount
+  useEffect(() => {
+    if (initialPath) {
+      import('../core/vault/vault.js').then(({ saveWorkspacePath }) => {
+        saveWorkspacePath(initialPath);
+        console.log('[Workspace] Saved workspace path to localStorage:', initialPath);
+      });
+    }
+  }, [initialPath]);
 
   // Add a simple fallback if path is not set
   if (!path && !initialPath) {

@@ -12,6 +12,48 @@
       html {
         font-size: 14px;
       }
+
+      /* Instant dark theme - prevents white screen flash on startup */
+      html, body, #root {
+        margin: 0;
+        padding: 0;
+        background-color: #1e1e1e; /* Obsidian dark bg */
+        color: #dcddde; /* Obsidian text */
+      }
+
+      /* Loading skeleton - shows while React initializes */
+      #root:empty::before {
+        content: '';
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #1e1e1e;
+      }
+
+      /* Loading indicator */
+      #root:empty::after {
+        content: 'Lokus';
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 32px;
+        font-weight: 700;
+        color: #7c3aed; /* Accent purple */
+        letter-spacing: -0.02em;
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
     </style>
   </head>
   <body>

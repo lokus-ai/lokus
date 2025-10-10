@@ -1,5 +1,20 @@
 /* GraphUI.css - Beautiful glassmorphism design for professional graph interface */
 
+/* Graph View Container - fills parent completely */
+.graph-view {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.graph-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
 /* Main Graph UI Container */
 .graph-ui {
   position: relative;

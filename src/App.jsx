@@ -9,6 +9,8 @@ import { PluginProvider } from "./hooks/usePlugins.jsx";
 import { AuthProvider } from "./core/auth/AuthContext.jsx";
 import platformService from "./services/platform/PlatformService.js";
 import { GmailProvider } from "./contexts/GmailContext.jsx";
+import markdownSyntaxConfig from "./core/markdown/syntax-config.js";
+import editorConfigCache from "./core/editor/config-cache.js";
 // Import workspace manager to expose developer utilities
 import "./core/workspace/manager.js";
 // Import MCP client for stdio-based connections
@@ -25,6 +27,12 @@ function App() {
   console.log('🎯 isPrefsWindow:', isPrefsWindow);
   console.log('🎯 activePath:', activePath);
   console.log('🎯 URL search params:', window.location.search);
+
+  // Initialize markdown syntax config and editor config cache on app startup
+  useEffect(() => {
+    markdownSyntaxConfig.init();
+    editorConfigCache.init(); // Pre-load editor config to eliminate "Loading editor..." delay
+  }, []);
 
   useEffect(() => {
     // Add platform class to document body

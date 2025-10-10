@@ -13,6 +13,7 @@
     "dialog:allow-save",
     "dialog:allow-open",
     "dialog:allow-confirm",
+    "dialog:allow-message",
     {
       "identifier": "fs:scope",
       "allow": [
