@@ -14,7 +14,13 @@ use hyper::body::Bytes;
 
 type HyperResponse = hyper::Response<Full<Bytes>>;
 
-const OAUTH_PORT: u16 = 8080;
+// Use environment variable or fall back to a less common port to avoid conflicts
+fn get_oauth_port() -> u16 {
+    std::env::var("OAUTH_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(9080) // Use 9080 instead of 8080 to avoid common conflicts
+}
 
 #[derive(Clone)]
 pub struct OAuthServer {
@@ -35,16 +41,17 @@ impl OAuthServer {
             return Ok(());
         }
 
-        println!("[OAUTH SERVER] 🚀 Starting Gmail OAuth callback server on port {}", OAUTH_PORT);
+        let oauth_port = get_oauth_port();
+        println!("[OAUTH SERVER] 🚀 Starting Gmail OAuth callback server on port {}", oauth_port);
 
-        let addr = std::net::SocketAddr::from(([127, 0, 0, 1], OAUTH_PORT));
+        let addr = std::net::SocketAddr::from(([127, 0, 0, 1], oauth_port));
         let listener = TcpListener::bind(addr).await?;
 
         *running = true;
         drop(running);
 
-        println!("[OAUTH SERVER] 🌐 Gmail OAuth callback server running at http://localhost:{}", OAUTH_PORT);
-        println!("[OAUTH SERVER] 📍 Callback URL: http://localhost:{}/gmail-callback", OAUTH_PORT);
+        println!("[OAUTH SERVER] 🌐 Gmail OAuth callback server running at http://localhost:{}", oauth_port);
+        println!("[OAUTH SERVER] 📍 Callback URL: http://localhost:{}/gmail-callback", oauth_port);
 
         let running_clone = self.running.clone();
         tokio::spawn(async move {

@@ -24,6 +24,10 @@ if (typeof globalThis !== 'undefined') {
   window.React = React;
 }
 
+console.log('🚀 Main.jsx starting to render');
+console.log('🚀 Window location:', window.location.href);
+console.log('🚀 DOM root element:', document.getElementById("root"));
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ThemeProvider>

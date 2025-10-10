@@ -16,12 +16,18 @@
         "width": 800,
         "height": 600,
         "minWidth": 600,
-        "minHeight": 400
+        "minHeight": 400,
+        "visible": false,
+        "decorations": true,
+        "transparent": false,
+        "alwaysOnTop": false,
+        "skipTaskbar": false
       }
     ],
     "security": {
       "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https: wss:; media-src 'self' data: blob:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests;"
-    }
+    },
+    "withGlobalTauri": false
   },
   "bundle": {
     "active": true,

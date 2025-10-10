@@ -20,6 +20,11 @@ function App() {
   // Use the hooks' values directly (no setter param expected)
   const { isPrefsWindow } = usePreferenceActivation();
   const activePath = useWorkspaceActivation();
+  
+  console.log('🎯 App.jsx rendering');
+  console.log('🎯 isPrefsWindow:', isPrefsWindow);
+  console.log('🎯 activePath:', activePath);
+  console.log('🎯 URL search params:', window.location.search);
 
   useEffect(() => {
     // Add platform class to document body
