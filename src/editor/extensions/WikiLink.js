@@ -1,5 +1,36 @@
 import { Node, mergeAttributes, InputRule } from '@tiptap/core'
 import { resolveWikiTarget } from '../../core/wiki/resolve.js'
+import markdownSyntaxConfig from '../../core/markdown/syntax-config.js'
+
+// Escape special regex characters
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// Build dynamic regex pattern for wiki links
+function buildWikiLinkPattern(imageEmbed = false) {
+  const config = markdownSyntaxConfig.get('link', 'wikiLink')
+  const open = config?.open || '[['
+  const close = config?.close || ']]'
+  const imageMarker = markdownSyntaxConfig.get('image', 'marker') || '!'
+
+  console.log('[WikiLink] Building pattern with:', { open, close, imageMarker, imageEmbed })
+
+  const escapedOpen = escapeRegex(open)
+  const escapedClose = escapeRegex(close)
+  const escapedImage = escapeRegex(imageMarker)
+
+  // Build character class for what's NOT allowed inside (everything except close markers)
+  const notClose = close.split('').map(c => escapeRegex(c)).join('')
+
+  const pattern = imageEmbed
+    ? new RegExp(`${escapedImage}${escapedOpen}([^${notClose}]+?)${escapedClose}$`)
+    : new RegExp(`${escapedOpen}([^${notClose}]+?)${escapedClose}$`)
+
+  console.log('[WikiLink] Created pattern:', pattern)
+
+  return pattern
+}
 
 function parseParts(raw) {
   // [[path#hash|alt]] or [[path|alt]] or [[path]]
@@ -21,6 +52,35 @@ export const WikiLink = Node.create({
   inline: true,
   atom: true,
   selectable: true,
+
+  onCreate() {
+    console.log('[WikiLink] Extension created, registering config listener');
+    // Listen for markdown syntax config changes and reload editor
+    this.configListener = markdownSyntaxConfig.onChange((category, key, value) => {
+      console.log('[WikiLink] Config changed detected:', { category, key, value });
+      console.log('[WikiLink] Current editor instance:', this.editor ? 'exists' : 'null');
+
+      // Recreate the extension by destroying and recreating the editor
+      if (this.editor) {
+        console.log('[WikiLink] Dispatching markdown-config-changed event');
+        // Trigger a full reload by emitting a custom event
+        window.dispatchEvent(new CustomEvent('markdown-config-changed', {
+          detail: { category, key, value }
+        }));
+      } else {
+        console.warn('[WikiLink] Editor instance not available for reload');
+      }
+    });
+    console.log('[WikiLink] Config listener registered successfully');
+  },
+
+  onDestroy() {
+    // Clean up listener
+    if (this.configListener) {
+      this.configListener()
+    }
+  },
+
   addAttributes() {
     return {
       id: { default: '' },
@@ -76,10 +136,12 @@ export const WikiLink = Node.create({
     }
   },
   addInputRules() {
+    const currentConfig = markdownSyntaxConfig.get('link', 'wikiLink');
+    console.log('[WikiLink] Creating input rules with config:', currentConfig);
     return [
-      // ![[...]] image embed
+      // ![[...]] image embed (dynamic pattern)
       new InputRule({
-        find: /!\[\[([^\]]+)\]\]$/,
+        find: buildWikiLinkPattern(true),
         handler: ({ range, match, chain }) => {
           const raw = match[1]
           const id = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)
@@ -105,9 +167,9 @@ export const WikiLink = Node.create({
           })
         },
       }),
-      // [[...]] file/note link
+      // [[...]] file/note link (dynamic pattern)
       new InputRule({
-        find: /\[\[([^\]]+)\]\]$/,
+        find: buildWikiLinkPattern(false),
         handler: ({ range, match, chain }) => {
           const raw = match[1]
           const id = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)

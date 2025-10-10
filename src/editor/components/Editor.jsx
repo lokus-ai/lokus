@@ -42,11 +42,16 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
   const [pluginExtensions, setPluginExtensions] = useState([]);
   const [lastPluginUpdate, setLastPluginUpdate] = useState(0);
 
-  // Listen for plugin extension changes
+  // Listen for plugin extension changes and markdown config changes
   useEffect(() => {
     const handlePluginUpdate = () => {
       const pluginExts = editorAPI.getAllExtensions();
       setPluginExtensions(pluginExts);
+      setLastPluginUpdate(Date.now());
+    };
+
+    const handleMarkdownConfigChange = () => {
+      console.log('[Editor] Markdown config changed, forcing editor reload...');
       setLastPluginUpdate(Date.now());
     };
 
@@ -60,6 +65,9 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
       setLastPluginUpdate(Date.now());
     });
 
+    // Listen for markdown config changes
+    window.addEventListener('markdown-config-changed', handleMarkdownConfigChange);
+
     // Initial load of plugin extensions
     const initialPluginExts = editorAPI.getAllExtensions();
     if (initialPluginExts.length > 0) {
@@ -72,6 +80,7 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
       unsubscribeExt();
       unsubscribeUnregister();
       unsubscribeHotReload();
+      window.removeEventListener('markdown-config-changed', handleMarkdownConfigChange);
     };
   }, []);
 

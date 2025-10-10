@@ -208,7 +208,7 @@ export async function registerGlobalShortcuts() {
       });
       registeredCount++;
     } catch (e) {
-      console.error(`[Shortcuts] Failed to register ${a.id} (${accel}):`, e);
+      // Silently skip shortcuts that conflict with system shortcuts
       skippedCount++;
     }
   }

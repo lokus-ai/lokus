@@ -39,13 +39,15 @@
     text-rendering: optimizeLegibility;
     font-variant-ligatures: contextual common-ligatures;
     font-feature-settings: "calt" 1, "liga" 1, "kern" 1;
-    
+
     /* Real-time customizable properties */
     font-family: var(--editor-font-family, ui-sans-serif) !important;
     font-size: var(--editor-font-size, 16px) !important;
     line-height: var(--editor-line-height, 1.7) !important;
     letter-spacing: var(--editor-letter-spacing, 0.003em) !important;
-    
+    font-weight: var(--editor-font-weight, 400) !important;
+    color: var(--editor-text-color, rgb(var(--text))) !important;
+
     caret-color: rgb(var(--accent));
     scroll-behavior: smooth;
     scroll-padding-top: 80px;
@@ -53,20 +55,62 @@
     transition: color .15s ease, background-color .15s ease, border-color .15s ease, font-size .15s ease, line-height .15s ease, letter-spacing .15s ease;
 }
 
+/* Selection color */
+.ProseMirror::selection,
+.ProseMirror *::selection {
+    background: var(--editor-selection-color, rgba(99, 102, 241, 0.2)) !important;
+}
+
+/* Paragraph spacing */
+.ProseMirror p {
+    margin: var(--editor-paragraph-spacing, 1rem) 0;
+}
+
 /* Real-time heading size customization */
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3,
+.ProseMirror h4,
+.ProseMirror h5,
+.ProseMirror h6 {
+    color: var(--editor-heading-color, inherit) !important;
+    margin-top: var(--editor-heading-margin-top, 1.5rem) !important;
+    margin-bottom: var(--editor-heading-margin-bottom, 0.5rem) !important;
+    transition: font-size .15s ease, color .15s ease, margin .15s ease;
+}
+
 .ProseMirror h1 {
     font-size: var(--editor-h1-size, 2.0em) !important;
-    transition: font-size .15s ease;
+    font-weight: var(--editor-h1-weight, 700) !important;
 }
 
 .ProseMirror h2 {
     font-size: var(--editor-h2-size, 1.6em) !important;
-    transition: font-size .15s ease;
+    font-weight: var(--editor-h2-weight, 600) !important;
 }
 
 .ProseMirror h3 {
     font-size: var(--editor-h3-size, 1.3em) !important;
-    transition: font-size .15s ease;
+    font-weight: var(--editor-h3-weight, 600) !important;
+}
+
+/* Links */
+.ProseMirror a {
+    color: var(--editor-link-color, rgb(var(--accent))) !important;
+    transition: color .15s ease;
+    text-decoration-thickness: var(--editor-link-underline-thickness, 1px) !important;
+    text-underline-offset: var(--editor-link-underline-offset, 2px) !important;
+}
+
+.ProseMirror a:hover {
+    color: var(--editor-link-hover-color, rgb(var(--accent))) !important;
+}
+
+/* Code */
+.ProseMirror code {
+    color: var(--editor-code-color, rgb(var(--text))) !important;
+    background: var(--editor-code-background, #f5f5f5) !important;
+    transition: color .15s ease;
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {
@@ -101,12 +145,18 @@
 .ProseMirror td,
 .ProseMirror th {
     min-width: 1em;
-    border: 1.5px solid rgb(var(--border));
-    padding: 6px 8px;
+    border: var(--editor-table-border-width, 1px) solid var(--editor-table-border, rgb(var(--border))) !important;
+    padding: var(--editor-table-cell-padding, 12px) !important;
     vertical-align: top;
     box-sizing: border-box;
     position: relative;
     background: rgb(var(--bg));
+}
+
+.tableWrapper th,
+.ProseMirror th {
+    background: var(--editor-table-header-bg, rgb(var(--panel))) !important;
+    font-weight: 600;
 }
 .tableWrapper .selectedCell::after,
 .ProseMirror .selectedCell::after {
@@ -254,17 +304,24 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
 .ProseMirror del,
 .ProseMirror [data-type="strike"] {
     text-decoration: line-through;
-    text-decoration-color: rgb(var(--text) / 0.6);
-    text-decoration-thickness: 2px;
+    text-decoration-color: var(--editor-strikethrough-color, #6c757d) !important;
+    text-decoration-thickness: var(--editor-strikethrough-thickness, 2px) !important;
+}
+
+/* Underline text */
+.ProseMirror u {
+    text-decoration: underline;
+    text-decoration-color: var(--editor-underline-color, inherit) !important;
+    text-decoration-thickness: var(--editor-underline-thickness, 1px) !important;
 }
 
 /* Highlights */
 .ProseMirror mark,
 .ProseMirror [data-type="highlight"] {
-    background: rgb(var(--accent) / 0.2);
+    background: var(--editor-highlight-color, #fff3cd) !important;
+    color: var(--editor-highlight-text-color, inherit) !important;
     padding: 0.1em 0.2em;
     border-radius: 0.25rem;
-    color: inherit;
 }
 
 /* Multi-color highlights */
@@ -278,15 +335,15 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
 
 /* Enhanced code blocks with syntax highlighting - isolated from external stylesheets */
 .ProseMirror pre {
-    background: rgb(var(--panel)) !important;
-    border: 1px solid rgb(var(--border)) !important;
-    border-radius: 0.5rem !important;
-    padding: 1rem !important;
-    margin: 1rem 0 !important;
+    background: var(--editor-code-block-bg, rgb(var(--panel))) !important;
+    border: var(--editor-code-block-border-width, 1px) solid var(--editor-code-block-border, rgb(var(--border))) !important;
+    border-radius: var(--editor-code-block-border-radius, 0.5rem) !important;
+    padding: var(--editor-code-block-padding, 1rem) !important;
+    margin: var(--editor-block-margin, 1rem) 0 !important;
     overflow-x: auto;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
-    font-size: 0.875em !important;
-    line-height: 1.5 !important;
+    font-family: var(--editor-code-block-font, ui-monospace) !important;
+    font-size: var(--editor-code-block-font-size, 14px) !important;
+    line-height: var(--editor-code-block-line-height, 1.5) !important;
     position: relative;
     color: rgb(var(--text)) !important;
     /* Reset any external stylesheet interference */
@@ -455,29 +512,29 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
 
 /* Enhanced blockquotes */
 .ProseMirror blockquote {
-    border-left: 4px solid rgb(var(--accent));
-    margin: 1rem 0;
-    padding: 0.5rem 0 0.5rem 1rem;
+    border-left: var(--editor-blockquote-border-width, 4px) var(--editor-blockquote-style, solid) var(--editor-blockquote-border, rgb(var(--accent))) !important;
+    margin: var(--editor-block-margin, 1rem) 0 !important;
+    padding: var(--editor-blockquote-padding, 16px) !important;
     background: rgb(var(--panel) / 0.3);
     border-radius: 0 0.375rem 0.375rem 0;
     font-style: italic;
-    color: rgb(var(--text) / 0.9);
+    color: var(--editor-blockquote-color, rgb(var(--text) / 0.9)) !important;
 }
 
 /* Enhanced lists */
 .ProseMirror ul,
 .ProseMirror ol {
-    padding-left: 1.5rem;
+    padding-left: var(--editor-list-indent, 1.5rem) !important;
 }
 
 .ProseMirror ul li {
     list-style-type: disc;
-    margin: 0.25rem 0;
+    margin: var(--editor-list-spacing, 0.25rem) 0 !important;
 }
 
 .ProseMirror ol li {
     list-style-type: decimal;
-    margin: 0.25rem 0;
+    margin: var(--editor-list-spacing, 0.25rem) 0 !important;
 }
 
 /* Nested list styling */
@@ -513,13 +570,13 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
 
 /* Enhanced emphasis */
 .ProseMirror strong {
-    font-weight: 600;
-    color: rgb(var(--text));
+    font-weight: var(--editor-bold-weight, 700) !important;
+    color: var(--editor-bold-color, inherit) !important;
 }
 
 .ProseMirror em {
     font-style: italic;
-    color: rgb(var(--text) / 0.9);
+    color: var(--editor-italic-color, inherit) !important;
 }
 
 /* Enhanced inline code */

@@ -9,6 +9,7 @@ import { PluginProvider } from "./hooks/usePlugins.jsx";
 import { AuthProvider } from "./core/auth/AuthContext.jsx";
 import platformService from "./services/platform/PlatformService.js";
 import { GmailProvider } from "./contexts/GmailContext.jsx";
+import markdownSyntaxConfig from "./core/markdown/syntax-config.js";
 // Import workspace manager to expose developer utilities
 import "./core/workspace/manager.js";
 // Import MCP client for stdio-based connections
@@ -20,6 +21,11 @@ function App() {
   // Use the hooks' values directly (no setter param expected)
   const { isPrefsWindow } = usePreferenceActivation();
   const activePath = useWorkspaceActivation();
+
+  // Initialize markdown syntax config on app startup
+  useEffect(() => {
+    markdownSyntaxConfig.init();
+  }, []);
 
   useEffect(() => {
     // Add platform class to document body

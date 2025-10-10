@@ -631,6 +631,26 @@ function WorkspaceWithScope({ path }) {
     }
   }, []);
 
+  // Listen for markdown config changes from Preferences window
+  useEffect(() => {
+    let isTauri = false;
+    try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
+
+    if (isTauri) {
+      const sub = listen('lokus:markdown-config-changed', async () => {
+        console.log('[Workspace] Received markdown config change event, reloading config...');
+        try {
+          const markdownSyntaxConfig = (await import('../core/markdown/syntax-config.js')).default;
+          await markdownSyntaxConfig.init();
+          console.log('[Workspace] Markdown config reloaded successfully');
+        } catch (e) {
+          console.error('[Workspace] Failed to reload markdown config:', e);
+        }
+      });
+      return () => { sub.then((un) => un()); };
+    }
+  }, []);
+
   // Save session state on change (debounced)
   useEffect(() => {
     const saveTimeout = setTimeout(() => {
@@ -1022,14 +1042,31 @@ function WorkspaceWithScope({ path }) {
 
   // Ref to track last close timestamp for debouncing (global for any tab)
   const lastCloseTimeRef = useRef(0);
-  
+  const isShowingDialogRef = useRef(false);
+  const currentlyClosingPathRef = useRef(null);
+
   const handleTabClose = useCallback(async (path) => {
+    // Prevent closing the same tab multiple times
+    if (currentlyClosingPathRef.current === path) {
+      console.log('[TabClose] Already processing close for:', path);
+      return;
+    }
+
+    // Prevent multiple dialogs from showing
+    if (isShowingDialogRef.current) {
+      console.log('[TabClose] Dialog already showing, ignoring close request');
+      return;
+    }
+
     // Global debounce: ignore ANY tab close within 200ms of the last one
     const now = Date.now();
     if (now - lastCloseTimeRef.current < 200) {
+      console.log('[TabClose] Debounce: ignoring close within 200ms');
       return;
     }
     lastCloseTimeRef.current = now;
+
+    console.log('[TabClose] Starting close process for:', path);
     
     const closeTab = () => {
       setOpenTabs(prevTabs => {
@@ -1063,15 +1100,34 @@ function WorkspaceWithScope({ path }) {
     };
 
     if (stateRef.current.unsavedChanges.has(path)) {
-      const confirmed = await confirm("You have unsaved changes. Close without saving?", {
-        title: "Unsaved Changes",
-        type: "warning",
-      });
-      if (confirmed) {
-        closeTab();
+      try {
+        console.log('[TabClose] Showing unsaved changes dialog for:', path);
+        currentlyClosingPathRef.current = path;
+        isShowingDialogRef.current = true;
+
+        const confirmed = await confirm("You have unsaved changes. Close without saving?", {
+          title: "Unsaved Changes",
+          type: "warning",
+        });
+
+        console.log('[TabClose] Dialog result:', confirmed ? 'OK' : 'Cancel');
+        if (confirmed) {
+          console.log('[TabClose] User confirmed, closing tab');
+          closeTab();
+        } else {
+          console.log('[TabClose] User cancelled, keeping tab open');
+        }
+      } catch (error) {
+        console.error('[TabClose] Error showing dialog:', error);
+      } finally {
+        console.log('[TabClose] Resetting dialog flags');
+        isShowingDialogRef.current = false;
+        currentlyClosingPathRef.current = null;
       }
     } else {
+      currentlyClosingPathRef.current = path;
       closeTab();
+      currentlyClosingPathRef.current = null;
     }
   }, []);
 
@@ -3462,6 +3518,16 @@ export default function Workspace({ initialPath = "" }) {
     invoke("validate_workspace_path", { path: initialPath });
   }
   const [path, setPath] = useState(initialPath);
+
+  // Save workspace path to localStorage on mount
+  useEffect(() => {
+    if (initialPath) {
+      import('../core/vault/vault.js').then(({ saveWorkspacePath }) => {
+        saveWorkspacePath(initialPath);
+        console.log('[Workspace] Saved workspace path to localStorage:', initialPath);
+      });
+    }
+  }, [initialPath]);
 
   // Add a simple fallback if path is not set
   if (!path && !initialPath) {
