@@ -558,6 +558,7 @@ function WorkspaceWithScope({ path }) {
   const [activeFile, setActiveFile] = useState(null);
   const [unsavedChanges, setUnsavedChanges] = useState(new Set());
   const [recentlyClosedTabs, setRecentlyClosedTabs] = useState([]);
+  const [recentFiles, setRecentFiles] = useState([]);
   
   const [editorContent, setEditorContent] = useState("");
   const [editorTitle, setEditorTitle] = useState("");
@@ -620,23 +621,47 @@ function WorkspaceWithScope({ path }) {
     savedContent,
   };
 
+  // Helper function to get proper display name for special tabs
+  const getTabDisplayName = (tabPath) => {
+    if (tabPath === '__graph__') return 'Graph View';
+    if (tabPath === '__kanban__') return 'Task Board';
+    if (tabPath === '__gmail__') return 'Gmail';
+    if (tabPath === '__bases__') return 'Bases';
+    if (tabPath.startsWith('__plugin_')) {
+      // Extract plugin name from path if possible, otherwise generic name
+      return 'Plugin'; // Will be updated when plugin details load
+    }
+    // For regular files, extract filename
+    return tabPath.split('/').pop();
+  };
+
   // Load session state on initial mount
   useEffect(() => {
     if (path) {
       invoke("load_session_state", { workspacePath: path }).then(session => {
         if (session && session.open_tabs) {
           setExpandedFolders(new Set(session.expanded_folders || []));
-          
+
           const tabsWithNames = session.open_tabs.map(p => ({
             path: p,
-            name: p.split('/').pop()
+            name: getTabDisplayName(p)
           }));
-          
+
           setOpenTabs(tabsWithNames);
-          
+
           if (tabsWithNames.length > 0) {
             setActiveFile(tabsWithNames[0].path);
           }
+
+          // Set recent files (filter out special views, keep only actual files)
+          const actualFiles = session.open_tabs.filter(p =>
+            !p.startsWith('__') &&
+            (p.endsWith('.md') || p.endsWith('.txt') || p.endsWith('.canvas'))
+          );
+          setRecentFiles(actualFiles.slice(0, 5).map(p => ({
+            path: p,
+            name: getFilename(p)
+          })));
         }
       });
     }
@@ -686,6 +711,13 @@ function WorkspaceWithScope({ path }) {
         const tabPaths = openTabs.map(t => t.path);
         const folderPaths = Array.from(expandedFolders);
         invoke("save_session_state", { workspacePath: path, openTabs: tabPaths, expandedFolders: folderPaths });
+
+        // Update recent files list
+        const actualFiles = openTabs.filter(t =>
+          !t.path.startsWith('__') &&
+          (t.path.endsWith('.md') || t.path.endsWith('.txt') || t.path.endsWith('.canvas'))
+        );
+        setRecentFiles(actualFiles.slice(0, 5));
       }
     }, 500);
     return () => clearTimeout(saveTimeout);
@@ -3248,9 +3280,38 @@ function WorkspaceWithScope({ path }) {
                         <div>
                           <h2 className="text-lg font-semibold text-app-text mb-4">Recent</h2>
                           <div className="space-y-2">
-                            <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
-                              <p className="text-sm text-app-muted">No recent files yet. Start by creating your first note!</p>
-                            </div>
+                            {recentFiles.length > 0 ? (
+                              recentFiles.map((file, idx) => (
+                                <button
+                                  key={idx}
+                                  onClick={() => handleFileOpen(file)}
+                                  className="w-full p-3 rounded-lg bg-app-panel/20 border border-app-border/50 hover:bg-app-panel/40 hover:border-app-accent/50 transition-all text-left group"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    {file.path.endsWith('.md') ? (
+                                      <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                                      </svg>
+                                    ) : file.path.endsWith('.canvas') ? (
+                                      <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M4.25 2A2.25 2.25 0 002 4.25v11.5A2.25 2.25 0 004.25 18h11.5A2.25 2.25 0 0018 15.75V4.25A2.25 2.25 0 0015.75 2H4.25z" clipRule="evenodd" />
+                                      </svg>
+                                    ) : (
+                                      <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                                      </svg>
+                                    )}
+                                    <span className="text-sm font-medium text-app-text group-hover:text-app-accent transition-colors truncate">
+                                      {file.name.replace(/\.(md|txt|canvas)$/, '')}
+                                    </span>
+                                  </div>
+                                </button>
+                              ))
+                            ) : (
+                              <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
+                                <p className="text-sm text-app-muted">No recent files yet. Start by creating your first note!</p>
+                              </div>
+                            )}
                           </div>
                         </div>
                         
@@ -3302,10 +3363,19 @@ function WorkspaceWithScope({ path }) {
                   hoveredNode={graphSidebarData.hoveredNode}
                   graphData={graphSidebarData.graphData}
                   stats={graphSidebarData.stats}
+                  config={graphSidebarData.graphConfig}
+                  onConfigChange={graphSidebarData.onConfigChange}
                   onNodeClick={(node) => {
-                    // Handle node click from sidebar - you can add focus/select logic here
-                    console.log('Node clicked from sidebar:', node);
+                    // Focus on the clicked node in the graph
+                    if (graphSidebarData.onFocusNode) {
+                      graphSidebarData.onFocusNode(node);
+                    }
                   }}
+                  // Animation tour controls
+                  isAnimating={graphSidebarData.isAnimating}
+                  animationSpeed={graphSidebarData.animationSpeed}
+                  onToggleAnimation={graphSidebarData.onToggleAnimation}
+                  onAnimationSpeedChange={graphSidebarData.onAnimationSpeedChange}
                 />
               ) : (
                 <DocumentOutline editor={editorRef.current?.editor} />
