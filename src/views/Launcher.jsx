@@ -36,7 +36,8 @@ async function openWorkspace(path) {
     // Trigger a page reload to activate workspace mode
     window.location.reload();
   } else {
-    // Normal Tauri mode - open new window
+    // Normal Tauri mode - replace current window with workspace (VSCode-style)
+    // This prevents duplicate windows and follows industry standard UX
     await invoke("open_workspace_window", { workspacePath: path });
   }
 }

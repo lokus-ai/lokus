@@ -18,8 +18,9 @@ let isTauri = false; try {
 // Debug mode for shortcuts - set to false to disable verbose logging
 const DEBUG_SHORTCUTS = false;
 
-// In development, disable global shortcuts to avoid conflicts
-const DISABLE_GLOBAL_SHORTCUTS_IN_DEV = false;
+// CRITICAL: Disable global shortcuts to prevent overriding system shortcuts
+// Global shortcuts work system-wide even when app is not focused, which breaks macOS defaults
+const DISABLE_GLOBAL_SHORTCUTS_IN_DEV = true;
 
 // CRITICAL: System shortcuts that should NEVER be registered globally
 // These are essential macOS/Windows system functions
@@ -42,7 +43,8 @@ export const ACTIONS = [
   { id: "save-file",        name: "Save File",           event: "lokus:save-file",        default: "CommandOrControl+S" },
   { id: "new-file",         name: "New File",            event: "lokus:new-file",         default: "CommandOrControl+N" },
   { id: "new-folder",       name: "New Folder",          event: "lokus:new-folder",       default: "CommandOrControl+Shift+N" },
-  { id: "toggle-sidebar",   name: "Toggle Sidebar",       event: "lokus:toggle-sidebar",   default: "CommandOrControl+B" },
+  { id: "toggle-sidebar",   name: "Toggle Left Sidebar (Files)",  event: "lokus:toggle-sidebar",   default: "CommandOrControl+B" },
+  { id: "toggle-right-sidebar", name: "Toggle Right Sidebar (Plugins)", event: "lokus:toggle-right-sidebar", default: "CommandOrControl+Shift+B" },
   { id: "open-preferences", name: "Open Preferences",     event: "preferences:open",       default: "CommandOrControl+," },
   { id: "in-file-search",   name: "Find in Note",        event: "lokus:in-file-search",   default: "CommandOrControl+F" },
   { id: "global-search",    name: "Global Search",       event: "lokus:global-search",    default: "CommandOrControl+Shift+F" },
@@ -164,6 +166,13 @@ export async function registerGlobalShortcuts() {
   if (!isTauri) {
     return; // no-op in browser
   }
+
+  // CRITICAL: Disable ALL global shortcuts to prevent overriding macOS system shortcuts
+  // Global shortcuts work system-wide and break shortcuts in other apps
+  // Shortcuts should only work when the app is focused (handled by menu bar and local listeners)
+  console.log('[Shortcuts] Global shortcuts disabled to prevent system conflicts');
+  await unregisterAll();
+  return;
 
   // Skip global shortcuts in development to avoid conflicts
   if (DISABLE_GLOBAL_SHORTCUTS_IN_DEV && typeof window !== 'undefined' && window.location?.hostname === 'localhost') {
