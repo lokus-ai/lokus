@@ -22,7 +22,7 @@ import { GraphUI } from '../components/graph/GraphUI.jsx';
 import '../components/graph/GraphUI.css';
 import { invoke } from "@tauri-apps/api/core";
 
-export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile, fileTree = [] }) => {
+export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile, fileTree = [], onGraphStateChange }) => {
   // Core state
   const [viewMode, setViewMode] = useState('2d'); // '2d', '3d', 'force'
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
@@ -775,7 +775,19 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     
     return mesh;
   }, [selectedNodes, getNodeSize, getNodeColor]);
-  
+
+  // Notify parent component of graph state changes
+  useEffect(() => {
+    if (onGraphStateChange) {
+      onGraphStateChange({
+        selectedNodes,
+        hoveredNode,
+        graphData,
+        stats
+      });
+    }
+  }, [selectedNodes, hoveredNode, graphData, stats, onGraphStateChange]);
+
   if (!isVisible) {
     return null;
   }

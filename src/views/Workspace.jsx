@@ -47,6 +47,8 @@ import { gmailAuth, gmailEmails } from '../services/gmail.js';
 import { FolderScopeProvider, useFolderScope } from "../contexts/FolderScopeContext.jsx";
 import { BasesProvider } from "../bases/BasesContext.jsx";
 import BasesView from "../bases/BasesView.jsx";
+import DocumentOutline from "../components/DocumentOutline.jsx";
+import GraphSidebar from "../components/GraphSidebar.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -360,7 +362,7 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
 }
 
 // --- Tab Bar Component ---
-function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDragEnd, onNewTab, onSplitDragStart, onSplitDragEnd, useSplitView, onToggleSplitView, splitDirection, onToggleSplitDirection, syncScrolling, onToggleSyncScrolling, onResetPaneSize, isLeftPane = true }) {
+function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDragEnd, onNewTab, onSplitDragStart, onSplitDragEnd, useSplitView, onToggleSplitView, splitDirection, onToggleSplitDirection, syncScrolling, onToggleSyncScrolling, onResetPaneSize, isLeftPane = true, onToggleRightSidebar, showRightSidebar }) {
   const [activeId, setActiveId] = useState(null);
   const [draggedTab, setDraggedTab] = useState(null);
   
@@ -458,6 +460,19 @@ function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDra
             </>
           )}
           
+          {/* Outline toggle button - only show on main pane */}
+          {isLeftPane && onToggleRightSidebar && (
+            <button
+              onClick={onToggleRightSidebar}
+              title={showRightSidebar ? "Hide outline" : "Show outline"}
+              className={`obsidian-button icon-only mb-1 ${showRightSidebar ? 'active' : ''}`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+              </svg>
+            </button>
+          )}
+
           <button
             onClick={onNewTab}
             title={`New file (${platformService.getModifierSymbol()}+N)`}
@@ -526,6 +541,11 @@ function WorkspaceWithScope({ path }) {
   const [showMiniKanban, setShowMiniKanban] = useState(false);
   const [refreshId, setRefreshId] = useState(0);
 
+  // Toggle right sidebar (outline)
+  const toggleRightSidebar = useCallback(() => {
+    setShowRight(prev => !prev);
+  }, []);
+
   const [fileTree, setFileTree] = useState([]);
   const [expandedFolders, setExpandedFolders] = useState(new Set());
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
@@ -560,10 +580,18 @@ function WorkspaceWithScope({ path }) {
   const [showGraphView, setShowGraphView] = useState(false);
   const [graphData, setGraphData] = useState(null);
   const [isLoadingGraph, setIsLoadingGraph] = useState(false);
-  
+
+  // Graph sidebar state
+  const [graphSidebarData, setGraphSidebarData] = useState({
+    selectedNodes: [],
+    hoveredNode: null,
+    graphData: { nodes: [], links: [] },
+    stats: {}
+  });
+
   // Persistent GraphEngine instance that survives tab switches
   const persistentGraphEngineRef = useRef(null);
-  
+
   // Graph data processor instance
   const graphProcessorRef = useRef(null);
   
@@ -1811,8 +1839,13 @@ function WorkspaceWithScope({ path }) {
       graphDatabase.off('connectionAdded', handleConnectionChanged);
       graphDatabase.off('connectionRemoved', handleConnectionChanged);
     };
-    
+
   }, [path, activeFile, graphData]);
+
+  // Handle graph state updates from ProfessionalGraphView
+  const handleGraphStateChange = useCallback((state) => {
+    setGraphSidebarData(state);
+  }, []);
 
   // OLD SYSTEM - Commented out since ProfessionalGraphView has its own data loading
   // const buildGraphData = useCallback(async () => {
@@ -2778,7 +2811,7 @@ function WorkspaceWithScope({ path }) {
                     [splitDirection === 'vertical' ? 'width' : 'height']: `${leftPaneSize}%`
                   }}
                 >
-                  <TabBar 
+                  <TabBar
                     tabs={openTabs}
                     activeTab={activeFile}
                     onTabClick={(path) => {
@@ -2799,6 +2832,8 @@ function WorkspaceWithScope({ path }) {
                     onToggleSyncScrolling={() => setSyncScrolling(prev => !prev)}
                     onResetPaneSize={resetPaneSize}
                     isLeftPane={true}
+                    onToggleRightSidebar={toggleRightSidebar}
+                    showRightSidebar={showRight}
                   />
                   {/* Left/Top Pane Content */}
                   {activeFile ? (
@@ -2986,7 +3021,7 @@ function WorkspaceWithScope({ path }) {
             ) : (
               /* Single View */
               <>
-                <TabBar 
+                <TabBar
                   tabs={openTabs}
                   activeTab={activeFile}
                   onTabClick={handleTabClick}
@@ -3004,6 +3039,8 @@ function WorkspaceWithScope({ path }) {
                   onToggleSyncScrolling={() => setSyncScrolling(prev => !prev)}
                   onResetPaneSize={resetPaneSize}
                   isLeftPane={true}
+                  onToggleRightSidebar={toggleRightSidebar}
+                  showRightSidebar={showRight}
                 />
               {activeFile === '__kanban__' ? (
             <div className="flex-1 bg-app-panel overflow-hidden">
@@ -3045,6 +3082,7 @@ function WorkspaceWithScope({ path }) {
                 fileTree={filteredFileTree}
                 workspacePath={path}
                 onOpenFile={handleFileOpen}
+                onGraphStateChange={handleGraphStateChange}
               />
             </div>
           ) : activeFile === '__bases__' ? (
@@ -3256,9 +3294,28 @@ function WorkspaceWithScope({ path }) {
         {showRight && <div onMouseDown={startRightDrag} className="cursor-col-resize bg-app-border hover:bg-app-accent transition-colors duration-300 w-1 min-h-full" />}
         {showRight && (
           <aside className="overflow-y-auto flex flex-col bg-app-panel border-l border-app-border">
-            <PanelRegion 
+            {/* Show GraphSidebar for graph view, DocumentOutline for editor */}
+            <div className="flex-1 overflow-hidden">
+              {activeFile === '__graph__' ? (
+                <GraphSidebar
+                  selectedNodes={graphSidebarData.selectedNodes}
+                  hoveredNode={graphSidebarData.hoveredNode}
+                  graphData={graphSidebarData.graphData}
+                  stats={graphSidebarData.stats}
+                  onNodeClick={(node) => {
+                    // Handle node click from sidebar - you can add focus/select logic here
+                    console.log('Node clicked from sidebar:', node);
+                  }}
+                />
+              ) : (
+                <DocumentOutline editor={editorRef.current?.editor} />
+              )}
+            </div>
+
+            {/* Plugin Panels */}
+            <PanelRegion
               position={PANEL_POSITIONS.SIDEBAR_RIGHT}
-              className="h-full"
+              className="border-t border-app-border"
             />
           </aside>
         )}
