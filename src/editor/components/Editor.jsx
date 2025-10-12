@@ -27,9 +27,13 @@ import MarkdownPaste from "../extensions/MarkdownPaste.js";
 import MarkdownTablePaste from "../extensions/MarkdownTablePaste.js";
 import SmartTask from "../extensions/SmartTask.js";
 import SimpleTask from "../extensions/SimpleTask.js";
+import TaskSyntaxHighlight from "../extensions/TaskSyntaxHighlight.js";
+import TaskMentionSuggest from "../extensions/TaskMentionSuggest.js";
+import TaskCreationTrigger from "../extensions/TaskCreationTrigger.js";
 import CodeBlockIndent from "../extensions/CodeBlockIndent.js";
 import liveEditorSettings from "../../core/editor/live-settings.js";
 import WikiLinkModal from "../../components/WikiLinkModal.jsx";
+import TaskCreationModal from "../../components/TaskCreationModal.jsx";
 import { editorAPI } from "../../plugins/api/EditorAPI.js";
 import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 
@@ -203,9 +207,15 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
     // Markdown paste functionality
     exts.push(MarkdownPaste);
     exts.push(MarkdownTablePaste);
-    
-    // Simple task management with unique patterns
-    exts.push(SimpleTask);
+
+    // Task syntax visual highlighting
+    exts.push(TaskSyntaxHighlight);
+
+    // Task mention autocomplete for @task
+    exts.push(TaskMentionSuggest);
+
+    // Task creation trigger for !task
+    exts.push(TaskCreationTrigger);
 
     // Code block indentation support (Tab, Shift+Tab, Enter)
     exts.push(CodeBlockIndent);
@@ -293,6 +303,7 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
 const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings }, ref) => {
   const isSettingRef = useRef(false);
   const [isWikiLinkModalOpen, setIsWikiLinkModalOpen] = useState(false);
+  const [isTaskCreationModalOpen, setIsTaskCreationModalOpen] = useState(false);
   
   // Subscribe to live settings changes for real-time updates
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
@@ -304,28 +315,15 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     return unsubscribe;
   }, []);
 
-  // Listen for WikiLink modal keyboard shortcut
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
-        e.preventDefault();
-        setIsWikiLinkModalOpen(true);
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
-  
   // Memoize callbacks for performance
   const handleEditorUpdate = useCallback(({ editor }) => {
-    if (isSettingRef.current) { 
-      isSettingRef.current = false; 
-      return; 
+    if (isSettingRef.current) {
+      isSettingRef.current = false;
+      return;
     }
     onContentChange(editor.getHTML());
   }, [onContentChange]);
-  
+
   const editor = useEditor({
     extensions,
     shouldRerenderOnTransaction: false,
@@ -352,22 +350,22 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           const href = el.getAttribute('href') || '';
           const target = el.getAttribute('target') || '';
           if (!href) return true;
-          
+
           event.preventDefault();
-          
+
           // Log for debugging
-          
+
           // Check if this is a resolved file path that exists in the index
           const index = globalThis.__LOKUS_FILE_INDEX__ || [];
           const fileExists = index.some(f => f.path === href);
-          
+
           if (!fileExists && target) {
             // Show a user-friendly message
             try {
               // You could show a toast notification here instead
             } catch {}
           }
-          
+
           // Emit to workspace to open file (Tauri or DOM event)
           (async () => {
             try {
@@ -384,6 +382,48 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     content,
     onUpdate: handleEditorUpdate,
   }, [extensions, handleEditorUpdate]);
+
+  // Keyboard shortcuts and event listeners for WikiLink and Task insertion
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+L: Open WikiLink modal
+      if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
+        e.preventDefault();
+        setIsWikiLinkModalOpen(true);
+        return;
+      }
+
+      // Task shortcuts - need editor instance
+      if (!editor) return;
+
+      // Ctrl+Shift+T: Open task creation modal (!task)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'T') {
+        e.preventDefault();
+        setIsTaskCreationModalOpen(true);
+        return;
+      }
+
+      // Ctrl+Shift+K: Insert @task (triggers task mention autocomplete)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'K') {
+        e.preventDefault();
+        editor.chain().focus().insertContent('@').run();
+        return;
+      }
+    };
+
+    // Listen for custom event from TaskCreationTrigger extension
+    const handleTaskModalEvent = () => {
+      setIsTaskCreationModalOpen(true);
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('lokus:open-task-modal', handleTaskModalEvent);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('lokus:open-task-modal', handleTaskModalEvent);
+    };
+  }, [editor]);
 
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
@@ -522,6 +562,14 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     }
   }, [editor]);
 
+  // Task creation handler
+  const handleCreateTask = useCallback(({ boardName, columnName, taskName }) => {
+    if (editor) {
+      // Insert the task mention in the correct format: @task[BoardName:TaskTitle]
+      editor.chain().focus().insertContent(`@task[${boardName}:${taskName}] `).run();
+    }
+  }, [editor]);
+
   return (
     <>
       {editor && showDebug && (
@@ -530,7 +578,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         </div>
       )}
       {editor && <TableBubbleMenu editor={editor} />}
-      <EditorContextMenu 
+      <EditorContextMenu
         onAction={handleEditorAction}
         hasSelection={editor?.state?.selection && !editor.state.selection.empty}
         canUndo={editor?.can().undo()}
@@ -538,7 +586,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
       >
         <EditorContent editor={editor} />
       </EditorContextMenu>
-      
+
       {/* WikiLink Modal */}
       <WikiLinkModal
         isOpen={isWikiLinkModalOpen}
@@ -546,6 +594,13 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         onSelectFile={handleSelectFile}
         workspacePath={globalThis.__LOKUS_WORKSPACE_PATH__}
         currentFile={globalThis.__LOKUS_ACTIVE_FILE__}
+      />
+
+      {/* Task Creation Modal */}
+      <TaskCreationModal
+        isOpen={isTaskCreationModalOpen}
+        onClose={() => setIsTaskCreationModalOpen(false)}
+        onCreateTask={handleCreateTask}
       />
     </>
   );

@@ -36,6 +36,10 @@ pub struct Task {
     pub note_path: Option<String>,
     pub note_position: Option<i32>,
     pub tags: Vec<String>,
+    // Kanban linking
+    pub kanban_board: Option<String>,  // Path to .kanban file
+    pub kanban_column: Option<String>, // Column ID in the board
+    pub kanban_card_id: Option<String>, // ID of the card in kanban
 }
 
 impl Task {
@@ -44,7 +48,7 @@ impl Task {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_millis() as i64;
-        
+
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             title,
@@ -56,6 +60,9 @@ impl Task {
             note_path: None,
             note_position: None,
             tags: Vec::new(),
+            kanban_board: None,
+            kanban_column: None,
+            kanban_card_id: None,
         }
     }
 
@@ -271,12 +278,47 @@ pub async fn bulk_update_task_status(app: AppHandle, task_ids: Vec<String>, stat
 pub async fn extract_tasks_from_content(content: String, note_path: String) -> Result<Vec<Task>, String> {
     let mut tasks = Vec::new();
     let lines: Vec<&str> = content.lines().collect();
-    
+
     for (line_num, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
-        
+
+        // Match !task syntax: !task This is a standalone task
+        if let Some(pos) = trimmed.find("!task ") {
+            let title = trimmed[pos + 6..].trim().to_string();
+            if !title.is_empty() {
+                let mut task = Task::new(title);
+                task.note_path = Some(note_path.clone());
+                task.note_position = Some(line_num as i32);
+                tasks.push(task);
+            }
+        }
+
+        // Match @task[board] or @task[board/column] syntax
+        else if let Some(pos) = trimmed.find("@task[") {
+            if let Some(end_bracket) = trimmed[pos..].find(']') {
+                let target = &trimmed[pos + 6..pos + end_bracket];
+                let title = trimmed[pos + end_bracket + 1..].trim().to_string();
+
+                if !title.is_empty() {
+                    let mut task = Task::new(title);
+                    task.note_path = Some(note_path.clone());
+                    task.note_position = Some(line_num as i32);
+
+                    // Parse board and column
+                    if let Some(slash_pos) = target.find('/') {
+                        task.kanban_board = Some(target[..slash_pos].to_string());
+                        task.kanban_column = Some(target[slash_pos + 1..].to_string());
+                    } else {
+                        task.kanban_board = Some(target.to_string());
+                    }
+
+                    tasks.push(task);
+                }
+            }
+        }
+
         // Match checkboxes: - [ ] Task or - [x] Task
-        if let Some(captures) = regex::Regex::new(r"^-\s*\[[ x]\]\s*(.+)")
+        else if let Some(captures) = regex::Regex::new(r"^-\s*\[[ x]\]\s*(.+)")
             .unwrap()
             .captures(trimmed)
         {
@@ -286,17 +328,17 @@ pub async fn extract_tasks_from_content(content: String, note_path: String) -> R
                     let mut task = Task::new(title);
                     task.note_path = Some(note_path.clone());
                     task.note_position = Some(line_num as i32);
-                    
+
                     // Set status based on checkbox state
                     if trimmed.contains("[x]") || trimmed.contains("[X]") {
                         task.status = TaskStatus::Completed;
                     }
-                    
+
                     tasks.push(task);
                 }
             }
         }
-        
+
         // Match headings with task keywords: ## TODO: Fix bug, ### URGENT: Review code
         else if let Some(captures) = regex::Regex::new(r"^#+\s*(TODO|FIXME|URGENT|BUG)[:]\s*(.+)")
             .unwrap()
@@ -310,20 +352,20 @@ pub async fn extract_tasks_from_content(content: String, note_path: String) -> R
                         let mut task = Task::new(title);
                         task.note_path = Some(note_path.clone());
                         task.note_position = Some(line_num as i32);
-                        
+
                         // Set status based on keyword
                         task.status = match keyword {
                             "URGENT" => TaskStatus::Urgent,
                             "TODO" | "FIXME" | "BUG" => TaskStatus::Todo,
                             _ => TaskStatus::Todo,
                         };
-                        
+
                         tasks.push(task);
                     }
                 }
             }
         }
-        
+
         // Match natural language patterns: "need to", "must do", "should complete"
         else if let Some(captures) = regex::Regex::new(r"(?i)(need to|must do|should complete|have to|got to)\s+(.{3,})")
             .unwrap()
@@ -340,8 +382,53 @@ pub async fn extract_tasks_from_content(content: String, note_path: String) -> R
             }
         }
     }
-    
+
     Ok(tasks)
+}
+
+// Link task to kanban board by creating/updating a card
+#[tauri::command]
+pub async fn link_task_to_kanban(
+    app: AppHandle,
+    task_id: String,
+    board_path: String,
+    column_id: String,
+) -> Result<Task, String> {
+    let mut task_store = get_task_store(&app)?;
+
+    let mut task = task_store
+        .get_task(&task_id)
+        .ok_or_else(|| format!("Task with id {} not found", task_id))?
+        .clone();
+
+    // Update task with kanban info
+    task.kanban_board = Some(board_path.clone());
+    task.kanban_column = Some(column_id.clone());
+    task.updated_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64;
+
+    task_store.update_task(&task_id, task.clone())?;
+    save_task_store(&app, &task_store)?;
+
+    Ok(task)
+}
+
+// Get tasks linked to a specific kanban board
+#[tauri::command]
+pub async fn get_tasks_by_kanban_board(app: AppHandle, board_path: String) -> Result<Vec<Task>, String> {
+    let task_store = get_task_store(&app)?;
+    Ok(task_store
+        .get_all_tasks()
+        .into_iter()
+        .filter(|task| {
+            task.kanban_board
+                .as_ref()
+                .map_or(false, |path| path == &board_path)
+        })
+        .cloned()
+        .collect())
 }
 
 // Module for UUID generation (simplified implementation)

@@ -1,13 +1,13 @@
 /**
- * GraphUI - Professional glassmorphism interface for graph visualization
- * 
+ * GraphUI - Simplified professional interface for graph visualization
+ *
  * Features:
+ * - Clean, simplified controls (Filters and Forces moved to GraphSidebar)
  * - Beautiful glassmorphism design with frosted glass effects
  * - Smooth 60fps animations with Framer Motion
- * - Advanced search with command palette
  * - Multiple view modes (2D, 3D, force-directed)
- * - Real-time statistics and performance monitoring
- * - Touch-friendly controls for all devices
+ * - Quick search and basic controls
+ * - Real-time performance monitoring
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -32,21 +32,15 @@ import {
   Hash,
   Zap
 } from 'lucide-react';
-import ForceControlsPanel from './ForceControlsPanel.jsx';
-import './ForceControlsPanel.css';
 
 export const GraphUI = ({
   graphData,
   onViewModeChange,
   onSearch,
-  onFilter,
   onLayoutControl,
   onZoom,
   onReset,
   onExport,
-  onSettingsChange,
-  onForceChange,
-  onPresetSelect,
   stats = {},
   isLayoutRunning = false,
   viewMode = '2d',
@@ -57,15 +51,8 @@ export const GraphUI = ({
 }) => {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showStats, setShowStats] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [activePanel, setActivePanel] = useState('controls');
   const [searchResults, setSearchResults] = useState([]);
-  const [filters, setFilters] = useState({
-    nodeTypes: [],
-    tags: [],
-    dateRange: null
-  });
-  
+
   const searchInputRef = useRef(null);
   
   // Handle keyboard shortcuts
@@ -137,96 +124,82 @@ export const GraphUI = ({
     { id: 'force', icon: Network, label: 'Force Layout', hotkey: '⌘3' }
   ];
   
-  // Panel configurations
-  const panels = [
-    { id: 'controls', icon: Settings, label: 'Controls' },
-    { id: 'forces', icon: Zap, label: 'Forces' },
-    { id: 'search', icon: Search, label: 'Search' },
-    { id: 'stats', icon: Info, label: 'Statistics' },
-    { id: 'filters', icon: Filter, label: 'Filters' }
-  ];
-  
   return (
     <div className={`graph-ui ${className}`}>
-      {/* Main Control Panel */}
+      {/* Simplified Control Panel - No Tabs */}
       <motion.div
         className="graph-control-panel"
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.3, ease: 'easeOut' }}
       >
-        {/* Panel Tabs */}
-        <div className="panel-tabs">
-          {panels.map((panel) => (
-            <motion.button
-              key={panel.id}
-              className={`panel-tab ${activePanel === panel.id ? 'active' : ''}`}
-              onClick={() => setActivePanel(panel.id)}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <panel.icon size={16} />
-              <span>{panel.label}</span>
-            </motion.button>
-          ))}
+        {/* Search Section */}
+        <div className="panel-section">
+          <div className="search-input-container">
+            <Search size={16} className="search-icon" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Search nodes... (⌘K)"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
+              className={`search-input ${isSearchFocused ? 'focused' : ''}`}
+            />
+            {searchQuery && (
+              <motion.button
+                className="clear-search"
+                onClick={() => handleSearchChange('')}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+              >
+                ×
+              </motion.button>
+            )}
+          </div>
         </div>
-        
-        {/* Panel Content */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activePanel}
-            className="panel-content"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-          >
-            {activePanel === 'controls' && (
-              <ControlsPanel
-                viewMode={viewMode}
-                viewModes={viewModes}
-                isLayoutRunning={isLayoutRunning}
-                onViewModeChange={onViewModeChange}
-                onLayoutControl={onLayoutControl}
-                onZoom={onZoom}
-                onReset={onReset}
-                onExport={onExport}
-              />
-            )}
 
-            {activePanel === 'forces' && (
-              <ForceControlsPanel
-                onForceChange={onForceChange}
-                onPresetSelect={onPresetSelect}
-                isAnimationRunning={isLayoutRunning}
-                onAnimationToggle={() => onLayoutControl?.(isLayoutRunning ? 'stop' : 'start')}
-              />
-            )}
+        {/* Essential Controls */}
+        <div className="panel-content">
+          <ControlsPanel
+            viewMode={viewMode}
+            viewModes={viewModes}
+            isLayoutRunning={isLayoutRunning}
+            onViewModeChange={onViewModeChange}
+            onLayoutControl={onLayoutControl}
+            onZoom={onZoom}
+            onReset={onReset}
+            onExport={onExport}
+          />
 
-            {activePanel === 'search' && (
-              <SearchPanel
-                searchQuery={searchQuery}
-                searchResults={searchResults}
-                onSearchChange={handleSearchChange}
-                isSearchFocused={isSearchFocused}
-                setIsSearchFocused={setIsSearchFocused}
-                searchInputRef={searchInputRef}
-              />
-            )}
+          {/* Toggle Stats Button */}
+          <div className="control-section">
+            <motion.button
+              className="control-btn secondary full-width"
+              onClick={() => setShowStats(!showStats)}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <Info size={16} />
+              <span>{showStats ? 'Hide' : 'Show'} Statistics</span>
+            </motion.button>
+          </div>
 
-            {activePanel === 'stats' && (
-              <StatsPanel stats={stats} />
+          {/* Stats (collapsible) */}
+          <AnimatePresence>
+            {showStats && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <StatsPanel stats={stats} />
+              </motion.div>
             )}
-
-            {activePanel === 'filters' && (
-              <FiltersPanel
-                filters={filters}
-                onFiltersChange={setFilters}
-                graphData={graphData}
-              />
-            )}
-          </motion.div>
-        </AnimatePresence>
+          </AnimatePresence>
+        </div>
       </motion.div>
       
       {/* Floating Action Buttons */}
@@ -400,80 +373,6 @@ const ControlsPanel = ({
   </div>
 );
 
-// Search Panel Component
-const SearchPanel = ({
-  searchQuery,
-  searchResults,
-  onSearchChange,
-  isSearchFocused,
-  setIsSearchFocused,
-  searchInputRef
-}) => (
-  <div className="search-panel">
-    <div className="search-input-container">
-      <Search size={16} className="search-icon" />
-      <input
-        ref={searchInputRef}
-        type="text"
-        placeholder="Search nodes... (⌘K)"
-        value={searchQuery}
-        onChange={(e) => onSearchChange(e.target.value)}
-        onFocus={() => setIsSearchFocused(true)}
-        onBlur={() => setIsSearchFocused(false)}
-        className={`search-input ${isSearchFocused ? 'focused' : ''}`}
-      />
-      {searchQuery && (
-        <motion.button
-          className="clear-search"
-          onClick={() => onSearchChange('')}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-        >
-          ×
-        </motion.button>
-      )}
-    </div>
-    
-    <AnimatePresence>
-      {searchResults.length > 0 && (
-        <motion.div
-          className="search-results"
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          {searchResults.map((result, index) => (
-            <motion.div
-              key={result.id}
-              className="search-result-item"
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.05 }}
-              whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}
-            >
-              <div className="result-title">{result.title}</div>
-              <div className="result-type">{result.type}</div>
-            </motion.div>
-          ))}
-        </motion.div>
-      )}
-    </AnimatePresence>
-    
-    <div className="search-tips">
-      <h5>Search Tips</h5>
-      <div className="tip-item">
-        <kbd>⌘K</kbd> Focus search
-      </div>
-      <div className="tip-item">
-        <kbd>Esc</kbd> Clear search
-      </div>
-      <div className="tip-item">
-        Use <code>#tag</code> to find tagged nodes
-      </div>
-    </div>
-  </div>
-);
 
 // Statistics Panel Component
 const StatsPanel = ({ stats }) => (
@@ -525,75 +424,6 @@ const StatsPanel = ({ stats }) => (
   </div>
 );
 
-// Filters Panel Component
-const FiltersPanel = ({ filters, onFiltersChange, graphData }) => {
-  const nodeTypes = ['document', 'placeholder', 'tag', 'folder'];
-  const availableTags = ['#research', '#project', '#idea', '#note']; // Mock data
-  
-  const toggleNodeType = (type) => {
-    const newTypes = filters.nodeTypes.includes(type)
-      ? filters.nodeTypes.filter(t => t !== type)
-      : [...filters.nodeTypes, type];
-    onFiltersChange({ ...filters, nodeTypes: newTypes });
-  };
-  
-  const toggleTag = (tag) => {
-    const newTags = filters.tags.includes(tag)
-      ? filters.tags.filter(t => t !== tag)
-      : [...filters.tags, tag];
-    onFiltersChange({ ...filters, tags: newTags });
-  };
-  
-  return (
-    <div className="filters-panel">
-      <div className="filter-section">
-        <h5>Node Types</h5>
-        <div className="filter-options">
-          {nodeTypes.map(type => (
-            <motion.button
-              key={type}
-              className={`filter-chip ${filters.nodeTypes.includes(type) ? 'active' : ''}`}
-              onClick={() => toggleNodeType(type)}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              {type}
-            </motion.button>
-          ))}
-        </div>
-      </div>
-      
-      <div className="filter-section">
-        <h5>Tags</h5>
-        <div className="filter-options">
-          {availableTags.map(tag => (
-            <motion.button
-              key={tag}
-              className={`filter-chip tag ${filters.tags.includes(tag) ? 'active' : ''}`}
-              onClick={() => toggleTag(tag)}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <Hash size={12} />
-              {tag.replace('#', '')}
-            </motion.button>
-          ))}
-        </div>
-      </div>
-      
-      <div className="filter-actions">
-        <motion.button
-          className="control-btn secondary full-width"
-          onClick={() => onFiltersChange({ nodeTypes: [], tags: [], dateRange: null })}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          Clear All Filters
-        </motion.button>
-      </div>
-    </div>
-  );
-};
 
 // Node Information Card Component
 const NodeInfoCard = ({ node }) => (

@@ -1,7 +1,7 @@
 /**
  * Lokus MCP Client - Stdio Configuration Helper
- * 
- * Simple client that helps users configure Claude Code to connect to Lokus via MCP.
+ *
+ * Simple client that helps users configure their AI assistant to connect to Lokus via MCP.
  * No server management needed - just provides connection instructions.
  */
 
@@ -12,8 +12,8 @@ class MCPClient {
   }
 
   /**
-   * Check if the user has likely configured Claude Code with Lokus MCP
-   * This is informational only - we can't actually verify the Claude Code config
+   * Check if the user has likely configured their AI assistant with Lokus MCP
+   * This is informational only - we can't actually verify the assistant config
    * @returns {Object} Configuration status
    */
   getConfigurationStatus() {
@@ -38,7 +38,7 @@ class MCPClient {
   }
 
   /**
-   * Get connection instructions for Claude Code
+   * Get connection instructions for AI assistant
    * @returns {Object} Connection details
    */
   getConnectionInstructions() {
@@ -46,7 +46,7 @@ class MCPClient {
       command: 'claude mcp add lokus',
       args: 'node src/mcp-server/stdio-server.js',
       fullCommand: 'claude mcp add lokus node src/mcp-server/stdio-server.js',
-      description: 'This connects Claude Code to your Lokus workspace via stdio'
+      description: 'This connects your AI assistant to your Lokus workspace via stdio'
     }
   }
 

@@ -14,7 +14,7 @@
  * - Incremental edge updates without full rebuilds
  * - Production-ready error handling and logging
  * 
- * @author Claude AI
+ * @author Lokus Team
  * @version 1.0.0
  */
 

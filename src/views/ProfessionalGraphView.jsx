@@ -21,6 +21,7 @@ import { GraphData } from '../core/graph/GraphData.js';
 import { GraphUI } from '../components/graph/GraphUI.jsx';
 import '../components/graph/GraphUI.css';
 import { invoke } from "@tauri-apps/api/core";
+import { loadGraphConfig, saveGraphConfig, getDefaultConfig, debouncedSaveGraphConfig } from '../core/graph/config-manager.js';
 
 export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile, fileTree = [], onGraphStateChange }) => {
   // Core state
@@ -38,6 +39,15 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   const [hoveredNode, setHoveredNode] = useState(null);
   const [zoomLevel, setZoomLevel] = useState(1);
 
+  // Graph customization config (Obsidian-style)
+  const [graphConfig, setGraphConfig] = useState(getDefaultConfig());
+
+  // Animation tour state
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [animationSpeed, setAnimationSpeed] = useState(2000); // ms per node
+  const animationIndexRef = useRef(0);
+  const animationIntervalRef = useRef(null);
+
   // Force configuration state
   const [forceConfig, setForceConfig] = useState({
     charge: { strength: -400 },
@@ -48,9 +58,9 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     velocityDecay: 0.3
   });
 
-  // Color and grouping configuration
-  const [colorScheme, setColorScheme] = useState('type'); // 'type', 'folder', 'tag', 'creation-date', 'modification-date', 'custom'
-  const [nodeGroups, setNodeGroups] = useState({});
+  // Get color scheme and groups from config
+  const colorScheme = graphConfig.colorScheme || 'type';
+  const nodeGroups = graphConfig.colorGroups || [];
   const [showOrphans, setShowOrphans] = useState(true);
   const [showTags, setShowTags] = useState(true);
   const [showAttachments, setShowAttachments] = useState(true);
@@ -128,7 +138,97 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       }
     };
   }, [isVisible]);
-  
+
+  // Load graph config from workspace
+  useEffect(() => {
+    if (!workspacePath) return;
+
+    const loadConfig = async () => {
+      try {
+        const config = await loadGraphConfig(workspacePath);
+        setGraphConfig(config);
+      } catch (error) {
+        console.error('[GraphView] Failed to load config:', error);
+      }
+    };
+
+    loadConfig();
+  }, [workspacePath]);
+
+  // Handle config changes and auto-save
+  const handleConfigChange = useCallback((newConfig) => {
+    setGraphConfig(newConfig);
+
+    // Auto-save with debounce
+    if (workspacePath) {
+      debouncedSaveGraphConfig(workspacePath, newConfig);
+    }
+  }, [workspacePath]);
+
+  // Apply force settings from graphConfig to D3 forces
+  useEffect(() => {
+    const currentRef = viewMode === '3d' ? forceGraph3DRef.current : forceGraph2DRef.current;
+    if (!currentRef || !graphConfig) return;
+
+    try {
+      // Apply charge (repel) strength - negative for repulsion
+      if (graphConfig.repelStrength !== undefined) {
+        currentRef.d3Force('charge', d3.forceManyBody().strength(-graphConfig.repelStrength * 10));
+      }
+
+      // Apply link distance and strength
+      const linkForce = currentRef.d3Force('link');
+      if (linkForce) {
+        if (graphConfig.linkDistance !== undefined) {
+          linkForce.distance(graphConfig.linkDistance);
+        }
+        if (graphConfig.linkStrength !== undefined) {
+          linkForce.strength(graphConfig.linkStrength);
+        }
+      }
+
+      // Apply center strength - pull toward center
+      if (graphConfig.centerStrength !== undefined) {
+        currentRef.d3Force('center', d3.forceCenter(0, 0).strength(graphConfig.centerStrength));
+      }
+
+      // Add collision force to prevent overlap
+      const avgNodeSize = 12; // Average node size
+      currentRef.d3Force('collision', d3.forceCollide(avgNodeSize * 1.5));
+
+      // Restart simulation with HIGH energy to spread nodes properly
+      const simulation = currentRef.d3Force('simulation');
+      if (simulation) {
+        simulation.alpha(1.0).restart(); // Full energy on config change
+      }
+    } catch (error) {
+      console.error('[GraphView] Failed to apply force config:', error);
+    }
+  }, [viewMode, graphConfig.repelStrength, graphConfig.linkDistance, graphConfig.linkStrength, graphConfig.centerStrength]);
+
+  // Initial warmup: Reheat simulation when graph data first loads
+  useEffect(() => {
+    if (!graphData.nodes || graphData.nodes.length === 0) return;
+
+    const currentRef = viewMode === '3d' ? forceGraph3DRef.current : forceGraph2DRef.current;
+    if (!currentRef) return;
+
+    // Delay to ensure forces are applied, then reheat
+    const timer = setTimeout(() => {
+      try {
+        const simulation = currentRef.d3Force('simulation');
+        if (simulation) {
+          console.log('[GraphView] Initial warmup - reheating simulation');
+          simulation.alpha(1.0).restart(); // Full energy for initial spread
+        }
+      } catch (error) {
+        console.error('[GraphView] Failed initial warmup:', error);
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [graphData.nodes?.length, viewMode]); // Only trigger when node count changes
+
   // Performance monitoring
   useEffect(() => {
     if (!graphDataManager || !isVisible) return;
@@ -365,7 +465,63 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     } catch (error) {
     }
   };
-  
+
+  /**
+   * Filter graph data based on configuration (Obsidian-style filtering)
+   */
+  const filterGraphData = useCallback((data, config) => {
+    if (!config) return data;
+
+    let nodes = [...data.nodes];
+    let links = [...data.links];
+
+    // Filter by search query
+    if (config.search && config.search.trim()) {
+      const searchLower = config.search.toLowerCase();
+      nodes = nodes.filter(n =>
+        (n.title && n.title.toLowerCase().includes(searchLower)) ||
+        (n.label && n.label.toLowerCase().includes(searchLower)) ||
+        (n.type && n.type.toLowerCase().includes(searchLower))
+      );
+    }
+
+    // Filter by node type
+    if (!config.showTags) {
+      nodes = nodes.filter(n => n.type !== 'tag');
+    }
+    if (!config.showAttachments) {
+      nodes = nodes.filter(n => n.type !== 'attachment');
+    }
+    if (config.hideUnresolved) {
+      nodes = nodes.filter(n => n.type !== 'placeholder' && !n.isPlaceholder);
+    }
+
+    // Filter orphans (nodes with no connections)
+    if (!config.showOrphans) {
+      const nodeIds = new Set(nodes.map(n => n.id));
+      const connectedNodes = new Set();
+
+      links.forEach(l => {
+        const sourceId = l.source?.id || l.source;
+        const targetId = l.target?.id || l.target;
+        if (nodeIds.has(sourceId)) connectedNodes.add(sourceId);
+        if (nodeIds.has(targetId)) connectedNodes.add(targetId);
+      });
+
+      nodes = nodes.filter(n => connectedNodes.has(n.id));
+    }
+
+    // Filter links to only include nodes that passed the filter
+    const validNodeIds = new Set(nodes.map(n => n.id));
+    links = links.filter(l => {
+      const sourceId = l.source?.id || l.source;
+      const targetId = l.target?.id || l.target;
+      return validNodeIds.has(sourceId) && validNodeIds.has(targetId);
+    });
+
+    return { nodes, links };
+  }, []);
+
   // Event handlers for data manager
   const handleNodeCreated = useCallback((event) => {
     if (graphDataManager) {
@@ -461,7 +617,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     setSelectedNodes([]);
     setHoveredNode(null);
     setZoomLevel(1);
-    
+
     // Reset view to fit all nodes
     if (forceGraph2DRef.current && (viewMode === '2d' || viewMode === 'force')) {
       forceGraph2DRef.current.zoomToFit(400);
@@ -469,6 +625,93 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       forceGraph3DRef.current.zoomToFit(400);
     }
   }, [viewMode]);
+
+  // Focus on a specific node (center camera and zoom)
+  const handleFocusNode = useCallback((node) => {
+    if (!node) return;
+
+    // Select the node
+    setSelectedNodes([node.id]);
+
+    // Center camera on node
+    if (forceGraph2DRef.current && (viewMode === '2d' || viewMode === 'force')) {
+      // For 2D graphs
+      forceGraph2DRef.current.centerAt(node.x, node.y, 1000); // Smooth 1s transition
+      forceGraph2DRef.current.zoom(1.8, 1000); // Gentle zoom in to 1.8x
+    } else if (forceGraph3DRef.current && viewMode === '3d') {
+      // For 3D graphs
+      const distance = 300; // Increased distance for better view
+      forceGraph3DRef.current.cameraPosition(
+        { x: node.x, y: node.y, z: node.z + distance }, // Camera position
+        node, // Look at node
+        1000 // 1s transition
+      );
+    }
+  }, [viewMode]);
+
+  // Animation tour controls
+  const startAnimationTour = useCallback(() => {
+    // Use graphData instead of filteredGraphData to avoid initialization order issues
+    const currentNodes = graphData.nodes || [];
+    if (currentNodes.length === 0) return;
+
+    setIsAnimating(true);
+    animationIndexRef.current = 0;
+
+    const animateNextNode = () => {
+      const nodes = graphData.nodes || [];
+      if (animationIndexRef.current >= nodes.length) {
+        // Loop back to start
+        animationIndexRef.current = 0;
+      }
+
+      const currentNode = nodes[animationIndexRef.current];
+      handleFocusNode(currentNode);
+      animationIndexRef.current++;
+    };
+
+    // Start immediately
+    animateNextNode();
+
+    // Then continue with interval
+    animationIntervalRef.current = setInterval(animateNextNode, animationSpeed);
+  }, [graphData, animationSpeed, handleFocusNode]);
+
+  const stopAnimationTour = useCallback(() => {
+    setIsAnimating(false);
+    if (animationIntervalRef.current) {
+      clearInterval(animationIntervalRef.current);
+      animationIntervalRef.current = null;
+    }
+  }, []);
+
+  const toggleAnimationTour = useCallback(() => {
+    if (isAnimating) {
+      stopAnimationTour();
+    } else {
+      startAnimationTour();
+    }
+  }, [isAnimating, startAnimationTour, stopAnimationTour]);
+
+  const handleAnimationSpeedChange = useCallback((newSpeed) => {
+    setAnimationSpeed(newSpeed);
+
+    // Restart animation with new speed if currently animating
+    if (isAnimating) {
+      stopAnimationTour();
+      // Delay restart to allow cleanup
+      setTimeout(() => startAnimationTour(), 100);
+    }
+  }, [isAnimating, stopAnimationTour, startAnimationTour]);
+
+  // Cleanup animation on unmount
+  useEffect(() => {
+    return () => {
+      if (animationIntervalRef.current) {
+        clearInterval(animationIntervalRef.current);
+      }
+    };
+  }, []);
   
   const handleSearch = useCallback((query) => {
     setSearchQuery(query);
@@ -654,15 +897,11 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
 
       case 'custom':
         // Check if node belongs to any custom group
-        for (const [groupName, groupNodes] of Object.entries(scheme)) {
-          if (groupNodes.includes(node.id)) {
-            // Generate consistent color based on group name
-            const hash = groupName.split('').reduce((a, b) => {
-              a = ((a << 5) - a) + b.charCodeAt(0);
-              return a & a;
-            }, 0);
-            const hue = Math.abs(hash) % 360;
-            return `hsl(${hue}, 70%, 50%)`;
+        if (Array.isArray(nodeGroups)) {
+          for (const group of nodeGroups) {
+            if (group.nodeIds && group.nodeIds.includes(node.id)) {
+              return group.color;
+            }
           }
         }
         return '#6366f1';
@@ -674,18 +913,19 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   
   const getNodeSize = useCallback((node) => {
     let baseSize = node.size || 8;
-    
+
     // Size based on importance
     if (node.backlinkCount) {
       baseSize += Math.min(5, node.backlinkCount * 0.5);
     }
-    
+
     if (selectedNodes.includes(node.id)) {
-      return baseSize * 1.5; // Enlarge selected nodes
+      baseSize = baseSize * 1.5; // Enlarge selected nodes
     }
-    
-    return baseSize;
-  }, [selectedNodes]);
+
+    // Apply node size multiplier from config (Obsidian-style)
+    return baseSize * (graphConfig.nodeSizeMultiplier || 1.0);
+  }, [selectedNodes, graphConfig.nodeSizeMultiplier]);
   
   const getLinkColor = useCallback((link) => {
     const sourceSelected = selectedNodes.includes(link.source?.id || link.source);
@@ -700,19 +940,41 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   const getLinkWidth = useCallback((link) => {
     const sourceSelected = selectedNodes.includes(link.source?.id || link.source);
     const targetSelected = selectedNodes.includes(link.target?.id || link.target);
-    
+
+    let baseWidth = link.width || 1.5;
+
     if (sourceSelected || targetSelected) {
-      return (link.width || 1.5) * 2;
+      baseWidth = baseWidth * 2;
     }
-    return link.width || 1.5;
-  }, [selectedNodes]);
+
+    // Apply line size multiplier from config (Obsidian-style)
+    return baseWidth * (graphConfig.lineSizeMultiplier || 1.0);
+  }, [selectedNodes, graphConfig.lineSizeMultiplier]);
   
   // Custom node rendering for 2D graphs
   const renderNode2D = useCallback((node, ctx, globalScale) => {
     const size = getNodeSize(node);
     const color = getNodeColor(node);
-    
-    // Draw glow effect
+
+    // Check if node matches search query
+    const searchQuery = graphConfig.search;
+    const isSearchMatch = searchQuery && searchQuery.trim() && (
+      (node.title && node.title.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (node.label && node.label.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (node.type && node.type.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+
+    // Draw search highlight (pulsing glow for matches)
+    if (isSearchMatch) {
+      const pulsePhase = (Date.now() % 1500) / 1500; // 1.5s cycle
+      const pulseIntensity = 0.5 + 0.5 * Math.sin(pulsePhase * Math.PI * 2);
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, size * (2.5 + pulseIntensity), 0, 2 * Math.PI, false);
+      ctx.fillStyle = `rgba(124, 58, 237, ${0.3 * pulseIntensity})`; // Accent purple glow
+      ctx.fill();
+    }
+
+    // Draw glow effect for selected/hovered
     if (selectedNodes.includes(node.id) || hoveredNode?.id === node.id) {
       ctx.beginPath();
       ctx.arc(node.x, node.y, size * 2.5, 0, 2 * Math.PI, false);
@@ -720,11 +982,20 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       ctx.fill();
     }
     
-    // Draw main node
+    // Draw main node (with reduced opacity for non-matches during search)
     ctx.beginPath();
     ctx.arc(node.x, node.y, size, 0, 2 * Math.PI, false);
-    ctx.fillStyle = color;
-    ctx.fill();
+
+    if (searchQuery && searchQuery.trim() && !isSearchMatch) {
+      // Dim non-matching nodes
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+    } else {
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
     
     // Draw border for selected nodes
     if (selectedNodes.includes(node.id)) {
@@ -735,15 +1006,28 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       ctx.stroke();
     }
     
-    // Draw label for important nodes
-    if (size > 10 || selectedNodes.includes(node.id) || hoveredNode?.id === node.id) {
+    // Draw label with text fade based on zoom (Obsidian-style)
+    // Text visibility threshold is affected by textFadeMultiplier
+    const textFadeThreshold = 10 * (graphConfig.textFadeMultiplier || 1.3);
+    const shouldShowLabel =
+      size > textFadeThreshold ||
+      selectedNodes.includes(node.id) ||
+      hoveredNode?.id === node.id;
+
+    if (shouldShowLabel) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#ffffff';
+
+      // Calculate text opacity based on zoom/size
+      const opacity = selectedNodes.includes(node.id) || hoveredNode?.id === node.id
+        ? 1.0
+        : Math.min(1.0, (size / textFadeThreshold));
+
+      ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
       ctx.font = `${Math.max(10, size / 2)}px Arial`;
       ctx.fillText(node.label || node.title || node.id, node.x, node.y + size + 15);
     }
-  }, [selectedNodes, hoveredNode, getNodeSize, getNodeColor]);
+  }, [selectedNodes, hoveredNode, getNodeSize, getNodeColor, graphConfig.textFadeMultiplier, graphConfig.search]);
   
   // Custom 3D node object
   const create3DNode = useCallback((node) => {
@@ -783,10 +1067,23 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         selectedNodes,
         hoveredNode,
         graphData,
-        stats
+        stats,
+        graphConfig,
+        onConfigChange: handleConfigChange,
+        onFocusNode: handleFocusNode,
+        // Animation tour controls
+        isAnimating,
+        animationSpeed,
+        onToggleAnimation: toggleAnimationTour,
+        onAnimationSpeedChange: handleAnimationSpeedChange
       });
     }
-  }, [selectedNodes, hoveredNode, graphData, stats, onGraphStateChange]);
+  }, [selectedNodes, hoveredNode, graphData, stats, graphConfig, handleConfigChange, handleFocusNode, isAnimating, animationSpeed, toggleAnimationTour, handleAnimationSpeedChange, onGraphStateChange]);
+
+  // Apply filtering to graph data
+  const filteredGraphData = React.useMemo(() => {
+    return filterGraphData(graphData, graphConfig);
+  }, [graphData, graphConfig, filterGraphData]);
 
   if (!isVisible) {
     return null;
@@ -819,17 +1116,21 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
             >
               <ForceGraph2D
                 ref={forceGraph2DRef}
-                graphData={graphData}
+                graphData={filteredGraphData}
                 nodeColor={getNodeColor}
                 nodeVal={getNodeSize}
                 nodeLabel={(node) => `${node.label || node.title || node.id}\nType: ${node.type}\nBacklinks: ${node.backlinkCount || 0}`}
                 linkColor={getLinkColor}
                 linkWidth={getLinkWidth}
+                linkDirectionalArrowLength={graphConfig.showArrow ? 6 : 0}
+                linkDirectionalArrowRelPos={1}
+                linkDirectionalArrowColor={getLinkColor}
                 onNodeHover={handleNodeHover}
                 onNodeClick={handleNodeClick}
-                d3AlphaDecay={0.02}
+                d3AlphaDecay={0.015}
                 d3VelocityDecay={0.3}
-                cooldownTicks={100}
+                cooldownTicks={300}
+                warmupTicks={100}
                 enableNodeDrag={true}
                 enableZoomInteraction={true}
                 enablePanInteraction={true}
@@ -852,17 +1153,21 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
             >
               <ForceGraph3D
                 ref={forceGraph3DRef}
-                graphData={graphData}
+                graphData={filteredGraphData}
                 nodeColor={getNodeColor}
                 nodeVal={getNodeSize}
                 nodeLabel={(node) => `${node.label || node.title || node.id}\nType: ${node.type}\nBacklinks: ${node.backlinkCount || 0}`}
                 linkColor={getLinkColor}
                 linkWidth={getLinkWidth}
+                linkDirectionalArrowLength={graphConfig.showArrow ? 6 : 0}
+                linkDirectionalArrowRelPos={1}
+                linkDirectionalArrowColor={getLinkColor}
                 onNodeHover={handleNodeHover}
                 onNodeClick={handleNodeClick}
-                d3AlphaDecay={0.02}
+                d3AlphaDecay={0.015}
                 d3VelocityDecay={0.3}
-                cooldownTicks={100}
+                cooldownTicks={300}
+                warmupTicks={100}
                 enableNodeDrag={true}
                 backgroundColor="transparent"
                 linkDirectionalParticles={isLayoutRunning ? 2 : 0}
@@ -883,17 +1188,21 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
             >
               <ForceGraph2D
                 ref={forceGraph2DRef}
-                graphData={graphData}
+                graphData={filteredGraphData}
                 nodeColor={getNodeColor}
                 nodeVal={getNodeSize}
                 nodeLabel={(node) => `${node.label || node.title || node.id}\nType: ${node.type}\nBacklinks: ${node.backlinkCount || 0}`}
                 linkColor={getLinkColor}
                 linkWidth={getLinkWidth}
+                linkDirectionalArrowLength={graphConfig.showArrow ? 6 : 0}
+                linkDirectionalArrowRelPos={1}
+                linkDirectionalArrowColor={getLinkColor}
                 onNodeHover={handleNodeHover}
                 onNodeClick={handleNodeClick}
                 d3AlphaDecay={0.005}
                 d3VelocityDecay={0.1}
                 cooldownTicks={500}
+                warmupTicks={100}
                 enableNodeDrag={true}
                 enableZoomInteraction={true}
                 enablePanInteraction={true}

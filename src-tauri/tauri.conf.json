@@ -40,7 +40,8 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "../src/themes"
+      "../src/themes/",
+      "mcp-bundle/"
     ]
   },
   "plugins": {

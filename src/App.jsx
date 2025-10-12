@@ -34,6 +34,12 @@ function App() {
     editorConfigCache.init(); // Pre-load editor config to eliminate "Loading editor..." delay
   }, []);
 
+  // Initialize markdown syntax config and editor config cache on app startup
+  useEffect(() => {
+    markdownSyntaxConfig.init();
+    editorConfigCache.init(); // Pre-load editor config to eliminate "Loading editor..." delay
+  }, []);
+
   useEffect(() => {
     // Add platform class to document body
     if (platformService.isWindows()) {

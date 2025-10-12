@@ -103,7 +103,7 @@ export class ExampleProjectRegistry {
           'Chat interface implementation'
         ],
         externalDependencies: [
-          'AI service API (OpenAI/Anthropic)',
+          'AI service API',
           'API key required'
         ]
       },

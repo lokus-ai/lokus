@@ -1,0 +1,25 @@
+{
+  "name": "@lokus/mcp-server",
+  "version": "1.0.0",
+  "description": "Lokus MCP Server - Bundled with Lokus App",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "lokus-mcp": "./index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "node-fetch": "^3.3.2"
+  },
+  "keywords": [
+    "lokus",
+    "mcp",
+    "note-taking",
+    "knowledge-base"
+  ],
+  "author": "Lokus Team",
+  "license": "MIT"
+}
