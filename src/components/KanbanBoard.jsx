@@ -1,40 +1,25 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
-import { Plus, X, MoreHorizontal } from 'lucide-react'
-
-// Task status to column mapping
-const TASK_COLUMNS = {
-  todo: { id: 'todo', title: 'Todo', status: 'todo' },
-  'in-progress': { id: 'in-progress', title: 'In Progress', status: 'in-progress' },
-  urgent: { id: 'urgent', title: 'Urgent', status: 'urgent' },
-  question: { id: 'question', title: 'Question', status: 'question' },
-  completed: { id: 'completed', title: 'Completed', status: 'completed' }
-}
-
-// Task status colors
-const STATUS_COLORS = {
-  todo: 'bg-gray-100 border-gray-300 text-gray-700',
-  'in-progress': 'bg-blue-100 border-blue-300 text-blue-700',
-  urgent: 'bg-red-100 border-red-300 text-red-700',
-  question: 'bg-yellow-100 border-yellow-300 text-yellow-700',
-  completed: 'bg-green-100 border-green-300 text-green-700',
-  cancelled: 'bg-gray-100 border-gray-300 text-gray-500 line-through',
-  delegated: 'bg-purple-100 border-purple-300 text-purple-700'
-}
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/core'
+import { Plus, X, MoreHorizontal, GripVertical, Pencil, Trash2, RefreshCw } from 'lucide-react'
 
 // Individual task card component
-function TaskCard({ task, onUpdate, onDelete }) {
+function TaskCard({ task, onUpdate, onDelete, isDragging }) {
   const [isEditing, setIsEditing] = useState(false)
   const [title, setTitle] = useState(task.title)
   const [showMenu, setShowMenu] = useState(false)
+
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+    id: task.id,
+    data: { type: 'card', task }
+  })
 
   const handleSave = useCallback(async () => {
     if (title.trim() && title !== task.title) {
       try {
         await onUpdate(task.id, { title: title.trim() })
       } catch (error) {
-        setTitle(task.title) // Revert on error
+        setTitle(task.title)
       }
     }
     setIsEditing(false)
@@ -49,11 +34,27 @@ function TaskCard({ task, onUpdate, onDelete }) {
     }
   }, [task.title, handleSave])
 
-  const statusColor = STATUS_COLORS[task.status] || STATUS_COLORS.todo
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+  } : undefined
 
   return (
-    <div className={`p-3 mb-2 rounded-md border-2 cursor-pointer transition-all hover:shadow-sm ${statusColor}`}>
-      <div className="flex items-start justify-between gap-2">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`group bg-app-bg border border-app-border rounded-lg p-3 mb-2 transition-all hover:shadow-md hover:border-app-accent/50 ${
+        isDragging ? 'opacity-50' : ''
+      }`}
+    >
+      <div className="flex items-start gap-2">
+        <div
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          <GripVertical className="w-4 h-4 text-app-muted" />
+        </div>
+
         {isEditing ? (
           <input
             type="text"
@@ -61,114 +62,214 @@ function TaskCard({ task, onUpdate, onDelete }) {
             onChange={(e) => setTitle(e.target.value)}
             onBlur={handleSave}
             onKeyDown={handleKeyDown}
-            className="flex-1 bg-transparent border-none outline-none text-sm font-medium"
+            className="flex-1 bg-transparent border-none outline-none text-sm font-medium text-app-text"
             autoFocus
           />
         ) : (
-          <div 
-            className="flex-1 text-sm font-medium cursor-pointer"
+          <div
+            className="flex-1 text-sm font-medium text-app-text cursor-pointer"
             onClick={() => setIsEditing(true)}
           >
             {task.title}
           </div>
         )}
-        
+
         <div className="relative">
           <button
             onClick={() => setShowMenu(!showMenu)}
-            className="p-1 rounded hover:bg-black/10 opacity-60 hover:opacity-100"
+            className="p-1 rounded hover:bg-app-hover text-app-muted hover:text-app-text opacity-0 group-hover:opacity-100 transition-opacity"
           >
-            <MoreHorizontal className="w-3 h-3" />
+            <MoreHorizontal className="w-3.5 h-3.5" />
           </button>
-          
+
           {showMenu && (
-            <div className="absolute right-0 top-6 bg-white border border-gray-200 rounded shadow-lg z-10 min-w-32">
-              <button
-                onClick={() => {
-                  setIsEditing(true)
-                  setShowMenu(false)
-                }}
-                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100"
-              >
-                Edit
-              </button>
-              <button
-                onClick={() => {
-                  onDelete(task.id)
-                  setShowMenu(false)
-                }}
-                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 text-red-600"
-              >
-                Delete
-              </button>
-            </div>
+            <>
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setShowMenu(false)}
+              />
+              <div className="absolute right-0 top-6 bg-app-panel border border-app-border rounded-lg shadow-xl z-20 min-w-40 overflow-hidden">
+                <button
+                  onClick={() => {
+                    setIsEditing(true)
+                    setShowMenu(false)
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-app-hover text-app-text flex items-center gap-2"
+                >
+                  <Pencil className="w-3 h-3" />
+                  Edit
+                </button>
+                <button
+                  onClick={() => {
+                    onDelete(task.id)
+                    setShowMenu(false)
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-app-hover text-red-500 flex items-center gap-2"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Delete
+                </button>
+              </div>
+            </>
           )}
         </div>
       </div>
-      
+
       {task.description && (
-        <div className="mt-2 text-xs opacity-70">
+        <div className="mt-2 text-xs text-app-muted">
           {task.description}
         </div>
       )}
-      
-      {task.note_path && (
-        <div className="mt-2 text-xs opacity-60 truncate">
-          📝 {task.note_path.split('/').pop()}
+
+      {task.created && (
+        <div className="mt-2 text-xs text-app-muted/70">
+          {new Date(task.created).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric'
+          })}
         </div>
       )}
-      
-      <div className="mt-2 text-xs opacity-50">
-        {new Date(task.created_at).toLocaleDateString()}
-      </div>
     </div>
   )
 }
 
-// Column component
-function KanbanColumn({ column, tasks, onTaskUpdate, onTaskDelete, onAddTask }) {
+// Column component with droppable area
+function KanbanColumn({ column, columnId, tasks, onTaskUpdate, onTaskDelete, onAddTask, onRenameColumn, onDeleteColumn, canDelete }) {
   const [isAdding, setIsAdding] = useState(false)
+  const [isRenaming, setIsRenaming] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
+  const [columnName, setColumnName] = useState(column.name)
+  const [showMenu, setShowMenu] = useState(false)
+
+  const { setNodeRef, isOver } = useDroppable({
+    id: columnId,
+    data: { type: 'column', columnId }
+  })
 
   const handleAddTask = useCallback(async () => {
     if (newTaskTitle.trim()) {
       try {
-        await onAddTask(newTaskTitle.trim(), column.status)
+        await onAddTask(newTaskTitle.trim(), columnId)
         setNewTaskTitle('')
         setIsAdding(false)
       } catch (error) {
+        console.error('Failed to add task:', error)
       }
     }
-  }, [newTaskTitle, column.status, onAddTask])
+  }, [newTaskTitle, columnId, onAddTask])
+
+  const handleRename = useCallback(async () => {
+    if (columnName.trim() && columnName !== column.name) {
+      try {
+        await onRenameColumn(columnId, columnName.trim())
+      } catch (error) {
+        setColumnName(column.name)
+      }
+    }
+    setIsRenaming(false)
+  }, [columnId, columnName, column.name, onRenameColumn])
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter') {
-      handleAddTask()
+      if (isAdding) handleAddTask()
+      else if (isRenaming) handleRename()
     } else if (e.key === 'Escape') {
-      setNewTaskTitle('')
-      setIsAdding(false)
+      if (isAdding) {
+        setNewTaskTitle('')
+        setIsAdding(false)
+      } else if (isRenaming) {
+        setColumnName(column.name)
+        setIsRenaming(false)
+      }
     }
-  }, [handleAddTask])
+  }, [isAdding, isRenaming, handleAddTask, handleRename, column.name])
 
   return (
-    <div className="bg-app-panel rounded-lg p-4 min-w-80 max-w-80 flex flex-col">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-sm text-app-text">
-          {column.title}
-          <span className="ml-2 px-2 py-1 bg-app-border/30 rounded-full text-xs">
-            {tasks.length}
-          </span>
-        </h3>
-        <button
-          onClick={() => setIsAdding(true)}
-          className="p-1 rounded hover:bg-app-hover text-app-muted hover:text-app-text"
-          title="Add task"
-        >
-          <Plus className="w-4 h-4" />
-        </button>
+    <div className="bg-app-panel/30 backdrop-blur-sm border border-app-border rounded-xl p-4 min-w-80 max-w-80 flex flex-col">
+      {/* Column Header */}
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-app-border/50">
+        {isRenaming ? (
+          <input
+            type="text"
+            value={columnName}
+            onChange={(e) => setColumnName(e.target.value)}
+            onBlur={handleRename}
+            onKeyDown={handleKeyDown}
+            className="flex-1 bg-app-bg border border-app-accent rounded px-2 py-1 text-sm font-semibold text-app-text outline-none"
+            autoFocus
+          />
+        ) : (
+          <div className="flex items-center gap-2 flex-1">
+            <h3 className="font-semibold text-sm text-app-text">
+              {column.name}
+            </h3>
+            <span className="px-2 py-0.5 bg-app-border/40 rounded-full text-xs text-app-muted">
+              {tasks.length}
+            </span>
+          </div>
+        )}
+
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setIsAdding(true)}
+            className="p-1.5 rounded-lg hover:bg-app-hover text-app-muted hover:text-app-text transition-colors"
+            title="Add task"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+
+          <div className="relative">
+            <button
+              onClick={() => setShowMenu(!showMenu)}
+              className="p-1.5 rounded-lg hover:bg-app-hover text-app-muted hover:text-app-text transition-colors"
+              title="Column options"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+
+            {showMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowMenu(false)}
+                />
+                <div className="absolute right-0 top-8 bg-app-panel border border-app-border rounded-lg shadow-xl z-20 min-w-40 overflow-hidden">
+                  <button
+                    onClick={() => {
+                      setIsRenaming(true)
+                      setShowMenu(false)
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-app-hover text-app-text flex items-center gap-2"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    Rename
+                  </button>
+                  {canDelete && (
+                    <button
+                      onClick={() => {
+                        onDeleteColumn(columnId)
+                        setShowMenu(false)
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-app-hover text-red-500 flex items-center gap-2"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Delete Column
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
-      
-      <div className="flex-1 overflow-y-auto min-h-32">
+
+      {/* Droppable Area */}
+      <div
+        ref={setNodeRef}
+        className={`flex-1 overflow-y-auto min-h-32 rounded-lg transition-colors ${
+          isOver ? 'bg-app-accent/10 border-2 border-dashed border-app-accent' : ''
+        }`}
+      >
         {tasks.map(task => (
           <TaskCard
             key={task.id}
@@ -177,9 +278,9 @@ function KanbanColumn({ column, tasks, onTaskUpdate, onTaskDelete, onAddTask }) 
             onDelete={onTaskDelete}
           />
         ))}
-        
+
         {isAdding && (
-          <div className="p-3 mb-2 rounded-md border-2 border-dashed border-app-border bg-app-bg">
+          <div className="bg-app-bg border border-app-accent rounded-lg p-3 mb-2">
             <input
               type="text"
               value={newTaskTitle}
@@ -187,9 +288,15 @@ function KanbanColumn({ column, tasks, onTaskUpdate, onTaskDelete, onAddTask }) 
               onBlur={handleAddTask}
               onKeyDown={handleKeyDown}
               placeholder="Task title..."
-              className="w-full bg-transparent border-none outline-none text-sm"
+              className="w-full bg-transparent border-none outline-none text-sm text-app-text placeholder:text-app-muted"
               autoFocus
             />
+          </div>
+        )}
+
+        {tasks.length === 0 && !isAdding && (
+          <div className="flex flex-col items-center justify-center py-8 text-app-muted/50">
+            <div className="text-xs">No tasks yet</div>
           </div>
         )}
       </div>
@@ -198,10 +305,13 @@ function KanbanColumn({ column, tasks, onTaskUpdate, onTaskDelete, onAddTask }) 
 }
 
 // Main Kanban Board component
-export default function KanbanBoard({ workspacePath, onFileOpen }) {
-  const [tasks, setTasks] = useState([])
+export default function KanbanBoard({ workspacePath, boardPath, onFileOpen }) {
+  const [board, setBoard] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [activeCard, setActiveCard] = useState(null)
+  const [isAddingColumn, setIsAddingColumn] = useState(false)
+  const [newColumnName, setNewColumnName] = useState('')
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -211,163 +321,351 @@ export default function KanbanBoard({ workspacePath, onFileOpen }) {
     })
   )
 
-  // Load all tasks
-  const loadTasks = useCallback(async () => {
+  // Load board from file
+  const loadBoard = useCallback(async () => {
+    if (!boardPath) return
+
     try {
       setLoading(true)
-      const allTasks = await invoke('get_all_tasks')
-      setTasks(allTasks || [])
+      const loadedBoard = await invoke('open_kanban_board', { filePath: boardPath })
+      setBoard(loadedBoard)
       setError(null)
     } catch (err) {
-      setError('Failed to load tasks')
+      setError('Failed to load kanban board')
+      console.error('Failed to load board:', err)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [boardPath])
 
-  // Load tasks on mount
   useEffect(() => {
-    loadTasks()
-  }, [loadTasks])
+    loadBoard()
+  }, [loadBoard])
 
-  // Add new task
-  const handleAddTask = useCallback(async (title, status = 'todo') => {
+  // Save board to file
+  const saveBoard = useCallback(async (updatedBoard) => {
+    if (!boardPath) return
+
     try {
-      const newTask = await invoke('create_task', {
-        title,
-        description: null,
-        notePath: null,
-        notePosition: null
+      await invoke('save_kanban_board', {
+        filePath: boardPath,
+        board: updatedBoard
       })
-      
-      // Update status if not todo
-      if (status !== 'todo') {
-        const updatedTask = await invoke('update_task', {
-          taskId: newTask.id,
-          title: null,
-          description: null,
-          status,
-          priority: null
-        })
-        setTasks(prev => [...prev, updatedTask])
-      } else {
-        setTasks(prev => [...prev, newTask])
+      setBoard(updatedBoard)
+    } catch (err) {
+      console.error('Failed to save board:', err)
+      throw err
+    }
+  }, [boardPath])
+
+  // Add new card to column
+  const handleAddTask = useCallback(async (title, columnId) => {
+    if (!board || !boardPath) return
+
+    try {
+      const newCard = {
+        id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+        title,
+        description: '',
+        tags: [],
+        assignee: null,
+        priority: 'normal',
+        due_date: null,
+        linked_notes: [],
+        checklist: [],
+        created: new Date().toISOString(),
+        modified: new Date().toISOString()
+      }
+
+      const updatedBoard = { ...board }
+      if (!updatedBoard.columns[columnId]) {
+        updatedBoard.columns[columnId] = { name: columnId, order: 0, cards: [] }
+      }
+      updatedBoard.columns[columnId].cards.push(newCard)
+      updatedBoard.metadata.modified = new Date().toISOString()
+
+      await saveBoard(updatedBoard)
+    } catch (error) {
+      throw error
+    }
+  }, [board, boardPath, saveBoard])
+
+  // Update card
+  const handleTaskUpdate = useCallback(async (cardId, updates) => {
+    if (!board || !boardPath) return
+
+    try {
+      const updatedBoard = { ...board }
+      let found = false
+
+      for (const [columnId, column] of Object.entries(updatedBoard.columns)) {
+        const cardIndex = column.cards.findIndex(c => c.id === cardId)
+        if (cardIndex !== -1) {
+          updatedBoard.columns[columnId].cards[cardIndex] = {
+            ...updatedBoard.columns[columnId].cards[cardIndex],
+            ...updates,
+            id: cardId,
+            modified: new Date().toISOString()
+          }
+          found = true
+          break
+        }
+      }
+
+      if (found) {
+        updatedBoard.metadata.modified = new Date().toISOString()
+        await saveBoard(updatedBoard)
       }
     } catch (error) {
       throw error
     }
-  }, [])
+  }, [board, boardPath, saveBoard])
 
-  // Update task
-  const handleTaskUpdate = useCallback(async (taskId, updates) => {
+  // Delete card
+  const handleTaskDelete = useCallback(async (cardId) => {
+    if (!board || !boardPath) return
+
     try {
-      const updatedTask = await invoke('update_task', {
-        taskId,
-        title: updates.title || null,
-        description: updates.description || null,
-        status: updates.status || null,
-        priority: updates.priority || null
-      })
-      
-      setTasks(prev => prev.map(task => 
-        task.id === taskId ? updatedTask : task
-      ))
+      const updatedBoard = { ...board }
+
+      for (const [columnId, column] of Object.entries(updatedBoard.columns)) {
+        const cardIndex = column.cards.findIndex(c => c.id === cardId)
+        if (cardIndex !== -1) {
+          updatedBoard.columns[columnId].cards.splice(cardIndex, 1)
+          updatedBoard.metadata.modified = new Date().toISOString()
+          await saveBoard(updatedBoard)
+          break
+        }
+      }
     } catch (error) {
+      console.error('Failed to delete card:', error)
+    }
+  }, [board, boardPath, saveBoard])
+
+  // Add new column
+  const handleAddColumn = useCallback(async () => {
+    if (!board || !boardPath || !newColumnName.trim()) return
+
+    try {
+      const updatedBoard = { ...board }
+      const columnId = newColumnName.toLowerCase().replace(/\s+/g, '-')
+      const maxOrder = Math.max(...Object.values(updatedBoard.columns).map(col => col.order), -1)
+
+      updatedBoard.columns[columnId] = {
+        name: newColumnName.trim(),
+        order: maxOrder + 1,
+        cards: []
+      }
+      updatedBoard.metadata.modified = new Date().toISOString()
+
+      await saveBoard(updatedBoard)
+      setNewColumnName('')
+      setIsAddingColumn(false)
+    } catch (error) {
+      console.error('Failed to add column:', error)
+    }
+  }, [board, boardPath, newColumnName, saveBoard])
+
+  // Rename column
+  const handleRenameColumn = useCallback(async (columnId, newName) => {
+    if (!board || !boardPath) return
+
+    try {
+      const updatedBoard = { ...board }
+      updatedBoard.columns[columnId].name = newName
+      updatedBoard.metadata.modified = new Date().toISOString()
+      await saveBoard(updatedBoard)
+    } catch (error) {
+      console.error('Failed to rename column:', error)
       throw error
     }
-  }, [])
+  }, [board, boardPath, saveBoard])
 
-  // Delete task
-  const handleTaskDelete = useCallback(async (taskId) => {
+  // Delete column
+  const handleDeleteColumn = useCallback(async (columnId) => {
+    if (!board || !boardPath) return
+
     try {
-      await invoke('delete_task', { taskId })
-      setTasks(prev => prev.filter(task => task.id !== taskId))
+      const updatedBoard = { ...board }
+      delete updatedBoard.columns[columnId]
+      updatedBoard.metadata.modified = new Date().toISOString()
+      await saveBoard(updatedBoard)
     } catch (error) {
+      console.error('Failed to delete column:', error)
     }
-  }, [])
+  }, [board, boardPath, saveBoard])
 
-  // Handle drag end - moving tasks between columns
+  // Handle drag start
+  const handleDragStart = useCallback((event) => {
+    const { active } = event
+    const activeTask = Object.values(board.columns)
+      .flatMap(col => col.cards)
+      .find(card => card.id === active.id)
+    setActiveCard(activeTask)
+  }, [board])
+
+  // Handle drag end
   const handleDragEnd = useCallback(async (event) => {
     const { active, over } = event
-    
-    if (!over || active.id === over.id) return
+    setActiveCard(null)
 
-    const taskId = active.id
-    const newStatus = over.id
+    if (!over || active.id === over.id || !board || !boardPath) return
 
-    if (!TASK_COLUMNS[newStatus]) return
+    const cardId = active.id
+    const targetColumnId = over.id
 
     try {
-      await handleTaskUpdate(taskId, { status: newStatus })
-    } catch (error) {
-    }
-  }, [handleTaskUpdate])
+      const updatedBoard = { ...board }
+      let sourceColumnId = null
+      let card = null
 
-  // Group tasks by status
-  const tasksByStatus = Object.keys(TASK_COLUMNS).reduce((acc, status) => {
-    acc[status] = tasks.filter(task => task.status === status)
-    return acc
-  }, {})
+      // Find source column and card
+      for (const [columnId, column] of Object.entries(updatedBoard.columns)) {
+        const cardIndex = column.cards.findIndex(c => c.id === cardId)
+        if (cardIndex !== -1) {
+          sourceColumnId = columnId
+          card = column.cards[cardIndex]
+          updatedBoard.columns[columnId].cards.splice(cardIndex, 1)
+          break
+        }
+      }
+
+      // Add to target column
+      if (card && updatedBoard.columns[targetColumnId]) {
+        card.modified = new Date().toISOString()
+        updatedBoard.columns[targetColumnId].cards.push(card)
+        updatedBoard.metadata.modified = new Date().toISOString()
+        await saveBoard(updatedBoard)
+      }
+    } catch (error) {
+      console.error('Failed to move card:', error)
+    }
+  }, [board, boardPath, saveBoard])
 
   if (loading) {
     return (
-      <div className="p-4 text-center">
-        <div className="text-app-muted">Loading tasks...</div>
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <RefreshCw className="w-6 h-6 animate-spin text-app-muted mx-auto mb-2" />
+          <div className="text-sm text-app-muted">Loading board...</div>
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="p-4 text-center">
-        <div className="text-red-600 mb-2">{error}</div>
-        <button
-          onClick={loadTasks}
-          className="px-3 py-1 text-xs rounded border border-app-border hover:bg-app-hover"
-        >
-          Retry
-        </button>
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="text-red-500 mb-3">{error}</div>
+          <button
+            onClick={loadBoard}
+            className="px-4 py-2 text-sm rounded-lg bg-app-accent text-app-accent-fg hover:bg-app-accent/80 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     )
   }
 
+  if (!board) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-sm text-app-muted">No board loaded</div>
+      </div>
+    )
+  }
+
+  const columns = Object.entries(board.columns).sort((a, b) => a[1].order - b[1].order)
+  const totalCards = columns.reduce((sum, [_, col]) => sum + (col.cards?.length || 0), 0)
+
   return (
-    <div className="h-full flex flex-col">
-      <div className="p-4 border-b border-app-border">
+    <div className="h-full flex flex-col bg-app-bg">
+      {/* Header */}
+      <div className="p-4 border-b border-app-border bg-app-panel/50 backdrop-blur-sm">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-app-text">Task Board</h2>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-app-muted">
-              {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold text-app-text">{board.name || 'Kanban Board'}</h2>
+            <span className="px-2.5 py-1 bg-app-accent/20 text-app-accent rounded-full text-xs font-medium">
+              {totalCards} {totalCards === 1 ? 'card' : 'cards'}
             </span>
-            <button
-              onClick={loadTasks}
-              className="px-2 py-1 text-xs rounded border border-app-border hover:bg-app-hover"
-            >
-              Refresh
-            </button>
           </div>
+          <button
+            onClick={loadBoard}
+            className="p-2 rounded-lg hover:bg-app-hover text-app-muted hover:text-app-text transition-colors"
+            title="Refresh board"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
         </div>
       </div>
-      
-      <div className="flex-1 overflow-x-auto">
+
+      {/* Board Content */}
+      <div className="flex-1 overflow-x-auto overflow-y-hidden">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex gap-4 p-4 min-h-full">
-            {Object.values(TASK_COLUMNS).map(column => (
+          <div className="flex gap-4 p-4 h-full">
+            {columns.map(([columnId, column]) => (
               <KanbanColumn
-                key={column.id}
+                key={columnId}
+                columnId={columnId}
                 column={column}
-                tasks={tasksByStatus[column.status] || []}
+                tasks={column.cards || []}
                 onTaskUpdate={handleTaskUpdate}
                 onTaskDelete={handleTaskDelete}
                 onAddTask={handleAddTask}
+                onRenameColumn={handleRenameColumn}
+                onDeleteColumn={handleDeleteColumn}
+                canDelete={columns.length > 1}
               />
             ))}
+
+            {/* Add Column Button */}
+            {isAddingColumn ? (
+              <div className="bg-app-panel/30 border border-app-border rounded-xl p-4 min-w-80 max-w-80">
+                <input
+                  type="text"
+                  value={newColumnName}
+                  onChange={(e) => setNewColumnName(e.target.value)}
+                  onBlur={() => {
+                    if (!newColumnName.trim()) setIsAddingColumn(false)
+                    else handleAddColumn()
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddColumn()
+                    else if (e.key === 'Escape') {
+                      setNewColumnName('')
+                      setIsAddingColumn(false)
+                    }
+                  }}
+                  placeholder="Column name..."
+                  className="w-full bg-app-bg border border-app-accent rounded-lg px-3 py-2 text-sm font-semibold text-app-text outline-none"
+                  autoFocus
+                />
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsAddingColumn(true)}
+                className="bg-app-panel/20 border-2 border-dashed border-app-border rounded-xl p-4 min-w-80 max-w-80 hover:bg-app-panel/30 hover:border-app-accent/50 transition-all flex flex-col items-center justify-center gap-2 text-app-muted hover:text-app-text"
+              >
+                <Plus className="w-6 h-6" />
+                <span className="text-sm font-medium">Add Column</span>
+              </button>
+            )}
           </div>
+
+          <DragOverlay>
+            {activeCard ? (
+              <div className="bg-app-bg border border-app-accent shadow-2xl rounded-lg p-3 opacity-90 rotate-3">
+                <div className="text-sm font-medium text-app-text">{activeCard.title}</div>
+              </div>
+            ) : null}
+          </DragOverlay>
         </DndContext>
       </div>
     </div>

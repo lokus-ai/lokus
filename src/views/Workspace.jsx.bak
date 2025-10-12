@@ -5,14 +5,13 @@ import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database, Trello } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database } from "lucide-react";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
 import Editor from "../editor";
 import StatusBar from "../components/StatusBar.jsx";
 import ConnectionStatus from "../components/ConnectionStatus.jsx";
 import Canvas from "./Canvas.jsx";
-import KanbanBoard from "../components/KanbanBoard.jsx";
 import { GraphDataProcessor } from "../core/graph/GraphDataProcessor.js";
 import { GraphEngine } from "../core/graph/GraphEngine.js";
 import FileContextMenu from "../components/FileContextMenu.jsx";
@@ -29,9 +28,9 @@ import InFileSearch from "../components/InFileSearch.jsx";
 import SearchPanel from "../components/SearchPanel.jsx";
 import ShortcutHelpModal from "../components/ShortcutHelpModal.jsx";
 import GlobalContextMenu from "../components/GlobalContextMenu.jsx";
-import KanbanList from "../components/KanbanList.jsx";
+import MiniKanban from "../components/MiniKanban.jsx";
 import { WorkspaceManager } from "../core/workspace/manager.js";
-// FullKanban removed - now using file-based KanbanBoard system
+import FullKanban from "../components/FullKanban.jsx";
 import PluginSettings from "./PluginSettings.jsx";
 import PluginDetail from "./PluginDetail.jsx";
 import { canvasManager } from "../core/canvas/manager.js";
@@ -657,7 +656,7 @@ function WorkspaceWithScope({ path }) {
           // Set recent files (filter out special views, keep only actual files)
           const actualFiles = session.open_tabs.filter(p =>
             !p.startsWith('__') &&
-            (p.endsWith('.md') || p.endsWith('.txt') || p.endsWith('.canvas') || p.endsWith('.kanban'))
+            (p.endsWith('.md') || p.endsWith('.txt') || p.endsWith('.canvas'))
           );
           setRecentFiles(actualFiles.slice(0, 5).map(p => ({
             path: p,
@@ -716,7 +715,7 @@ function WorkspaceWithScope({ path }) {
         // Update recent files list
         const actualFiles = openTabs.filter(t =>
           !t.path.startsWith('__') &&
-          (t.path.endsWith('.md') || t.path.endsWith('.txt') || t.path.endsWith('.canvas') || t.path.endsWith('.kanban'))
+          (t.path.endsWith('.md') || t.path.endsWith('.txt') || t.path.endsWith('.canvas'))
         );
         setRecentFiles(actualFiles.slice(0, 5));
       }
@@ -1059,7 +1058,21 @@ function WorkspaceWithScope({ path }) {
     handleFileOpen(mostRecentTab);
   }, [recentlyClosedTabs]);
 
-  // handleOpenFullKanban removed - use file-based kanban boards instead
+  const handleOpenFullKanban = () => {
+    const kanbanPath = '__kanban__';
+    const kanbanName = 'Task Board';
+    
+    setOpenTabs(prevTabs => {
+      const newTabs = prevTabs.filter(t => t.path !== kanbanPath);
+      newTabs.unshift({ path: kanbanPath, name: kanbanName });
+      if (newTabs.length > MAX_OPEN_TABS) {
+        newTabs.pop();
+      }
+      return newTabs;
+    });
+    setActiveFile(kanbanPath);
+    setShowKanban(false); // Close mini kanban when opening full
+  };
 
   const handleTabClick = (path) => {
     setActiveFile(path);
@@ -1774,23 +1787,6 @@ function WorkspaceWithScope({ path }) {
     }
   };
 
-  const handleCreateKanban = async () => {
-    try {
-      // Create a real kanban board with file-based storage
-      const board = await invoke("create_kanban_board", {
-        workspacePath: path,
-        name: "New Board",
-        columns: ["To Do", "In Progress", "Done"]
-      });
-      handleRefreshFiles();
-      const fileName = "New Board.kanban";
-      const boardPath = `${path}/${fileName}`;
-      handleFileOpen({ path: boardPath, name: fileName, is_directory: false });
-    } catch (error) {
-      console.error("Failed to create kanban board:", error);
-    }
-  };
-
   const handleCreateFolder = () => {
     setIsCreatingFolder(true);
   };
@@ -2040,7 +2036,7 @@ function WorkspaceWithScope({ path }) {
                                 nextTab.path === '__bases__' ||
                                 nextTab.path.startsWith('__graph__') ||
                                 nextTab.path.startsWith('__plugin_') ||
-                                nextTab.path.endsWith('.canvas') || nextTab.path.endsWith('.kanban');
+                                nextTab.path.endsWith('.canvas');
             
             if (!isSpecialView && (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt'))) {
               try {
@@ -2182,7 +2178,7 @@ function WorkspaceWithScope({ path }) {
     }));
     const unlistenRefreshFiles = isTauri ? listen("lokus:refresh-files", handleRefreshFiles) : Promise.resolve(addDom('lokus:refresh-files', handleRefreshFiles));
     const unlistenNewCanvas = isTauri ? listen("lokus:new-canvas", handleCreateCanvas) : Promise.resolve(addDom('lokus:new-canvas', handleCreateCanvas));
-    // unlistenOpenKanban removed - no longer using FullKanban
+    const unlistenOpenKanban = isTauri ? listen("lokus:open-kanban", handleOpenFullKanban) : Promise.resolve(addDom('lokus:open-kanban', handleOpenFullKanban));
     const unlistenReopenClosedTab = isTauri ? listen("lokus:reopen-closed-tab", handleReopenClosedTab) : Promise.resolve(addDom('lokus:reopen-closed-tab', handleReopenClosedTab));
     
     // Split editor shortcuts
@@ -2482,6 +2478,7 @@ function WorkspaceWithScope({ path }) {
       unlistenShortcutHelp.then(f => { if (typeof f === 'function') f(); });
       unlistenRefreshFiles.then(f => { if (typeof f === 'function') f(); });
       unlistenNewCanvas.then(f => { if (typeof f === 'function') f(); });
+      unlistenOpenKanban.then(f => { if (typeof f === 'function') f(); });
       unlistenReopenClosedTab.then(f => { if (typeof f === 'function') f(); });
       unlistenToggleSplitView.then(f => { if (typeof f === 'function') f(); });
       unlistenToggleSplitDirection.then(f => { if (typeof f === 'function') f(); });
@@ -2754,9 +2751,6 @@ function WorkspaceWithScope({ path }) {
                     <button onClick={handleCreateCanvas} title="New Canvas" className="obsidian-button small icon-only">
                       <Layers className="w-4 h-4" />
                     </button>
-                    <button onClick={handleCreateKanban} title="New Kanban Board" className="obsidian-button small icon-only">
-                      <Trello className="w-4 h-4" />
-                    </button>
                     <button onClick={handleCreateFolder} title="New Folder" className="obsidian-button small icon-only">
                       <FolderPlus className="w-4 h-4" />
                     </button>
@@ -2774,10 +2768,9 @@ function WorkspaceWithScope({ path }) {
               </div>
             ) : showKanban ? (
               <div className="flex-1 overflow-hidden">
-                <KanbanList
+                <MiniKanban 
                   workspacePath={path}
-                  onBoardOpen={handleFileOpen}
-                  onCreateBoard={handleCreateKanban}
+                  onOpenFull={handleOpenFullKanban}
                 />
               </div>
             ) : showGraphView ? (
@@ -2978,7 +2971,14 @@ function WorkspaceWithScope({ path }) {
                   />
                   {/* Right/Bottom Pane Content */}
                   {rightPaneFile ? (
-                    rightPaneFile && rightPaneFile.endsWith('.canvas') ? (
+                    rightPaneFile === '__kanban__' ? (
+                      <div className="flex-1 bg-app-panel overflow-hidden">
+                        <FullKanban 
+                          workspacePath={path}
+                          onFileOpen={handleFileOpen}
+                        />
+                      </div>
+                    ) : rightPaneFile && rightPaneFile.endsWith('.canvas') ? (
                       <div className="flex-1 overflow-hidden">
                         <Canvas
                           canvasPath={rightPaneFile}
@@ -2998,14 +2998,6 @@ function WorkspaceWithScope({ path }) {
                           onChange={() => {
                             setUnsavedChanges(prev => new Set(prev).add(rightPaneFile));
                           }}
-                        />
-                      </div>
-                    ) : rightPaneFile && rightPaneFile.endsWith('.kanban') ? (
-                      <div className="flex-1 overflow-hidden">
-                        <KanbanBoard
-                          workspacePath={path}
-                          boardPath={rightPaneFile}
-                          onFileOpen={handleFileOpen}
                         />
                       </div>
                     ) : rightPaneFile.startsWith('__graph__') ? (
@@ -3082,7 +3074,14 @@ function WorkspaceWithScope({ path }) {
                   onToggleRightSidebar={toggleRightSidebar}
                   showRightSidebar={showRight}
                 />
-              {activeFile && activeFile.endsWith('.canvas') ? (
+              {activeFile === '__kanban__' ? (
+            <div className="flex-1 bg-app-panel overflow-hidden">
+              <FullKanban 
+                workspacePath={path}
+                onFileOpen={handleFileOpen}
+              />
+            </div>
+          ) : activeFile && activeFile.endsWith('.canvas') ? (
             <div className="flex-1 overflow-hidden">
               <Canvas
                 canvasPath={activeFile}
@@ -3106,14 +3105,6 @@ function WorkspaceWithScope({ path }) {
                   });
                 }}
                 initialData={null} // Will be loaded by Canvas component
-              />
-            </div>
-          ) : activeFile && activeFile.endsWith('.kanban') ? (
-            <div className="flex-1 overflow-hidden">
-              <KanbanBoard
-                workspacePath={path}
-                boardPath={activeFile}
-                onFileOpen={handleFileOpen}
               />
             </div>
           ) : activeFile === '__graph__' ? (
@@ -3301,7 +3292,7 @@ function WorkspaceWithScope({ path }) {
                                       <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
                                         <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
                                       </svg>
-                                    ) : file.path.endsWith('.canvas') || file.path.endsWith('.kanban') ? (
+                                    ) : file.path.endsWith('.canvas') ? (
                                       <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
                                         <path fillRule="evenodd" d="M4.25 2A2.25 2.25 0 002 4.25v11.5A2.25 2.25 0 004.25 18h11.5A2.25 2.25 0 0018 15.75V4.25A2.25 2.25 0 0015.75 2H4.25z" clipRule="evenodd" />
                                       </svg>
@@ -3662,15 +3653,6 @@ export default function Workspace({ initialPath = "" }) {
         saveWorkspacePath(initialPath);
         console.log('[Workspace] Saved workspace path to localStorage:', initialPath);
       });
-
-      // Initialize default kanban board if none exists
-      invoke('initialize_workspace_kanban', { workspacePath: initialPath })
-        .then(() => {
-          console.log('[Workspace] Kanban initialization complete');
-        })
-        .catch((error) => {
-          console.error('[Workspace] Failed to initialize kanban:', error);
-        });
     }
   }, [initialPath]);
 

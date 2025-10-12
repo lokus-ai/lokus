@@ -8,6 +8,9 @@
 import MarkdownIt from "markdown-it"
 import markdownItMark from "markdown-it-mark"
 import markdownItStrikethrough from "markdown-it-strikethrough-alt"
+import markdownItTexmath from "markdown-it-texmath"
+import katex from "katex"
+import markdownItWikiLinks from "./plugins/wikilinks.js"
 
 export class MarkdownCompiler {
   constructor(options = {}) {
@@ -20,6 +23,15 @@ export class MarkdownCompiler {
     })
       .use(markdownItMark)
       .use(markdownItStrikethrough)
+      .use(markdownItWikiLinks)
+      .use(markdownItTexmath, {
+        engine: katex,
+        delimiters: 'dollars',  // Support $inline$ and $$block$$
+        katexOptions: {
+          throwOnError: false,
+          displayMode: false
+        }
+      })
     
     this.options = {
       aggressive: true,  // Aggressively detect markdown

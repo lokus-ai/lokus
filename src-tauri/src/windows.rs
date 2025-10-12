@@ -34,7 +34,15 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
     println!("[Backend] Workspace already open in another window, focusing it");
     focus(&existing_win);
     // Re-activate just in case the workspace needs to refresh
-    let _ = existing_win.emit("workspace:activate", workspace_path);
+    let _ = existing_win.emit("workspace:activate", workspace_path.clone());
+
+    // Update API server with the workspace
+    let workspace_for_api = workspace_path.clone();
+    let app_handle_for_api = app.clone();
+    tauri::async_runtime::spawn(async move {
+      crate::api_server::update_workspace(&app_handle_for_api, Some(workspace_for_api)).await;
+    });
+
     return Ok(());
   }
 
@@ -50,8 +58,20 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
 
   if let Some(win) = current_window {
     println!("[Backend] Found current window, replacing with workspace (VSCode-style)");
-    let _ = win.emit("workspace:activate", workspace_path);
+    // Show window first (in case it was hidden)
+    let _ = win.show();
+    // Navigate to workspace by emitting activation event
+    let _ = win.emit("workspace:activate", workspace_path.clone());
+    // Bring window to focus
     focus(&win);
+
+    // Update API server with the workspace
+    let workspace_for_api = workspace_path.clone();
+    let app_handle_for_api = app.clone();
+    tauri::async_runtime::spawn(async move {
+      crate::api_server::update_workspace(&app_handle_for_api, Some(workspace_for_api)).await;
+    });
+
     return Ok(());
   }
 
@@ -78,6 +98,13 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
   // Emit workspace:activate as backup method
   println!("[Backend] Emitting workspace:activate event to new window");
   let _ = win.emit("workspace:activate", workspace_path.clone());
+
+  // Update API server with the new workspace
+  let workspace_for_api = workspace_path.clone();
+  let app_handle_for_api = app.clone();
+  tauri::async_runtime::spawn(async move {
+    crate::api_server::update_workspace(&app_handle_for_api, Some(workspace_for_api)).await;
+  });
 
   println!("[Backend] Window created successfully");
 

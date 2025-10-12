@@ -1,18 +1,77 @@
-import { useState } from 'react';
-import { Bot, Sparkles, Zap, Copy, CheckCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { Bot, Sparkles, Zap, CheckCircle, AlertCircle, Loader2, Settings, RefreshCw, ExternalLink } from 'lucide-react';
 
 export default function AIAssistant() {
-  const [copySuccess, setCopySuccess] = useState(false);
+  const [setupState, setSetupState] = useState('checking'); // checking, not-setup, setting-up, success, error
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isConfigured, setIsConfigured] = useState(false);
 
-  const command = 'claude mcp add lokus node src/mcp-server/stdio-server.js';
+  useEffect(() => {
+    checkSetupStatus();
+  }, []);
 
-  const copyToClipboard = async (text) => {
+  const checkSetupStatus = async () => {
     try {
-      await navigator.clipboard.writeText(text);
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000);
+      setSetupState('checking');
+      const status = await invoke('check_mcp_status');
+      setIsConfigured(status);
+      setSetupState(status ? 'success' : 'not-setup');
     } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
+      console.error('Failed to check MCP status:', error);
+      setSetupState('not-setup');
+    }
+  };
+
+  const handleSetup = async () => {
+    try {
+      setSetupState('setting-up');
+      setErrorMessage('');
+
+      // First, bundle the MCP server if needed
+      const result = await invoke('setup_mcp_integration');
+      console.log('Setup result:', result);
+
+      // Wait a moment for the setup to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      setSetupState('success');
+      setIsConfigured(true);
+    } catch (error) {
+      console.error('Setup failed:', error);
+      setErrorMessage(error.toString());
+      setSetupState('error');
+    }
+  };
+
+  const getStatusIcon = () => {
+    switch (setupState) {
+      case 'checking':
+      case 'setting-up':
+        return <Loader2 className="w-5 h-5 animate-spin text-blue-500" />;
+      case 'success':
+        return <CheckCircle className="w-5 h-5 text-green-500" />;
+      case 'error':
+        return <AlertCircle className="w-5 h-5 text-red-500" />;
+      default:
+        return <Bot className="w-5 h-5 text-gray-500" />;
+    }
+  };
+
+  const getStatusText = () => {
+    switch (setupState) {
+      case 'checking':
+        return 'Checking AI Assistant status...';
+      case 'setting-up':
+        return 'Setting up AI Assistant connection...';
+      case 'success':
+        return 'AI Assistant is connected and ready!';
+      case 'error':
+        return 'Setup failed. Please try again.';
+      case 'not-setup':
+        return isConfigured ? 'AI Assistant is configured' : 'AI Assistant not connected';
+      default:
+        return 'Unknown status';
     }
   };
 
@@ -24,71 +83,100 @@ export default function AIAssistant() {
         <div>
           <h1 className="text-2xl font-semibold text-app-text">AI Assistant</h1>
           <p className="text-sm text-app-muted mt-1">
-            Connect your AI assistant to work with your notes and workspace
+            Connect Claude Desktop to your notes and workspace
           </p>
         </div>
       </div>
 
-      {/* Connection Instructions Card */}
+      {/* Main Setup Card */}
       <div className="bg-app-panel/40 border border-app-border rounded-lg p-6">
         <div className="flex items-start space-x-4">
-          {/* AI Assistant Icon */}
-          <div className="h-12 w-12 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg flex items-center justify-center">
+          {/* Icon */}
+          <div className="h-12 w-12 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg flex items-center justify-center flex-shrink-0">
             <Sparkles className="h-6 w-6 text-white" />
           </div>
-          
-          <div className="flex-1">
-            <h3 className="text-lg font-medium text-app-text">AI Assistant Connection</h3>
-            <p className="text-sm text-app-muted mt-1">
-              Connect your AI assistant to read your notes, search content, and help with writing
-            </p>
-          </div>
-        </div>
 
-        {/* Simple Connection Instructions */}
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex items-start space-x-3">
-            <div className="h-5 w-5 bg-blue-500 rounded-full flex items-center justify-center mt-0.5 flex-shrink-0">
-              <span className="text-xs text-white font-bold">1</span>
+          <div className="flex-1">
+            <h3 className="text-lg font-medium text-app-text">Claude Desktop Integration</h3>
+            <p className="text-sm text-app-muted mt-1">
+              Enable Claude to read your notes, search content, and help with writing
+            </p>
+
+            {/* Status */}
+            <div className="flex items-center space-x-2 mt-4">
+              {getStatusIcon()}
+              <span className="text-sm font-medium text-app-text">
+                {getStatusText()}
+              </span>
             </div>
-            <div className="flex-1">
-              <h4 className="text-sm font-medium text-blue-900">To connect Claude Code to your Lokus workspace, run this command in your terminal:</h4>
-              
-              <div className="mt-3 p-3 bg-gray-900 rounded border text-sm font-mono text-green-400 relative">
-                <code>{command}</code>
+
+            {/* Error Message */}
+            {errorMessage && (
+              <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                <p className="text-sm text-red-600 dark:text-red-400">{errorMessage}</p>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex items-center space-x-3 mt-4">
+              {!isConfigured && setupState !== 'setting-up' && (
                 <button
-                  onClick={() => copyToClipboard(command)}
-                  className={`absolute top-2 right-2 p-1.5 rounded transition-colors ${
-                    copySuccess 
-                      ? 'bg-green-600 text-white' 
-                      : 'hover:bg-gray-700 text-gray-300 hover:text-white'
-                  }`}
-                  title="Copy command"
+                  onClick={handleSetup}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center space-x-2"
+                  disabled={setupState === 'setting-up'}
                 >
-                  {copySuccess ? (
-                    <CheckCircle className="h-4 w-4" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
+                  <Settings className="w-4 h-4" />
+                  <span>Enable AI Assistant</span>
                 </button>
-              </div>
-              
-              <p className="text-xs text-blue-800 mt-3">
-                This connects Claude Code to your Lokus workspace so it can read notes, search content, and help with writing.
-              </p>
-              
-              <div className="mt-3">
-                <p className="text-xs text-blue-800 font-medium">
-                  After running the command, you can ask Claude Code to:
-                </p>
-                <ul className="text-xs text-blue-800 mt-1 space-y-1">
-                  <li>• "Search my notes about project ideas"</li>
-                  <li>• "Create a new note with today's meeting agenda"</li>
-                  <li>• "Format this text with proper headings"</li>
-                  <li>• "Help me organize my workspace"</li>
-                </ul>
-              </div>
+              )}
+
+              {isConfigured && (
+                <button
+                  onClick={checkSetupStatus}
+                  className="px-4 py-2 bg-app-panel border border-app-border text-app-text rounded-md hover:bg-app-bg transition-colors focus:outline-none focus:ring-2 focus:ring-app-border flex items-center space-x-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Refresh Status</span>
+                </button>
+              )}
+
+              <a
+                href="https://claude.ai/download"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center text-sm text-blue-500 hover:text-blue-600 transition-colors"
+              >
+                Download Claude Desktop
+                <ExternalLink className="w-3 h-3 ml-1" />
+              </a>
             </div>
+
+            {/* Success Instructions */}
+            {isConfigured && (
+              <div className="mt-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                <h4 className="text-sm font-semibold text-green-800 dark:text-green-300 mb-2">
+                  ✓ Setup Complete!
+                </h4>
+                <p className="text-sm text-green-700 dark:text-green-400 mb-3">
+                  To use the AI Assistant:
+                </p>
+                <ol className="text-sm text-green-700 dark:text-green-400 space-y-1 list-decimal list-inside">
+                  <li>Open Claude Desktop (not the website)</li>
+                  <li>Restart Claude Desktop if it was already running</li>
+                  <li>Start a new conversation</li>
+                  <li>Try these commands:</li>
+                </ol>
+                <ul className="text-sm text-green-700 dark:text-green-400 mt-2 ml-6 space-y-1">
+                  <li>• "What notes do I have in my Lokus workspace?"</li>
+                  <li>• "Search for notes about [topic]"</li>
+                  <li>• "Create a new note called [name]"</li>
+                  <li>• "Show me my workspace info"</li>
+                </ul>
+                <p className="text-xs text-green-600 dark:text-green-500 mt-3">
+                  Note: If Claude doesn't respond to Lokus commands, restart Claude Desktop.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -101,7 +189,7 @@ export default function AIAssistant() {
             <span className="font-medium text-app-text">Smart Search</span>
           </div>
           <p className="text-sm text-app-muted">
-            AI can search through all your notes and find relevant content
+            AI can search through all your notes and find relevant content instantly
           </p>
         </div>
 
@@ -111,21 +199,34 @@ export default function AIAssistant() {
             <span className="font-medium text-app-text">Content Creation</span>
           </div>
           <p className="text-sm text-app-muted">
-            Generate new notes, format text, and enhance your writing
+            Generate new notes, format text, and enhance your writing with AI help
           </p>
         </div>
 
         <div className="bg-app-panel/20 border border-app-border rounded-lg p-4">
           <div className="flex items-center space-x-2 mb-2">
             <Zap className="h-5 w-5 text-yellow-500" />
-            <span className="font-medium text-app-text">Workspace Integration</span>
+            <span className="font-medium text-app-text">Privacy First</span>
           </div>
           <p className="text-sm text-app-muted">
-            Direct access to your files, themes, and workspace settings
+            Your notes stay local. Claude only accesses them when you explicitly ask
           </p>
         </div>
       </div>
 
+      {/* Technical Details */}
+      <details className="mt-4">
+        <summary className="text-sm text-app-muted cursor-pointer hover:text-app-text">
+          Technical Details
+        </summary>
+        <div className="mt-2 p-3 bg-app-panel/20 rounded-md">
+          <p className="text-xs text-app-muted">
+            This integration uses the Model Context Protocol (MCP) to allow Claude Desktop to interact with your Lokus workspace.
+            The connection is local and secure - your data never leaves your computer unless you explicitly share it in a conversation.
+            The MCP server runs locally and provides Claude with tools to list, read, create, and search your notes.
+          </p>
+        </div>
+      </details>
     </div>
   );
 }

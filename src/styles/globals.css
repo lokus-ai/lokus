@@ -1007,3 +1007,40 @@ div:focus-visible,
   box-shadow: none !important;
   border: none !important;
 }
+
+/* Task Syntax Highlighting */
+.task-syntax {
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  transition: all 150ms ease;
+  cursor: help;
+}
+
+.task-syntax-simple {
+  background: rgb(var(--task-progress) / 0.15);
+  color: rgb(var(--task-progress));
+  border: 1px solid rgb(var(--task-progress) / 0.3);
+}
+
+.task-syntax-linked {
+  background: rgb(var(--accent) / 0.15);
+  color: rgb(var(--accent));
+  border: 1px solid rgb(var(--accent) / 0.3);
+}
+
+.task-syntax:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.task-syntax-simple:hover {
+  background: rgb(var(--task-progress) / 0.25);
+  border-color: rgb(var(--task-progress) / 0.5);
+}
+
+.task-syntax-linked:hover {
+  background: rgb(var(--accent) / 0.25);
+  border-color: rgb(var(--accent) / 0.5);
+}
