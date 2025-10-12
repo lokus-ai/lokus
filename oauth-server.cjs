@@ -2,7 +2,8 @@ const http = require('http');
 const url = require('url');
 const { exec } = require('child_process');
 
-const PORT = 8080;
+// Use environment variable or fall back to a less common port to avoid conflicts
+const PORT = process.env.OAUTH_PORT || 9080;
 
 console.log('[OAUTH SERVER] 🚀 Starting Gmail OAuth callback server on port', PORT);
 

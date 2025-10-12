@@ -15,9 +15,12 @@ export function ThemeProvider({ children }) {
   // Load initial theme from config
   useEffect(() => {
     async function loadInitial() {
+      console.log('🎨 ThemeProvider loading initial theme');
       const visuals = await readGlobalVisuals();
+      console.log('🎨 Read global visuals:', visuals);
       setTheme(visuals.theme);
       await applyInitialTheme();
+      console.log('🎨 Applied initial theme');
     }
     loadInitial();
   }, []);

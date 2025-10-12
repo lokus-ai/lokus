@@ -13,6 +13,11 @@ import { useAuth } from "../core/auth/AuthContext";
 import { User, LogIn, LogOut, Crown, Shield, Settings as SettingsIcon } from "lucide-react";
 
 export default function Preferences() {
+  console.log('🔧 Preferences component rendering');
+  console.log('🔧 Window location:', window.location.href);
+  console.log('🔧 Window search params:', new URLSearchParams(window.location.search).toString());
+  console.log('🔧 Document root styles:', window.getComputedStyle(document.documentElement).getPropertyValue('--bg'));
+  console.log('🔧 Document body classes:', document.body.className);
   const [themes, setThemes] = useState([]);
   const [activeTheme, setActiveTheme] = useState("");
   const [section, setSection] = useState("Appearance");
@@ -329,11 +334,23 @@ export default function Preferences() {
     } catch (e) { }
   };
 
-  return (
-    <div className="h-screen bg-app-bg text-app-text flex flex-col">
-      <header className="h-12 px-4 flex items-center border-b border-app-border bg-app-panel">
-        <div className="font-medium">Preferences</div>
-      </header>
+  // Add error boundary
+  try {
+    return (
+      <div className="h-screen bg-app-bg text-app-text flex flex-col" style={{ 
+        minHeight: '100vh', 
+        backgroundColor: 'var(--bg, #ffffff)', 
+        color: 'var(--text, #000000)',
+        fontFamily: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif'
+      }}>
+        <header className="h-12 px-4 flex items-center border-b border-app-border bg-app-panel" style={{ 
+          backgroundColor: 'var(--panel, #f5f5f5)', 
+          borderColor: 'var(--border, #e5e5e5)',
+          borderBottomWidth: '1px',
+          borderBottomStyle: 'solid'
+        }}>
+          <div className="font-medium" style={{ fontSize: '14px', fontWeight: '500' }}>Preferences</div>
+        </header>
 
       <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: "220px 1px 1fr" }}>
         {/* Sidebar */}
@@ -2058,5 +2075,20 @@ export default function Preferences() {
         </main>
       </div>
     </div>
-  );
+    );
+  } catch (error) {
+    console.error('🔧 Preferences rendering error:', error);
+    return (
+      <div style={{ padding: '20px', backgroundColor: '#ffffff', color: '#000000', minHeight: '100vh' }}>
+        <h1>Preferences</h1>
+        <p>There was an error loading preferences. Check the console for details.</p>
+        <p style={{ color: '#ff0000', fontFamily: 'monospace', fontSize: '12px' }}>
+          {error.toString()}
+        </p>
+        <button onClick={() => window.location.reload()} style={{ padding: '10px', marginTop: '10px' }}>
+          Reload Window
+        </button>
+      </div>
+    );
+  }
 }

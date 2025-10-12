@@ -7,7 +7,7 @@ fn base_label_from_path(path: &str) -> String {
   let last = path_obj.file_name()
     .and_then(|n| n.to_str())
     .unwrap_or("workspace");
-  
+
   let mut s = String::from("ws-");
   for ch in last.chars() {
     if ch.is_ascii_alphanumeric() { s.push(ch.to_ascii_lowercase()); } else { s.push('-'); }

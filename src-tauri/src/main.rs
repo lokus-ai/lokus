@@ -201,11 +201,30 @@ fn get_all_workspaces(app: tauri::AppHandle) -> Vec<WorkspaceItem> {
 }
 
 fn main() {
-  // Load environment variables from .env file
-  if let Err(e) = dotenvy::from_filename("../.env") {
-    println!("Warning: Failed to load .env file: {}", e);
-    println!("This is expected in production builds or if .env file doesn't exist");
+  // Load environment variables from .env file if it exists
+  // Use proper path resolution instead of hardcoded relative path
+  if let Ok(current_dir) = std::env::current_dir() {
+    let env_path = current_dir.parent().unwrap_or(&current_dir).join(".env");
+    if env_path.exists() {
+      if let Err(e) = dotenvy::from_path(&env_path) {
+        println!("Warning: Failed to load .env file from {:?}: {}", env_path, e);
+      }
+    }
   }
+
+  // Set up panic hook to handle WebView2 cleanup errors gracefully
+  std::panic::set_hook(Box::new(|panic_info| {
+    let payload = panic_info.payload();
+    if let Some(s) = payload.downcast_ref::<&str>() {
+      // Ignore WebView2 window cleanup errors
+      if s.contains("Failed to unregister class") || s.contains("Chrome_WidgetWin") {
+        eprintln!("WebView2 cleanup warning (non-critical): {}", s);
+        return;
+      }
+    }
+    // For other panics, print the normal panic message
+    eprintln!("Application panic: {}", panic_info);
+  }));
 
   tauri::Builder::default()
     .plugin(tauri_plugin_store::Builder::new().build())
@@ -346,13 +365,21 @@ fn main() {
     .setup(|app| {
       menu::init(&app.handle())?;
 
-      // Initialize platform-specific systems
-      if let Err(e) = handlers::platform_files::initialize() {
-        eprintln!("Warning: Failed to initialize platform file operations: {}", e);
+      // Initialize platform-specific systems with better error handling
+      match handlers::platform_files::initialize() {
+        Ok(_) => println!("✅ Platform file operations initialized successfully"),
+        Err(e) => {
+          eprintln!("⚠️ Warning: Failed to initialize platform file operations: {}", e);
+          eprintln!("ℹ️ Some file operations may not work properly");
+        }
       }
 
-      if let Err(e) = clipboard_platform::initialize() {
-        eprintln!("Warning: Failed to initialize platform clipboard: {}", e);
+      match clipboard_platform::initialize() {
+        Ok(_) => println!("✅ Platform clipboard initialized successfully"),
+        Err(e) => {
+          eprintln!("⚠️ Warning: Failed to initialize platform clipboard: {}", e);
+          eprintln!("ℹ️ Clipboard functionality may be limited");
+        }
       }
 
       // Initialize MCP Server Manager
@@ -370,8 +397,13 @@ fn main() {
       // Start OAuth server after the app is fully initialized
       let oauth_server_clone = oauth_server.clone();
       tauri::async_runtime::spawn(async move {
-        if let Err(e) = oauth_server_clone.start().await {
-          eprintln!("[OAUTH SERVER] ❌ Failed to start OAuth server: {}", e);
+        match oauth_server_clone.start().await {
+          Ok(_) => println!("[OAUTH SERVER] ✅ OAuth server started successfully"),
+          Err(e) => {
+            eprintln!("[OAUTH SERVER] ⚠️ Failed to start OAuth server: {}", e);
+            eprintln!("[OAUTH SERVER] ℹ️ OAuth functionality will be disabled");
+            eprintln!("[OAUTH SERVER] 💡 Try setting OAUTH_PORT environment variable to use a different port");
+          }
         }
       });
 
@@ -430,20 +462,23 @@ fn main() {
       if cfg!(debug_assertions) {
         println!("Development mode detected - clearing workspace data and showing launcher");
         clear_all_workspace_data(app.handle().clone());
-        let main_window = app.get_webview_window("main").unwrap();
-        main_window.show().unwrap();
+        if let Some(main_window) = app.get_webview_window("main") {
+          let _ = main_window.show();
+        }
       } else {
         // Production mode - use the validation function to check for valid workspace
         if let Some(valid_path) = get_validated_workspace_path(app.handle().clone()) {
           println!("Loading validated workspace: {}", valid_path);
-          let main_window = app.get_webview_window("main").unwrap();
-          main_window.hide().unwrap();
+          if let Some(main_window) = app.get_webview_window("main") {
+            let _ = main_window.hide();
+          }
           let _ = open_workspace_window(app_handle, valid_path);
         } else {
           // No valid workspace found, show the launcher
           println!("No valid workspace found, showing launcher");
-          let main_window = app.get_webview_window("main").unwrap();
-          main_window.show().unwrap();
+          if let Some(main_window) = app.get_webview_window("main") {
+            let _ = main_window.show();
+          }
         }
       }
 

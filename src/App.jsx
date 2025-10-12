@@ -22,6 +22,17 @@ function App() {
   // Use the hooks' values directly (no setter param expected)
   const { isPrefsWindow } = usePreferenceActivation();
   const activePath = useWorkspaceActivation();
+  
+  console.log('🎯 App.jsx rendering');
+  console.log('🎯 isPrefsWindow:', isPrefsWindow);
+  console.log('🎯 activePath:', activePath);
+  console.log('🎯 URL search params:', window.location.search);
+
+  // Initialize markdown syntax config and editor config cache on app startup
+  useEffect(() => {
+    markdownSyntaxConfig.init();
+    editorConfigCache.init(); // Pre-load editor config to eliminate "Loading editor..." delay
+  }, []);
 
   // Initialize markdown syntax config and editor config cache on app startup
   useEffect(() => {
