@@ -16,6 +16,9 @@ import KanbanBoard from "../components/KanbanBoard.jsx";
 import { GraphDataProcessor } from "../core/graph/GraphDataProcessor.js";
 import { GraphEngine } from "../core/graph/GraphEngine.js";
 import FileContextMenu from "../components/FileContextMenu.jsx";
+import EditorGroupsContainer from "../components/EditorGroupsContainer.jsx";
+import { useEditorGroups } from "../hooks/useEditorGroups.js";
+import TabBar from "../components/TabBar.jsx";
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -28,7 +31,7 @@ import CommandPalette from "../components/CommandPalette.jsx";
 import InFileSearch from "../components/InFileSearch.jsx";
 import SearchPanel from "../components/SearchPanel.jsx";
 import ShortcutHelpModal from "../components/ShortcutHelpModal.jsx";
-import GlobalContextMenu from "../components/GlobalContextMenu.jsx";
+// GlobalContextMenu removed - using EditorContextMenu and FileContextMenu instead
 import KanbanList from "../components/KanbanList.jsx";
 import { WorkspaceManager } from "../core/workspace/manager.js";
 // FullKanban removed - now using file-based KanbanBoard system
@@ -362,8 +365,8 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
   );
 }
 
-// --- Tab Bar Component ---
-function TabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDragEnd, onNewTab, onSplitDragStart, onSplitDragEnd, useSplitView, onToggleSplitView, splitDirection, onToggleSplitDirection, syncScrolling, onToggleSyncScrolling, onResetPaneSize, isLeftPane = true, onToggleRightSidebar, showRightSidebar }) {
+// --- OLD Tab Bar Component (for old split view) ---
+function OldTabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDragEnd, onNewTab, onSplitDragStart, onSplitDragEnd, useSplitView, onToggleSplitView, splitDirection, onToggleSplitDirection, syncScrolling, onToggleSyncScrolling, onResetPaneSize, isLeftPane = true, onToggleRightSidebar, showRightSidebar }) {
   const [activeId, setActiveId] = useState(null);
   const [draggedTab, setDraggedTab] = useState(null);
   
@@ -559,6 +562,9 @@ function WorkspaceWithScope({ path }) {
   const [activeFile, setActiveFile] = useState(null);
   const [unsavedChanges, setUnsavedChanges] = useState(new Set());
   const [recentlyClosedTabs, setRecentlyClosedTabs] = useState([]);
+
+  // Editor groups system for VSCode-style split view
+  const editorGroups = useEditorGroups(openTabs);
   const [recentFiles, setRecentFiles] = useState([]);
   
   const [editorContent, setEditorContent] = useState("");
@@ -567,7 +573,7 @@ function WorkspaceWithScope({ path }) {
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showInFileSearch, setShowInFileSearch] = useState(false);
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
-  const [contextMenu, setContextMenu] = useState({ isOpen: false, position: { x: 0, y: 0 }, targetElement: null, contextType: "default" });
+  // Removed global context menu state - using component-specific context menus instead
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [templatePickerData, setTemplatePickerData] = useState(null);
   const [showCreateTemplate, setShowCreateTemplate] = useState(false);
@@ -931,41 +937,8 @@ function WorkspaceWithScope({ path }) {
   }, [openTabs, activeFile]);
 
   // Global right-click context menu
-  useEffect(() => {
-    const handleContextMenu = (e) => {
-      // Allow default context menu when holding Shift
-      if (e.shiftKey) {
-        return; // Let browser's default context menu show
-      }
-      
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      
-      // Single context menu for all right-clicks
-      let contextType = "default";
-
-      setContextMenu({
-        isOpen: true,
-        position: { x: e.clientX, y: e.clientY },
-        targetElement: e.target,
-        contextType
-      });
-      
-      return false;
-    };
-
-    // Add multiple event listeners to ensure we catch all context menus
-    document.addEventListener('contextmenu', handleContextMenu, true);
-    document.addEventListener('contextmenu', handleContextMenu, false);
-    window.addEventListener('contextmenu', handleContextMenu, true);
-    
-    return () => {
-      document.removeEventListener('contextmenu', handleContextMenu, true);
-      document.removeEventListener('contextmenu', handleContextMenu, false);
-      window.removeEventListener('contextmenu', handleContextMenu, true);
-    };
-  }, []);
+  // Removed global context menu handler - context menus are now component-specific
+  // EditorContextMenu handles editor right-clicks, FileContextMenu handles file sidebar right-clicks
 
   const handleRefreshFiles = () => setRefreshId(id => id + 1);
 
@@ -2157,6 +2130,23 @@ function WorkspaceWithScope({ path }) {
     }
   };
 
+  // Direct keyboard event listener as a bulletproof backup for critical shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Cmd/Ctrl+S: Save file
+      if ((e.metaKey || e.ctrlKey) && e.key === 's' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        handleSave();
+        return;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, { capture: true });
+    };
+  }, [handleSave]);
+
   useEffect(() => {
     let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
     const addDom = (name, fn) => { const h = () => fn(); window.addEventListener(name, h); return () => window.removeEventListener(name, h); };
@@ -2850,7 +2840,7 @@ function WorkspaceWithScope({ path }) {
                     [splitDirection === 'vertical' ? 'width' : 'height']: `${leftPaneSize}%`
                   }}
                 >
-                  <TabBar
+                  <OldTabBar
                     tabs={openTabs}
                     activeTab={activeFile}
                     onTabClick={(path) => {
@@ -2919,7 +2909,7 @@ function WorkspaceWithScope({ path }) {
                     [splitDirection === 'vertical' ? 'width' : 'height']: `${100 - leftPaneSize}%`
                   }}
                 >
-                  <TabBar 
+                  <OldTabBar 
                     tabs={openTabs}
                     activeTab={rightPaneFile}
                     onTabClick={(path) => {
@@ -3061,7 +3051,7 @@ function WorkspaceWithScope({ path }) {
             ) : (
               /* Single View */
               <>
-                <TabBar
+                <OldTabBar
                   tabs={openTabs}
                   activeTab={activeFile}
                   onTabClick={handleTabClick}
@@ -3632,15 +3622,6 @@ function WorkspaceWithScope({ path }) {
         activeFile={activeFile} 
         unsavedChanges={unsavedChanges} 
         openTabs={openTabs}
-      />
-      
-      {/* Global Context Menu */}
-      <GlobalContextMenu
-        isOpen={contextMenu.isOpen}
-        position={contextMenu.position}
-        targetElement={contextMenu.targetElement}
-        contextType={contextMenu.contextType}
-        onClose={() => setContextMenu(prev => ({ ...prev, isOpen: false }))}
       />
     </div>
     </PanelManager>

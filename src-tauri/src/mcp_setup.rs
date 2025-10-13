@@ -8,7 +8,6 @@
 use std::path::PathBuf;
 use std::fs;
 use serde_json::json;
-use tauri::Manager;
 use crate::mcp_embedded;
 
 #[derive(Debug)]
@@ -27,21 +26,26 @@ impl MCPSetup {
 
         // 1. Get paths
         let mcp_server_path = self.get_bundled_mcp_path()?;
-        let ai_config_path = self.get_ai_desktop_config_path()?;
+        let ai_desktop_config_path = self.get_ai_desktop_config_path()?;
 
         // 2. Ensure MCP server is executable
         self.make_mcp_executable(&mcp_server_path)?;
 
         // 3. Create/update AI Desktop configuration
-        self.update_ai_desktop_config(&ai_config_path, &mcp_server_path)?;
+        self.update_ai_desktop_config(&ai_desktop_config_path, &mcp_server_path)?;
 
-        // 4. Ensure default workspace exists
+        // 4. Create/update Claude Code configuration (.mcp.json and CLI)
+        // Note: We pass a dummy PathBuf since we don't use config_path anymore
+        self.update_cli_config(&PathBuf::new(), &mcp_server_path)?;
+
+        // 5. Ensure default workspace exists
         self.ensure_default_workspace()?;
 
-        // 5. Create Lokus config directory
+        // 6. Create Lokus config directory
         self.create_lokus_config_dir()?;
 
         println!("[MCP Setup] ✅ MCP configuration completed successfully!");
+        println!("[MCP Setup] ✅ Configured for both Desktop and Claude Code");
         Ok(())
     }
 
@@ -85,6 +89,7 @@ impl MCPSetup {
 
         Ok(config_path)
     }
+
 
     /// Make MCP server executable (Unix only)
     #[cfg(unix)]
@@ -131,11 +136,11 @@ impl MCPSetup {
             }
 
             if let Some(mcp_servers) = obj.get_mut("mcpServers").and_then(|v| v.as_object_mut()) {
-                // Add Lokus MCP server configuration
+                // Use stdio transport for Desktop
+                // Desktop spawns its own MCP server process using node
                 mcp_servers.insert("lokus".to_string(), json!({
                     "command": "node",
-                    "args": [mcp_path.to_string_lossy()],
-                    "env": {}
+                    "args": [mcp_path.to_string_lossy()]
                 }));
             }
         }
@@ -149,6 +154,86 @@ impl MCPSetup {
 
         println!("[MCP Setup] ✅ Updated AI Desktop config at: {:?}", config_path);
         Ok(())
+    }
+
+    /// Update or create CLI config
+    fn update_cli_config(&self, _config_path: &PathBuf, _mcp_path: &PathBuf) -> Result<(), String> {
+        // For Claude Code, we should create a .mcp.json file in the workspace root
+        // instead of trying to write to ~/.config/claude-code/config.json
+        // Claude Code will automatically pick up .mcp.json files in project roots
+
+        // Try to get the workspace directory from app data
+        let workspace_path = self.get_workspace_path()?;
+        let mcp_json_path = workspace_path.join(".mcp.json");
+
+        // Create .mcp.json configuration for Claude Code
+        let mcp_config = json!({
+            "mcpServers": {
+                "lokus": {
+                    "transport": "http",
+                    "url": "http://localhost:3456/mcp"
+                }
+            }
+        });
+
+        // Write .mcp.json to workspace root
+        let config_str = serde_json::to_string_pretty(&mcp_config)
+            .map_err(|e| format!("Failed to serialize .mcp.json config: {}", e))?;
+
+        fs::write(&mcp_json_path, config_str)
+            .map_err(|e| format!("Failed to write .mcp.json: {}", e))?;
+
+        println!("[MCP Setup] ✅ Created .mcp.json for Claude Code at: {:?}", mcp_json_path);
+
+        // Also try to configure via Claude CLI if available
+        self.configure_via_cli()?;
+
+        Ok(())
+    }
+
+    /// Configure Claude Code via CLI if available
+    fn configure_via_cli(&self) -> Result<(), String> {
+        use std::process::Command;
+
+        // Check if claude CLI is available
+        let claude_check = Command::new("which")
+            .arg("claude")
+            .output();
+
+        if let Ok(output) = claude_check {
+            if output.status.success() {
+                // Remove any existing lokus configuration
+                let _ = Command::new("claude")
+                    .args(&["mcp", "remove", "lokus", "-s", "user"])
+                    .output();
+
+                // Add HTTP configuration
+                let result = Command::new("claude")
+                    .args(&["mcp", "add", "-t", "http", "lokus", "http://localhost:3456/mcp", "-s", "user"])
+                    .output()
+                    .map_err(|e| format!("Failed to run claude CLI: {}", e))?;
+
+                if result.status.success() {
+                    println!("[MCP Setup] ✅ Configured Claude Code via CLI");
+                } else {
+                    println!("[MCP Setup] ⚠️ Claude CLI configuration failed, but .mcp.json was created");
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get workspace path from app data or use default
+    fn get_workspace_path(&self) -> Result<PathBuf, String> {
+        // Try to get current workspace from app state
+        // For now, return the current directory as a fallback
+        Ok(std::env::current_dir().unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("/"))
+                .join("Documents")
+                .join("Lokus Workspace")
+        }))
     }
 
     /// Ensure default workspace exists

@@ -201,27 +201,44 @@ pub async fn save_board_to_file(file_path: &Path, board: &KanbanBoard) -> Result
         .map_err(|e| format!("Failed to write board file: {}", e))
 }
 
-pub async fn list_boards_in_workspace(workspace_path: &Path) -> Result<Vec<BoardInfo>, String> {
-    let mut boards = Vec::new();
+fn scan_directory_for_boards<'a>(
+    dir_path: &'a Path,
+    boards: &'a mut Vec<BoardInfo>,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + 'a>> {
+    Box::pin(async move {
+        let mut entries = match tokio::fs::read_dir(dir_path).await {
+            Ok(e) => e,
+            Err(_) => return Ok(()), // Skip directories we can't read
+        };
 
-    let mut entries = tokio::fs::read_dir(workspace_path)
-        .await
-        .map_err(|e| format!("Failed to read workspace directory: {}", e))?;
+        while let Some(entry) = entries.next_entry().await.map_err(|e| format!("Failed to read directory entry: {}", e))? {
+            let path = entry.path();
 
-    while let Some(entry) = entries.next_entry().await.map_err(|e| format!("Failed to read directory entry: {}", e))? {
-        let path = entry.path();
-        if path.extension().and_then(|s| s.to_str()) == Some("kanban") {
-            if let Ok(board) = load_board_from_file(&path).await {
-                boards.push(BoardInfo {
-                    name: board.name.clone(),
-                    path: path.to_string_lossy().to_string(),
-                    card_count: board.get_total_card_count(),
-                    column_count: board.columns.len(),
-                    modified: board.metadata.modified.clone(),
-                });
+            if path.is_file() {
+                if path.extension().and_then(|s| s.to_str()) == Some("kanban") {
+                    if let Ok(board) = load_board_from_file(&path).await {
+                        boards.push(BoardInfo {
+                            name: board.name.clone(),
+                            path: path.to_string_lossy().to_string(),
+                            card_count: board.get_total_card_count(),
+                            column_count: board.columns.len(),
+                            modified: board.metadata.modified.clone(),
+                        });
+                    }
+                }
+            } else if path.is_dir() {
+                // Recursively scan subdirectories
+                let _ = scan_directory_for_boards(&path, boards).await;
             }
         }
-    }
+
+        Ok(())
+    })
+}
+
+pub async fn list_boards_in_workspace(workspace_path: &Path) -> Result<Vec<BoardInfo>, String> {
+    let mut boards = Vec::new();
+    scan_directory_for_boards(workspace_path, &mut boards).await?;
 
     // Sort by modification time (most recent first)
     boards.sort_by(|a, b| b.modified.cmp(&a.modified));
