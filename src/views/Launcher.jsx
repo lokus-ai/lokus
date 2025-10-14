@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { readRecents, addRecent, removeRecent, shortenPath } from "../lib/recents.js";
 import { WorkspaceManager } from "../core/workspace/manager.js";
+import { readGlobalVisuals, setGlobalActiveTheme } from "../core/theme/manager.js";
 import LokusLogo from "../components/LokusLogo.jsx";
 
 // --- Reusable Icon Component ---
@@ -16,6 +17,17 @@ const Icon = ({ path, className = "w-5 h-5" }) => (
 
 // --- Main Launcher Component ---
 async function openWorkspace(path) {
+  // Ensure current theme is saved globally before opening workspace
+  // This fixes the issue where new workspace windows don't inherit the theme
+  try {
+    const visuals = await readGlobalVisuals();
+    if (visuals && visuals.theme) {
+      await setGlobalActiveTheme(visuals.theme);
+    }
+  } catch (error) {
+    console.warn('Could not persist theme before opening workspace:', error);
+  }
+
   // In test mode or browser mode, transition current window to workspace
   const isTestMode = new URLSearchParams(window.location.search).get('testMode') === 'true';
   const isTauri = typeof window !== 'undefined' && (
@@ -23,7 +35,7 @@ async function openWorkspace(path) {
     window.__TAURI_METADATA__ ||
     (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.includes('Tauri'))
   );
-  
+
   if (isTestMode || !isTauri) {
     // For test mode or browser mode, update URL to include workspace path
     const url = new URL(window.location);

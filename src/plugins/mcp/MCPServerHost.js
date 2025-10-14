@@ -632,7 +632,7 @@ export class MCPServerHost extends EventEmitter {
       errorServers: 0,
       byType: {},
       totalMemoryUsage: 0,
-      healthySer: 0,
+      healthyServers: 0,
       unhealthyServers: 0
     }
     

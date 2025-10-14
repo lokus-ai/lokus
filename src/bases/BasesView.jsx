@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useBases } from './BasesContext.jsx';
 import { useFolderScope } from '../contexts/FolderScopeContext.jsx';
+import { DebouncedInput } from '../components/OptimizedWrapper.jsx';
 import BaseTableView from './ui/BaseTableView.jsx';
 import BaseListView from './ui/BaseListView.jsx';
 import BaseGridView from './ui/BaseGridView.jsx';
@@ -11,7 +12,7 @@ import FilterBuilder from './ui/FilterBuilder.jsx';
 import CustomSelect from './ui/CustomSelect.jsx';
 import { Settings, Filter, Columns, Download, RefreshCw, AlertCircle, Table, ArrowUpDown, ChevronDown, Folder, FolderOpen, Search, List, Grid, MoreVertical } from 'lucide-react';
 
-export default function BasesView({ isVisible, onFileOpen }) {
+const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
   const {
     activeBase,
     activeView,
@@ -40,6 +41,10 @@ export default function BasesView({ isVisible, onFileOpen }) {
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [currentColumns, setCurrentColumns] = useState([]);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50); // Only show 50 items at a time
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [showPropertiesDropdown, setShowPropertiesDropdown] = useState(false);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
@@ -59,11 +64,19 @@ export default function BasesView({ isVisible, onFileOpen }) {
         setViewData(result.data || []);
         setTotalCount(result.totalCount || 0);
         setFilteredCount(result.filteredCount || 0);
+
+        // Reset to first page when data changes
+        setCurrentPage(1);
+
+        // Log if we have a large dataset
+        if (result.data && result.data.length > 100) {
+          console.log(`[BasesView] Loaded ${result.data.length} items. Pagination enabled (${itemsPerPage} per page)`);
+        }
       }
     };
 
     loadData();
-  }, [isVisible, activeBase, activeView, executeQuery, refreshKey]);
+  }, [isVisible, activeBase, activeView, executeQuery, refreshKey, itemsPerPage]);
 
   // Load available properties
   useEffect(() => {
@@ -102,6 +115,33 @@ export default function BasesView({ isVisible, onFileOpen }) {
   const handleColumnsChange = (newColumns) => {
     setCurrentColumns(newColumns);
   };
+
+  // Calculate pagination - memoized for performance
+  const { totalPages, startIndex, endIndex, paginatedData } = useMemo(() => {
+    const total = Math.ceil(viewData.length / itemsPerPage);
+    const start = (currentPage - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    const paginated = viewData.slice(start, end);
+
+    return {
+      totalPages: total,
+      startIndex: start,
+      endIndex: end,
+      paginatedData: paginated
+    };
+  }, [viewData, currentPage, itemsPerPage]);
+
+  // Pagination controls
+  const goToPage = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  const goToPreviousPage = () => goToPage(currentPage - 1);
+  const goToNextPage = () => goToPage(currentPage + 1);
+  const goToFirstPage = () => goToPage(1);
+  const goToLastPage = () => goToPage(totalPages);
 
   // Handle export
   const handleExport = () => {
@@ -215,21 +255,67 @@ export default function BasesView({ isVisible, onFileOpen }) {
             </div>
           )}
 
-          {/* Search Bar */}
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-app-muted pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search..."
-              className="pl-8 pr-3 py-1.5 text-xs bg-app-bg border border-app-border rounded text-app-text placeholder-app-muted focus:outline-none focus:border-app-accent transition-colors w-48"
-            />
-          </div>
+          {/* Search Bar with Debouncing */}
+          <DebouncedInput
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Search..."
+            delay={300}
+            style={{ width: '12rem' }}
+          />
 
           <span className="text-xs text-app-muted border-l border-app-border pl-3 ml-1">
             {filteredCount} of {totalCount} items
           </span>
+
+          {/* Pagination Controls - Essentials only */}
+          {viewData.length > itemsPerPage && (
+            <>
+              <div className="w-px h-4 bg-app-border ml-2" />
+              <div className="flex items-center gap-2 text-xs">
+                <button
+                  onClick={goToPreviousPage}
+                  disabled={currentPage === 1}
+                  className="p-1 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Previous page"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+
+                <span className="text-app-muted min-w-[60px] text-center">
+                  {currentPage} / {totalPages}
+                </span>
+
+                <button
+                  onClick={goToNextPage}
+                  disabled={currentPage === totalPages}
+                  className="p-1 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Next page"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-2 py-0.5 text-xs bg-app-bg border border-app-border rounded text-app-muted focus:outline-none focus:border-app-accent hover:text-app-text transition-colors"
+                  title="Items per page"
+                >
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                  <option value={500}>500</option>
+                </select>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -391,7 +477,7 @@ export default function BasesView({ isVisible, onFileOpen }) {
         {/* Always render BaseTableView for dropdown functionality */}
         <div style={{ display: viewType === 'table' ? 'flex' : 'none' }} className="flex-1 h-full">
           <BaseTableView
-            data={viewData}
+            data={paginatedData}
             base={activeBase}
             columns={currentColumns}
             onPropertyEdit={handlePropertyEdit}
@@ -421,7 +507,7 @@ export default function BasesView({ isVisible, onFileOpen }) {
 
         {viewType === 'list' && (
           <BaseListView
-            data={viewData}
+            data={paginatedData}
             onFileOpen={onFileOpen}
             searchQuery={searchQuery}
           />
@@ -429,7 +515,7 @@ export default function BasesView({ isVisible, onFileOpen }) {
 
         {viewType === 'grid' && (
           <BaseGridView
-            data={viewData}
+            data={paginatedData}
             onFileOpen={onFileOpen}
             searchQuery={searchQuery}
           />
@@ -483,4 +569,6 @@ export default function BasesView({ isVisible, onFileOpen }) {
       )}
     </div>
   );
-}
+});
+
+export default BasesView;
