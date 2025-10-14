@@ -248,39 +248,22 @@ export class BasesDataManager {
       // Convert backend format to our format
       const mdFiles = flatFiles.filter(file => file.name.endsWith('.md') || file.name.endsWith('.markdown'));
 
-      // Parse frontmatter for each file
-      const results = await Promise.all(
-        mdFiles.map(async (file) => {
+      // DON'T parse frontmatter for each file - too slow!
+      // Just use basic metadata for listing
+      const results = mdFiles.map((file) => {
           const filename = file.name;
           const filePath = normalizePath(file.path || `${this.workspacePath}/${filename}`);
           // Remove .md or .markdown extension to get title
           const title = filename.replace(/\.md$/, '').replace(/\.markdown$/, '');
 
-          // Parse frontmatter
+          // Don't load file content here - only on demand
+          // This was the performance killer!
           let frontmatterProperties = {};
-          try {
-            // Check cache first
-            if (this.frontmatterCache.has(filePath)) {
-              const cached = this.frontmatterCache.get(filePath);
-              frontmatterProperties = cached.properties || {};
-            } else {
-              // Read file content using Tauri
-              const fileContent = await invoke('read_file_content', { path: filePath });
 
-              // Parse frontmatter
-              const parsed = this.frontmatterParser.parseFile(filePath, fileContent);
-              frontmatterProperties = parsed.properties || {};
-
-              // Cache the result
-              this.frontmatterCache.set(filePath, parsed);
-
-              // Limit cache size
-              if (this.frontmatterCache.size > this.options.maxCacheSize) {
-                const firstKey = this.frontmatterCache.keys().next().value;
-                this.frontmatterCache.delete(firstKey);
-              }
-            }
-          } catch (error) {
+          // Only check cache, don't load new files
+          if (this.frontmatterCache.has(filePath)) {
+            const cached = this.frontmatterCache.get(filePath);
+            frontmatterProperties = cached.properties || {};
           }
 
           // Convert timestamps to milliseconds if needed (backend might return seconds)
@@ -303,8 +286,7 @@ export class BasesDataManager {
             size: file.size || 0,
             isDirectory: file.is_directory || false
           };
-        })
-      );
+        });
 
 
       return results;

@@ -454,3 +454,127 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Markdown rendering in kanban cards */
+.kanban-card-markdown {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+}
+
+/* Scrollbar styling for markdown overflow */
+.kanban-card-markdown::-webkit-scrollbar {
+  width: 4px;
+}
+
+.kanban-card-markdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.kanban-card-markdown::-webkit-scrollbar-thumb {
+  background: var(--app-border);
+  border-radius: 2px;
+}
+
+.kanban-card-markdown::-webkit-scrollbar-thumb:hover {
+  background: var(--app-muted);
+}
+
+.kanban-card-markdown p {
+  margin: 0.25rem 0;
+}
+
+.kanban-card-markdown p:first-child {
+  margin-top: 0;
+}
+
+.kanban-card-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.kanban-card-markdown strong {
+  font-weight: 600;
+  color: var(--app-text);
+}
+
+.kanban-card-markdown em {
+  font-style: italic;
+  color: var(--app-text);
+}
+
+.kanban-card-markdown a {
+  color: var(--app-accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s;
+}
+
+.kanban-card-markdown a:hover {
+  border-bottom-color: var(--app-accent);
+}
+
+.kanban-card-markdown code {
+  background: var(--app-panel);
+  padding: 0.125rem 0.25rem;
+  border-radius: 3px;
+  font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+  font-size: 0.7rem;
+  color: var(--app-accent);
+}
+
+.kanban-card-markdown ul,
+.kanban-card-markdown ol {
+  margin: 0.25rem 0;
+  padding-left: 1.25rem;
+}
+
+.kanban-card-markdown li {
+  margin: 0.125rem 0;
+}
+
+.kanban-card-markdown blockquote {
+  border-left: 2px solid var(--app-accent);
+  padding-left: 0.5rem;
+  margin: 0.25rem 0;
+  color: var(--app-muted);
+  font-style: italic;
+}
+
+.kanban-card-markdown h1,
+.kanban-card-markdown h2,
+.kanban-card-markdown h3,
+.kanban-card-markdown h4 {
+  font-weight: 600;
+  margin: 0.5rem 0 0.25rem 0;
+  color: var(--app-text);
+}
+
+.kanban-card-markdown h1 {
+  font-size: 0.9rem;
+}
+
+.kanban-card-markdown h2 {
+  font-size: 0.85rem;
+}
+
+.kanban-card-markdown h3,
+.kanban-card-markdown h4 {
+  font-size: 0.8rem;
+}
+
+.kanban-card-markdown pre {
+  background: var(--app-panel);
+  padding: 0.5rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+
+.kanban-card-markdown pre code {
+  background: none;
+  padding: 0;
+  color: var(--app-text);
+  font-size: 0.7rem;
+}

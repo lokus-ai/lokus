@@ -384,7 +384,25 @@ fn main() {
 
       // Initialize MCP Server Manager
       let mcp_manager = mcp::MCPServerManager::new(app.handle().clone());
-      app.manage(mcp_manager);
+      app.manage(mcp_manager.clone());
+
+      // Auto-start HTTP MCP server for CLI integration
+      let mcp_manager_clone = mcp_manager.clone();
+      tauri::async_runtime::spawn(async move {
+        // Small delay to ensure MCP setup completes first
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+        match mcp_manager_clone.auto_start() {
+          Ok(status) => {
+            println!("[MCP] ✅ HTTP server auto-started successfully");
+            println!("[MCP] 🔗 CLI endpoint: http://localhost:{}/mcp", status.port);
+          }
+          Err(e) => {
+            eprintln!("[MCP] ⚠️  Failed to auto-start HTTP server: {}", e);
+            eprintln!("[MCP] ℹ️  CLI integration will not work until server is started manually");
+          }
+        }
+      });
 
       // Initialize auth state
       let auth_state = auth::SharedAuthState::default();

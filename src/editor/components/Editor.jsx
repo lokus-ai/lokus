@@ -509,24 +509,61 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
       case 'redo':
         editor.commands.redo();
         break;
+      case 'toggleBold':
+        editor.chain().focus().toggleBold().run();
+        break;
+      case 'toggleItalic':
+        editor.chain().focus().toggleItalic().run();
+        break;
+      case 'toggleStrikethrough':
+        editor.chain().focus().toggleStrike().run();
+        break;
+      case 'toggleCode':
+        editor.chain().focus().toggleCode().run();
+        break;
+      case 'clearFormatting':
+        editor.chain().focus().clearNodes().unsetAllMarks().run();
+        break;
+      case 'setHeading':
+        if (data?.level) {
+          editor.chain().focus().setHeading({ level: data.level }).run();
+        }
+        break;
+      case 'setParagraph':
+        editor.chain().focus().setParagraph().run();
+        break;
+      case 'toggleBulletList':
+        editor.chain().focus().toggleBulletList().run();
+        break;
+      case 'toggleOrderedList':
+        editor.chain().focus().toggleOrderedList().run();
+        break;
+      case 'toggleTaskList':
+        editor.chain().focus().toggleTaskList().run();
+        break;
       case 'find':
-        // TODO: Implement find functionality
+        // Trigger in-file search
+        window.dispatchEvent(new CustomEvent('lokus:toggle-search'));
         break;
       case 'findAndReplace':
-        // TODO: Implement find and replace
+        // Trigger in-file search with replace mode
+        window.dispatchEvent(new CustomEvent('lokus:toggle-search', { detail: { replaceMode: true } }));
         break;
       case 'commandPalette':
         // Dispatch event to open command palette
-        try {
-          window.dispatchEvent(new CustomEvent('lokus:command-palette'));
-        } catch (e) {
-        }
+        window.dispatchEvent(new CustomEvent('lokus:command-palette'));
         break;
       case 'insertTable':
         insertTestTable();
         break;
       case 'insertCodeBlock':
         editor.commands.setCodeBlock();
+        break;
+      case 'insertQuote':
+        editor.chain().focus().toggleBlockquote().run();
+        break;
+      case 'insertHorizontalRule':
+        editor.chain().focus().setHorizontalRule().run();
         break;
       case 'insertLink':
         const url = window.prompt('Enter URL:');
@@ -541,13 +578,52 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         }
         break;
       case 'exportMarkdown':
-        // TODO: Implement markdown export
+        // Export content as markdown
+        try {
+          const content = editor.getHTML();
+          const blob = new Blob([content], { type: 'text/markdown' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'export.md';
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          console.error('Failed to export markdown:', e);
+        }
         break;
       case 'exportHTML':
-        // TODO: Implement HTML export  
+        // Export content as HTML
+        try {
+          const content = editor.getHTML();
+          const blob = new Blob([content], { type: 'text/html' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'export.html';
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          console.error('Failed to export HTML:', e);
+        }
+        break;
+      case 'exportPDF':
+        // PDF export would require additional library
+        alert('PDF export coming soon!');
         break;
       case 'importFile':
-        // TODO: Implement file import
+        // Trigger file import dialog
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.md,.txt,.html';
+        input.onchange = async (e) => {
+          const file = e.target.files[0];
+          if (file) {
+            const text = await file.text();
+            editor.commands.setContent(text);
+          }
+        };
+        input.click();
         break;
       default:
     }

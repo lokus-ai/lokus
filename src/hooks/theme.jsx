@@ -11,16 +11,38 @@ const ThemeCtx = createContext(null);
 
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(null);
+  const [isThemeLoaded, setIsThemeLoaded] = useState(false);
 
-  // Load initial theme from config
+  // Load initial theme from config with better error handling
   useEffect(() => {
     async function loadInitial() {
-      console.log('🎨 ThemeProvider loading initial theme');
-      const visuals = await readGlobalVisuals();
-      console.log('🎨 Read global visuals:', visuals);
-      setTheme(visuals.theme);
-      await applyInitialTheme();
-      console.log('🎨 Applied initial theme');
+      try {
+        console.log('🎨 ThemeProvider loading initial theme');
+
+        // Apply initial theme immediately to prevent flash of unthemed content
+        await applyInitialTheme();
+
+        // Then read the actual configured theme
+        const visuals = await readGlobalVisuals();
+        console.log('🎨 Read global visuals:', visuals);
+
+        if (visuals && visuals.theme) {
+          setTheme(visuals.theme);
+          // Re-apply theme if it's different from the initial
+          await setGlobalActiveTheme(visuals.theme);
+        } else {
+          // Fallback to a default theme if none is configured
+          console.log('🎨 No theme configured, using default');
+          setTheme('default');
+        }
+
+        setIsThemeLoaded(true);
+        console.log('🎨 Theme initialization complete');
+      } catch (error) {
+        console.error('🎨 Error loading initial theme:', error);
+        // Ensure we still mark as loaded to prevent infinite loading
+        setIsThemeLoaded(true);
+      }
     }
     loadInitial();
   }, []);
@@ -67,7 +89,20 @@ export function ThemeProvider({ children }) {
   const value = {
     theme,
     setTheme: handleSetTheme,
+    isThemeLoaded,
   };
+
+  // Optionally show a loading state while theme is being loaded
+  // This prevents flash of unthemed content on initial load
+  if (!isThemeLoaded) {
+    return (
+      <ThemeCtx.Provider value={value}>
+        <div className="fixed inset-0 bg-app-bg" style={{ visibility: 'hidden' }}>
+          {children}
+        </div>
+      </ThemeCtx.Provider>
+    );
+  }
 
   return <ThemeCtx.Provider value={value}>{children}</ThemeCtx.Provider>;
 }
