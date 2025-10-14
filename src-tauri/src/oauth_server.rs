@@ -210,7 +210,7 @@ async fn handle_health_check() -> Result<HyperResponse, Box<dyn std::error::Erro
         .header("Content-Type", "application/json")
         .body(Full::new(Bytes::from(format!(
             r#"{{"status": "ok", "port": {}}}"#,
-            OAUTH_PORT
+            get_oauth_port()
         ))))?)
 }
 

@@ -31,7 +31,7 @@ export const kanbanTools = [
   },
   {
     name: "create_board",
-    description: "Create a new kanban board",
+    description: "Create a new kanban board. Supports automatic date-based column creation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -43,6 +43,24 @@ export const kanbanTools = [
           type: "array",
           items: { type: "string" },
           description: "Column names (e.g., ['To Do', 'In Progress', 'Done'])"
+        },
+        dateType: {
+          type: "string",
+          enum: ["monthly", "quarterly", "yearly", "custom"],
+          description: "Type of date-based columns to create (optional)"
+        },
+        startDate: {
+          type: "string",
+          description: "Start date for date-based columns (YYYY-MM-DD format, optional)"
+        },
+        endDate: {
+          type: "string",
+          description: "End date for date-based columns (YYYY-MM-DD format, optional)"
+        },
+        additionalColumns: {
+          type: "array",
+          items: { type: "string" },
+          description: "Additional status columns (e.g., ['Applied', 'Accepted', 'Rejected'])"
         }
       },
       required: ["name"]
@@ -254,27 +272,50 @@ async function getBoard(workspace, boardId) {
   }
 }
 
-async function createBoard(workspace, { name, columns = ['To Do', 'In Progress', 'Done'] }) {
+async function createBoard(workspace, { name, columns, dateType, startDate, endDate, additionalColumns = [] }) {
   const kanbanDir = join(workspace, '.lokus', 'kanban');
   await mkdir(kanbanDir, { recursive: true });
 
   const boardId = name.toLowerCase().replace(/[^a-z0-9]/g, '-');
   const boardPath = join(kanbanDir, `${boardId}.json`);
 
+  const now = new Date().toISOString();
+
   const board = {
-    id: boardId,
+    version: "1.0.0",
     name,
     columns: {},
-    created: new Date().toISOString(),
-    modified: new Date().toISOString()
+    settings: {
+      card_template: {},
+      automations: [],
+      custom_fields: []
+    },
+    metadata: {
+      created: now,
+      modified: now,
+      created_with: "Lokus MCP"
+    }
   };
 
+  let finalColumns = columns || ['To Do', 'In Progress', 'Done'];
+
+  // Generate date-based columns if requested
+  if (dateType && startDate) {
+    finalColumns = generateDateColumns(dateType, startDate, endDate);
+    // Add additional status columns at the end
+    if (additionalColumns.length > 0) {
+      finalColumns = [...finalColumns, ...additionalColumns];
+    }
+  }
+
   // Initialize columns
-  for (const columnName of columns) {
-    board.columns[columnName] = {
+  for (let i = 0; i < finalColumns.length; i++) {
+    const columnName = finalColumns[i];
+    const columnId = columnName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    board.columns[columnId] = {
       name: columnName,
-      cards: [],
-      order: columns.indexOf(columnName)
+      order: i,
+      cards: []
     };
   }
 
@@ -283,9 +324,41 @@ async function createBoard(workspace, { name, columns = ['To Do', 'In Progress',
   return {
     content: [{
       type: "text",
-      text: `✅ Kanban board "${name}" created with ${columns.length} columns:\n${columns.map(c => `  - ${c}`).join('\n')}`
+      text: `✅ Kanban board "${name}" created with ${Object.keys(board.columns).length} columns:\n${finalColumns.map(c => `  - ${c}`).join('\n')}`
     }]
   };
+}
+
+function generateDateColumns(dateType, startDateStr, endDateStr) {
+  const columns = [];
+  const startDate = new Date(startDateStr);
+  const endDate = endDateStr ? new Date(endDateStr) : new Date(startDate.getFullYear() + 1, startDate.getMonth(), 1);
+
+  if (dateType === 'monthly') {
+    let current = new Date(startDate);
+    while (current <= endDate) {
+      const monthName = current.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      columns.push(`📅 ${monthName}`);
+      current.setMonth(current.getMonth() + 1);
+    }
+  } else if (dateType === 'quarterly') {
+    let current = new Date(startDate);
+    let quarter = Math.floor(current.getMonth() / 3) + 1;
+    while (current <= endDate) {
+      columns.push(`📅 Q${quarter} ${current.getFullYear()}`);
+      current.setMonth(current.getMonth() + 3);
+      quarter = Math.floor(current.getMonth() / 3) + 1;
+    }
+  } else if (dateType === 'yearly') {
+    let year = startDate.getFullYear();
+    const endYear = endDate.getFullYear();
+    while (year <= endYear) {
+      columns.push(`📅 ${year}`);
+      year++;
+    }
+  }
+
+  return columns;
 }
 
 async function addCard(workspace, { boardId, column, card }) {
@@ -299,6 +372,8 @@ async function addCard(workspace, { boardId, column, card }) {
       throw new Error(`Column "${column}" not found`);
     }
 
+    const now = new Date().toISOString();
+
     const newCard = {
       id: card.id || Date.now().toString(36) + Math.random().toString(36).substr(2),
       title: card.title || 'Untitled',
@@ -306,15 +381,16 @@ async function addCard(workspace, { boardId, column, card }) {
       tags: card.tags || [],
       assignee: card.assignee || null,
       priority: card.priority || 'normal',
-      dueDate: card.dueDate || null,
-      created: new Date().toISOString(),
-      modified: new Date().toISOString(),
-      ...card
+      due_date: card.due_date || card.dueDate || null,
+      linked_notes: card.linked_notes || [],
+      checklist: card.checklist || [],
+      created: now,
+      modified: now
     };
 
     board.columns[column].cards = board.columns[column].cards || [];
     board.columns[column].cards.push(newCard);
-    board.modified = new Date().toISOString();
+    board.metadata.modified = now;
 
     await writeFile(boardPath, JSON.stringify(board, null, 2));
 
@@ -357,7 +433,7 @@ async function moveCard(workspace, { boardId, cardId, fromColumn, toColumn }) {
     // Add to target column
     board.columns[toColumn].cards = board.columns[toColumn].cards || [];
     board.columns[toColumn].cards.push(card);
-    board.modified = new Date().toISOString();
+    board.metadata.modified = new Date().toISOString();
 
     await writeFile(boardPath, JSON.stringify(board, null, 2));
 
@@ -404,7 +480,7 @@ async function updateCard(workspace, { boardId, cardId, updates }) {
       throw new Error(`Card ${cardId} not found`);
     }
 
-    board.modified = new Date().toISOString();
+    board.metadata.modified = new Date().toISOString();
     await writeFile(boardPath, JSON.stringify(board, null, 2));
 
     return {

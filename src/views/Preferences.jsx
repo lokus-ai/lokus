@@ -337,24 +337,14 @@ export default function Preferences() {
   // Add error boundary
   try {
     return (
-      <div className="h-screen bg-app-bg text-app-text flex flex-col" style={{ 
-        minHeight: '100vh', 
-        backgroundColor: 'var(--bg, #ffffff)', 
-        color: 'var(--text, #000000)',
-        fontFamily: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif'
-      }}>
-        <header className="h-12 px-4 flex items-center border-b border-app-border bg-app-panel" style={{ 
-          backgroundColor: 'var(--panel, #f5f5f5)', 
-          borderColor: 'var(--border, #e5e5e5)',
-          borderBottomWidth: '1px',
-          borderBottomStyle: 'solid'
-        }}>
-          <div className="font-medium" style={{ fontSize: '14px', fontWeight: '500' }}>Preferences</div>
+      <div className="h-screen bg-app-bg text-app-text flex flex-col">
+        <header className="h-12 px-4 flex items-center border-b border-app-border bg-app-panel">
+          <div className="font-medium text-sm">Preferences</div>
         </header>
 
-      <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: "220px 1px 1fr" }}>
+      <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: "220px 1fr" }}>
         {/* Sidebar */}
-        <aside className="bg-app-panel/50 p-3">
+        <aside className="bg-app-panel border-r border-app-border p-3">
           {[
             // "General",
             "Appearance",
@@ -376,7 +366,6 @@ export default function Preferences() {
             </button>
           ))}
         </aside>
-        <div className="bg-app-border/20 w-px" />
 
         {/* Content */}
         <main className="p-6 overflow-auto">
@@ -1425,7 +1414,7 @@ export default function Preferences() {
                           markdownSyntax.heading?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
                         }`}
                       >
-                        <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
+                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
                           markdownSyntax.heading?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
                         }`}></div>
                       </button>
@@ -1458,7 +1447,7 @@ export default function Preferences() {
                           markdownSyntax.bold?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
                         }`}
                       >
-                        <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
+                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
                           markdownSyntax.bold?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
                         }`}></div>
                       </button>
@@ -1491,7 +1480,7 @@ export default function Preferences() {
                           markdownSyntax.italic?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
                         }`}
                       >
-                        <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
+                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
                           markdownSyntax.italic?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
                         }`}></div>
                       </button>
@@ -1524,7 +1513,7 @@ export default function Preferences() {
                           markdownSyntax.inlineCode?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
                         }`}
                       >
-                        <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
+                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
                           markdownSyntax.inlineCode?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
                         }`}></div>
                       </button>
@@ -1557,7 +1546,7 @@ export default function Preferences() {
                           markdownSyntax.strikethrough?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
                         }`}
                       >
-                        <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
+                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
                           markdownSyntax.strikethrough?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
                         }`}></div>
                       </button>
@@ -1590,7 +1579,7 @@ export default function Preferences() {
                           markdownSyntax.highlight?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
                         }`}
                       >
-                        <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
+                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
                           markdownSyntax.highlight?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
                         }`}></div>
                       </button>
@@ -1625,7 +1614,7 @@ export default function Preferences() {
                           markdownSyntax.bulletList?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
                         }`}
                       >
-                        <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
+                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
                           markdownSyntax.bulletList?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
                         }`}></div>
                       </button>
@@ -1658,7 +1647,7 @@ export default function Preferences() {
                           markdownSyntax.blockquote?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
                         }`}
                       >
-                        <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
+                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
                           markdownSyntax.blockquote?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
                         }`}></div>
                       </button>
@@ -1701,7 +1690,7 @@ export default function Preferences() {
                           markdownSyntax.link?.wikiLink?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
                         }`}
                       >
-                        <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
+                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
                           markdownSyntax.link?.wikiLink?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
                         }`}></div>
                       </button>
@@ -1734,7 +1723,7 @@ export default function Preferences() {
                           markdownSyntax.image?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
                         }`}
                       >
-                        <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
+                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
                           markdownSyntax.image?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
                         }`}></div>
                       </button>
@@ -1900,7 +1889,7 @@ export default function Preferences() {
                           <p className="text-xs text-app-text-secondary">Coming soon</p>
                         </div>
                       </div>
-                      <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+                      <div className="w-3 h-3 bg-app-muted rounded-full"></div>
                     </div>
                   </div>
 
@@ -1916,7 +1905,7 @@ export default function Preferences() {
                           <p className="text-xs text-app-text-secondary">Coming soon</p>
                         </div>
                       </div>
-                      <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+                      <div className="w-3 h-3 bg-app-muted rounded-full"></div>
                     </div>
                   </div>
 
@@ -1932,7 +1921,7 @@ export default function Preferences() {
                           <p className="text-xs text-app-text-secondary">Coming soon</p>
                         </div>
                       </div>
-                      <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+                      <div className="w-3 h-3 bg-app-muted rounded-full"></div>
                     </div>
                   </div>
                 </div>
@@ -2079,13 +2068,16 @@ export default function Preferences() {
   } catch (error) {
     console.error('🔧 Preferences rendering error:', error);
     return (
-      <div style={{ padding: '20px', backgroundColor: '#ffffff', color: '#000000', minHeight: '100vh' }}>
-        <h1>Preferences</h1>
-        <p>There was an error loading preferences. Check the console for details.</p>
-        <p style={{ color: '#ff0000', fontFamily: 'monospace', fontSize: '12px' }}>
+      <div className="p-5 bg-app-bg text-app-text min-h-screen">
+        <h1 className="text-2xl font-bold mb-4">Preferences</h1>
+        <p className="text-app-muted mb-4">There was an error loading preferences. Check the console for details.</p>
+        <p className="text-red-500 font-mono text-xs mb-4 p-3 bg-red-500/10 rounded">
           {error.toString()}
         </p>
-        <button onClick={() => window.location.reload()} style={{ padding: '10px', marginTop: '10px' }}>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-app-accent text-app-accent-fg rounded hover:opacity-90 transition-opacity"
+        >
           Reload Window
         </button>
       </div>

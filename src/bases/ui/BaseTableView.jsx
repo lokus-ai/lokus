@@ -249,6 +249,9 @@ export default function BaseTableView({
   const [selectedRows, setSelectedRows] = useState(new Set()) // Set of selected row paths
   const [lastSelectedIndex, setLastSelectedIndex] = useState(null) // For shift-click selection
 
+  // Path expansion state
+  const [expandedPaths, setExpandedPaths] = useState(new Set()) // Set of expanded path cells (format: "rowPath:column")
+
   // COMPUTED VALUES AFTER STATE
   // Use data prop if available, otherwise fall back to notes prop, or use test data
   const items = data?.length > 0 ? data : notes?.length > 0 ? notes : [
@@ -810,10 +813,30 @@ export default function BaseTableView({
     }))
   }
 
+  // Path expansion handler
+  const handleTogglePathExpansion = (rowPath, column) => {
+    const key = `${rowPath}:${column}`;
+    setExpandedPaths(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
+    });
+  }
+
   // Cell editing handlers
   const handleCellClick = (item, column) => {
+    // Path column has special click behavior (expand/collapse)
+    if (column === 'path') {
+      handleTogglePathExpansion(item.path, column);
+      return;
+    }
+
     // Don't allow editing name column or computed columns
-    if (column === 'name' || column === 'created' || column === 'modified' || column === 'size' || column === 'path' || column === 'extension') {
+    if (column === 'name' || column === 'created' || column === 'modified' || column === 'size' || column === 'extension') {
       return
     }
 
@@ -1038,28 +1061,33 @@ export default function BaseTableView({
         </div>
       )}
 
-      {/* Clean table with proper dark theme colors */}
+      {/* Modern clean table with Notion/Linear aesthetic */}
       <div className="flex-1 bg-app-bg relative" style={{ overflow: 'auto' }}>
         <div style={{ display: 'inline-block', minWidth: '100%' }}>
-          <table style={{ width: 'fit-content' }}>
+          <table className="w-full border-separate" style={{ borderSpacing: 0 }}>
           {/* Table header */}
-          <thead className="sticky top-0 z-10 bg-app-bg">
-            <tr className="border-b border-app-border">
+          <thead className="sticky top-0 z-10 bg-app-bg border-b-2 border-app-border">
+            <tr>
               {/* Selection checkbox column */}
               <th
-                className="px-4 py-2 w-12 border-r border-app-border/30 sticky left-0 z-30"
+                className="px-4 py-3 w-12 text-left align-middle font-semibold text-xs text-app-muted uppercase tracking-wide border-r border-app-border/50 sticky left-0 z-30 bg-app-bg"
                 style={{
                   width: 48,
                   backgroundColor: 'var(--app-bg)',
-                  boxShadow: '2px 0 8px 0 rgba(0,0,0,0.3)'
+                  boxShadow: '2px 0 8px 0 rgba(0,0,0,0.15)'
                 }}
               >
-                <input
-                  type="checkbox"
-                  checked={scopedItems.length > 0 && selectedRows.size === scopedItems.length}
-                  onChange={(e) => handleSelectAll(e.target.checked)}
-                  className="w-4 h-4 rounded border-app-border text-app-accent focus:ring-app-accent focus:ring-2 cursor-pointer"
-                />
+                <div className="relative flex items-center justify-center">
+                  <input
+                    type="checkbox"
+                    checked={scopedItems.length > 0 && selectedRows.size === scopedItems.length}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    className="appearance-none w-4 h-4 border-2 border-app-border rounded bg-transparent checked:bg-app-accent checked:border-app-accent focus:outline-none focus:ring-2 focus:ring-app-accent/20 transition-all cursor-pointer"
+                  />
+                  {scopedItems.length > 0 && selectedRows.size === scopedItems.length && (
+                    <Check className="w-3 h-3 text-white absolute pointer-events-none" />
+                  )}
+                </div>
               </th>
 
               {displayColumns.map((column, index) => (
@@ -1070,7 +1098,7 @@ export default function BaseTableView({
                   onDragOver={(e) => handleDragOver(e, column)}
                   onDragEnd={handleDragEnd}
                   onDrop={(e) => handleDrop(e, column)}
-                  className={`group px-4 py-2 text-left text-xs font-medium text-app-muted uppercase tracking-wide border-r border-app-border/30 last:border-r-0 relative bg-app-bg transition-all ${
+                  className={`group px-4 py-3 text-left text-xs font-semibold text-app-muted uppercase tracking-wide border-r border-app-border/50 last:border-r-0 relative bg-app-bg transition-all ${
                     draggedColumn === column ? 'opacity-50' : ''
                   } ${
                     column !== 'name' ? 'cursor-move' : ''
@@ -1082,7 +1110,7 @@ export default function BaseTableView({
                     zIndex: pinnedColumns[column] ? 30 : 10,
                     backgroundColor: 'var(--app-bg)',
                     ...(pinnedColumns[column] ? {
-                      boxShadow: '2px 0 8px 0 rgba(0,0,0,0.3)',
+                      boxShadow: '2px 0 8px 0 rgba(0,0,0,0.15)',
                     } : {}),
                   }}
                 >
@@ -1098,11 +1126,12 @@ export default function BaseTableView({
 
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      {/* Drag handle */}
+                      {/* Drag handle - always visible to indicate draggability */}
                       {column !== 'name' && (
                         <GripVertical
-                          className="w-3 h-3 text-app-muted/50 group-hover:text-app-muted flex-shrink-0"
+                          className="w-3 h-3 text-app-muted/40 group-hover:text-app-muted flex-shrink-0"
                           style={{ cursor: 'grab' }}
+                          title="Drag to reorder column"
                         />
                       )}
                       <span className="truncate">{column === 'name' ? 'File Name' : column.charAt(0).toUpperCase() + column.slice(1)}</span>
@@ -1123,14 +1152,15 @@ export default function BaseTableView({
                     </button>
                   </div>
 
-                  {/* Resize handle - wider hit area */}
+                  {/* Resize handle - wider hit area with visible indicator */}
                   <div
                     onMouseDown={(e) => handleResizeStart(e, column)}
-                    className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize hover:bg-app-accent/50 transition-colors"
+                    className="absolute right-0 top-0 bottom-0 w-1 bg-app-border/30 hover:bg-app-accent hover:w-1.5 cursor-col-resize transition-all"
                     style={{
-                      marginRight: '-6px',
+                      marginRight: '-2px',
                       zIndex: 40
                     }}
+                    title="Drag to resize column"
                   />
                 </th>
               ))}
@@ -1166,26 +1196,32 @@ export default function BaseTableView({
                     return (
                     <tr
                       key={item.id || item.path || itemIndex}
-                      className={`border-b border-app-border/20 group transition-colors ${
-                        selectedRows.has(item.path) ? 'bg-app-accent/5' : ''
+                      className={`border-b border-app-border/50 group transition-all hover:bg-app-surface ${
+                        selectedRows.has(item.path) ? 'bg-app-accent/10' : itemIndex % 2 === 0 ? 'bg-app-bg' : 'bg-app-surface/30'
                       }`}
                     >
                       {/* Selection checkbox */}
                       <td
-                        className="px-4 py-3 w-12 border-r border-app-border/10 sticky left-0 z-25"
+                        className={`px-4 py-3 w-12 border-r border-app-border/30 sticky left-0 z-25 ${
+                          selectedRows.has(item.path) ? 'bg-app-accent/10' : itemIndex % 2 === 0 ? 'bg-app-bg' : 'bg-app-surface/30'
+                        }`}
                         style={{
                           width: 48,
-                          backgroundColor: 'var(--app-bg)',
-                          boxShadow: '2px 0 8px 0 rgba(0,0,0,0.3)'
+                          boxShadow: '2px 0 8px 0 rgba(0,0,0,0.15)'
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          checked={selectedRows.has(item.path)}
-                          onChange={(e) => handleSelectRow(item.path, globalIndex, e)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-4 h-4 rounded border-app-border text-app-accent focus:ring-app-accent focus:ring-2 cursor-pointer"
-                        />
+                        <div className="relative flex items-center justify-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedRows.has(item.path)}
+                            onChange={(e) => handleSelectRow(item.path, globalIndex, e)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="appearance-none w-4 h-4 border-2 border-app-border rounded bg-transparent checked:bg-app-accent checked:border-app-accent focus:outline-none focus:ring-2 focus:ring-app-accent/20 transition-all cursor-pointer"
+                          />
+                          {selectedRows.has(item.path) && (
+                            <Check className="w-3 h-3 text-white absolute pointer-events-none" />
+                          )}
+                        </div>
                       </td>
 
                       {displayColumns.map((column, colIndex) => {
@@ -1196,17 +1232,16 @@ export default function BaseTableView({
                         return (
                         <td
                           key={`${item.id || item.path}-${column}`}
-                          className={`px-4 py-3 text-sm text-app-text border-r border-app-border/10 last:border-r-0 group/cell ${
-                            !pinnedColumns[column] ? 'group-hover:bg-app-accent/5 transition-colors' : ''
+                          className={`px-4 py-3 text-sm text-app-text align-middle border-r border-app-border/30 last:border-r-0 group/cell ${
+                            selectedRows.has(item.path) ? 'bg-app-accent/10' : itemIndex % 2 === 0 ? 'bg-app-bg' : 'bg-app-surface/30'
                           }`}
                           style={{
                             width: columnWidths[column] || 200,
                             position: pinnedColumns[column] ? 'sticky' : 'relative',
                             left: pinnedColumns[column] ? (colIndex === 0 ? 0 : columnWidths['name'] || 300) : 'auto',
                             zIndex: pinnedColumns[column] ? 25 : 'auto',
-                            backgroundColor: pinnedColumns[column] ? 'var(--app-bg)' : 'transparent',
                             ...(pinnedColumns[column] ? {
-                              boxShadow: '2px 0 8px 0 rgba(0,0,0,0.3)',
+                              boxShadow: '2px 0 8px 0 rgba(0,0,0,0.15)',
                             } : {}),
                           }}
                         >
@@ -1245,13 +1280,25 @@ export default function BaseTableView({
                             <div
                               onClick={() => handleCellClick(item, column)}
                               className={`text-app-text px-2 py-1 -mx-2 -my-1 rounded transition-colors ${
-                                // Read-only columns: no cursor pointer, no hover effects
-                                column === 'created' || column === 'modified' || column === 'size' || column === 'path' || column === 'extension'
+                                // Path column: clickable to expand
+                                column === 'path'
+                                  ? 'cursor-pointer hover:bg-app-accent/10 group-hover:border group-hover:border-app-border/30'
+                                  // Other read-only columns: no cursor pointer, no hover effects
+                                  : column === 'created' || column === 'modified' || column === 'size' || column === 'extension'
                                   ? 'cursor-default'
                                   : 'cursor-pointer hover:bg-app-accent/10 group-hover:border group-hover:border-app-border/30'
                               }`}
                             >
-                              {column === 'tags' && Array.isArray(cellValue) ? (
+                              {column === 'path' ? (
+                                <div className="flex items-center gap-1">
+                                  <span className={expandedPaths.has(`${item.path}:${column}`) ? 'whitespace-normal break-all' : 'truncate'}>
+                                    {cellValue || '—'}
+                                  </span>
+                                  <span className="text-xs text-app-muted flex-shrink-0">
+                                    {expandedPaths.has(`${item.path}:${column}`) ? '▼' : '▶'}
+                                  </span>
+                                </div>
+                              ) : column === 'tags' && Array.isArray(cellValue) ? (
                                 <div className="flex flex-wrap gap-1">
                                   {cellValue.map((tag, i) => (
                                     <span
@@ -1282,26 +1329,32 @@ export default function BaseTableView({
               scopedItems.map((item, index) => (
               <tr
                 key={item.id || item.path || index}
-                className={`border-b border-app-border/20 group transition-colors ${
-                  selectedRows.has(item.path) ? 'bg-app-accent/5' : ''
+                className={`border-b border-app-border/50 group transition-all hover:bg-app-surface ${
+                  selectedRows.has(item.path) ? 'bg-app-accent/10' : index % 2 === 0 ? 'bg-app-bg' : 'bg-app-surface/30'
                 }`}
               >
                 {/* Selection checkbox */}
                 <td
-                  className="px-4 py-3 w-12 border-r border-app-border/10 sticky left-0 z-25"
+                  className={`px-4 py-3 w-12 border-r border-app-border/30 sticky left-0 z-25 ${
+                    selectedRows.has(item.path) ? 'bg-app-accent/10' : index % 2 === 0 ? 'bg-app-bg' : 'bg-app-surface/30'
+                  }`}
                   style={{
                     width: 48,
-                    backgroundColor: 'var(--app-bg)',
-                    boxShadow: '2px 0 8px 0 rgba(0,0,0,0.3)'
+                    boxShadow: '2px 0 8px 0 rgba(0,0,0,0.15)'
                   }}
                 >
-                  <input
-                    type="checkbox"
-                    checked={selectedRows.has(item.path)}
-                    onChange={(e) => handleSelectRow(item.path, index, e)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-4 h-4 rounded border-app-border text-app-accent focus:ring-app-accent focus:ring-2 cursor-pointer"
-                  />
+                  <div className="relative flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedRows.has(item.path)}
+                      onChange={(e) => handleSelectRow(item.path, index, e)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="appearance-none w-4 h-4 border-2 border-app-border rounded bg-transparent checked:bg-app-accent checked:border-app-accent focus:outline-none focus:ring-2 focus:ring-app-accent/20 transition-all cursor-pointer"
+                    />
+                    {selectedRows.has(item.path) && (
+                      <Check className="w-3 h-3 text-white absolute pointer-events-none" />
+                    )}
+                  </div>
                 </td>
 
                 {displayColumns.map((column, colIndex) => {
@@ -1312,17 +1365,16 @@ export default function BaseTableView({
                   return (
                   <td
                     key={`${item.id || item.path}-${column}`}
-                    className={`px-4 py-3 text-sm text-app-text border-r border-app-border/10 last:border-r-0 group/cell ${
-                      !pinnedColumns[column] ? 'group-hover:bg-app-accent/5 transition-colors' : ''
+                    className={`px-4 py-3 text-sm text-app-text align-middle border-r border-app-border/30 last:border-r-0 group/cell ${
+                      selectedRows.has(item.path) ? 'bg-app-accent/10' : index % 2 === 0 ? 'bg-app-bg' : 'bg-app-surface/30'
                     }`}
                     style={{
                       width: columnWidths[column] || 200,
                       position: pinnedColumns[column] ? 'sticky' : 'relative',
                       left: pinnedColumns[column] ? (colIndex === 0 ? 0 : columnWidths['name'] || 300) : 'auto',
                       zIndex: pinnedColumns[column] ? 25 : 'auto',
-                      backgroundColor: pinnedColumns[column] ? 'var(--app-bg)' : 'transparent',
                       ...(pinnedColumns[column] ? {
-                        boxShadow: '2px 0 8px 0 rgba(0,0,0,0.3)',
+                        boxShadow: '2px 0 8px 0 rgba(0,0,0,0.15)',
                       } : {}),
                     }}
                   >
@@ -1361,13 +1413,25 @@ export default function BaseTableView({
                       <div
                         onClick={() => handleCellClick(item, column)}
                         className={`text-app-text px-2 py-1 -mx-2 -my-1 rounded transition-colors ${
-                          // Read-only columns: no cursor pointer, no hover effects
-                          column === 'created' || column === 'modified' || column === 'size' || column === 'path' || column === 'extension'
+                          // Path column: clickable to expand
+                          column === 'path'
+                            ? 'cursor-pointer hover:bg-app-accent/10 group-hover:border group-hover:border-app-border/30'
+                            // Other read-only columns: no cursor pointer, no hover effects
+                            : column === 'created' || column === 'modified' || column === 'size' || column === 'extension'
                             ? 'cursor-default'
                             : 'cursor-pointer hover:bg-app-accent/10 group-hover:border group-hover:border-app-border/30'
                         }`}
                       >
-                        {column === 'tags' && Array.isArray(cellValue) ? (
+                        {column === 'path' ? (
+                          <div className="flex items-center gap-1">
+                            <span className={expandedPaths.has(`${item.path}:${column}`) ? 'whitespace-normal break-all' : 'truncate'}>
+                              {cellValue || '—'}
+                            </span>
+                            <span className="text-xs text-app-muted flex-shrink-0">
+                              {expandedPaths.has(`${item.path}:${column}`) ? '▼' : '▶'}
+                            </span>
+                          </div>
+                        ) : column === 'tags' && Array.isArray(cellValue) ? (
                           <div className="flex flex-wrap gap-1">
                             {cellValue.map((tag, i) => (
                               <span

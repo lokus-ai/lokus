@@ -1,7 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/core'
 import { Plus, X, MoreHorizontal, GripVertical, Pencil, Trash2, RefreshCw } from 'lucide-react'
+import MarkdownIt from 'markdown-it'
+
+// Initialize markdown renderer
+const md = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+  typographer: true
+})
 
 // Individual task card component
 function TaskCard({ task, onUpdate, onDelete, isDragging }) {
@@ -13,6 +22,12 @@ function TaskCard({ task, onUpdate, onDelete, isDragging }) {
     id: task.id,
     data: { type: 'card', task }
   })
+
+  // Render markdown description
+  const renderedDescription = useMemo(() => {
+    if (!task.description) return null
+    return md.render(task.description)
+  }, [task.description])
 
   const handleSave = useCallback(async () => {
     if (title.trim() && title !== task.title) {
@@ -116,16 +131,19 @@ function TaskCard({ task, onUpdate, onDelete, isDragging }) {
       </div>
 
       {task.description && (
-        <div className="mt-2 text-xs text-app-muted">
-          {task.description}
-        </div>
+        <div
+          className="mt-2 text-xs text-app-muted kanban-card-markdown max-h-48 overflow-y-auto"
+          dangerouslySetInnerHTML={{ __html: renderedDescription }}
+        />
       )}
 
-      {task.created && (
-        <div className="mt-2 text-xs text-app-muted/70">
-          {new Date(task.created).toLocaleDateString('en-US', {
+      {task.due_date && (
+        <div className="mt-2 text-xs text-app-muted/70 flex items-center gap-1">
+          <span>📅</span>
+          {new Date(task.due_date).toLocaleDateString('en-US', {
             month: 'short',
-            day: 'numeric'
+            day: 'numeric',
+            year: 'numeric'
           })}
         </div>
       )}

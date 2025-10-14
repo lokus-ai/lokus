@@ -22,7 +22,7 @@ pub struct MCPServerStatus {
     pub last_error: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MCPServerManager {
     process: Arc<Mutex<Option<Child>>>,
     status: Arc<Mutex<MCPServerStatus>>,
@@ -44,45 +44,42 @@ impl MCPServerManager {
         }
     }
 
-    pub fn start_server(&self, port: Option<u16>) -> Result<MCPServerStatus, String> {
+    /// Auto-start HTTP server for CLI (called on app launch)
+    pub fn auto_start(&self) -> Result<MCPServerStatus, String> {
+        println!("[MCP] Auto-starting HTTP server for CLI integration...");
+
+        // Use extracted bundle path
+        let home = dirs::home_dir().ok_or("Could not find home directory")?;
+        let server_script = home.join(".lokus").join("mcp-server").join("http-server.js");
+
+        // Verify the script exists
+        if !server_script.exists() {
+            return Err(format!(
+                "HTTP server script not found at: {}. MCP setup may not have completed yet.",
+                server_script.display()
+            ));
+        }
+
+        self.start_server_with_script(server_script, Some(3456))
+    }
+
+    /// Start server with a specific script path
+    fn start_server_with_script(&self, server_script: std::path::PathBuf, port: Option<u16>) -> Result<MCPServerStatus, String> {
         let mut process_guard = self.process.lock().map_err(|e| format!("Mutex error: {}", e))?;
         let mut status_guard = self.status.lock().map_err(|e| format!("Mutex error: {}", e))?;
 
         // Check if already running
         if status_guard.is_running {
+            println!("[MCP] Server already running on port {}", status_guard.port);
             return Ok(status_guard.clone());
         }
 
         let port = port.unwrap_or(3456);
-        
-        // Get the project root directory and find the MCP server script
-        let current_dir = std::env::current_dir()
-            .map_err(|e| format!("Failed to get current directory: {}", e))?;
-        
-        // In development, current_dir is src-tauri, so we need to go up one level
-        let project_root = if current_dir.file_name().unwrap_or_default() == "src-tauri" {
-            current_dir.parent().unwrap_or(&current_dir).to_path_buf()
-        } else {
-            current_dir.clone()
-        };
-        
-        let server_script = project_root.join("src").join("mcp-server").join("standalone.js");
-        
-        // Verify the script exists
-        if !server_script.exists() {
-            return Err(format!(
-                "MCP server script not found at: {}. Current dir: {}, Project root: {}", 
-                server_script.display(),
-                current_dir.display(),
-                project_root.display()
-            ));
-        }
 
         // Start the Node.js process
         let mut command = Command::new("node");
         command
             .arg(server_script.to_string_lossy().to_string())
-            .arg("--port")
             .arg(port.to_string())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -100,9 +97,42 @@ impl MCPServerManager {
         status_guard.url = Some(format!("http://localhost:{}", port));
         status_guard.last_error = None;
 
-        println!("🔌 MCP Server started on port {} with PID {}", port, pid);
+        println!("[MCP] ✅ HTTP Server started on port {} with PID {}", port, pid);
 
         Ok(status_guard.clone())
+    }
+
+    /// Legacy method for manual start (kept for compatibility)
+    pub fn start_server(&self, port: Option<u16>) -> Result<MCPServerStatus, String> {
+        // Try extracted bundle first (production)
+        let home = dirs::home_dir().ok_or("Could not find home directory")?;
+        let bundle_script = home.join(".lokus").join("mcp-server").join("http-server.js");
+
+        if bundle_script.exists() {
+            return self.start_server_with_script(bundle_script, port);
+        }
+
+        // Fall back to dev path
+        let current_dir = std::env::current_dir()
+            .map_err(|e| format!("Failed to get current directory: {}", e))?;
+
+        let project_root = if current_dir.file_name().unwrap_or_default() == "src-tauri" {
+            current_dir.parent().unwrap_or(&current_dir).to_path_buf()
+        } else {
+            current_dir.clone()
+        };
+
+        let dev_script = project_root.join("src").join("mcp-server").join("http-server.js");
+
+        if !dev_script.exists() {
+            return Err(format!(
+                "HTTP server script not found at: {} or {}",
+                bundle_script.display(),
+                dev_script.display()
+            ));
+        }
+
+        self.start_server_with_script(dev_script, port)
     }
 
     pub fn stop_server(&self) -> Result<MCPServerStatus, String> {

@@ -253,12 +253,7 @@ pub async fn get_all_workspaces(
 }
 
 // Create the API router
-pub fn create_api_router(app_handle: tauri::AppHandle) -> Router {
-    let state = ApiState {
-        app_handle,
-        current_workspace: Arc::new(RwLock::new(None)),
-    };
-
+pub fn create_api_router(state: ApiState) -> Router {
     Router::new()
         .route("/api/workspace", get(get_workspace))
         .route("/api/workspaces/all", get(get_all_workspaces))
@@ -270,7 +265,16 @@ pub fn create_api_router(app_handle: tauri::AppHandle) -> Router {
 
 // Start the API server
 pub async fn start_api_server(app_handle: tauri::AppHandle) {
-    let router = create_api_router(app_handle.clone());
+    // Get the shared state from Tauri's state management
+    let state = match app_handle.try_state::<ApiState>() {
+        Some(state) => state.inner().clone(),
+        None => {
+            eprintln!("[API Server] ❌ ApiState not found in Tauri state management!");
+            return;
+        }
+    };
+
+    let router = create_api_router(state);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3333")
         .await
