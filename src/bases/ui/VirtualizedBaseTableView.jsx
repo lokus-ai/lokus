@@ -57,10 +57,20 @@ export const VirtualizedBaseTableView = ({
   const processedData = useMemo(() => {
     let filtered = [...data];
 
-    // Apply search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    // Apply search filter from parent component (viewConfig)
+    const effectiveSearchQuery = viewConfig?.searchQuery || searchQuery;
+    if (effectiveSearchQuery) {
+      const query = effectiveSearchQuery.toLowerCase();
       filtered = filtered.filter(item => {
+        // Check name first (handle path-based names)
+        if (item.name) {
+          if (item.name.toLowerCase().includes(query)) return true;
+        } else if (item.path) {
+          const fileName = item.path.split('/').pop().replace(/\.md$/, '');
+          if (fileName.toLowerCase().includes(query)) return true;
+        }
+
+        // Then check other fields
         return Object.values(item).some(value => {
           if (value === null || value === undefined) return false;
           return String(value).toLowerCase().includes(query);
@@ -225,7 +235,17 @@ export const VirtualizedBaseTableView = ({
         {/* Data columns */}
         {visibleColumnDefs.map((col, colIndex) => {
           const field = col.field || col.id;
-          const value = item[field];
+          let value = item[field];
+
+          // Special handling for 'name' field
+          if (field === 'name' && !value && item.path) {
+            value = item.path.split('/').pop().replace(/\.md$/, '');
+          }
+
+          // Special handling for date fields
+          if ((field === 'created' || field === 'modified') && typeof value === 'number') {
+            value = new Date(value * 1000).toLocaleDateString();
+          }
 
           return (
             <div
@@ -241,7 +261,7 @@ export const VirtualizedBaseTableView = ({
               }}
             >
               {col.render ? col.render(value, item) : (
-                <span className="block truncate">
+                <span className="block truncate" title={String(value)}>
                   {value !== null && value !== undefined ? String(value) : '-'}
                 </span>
               )}
@@ -457,14 +477,27 @@ export const VirtualizedBaseTableView = ({
           <span>
             {processedData.length > 0 ? (
               <>
-                Virtualized rendering • Only {virtualizer.getVirtualItems().length} rows in DOM
+                Virtual scrolling • {virtualizer.getVirtualItems().length}/{processedData.length} rows rendered
               </>
             ) : (
               'No items'
             )}
           </span>
-          <span>
-            Performance: {processedData.length > 1000 ? '🚀 Optimized' : '✓ Normal'}
+          <span className="flex items-center gap-2">
+            {processedData.length > 1000 && (
+              <span className="text-green-500 font-medium">🚀 Performance mode</span>
+            )}
+            {processedData.length > 100 && processedData.length <= 1000 && (
+              <span className="text-blue-500">⚡ Optimized</span>
+            )}
+            {processedData.length <= 100 && (
+              <span>✓ Normal</span>
+            )}
+            {viewConfig?.dataLoadingMode === 'optimized' && (
+              <span className="px-2 py-0.5 bg-green-500/20 text-green-500 rounded text-xs">
+                Large dataset mode
+              </span>
+            )}
           </span>
         </div>
       </div>

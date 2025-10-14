@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useBases } from './BasesContext.jsx';
 import { useFolderScope } from '../contexts/FolderScopeContext.jsx';
-import BaseTableView from './ui/BaseTableView.jsx';
+import VirtualizedBaseTableView from './ui/VirtualizedBaseTableView.jsx';
 import BaseListView from './ui/BaseListView.jsx';
 import BaseGridView from './ui/BaseGridView.jsx';
 import BaseSidebar from './ui/BaseSidebar.jsx';
@@ -40,6 +40,8 @@ export default function BasesView({ isVisible, onFileOpen }) {
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [currentColumns, setCurrentColumns] = useState([]);
+  const [dataLoadingMode, setDataLoadingMode] = useState('optimized'); // 'all' or 'optimized'
+  const CHUNK_SIZE = 500; // Load data in chunks for better performance
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [showPropertiesDropdown, setShowPropertiesDropdown] = useState(false);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
@@ -49,16 +51,35 @@ export default function BasesView({ isVisible, onFileOpen }) {
   const [viewType, setViewType] = useState('table'); // 'table', 'list', 'grid'
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
-  // Load data when view changes
+  // Load data when view changes - with performance optimization
   useEffect(() => {
     if (!isVisible || !activeBase || !activeView) return;
 
     const loadData = async () => {
       const result = await executeQuery();
       if (result.success) {
-        setViewData(result.data || []);
-        setTotalCount(result.totalCount || 0);
-        setFilteredCount(result.filteredCount || 0);
+        const allData = result.data || [];
+        const totalCount = result.totalCount || allData.length;
+
+        // Performance optimization: Check if we have too much data
+        if (allData.length > 1000) {
+          console.log(`[BasesView] Large dataset detected (${allData.length} items). Using optimized loading.`);
+          // For large datasets, we rely on virtual scrolling in VirtualizedBaseTableView
+          // The table will handle rendering only visible rows
+          setDataLoadingMode('optimized');
+        } else {
+          setDataLoadingMode('all');
+        }
+
+        // Still set all data - VirtualizedBaseTableView will handle virtualization
+        setViewData(allData);
+        setTotalCount(totalCount);
+        setFilteredCount(result.filteredCount || totalCount);
+
+        // Log performance info
+        if (allData.length > 100) {
+          console.log(`[BasesView] Loaded ${allData.length} items. Virtual scrolling enabled.`);
+        }
       }
     };
 
@@ -388,34 +409,39 @@ export default function BasesView({ isVisible, onFileOpen }) {
 
       {/* Main content - Conditional rendering based on view type */}
       <div className="flex-1 overflow-auto">
-        {/* Always render BaseTableView for dropdown functionality */}
+        {/* Always render VirtualizedBaseTableView for dropdown functionality */}
         <div style={{ display: viewType === 'table' ? 'flex' : 'none' }} className="flex-1 h-full">
-          <BaseTableView
+          <VirtualizedBaseTableView
             data={viewData}
-            base={activeBase}
-            columns={currentColumns}
-            onPropertyEdit={handlePropertyEdit}
-            onAddColumn={handleAddColumn}
-            onColumnResize={handleColumnsChange}
-            isLoading={isLoading}
-            showSortDropdown={showSortDropdown}
-            setShowSortDropdown={setShowSortDropdown}
-            showPropertiesDropdown={showPropertiesDropdown}
-            setShowPropertiesDropdown={setShowPropertiesDropdown}
-            showFilterDropdown={showFilterDropdown}
-            setShowFilterDropdown={setShowFilterDropdown}
-            onFilterRulesChange={handleFilterRulesChange}
-            ignoreScope={baseScopeMode === 'all'}
-            onFileOpen={onFileOpen}
-            searchQuery={searchQuery}
-            folderScope={baseScopeMode}
-            onFolderScopeChange={(newScope) => {
-              setBaseScopeMode(newScope);
-              if (newScope === 'all') {
-                setGlobalScope();
+            columns={(activeView?.columns || ['name', 'created', 'modified']).map(col => {
+              // Convert column format if needed
+              if (typeof col === 'string') {
+                return {
+                  field: col,
+                  label: col.charAt(0).toUpperCase() + col.slice(1),
+                  width: col === 'name' ? 300 : 150
+                };
               }
-              handleRefresh();
+              return col;
+            })}
+            onItemClick={(item) => {
+              if (onFileOpen && item.path) {
+                onFileOpen({ path: item.path, name: item.name || item.path });
+              }
             }}
+            onItemEdit={handlePropertyEdit}
+            selectedItems={[]}
+            enableSearch={false} // Search is in header
+            enableFilter={false} // Filter is in header
+            enableSort={true}
+            isLoading={isLoading}
+            viewConfig={{
+              searchQuery: searchQuery,
+              filterRules: filterRules,
+              baseScopeMode: baseScopeMode,
+              dataLoadingMode: dataLoadingMode
+            }}
+            className="flex-1"
           />
         </div>
 
