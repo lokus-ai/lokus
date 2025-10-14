@@ -267,6 +267,55 @@ const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
           <span className="text-xs text-app-muted border-l border-app-border pl-3 ml-1">
             {filteredCount} of {totalCount} items
           </span>
+
+          {/* Pagination Controls - Essentials only */}
+          {viewData.length > itemsPerPage && (
+            <>
+              <div className="w-px h-4 bg-app-border ml-2" />
+              <div className="flex items-center gap-2 text-xs">
+                <button
+                  onClick={goToPreviousPage}
+                  disabled={currentPage === 1}
+                  className="p-1 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Previous page"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+
+                <span className="text-app-muted min-w-[60px] text-center">
+                  {currentPage} / {totalPages}
+                </span>
+
+                <button
+                  onClick={goToNextPage}
+                  disabled={currentPage === totalPages}
+                  className="p-1 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Next page"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-2 py-0.5 text-xs bg-app-bg border border-app-border rounded text-app-muted focus:outline-none focus:border-app-accent hover:text-app-text transition-colors"
+                  title="Items per page"
+                >
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                  <option value={500}>500</option>
+                </select>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -472,102 +521,6 @@ const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
           />
         )}
       </div>
-
-      {/* Pagination Controls */}
-      {viewData.length > itemsPerPage && (
-        <div className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-t border-app-border/50 bg-app-bg">
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-app-muted">
-              Showing {startIndex + 1}-{Math.min(endIndex, viewData.length)} of {viewData.length} items
-            </span>
-
-            {/* Items per page selector */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-app-muted">Items per page:</span>
-              <select
-                value={itemsPerPage}
-                onChange={(e) => {
-                  setItemsPerPage(Number(e.target.value));
-                  setCurrentPage(1); // Reset to first page
-                }}
-                className="px-2 py-1 text-sm bg-app-bg border border-app-border rounded text-app-text focus:outline-none focus:border-app-accent"
-              >
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-                <option value={200}>200</option>
-                <option value={500}>500</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* First page button */}
-            <button
-              onClick={goToFirstPage}
-              disabled={currentPage === 1}
-              className="p-1.5 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="First page"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7M18 19l-7-7 7-7" />
-              </svg>
-            </button>
-
-            {/* Previous page button */}
-            <button
-              onClick={goToPreviousPage}
-              disabled={currentPage === 1}
-              className="p-1.5 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Previous page"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-
-            {/* Page number input */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-app-muted">Page</span>
-              <input
-                type="number"
-                min="1"
-                max={totalPages}
-                value={currentPage}
-                onChange={(e) => {
-                  const page = parseInt(e.target.value, 10);
-                  if (!isNaN(page)) goToPage(page);
-                }}
-                className="w-16 px-2 py-1 text-sm text-center bg-app-bg border border-app-border rounded text-app-text focus:outline-none focus:border-app-accent"
-              />
-              <span className="text-sm text-app-muted">of {totalPages}</span>
-            </div>
-
-            {/* Next page button */}
-            <button
-              onClick={goToNextPage}
-              disabled={currentPage === totalPages}
-              className="p-1.5 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Next page"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-
-            {/* Last page button */}
-            <button
-              onClick={goToLastPage}
-              disabled={currentPage === totalPages}
-              className="p-1.5 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Last page"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M6 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Modals */}
       {showPropertyEditor && (
