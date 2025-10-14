@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useBases } from './BasesContext.jsx';
 import { useFolderScope } from '../contexts/FolderScopeContext.jsx';
-import VirtualizedBaseTableView from './ui/VirtualizedBaseTableView.jsx';
+import { DebouncedInput } from '../components/OptimizedWrapper.jsx';
+import BaseTableView from './ui/BaseTableView.jsx';
 import BaseListView from './ui/BaseListView.jsx';
 import BaseGridView from './ui/BaseGridView.jsx';
 import BaseSidebar from './ui/BaseSidebar.jsx';
@@ -11,7 +12,7 @@ import FilterBuilder from './ui/FilterBuilder.jsx';
 import CustomSelect from './ui/CustomSelect.jsx';
 import { Settings, Filter, Columns, Download, RefreshCw, AlertCircle, Table, ArrowUpDown, ChevronDown, Folder, FolderOpen, Search, List, Grid, MoreVertical } from 'lucide-react';
 
-export default function BasesView({ isVisible, onFileOpen }) {
+const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
   const {
     activeBase,
     activeView,
@@ -40,8 +41,10 @@ export default function BasesView({ isVisible, onFileOpen }) {
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [currentColumns, setCurrentColumns] = useState([]);
-  const [dataLoadingMode, setDataLoadingMode] = useState('optimized'); // 'all' or 'optimized'
-  const CHUNK_SIZE = 500; // Load data in chunks for better performance
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50); // Only show 50 items at a time
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [showPropertiesDropdown, setShowPropertiesDropdown] = useState(false);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
@@ -51,40 +54,29 @@ export default function BasesView({ isVisible, onFileOpen }) {
   const [viewType, setViewType] = useState('table'); // 'table', 'list', 'grid'
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
-  // Load data when view changes - with performance optimization
+  // Load data when view changes
   useEffect(() => {
     if (!isVisible || !activeBase || !activeView) return;
 
     const loadData = async () => {
       const result = await executeQuery();
       if (result.success) {
-        const allData = result.data || [];
-        const totalCount = result.totalCount || allData.length;
+        setViewData(result.data || []);
+        setTotalCount(result.totalCount || 0);
+        setFilteredCount(result.filteredCount || 0);
 
-        // Performance optimization: Check if we have too much data
-        if (allData.length > 1000) {
-          console.log(`[BasesView] Large dataset detected (${allData.length} items). Using optimized loading.`);
-          // For large datasets, we rely on virtual scrolling in VirtualizedBaseTableView
-          // The table will handle rendering only visible rows
-          setDataLoadingMode('optimized');
-        } else {
-          setDataLoadingMode('all');
-        }
+        // Reset to first page when data changes
+        setCurrentPage(1);
 
-        // Still set all data - VirtualizedBaseTableView will handle virtualization
-        setViewData(allData);
-        setTotalCount(totalCount);
-        setFilteredCount(result.filteredCount || totalCount);
-
-        // Log performance info
-        if (allData.length > 100) {
-          console.log(`[BasesView] Loaded ${allData.length} items. Virtual scrolling enabled.`);
+        // Log if we have a large dataset
+        if (result.data && result.data.length > 100) {
+          console.log(`[BasesView] Loaded ${result.data.length} items. Pagination enabled (${itemsPerPage} per page)`);
         }
       }
     };
 
     loadData();
-  }, [isVisible, activeBase, activeView, executeQuery, refreshKey]);
+  }, [isVisible, activeBase, activeView, executeQuery, refreshKey, itemsPerPage]);
 
   // Load available properties
   useEffect(() => {
@@ -123,6 +115,33 @@ export default function BasesView({ isVisible, onFileOpen }) {
   const handleColumnsChange = (newColumns) => {
     setCurrentColumns(newColumns);
   };
+
+  // Calculate pagination - memoized for performance
+  const { totalPages, startIndex, endIndex, paginatedData } = useMemo(() => {
+    const total = Math.ceil(viewData.length / itemsPerPage);
+    const start = (currentPage - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    const paginated = viewData.slice(start, end);
+
+    return {
+      totalPages: total,
+      startIndex: start,
+      endIndex: end,
+      paginatedData: paginated
+    };
+  }, [viewData, currentPage, itemsPerPage]);
+
+  // Pagination controls
+  const goToPage = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  const goToPreviousPage = () => goToPage(currentPage - 1);
+  const goToNextPage = () => goToPage(currentPage + 1);
+  const goToFirstPage = () => goToPage(1);
+  const goToLastPage = () => goToPage(totalPages);
 
   // Handle export
   const handleExport = () => {
@@ -236,17 +255,14 @@ export default function BasesView({ isVisible, onFileOpen }) {
             </div>
           )}
 
-          {/* Search Bar */}
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-app-muted pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search..."
-              className="pl-8 pr-3 py-1.5 text-xs bg-app-bg border border-app-border rounded text-app-text placeholder-app-muted focus:outline-none focus:border-app-accent transition-colors w-48"
-            />
-          </div>
+          {/* Search Bar with Debouncing */}
+          <DebouncedInput
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Search..."
+            delay={300}
+            style={{ width: '12rem' }}
+          />
 
           <span className="text-xs text-app-muted border-l border-app-border pl-3 ml-1">
             {filteredCount} of {totalCount} items
@@ -409,45 +425,40 @@ export default function BasesView({ isVisible, onFileOpen }) {
 
       {/* Main content - Conditional rendering based on view type */}
       <div className="flex-1 overflow-auto">
-        {/* Always render VirtualizedBaseTableView for dropdown functionality */}
+        {/* Always render BaseTableView for dropdown functionality */}
         <div style={{ display: viewType === 'table' ? 'flex' : 'none' }} className="flex-1 h-full">
-          <VirtualizedBaseTableView
-            data={viewData}
-            columns={(activeView?.columns || ['name', 'created', 'modified']).map(col => {
-              // Convert column format if needed
-              if (typeof col === 'string') {
-                return {
-                  field: col,
-                  label: col.charAt(0).toUpperCase() + col.slice(1),
-                  width: col === 'name' ? 300 : 150
-                };
-              }
-              return col;
-            })}
-            onItemClick={(item) => {
-              if (onFileOpen && item.path) {
-                onFileOpen({ path: item.path, name: item.name || item.path });
-              }
-            }}
-            onItemEdit={handlePropertyEdit}
-            selectedItems={[]}
-            enableSearch={false} // Search is in header
-            enableFilter={false} // Filter is in header
-            enableSort={true}
+          <BaseTableView
+            data={paginatedData}
+            base={activeBase}
+            columns={currentColumns}
+            onPropertyEdit={handlePropertyEdit}
+            onAddColumn={handleAddColumn}
+            onColumnResize={handleColumnsChange}
             isLoading={isLoading}
-            viewConfig={{
-              searchQuery: searchQuery,
-              filterRules: filterRules,
-              baseScopeMode: baseScopeMode,
-              dataLoadingMode: dataLoadingMode
+            showSortDropdown={showSortDropdown}
+            setShowSortDropdown={setShowSortDropdown}
+            showPropertiesDropdown={showPropertiesDropdown}
+            setShowPropertiesDropdown={setShowPropertiesDropdown}
+            showFilterDropdown={showFilterDropdown}
+            setShowFilterDropdown={setShowFilterDropdown}
+            onFilterRulesChange={handleFilterRulesChange}
+            ignoreScope={baseScopeMode === 'all'}
+            onFileOpen={onFileOpen}
+            searchQuery={searchQuery}
+            folderScope={baseScopeMode}
+            onFolderScopeChange={(newScope) => {
+              setBaseScopeMode(newScope);
+              if (newScope === 'all') {
+                setGlobalScope();
+              }
+              handleRefresh();
             }}
-            className="flex-1"
           />
         </div>
 
         {viewType === 'list' && (
           <BaseListView
-            data={viewData}
+            data={paginatedData}
             onFileOpen={onFileOpen}
             searchQuery={searchQuery}
           />
@@ -455,12 +466,108 @@ export default function BasesView({ isVisible, onFileOpen }) {
 
         {viewType === 'grid' && (
           <BaseGridView
-            data={viewData}
+            data={paginatedData}
             onFileOpen={onFileOpen}
             searchQuery={searchQuery}
           />
         )}
       </div>
+
+      {/* Pagination Controls */}
+      {viewData.length > itemsPerPage && (
+        <div className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-t border-app-border/50 bg-app-bg">
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-app-muted">
+              Showing {startIndex + 1}-{Math.min(endIndex, viewData.length)} of {viewData.length} items
+            </span>
+
+            {/* Items per page selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-app-muted">Items per page:</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1); // Reset to first page
+                }}
+                className="px-2 py-1 text-sm bg-app-bg border border-app-border rounded text-app-text focus:outline-none focus:border-app-accent"
+              >
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+                <option value={500}>500</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* First page button */}
+            <button
+              onClick={goToFirstPage}
+              disabled={currentPage === 1}
+              className="p-1.5 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="First page"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7M18 19l-7-7 7-7" />
+              </svg>
+            </button>
+
+            {/* Previous page button */}
+            <button
+              onClick={goToPreviousPage}
+              disabled={currentPage === 1}
+              className="p-1.5 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Previous page"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+
+            {/* Page number input */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-app-muted">Page</span>
+              <input
+                type="number"
+                min="1"
+                max={totalPages}
+                value={currentPage}
+                onChange={(e) => {
+                  const page = parseInt(e.target.value, 10);
+                  if (!isNaN(page)) goToPage(page);
+                }}
+                className="w-16 px-2 py-1 text-sm text-center bg-app-bg border border-app-border rounded text-app-text focus:outline-none focus:border-app-accent"
+              />
+              <span className="text-sm text-app-muted">of {totalPages}</span>
+            </div>
+
+            {/* Next page button */}
+            <button
+              onClick={goToNextPage}
+              disabled={currentPage === totalPages}
+              className="p-1.5 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Next page"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+
+            {/* Last page button */}
+            <button
+              onClick={goToLastPage}
+              disabled={currentPage === totalPages}
+              className="p-1.5 text-app-muted hover:text-app-text hover:bg-app-accent/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Last page"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M6 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       {showPropertyEditor && (
@@ -509,4 +616,6 @@ export default function BasesView({ isVisible, onFileOpen }) {
       )}
     </div>
   );
-}
+});
+
+export default BasesView;
