@@ -41,6 +41,7 @@ import {
   Database,
   FolderTree,
   ArrowRight,
+  Clock,
 } from 'lucide-react';
 import platformService from '../services/platform/PlatformService';
 
@@ -127,6 +128,12 @@ export default function FileContextMenu({
                   <ArrowRight className="mr-2 h-4 w-4" />
                   Open to the Side
                   <ContextMenuShortcut>{isWindows ? 'Ctrl+Enter' : '⌘Enter'}</ContextMenuShortcut>
+                </ContextMenuItem>
+
+                <ContextMenuItem onClick={() => handleAction('viewHistory')}>
+                  <Clock className="mr-2 h-4 w-4" />
+                  View History
+                  <ContextMenuShortcut>{isWindows ? 'Ctrl+H' : '⌘H'}</ContextMenuShortcut>
                 </ContextMenuItem>
 
                 <ContextMenuSub>

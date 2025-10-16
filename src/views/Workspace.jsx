@@ -53,6 +53,7 @@ import { BasesProvider } from "../bases/BasesContext.jsx";
 import BasesView from "../bases/BasesView.jsx";
 import DocumentOutline from "../components/DocumentOutline.jsx";
 import GraphSidebar from "../components/GraphSidebar.jsx";
+import VersionHistoryPanel from "../components/VersionHistoryPanel.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -141,8 +142,48 @@ function NewFolderInput({ onConfirm, level }) {
   );
 }
 
+// --- Inline Rename Input Component ---
+function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
+  const [value, setValue] = useState(initialValue);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, []);
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      onSubmit(value);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      onCancel();
+    }
+  };
+
+  const handleBlur = () => {
+    onSubmit(value);
+  };
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={handleKeyDown}
+      onBlur={handleBlur}
+      className="inline-rename-input"
+      onClick={(e) => e.stopPropagation()}
+    />
+  );
+}
+
 // --- File Entry Component ---
-function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap }) {
+function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory }) {
   const { attributes, listeners, setNodeRef: draggableRef, isDragging } = useDraggable({
     id: entry.path,
     data: { type: "file-entry", entry },
@@ -170,14 +211,39 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
   const dropTargetClasses = isDropTarget ? 'bg-app-accent/30 ring-2 ring-app-accent' : '';
   const draggingClasses = isDragging ? 'opacity-50' : '';
 
-  const onRename = async () => {
-    const newName = window.prompt("Rename to:", entry.name);
-    if (!newName || newName.trim() === entry.name) return;
+  const onRename = () => {
+    // For files: just open them (the note header handles renaming)
+    if (!entry.is_directory) {
+      onFileClick(entry);
+      return;
+    }
+
+    // For folders: enter inline rename mode
+    setRenamingPath(entry.path);
+  };
+
+  const handleRenameSubmit = async (newName) => {
+    if (!newName || newName.trim() === "" || newName.trim() === entry.name) {
+      setRenamingPath(null);
+      return;
+    }
+
     try {
-      await invoke("rename_file", { path: entry.path, newName: newName.trim() });
+      const trimmedName = newName.trim();
+      console.log(`Renaming "${entry.name}" to "${trimmedName}"`);
+      await invoke("rename_file", { path: entry.path, newName: trimmedName });
+      console.log('Rename successful, refreshing file list');
+      setRenamingPath(null);
       onRefresh && onRefresh();
     } catch (e) {
+      console.error('Failed to rename:', e);
+      alert(`Failed to rename: ${e.message || e}`);
+      setRenamingPath(null);
     }
+  };
+
+  const handleRenameCancel = () => {
+    setRenamingPath(null);
   };
 
   const onCreateFileHere = async () => {
@@ -201,13 +267,18 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 
   const handleFileContextAction = async (action, data) => {
     const { file } = data;
-    
+
     switch (action) {
       case 'open':
         onFileClick(file);
         break;
       case 'openToSide':
         // TODO: Implement open to side functionality
+        break;
+      case 'viewHistory':
+        if (onViewHistory && file.type === 'file') {
+          onViewHistory(file.path);
+        }
         break;
       case 'openWith':
         // TODO: Implement open with functionality
@@ -286,7 +357,15 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
               ) : (
                 <Icon path="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" className="obsidian-file-icon" />
               )}
-              <span className="truncate">{entry.name}</span>
+              {renamingPath === entry.path && entry.is_directory ? (
+                <InlineRenameInput
+                  initialValue={entry.name}
+                  onSubmit={handleRenameSubmit}
+                  onCancel={handleRenameCancel}
+                />
+              ) : (
+                <span className="truncate">{entry.name}</span>
+              )}
             </button>
           </FileContextMenu>
         </div>
@@ -304,6 +383,9 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
               toggleFolder={toggleFolder}
               onRefresh={onRefresh}
               keymap={keymap}
+              renamingPath={renamingPath}
+              setRenamingPath={setRenamingPath}
+              onViewHistory={onViewHistory}
             />
           ))}
         </ul>
@@ -313,7 +395,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 }
 
 // --- File Tree View Component ---
-function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm, keymap }) {
+function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm, keymap, renamingPath, setRenamingPath, onViewHistory }) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -358,6 +440,9 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
             toggleFolder={toggleFolder}
             onRefresh={onRefresh}
             keymap={keymap}
+            renamingPath={renamingPath}
+            setRenamingPath={setRenamingPath}
+            onViewHistory={onViewHistory}
           />
         ))}
       </ul>
@@ -550,26 +635,76 @@ function WorkspaceWithScope({ path }) {
     setShowRight(prev => !prev);
   }, []);
 
+  // Version history state
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [versionHistoryFile, setVersionHistoryFile] = useState(null);
+  const [versionRefreshKey, setVersionRefreshKey] = useState(0); // Force refresh of version panel
+  const lastVersionSaveRef = useRef({}); // Track last version save time per file
+  const lastVersionContentRef = useRef({}); // Track last saved content per file
+
+  const toggleVersionHistory = useCallback((file = null) => {
+    if (file) {
+      setVersionHistoryFile(file);
+      setShowVersionHistory(true);
+      setShowRight(true); // Ensure right sidebar is visible
+    } else {
+      setShowVersionHistory(prev => !prev);
+    }
+  }, []);
+
   const [fileTree, setFileTree] = useState([]);
   const [expandedFolders, setExpandedFolders] = useState(new Set());
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
-  
+  const [renamingPath, setRenamingPath] = useState(null);
+
   // Check if we're in test mode
   const isTestMode = new URLSearchParams(window.location.search).get('testMode') === 'true';
   const [keymap, setKeymap] = useState({});
-  
+
   const [openTabs, setOpenTabs] = useState([]);
   const [activeFile, setActiveFile] = useState(null);
   const [unsavedChanges, setUnsavedChanges] = useState(new Set());
   const [recentlyClosedTabs, setRecentlyClosedTabs] = useState([]);
 
-  // Editor groups system for VSCode-style split view
-  const editorGroups = useEditorGroups(openTabs);
-  const [recentFiles, setRecentFiles] = useState([]);
-  
   const [editorContent, setEditorContent] = useState("");
   const [editorTitle, setEditorTitle] = useState("");
   const [savedContent, setSavedContent] = useState("");
+
+  // Reload current file after version restore
+  const reloadCurrentFile = useCallback(async () => {
+    if (!activeFile) return;
+
+    try {
+      const content = await invoke("read_file_content", { path: activeFile });
+      const activeTab = openTabs.find(tab => tab.path === activeFile);
+
+      if (activeTab) {
+        const compiler = getMarkdownCompiler();
+        let processedContent = content;
+
+        if (activeTab.name.endsWith('.md') && compiler.isMarkdown(content)) {
+          processedContent = compiler.compile(content);
+        }
+
+        setEditorContent(processedContent);
+        setSavedContent(content);
+
+        // Clear unsaved changes for this file since we just reloaded
+        setUnsavedChanges(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(activeFile);
+          return newSet;
+        });
+      }
+    } catch (error) {
+      console.error("Failed to reload file:", error);
+    }
+  }, [activeFile, openTabs]);
+
+  // Editor groups system for VSCode-style split view
+  const editorGroups = useEditorGroups(openTabs);
+  const [recentFiles, setRecentFiles] = useState([]);
+
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showInFileSearch, setShowInFileSearch] = useState(false);
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
@@ -1245,6 +1380,32 @@ function WorkspaceWithScope({ path }) {
         newSet.delete(path_to_save);
         return newSet;
       });
+
+      // Save version only if content actually changed
+      const lastContent = lastVersionContentRef.current[path_to_save];
+      const contentChanged = !lastContent || lastContent !== contentToSave;
+
+      if (contentChanged) {
+        try {
+          await invoke("save_file_version_manual", {
+            path: path_to_save,
+            content: contentToSave
+          });
+          const now = Date.now();
+          lastVersionSaveRef.current[path_to_save] = now;
+          lastVersionContentRef.current[path_to_save] = contentToSave;
+
+          // Refresh version history panel
+          setVersionRefreshKey(prev => prev + 1);
+
+          console.log("[Version] Saved version for", path_to_save);
+        } catch (error) {
+          console.warn("[Version] Failed to save version:", error);
+          // Non-blocking - don't show error to user
+        }
+      } else {
+        console.log("[Version] Skipped - content unchanged");
+      }
 
       // Check if this is a Gmail template and send email
       const gmailTemplate = parseGmailTemplate(contentToSave);
@@ -2139,13 +2300,22 @@ function WorkspaceWithScope({ path }) {
         handleSave();
         return;
       }
+
+      // Cmd/Ctrl+H: Toggle version history
+      if ((e.metaKey || e.ctrlKey) && e.key === 'h' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        if (activeFile && !activeFile.startsWith('__')) {
+          toggleVersionHistory(activeFile);
+        }
+        return;
+      }
     };
 
     document.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => {
       document.removeEventListener('keydown', handleKeyDown, { capture: true });
     };
-  }, [handleSave]);
+  }, [handleSave, activeFile, toggleVersionHistory]);
 
   useEffect(() => {
     let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
@@ -2791,7 +2961,7 @@ function WorkspaceWithScope({ path }) {
                   <div className="p-2 flex-1 overflow-y-auto">
                     <FileTreeView
                       entries={filteredFileTree}
-                      onFileClick={handleFileOpen} 
+                      onFileClick={handleFileOpen}
                       activeFile={activeFile}
                       onRefresh={handleRefreshFiles}
                       data-testid="file-tree"
@@ -2800,6 +2970,9 @@ function WorkspaceWithScope({ path }) {
                       isCreating={isCreatingFolder}
                       onCreateConfirm={handleConfirmCreateFolder}
                       keymap={keymap}
+                      renamingPath={renamingPath}
+                      setRenamingPath={setRenamingPath}
+                      onViewHistory={toggleVersionHistory}
                     />
                   </div>
                 </ContextMenuTrigger>
@@ -3353,10 +3526,18 @@ function WorkspaceWithScope({ path }) {
         </main>
         {showRight && <div onMouseDown={startRightDrag} className="cursor-col-resize bg-app-border hover:bg-app-accent transition-colors duration-300 w-1 min-h-full" />}
         {showRight && (
-          <aside className="overflow-y-auto flex flex-col bg-app-panel border-l border-app-border">
-            {/* Show GraphSidebar for graph view, DocumentOutline for editor */}
+          <aside className="overflow-y-auto flex flex-col bg-app-panel border-l border-app-border" style={{ width: `${rightW}px` }}>
+            {/* Show VersionHistory, GraphSidebar, or DocumentOutline */}
             <div className="flex-1 overflow-hidden">
-              {activeFile === '__graph__' ? (
+              {showVersionHistory ? (
+                <VersionHistoryPanel
+                  key={`version-${activeFile}-${versionRefreshKey}`}
+                  workspacePath={path}
+                  filePath={activeFile}
+                  onClose={() => setShowVersionHistory(false)}
+                  onRestore={reloadCurrentFile}
+                />
+              ) : activeFile === '__graph__' ? (
                 <GraphSidebar
                   selectedNodes={graphSidebarData.selectedNodes}
                   hoveredNode={graphSidebarData.hoveredNode}
@@ -3643,6 +3824,18 @@ export default function Workspace({ initialPath = "" }) {
         saveWorkspacePath(initialPath);
         console.log('[Workspace] Saved workspace path to localStorage:', initialPath);
       });
+
+      // Set global workspace path for components like SyncStatus
+      window.__WORKSPACE_PATH__ = initialPath;
+
+      // Update API server state with current workspace
+      invoke('api_set_workspace', { workspace: initialPath })
+        .then(() => {
+          console.log('[Workspace] Updated API server with workspace path');
+        })
+        .catch((error) => {
+          console.log('[Workspace] API server update skipped:', error);
+        });
 
       // Initialize default kanban board if none exists
       invoke('initialize_workspace_kanban', { workspacePath: initialPath })

@@ -99,6 +99,35 @@ openapi.yaml
 *summer_*.md
 *personal*.md
 *internship*.md
+*research*.md
+*NSF*.md
+*REU*.md
+test-email*.md
+*-email*.md
+
+# Temporary documentation files
+*ANSWER_*.md
+*FIX_*.md
+*TEST_*.md
+*TRANSPORT_*.md
+*VERIFICATION_*.md
+*QUANTUM_*.md
+*PERFORMANCE_*.md
+*LOKUS_QUANTUM*.md
+Progress.md
+*DOCUMENTATION_UPDATE*.md
+*DUAL_CONFIG*.md
+*AUTO_START*.md
+
+# Backup and old files
+*.bak
+*-old.*
+*-backup.*
+*.backup
+
+# Date-stamped temporary files
+20[0-9][0-9]-*-*.txt
+20[0-9][0-9]-*-*.md
 
 # AI Assistant
 .claude/

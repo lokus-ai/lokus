@@ -112,14 +112,21 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
 }
 
 #[tauri::command]
-pub fn open_preferences_window(app: AppHandle) -> Result<(), String> {
+pub fn open_preferences_window(app: AppHandle, workspace_path: Option<String>) -> Result<(), String> {
   let label = "prefs";
   if let Some(win) = app.get_webview_window(label) {
     focus(&win);
     return Ok(());
   }
   // Pass a query param so the frontend can render the Preferences view immediately
-  let url = WebviewUrl::App("index.html?view=prefs".into());
+  // Also pass workspace path if available
+  let url_string = if let Some(path) = workspace_path {
+    let encoded_path = urlencoding::encode(&path);
+    format!("index.html?view=prefs&workspacePath={}", encoded_path)
+  } else {
+    "index.html?view=prefs".to_string()
+  };
+  let url = WebviewUrl::App(url_string.into());
   let _win = WebviewWindowBuilder::new(&app, label, url)
     .title("Preferences")
     .inner_size(760.0, 560.0)
