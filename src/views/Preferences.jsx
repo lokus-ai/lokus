@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { setGlobalActiveTheme, listAvailableThemes, readGlobalVisuals } from "../core/theme/manager.js";
+import { setGlobalActiveTheme, listAvailableThemes, readGlobalVisuals, importThemeFile, validateThemeFile, exportTheme, deleteCustomTheme, getThemeTokens, saveThemeTokens, applyTokens } from "../core/theme/manager.js";
 import { listActions, getActiveShortcuts, setShortcut, resetShortcuts } from "../core/shortcuts/registry.js";
 import { readConfig, updateConfig } from "../core/config/store.js";
 import { formatAccelerator } from "../core/shortcuts/registry.js";
-import { Search, Pencil, RotateCcw } from "lucide-react";
+import { Search, Pencil, RotateCcw, Upload, Download, Save, RefreshCw, GitBranch, CloudOff, CloudUpload } from "lucide-react";
+import { open, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import liveEditorSettings from "../core/editor/live-settings.js";
 import markdownSyntaxConfig from "../core/markdown/syntax-config.js";
 import AIAssistant from "./preferences/AIAssistant.jsx";
@@ -20,6 +22,9 @@ export default function Preferences() {
   console.log('🔧 Document body classes:', document.body.className);
   const [themes, setThemes] = useState([]);
   const [activeTheme, setActiveTheme] = useState("");
+  const [themeTokens, setThemeTokens] = useState({});
+  const [originalTokens, setOriginalTokens] = useState({});
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [section, setSection] = useState("Appearance");
   const { isAuthenticated, user, signIn, signOut, isLoading } = useAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -34,6 +39,21 @@ export default function Preferences() {
   const [saveStatus, setSaveStatus] = useState(''); // For showing save feedback
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
   const [markdownSyntax, setMarkdownSyntax] = useState(markdownSyntaxConfig.getAll());
+
+  // Sync state
+  const [workspacePath, setWorkspacePath] = useState('');
+  const [syncRemoteUrl, setSyncRemoteUrl] = useState('');
+  const [syncAuthorName, setSyncAuthorName] = useState('');
+  const [syncAuthorEmail, setSyncAuthorEmail] = useState('');
+  const [syncBranch, setSyncBranch] = useState('main');
+  const [syncUsername, setSyncUsername] = useState('');
+  const [syncToken, setSyncToken] = useState('');
+  const [syncStatus, setSyncStatus] = useState(null);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
+  const [syncConfigExpanded, setSyncConfigExpanded] = useState(false);
+  const [tokenLoaded, setTokenLoaded] = useState(false);
+
   const [expandedSections, setExpandedSections] = useState({
     font: true,
     colors: false,
@@ -163,13 +183,27 @@ export default function Preferences() {
       const available = await listAvailableThemes();
       setThemes(available);
       const visuals = await readGlobalVisuals();
-      setActiveTheme(visuals.theme || "");
+      const themeId = visuals.theme || "";
+      setActiveTheme(themeId);
+
+      // Load theme tokens for the initially selected theme
+      if (themeId) {
+        try {
+          const tokens = await getThemeTokens(themeId);
+          setThemeTokens(tokens);
+          setOriginalTokens(tokens);
+          setHasUnsavedChanges(false);
+        } catch (error) {
+          console.error('Failed to load initial theme tokens:', error);
+        }
+      }
+
       // load markdown prefs if present
       try {
         const { readConfig } = await import("../core/config/store.js");
         const cfg = await readConfig();
         if (cfg.markdown) setMd({ ...md, ...cfg.markdown });
-        
+
         // Load editor settings
         if (cfg.editor) {
           setEditorSettings(prev => ({
@@ -187,6 +221,64 @@ export default function Preferences() {
         if (hs.marker) setHeadingAltMarker(hs.marker);
         if (typeof hs.enabled === 'boolean') setHeadingAltEnabled(hs.enabled);
       } catch {}
+
+      // Load sync settings
+      try {
+        const cfg = await readConfig();
+        if (cfg.sync) {
+          if (cfg.sync.remoteUrl) setSyncRemoteUrl(cfg.sync.remoteUrl);
+          if (cfg.sync.authorName) setSyncAuthorName(cfg.sync.authorName);
+          if (cfg.sync.authorEmail) setSyncAuthorEmail(cfg.sync.authorEmail);
+          if (cfg.sync.branch) setSyncBranch(cfg.sync.branch);
+          if (cfg.sync.username) setSyncUsername(cfg.sync.username);
+        }
+
+        // Load encrypted token from secure storage
+        const token = await invoke('retrieve_sync_token');
+        if (token) {
+          setSyncToken(token);
+          setTokenLoaded(true);
+          console.log('[Sync] Loaded token from secure storage');
+        }
+      } catch (e) {
+        console.error('Failed to load sync settings:', e);
+      }
+
+      // Get workspace path from opener, URL params, or backend API
+      try {
+        let foundPath = false;
+
+        // Try to get from window.opener first (if opened from workspace)
+        if (window.opener && window.opener.__WORKSPACE_PATH__) {
+          setWorkspacePath(window.opener.__WORKSPACE_PATH__);
+          foundPath = true;
+        } else {
+          // Try from URL params
+          const params = new URLSearchParams(window.location.search);
+          const path = params.get('workspacePath');
+          if (path) {
+            setWorkspacePath(decodeURIComponent(path));
+            foundPath = true;
+          }
+        }
+
+        // Fallback: Try to get from backend API state if not found
+        if (!foundPath) {
+          try {
+            const currentWorkspace = await invoke('api_get_current_workspace');
+            if (currentWorkspace) {
+              console.log('Got workspace path from API:', currentWorkspace);
+              setWorkspacePath(currentWorkspace);
+            } else {
+              console.warn('No current workspace in API state');
+            }
+          } catch (e) {
+            console.error('Failed to get current workspace from API:', e);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to get workspace path:', e);
+      }
     }
     loadData().catch(() => {});
   }, []);
@@ -194,6 +286,69 @@ export default function Preferences() {
   useEffect(() => {
     getActiveShortcuts().then(setKeymap).catch(() => {});
   }, []);
+
+  // Auto-save sync settings when they change (except token which is saved separately)
+  useEffect(() => {
+    const saveSyncSettings = async () => {
+      try {
+        await updateConfig({
+          sync: {
+            remoteUrl: syncRemoteUrl,
+            authorName: syncAuthorName,
+            authorEmail: syncAuthorEmail,
+            branch: syncBranch,
+            username: syncUsername
+          }
+        });
+      } catch (e) {
+        console.error('Failed to save sync settings:', e);
+      }
+    };
+
+    // Only save if at least one field is filled
+    if (syncRemoteUrl || syncAuthorName || syncAuthorEmail || syncUsername) {
+      saveSyncSettings();
+    }
+  }, [syncRemoteUrl, syncAuthorName, syncAuthorEmail, syncBranch, syncUsername]);
+
+  // Auto-save token to secure storage when it changes
+  useEffect(() => {
+    const saveToken = async () => {
+      if (!syncToken) return;
+
+      try {
+        await invoke('store_sync_token', { token: syncToken });
+        console.log('[Sync] Token saved to secure storage');
+      } catch (e) {
+        console.error('Failed to save token:', e);
+      }
+    };
+
+    if (syncToken && !tokenLoaded) {
+      // Only save if user typed it (not loaded from storage)
+      saveToken();
+    }
+  }, [syncToken]);
+
+  // Auto-detect branch name when workspace path is available
+  useEffect(() => {
+    const detectBranch = async () => {
+      if (!workspacePath) return;
+
+      try {
+        const branchName = await invoke('git_get_current_branch', { workspacePath });
+        if (branchName && branchName !== syncBranch) {
+          setSyncBranch(branchName);
+          console.log('[Sync] Auto-detected branch:', branchName);
+        }
+      } catch (e) {
+        // Ignore error if Git not initialized yet
+        console.log('[Sync] Could not detect branch (Git may not be initialized)');
+      }
+    };
+
+    detectBranch();
+  }, [workspacePath]);
 
   const beginEdit = (id) => setEditing(id);
   const cancelEdit = () => setEditing(null);
@@ -235,10 +390,117 @@ export default function Preferences() {
     </span>
   );
 
-  const handleThemeChange = (e) => {
+  const handleThemeChange = async (e) => {
     const themeId = e.target.value;
     setActiveTheme(themeId);
-    setGlobalActiveTheme(themeId).catch(() => {});
+    await setGlobalActiveTheme(themeId).catch(() => {});
+
+    // Load theme tokens for editing
+    if (themeId) {
+      try {
+        const tokens = await getThemeTokens(themeId);
+        setThemeTokens(tokens);
+        setOriginalTokens(tokens);
+        setHasUnsavedChanges(false);
+      } catch (error) {
+        console.error('Failed to load theme tokens:', error);
+        setThemeTokens({});
+        setOriginalTokens({});
+      }
+    } else {
+      setThemeTokens({});
+      setOriginalTokens({});
+    }
+  };
+
+  const handleUploadTheme = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{
+          name: 'Theme',
+          extensions: ['json']
+        }]
+      });
+
+      if (!selected) return;
+
+      const themeId = await importThemeFile(selected, false);
+
+      // Refresh theme list
+      const available = await listAvailableThemes();
+      setThemes(available);
+
+      // Switch to the new theme
+      setActiveTheme(themeId);
+      await setGlobalActiveTheme(themeId);
+
+      // Load tokens
+      const tokens = await getThemeTokens(themeId);
+      setThemeTokens(tokens);
+      setOriginalTokens(tokens);
+      setHasUnsavedChanges(false);
+
+      alert('Theme imported successfully!');
+    } catch (error) {
+      alert(`Failed to import theme: ${error.message}`);
+    }
+  };
+
+  const handleExportTheme = async () => {
+    if (!activeTheme) {
+      alert('Please select a theme first');
+      return;
+    }
+
+    try {
+      const themeName = themes.find(t => t.id === activeTheme)?.name || activeTheme;
+      const filePath = await saveDialog({
+        defaultPath: `${themeName}.json`,
+        filters: [{
+          name: 'Theme',
+          extensions: ['json']
+        }]
+      });
+
+      if (!filePath) return;
+
+      await exportTheme(activeTheme, filePath);
+      alert('Theme exported successfully!');
+    } catch (error) {
+      alert(`Failed to export theme: ${error.message}`);
+    }
+  };
+
+  const handleTokenChange = (tokenKey, newValue) => {
+    const updatedTokens = { ...themeTokens, [tokenKey]: newValue };
+    setThemeTokens(updatedTokens);
+    setHasUnsavedChanges(true);
+
+    // Live preview: apply changes immediately
+    applyTokens(updatedTokens);
+  };
+
+  const handleSaveTheme = async () => {
+    if (!activeTheme) {
+      alert('Please select a theme first');
+      return;
+    }
+
+    try {
+      await saveThemeTokens(activeTheme, themeTokens);
+      setOriginalTokens(themeTokens);
+      setHasUnsavedChanges(false);
+      alert('Theme saved successfully!');
+    } catch (error) {
+      alert(`Failed to save theme: ${error.message}`);
+    }
+  };
+
+  const handleResetTheme = () => {
+    setThemeTokens(originalTokens);
+    setHasUnsavedChanges(false);
+    applyTokens(originalTokens);
   };
 
   // Listen for theme changes from other windows
@@ -351,6 +613,7 @@ export default function Preferences() {
             "Editor",
             "Markdown",
             "Shortcuts",
+            "Sync",
             "Connections",
             "Account",
             "AI Assistant",
@@ -373,9 +636,31 @@ export default function Preferences() {
             <div className="space-y-8 max-w-xl">
 
               <section>
-                <h2 className="text-sm uppercase tracking-wide text-app-muted mb-3">Theme</h2>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-sm uppercase tracking-wide text-app-muted">Theme</h2>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleUploadTheme}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-app-panel border border-app-border hover:bg-app-bg transition-colors"
+                      title="Upload theme file"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      Upload
+                    </button>
+                    <button
+                      onClick={handleExportTheme}
+                      disabled={!activeTheme}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-app-panel border border-app-border hover:bg-app-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Export current theme"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Export
+                    </button>
+                  </div>
+                </div>
+
                 <select
-                  className="h-9 px-3 w-full rounded-md bg-app-panel border border-app-border outline-none"
+                  className="h-9 px-3 w-full rounded-md bg-app-panel border border-app-border outline-none mb-4"
                   value={activeTheme}
                   onChange={handleThemeChange}
                 >
@@ -386,9 +671,82 @@ export default function Preferences() {
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-app-muted mt-2">
-                  Add more themes to <code>~/Library/Application Support/Lokus/themes/</code>
-                </p>
+
+                {/* Theme Editor Table */}
+                {activeTheme && Object.keys(themeTokens).length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-app-muted">
+                        Edit colors and save changes to the theme file
+                      </p>
+                      <div className="flex items-center gap-2">
+                        {hasUnsavedChanges && (
+                          <button
+                            onClick={handleResetTheme}
+                            className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md hover:bg-app-panel transition-colors text-app-muted"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            Reset
+                          </button>
+                        )}
+                        <button
+                          onClick={handleSaveTheme}
+                          disabled={!hasUnsavedChanges}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-app-accent text-app-accent-fg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          Save Changes
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="border border-app-border rounded-md overflow-hidden">
+                      <div className="max-h-96 overflow-y-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-app-panel sticky top-0">
+                            <tr>
+                              <th className="text-left px-3 py-2 text-xs font-medium text-app-muted uppercase tracking-wide">Token</th>
+                              <th className="text-left px-3 py-2 text-xs font-medium text-app-muted uppercase tracking-wide w-16">Preview</th>
+                              <th className="text-left px-3 py-2 text-xs font-medium text-app-muted uppercase tracking-wide">Value</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.entries(themeTokens).sort().map(([key, value]) => {
+                              const rgbValue = value.includes(' ') ? `rgb(${value})` : value;
+                              return (
+                                <tr key={key} className="border-t border-app-border hover:bg-app-panel/50">
+                                  <td className="px-3 py-2 font-mono text-xs text-app-muted">{key}</td>
+                                  <td className="px-3 py-2">
+                                    <div
+                                      className="w-8 h-8 rounded border border-app-border"
+                                      style={{ backgroundColor: rgbValue }}
+                                      title={rgbValue}
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <input
+                                      type="text"
+                                      value={value}
+                                      onChange={(e) => handleTokenChange(key, e.target.value)}
+                                      className="w-full px-2 py-1 text-xs font-mono rounded bg-app-bg border border-app-border outline-none focus:border-app-accent"
+                                      placeholder="e.g., 255 128 0 or #ff8000"
+                                    />
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!activeTheme && (
+                  <p className="text-xs text-app-muted mt-2">
+                    Select a theme to edit its colors
+                  </p>
+                )}
               </section>
 
             </div>
@@ -2054,6 +2412,366 @@ export default function Preferences() {
                     </div>
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+
+          {section === "Sync" && (
+            <div className="space-y-6 max-w-2xl">
+              <div>
+                <h2 className="text-lg font-semibold mb-2 text-app-text">Git Sync</h2>
+                <p className="text-sm text-app-muted mb-6">
+                  Sync your workspace across devices using Git (GitHub, GitLab, etc.). Free forever!
+                </p>
+              </div>
+
+              {/* Check if sync is configured */}
+              {(!syncRemoteUrl || !syncUsername || !syncToken) ? (
+                /* Setup Mode - Show when not configured */
+                <>
+                  <section className="p-4 bg-app-panel border border-app-border rounded-md">
+                    <h3 className="text-sm font-medium text-app-text mb-2">Setup Instructions</h3>
+                    <ol className="text-xs text-app-muted space-y-2 list-decimal list-inside mb-4">
+                      <li>Create a private repository on GitHub or GitLab</li>
+                      <li>Generate a Personal Access Token with repo permissions</li>
+                      <li>Click "Initialize Git" below, then fill in your repository details</li>
+                    </ol>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={async () => {
+                          if (!workspacePath) {
+                            alert('Workspace path not available. Please reopen Preferences from the workspace.');
+                            return;
+                          }
+                          setSyncLoading(true);
+                          try {
+                            const result = await invoke('git_init', { workspacePath });
+                            alert(result);
+                          } catch (err) {
+                            alert('Git init failed: ' + err);
+                          }
+                          setSyncLoading(false);
+                        }}
+                        disabled={syncLoading || !workspacePath}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+                      >
+                        <GitBranch className="w-4 h-4" />
+                        Initialize Git
+                      </button>
+                    </div>
+                  </section>
+
+                  {/* Configuration Form */}
+                  <section className="space-y-4 bg-app-panel border border-app-border rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-app-text uppercase tracking-wide">Repository Configuration</h3>
+
+                    <div>
+                      <label className="block text-sm text-app-muted mb-2">Remote URL</label>
+                      <input
+                        type="text"
+                        value={syncRemoteUrl}
+                        onChange={(e) => setSyncRemoteUrl(e.target.value)}
+                        placeholder="https://github.com/username/repo.git"
+                        className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm text-app-muted mb-2">Author Name</label>
+                        <input
+                          type="text"
+                          value={syncAuthorName}
+                          onChange={(e) => setSyncAuthorName(e.target.value)}
+                          placeholder="Your Name"
+                          className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm text-app-muted mb-2">Author Email</label>
+                        <input
+                          type="email"
+                          value={syncAuthorEmail}
+                          onChange={(e) => setSyncAuthorEmail(e.target.value)}
+                          placeholder="your@email.com"
+                          className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-app-muted mb-2">Username</label>
+                      <input
+                        type="text"
+                        value={syncUsername}
+                        onChange={(e) => setSyncUsername(e.target.value)}
+                        placeholder="github-username"
+                        className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-app-muted mb-2">Personal Access Token</label>
+                      <input
+                        type="password"
+                        value={tokenLoaded ? '••••••••••••' : syncToken}
+                        onChange={(e) => {
+                          setSyncToken(e.target.value);
+                          setTokenLoaded(false);
+                        }}
+                        placeholder="ghp_... or glpat-..."
+                        className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
+                      />
+                      <p className="text-xs text-app-muted mt-1">
+                        <strong>GitHub:</strong> <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-app-accent hover:underline">Create token</a> with <code className="bg-app-bg px-1 rounded">repo</code> scope
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-app-muted mb-2">Branch</label>
+                      <input
+                        type="text"
+                        value={syncBranch}
+                        onChange={(e) => setSyncBranch(e.target.value)}
+                        placeholder="main"
+                        className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
+                      />
+                      <p className="text-xs text-app-muted mt-1">Auto-detected from Git repository</p>
+                    </div>
+
+                    <button
+                      onClick={async () => {
+                        if (!workspacePath) {
+                          alert('Workspace path not available. Please reopen Preferences from the workspace.');
+                          return;
+                        }
+                        if (!syncRemoteUrl) {
+                          alert('Please enter a remote URL first.');
+                          return;
+                        }
+                        setSyncLoading(true);
+                        try {
+                          const result = await invoke('git_add_remote', {
+                            workspacePath,
+                            remoteName: 'origin',
+                            remoteUrl: syncRemoteUrl
+                          });
+                          alert(result);
+                        } catch (err) {
+                          alert('Add remote failed: ' + err);
+                        }
+                        setSyncLoading(false);
+                      }}
+                      disabled={syncLoading || !workspacePath || !syncRemoteUrl}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+                    >
+                      <CloudUpload className="w-4 h-4" />
+                      Connect Remote Repository
+                    </button>
+                  </section>
+                </>
+              ) : (
+                /* Configured Mode - Show cards */
+                <>
+                  {/* Configuration Card */}
+                  <section className="bg-app-panel border border-app-border rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => setSyncConfigExpanded(!syncConfigExpanded)}
+                      className="w-full flex items-center justify-between p-4 hover:bg-app-bg transition-colors text-left"
+                    >
+                      <div className="flex items-center gap-3">
+                        <GitBranch className="w-5 h-5 text-app-accent" />
+                        <div>
+                          <h3 className="text-sm font-medium text-app-text">Git Configuration</h3>
+                          <p className="text-xs text-app-muted mt-0.5">
+                            {syncRemoteUrl.replace('https://', '').replace('.git', '')} • {syncBranch}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-app-muted">{syncConfigExpanded ? 'Collapse' : 'Expand'}</span>
+                        <svg
+                          className={`w-4 h-4 text-app-muted transition-transform ${syncConfigExpanded ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </button>
+
+                    {syncConfigExpanded && (
+                      <div className="px-4 pb-4 space-y-3 border-t border-app-border pt-4">
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <span className="text-app-muted">Author:</span>
+                            <span className="ml-2 text-app-text">{syncAuthorName}</span>
+                          </div>
+                          <div>
+                            <span className="text-app-muted">Email:</span>
+                            <span className="ml-2 text-app-text">{syncAuthorEmail}</span>
+                          </div>
+                          <div>
+                            <span className="text-app-muted">Username:</span>
+                            <span className="ml-2 text-app-text">{syncUsername}</span>
+                          </div>
+                          <div>
+                            <span className="text-app-muted">Token:</span>
+                            <span className="ml-2 text-app-text">••••••••••••</span>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 flex gap-2">
+                          <button
+                            onClick={() => {
+                              // Clear all sync settings
+                              setSyncRemoteUrl('');
+                              setSyncAuthorName('');
+                              setSyncAuthorEmail('');
+                              setSyncUsername('');
+                              setSyncToken('');
+                              setTokenLoaded(false);
+                              setSyncConfigExpanded(false);
+                              invoke('delete_sync_token');
+                            }}
+                            className="px-3 py-1.5 text-sm bg-app-bg border border-app-border hover:border-red-500 hover:text-red-500 rounded-md text-app-text transition-colors"
+                          >
+                            Delete Configuration
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Quick Sync Card */}
+                  <section className="space-y-4 bg-app-panel border border-app-border rounded-lg p-4">
+                    <div className="flex items-center gap-2">
+                      <CloudUpload className="w-5 h-5 text-app-accent" />
+                      <h3 className="text-sm font-medium text-app-text">Sync Workspace</h3>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-app-muted mb-2">Commit Message</label>
+                      <input
+                        type="text"
+                        value={syncMessage}
+                        onChange={(e) => setSyncMessage(e.target.value)}
+                        placeholder="Update workspace"
+                        className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
+                      />
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={async () => {
+                          if (!workspacePath) {
+                            alert('Workspace path not available. Please reopen Preferences from the workspace.');
+                            return;
+                          }
+                          setSyncLoading(true);
+                          try {
+                            await invoke('git_pull', {
+                              workspacePath,
+                              remoteName: 'origin',
+                              branchName: syncBranch,
+                              username: syncUsername,
+                              token: syncToken
+                            });
+                            alert('Pulled successfully!');
+                          } catch (err) {
+                            alert('Pull failed: ' + err);
+                          }
+                          setSyncLoading(false);
+                        }}
+                        disabled={syncLoading || !workspacePath}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
+                      >
+                        <CloudOff className="w-4 h-4" />
+                        Pull
+                      </button>
+
+                      <button
+                        onClick={async () => {
+                          if (!workspacePath) {
+                            alert('Workspace path not available. Please reopen Preferences from the workspace.');
+                            return;
+                          }
+                          setSyncLoading(true);
+                          try {
+                            // First commit
+                            await invoke('git_commit', {
+                              workspacePath,
+                              message: syncMessage || 'Update workspace',
+                              authorName: syncAuthorName,
+                              authorEmail: syncAuthorEmail
+                            });
+                            // Then push
+                            await invoke('git_push', {
+                              workspacePath,
+                              remoteName: 'origin',
+                              branchName: syncBranch,
+                              username: syncUsername,
+                              token: syncToken
+                            });
+                            alert('Pushed successfully!');
+                            setSyncMessage('');
+                          } catch (err) {
+                            alert('Push failed: ' + err);
+                          }
+                          setSyncLoading(false);
+                        }}
+                        disabled={syncLoading || !syncMessage || !workspacePath}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+                      >
+                        <CloudUpload className="w-4 h-4" />
+                        Commit & Push
+                      </button>
+
+                      <button
+                        onClick={async () => {
+                          if (!workspacePath) {
+                            alert('Workspace path not available. Please reopen Preferences from the workspace.');
+                            return;
+                          }
+                          setSyncLoading(true);
+                          try {
+                            const status = await invoke('git_status', {
+                              workspacePath
+                            });
+                            setSyncStatus(status);
+                          } catch (err) {
+                            alert('Status check failed: ' + err);
+                          }
+                          setSyncLoading(false);
+                        }}
+                        disabled={syncLoading || !workspacePath}
+                        className="px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
+                      >
+                        <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
+                      </button>
+                    </div>
+
+                    {syncStatus && (
+                      <div className="p-3 bg-app-bg border border-app-border rounded-md text-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                          <GitBranch className="w-4 h-4 text-app-accent" />
+                          <span className="font-medium text-app-text">Status</span>
+                        </div>
+                        <div className="space-y-1 text-app-muted">
+                          <div>Synced: {syncStatus.is_synced ? '✓' : '✗'}</div>
+                          <div>Changes: {syncStatus.has_changes ? 'Yes' : 'No'}</div>
+                          <div>Ahead: {syncStatus.ahead} | Behind: {syncStatus.behind}</div>
+                          {syncStatus.conflicts.length > 0 && (
+                            <div className="text-red-500">Conflicts: {syncStatus.conflicts.join(', ')}</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </section>
+                </>
               )}
             </div>
           )}

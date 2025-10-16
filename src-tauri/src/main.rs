@@ -19,6 +19,7 @@ mod connections;
 mod oauth_server;
 mod secure_storage;
 mod api_server;
+mod sync;
 
 use windows::{open_workspace_window, open_preferences_window, open_launcher_window};
 use tauri::Manager;
@@ -249,11 +250,19 @@ fn main() {
       load_session_state,
       get_all_workspaces,
       theme::theme_broadcast,
+      theme::import_theme_file,
+      theme::validate_theme_file,
+      theme::export_theme,
+      theme::delete_custom_theme,
+      theme::list_custom_themes,
+      theme::get_theme_tokens,
+      theme::save_theme_tokens,
       handlers::files::read_workspace_files,
       handlers::files::create_file_in_workspace,
       handlers::files::create_folder_in_workspace,
       handlers::files::read_file_content,
       handlers::files::write_file_content,
+      handlers::files::save_file_version_manual,
       handlers::files::rename_file,
       handlers::files::move_file,
       handlers::files::delete_file,
@@ -264,6 +273,22 @@ fn main() {
       handlers::platform_files::get_platform_information,
       handlers::platform_files::check_platform_feature_support,
       handlers::platform_files::get_platform_capabilities,
+      handlers::version_history::save_version,
+      handlers::version_history::get_file_versions,
+      handlers::version_history::get_version_content,
+      handlers::version_history::get_diff,
+      handlers::version_history::restore_version,
+      handlers::version_history::cleanup_old_versions,
+      sync::git_init,
+      sync::git_add_remote,
+      sync::git_commit,
+      sync::git_push,
+      sync::git_pull,
+      sync::git_status,
+      sync::detect_conflicts,
+      sync::git_get_current_branch,
+      sync::git_force_push,
+      sync::git_force_pull,
       clipboard::clipboard_write_text,
       clipboard::clipboard_read_text,
       clipboard::clipboard_write_html,
@@ -360,7 +385,11 @@ fn main() {
       mcp_setup::setup_mcp_integration,
       mcp_setup::check_mcp_status,
       api_server::api_set_workspace,
-      api_server::api_clear_workspace
+      api_server::api_clear_workspace,
+      api_server::api_get_current_workspace,
+      secure_storage::store_sync_token,
+      secure_storage::retrieve_sync_token,
+      secure_storage::delete_sync_token
     ])
     .setup(|app| {
       menu::init(&app.handle())?;

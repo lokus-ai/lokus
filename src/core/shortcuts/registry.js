@@ -201,7 +201,13 @@ export async function registerGlobalShortcuts() {
     try {
       await register(accel, async () => {
         if (a.id === 'open-preferences') {
-          try { await invoke('open_preferences_window'); } catch (e) { console.error('Failed to open preferences:', e); }
+          try {
+            // Try to get workspace path from window if available
+            const workspacePath = window.__WORKSPACE_PATH__ || null;
+            await invoke('open_preferences_window', { workspacePath });
+          } catch (e) {
+            console.error('Failed to open preferences:', e);
+          }
         } else {
           // Use Tauri events in Tauri environment, DOM events otherwise
           if (isTauri) {

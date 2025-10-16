@@ -311,3 +311,52 @@ pub fn list_custom_themes() -> Result<Vec<ThemeManifest>, String> {
 
     Ok(themes)
 }
+
+#[tauri::command]
+pub fn get_theme_tokens(theme_id: String) -> Result<HashMap<String, String>, String> {
+    let themes_dir = get_themes_directory()
+        .map_err(|e| format!("Failed to access themes directory: {}", e))?;
+
+    let theme_file = themes_dir.join(format!("{}.json", theme_id));
+
+    if !theme_file.exists() {
+        return Err(format!("Theme '{}' not found", theme_id));
+    }
+
+    let content = fs::read_to_string(&theme_file)
+        .map_err(|e| format!("Failed to read theme file: {}", e))?;
+
+    let manifest: ThemeManifest = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse theme JSON: {}", e))?;
+
+    Ok(manifest.tokens.tokens)
+}
+
+#[tauri::command]
+pub fn save_theme_tokens(theme_id: String, tokens: HashMap<String, String>) -> Result<(), String> {
+    let themes_dir = get_themes_directory()
+        .map_err(|e| format!("Failed to access themes directory: {}", e))?;
+
+    let theme_file = themes_dir.join(format!("{}.json", theme_id));
+
+    if !theme_file.exists() {
+        return Err(format!("Theme '{}' not found", theme_id));
+    }
+
+    // Read existing manifest to preserve name, author, etc.
+    let content = fs::read_to_string(&theme_file)
+        .map_err(|e| format!("Failed to read theme file: {}", e))?;
+
+    let mut manifest: ThemeManifest = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse theme JSON: {}", e))?;
+
+    // Update tokens
+    manifest.tokens.tokens = tokens;
+
+    // Write back to file
+    fs::write(&theme_file, serde_json::to_string_pretty(&manifest).unwrap())
+        .map_err(|e| format!("Failed to write theme file: {}", e))?;
+
+    println!("🎨 Successfully saved theme: {}", theme_id);
+    Ok(())
+}

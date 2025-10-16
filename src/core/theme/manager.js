@@ -150,38 +150,54 @@ export async function installDefaultThemes() {
 export async function loadThemeManifestById(id) {
   if (!id) return null;
   await initializeTauri();
-  const userThemePath = await join(await getGlobalThemesDir(), `${id}.json`);
-  if (await exists(userThemePath)) {
-    const j = await readJson(userThemePath);
-    if (j?.tokens) return j;
-  }
+
+  // First, check if it's a built-in theme
   if (DEFAULT_THEME_CONTENT[id]) {
     try { return JSON.parse(DEFAULT_THEME_CONTENT[id]); }
     catch (e) { }
   }
+
+  // Otherwise, try to load from Rust backend (custom themes in ~/.lokus/themes/)
+  if (isTauri) {
+    try {
+      await ensureTauriInvoke();
+      const tokens = await invoke('get_theme_tokens', { themeId: id });
+      return { tokens };
+    } catch (e) {
+      console.error(`Failed to load theme ${id} from backend:`, e);
+    }
+  }
+
   return null;
 }
 
 export async function listAvailableThemes() {
   const themeMap = new Map();
+
+  // Add default built-in themes
   for (const themeId of DEFAULT_THEMES) {
     try {
       const manifest = JSON.parse(DEFAULT_THEME_CONTENT[themeId]);
       themeMap.set(themeId, { id: themeId, name: manifest.name });
     } catch { themeMap.set(themeId, { id: themeId, name: themeId }); }
   }
-  if (isTauri) try {
-    const themesDir = await getGlobalThemesDir();
-    if (await exists(themesDir)) {
-      for (const file of await readDir(themesDir)) {
-        if (file.name.endsWith(".json")) {
-          const themeId = file.name.replace(".json", "");
-          const manifest = await readJson(file.path);
-          if (manifest?.name) themeMap.set(themeId, { id: themeId, name: manifest.name });
-        }
+
+  // Add custom themes from Rust backend (reads from ~/.lokus/themes/)
+  if (isTauri) {
+    try {
+      const customThemes = await listCustomThemes();
+      for (const manifest of customThemes) {
+        // Generate safe theme ID from name (same logic as Rust backend)
+        const themeId = manifest.name
+          .toLowerCase()
+          .replace(/[^a-z0-9_-]/g, '_');
+        themeMap.set(themeId, { id: themeId, name: manifest.name });
       }
+    } catch (e) {
+      console.error('Failed to load custom themes:', e);
     }
-  } catch (e) { }
+  }
+
   return Array.from(themeMap.values());
 }
 
@@ -194,16 +210,20 @@ export async function readGlobalVisuals() {
 }
 
 export async function setGlobalActiveTheme(id) {
-  try { 
-    await updateConfig({ theme: id }); 
-  } catch (e) { 
+  try {
+    await updateConfig({ theme: id });
+  } catch (e) {
     return;
   }
-  
+
   const manifest = await loadThemeManifestById(id);
-  const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
+  let tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
+
+  // Merge with defaults to fill in missing tokens
+  tokensToApply = { ...BUILT_IN_THEME_TOKENS, ...tokensToApply };
+
   applyTokens(tokensToApply);
-  
+
   await broadcastTheme({ tokens: tokensToApply, visuals: { theme: id } });
 }
 
@@ -221,22 +241,30 @@ export async function loadThemeForWorkspace(workspacePath) {
     id = globalCfg.theme;
   }
   const manifest = await loadThemeManifestById(id);
-  const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
+  let tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
+
+  // Merge with defaults to fill in missing tokens
+  tokensToApply = { ...BUILT_IN_THEME_TOKENS, ...tokensToApply };
+
   applyTokens(tokensToApply);
 }
 
 export async function applyInitialTheme() {
   let { theme } = await readGlobalVisuals();
-  
+
   // Check if we should sync with system dark mode
   if (theme === 'system' || theme === 'auto') {
     theme = getSystemPreferredTheme();
   }
-  
+
   const manifest = await loadThemeManifestById(theme);
-  const tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
+  let tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
+
+  // Merge with defaults to fill in missing tokens
+  tokensToApply = { ...BUILT_IN_THEME_TOKENS, ...tokensToApply };
+
   applyTokens(tokensToApply);
-  
+
   // Set up system theme listener if using auto mode
   if (theme === 'system' || theme === 'auto') {
     setupSystemThemeListener();
@@ -257,19 +285,19 @@ export function getSystemPreferredTheme() {
 // Set up listener for system theme changes
 export function setupSystemThemeListener() {
   if (typeof window === 'undefined' || !window.matchMedia) return;
-  
+
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-  
+
   const handleChange = async (e) => {
     const newTheme = e.matches ? 'dark' : 'light';
     await setGlobalActiveTheme(newTheme);
-    
+
     // Emit theme change event
     if (isTauri) {
       await emit("theme:changed", { theme: newTheme });
     }
   };
-  
+
   // Modern browsers
   if (mediaQuery.addEventListener) {
     mediaQuery.addEventListener('change', handleChange);
@@ -277,4 +305,74 @@ export function setupSystemThemeListener() {
     // Fallback for older browsers
     mediaQuery.addListener(handleChange);
   }
+}
+
+// --- Theme Management API ---
+let invoke;
+async function ensureTauriInvoke() {
+  if (invoke) return;
+  if (isTauri) {
+    const tauriCore = await import('@tauri-apps/api/core');
+    invoke = tauriCore.invoke;
+  }
+}
+
+export async function importThemeFile(filePath, overwrite = false) {
+  await initializeTauri();
+  await ensureTauriInvoke();
+  if (!isTauri) throw new Error('Theme import only available in desktop app');
+
+  const themeId = await invoke('import_theme_file', { filePath, overwrite });
+  return themeId;
+}
+
+export async function validateThemeFile(filePath) {
+  await initializeTauri();
+  await ensureTauriInvoke();
+  if (!isTauri) throw new Error('Theme validation only available in desktop app');
+
+  const result = await invoke('validate_theme_file', { filePath });
+  return result;
+}
+
+export async function exportTheme(themeId, exportPath) {
+  await initializeTauri();
+  await ensureTauriInvoke();
+  if (!isTauri) throw new Error('Theme export only available in desktop app');
+
+  await invoke('export_theme', { themeId, exportPath });
+}
+
+export async function deleteCustomTheme(themeId) {
+  await initializeTauri();
+  await ensureTauriInvoke();
+  if (!isTauri) throw new Error('Theme deletion only available in desktop app');
+
+  await invoke('delete_custom_theme', { themeId });
+}
+
+export async function listCustomThemes() {
+  await initializeTauri();
+  await ensureTauriInvoke();
+  if (!isTauri) return [];
+
+  const themes = await invoke('list_custom_themes');
+  return themes;
+}
+
+export async function getThemeTokens(themeId) {
+  await initializeTauri();
+  await ensureTauriInvoke();
+  if (!isTauri) throw new Error('Theme token retrieval only available in desktop app');
+
+  const tokens = await invoke('get_theme_tokens', { themeId });
+  return tokens;
+}
+
+export async function saveThemeTokens(themeId, tokens) {
+  await initializeTauri();
+  await ensureTauriInvoke();
+  if (!isTauri) throw new Error('Theme saving only available in desktop app');
+
+  await invoke('save_theme_tokens', { themeId, tokens });
 }

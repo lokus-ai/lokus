@@ -321,3 +321,16 @@ pub async fn api_clear_workspace(
     update_workspace(&app_handle, None).await;
     Ok(())
 }
+
+// Tauri command to get current workspace
+#[tauri::command]
+pub async fn api_get_current_workspace(
+    app_handle: tauri::AppHandle,
+) -> Result<Option<String>, String> {
+    if let Some(state) = app_handle.try_state::<ApiState>() {
+        let current = state.current_workspace.read().await;
+        Ok(current.clone())
+    } else {
+        Ok(None)
+    }
+}

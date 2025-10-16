@@ -41,9 +41,9 @@ This project and everyone participating in it is governed by our [Code of Conduc
 
 ### Before You Start
 
-1. Check [existing issues](https://github.com/YOUR_USERNAME/lokus/issues) to see if your bug/feature has already been reported
-2. Look at [open pull requests](https://github.com/YOUR_USERNAME/lokus/pulls) to avoid duplicate work
-3. For large features, consider opening an [RFC discussion](https://github.com/YOUR_USERNAME/lokus/discussions) first
+1. Check [existing issues](https://github.com/lokus-ai/lokus/issues) to see if your bug/feature has already been reported
+2. Look at [open pull requests](https://github.com/lokus-ai/lokus/pulls) to avoid duplicate work
+3. For large features, consider opening an [RFC discussion](https://github.com/lokus-ai/lokus/discussions) first
 
 ## 💻 Development Setup
 
@@ -182,7 +182,7 @@ brew install pkg-config
 #### 1. Fork and Clone
 ```bash
 # Fork the repository on GitHub first, then:
-git clone https://github.com/YOUR_USERNAME/lokus.git
+git clone https://github.com/lokus-ai/lokus.git
 cd lokus
 
 # Verify you're in the right directory
@@ -667,12 +667,12 @@ lokus/
 ## 🔄 Contributing Workflow
 
 1. **Create an issue** (if one doesn't exist)
-   - For bugs: Use the [bug report template](https://github.com/YOUR_USERNAME/lokus/issues/new?template=bug_report.yml)
-   - For features: Use the [feature request template](https://github.com/YOUR_USERNAME/lokus/issues/new?template=feature_request.yml)
+   - For bugs: Use the [bug report template](https://github.com/lokus-ai/lokus/issues/new?template=bug_report.yml)
+   - For features: Use the [feature request template](https://github.com/lokus-ai/lokus/issues/new?template=feature_request.yml)
 
 2. **Fork the repository**
    ```bash
-   gh repo fork YOUR_USERNAME/lokus --clone
+   gh repo fork lokus-ai/lokus --clone
    ```
 
 3. **Create a feature branch**
@@ -890,9 +890,9 @@ Contributors are recognized in:
 
 ## 📞 Getting Help
 
-- **Questions**: [GitHub Discussions](https://github.com/YOUR_USERNAME/lokus/discussions)
+- **Questions**: [GitHub Discussions](https://github.com/lokus-ai/lokus/discussions)
 - **Chat**: Join our Discord community
-- **Issues**: [GitHub Issues](https://github.com/YOUR_USERNAME/lokus/issues)
+- **Issues**: [GitHub Issues](https://github.com/lokus-ai/lokus/issues)
 
 ## 📄 License
 
