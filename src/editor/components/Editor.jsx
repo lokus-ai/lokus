@@ -35,6 +35,7 @@ import CodeBlockIndent from "../extensions/CodeBlockIndent.js";
 import liveEditorSettings from "../../core/editor/live-settings.js";
 import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import TaskCreationModal from "../../components/TaskCreationModal.jsx";
+import ExportModal from "../../views/ExportModal.jsx";
 import { editorAPI } from "../../plugins/api/EditorAPI.js";
 import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 
@@ -308,7 +309,8 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
   const isSettingRef = useRef(false);
   const [isWikiLinkModalOpen, setIsWikiLinkModalOpen] = useState(false);
   const [isTaskCreationModalOpen, setIsTaskCreationModalOpen] = useState(false);
-  
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
   // Subscribe to live settings changes for real-time updates
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
   
@@ -582,38 +584,10 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         }
         break;
       case 'exportMarkdown':
-        // Export content as markdown
-        try {
-          const content = editor.getHTML();
-          const blob = new Blob([content], { type: 'text/markdown' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'export.md';
-          a.click();
-          URL.revokeObjectURL(url);
-        } catch (e) {
-          console.error('Failed to export markdown:', e);
-        }
-        break;
       case 'exportHTML':
-        // Export content as HTML
-        try {
-          const content = editor.getHTML();
-          const blob = new Blob([content], { type: 'text/html' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'export.html';
-          a.click();
-          URL.revokeObjectURL(url);
-        } catch (e) {
-          console.error('Failed to export HTML:', e);
-        }
-        break;
       case 'exportPDF':
-        // PDF export would require additional library
-        alert('PDF export coming soon!');
+        // Open export modal
+        setIsExportModalOpen(true);
         break;
       case 'importFile':
         // Trigger file import dialog
@@ -681,6 +655,19 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         isOpen={isTaskCreationModalOpen}
         onClose={() => setIsTaskCreationModalOpen(false)}
         onCreateTask={handleCreateTask}
+      />
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        htmlContent={editor?.getHTML()}
+        currentFile={{
+          name: globalThis.__LOKUS_ACTIVE_FILE__?.name || 'untitled',
+          path: globalThis.__LOKUS_ACTIVE_FILE__?.path,
+        }}
+        workspacePath={globalThis.__LOKUS_WORKSPACE_PATH__}
+        exportType="single"
       />
     </>
   );
