@@ -31,6 +31,90 @@ export const Folding = Extension.create({
   addProseMirrorPlugins() {
     const extension = this;
 
+    // Bind buildDecorations to the extension context
+    const buildDecorations = (state) => {
+      const decorations = [];
+      const { doc } = state;
+      const foldedSections = extension.storage.foldedSections;
+
+      // Find all headings and add fold indicators
+      const headings = [];
+      doc.descendants((node, pos) => {
+        if (node.type.name === 'heading') {
+          headings.push({ level: node.attrs.level, pos });
+        }
+      });
+
+      // Build fold decorations
+      headings.forEach((heading, index) => {
+        const { level, pos } = heading;
+        const isFolded = foldedSections.has(pos);
+
+        // Find the range of content to fold (until next heading of same or higher level)
+        let endPos = doc.content.size;
+        for (let i = index + 1; i < headings.length; i++) {
+          if (headings[i].level <= level) {
+            endPos = headings[i].pos;
+            break;
+          }
+        }
+
+        // Add fold indicator decoration
+        const indicator = document.createElement('span');
+        indicator.className = 'fold-indicator';
+        indicator.dataset.pos = pos;
+        indicator.textContent = isFolded ? '▶' : '▼';
+        indicator.style.cssText = `
+          cursor: pointer;
+          user-select: none;
+          display: inline-block;
+          width: 16px;
+          height: 16px;
+          margin-right: 6px;
+          margin-left: -22px;
+          color: var(--muted);
+          font-size: 10px;
+          line-height: 16px;
+          text-align: center;
+          transition: color 0.15s ease, transform 0.15s ease;
+        `;
+
+        // Add hover effect
+        indicator.addEventListener('mouseenter', () => {
+          indicator.style.color = 'var(--accent)';
+          indicator.style.transform = 'scale(1.2)';
+        });
+        indicator.addEventListener('mouseleave', () => {
+          indicator.style.color = 'var(--muted)';
+          indicator.style.transform = 'scale(1)';
+        });
+
+        const indicatorDeco = Decoration.widget(pos, indicator, {
+          side: -1,
+        });
+        decorations.push(indicatorDeco);
+
+        // If folded, hide the content between this heading and the next
+        if (isFolded && endPos > pos + 1) {
+          const nodeAfterHeading = doc.nodeAt(pos);
+          const headingSize = nodeAfterHeading ? nodeAfterHeading.nodeSize : 1;
+          const foldStart = pos + headingSize;
+          const foldEnd = endPos;
+
+          if (foldEnd > foldStart) {
+            // Add CSS class to hide folded content
+            const foldDeco = Decoration.node(foldStart, foldEnd, {
+              class: 'folded-content',
+              style: 'display: none;',
+            });
+            decorations.push(foldDeco);
+          }
+        }
+      });
+
+      return DecorationSet.create(doc, decorations);
+    };
+
     return [
       new Plugin({
         key: FoldingPluginKey,
@@ -60,7 +144,7 @@ export const Folding = Extension.create({
 
             // Rebuild decorations if meta indicates fold state changed
             if (tr.getMeta('foldingChanged')) {
-              return extension.buildDecorations(newState);
+              return buildDecorations(newState);
             }
 
             return decorationSet;
@@ -69,7 +153,7 @@ export const Folding = Extension.create({
 
         props: {
           decorations(state) {
-            return extension.buildDecorations(state);
+            return buildDecorations(state);
           },
 
           handleDOMEvents: {
@@ -190,89 +274,6 @@ export const Folding = Extension.create({
       const positions = Array.from(this.storage.foldedSections);
       localStorage.setItem(storageKey, JSON.stringify(positions));
     }
-  },
-
-  buildDecorations(state) {
-    const decorations = [];
-    const { doc } = state;
-    const foldedSections = this.storage.foldedSections;
-
-    // Find all headings and add fold indicators
-    const headings = [];
-    doc.descendants((node, pos) => {
-      if (node.type.name === 'heading') {
-        headings.push({ level: node.attrs.level, pos });
-      }
-    });
-
-    // Build fold decorations
-    headings.forEach((heading, index) => {
-      const { level, pos } = heading;
-      const isFolded = foldedSections.has(pos);
-
-      // Find the range of content to fold (until next heading of same or higher level)
-      let endPos = doc.content.size;
-      for (let i = index + 1; i < headings.length; i++) {
-        if (headings[i].level <= level) {
-          endPos = headings[i].pos;
-          break;
-        }
-      }
-
-      // Add fold indicator decoration
-      const indicator = document.createElement('span');
-      indicator.className = 'fold-indicator';
-      indicator.dataset.pos = pos;
-      indicator.textContent = isFolded ? '▶' : '▼';
-      indicator.style.cssText = `
-        cursor: pointer;
-        user-select: none;
-        display: inline-block;
-        width: 16px;
-        height: 16px;
-        margin-right: 6px;
-        margin-left: -22px;
-        color: var(--muted);
-        font-size: 10px;
-        line-height: 16px;
-        text-align: center;
-        transition: color 0.15s ease, transform 0.15s ease;
-      `;
-
-      // Add hover effect
-      indicator.addEventListener('mouseenter', () => {
-        indicator.style.color = 'var(--accent)';
-        indicator.style.transform = 'scale(1.2)';
-      });
-      indicator.addEventListener('mouseleave', () => {
-        indicator.style.color = 'var(--muted)';
-        indicator.style.transform = 'scale(1)';
-      });
-
-      const indicatorDeco = Decoration.widget(pos, indicator, {
-        side: -1,
-      });
-      decorations.push(indicatorDeco);
-
-      // If folded, hide the content between this heading and the next
-      if (isFolded && endPos > pos + 1) {
-        const nodeAfterHeading = doc.nodeAt(pos);
-        const headingSize = nodeAfterHeading ? nodeAfterHeading.nodeSize : 1;
-        const foldStart = pos + headingSize;
-        const foldEnd = endPos;
-
-        if (foldEnd > foldStart) {
-          // Add CSS class to hide folded content
-          const foldDeco = Decoration.node(foldStart, foldEnd, {
-            class: 'folded-content',
-            style: 'display: none;',
-          });
-          decorations.push(foldDeco);
-        }
-      }
-    });
-
-    return DecorationSet.create(doc, decorations);
   },
 });
 
