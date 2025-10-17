@@ -147,7 +147,12 @@ const TagAutocomplete = Extension.create({
               }
 
               container = null;
-              component.destroy();
+
+              // Only destroy component if it exists
+              if (component?.destroy) {
+                component.destroy();
+              }
+              component = null;
             }
           };
         }
