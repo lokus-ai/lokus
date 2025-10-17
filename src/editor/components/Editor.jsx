@@ -351,116 +351,16 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
     return <div className="m-5 text-app-muted">Loading editor…</div>;
   }
 
-  return (
-    <>
-      {/* Mode Switcher - Compact pill design in top-right */}
-      <div style={{
-        position: 'absolute',
-        top: '0.75rem',
-        right: '1rem',
-        zIndex: 1000,
-        display: 'flex',
-        gap: '0.25rem',
-        background: 'rgb(var(--panel))',
-        border: '1px solid rgb(var(--border))',
-        borderRadius: '0.5rem',
-        padding: '0.25rem',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-      }}>
-        <button
-          onClick={() => setEditorMode('edit')}
-          title="Edit Mode"
-          style={{
-            padding: '0.375rem 0.875rem',
-            borderRadius: '0.375rem',
-            border: 'none',
-            background: editorMode === 'edit' ? 'rgb(var(--accent))' : 'transparent',
-            color: editorMode === 'edit' ? 'white' : 'rgb(var(--muted))',
-            cursor: 'pointer',
-            fontSize: '0.8125rem',
-            fontWeight: editorMode === 'edit' ? 600 : 500,
-            transition: 'all 0.15s ease',
-            opacity: editorMode === 'edit' ? 1 : 0.7
-          }}
-          onMouseEnter={(e) => {
-            if (editorMode !== 'edit') {
-              e.target.style.opacity = '1';
-              e.target.style.background = 'rgb(var(--hover))';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (editorMode !== 'edit') {
-              e.target.style.opacity = '0.7';
-              e.target.style.background = 'transparent';
-            }
-          }}
-        >
-          Edit
-        </button>
-        <button
-          onClick={() => setEditorMode('live')}
-          title="Live Preview Mode"
-          style={{
-            padding: '0.375rem 0.875rem',
-            borderRadius: '0.375rem',
-            border: 'none',
-            background: editorMode === 'live' ? 'rgb(var(--accent))' : 'transparent',
-            color: editorMode === 'live' ? 'white' : 'rgb(var(--muted))',
-            cursor: 'pointer',
-            fontSize: '0.8125rem',
-            fontWeight: editorMode === 'live' ? 600 : 500,
-            transition: 'all 0.15s ease',
-            opacity: editorMode === 'live' ? 1 : 0.7
-          }}
-          onMouseEnter={(e) => {
-            if (editorMode !== 'live') {
-              e.target.style.opacity = '1';
-              e.target.style.background = 'rgb(var(--hover))';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (editorMode !== 'live') {
-              e.target.style.opacity = '0.7';
-              e.target.style.background = 'transparent';
-            }
-          }}
-        >
-          Live
-        </button>
-        <button
-          onClick={() => setEditorMode('reading')}
-          title="Reading Mode"
-          style={{
-            padding: '0.375rem 0.875rem',
-            borderRadius: '0.375rem',
-            border: 'none',
-            background: editorMode === 'reading' ? 'rgb(var(--accent))' : 'transparent',
-            color: editorMode === 'reading' ? 'white' : 'rgb(var(--muted))',
-            cursor: 'pointer',
-            fontSize: '0.8125rem',
-            fontWeight: editorMode === 'reading' ? 600 : 500,
-            transition: 'all 0.15s ease',
-            opacity: editorMode === 'reading' ? 1 : 0.7
-          }}
-          onMouseEnter={(e) => {
-            if (editorMode !== 'reading') {
-              e.target.style.opacity = '1';
-              e.target.style.background = 'rgb(var(--hover))';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (editorMode !== 'reading') {
-              e.target.style.opacity = '0.7';
-              e.target.style.background = 'transparent';
-            }
-          }}
-        >
-          Read
-        </button>
-      </div>
+  // Expose editorMode to parent via window global for sidebar access
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.__LOKUS_EDITOR_MODE__ = editorMode;
+      window.__LOKUS_SET_EDITOR_MODE__ = setEditorMode;
+    }
+  }, [editorMode]);
 
-      <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} editorMode={editorMode} />
-    </>
+  return (
+    <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} editorMode={editorMode} />
   );
 });
 

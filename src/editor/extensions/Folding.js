@@ -68,17 +68,20 @@ export const Folding = Extension.create({
           cursor: pointer;
           user-select: none;
           display: inline-block;
-          width: 20px;
-          height: 20px;
+          width: 18px;
+          height: 18px;
           margin-right: 4px;
-          margin-left: -26px;
+          margin-left: 0px;
           color: rgb(var(--muted));
-          font-size: 11px;
-          line-height: 20px;
+          font-size: 12px;
+          line-height: 18px;
           text-align: center;
           transition: color 0.15s ease, transform 0.15s ease;
           pointer-events: auto;
-          position: relative;
+          position: absolute;
+          left: -22px;
+          top: 50%;
+          transform: translateY(-50%);
           z-index: 10;
         `;
 
@@ -95,11 +98,11 @@ export const Folding = Extension.create({
         // Add hover effect
         indicator.addEventListener('mouseenter', () => {
           indicator.style.color = 'rgb(var(--accent))';
-          indicator.style.transform = 'scale(1.15)';
+          indicator.style.transform = 'translateY(-50%) scale(1.15)';
         });
         indicator.addEventListener('mouseleave', () => {
           indicator.style.color = 'rgb(var(--muted))';
-          indicator.style.transform = 'scale(1)';
+          indicator.style.transform = 'translateY(-50%)';
         });
 
         const indicatorDeco = Decoration.widget(pos, indicator, {
