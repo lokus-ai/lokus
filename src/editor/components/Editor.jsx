@@ -347,10 +347,6 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
     return () => document.removeEventListener('keydown', handleModeShortcut);
   }, []);
 
-  if (loading || !extensions || !editorSettings) {
-    return <div className="m-5 text-app-muted">Loading editor…</div>;
-  }
-
   // Expose editorMode to parent via window global for sidebar access
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -358,6 +354,10 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
       window.__LOKUS_SET_EDITOR_MODE__ = setEditorMode;
     }
   }, [editorMode]);
+
+  if (loading || !extensions || !editorSettings) {
+    return <div className="m-5 text-app-muted">Loading editor…</div>;
+  }
 
   return (
     <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} editorMode={editorMode} />
