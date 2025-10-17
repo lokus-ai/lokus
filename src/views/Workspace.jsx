@@ -14,6 +14,7 @@ import ConnectionStatus from "../components/ConnectionStatus.jsx";
 import Canvas from "./Canvas.jsx";
 import KanbanBoard from "../components/KanbanBoard.jsx";
 import { GraphDataProcessor } from "../core/graph/GraphDataProcessor.js";
+import { GraphData } from "../core/graph/GraphData.js";
 import { GraphEngine } from "../core/graph/GraphEngine.js";
 import FileContextMenu from "../components/FileContextMenu.jsx";
 import EditorGroupsContainer from "../components/EditorGroupsContainer.jsx";
@@ -54,6 +55,7 @@ import BasesView from "../bases/BasesView.jsx";
 import DocumentOutline from "../components/DocumentOutline.jsx";
 import GraphSidebar from "../components/GraphSidebar.jsx";
 import VersionHistoryPanel from "../components/VersionHistoryPanel.jsx";
+import BacklinksPanel from "./BacklinksPanel.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -737,7 +739,10 @@ function WorkspaceWithScope({ path }) {
 
   // Graph data processor instance
   const graphProcessorRef = useRef(null);
-  
+
+  // GraphData instance for backlinks
+  const graphDataInstanceRef = useRef(null);
+
   // Split editor state
   const [useSplitView, setUseSplitView] = useState(false);
   const [splitDirection, setSplitDirection] = useState('vertical'); // 'vertical' or 'horizontal'
@@ -1975,9 +1980,18 @@ function WorkspaceWithScope({ path }) {
   // Graph View Functions
   const initializeGraphProcessor = useCallback(() => {
     if (!path || graphProcessorRef.current) return;
-    
+
     graphProcessorRef.current = new GraphDataProcessor(path);
-    
+
+    // Initialize GraphData instance for backlinks
+    if (!graphDataInstanceRef.current) {
+      graphDataInstanceRef.current = new GraphData({
+        enablePersistence: false,
+        enableRealTimeSync: true,
+        maxCacheSize: 10000
+      });
+    }
+
     // Set up event listeners for real-time graph updates
     const graphDatabase = graphProcessorRef.current.getGraphDatabase();
     
@@ -3558,7 +3572,21 @@ function WorkspaceWithScope({ path }) {
                   onAnimationSpeedChange={graphSidebarData.onAnimationSpeedChange}
                 />
               ) : (
-                <DocumentOutline editor={editorRef.current?.editor} />
+                <>
+                  {/* Document Outline */}
+                  <div style={{ minHeight: '200px', maxHeight: '30%', overflowY: 'auto', borderBottom: '1px solid var(--border)' }}>
+                    <DocumentOutline editor={editorRef.current?.editor} />
+                  </div>
+
+                  {/* Backlinks Panel */}
+                  <div style={{ minHeight: '200px', flex: 1, overflowY: 'auto' }}>
+                    <BacklinksPanel
+                      graphData={graphDataInstanceRef.current}
+                      currentFile={activeFile}
+                      onOpenFile={handleFileOpen}
+                    />
+                  </div>
+                </>
               )}
             </div>
 
