@@ -62,35 +62,49 @@ export const Folding = Extension.create({
         // Add fold indicator decoration
         const indicator = document.createElement('span');
         indicator.className = 'fold-indicator';
-        indicator.dataset.pos = pos;
+        indicator.dataset.pos = pos.toString();
         indicator.textContent = isFolded ? '▶' : '▼';
         indicator.style.cssText = `
           cursor: pointer;
           user-select: none;
           display: inline-block;
-          width: 16px;
-          height: 16px;
-          margin-right: 6px;
-          margin-left: -22px;
-          color: var(--muted);
-          font-size: 10px;
-          line-height: 16px;
+          width: 20px;
+          height: 20px;
+          margin-right: 4px;
+          margin-left: -26px;
+          color: rgb(var(--muted));
+          font-size: 11px;
+          line-height: 20px;
           text-align: center;
           transition: color 0.15s ease, transform 0.15s ease;
+          pointer-events: auto;
+          position: relative;
+          z-index: 10;
         `;
+
+        // Add direct click handler to the indicator
+        indicator.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const clickPos = parseInt(indicator.dataset.pos, 10);
+          if (!isNaN(clickPos) && extension.editor?.view) {
+            extension.toggleFold(extension.editor.view, clickPos);
+          }
+        });
 
         // Add hover effect
         indicator.addEventListener('mouseenter', () => {
-          indicator.style.color = 'var(--accent)';
-          indicator.style.transform = 'scale(1.2)';
+          indicator.style.color = 'rgb(var(--accent))';
+          indicator.style.transform = 'scale(1.15)';
         });
         indicator.addEventListener('mouseleave', () => {
-          indicator.style.color = 'var(--muted)';
+          indicator.style.color = 'rgb(var(--muted))';
           indicator.style.transform = 'scale(1)';
         });
 
         const indicatorDeco = Decoration.widget(pos, indicator, {
           side: -1,
+          stopEvent: () => true, // Prevent ProseMirror from handling this event
         });
         decorations.push(indicatorDeco);
 

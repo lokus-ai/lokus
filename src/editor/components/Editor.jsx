@@ -353,71 +353,110 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
 
   return (
     <>
-      {/* Mode Switcher Toolbar */}
-      <div className="editor-mode-switcher" style={{
+      {/* Mode Switcher - Compact pill design in top-right */}
+      <div style={{
+        position: 'absolute',
+        top: '0.75rem',
+        right: '1rem',
+        zIndex: 1000,
         display: 'flex',
-        gap: '0.5rem',
-        padding: '0.5rem 1rem',
-        borderBottom: '1px solid rgb(var(--border))',
+        gap: '0.25rem',
         background: 'rgb(var(--panel))',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100
+        border: '1px solid rgb(var(--border))',
+        borderRadius: '0.5rem',
+        padding: '0.25rem',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
       }}>
         <button
           onClick={() => setEditorMode('edit')}
-          className={editorMode === 'edit' ? 'mode-active' : ''}
+          title="Edit Mode"
           style={{
-            padding: '0.375rem 0.75rem',
+            padding: '0.375rem 0.875rem',
             borderRadius: '0.375rem',
-            border: '1px solid rgb(var(--border))',
+            border: 'none',
             background: editorMode === 'edit' ? 'rgb(var(--accent))' : 'transparent',
-            color: editorMode === 'edit' ? 'white' : 'rgb(var(--text))',
+            color: editorMode === 'edit' ? 'white' : 'rgb(var(--muted))',
             cursor: 'pointer',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            transition: 'all 0.2s ease'
+            fontSize: '0.8125rem',
+            fontWeight: editorMode === 'edit' ? 600 : 500,
+            transition: 'all 0.15s ease',
+            opacity: editorMode === 'edit' ? 1 : 0.7
+          }}
+          onMouseEnter={(e) => {
+            if (editorMode !== 'edit') {
+              e.target.style.opacity = '1';
+              e.target.style.background = 'rgb(var(--hover))';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (editorMode !== 'edit') {
+              e.target.style.opacity = '0.7';
+              e.target.style.background = 'transparent';
+            }
           }}
         >
           Edit
         </button>
         <button
           onClick={() => setEditorMode('live')}
-          className={editorMode === 'live' ? 'mode-active' : ''}
+          title="Live Preview Mode"
           style={{
-            padding: '0.375rem 0.75rem',
+            padding: '0.375rem 0.875rem',
             borderRadius: '0.375rem',
-            border: '1px solid rgb(var(--border))',
+            border: 'none',
             background: editorMode === 'live' ? 'rgb(var(--accent))' : 'transparent',
-            color: editorMode === 'live' ? 'white' : 'rgb(var(--text))',
+            color: editorMode === 'live' ? 'white' : 'rgb(var(--muted))',
             cursor: 'pointer',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            transition: 'all 0.2s ease'
+            fontSize: '0.8125rem',
+            fontWeight: editorMode === 'live' ? 600 : 500,
+            transition: 'all 0.15s ease',
+            opacity: editorMode === 'live' ? 1 : 0.7
+          }}
+          onMouseEnter={(e) => {
+            if (editorMode !== 'live') {
+              e.target.style.opacity = '1';
+              e.target.style.background = 'rgb(var(--hover))';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (editorMode !== 'live') {
+              e.target.style.opacity = '0.7';
+              e.target.style.background = 'transparent';
+            }
           }}
         >
-          Live Preview
+          Live
         </button>
         <button
           onClick={() => setEditorMode('reading')}
-          className={editorMode === 'reading' ? 'mode-active' : ''}
+          title="Reading Mode"
           style={{
-            padding: '0.375rem 0.75rem',
+            padding: '0.375rem 0.875rem',
             borderRadius: '0.375rem',
-            border: '1px solid rgb(var(--border))',
+            border: 'none',
             background: editorMode === 'reading' ? 'rgb(var(--accent))' : 'transparent',
-            color: editorMode === 'reading' ? 'white' : 'rgb(var(--text))',
+            color: editorMode === 'reading' ? 'white' : 'rgb(var(--muted))',
             cursor: 'pointer',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            transition: 'all 0.2s ease'
+            fontSize: '0.8125rem',
+            fontWeight: editorMode === 'reading' ? 600 : 500,
+            transition: 'all 0.15s ease',
+            opacity: editorMode === 'reading' ? 1 : 0.7
+          }}
+          onMouseEnter={(e) => {
+            if (editorMode !== 'reading') {
+              e.target.style.opacity = '1';
+              e.target.style.background = 'rgb(var(--hover))';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (editorMode !== 'reading') {
+              e.target.style.opacity = '0.7';
+              e.target.style.background = 'transparent';
+            }
           }}
         >
-          Reading
+          Read
         </button>
-        <div style={{ marginLeft: 'auto', fontSize: '0.75rem', color: 'rgb(var(--muted))', display: 'flex', alignItems: 'center' }}>
-          Press Cmd/Ctrl+E to cycle modes
-        </div>
       </div>
 
       <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} editorMode={editorMode} />
