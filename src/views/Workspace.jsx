@@ -14,6 +14,7 @@ import ConnectionStatus from "../components/ConnectionStatus.jsx";
 import Canvas from "./Canvas.jsx";
 import KanbanBoard from "../components/KanbanBoard.jsx";
 import { GraphDataProcessor } from "../core/graph/GraphDataProcessor.js";
+import { GraphData } from "../core/graph/GraphData.js";
 import { GraphEngine } from "../core/graph/GraphEngine.js";
 import FileContextMenu from "../components/FileContextMenu.jsx";
 import EditorGroupsContainer from "../components/EditorGroupsContainer.jsx";
@@ -29,7 +30,7 @@ import {
 import { getActiveShortcuts, formatAccelerator } from "../core/shortcuts/registry.js";
 import CommandPalette from "../components/CommandPalette.jsx";
 import InFileSearch from "../components/InFileSearch.jsx";
-import SearchPanel from "../components/SearchPanel.jsx";
+import FullTextSearchPanel from "./FullTextSearchPanel.jsx";
 import ShortcutHelpModal from "../components/ShortcutHelpModal.jsx";
 // GlobalContextMenu removed - using EditorContextMenu and FileContextMenu instead
 import KanbanList from "../components/KanbanList.jsx";
@@ -737,6 +738,7 @@ function WorkspaceWithScope({ path }) {
 
   // Graph data processor instance
   const graphProcessorRef = useRef(null);
+  const graphDataInstanceRef = useRef(null); // GraphData instance for backlinks
   
   // Split editor state
   const [useSplitView, setUseSplitView] = useState(false);
@@ -3558,7 +3560,34 @@ function WorkspaceWithScope({ path }) {
                   onAnimationSpeedChange={graphSidebarData.onAnimationSpeedChange}
                 />
               ) : (
-                <DocumentOutline editor={editorRef.current?.editor} />
+                <>
+                  {/* Document Outline */}
+                  <div style={{ minHeight: '200px', maxHeight: '30%', overflowY: 'auto', borderBottom: '1px solid var(--border)' }}>
+                    <DocumentOutline editor={editorRef.current?.editor} />
+                  </div>
+
+                  {/* Outgoing Links Panel */}
+                  <div style={{ minHeight: '200px', maxHeight: '30%', overflowY: 'auto', borderBottom: '1px solid var(--border)' }}>
+                    <OutgoingLinksPanel
+                      editor={editorRef.current?.editor}
+                      onNavigate={handleFileOpen}
+                      onCreateNote={(noteName) => {
+                        const fileName = noteName.endsWith('.md') ? noteName : `${noteName}.md`;
+                        const newPath = path ? `${path}/${fileName}` : fileName;
+                        handleCreateFile(newPath);
+                      }}
+                    />
+                  </div>
+
+                  {/* Backlinks Panel */}
+                  <div style={{ minHeight: '200px', flex: 1, overflowY: 'auto' }}>
+                    <BacklinksPanel
+                      graphData={graphData}
+                      currentFile={activeFile}
+                      onOpenFile={handleFileOpen}
+                    />
+                  </div>
+                </>
               )}
             </div>
 
@@ -3779,10 +3808,15 @@ function WorkspaceWithScope({ path }) {
         />
       )}
       
-      <SearchPanel
+      <FullTextSearchPanel
         isOpen={showGlobalSearch}
         onClose={() => setShowGlobalSearch(false)}
-        onFileOpen={handleFileOpen}
+        onResultClick={(result) => {
+          if (result.path) {
+            handleFileOpen(result.path);
+          }
+          setShowGlobalSearch(false);
+        }}
         workspacePath={path}
       />
 

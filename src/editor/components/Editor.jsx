@@ -32,9 +32,12 @@ import TaskSyntaxHighlight from "../extensions/TaskSyntaxHighlight.js";
 import TaskMentionSuggest from "../extensions/TaskMentionSuggest.js";
 import TaskCreationTrigger from "../extensions/TaskCreationTrigger.js";
 import CodeBlockIndent from "../extensions/CodeBlockIndent.js";
+import Callout from "../extensions/Callout.js";
+import Folding from "../extensions/Folding.js";
 import liveEditorSettings from "../../core/editor/live-settings.js";
 import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import TaskCreationModal from "../../components/TaskCreationModal.jsx";
+import ReadingModeView from "./ReadingModeView.jsx";
 import { editorAPI } from "../../plugins/api/EditorAPI.js";
 import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 
@@ -46,6 +49,19 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
   const [editorSettings, setEditorSettings] = useState(null);
   const [pluginExtensions, setPluginExtensions] = useState([]);
   const [lastPluginUpdate, setLastPluginUpdate] = useState(0);
+
+  // Reading mode state: 'edit', 'live', 'reading'
+  const [editorMode, setEditorMode] = useState(() => {
+    // Try to load mode from localStorage
+    try {
+      const activeFile = globalThis.__LOKUS_ACTIVE_FILE__;
+      if (activeFile) {
+        const saved = localStorage.getItem(`editor-mode:${activeFile}`);
+        return saved || 'edit';
+      }
+    } catch {}
+    return 'edit';
+  });
 
   // Listen for plugin extension changes and markdown config changes
   useEffect(() => {
@@ -224,6 +240,12 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
     // Code block indentation support (Tab, Shift+Tab, Enter)
     exts.push(CodeBlockIndent);
 
+    // Callout/Admonition blocks
+    exts.push(Callout);
+
+    // Section folding for headings
+    exts.push(Folding);
+
     // Add plugin extensions
     exts.push(...pluginExtensions);
 
@@ -297,14 +319,112 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
     })()
   }, [pluginExtensions, lastPluginUpdate]);
 
+  // Persist editor mode changes
+  useEffect(() => {
+    try {
+      const activeFile = globalThis.__LOKUS_ACTIVE_FILE__;
+      if (activeFile) {
+        localStorage.setItem(`editor-mode:${activeFile}`, editorMode);
+      }
+    } catch {}
+  }, [editorMode]);
+
+  // Keyboard shortcut for cycling modes (Cmd/Ctrl+E)
+  useEffect(() => {
+    const handleModeShortcut = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+        e.preventDefault();
+        setEditorMode(current => {
+          if (current === 'edit') return 'live';
+          if (current === 'live') return 'reading';
+          return 'edit';
+        });
+      }
+    };
+
+    document.addEventListener('keydown', handleModeShortcut);
+    return () => document.removeEventListener('keydown', handleModeShortcut);
+  }, []);
+
   if (loading || !extensions || !editorSettings) {
     return <div className="m-5 text-app-muted">Loading editor…</div>;
   }
 
-  return <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} />;
+  return (
+    <>
+      {/* Mode Switcher Toolbar */}
+      <div className="editor-mode-switcher" style={{
+        display: 'flex',
+        gap: '0.5rem',
+        padding: '0.5rem 1rem',
+        borderBottom: '1px solid rgb(var(--border))',
+        background: 'rgb(var(--panel))',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100
+      }}>
+        <button
+          onClick={() => setEditorMode('edit')}
+          className={editorMode === 'edit' ? 'mode-active' : ''}
+          style={{
+            padding: '0.375rem 0.75rem',
+            borderRadius: '0.375rem',
+            border: '1px solid rgb(var(--border))',
+            background: editorMode === 'edit' ? 'rgb(var(--accent))' : 'transparent',
+            color: editorMode === 'edit' ? 'white' : 'rgb(var(--text))',
+            cursor: 'pointer',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            transition: 'all 0.2s ease'
+          }}
+        >
+          Edit
+        </button>
+        <button
+          onClick={() => setEditorMode('live')}
+          className={editorMode === 'live' ? 'mode-active' : ''}
+          style={{
+            padding: '0.375rem 0.75rem',
+            borderRadius: '0.375rem',
+            border: '1px solid rgb(var(--border))',
+            background: editorMode === 'live' ? 'rgb(var(--accent))' : 'transparent',
+            color: editorMode === 'live' ? 'white' : 'rgb(var(--text))',
+            cursor: 'pointer',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            transition: 'all 0.2s ease'
+          }}
+        >
+          Live Preview
+        </button>
+        <button
+          onClick={() => setEditorMode('reading')}
+          className={editorMode === 'reading' ? 'mode-active' : ''}
+          style={{
+            padding: '0.375rem 0.75rem',
+            borderRadius: '0.375rem',
+            border: '1px solid rgb(var(--border))',
+            background: editorMode === 'reading' ? 'rgb(var(--accent))' : 'transparent',
+            color: editorMode === 'reading' ? 'white' : 'rgb(var(--text))',
+            cursor: 'pointer',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            transition: 'all 0.2s ease'
+          }}
+        >
+          Reading
+        </button>
+        <div style={{ marginLeft: 'auto', fontSize: '0.75rem', color: 'rgb(var(--muted))', display: 'flex', alignItems: 'center' }}>
+          Press Cmd/Ctrl+E to cycle modes
+        </div>
+      </div>
+
+      <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} editorMode={editorMode} />
+    </>
+  );
 });
 
-const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings }, ref) => {
+const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings, editorMode = 'edit' }, ref) => {
   const isSettingRef = useRef(false);
   const [isWikiLinkModalOpen, setIsWikiLinkModalOpen] = useState(false);
   const [isTaskCreationModalOpen, setIsTaskCreationModalOpen] = useState(false);
@@ -650,6 +770,18 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     }
   }, [editor]);
 
+  // Reading mode - show non-editable HTML view
+  if (editorMode === 'reading') {
+    return (
+      <ReadingModeView
+        content={editor?.getHTML() || content}
+        editorSettings={editorSettings}
+      />
+    );
+  }
+
+  // Edit and Live Preview modes - show TipTap editor
+  // In live mode, we keep editor editable but could add visual hints
   return (
     <>
       {editor && showDebug && (
@@ -664,7 +796,10 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         canUndo={editor?.can().undo()}
         canRedo={editor?.can().redo()}
       >
-        <EditorContent editor={editor} />
+        <EditorContent
+          editor={editor}
+          className={editorMode === 'live' ? 'live-preview-mode' : ''}
+        />
       </EditorContextMenu>
 
       {/* WikiLink Modal */}
