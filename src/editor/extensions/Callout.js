@@ -148,7 +148,7 @@ export const Callout = Node.create({
     return [
       new InputRule({
         find: /^>\[!(\w+)\](-?)\s*(.*)$/,
-        handler: ({ state, range, match, chain }) => {
+        handler: ({ state, range, match }) => {
           const [, type, collapsedFlag, title] = match;
           const calloutType = CALLOUT_TYPES[type.toLowerCase()] ? type.toLowerCase() : 'note';
           const collapsed = collapsedFlag === '-';
@@ -174,8 +174,9 @@ export const Callout = Node.create({
           // Position cursor inside the callout
           tr.setSelection(state.selection.constructor.near(tr.doc.resolve(start + 2)));
 
+          // Dispatch the transaction and return false to prevent further handling
           this.editor.view.dispatch(tr);
-          return true;
+          return false;
         }
       })
     ];

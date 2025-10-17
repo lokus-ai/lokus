@@ -134,7 +134,12 @@ const TagAutocomplete = Extension.create({
                 return true;
               }
 
-              return component.ref?.onKeyDown(props);
+              // Guard against null component
+              if (!component || !component.ref) {
+                return false;
+              }
+
+              return component.ref.onKeyDown(props);
             },
 
             onExit: () => {

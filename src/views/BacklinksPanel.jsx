@@ -44,10 +44,20 @@ export default function BacklinksPanel({
 
   // Get current node ID from file path
   const currentNodeId = useMemo(() => {
-    if (!currentFile || !graphData || !graphData.documentNodes) return null;
+    if (!currentFile || !graphData || !graphData.nodes) return null;
 
-    for (const [docId, nodeId] of graphData.documentNodes.entries()) {
-      if (docId === currentFile) {
+    // If graphData has documentNodes (GraphData), use it
+    if (graphData.documentNodes) {
+      for (const [docId, nodeId] of graphData.documentNodes.entries()) {
+        if (docId === currentFile) {
+          return nodeId;
+        }
+      }
+    }
+
+    // Otherwise search nodes by path (GraphDatabase compatibility)
+    for (const [nodeId, node] of graphData.nodes.entries()) {
+      if (node.path === currentFile || node.documentId === currentFile) {
         return nodeId;
       }
     }

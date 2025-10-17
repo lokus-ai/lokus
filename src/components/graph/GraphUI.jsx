@@ -60,11 +60,6 @@ export const GraphUI = ({
     const handleKeyDown = (e) => {
       if (e.metaKey || e.ctrlKey) {
         switch (e.key) {
-          case 'k':
-            e.preventDefault();
-            setIsSearchFocused(true);
-            searchInputRef.current?.focus();
-            break;
           case 'r':
             e.preventDefault();
             onReset?.();
@@ -85,19 +80,19 @@ export const GraphUI = ({
             break;
         }
       }
-      
+
       if (e.key === 'Escape') {
         setIsSearchFocused(false);
         setShowSettings(false);
         searchInputRef.current?.blur();
       }
-      
+
       if (e.key === ' ') {
         e.preventDefault();
         onLayoutControl?.(isLayoutRunning ? 'stop' : 'start');
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isLayoutRunning, onViewModeChange, onReset, onLayoutControl]);
@@ -140,7 +135,7 @@ export const GraphUI = ({
             <input
               ref={searchInputRef}
               type="text"
-              placeholder="Search nodes... (⌘K)"
+              placeholder="Search nodes..."
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
               onFocus={() => setIsSearchFocused(true)}
@@ -234,22 +229,7 @@ export const GraphUI = ({
           <Maximize2 size={18} />
         </motion.button>
       </div>
-      
-      {/* Node Information Overlay */}
-      <AnimatePresence>
-        {hoveredNode && (
-          <motion.div
-            className="node-info-overlay"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.15 }}
-          >
-            <NodeInfoCard node={hoveredNode} />
-          </motion.div>
-        )}
-      </AnimatePresence>
-      
+
       {/* Performance Monitor */}
       {stats.fps && (
         <motion.div

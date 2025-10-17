@@ -1,6 +1,6 @@
 /**
  * GraphData - Real-time WikiLink integration and graph data management
- * 
+ *
  * Features:
  * - Real-time sync with WikiLinks in documents
  * - Bidirectional relationship tracking
@@ -11,6 +11,8 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import { extractTags, extractInlineTags } from '../tags/tag-parser.js';
+import { parseFrontmatter } from '../../bases/data/FrontmatterParser.js';
 
 // Create deterministic ID from file path
 function createNodeId(filePath) {
@@ -402,22 +404,28 @@ export class GraphData {
   }
 
   /**
-   * Extract tags from content
+   * Extract tags from content (including YAML frontmatter)
    */
   extractTags(content) {
-    const tagRegex = /#([a-zA-Z0-9_-]+)/g;
-    const tags = [];
-    let match;
-    
-    while ((match = tagRegex.exec(content)) !== null) {
-      tags.push({
-        tag: match[1],
-        position: match.index,
-        raw: match[0]
-      });
+    try {
+      // Parse frontmatter to get tags from YAML
+      const { raw: frontmatter } = parseFrontmatter(content);
+
+      // Extract tags using the proper tag parser
+      const allTags = extractTags(content, frontmatter);
+
+      // Convert Set to array format expected by rest of the code
+      const tags = Array.from(allTags).map(tag => ({
+        tag: tag,
+        position: 0, // Position is not critical for graph view
+        raw: `#${tag}`
+      }));
+
+      return tags;
+    } catch (error) {
+      console.error('[GraphData] Failed to extract tags:', error);
+      return [];
     }
-    
-    return tags;
   }
 
   /**

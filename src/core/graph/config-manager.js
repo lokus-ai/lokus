@@ -38,7 +38,15 @@ export function getDefaultConfig() {
     // Color customization
     'collapse-groups': false,
     colorScheme: 'type', // 'type', 'folder', 'tag', 'creation-date', 'modification-date', 'custom'
-    colorGroups: []
+    colorGroups: [],
+    // Background customization
+    'collapse-background': false,
+    backgroundType: 'radial', // 'none', 'solid', 'gradient', 'radial', 'dots', 'grid'
+    backgroundColor: '#1e1b4b',
+    backgroundSecondary: '#6366f1',
+    backgroundOpacity: 0.1,
+    backgroundDotSize: 2,
+    backgroundDotSpacing: 30
   };
 }
 
@@ -140,7 +148,7 @@ export function validateConfig(config) {
 
   // Validate boolean fields
   const boolFields = [
-    'collapse-filter', 'collapse-display', 'collapse-forces', 'collapse-groups', 'collapse-animation',
+    'collapse-filter', 'collapse-display', 'collapse-forces', 'collapse-groups', 'collapse-animation', 'collapse-background',
     'showTags', 'showAttachments', 'hideUnresolved', 'showOrphans', 'showArrow'
   ];
 
@@ -161,6 +169,16 @@ export function validateConfig(config) {
     const validSchemes = ['type', 'folder', 'tag', 'creation-date', 'modification-date', 'custom'];
     validated.colorScheme = validSchemes.includes(config.colorScheme) ? config.colorScheme : 'type';
   }
+  if (typeof config.backgroundType === 'string') {
+    const validTypes = ['none', 'solid', 'gradient', 'radial', 'dots', 'grid'];
+    validated.backgroundType = validTypes.includes(config.backgroundType) ? config.backgroundType : 'radial';
+  }
+  if (typeof config.backgroundColor === 'string' && /^#[0-9A-F]{6}$/i.test(config.backgroundColor)) {
+    validated.backgroundColor = config.backgroundColor;
+  }
+  if (typeof config.backgroundSecondary === 'string' && /^#[0-9A-F]{6}$/i.test(config.backgroundSecondary)) {
+    validated.backgroundSecondary = config.backgroundSecondary;
+  }
 
   // Validate numeric fields with ranges
   const numericFields = [
@@ -170,7 +188,10 @@ export function validateConfig(config) {
     { key: 'centerStrength', min: 0, max: 1, default: 0.3 },
     { key: 'repelStrength', min: 0, max: 20, default: 15 },
     { key: 'linkStrength', min: 0, max: 2, default: 0.5 },
-    { key: 'linkDistance', min: 50, max: 500, default: 250 }
+    { key: 'linkDistance', min: 50, max: 500, default: 250 },
+    { key: 'backgroundOpacity', min: 0, max: 1, default: 0.1 },
+    { key: 'backgroundDotSize', min: 1, max: 10, default: 2 },
+    { key: 'backgroundDotSpacing', min: 10, max: 100, default: 30 }
   ];
 
   numericFields.forEach(({ key, min, max, default: defaultVal }) => {

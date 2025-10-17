@@ -387,6 +387,20 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
       return;
     }
     onContentChange(editor.getHTML());
+
+    // Index tags for autocomplete
+    try {
+      const activeFile = globalThis.__LOKUS_ACTIVE_FILE__;
+      if (activeFile) {
+        // Import tagManager and index the content
+        import('../../core/tags/tag-manager.js').then(({ default: tagManager }) => {
+          const content = editor.getText();
+          tagManager.indexNote(activeFile, content);
+        });
+      }
+    } catch (error) {
+      console.error('[Editor] Failed to index tags:', error);
+    }
   }, [onContentChange]);
 
   const editor = useEditor({

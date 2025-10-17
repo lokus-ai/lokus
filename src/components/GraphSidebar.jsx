@@ -1,5 +1,5 @@
 import React from 'react';
-import { Network, Link, FileText, Tag, ChevronDown, ChevronRight, Search, Sliders, Palette, Filter, Zap, Play, Pause, Sparkles } from 'lucide-react';
+import { Network, Link, FileText, Tag, ChevronDown, ChevronRight, Search, Sliders, Palette, Filter, Zap, Play, Pause, Sparkles, Image } from 'lucide-react';
 
 /**
  * GraphSidebar - Obsidian-style graph customization panel
@@ -510,6 +510,152 @@ export default function GraphSidebar({
                     💡 Tip: Select nodes in the graph, then drag them into a color group to assign colors
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* BACKGROUND SECTION */}
+        <div className="border-b border-app-border">
+          <button
+            onClick={() => toggleCollapse('background')}
+            className="w-full px-4 py-3 flex items-center justify-between hover:bg-app-bg/50 transition-colors"
+          >
+            <div className="flex items-center gap-2 text-sm font-semibold text-app-text">
+              <Image className="w-4 h-4" />
+              <span>Background</span>
+            </div>
+            {config['collapse-background'] ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+
+          {!config['collapse-background'] && (
+            <div className="px-4 pb-4 space-y-4">
+              {/* Background Type Selector */}
+              <div>
+                <label className="text-xs text-app-muted mb-1.5 block">Background Type</label>
+                <select
+                  value={config.backgroundType || 'radial'}
+                  onChange={(e) => updateConfig('backgroundType', e.target.value)}
+                  className="w-full px-3 py-2 bg-app-bg border border-app-border rounded text-xs text-app-text focus:outline-none focus:border-app-accent"
+                >
+                  <option value="none">None (transparent)</option>
+                  <option value="solid">Solid Color</option>
+                  <option value="gradient">Linear Gradient</option>
+                  <option value="radial">Radial Gradient</option>
+                  <option value="dots">Dot Pattern</option>
+                  <option value="grid">Grid Pattern</option>
+                </select>
+              </div>
+
+              {/* Color Pickers - Show for all types except 'none' */}
+              {config.backgroundType !== 'none' && (
+                <>
+                  {/* Primary Color */}
+                  <div>
+                    <label className="text-xs text-app-muted mb-1.5 block">
+                      {config.backgroundType === 'solid' ? 'Background Color' : 'Primary Color'}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={config.backgroundColor || '#1e1b4b'}
+                        onChange={(e) => updateConfig('backgroundColor', e.target.value)}
+                        className="w-12 h-10 rounded border border-app-border cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={config.backgroundColor || '#1e1b4b'}
+                        onChange={(e) => updateConfig('backgroundColor', e.target.value)}
+                        className="flex-1 px-3 py-2 bg-app-bg border border-app-border rounded text-xs text-app-text font-mono focus:outline-none focus:border-app-accent"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Secondary Color - Show for gradients and patterns */}
+                  {(config.backgroundType === 'gradient' || config.backgroundType === 'radial' ||
+                    config.backgroundType === 'dots' || config.backgroundType === 'grid') && (
+                    <div>
+                      <label className="text-xs text-app-muted mb-1.5 block">Secondary Color</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={config.backgroundSecondary || '#6366f1'}
+                          onChange={(e) => updateConfig('backgroundSecondary', e.target.value)}
+                          className="w-12 h-10 rounded border border-app-border cursor-pointer"
+                        />
+                        <input
+                          type="text"
+                          value={config.backgroundSecondary || '#6366f1'}
+                          onChange={(e) => updateConfig('backgroundSecondary', e.target.value)}
+                          className="flex-1 px-3 py-2 bg-app-bg border border-app-border rounded text-xs text-app-text font-mono focus:outline-none focus:border-app-accent"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Opacity Slider */}
+                  <div>
+                    <div className="flex justify-between text-xs mb-1.5">
+                      <span className="text-app-muted">Opacity</span>
+                      <span className="text-app-text font-medium">{(config.backgroundOpacity ?? 0.1).toFixed(2)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={config.backgroundOpacity ?? 0.1}
+                      onChange={(e) => updateConfig('backgroundOpacity', parseFloat(e.target.value))}
+                      className="w-full accent-app-accent"
+                    />
+                  </div>
+
+                  {/* Pattern-specific controls */}
+                  {(config.backgroundType === 'dots' || config.backgroundType === 'grid') && (
+                    <>
+                      <div>
+                        <div className="flex justify-between text-xs mb-1.5">
+                          <span className="text-app-muted">{config.backgroundType === 'dots' ? 'Dot Size' : 'Line Width'}</span>
+                          <span className="text-app-text font-medium">{config.backgroundDotSize ?? 2}px</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="1"
+                          max="10"
+                          step="0.5"
+                          value={config.backgroundDotSize ?? 2}
+                          onChange={(e) => updateConfig('backgroundDotSize', parseFloat(e.target.value))}
+                          className="w-full accent-app-accent"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between text-xs mb-1.5">
+                          <span className="text-app-muted">Spacing</span>
+                          <span className="text-app-text font-medium">{config.backgroundDotSpacing ?? 30}px</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="10"
+                          max="100"
+                          step="5"
+                          value={config.backgroundDotSpacing ?? 30}
+                          onChange={(e) => updateConfig('backgroundDotSpacing', parseInt(e.target.value))}
+                          className="w-full accent-app-accent"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Info Text */}
+                  <div className="text-xs text-app-muted p-2 bg-app-bg rounded border border-app-border">
+                    {config.backgroundType === 'solid' && '💡 Solid background fill'}
+                    {config.backgroundType === 'gradient' && '💡 Linear gradient from top to bottom'}
+                    {config.backgroundType === 'radial' && '💡 Radial gradient from center outward'}
+                    {config.backgroundType === 'dots' && '💡 Dot pattern overlay'}
+                    {config.backgroundType === 'grid' && '💡 Grid pattern overlay'}
+                  </div>
+                </>
               )}
             </div>
           )}

@@ -31,26 +31,25 @@ export const Folding = Extension.create({
   addProseMirrorPlugins() {
     const extension = this;
 
-    // Bind buildDecorations to the extension context
     const buildDecorations = (state) => {
       const decorations = [];
       const { doc } = state;
       const foldedSections = extension.storage.foldedSections;
 
-      // Find all headings and add fold indicators
+      // Find all headings
       const headings = [];
       doc.descendants((node, pos) => {
         if (node.type.name === 'heading') {
-          headings.push({ level: node.attrs.level, pos });
+          headings.push({ level: node.attrs.level, pos, node });
         }
       });
 
-      // Build fold decorations
+      // Build decorations for each heading
       headings.forEach((heading, index) => {
-        const { level, pos } = heading;
+        const { level, pos, node } = heading;
         const isFolded = foldedSections.has(pos);
 
-        // Find the range of content to fold (until next heading of same or higher level)
+        // Find the range of content to fold
         let endPos = doc.content.size;
         for (let i = index + 1; i < headings.length; i++) {
           if (headings[i].level <= level) {
@@ -59,72 +58,31 @@ export const Folding = Extension.create({
           }
         }
 
-        // Add fold indicator decoration
-        const indicator = document.createElement('span');
-        indicator.className = 'fold-indicator';
-        indicator.dataset.pos = pos.toString();
-        indicator.textContent = isFolded ? '▶' : '▼';
-        indicator.style.cssText = `
-          cursor: pointer;
-          user-select: none;
-          display: inline-block;
-          width: 18px;
-          height: 18px;
-          margin-right: 4px;
-          margin-left: 0px;
-          color: rgb(var(--muted));
-          font-size: 12px;
-          line-height: 18px;
-          text-align: center;
-          transition: color 0.15s ease, transform 0.15s ease;
-          pointer-events: auto;
-          position: absolute;
-          left: -22px;
-          top: 50%;
-          transform: translateY(-50%);
-          z-index: 10;
-        `;
-
-        // Add direct click handler to the indicator
-        indicator.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const clickPos = parseInt(indicator.dataset.pos, 10);
-          if (!isNaN(clickPos) && extension.editor?.view) {
-            extension.toggleFold(extension.editor.view, clickPos);
-          }
-        });
-
-        // Add hover effect
-        indicator.addEventListener('mouseenter', () => {
-          indicator.style.color = 'rgb(var(--accent))';
-          indicator.style.transform = 'translateY(-50%) scale(1.15)';
-        });
-        indicator.addEventListener('mouseleave', () => {
-          indicator.style.color = 'rgb(var(--muted))';
-          indicator.style.transform = 'translateY(-50%)';
-        });
-
-        const indicatorDeco = Decoration.widget(pos, indicator, {
-          side: -1,
-          stopEvent: () => true, // Prevent ProseMirror from handling this event
-        });
-        decorations.push(indicatorDeco);
+        // Add data attribute to heading for fold indicator via CSS
+        decorations.push(
+          Decoration.node(pos, pos + node.nodeSize, {
+            class: `foldable-heading ${isFolded ? 'folded' : 'unfolded'}`,
+            'data-fold-pos': pos,
+          })
+        );
 
         // If folded, hide the content between this heading and the next
-        if (isFolded && endPos > pos + 1) {
-          const nodeAfterHeading = doc.nodeAt(pos);
-          const headingSize = nodeAfterHeading ? nodeAfterHeading.nodeSize : 1;
-          const foldStart = pos + headingSize;
+        if (isFolded && endPos > pos + node.nodeSize) {
+          const foldStart = pos + node.nodeSize;
           const foldEnd = endPos;
 
           if (foldEnd > foldStart) {
-            // Add CSS class to hide folded content
-            const foldDeco = Decoration.node(foldStart, foldEnd, {
-              class: 'folded-content',
-              style: 'display: none;',
+            // Try to apply decoration to each node in range
+            doc.nodesBetween(foldStart, foldEnd, (node, nodePos) => {
+              if (nodePos >= foldStart && nodePos < foldEnd) {
+                decorations.push(
+                  Decoration.node(nodePos, nodePos + node.nodeSize, {
+                    class: 'folded-content',
+                    style: 'display: none;',
+                  })
+                );
+              }
             });
-            decorations.push(foldDeco);
           }
         }
       });
@@ -152,44 +110,61 @@ export const Folding = Extension.create({
                 }
               }
             }
-            return DecorationSet.empty;
+            return buildDecorations(state);
           },
 
           apply(tr, decorationSet, oldState, newState) {
-            // Map decorations through document changes
-            decorationSet = decorationSet.map(tr.mapping, tr.doc);
-
-            // Rebuild decorations if meta indicates fold state changed
-            if (tr.getMeta('foldingChanged')) {
+            // Rebuild decorations on document changes or fold state changes
+            if (tr.docChanged || tr.getMeta('foldingChanged')) {
               return buildDecorations(newState);
             }
 
-            return decorationSet;
+            // Map decorations through selection changes
+            return decorationSet.map(tr.mapping, tr.doc);
           },
         },
 
         props: {
           decorations(state) {
-            return buildDecorations(state);
+            return this.getState(state);
           },
 
           handleDOMEvents: {
             click(view, event) {
               const target = event.target;
 
-              // Check if clicked on fold indicator
-              if (target.classList?.contains('fold-indicator')) {
-                event.preventDefault();
-                event.stopPropagation();
-
-                const pos = parseInt(target.dataset.pos, 10);
-                if (!isNaN(pos)) {
-                  extension.toggleFold(view, pos);
-                }
-                return true;
+              // Check if clicked on a heading with foldable class
+              // The click might be on the heading itself or the ::before pseudo-element
+              let heading = null;
+              if (target.classList?.contains('foldable-heading')) {
+                heading = target;
+              } else if (target.closest('.foldable-heading')) {
+                heading = target.closest('.foldable-heading');
               }
 
-              return false;
+              if (!heading) {
+                return false;
+              }
+
+              // Check if click is in the left gutter area (for fold indicator)
+              const rect = heading.getBoundingClientRect();
+              const clickX = event.clientX;
+              const gutterWidth = 30; // Width of the gutter where fold indicator is
+
+              // Only handle clicks in the left gutter area
+              if (clickX < rect.left || clickX > rect.left + gutterWidth) {
+                return false;
+              }
+
+              event.preventDefault();
+              event.stopPropagation();
+
+              const pos = parseInt(heading.dataset.foldPos, 10);
+              if (!isNaN(pos)) {
+                extension.toggleFold(view, pos);
+              }
+
+              return true;
             },
           },
         },

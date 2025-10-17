@@ -43,6 +43,7 @@ const WikiLinkSuggest = Extension.create({
   addProseMirrorPlugins() {
     const dbg = (...args) => {
       try {
+        console.log('[WikiLinkSuggest]', ...args);
       } catch {}
     }
     return [
@@ -154,7 +155,11 @@ const WikiLinkSuggest = Extension.create({
                 container = null
                 return true
               }
-              return component.ref?.onKeyDown(props)
+              // Guard against null component
+              if (!component || !component.ref) {
+                return false;
+              }
+              return component.ref.onKeyDown(props)
             },
             onExit: () => {
               try { if (container?.parentNode) container.parentNode.removeChild(container) } catch {}
