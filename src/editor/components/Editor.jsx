@@ -22,6 +22,7 @@ import { InputRule } from "@tiptap/core";
 import MathExt from "../extensions/Math.js";
 import WikiLink from "../extensions/WikiLink.js";
 import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
+import TagAutocomplete from "../extensions/TagAutocomplete.js";
 import HeadingAltInput from "../extensions/HeadingAltInput.js";
 import MarkdownPaste from "../extensions/MarkdownPaste.js";
 import MarkdownTablePaste from "../extensions/MarkdownTablePaste.js";
@@ -203,7 +204,10 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
     // Obsidian‑style wikilinks and image embeds
     exts.push(WikiLink);
     exts.push(WikiLinkSuggest);
-    
+
+    // Tag autocomplete
+    exts.push(TagAutocomplete);
+
     // Markdown paste functionality
     exts.push(MarkdownPaste);
     exts.push(MarkdownTablePaste);
