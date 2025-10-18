@@ -51,6 +51,16 @@
 
   /* Editor colors */
   --editor-placeholder: 148 163 184; /* slate-400 */
+
+  /* Graph visualization colors */
+  --graph-bg-primary: #1e1e1e;
+  --graph-bg-secondary: #6366f1;
+  --graph-node-document: #10b981;
+  --graph-node-placeholder: #6b7280;
+  --graph-node-tag: #ef4444;
+  --graph-node-folder: #f59e0b;
+  --graph-link: #6b7280;
+  --graph-link-hover: #6366f1;
 }
 
 :root[data-theme="light"] {
@@ -83,11 +93,21 @@
 
   /* Editor colors */
   --editor-placeholder: 107 114 128; /* gray-500 */
+
+  /* Graph visualization colors */
+  --graph-bg-primary: #f8fafc;
+  --graph-bg-secondary: #6366f1;
+  --graph-node-document: #10b981;
+  --graph-node-placeholder: #cbd5e1;
+  --graph-node-tag: #ef4444;
+  --graph-node-folder: #f59e0b;
+  --graph-link: #cbd5e1;
+  --graph-link-hover: #6366f1;
 }
 
 :root[data-theme="dark"] {
   --app-titlebar: 32 32 32; /* Obsidian dark titlebar */
-  
+
   /* Core theme tokens - Obsidian Dark */
   --bg: 30 30 30;          /* #1e1e1e - Obsidian main bg */
   --panel: 42 42 42;       /* #2a2a2a - Obsidian sidebar */
@@ -118,6 +138,16 @@
 
   /* Editor colors */
   --editor-placeholder: 148 163 184; /* slate-400 */
+
+  /* Graph visualization colors */
+  --graph-bg-primary: #1e1e1e;
+  --graph-bg-secondary: #7c3aed;
+  --graph-node-document: #10b981;
+  --graph-node-placeholder: #6b7280;
+  --graph-node-tag: #ef4444;
+  --graph-node-folder: #f59e0b;
+  --graph-link: #6b7280;
+  --graph-link-hover: #7c3aed;
 }
 
 ::selection { background: rgb(var(--accent) / 0.25); }

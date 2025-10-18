@@ -2,10 +2,27 @@
   "name": "Monokai",
   "tokens": {
     "--app-bg": "#272822",
-    "--app-text": "#F8F8F2",
-    "--app-panel": "#3E3D32",
-    "--app-border": "#75715E",
+    "--app-text": "#f8f8f2",
+    "--app-panel": "#3e3d32",
+    "--app-panel-secondary": "#49483e",
+    "--app-border": "#75715e",
+    "--app-border-hover": "#878378",
     "--app-muted": "#999",
-    "--accent": "#FD971F"
+    "--app-text-secondary": "#cfcfc2",
+    "--accent": "#fd971f",
+    "--accent-hover": "#e0851c",
+    "--accent-fg": "#272822",
+    "--danger": "#f92672",
+    "--success": "#a6e22e",
+    "--warning": "#e6db74",
+    "--info": "#66d9ef",
+    "--graph-bg-primary": "#272822",
+    "--graph-bg-secondary": "#fd971f",
+    "--graph-node-document": "#a6e22e",
+    "--graph-node-placeholder": "#75715e",
+    "--graph-node-tag": "#f92672",
+    "--graph-node-folder": "#e6db74",
+    "--graph-link": "#75715e",
+    "--graph-link-hover": "#fd971f"
   }
 }

@@ -1,0 +1,28 @@
+{
+  "name": "One Dark Pro",
+  "tokens": {
+    "--app-bg": "#282c34",
+    "--app-text": "#abb2bf",
+    "--app-panel": "#21252b",
+    "--app-panel-secondary": "#2c313a",
+    "--app-border": "#3e4451",
+    "--app-border-hover": "#4b5263",
+    "--app-muted": "#5c6370",
+    "--app-text-secondary": "#959ba6",
+    "--accent": "#61afef",
+    "--accent-hover": "#4d99d6",
+    "--accent-fg": "#282c34",
+    "--danger": "#e06c75",
+    "--success": "#98c379",
+    "--warning": "#e5c07b",
+    "--info": "#56b6c2",
+    "--graph-bg-primary": "#282c34",
+    "--graph-bg-secondary": "#61afef",
+    "--graph-node-document": "#98c379",
+    "--graph-node-placeholder": "#5c6370",
+    "--graph-node-tag": "#c678dd",
+    "--graph-node-folder": "#d19a66",
+    "--graph-link": "#3e4451",
+    "--graph-link-hover": "#61afef"
+  }
+}

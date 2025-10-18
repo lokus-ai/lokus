@@ -1,0 +1,28 @@
+{
+  "name": "Tokyo Night",
+  "tokens": {
+    "--app-bg": "#1a1b26",
+    "--app-text": "#a9b1d6",
+    "--app-panel": "#16161e",
+    "--app-panel-secondary": "#24283b",
+    "--app-border": "#414868",
+    "--app-border-hover": "#565f89",
+    "--app-muted": "#565f89",
+    "--app-text-secondary": "#787c99",
+    "--accent": "#7aa2f7",
+    "--accent-hover": "#5583d6",
+    "--accent-fg": "#1a1b26",
+    "--danger": "#f7768e",
+    "--success": "#9ece6a",
+    "--warning": "#e0af68",
+    "--info": "#7dcfff",
+    "--graph-bg-primary": "#1a1b26",
+    "--graph-bg-secondary": "#7aa2f7",
+    "--graph-node-document": "#9ece6a",
+    "--graph-node-placeholder": "#565f89",
+    "--graph-node-tag": "#bb9af7",
+    "--graph-node-folder": "#e0af68",
+    "--graph-link": "#414868",
+    "--graph-link-hover": "#7aa2f7"
+  }
+}
