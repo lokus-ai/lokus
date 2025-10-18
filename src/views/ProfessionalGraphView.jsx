@@ -1090,12 +1090,33 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     filterGraphData
   ]);
 
+  // Helper to get CSS variable color
+  const getCSSColor = (varName, fallback) => {
+    if (typeof window === 'undefined') return fallback;
+    const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+    return value || fallback;
+  };
+
   // Generate background style from config - memoized to only update when background settings change
   const backgroundStyle = React.useMemo(() => {
     const config = graphConfig;
     const bgType = config.backgroundType || 'radial';
-    const color1 = config.backgroundColor || '#1e1b4b';
-    const color2 = config.backgroundSecondary || '#6366f1';
+
+    // Get theme colors from CSS variables
+    const themeColor1 = getCSSColor('--graph-bg-primary', '#1e1b4b');
+    const themeColor2 = getCSSColor('--graph-bg-secondary', '#6366f1');
+
+    // Use custom colors only if explicitly set AND different from old defaults
+    // Otherwise, use theme colors to respect theme changes
+    const isCustomColor1 = config.backgroundColor &&
+                           config.backgroundColor !== '#1e1b4b' &&
+                           config.backgroundColor !== themeColor1;
+    const isCustomColor2 = config.backgroundSecondary &&
+                           config.backgroundSecondary !== '#6366f1' &&
+                           config.backgroundSecondary !== themeColor2;
+
+    const color1 = isCustomColor1 ? config.backgroundColor : themeColor1;
+    const color2 = isCustomColor2 ? config.backgroundSecondary : themeColor2;
     const opacity = config.backgroundOpacity ?? 0.1;
 
     // Helper to convert hex to rgba
