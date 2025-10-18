@@ -1,287 +1,93 @@
-# Lokus Quick Start Guide
+# Lokus Quickstart
 
-Get up and running with Lokus in **5 minutes**.
+This guide walks through installing Lokus, creating your first workspace, and discovering the core features in under ten minutes.
 
 ---
 
-## 1. Install Lokus
+## 1. Install the desktop app
 
-### macOS
+| Platform | Steps |
+| --- | --- |
+| **macOS** | Download the `.dmg` from the [latest release](https://github.com/lokus-ai/lokus/releases/latest), open it, and drag **Lokus.app** into `Applications`. Gatekeeper may require you to approve the app in **System Settings → Privacy & Security** the first time you run it. |
+| **Windows** | Download the `.msi` installer from the [latest release](https://github.com/lokus-ai/lokus/releases/latest) and follow the installation wizard. If SmartScreen appears, choose **More info → Run anyway**. |
+| **Linux** | Download the `.AppImage` from the [latest release](https://github.com/lokus-ai/lokus/releases/latest), then run:
 ```bash
-# Download .dmg from releases
-https://github.com/lokus-ai/lokus/releases/latest
-
-# Or via Homebrew (coming soon)
-brew install lokus
-```
-
-### Windows
-```bash
-# Download installer
-https://github.com/lokus-ai/lokus/releases/latest
-```
-
-### Linux
-```bash
-# AppImage
-wget https://github.com/lokus-ai/lokus/releases/latest/download/lokus.AppImage
 chmod +x lokus.AppImage
 ./lokus.AppImage
 ```
+AppImageLauncher or similar tools can integrate the app into your launcher menu. |
+
+> Check the release notes for platform-specific caveats (code signing requirements, additional libraries on Linux, etc.).
 
 ---
 
-## 2. Create Your First Workspace
+## 2. Create a workspace
 
-1. **Launch Lokus**
-2. **Click "Create New Workspace"**
-3. **Choose a folder** (or create new one)
-4. **Click "Open"**
+1. Launch **Lokus**.
+2. Choose **Create workspace** and select (or create) a folder on disk. Lokus stores all notes, Bases metadata, and configuration in that directory.
+3. The workspace opens with a welcome note and sidebar navigation for Notes, Bases, Graph, and Settings.
 
-Done! Your workspace is ready.
-
-[📹 Video: Creating your first workspace]
+You can create multiple workspaces and switch between them from the workspace picker on the home screen.
 
 ---
 
-## 3. Create Your First Note
+## 3. Add your first note
 
-### Method 1: Quick Create
-- Press `Cmd/Ctrl + N`
-- Type your content
-- Auto-saves as you type
+- Press `Cmd/Ctrl + N` to create a note anywhere.
+- Give it a title and start typing in Markdown. Formatting helpers appear in the toolbar when text is selected.
+- Use frontmatter to capture structured data:
 
-### Method 2: From Sidebar
-- Click **"+ New Note"** in sidebar
-- Enter title
-- Start writing
-
-### Your First Note Structure
 ```markdown
 ---
-title: My First Note
-tags: [getting-started]
-date: 2025-10-15
+status: In Progress
+due: 2025-10-30
 ---
 
-# Welcome to Lokus!
+# Kick off redesign
 
-This is my first note.
-
-## Features I Want to Try
-- [ ] WikiLinks
-- [ ] Bases (database views)
-- [ ] Knowledge graph
-- [ ] Kanban boards
-
-## Notes
-Type here...
+- [ ] Outline requirements
+- [ ] Share draft with stakeholders
 ```
 
-[📹 Video: Creating your first note]
+Frontmatter fields automatically show up inside the **Bases** view as sortable columns.
 
 ---
 
-## 4. Try Key Features
+## 4. Explore the core views
 
-### WikiLinks - Connect Your Notes
-```markdown
-I'm learning about [[Lokus]] today.
-It integrates well with [[My Projects]].
-```
-- Type `[[` to see autocomplete
-- Click links to navigate
-- View backlinks in right panel
-
-### Bases - Database Views
-1. Click **"Bases"** in sidebar
-2. You'll see all notes in a table!
-3. Try:
-   - **Sort** - Click column headers
-   - **Filter** - Click "Filter" button
-   - **Edit** - Click any cell to edit
-   - **Group** - Right-click column (coming soon)
-
-[📹 Video: Using Bases]
-
-### Knowledge Graph
-1. Click **"Graph"** in sidebar
-2. See your notes as connected nodes
-3. Try:
-   - **Click node** → Opens note
-   - **Drag nodes** → Rearrange
-   - **Zoom** → Mouse wheel
-   - **Toggle 3D** → Button at top
-
-### Kanban Boards
-1. Click **"Kanban"** in sidebar
-2. Click **"New Board"**
-3. Add cards:
-   - Click **"+ Add Card"**
-   - Or press `N` on keyboard
-4. Move cards:
-   - **Drag & drop** with mouse
-   - **Or use** `H/J/K/L` keys
-
-[📹 Video: Kanban basics]
+| View | What it does | Try this |
+| --- | --- | --- |
+| **Bases** | Turns note frontmatter into a spreadsheet-like table. | Filter by `status`, edit properties inline, or create saved views for recurring filters. |
+| **Graph** | Visualises relationships across notes using wiki links. | Hover to preview, drag nodes to reorganise, and switch between 2D and 3D layouts. |
+| **Canvas** | Spatial canvas for arranging blocks of content (beta). | Drop notes onto the canvas and connect them with arrows for project planning. |
+| **Command palette** | Quick actions and navigation (`Cmd/Ctrl + K`). | Jump to notes, toggle panes, or trigger plugins without leaving the keyboard. |
 
 ---
 
-## 5. Connect AI Assistants (Optional)
+## 5. Bring in existing content
 
-Lokus includes a built-in MCP server for AI integration!
-
-### Automatic Setup ✨
-**It just works!** The MCP server auto-starts when Lokus launches.
-
-### Verify It's Working
-1. Look at **status bar** (bottom)
-2. Should show: **"MCP: Running" (green)**
-
-### Use with AI
-Your AI assistant can now:
-- ✅ Read your notes
-- ✅ Create new notes
-- ✅ Search your workspace
-- ✅ Suggest connections
-- ✅ Backup and organize
-- ✅ 68+ tools available!
-
-**Try asking AI:**
-```
-"List all notes in my workspace"
-"Create a project note for Website Redesign"
-"Find all notes about AI"
-"Backup my workspace"
-```
-
-[📹 Video: AI integration basics]
+- **Import Markdown:** drag files or folders onto the sidebar, or choose **Workspace → Import files**.
+- **Clone a repo:** sync a git repository into your workspace directory to keep notes under version control.
+- **Templates:** create reusable note scaffolds from the **Templates** panel inside the editor.
 
 ---
 
-## 6. Customize Your Setup
+## 6. Optional: enable AI integrations
 
-### Change Theme
-1. **Preferences** (Cmd/Ctrl + ,)
-2. **Appearance** → **Theme**
-3. Choose: Light, Dark, or Auto
+Lokus ships with an embedded Model Context Protocol (MCP) server that exposes read/write actions over your workspace.
 
-### Keyboard Shortcuts
-Learn essential shortcuts:
-- `Cmd/Ctrl + N` - New note
-- `Cmd/Ctrl + P` - Command palette
-- `Cmd/Ctrl + \` - Split pane
-- `Cmd/Ctrl + Shift + G` - Graph view
-- `Cmd/Ctrl + Shift + B` - Bases view
+1. Open **Settings → Integrations** and ensure **MCP server** is enabled.
+2. Point your AI assistant (Claude Desktop, Cursor, etc.) at the connection info shown in the settings pane.
+3. Use the provided commands to list notes, create tasks, or run custom scripts.
 
-### Editor Settings
-**Preferences → Editor:**
-- Font size
-- Line height
-- Auto-save interval
-- Spell check
-- Vim mode (coming soon)
-
-[📹 Video: Customization tour]
+See the [MCP Integration Guide](docs/MCP_INTEGRATION_GUIDE.md) for connection examples and security tips.
 
 ---
 
-## Next Steps
+## 7. Learn more
 
-### Learn More
-- 📖 [Comprehensive User Guide](/docs/COMPREHENSIVE_USER_GUIDE.md)
-- 🗄️ [Bases Complete Guide](/docs/features/BASES_COMPLETE_GUIDE.md)
-- 🤖 [MCP Integration Guide](/docs/MCP_INTEGRATION_GUIDE.md)
-- 🎨 [Theme Guide](/docs/features/themes.md)
+- Browse the [feature guides](docs/features/) for deep dives into the editor, Bases, graph navigation, and more.
+- Visit the [Troubleshooting guide](docs/user-guide/troubleshooting.md) if something doesn’t behave as expected.
+- Join the [Discord community](https://discord.gg/lokus) to share setups and request features.
 
-### Join Community
-- 💬 [Discord](https://discord.gg/lokus)
-- 🐛 [GitHub Issues](https://github.com/lokus-ai/lokus/issues)
-- 💡 [Feature Requests](https://github.com/lokus-ai/lokus/discussions)
-
-### Watch Tutorials
-- 📹 [YouTube Channel](https://youtube.com/@lokus-ai)
-- 📹 [Feature Demos Playlist]
-- 📹 [Tips & Tricks]
-
----
-
-## Troubleshooting
-
-### App Won't Launch
-- **macOS**: Allow in System Preferences → Security & Privacy
-- **Windows**: Run as Administrator first time
-- **Linux**: Make AppImage executable: `chmod +x lokus.AppImage`
-
-### Can't Open Workspace
-- Check folder exists and is accessible
-- Verify read/write permissions
-- Try creating new workspace instead
-
-### MCP Not Working
-- Look for "MCP: Running" in status bar
-- If stopped, restart Lokus
-- Check port 3456 not in use: `lsof -i :3456`
-
-### Slow Performance
-- Enable Quantum indexing: Preferences → Performance
-- Close unused tabs
-- Reduce graph complexity
-- Check for large images (compress them)
-
-### Need Help?
-- 📧 support@lokus.ai
-- 💬 [Discord Support Channel](https://discord.gg/lokus)
-- 📖 [Full Documentation](https://docs.lokus.ai)
-
----
-
-## Quick Tips
-
-### Productivity
-- **Use WikiLinks liberally** - Connect as you think
-- **Tag consistently** - Use frontmatter tags for Bases
-- **Review backlinks** - Discover unexpected connections
-- **Try split pane** - Work on two notes simultaneously
-
-### Organization
-- **Use folders** - Organize by project/area/topic
-- **Create templates** - For repeated note structures
-- **Use Bases** - For project tracking, reading lists, etc.
-- **Archive regularly** - Keep workspace focused
-
-### Workflow
-- **Inbox → Process → Archive**
-- **Daily notes** - Journal template with date
-- **Weekly review** - Check Bases views for status
-- **Link as you go** - Don't batch linking later
-
-### AI Integration
-- **Ask AI to organize** - "Suggest structure for my notes"
-- **Use for summaries** - "Summarize this meeting note"
-- **Find connections** - "What notes relate to this?"
-- **Automate backups** - "Backup weekly on Fridays"
-
----
-
-## Welcome to Lokus! 🎉
-
-You're all set! Start building your knowledge base.
-
-**Remember:**
-- 📝 Your files are just markdown - no lock-in
-- 🔒 Everything stays local unless you choose to sync
-- 🚀 Features are built-in, no plugins needed
-- 🤖 AI integration is automatic and powerful
-
-**Need help?** We're here:
-- 💬 Discord: https://discord.gg/lokus
-- 📧 Email: support@lokus.ai
-- 📖 Docs: https://docs.lokus.ai
-
-Happy note-taking! ✨
-
----
-
-**Version:** 1.3.1
-**Last Updated:** October 2025
+Happy writing!
