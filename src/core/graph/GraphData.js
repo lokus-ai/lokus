@@ -1,6 +1,6 @@
 /**
  * GraphData - Real-time WikiLink integration and graph data management
- * 
+ *
  * Features:
  * - Real-time sync with WikiLinks in documents
  * - Bidirectional relationship tracking
@@ -11,6 +11,8 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import { extractTags, extractInlineTags } from '../tags/tag-parser.js';
+import { parseFrontmatter } from '../../bases/data/FrontmatterParser.js';
 
 // Create deterministic ID from file path
 function createNodeId(filePath) {
@@ -22,6 +24,22 @@ function createNodeId(filePath) {
     hash = hash & hash; // Convert to 32-bit integer
   }
   return `node_${Math.abs(hash).toString(36)}`;
+}
+
+// Helper function to get CSS variable value
+function getCSSVariable(variableName) {
+  if (typeof window === 'undefined') return null;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(variableName).trim();
+  // If it's a hex color, return it
+  if (value.startsWith('#')) return value;
+  // If it's an RGB value (like "10 185 129"), convert to hex
+  if (value && !value.startsWith('#')) {
+    const rgb = value.split(' ').map(n => parseInt(n.trim()));
+    if (rgb.length === 3 && rgb.every(n => !isNaN(n))) {
+      return `#${rgb.map(n => n.toString(16).padStart(2, '0')).join('')}`;
+    }
+  }
+  return value || null;
 }
 
 export class GraphData {
@@ -402,22 +420,28 @@ export class GraphData {
   }
 
   /**
-   * Extract tags from content
+   * Extract tags from content (including YAML frontmatter)
    */
   extractTags(content) {
-    const tagRegex = /#([a-zA-Z0-9_-]+)/g;
-    const tags = [];
-    let match;
-    
-    while ((match = tagRegex.exec(content)) !== null) {
-      tags.push({
-        tag: match[1],
-        position: match.index,
-        raw: match[0]
-      });
+    try {
+      // Parse frontmatter to get tags from YAML
+      const { raw: frontmatter } = parseFrontmatter(content);
+
+      // Extract tags using the proper tag parser
+      const allTags = extractTags(content, frontmatter);
+
+      // Convert Set to array format expected by rest of the code
+      const tags = Array.from(allTags).map(tag => ({
+        tag: tag,
+        position: 0, // Position is not critical for graph view
+        raw: `#${tag}`
+      }));
+
+      return tags;
+    } catch (error) {
+      console.error('[GraphData] Failed to extract tags:', error);
+      return [];
     }
-    
-    return tags;
   }
 
   /**
@@ -889,14 +913,24 @@ export class GraphData {
    * Get color based on node type
    */
   getTypeColor(type) {
-    const colors = {
+    // Try to get color from CSS variables (theme-aware)
+    const cssColors = {
+      document: getCSSVariable('--graph-node-document'),
+      placeholder: getCSSVariable('--graph-node-placeholder'),
+      tag: getCSSVariable('--graph-node-tag'),
+      folder: getCSSVariable('--graph-node-folder')
+    };
+
+    // Fallback colors if CSS variables not available
+    const fallbackColors = {
       document: '#10b981',
       placeholder: '#6b7280',
       tag: '#ef4444',
       folder: '#f59e0b',
       default: '#6366f1'
     };
-    return colors[type] || colors.default;
+
+    return cssColors[type] || fallbackColors[type] || fallbackColors.default;
   }
 
   /**
@@ -913,13 +947,24 @@ export class GraphData {
    * Get link color based on type
    */
   getLinkColor(type) {
-    const colors = {
+    // Try to get color from CSS variables (theme-aware)
+    const baseColor = getCSSVariable('--graph-link');
+    const hoverColor = getCSSVariable('--graph-link-hover');
+
+    // Add transparency to theme colors
+    if (baseColor && baseColor.startsWith('#')) {
+      return baseColor + '60'; // Add 60 alpha (37.5% opacity)
+    }
+
+    // Fallback colors if CSS variables not available
+    const fallbackColors = {
       wikilink: '#ffffff60',
       tag: '#ef444460',
       folder: '#f59e0b60',
       default: '#ffffff40'
     };
-    return colors[type] || colors.default;
+
+    return fallbackColors[type] || fallbackColors.default;
   }
 
   /**

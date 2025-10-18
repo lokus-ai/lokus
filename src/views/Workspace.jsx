@@ -14,6 +14,7 @@ import ConnectionStatus from "../components/ConnectionStatus.jsx";
 import Canvas from "./Canvas.jsx";
 import KanbanBoard from "../components/KanbanBoard.jsx";
 import { GraphDataProcessor } from "../core/graph/GraphDataProcessor.js";
+import { GraphData } from "../core/graph/GraphData.js";
 import { GraphEngine } from "../core/graph/GraphEngine.js";
 import FileContextMenu from "../components/FileContextMenu.jsx";
 import EditorGroupsContainer from "../components/EditorGroupsContainer.jsx";
@@ -29,7 +30,7 @@ import {
 import { getActiveShortcuts, formatAccelerator } from "../core/shortcuts/registry.js";
 import CommandPalette from "../components/CommandPalette.jsx";
 import InFileSearch from "../components/InFileSearch.jsx";
-import SearchPanel from "../components/SearchPanel.jsx";
+import FullTextSearchPanel from "./FullTextSearchPanel.jsx";
 import ShortcutHelpModal from "../components/ShortcutHelpModal.jsx";
 // GlobalContextMenu removed - using EditorContextMenu and FileContextMenu instead
 import KanbanList from "../components/KanbanList.jsx";
@@ -54,9 +55,114 @@ import BasesView from "../bases/BasesView.jsx";
 import DocumentOutline from "../components/DocumentOutline.jsx";
 import GraphSidebar from "../components/GraphSidebar.jsx";
 import VersionHistoryPanel from "../components/VersionHistoryPanel.jsx";
+import BacklinksPanel from "./BacklinksPanel.jsx";
 
 const MAX_OPEN_TABS = 10;
 
+// Editor Mode Switcher Component for Right Sidebar
+const EditorModeSwitcher = () => {
+  const [editorMode, setEditorMode] = useState('edit');
+
+  useEffect(() => {
+    // Sync with global editor mode
+    const interval = setInterval(() => {
+      if (window.__LOKUS_EDITOR_MODE__) {
+        setEditorMode(window.__LOKUS_EDITOR_MODE__);
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleModeChange = (mode) => {
+    if (window.__LOKUS_SET_EDITOR_MODE__) {
+      window.__LOKUS_SET_EDITOR_MODE__(mode);
+    }
+    setEditorMode(mode);
+  };
+
+  return (
+    <div style={{
+      padding: '0.75rem',
+      borderBottom: '1px solid rgb(var(--border))',
+      background: 'rgb(var(--panel))'
+    }}>
+      <div style={{
+        fontSize: '0.6875rem',
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em',
+        color: 'rgb(var(--muted))',
+        marginBottom: '0.5rem'
+      }}>
+        Editor Mode
+      </div>
+      <div style={{
+        display: 'flex',
+        gap: '0.25rem',
+        background: 'rgb(var(--bg))',
+        border: '1px solid rgb(var(--border))',
+        borderRadius: '0.5rem',
+        padding: '0.25rem'
+      }}>
+        <button
+          onClick={() => handleModeChange('edit')}
+          title="Edit Mode"
+          style={{
+            flex: 1,
+            padding: '0.5rem 0.75rem',
+            borderRadius: '0.375rem',
+            border: 'none',
+            background: editorMode === 'edit' ? 'rgb(var(--accent))' : 'transparent',
+            color: editorMode === 'edit' ? 'white' : 'rgb(var(--text))',
+            cursor: 'pointer',
+            fontSize: '0.8125rem',
+            fontWeight: editorMode === 'edit' ? 600 : 500,
+            transition: 'all 0.15s ease'
+          }}
+        >
+          Edit
+        </button>
+        <button
+          onClick={() => handleModeChange('live')}
+          title="Live Preview Mode"
+          style={{
+            flex: 1,
+            padding: '0.5rem 0.75rem',
+            borderRadius: '0.375rem',
+            border: 'none',
+            background: editorMode === 'live' ? 'rgb(var(--accent))' : 'transparent',
+            color: editorMode === 'live' ? 'white' : 'rgb(var(--text))',
+            cursor: 'pointer',
+            fontSize: '0.8125rem',
+            fontWeight: editorMode === 'live' ? 600 : 500,
+            transition: 'all 0.15s ease'
+          }}
+        >
+          Live
+        </button>
+        <button
+          onClick={() => handleModeChange('reading')}
+          title="Reading Mode"
+          style={{
+            flex: 1,
+            padding: '0.5rem 0.75rem',
+            borderRadius: '0.375rem',
+            border: 'none',
+            background: editorMode === 'reading' ? 'rgb(var(--accent))' : 'transparent',
+            color: editorMode === 'reading' ? 'white' : 'rgb(var(--text))',
+            cursor: 'pointer',
+            fontSize: '0.8125rem',
+            fontWeight: editorMode === 'reading' ? 600 : 500,
+            transition: 'all 0.15s ease'
+          }}
+        >
+          Read
+        </button>
+      </div>
+    </div>
+  );
+};
 
 // --- Reusable Icon Component ---
 const Icon = ({ path, className = "w-5 h-5" }) => (
@@ -737,7 +843,9 @@ function WorkspaceWithScope({ path }) {
 
   // Graph data processor instance
   const graphProcessorRef = useRef(null);
-  
+
+  // GraphData instance for backlinks
+  const graphDataInstanceRef = useRef(null);
   // Split editor state
   const [useSplitView, setUseSplitView] = useState(false);
   const [splitDirection, setSplitDirection] = useState('vertical'); // 'vertical' or 'horizontal'
@@ -1975,9 +2083,18 @@ function WorkspaceWithScope({ path }) {
   // Graph View Functions
   const initializeGraphProcessor = useCallback(() => {
     if (!path || graphProcessorRef.current) return;
-    
+
     graphProcessorRef.current = new GraphDataProcessor(path);
-    
+
+    // Initialize GraphData instance for backlinks
+    if (!graphDataInstanceRef.current) {
+      graphDataInstanceRef.current = new GraphData({
+        enablePersistence: false,
+        enableRealTimeSync: true,
+        maxCacheSize: 10000
+      });
+    }
+
     // Set up event listeners for real-time graph updates
     const graphDatabase = graphProcessorRef.current.getGraphDatabase();
     
@@ -2331,7 +2448,20 @@ function WorkspaceWithScope({ path }) {
     const unlistenNewFile = isTauri ? listen("lokus:new-file", handleCreateFile) : Promise.resolve(addDom('lokus:new-file', handleCreateFile));
     const unlistenNewFolder = isTauri ? listen("lokus:new-folder", () => setIsCreatingFolder(true)) : Promise.resolve(addDom('lokus:new-folder', () => setIsCreatingFolder(true)));
     const unlistenToggleSidebar = isTauri ? listen("lokus:toggle-sidebar", () => setShowLeft(v => !v)) : Promise.resolve(addDom('lokus:toggle-sidebar', () => setShowLeft(v => !v)));
-    const unlistenCommandPalette = isTauri ? listen("lokus:command-palette", () => setShowCommandPalette(true)) : Promise.resolve(addDom('lokus:command-palette', () => setShowCommandPalette(true)));
+    const unlistenCommandPalette = isTauri ? listen("lokus:command-palette", () => {
+      // Don't open command palette when graph view is active
+      const isGraphActive = stateRef.current.activeFile === '__graph__' ||
+                           stateRef.current.activeFile?.startsWith('__graph__');
+      if (!isGraphActive) {
+        setShowCommandPalette(true);
+      }
+    }) : Promise.resolve(addDom('lokus:command-palette', () => {
+      const isGraphActive = stateRef.current.activeFile === '__graph__' ||
+                           stateRef.current.activeFile?.startsWith('__graph__');
+      if (!isGraphActive) {
+        setShowCommandPalette(true);
+      }
+    }));
     const unlistenInFileSearch = isTauri ? listen("lokus:in-file-search", () => setShowInFileSearch(true)) : Promise.resolve(addDom('lokus:in-file-search', () => setShowInFileSearch(true)));
     const unlistenGlobalSearch = isTauri ? listen("lokus:global-search", () => setShowGlobalSearch(true)) : Promise.resolve(addDom('lokus:global-search', () => setShowGlobalSearch(true)));
     const unlistenGraphView = isTauri ? listen("lokus:graph-view", handleOpenGraphView) : Promise.resolve(addDom('lokus:graph-view', handleOpenGraphView));
@@ -3172,7 +3302,7 @@ function WorkspaceWithScope({ path }) {
                         />
                       </div>
                     ) : rightPaneFile.startsWith('__graph__') ? (
-                      <div className="h-full">
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
                         <ProfessionalGraphView
                           fileTree={filteredFileTree}
                           activeFile={rightPaneFile}
@@ -3280,7 +3410,7 @@ function WorkspaceWithScope({ path }) {
               />
             </div>
           ) : activeFile === '__graph__' ? (
-            <div className="flex-1 h-full overflow-hidden">
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
               <ProfessionalGraphView
                 isVisible={true}
                 fileTree={filteredFileTree}
@@ -3558,7 +3688,37 @@ function WorkspaceWithScope({ path }) {
                   onAnimationSpeedChange={graphSidebarData.onAnimationSpeedChange}
                 />
               ) : (
-                <DocumentOutline editor={editorRef.current?.editor} />
+                <>
+                  {/* Editor Mode Switcher */}
+                  <EditorModeSwitcher />
+
+                  {/* Document Outline */}
+                  <div style={{ minHeight: '200px', maxHeight: '30%', overflowY: 'auto', borderBottom: '1px solid var(--border)' }}>
+                    <DocumentOutline editor={editorRef.current?.editor} />
+                  </div>
+
+                  {/* Outgoing Links Panel - TODO: Implement OutgoingLinksPanel component */}
+                  {/* <div style={{ minHeight: '200px', maxHeight: '30%', overflowY: 'auto', borderBottom: '1px solid var(--border)' }}>
+                    <OutgoingLinksPanel
+                      editor={editorRef.current?.editor}
+                      onNavigate={handleFileOpen}
+                      onCreateNote={(noteName) => {
+                        const fileName = noteName.endsWith('.md') ? noteName : `${noteName}.md`;
+                        const newPath = path ? `${path}/${fileName}` : fileName;
+                        handleCreateFile(newPath);
+                      }}
+                    />
+                  </div> */}
+
+                  {/* Backlinks Panel */}
+                  <div style={{ minHeight: '200px', flex: 1, overflowY: 'auto' }}>
+                    <BacklinksPanel
+                      graphData={graphProcessorRef.current?.getGraphDatabase()}
+                      currentFile={activeFile}
+                      onOpenFile={handleFileOpen}
+                    />
+                  </div>
+                </>
               )}
             </div>
 
@@ -3779,10 +3939,15 @@ function WorkspaceWithScope({ path }) {
         />
       )}
       
-      <SearchPanel
+      <FullTextSearchPanel
         isOpen={showGlobalSearch}
         onClose={() => setShowGlobalSearch(false)}
-        onFileOpen={handleFileOpen}
+        onResultClick={(result) => {
+          if (result.path) {
+            handleFileOpen(result.path);
+          }
+          setShowGlobalSearch(false);
+        }}
         workspacePath={path}
       />
 

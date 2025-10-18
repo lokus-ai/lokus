@@ -22,6 +22,7 @@ import { InputRule } from "@tiptap/core";
 import MathExt from "../extensions/Math.js";
 import WikiLink from "../extensions/WikiLink.js";
 import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
+import TagAutocomplete from "../extensions/TagAutocomplete.js";
 import HeadingAltInput from "../extensions/HeadingAltInput.js";
 import MarkdownPaste from "../extensions/MarkdownPaste.js";
 import MarkdownTablePaste from "../extensions/MarkdownTablePaste.js";
@@ -31,9 +32,13 @@ import TaskSyntaxHighlight from "../extensions/TaskSyntaxHighlight.js";
 import TaskMentionSuggest from "../extensions/TaskMentionSuggest.js";
 import TaskCreationTrigger from "../extensions/TaskCreationTrigger.js";
 import CodeBlockIndent from "../extensions/CodeBlockIndent.js";
+import Callout from "../extensions/Callout.js";
+import Folding from "../extensions/Folding.js";
 import liveEditorSettings from "../../core/editor/live-settings.js";
 import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import TaskCreationModal from "../../components/TaskCreationModal.jsx";
+import ExportModal from "../../views/ExportModal.jsx";
+import ReadingModeView from "./ReadingModeView.jsx";
 import { editorAPI } from "../../plugins/api/EditorAPI.js";
 import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 
@@ -45,6 +50,19 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
   const [editorSettings, setEditorSettings] = useState(null);
   const [pluginExtensions, setPluginExtensions] = useState([]);
   const [lastPluginUpdate, setLastPluginUpdate] = useState(0);
+
+  // Reading mode state: 'edit', 'live', 'reading'
+  const [editorMode, setEditorMode] = useState(() => {
+    // Try to load mode from localStorage
+    try {
+      const activeFile = globalThis.__LOKUS_ACTIVE_FILE__;
+      if (activeFile) {
+        const saved = localStorage.getItem(`editor-mode:${activeFile}`);
+        return saved || 'edit';
+      }
+    } catch {}
+    return 'edit';
+  });
 
   // Listen for plugin extension changes and markdown config changes
   useEffect(() => {
@@ -203,7 +221,10 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
     // Obsidian‑style wikilinks and image embeds
     exts.push(WikiLink);
     exts.push(WikiLinkSuggest);
-    
+
+    // Tag autocomplete
+    exts.push(TagAutocomplete);
+
     // Markdown paste functionality
     exts.push(MarkdownPaste);
     exts.push(MarkdownTablePaste);
@@ -219,6 +240,12 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
 
     // Code block indentation support (Tab, Shift+Tab, Enter)
     exts.push(CodeBlockIndent);
+
+    // Callout/Admonition blocks
+    exts.push(Callout);
+
+    // Section folding for headings
+    exts.push(Folding);
 
     // Add plugin extensions
     exts.push(...pluginExtensions);
@@ -293,18 +320,56 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
     })()
   }, [pluginExtensions, lastPluginUpdate]);
 
+  // Persist editor mode changes
+  useEffect(() => {
+    try {
+      const activeFile = globalThis.__LOKUS_ACTIVE_FILE__;
+      if (activeFile) {
+        localStorage.setItem(`editor-mode:${activeFile}`, editorMode);
+      }
+    } catch {}
+  }, [editorMode]);
+
+  // Keyboard shortcut for cycling modes (Cmd/Ctrl+E)
+  useEffect(() => {
+    const handleModeShortcut = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+        e.preventDefault();
+        setEditorMode(current => {
+          if (current === 'edit') return 'live';
+          if (current === 'live') return 'reading';
+          return 'edit';
+        });
+      }
+    };
+
+    document.addEventListener('keydown', handleModeShortcut);
+    return () => document.removeEventListener('keydown', handleModeShortcut);
+  }, []);
+
+  // Expose editorMode to parent via window global for sidebar access
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.__LOKUS_EDITOR_MODE__ = editorMode;
+      window.__LOKUS_SET_EDITOR_MODE__ = setEditorMode;
+    }
+  }, [editorMode]);
+
   if (loading || !extensions || !editorSettings) {
     return <div className="m-5 text-app-muted">Loading editor…</div>;
   }
 
-  return <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} />;
+  return (
+    <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} editorMode={editorMode} />
+  );
 });
 
-const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings }, ref) => {
+const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings, editorMode = 'edit' }, ref) => {
   const isSettingRef = useRef(false);
   const [isWikiLinkModalOpen, setIsWikiLinkModalOpen] = useState(false);
   const [isTaskCreationModalOpen, setIsTaskCreationModalOpen] = useState(false);
-  
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
   // Subscribe to live settings changes for real-time updates
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
   
@@ -322,6 +387,20 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
       return;
     }
     onContentChange(editor.getHTML());
+
+    // Index tags for autocomplete
+    try {
+      const activeFile = globalThis.__LOKUS_ACTIVE_FILE__;
+      if (activeFile) {
+        // Import tagManager and index the content
+        import('../../core/tags/tag-manager.js').then(({ default: tagManager }) => {
+          const content = editor.getText();
+          tagManager.indexNote(activeFile, content);
+        });
+      }
+    } catch (error) {
+      console.error('[Editor] Failed to index tags:', error);
+    }
   }, [onContentChange]);
 
   const editor = useEditor({
@@ -578,38 +657,10 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         }
         break;
       case 'exportMarkdown':
-        // Export content as markdown
-        try {
-          const content = editor.getHTML();
-          const blob = new Blob([content], { type: 'text/markdown' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'export.md';
-          a.click();
-          URL.revokeObjectURL(url);
-        } catch (e) {
-          console.error('Failed to export markdown:', e);
-        }
-        break;
       case 'exportHTML':
-        // Export content as HTML
-        try {
-          const content = editor.getHTML();
-          const blob = new Blob([content], { type: 'text/html' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'export.html';
-          a.click();
-          URL.revokeObjectURL(url);
-        } catch (e) {
-          console.error('Failed to export HTML:', e);
-        }
-        break;
       case 'exportPDF':
-        // PDF export would require additional library
-        alert('PDF export coming soon!');
+        // Open export modal
+        setIsExportModalOpen(true);
         break;
       case 'importFile':
         // Trigger file import dialog
@@ -646,6 +697,18 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     }
   }, [editor]);
 
+  // Reading mode - show non-editable HTML view
+  if (editorMode === 'reading') {
+    return (
+      <ReadingModeView
+        content={editor?.getHTML() || content}
+        editorSettings={editorSettings}
+      />
+    );
+  }
+
+  // Edit and Live Preview modes - show TipTap editor
+  // In live mode, we keep editor editable but could add visual hints
   return (
     <>
       {editor && showDebug && (
@@ -660,7 +723,10 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         canUndo={editor?.can().undo()}
         canRedo={editor?.can().redo()}
       >
-        <EditorContent editor={editor} />
+        <EditorContent
+          editor={editor}
+          className={editorMode === 'live' ? 'live-preview-mode' : ''}
+        />
       </EditorContextMenu>
 
       {/* WikiLink Modal */}
@@ -677,6 +743,19 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         isOpen={isTaskCreationModalOpen}
         onClose={() => setIsTaskCreationModalOpen(false)}
         onCreateTask={handleCreateTask}
+      />
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        htmlContent={editor?.getHTML()}
+        currentFile={{
+          name: globalThis.__LOKUS_ACTIVE_FILE__?.name || 'untitled',
+          path: globalThis.__LOKUS_ACTIVE_FILE__?.path,
+        }}
+        workspacePath={globalThis.__LOKUS_WORKSPACE_PATH__}
+        exportType="single"
       />
     </>
   );

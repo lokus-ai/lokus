@@ -556,6 +556,7 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
     font-weight: 600;
     margin: 1.5rem 0 0.75rem 0;
     line-height: 1.25;
+    position: relative; /* For fold indicator positioning */
 }
 
 .ProseMirror h1 {
@@ -1024,4 +1025,42 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
   .hljs-params {
     color: #A1C17E;
   }
+}
+
+/* Folding indicators for headings */
+.ProseMirror .foldable-heading::before {
+  content: '';
+  position: absolute;
+  left: -22px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  color: rgb(var(--muted));
+  font-size: 12px;
+  transition: color 0.15s ease, transform 0.15s ease;
+  z-index: 10;
+}
+
+.ProseMirror .foldable-heading.unfolded::before {
+  content: '▼';
+}
+
+.ProseMirror .foldable-heading.folded::before {
+  content: '▶';
+}
+
+.ProseMirror .foldable-heading:hover::before {
+  color: rgb(var(--accent));
+  transform: translateY(-50%) scale(1.15);
+}
+
+/* Folded content is hidden */
+.ProseMirror .folded-content {
+  display: none !important;
 }

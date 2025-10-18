@@ -196,11 +196,8 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       const avgNodeSize = 12; // Average node size
       currentRef.d3Force('collision', d3.forceCollide(avgNodeSize * 1.5));
 
-      // Restart simulation with HIGH energy to spread nodes properly
-      const simulation = currentRef.d3Force('simulation');
-      if (simulation) {
-        simulation.alpha(1.0).restart(); // Full energy on config change
-      }
+      // Forces updated - no restart needed to avoid node spreading on UI changes
+      // The simulation will naturally adapt to new force values
     } catch (error) {
       console.error('[GraphView] Failed to apply force config:', error);
     }
@@ -1080,10 +1077,111 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     }
   }, [selectedNodes, hoveredNode, graphData, stats, graphConfig, handleConfigChange, handleFocusNode, isAnimating, animationSpeed, toggleAnimationTour, handleAnimationSpeedChange, onGraphStateChange]);
 
-  // Apply filtering to graph data
+  // Apply filtering to graph data - only recompute when filter settings actually change
   const filteredGraphData = React.useMemo(() => {
     return filterGraphData(graphData, graphConfig);
-  }, [graphData, graphConfig, filterGraphData]);
+  }, [
+    graphData,
+    graphConfig.search,
+    graphConfig.showTags,
+    graphConfig.showAttachments,
+    graphConfig.hideUnresolved,
+    graphConfig.showOrphans,
+    filterGraphData
+  ]);
+
+  // Helper to get CSS variable color
+  const getCSSColor = (varName, fallback) => {
+    if (typeof window === 'undefined') return fallback;
+    const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+    return value || fallback;
+  };
+
+  // Generate background style from config - memoized to only update when background settings change
+  const backgroundStyle = React.useMemo(() => {
+    const config = graphConfig;
+    const bgType = config.backgroundType || 'radial';
+
+    // Get theme colors from CSS variables
+    const themeColor1 = getCSSColor('--graph-bg-primary', '#1e1b4b');
+    const themeColor2 = getCSSColor('--graph-bg-secondary', '#6366f1');
+
+    // Use custom colors only if explicitly set AND different from old defaults
+    // Otherwise, use theme colors to respect theme changes
+    const isCustomColor1 = config.backgroundColor &&
+                           config.backgroundColor !== '#1e1b4b' &&
+                           config.backgroundColor !== themeColor1;
+    const isCustomColor2 = config.backgroundSecondary &&
+                           config.backgroundSecondary !== '#6366f1' &&
+                           config.backgroundSecondary !== themeColor2;
+
+    const color1 = isCustomColor1 ? config.backgroundColor : themeColor1;
+    const color2 = isCustomColor2 ? config.backgroundSecondary : themeColor2;
+    const opacity = config.backgroundOpacity ?? 0.1;
+
+    // Helper to convert hex to rgba
+    const hexToRgba = (hex, alpha) => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
+
+    switch (bgType) {
+      case 'none':
+        return { background: 'transparent' };
+
+      case 'solid':
+        return { background: hexToRgba(color1, opacity) };
+
+      case 'gradient':
+        return {
+          background: `linear-gradient(to bottom, ${hexToRgba(color1, opacity)} 0%, ${hexToRgba(color2, opacity)} 100%)`
+        };
+
+      case 'radial':
+        return {
+          background: `radial-gradient(circle at 50% 50%, ${hexToRgba(color2, opacity)} 0%, transparent 50%)`
+        };
+
+      case 'dots': {
+        const dotSize = config.backgroundDotSize ?? 2;
+        const spacing = config.backgroundDotSpacing ?? 30;
+        const dotColor = hexToRgba(color2, opacity);
+        return {
+          backgroundColor: hexToRgba(color1, opacity / 3),
+          backgroundImage: `radial-gradient(${dotColor} ${dotSize}px, transparent ${dotSize}px)`,
+          backgroundSize: `${spacing}px ${spacing}px`
+        };
+      }
+
+      case 'grid': {
+        const lineWidth = config.backgroundDotSize ?? 2;
+        const spacing = config.backgroundDotSpacing ?? 30;
+        const lineColor = hexToRgba(color2, opacity);
+        return {
+          backgroundColor: hexToRgba(color1, opacity / 3),
+          backgroundImage: `
+            linear-gradient(${lineColor} ${lineWidth}px, transparent ${lineWidth}px),
+            linear-gradient(90deg, ${lineColor} ${lineWidth}px, transparent ${lineWidth}px)
+          `,
+          backgroundSize: `${spacing}px ${spacing}px`
+        };
+      }
+
+      default:
+        return {
+          background: `radial-gradient(circle at 50% 50%, ${hexToRgba(color2, opacity)} 0%, transparent 50%)`
+        };
+    }
+  }, [
+    graphConfig.backgroundType,
+    graphConfig.backgroundColor,
+    graphConfig.backgroundSecondary,
+    graphConfig.backgroundOpacity,
+    graphConfig.backgroundDotSize,
+    graphConfig.backgroundDotSpacing
+  ]);
 
   if (!isVisible) {
     return null;
@@ -1097,12 +1195,10 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
     >
-      <div 
+      <div
         ref={containerRef}
         className="graph-container"
-        style={{ 
-          background: 'radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%)'
-        }}
+        style={backgroundStyle}
       >
         <AnimatePresence mode="wait">
           {viewMode === '2d' && (

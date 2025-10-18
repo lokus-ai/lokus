@@ -551,20 +551,21 @@ export class GraphDataProcessor {
     // Check if node exists in GraphDatabase using consistent node ID
     const nodeId = createNodeId(file.path);
     if (!this.graphDatabase.nodes.has(nodeId)) return;
-    
+
     const node = this.graphDatabase.nodes.get(nodeId);
-    
+
     // Update size based on content length
     const contentLength = content.length;
     const sizeMultiplier = Math.log10(Math.max(contentLength, 100)) / 5;
     node.size = Math.max(4, Math.min(20, node.size * sizeMultiplier));
-    
+
     // Ensure metadata object exists
     if (!node.metadata) {
       node.metadata = {};
     }
-    
+
     // Additional metadata
+    node.metadata.content = content; // Store content for backlinks detection
     node.metadata.contentLength = contentLength;
     node.metadata.lineCount = content.split('\n').length;
     node.metadata.wordCount = content.split(/\s+/).length;
@@ -778,19 +779,32 @@ export class GraphDataProcessor {
    * @returns {Promise<Object>} Update result
    */
   async updateFileContent(filePath, content) {
-    
+
     try {
       // Extract new links from content
       const newLinks = this.extractWikiLinks(content).map(link => {
         const resolvedTarget = this.resolveLinkTarget(link.target, filePath);
         return resolvedTarget || `phantom:${link.target}`;
       });
-      
+
       // Use GraphDatabase's real-time update method
       const updateResult = this.graphDatabase.updateFileLinks(filePath, newLinks);
-      
+
+      // Update node metadata with new content for backlinks detection
+      const nodeId = createNodeId(filePath);
+      if (this.graphDatabase.nodes.has(nodeId)) {
+        const node = this.graphDatabase.nodes.get(nodeId);
+        if (!node.metadata) {
+          node.metadata = {};
+        }
+        node.metadata.content = content;
+        node.metadata.contentLength = content.length;
+        node.metadata.lineCount = content.split('\n').length;
+        node.metadata.wordCount = content.split(/\s+/).length;
+      }
+
       return updateResult;
-      
+
     } catch (error) {
       throw error;
     }
