@@ -239,6 +239,7 @@ fn main() {
       open_workspace_window,
       open_preferences_window,
       open_launcher_window,
+      windows::sync_window_theme,
       save_last_workspace,
       clear_last_workspace,
       validate_workspace_path,

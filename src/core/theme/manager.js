@@ -91,10 +91,21 @@ export async function getGlobalConfigPath() { await initializeTauri(); if (!isTa
 export async function getGlobalThemesDir() { await initializeTauri(); if (!isTauri) return THEMES_DIRNAME; const t = await join(await getGlobalDir(), THEMES_DIRNAME); await ensureDir(t); return t; }
 
 // --- Core Theme Logic ---
+// Bug fix #6: Add proper validation to prevent crashes
 function normalize(val) {
+  // Add type check
   if (typeof val !== "string") return val;
+
+  // Trim whitespace
+  val = val.trim();
+
   if (val.startsWith("#")) {
     const clean = val.replace("#", "");
+    // Validate hex characters
+    if (!/^[0-9A-Fa-f]{3}$|^[0-9A-Fa-f]{6}$/.test(clean)) {
+      console.warn(`Invalid hex color: ${val}`);
+      return val; // Return as-is instead of processing
+    }
     const full = clean.length === 3 ? clean.split("").map((c) => c + c).join("") : clean;
     const n = parseInt(full, 16);
     return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
@@ -102,9 +113,15 @@ function normalize(val) {
   return val;
 }
 
-export function applyTokens(tokens) {
+export async function applyTokens(tokens) {
+  // Add null check - Bug fix #5
+  if (!tokens || typeof tokens !== 'object') {
+    console.warn('applyTokens called with invalid tokens:', tokens);
+    return;
+  }
+
   const root = document.documentElement;
-  
+
   // Map app-prefixed tokens to correct CSS variable names
   const mappedTokens = {};
   for (const [key, value] of Object.entries(tokens)) {
@@ -115,7 +132,7 @@ export function applyTokens(tokens) {
     }
     mappedTokens[key] = value;
   }
-  
+
   for (const key of THEME_TOKEN_KEYS) {
     const value = mappedTokens[key];
     if (value) {
@@ -123,6 +140,26 @@ export function applyTokens(tokens) {
       root.style.setProperty(key, normalizedValue);
     } else {
       root.style.removeProperty(key);
+    }
+  }
+
+  // Sync window theme with native titlebar - Bug fix #1
+  if (isTauri) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+
+      const bgColor = mappedTokens['--bg'] || '15 23 42';
+      const isDark = document.documentElement.classList.contains('dark') ||
+                     window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+      await invoke('sync_window_theme', {
+        isDark,
+        bgColor
+      });
+    } catch (e) {
+      // Silently fail - window theme sync is not critical
+      console.debug('Window theme sync not available:', e);
     }
   }
 }
@@ -222,7 +259,7 @@ export async function setGlobalActiveTheme(id) {
   // Merge with defaults to fill in missing tokens
   tokensToApply = { ...BUILT_IN_THEME_TOKENS, ...tokensToApply };
 
-  applyTokens(tokensToApply);
+  await applyTokens(tokensToApply);
 
   await broadcastTheme({ tokens: tokensToApply, visuals: { theme: id } });
 }
@@ -246,7 +283,7 @@ export async function loadThemeForWorkspace(workspacePath) {
   // Merge with defaults to fill in missing tokens
   tokensToApply = { ...BUILT_IN_THEME_TOKENS, ...tokensToApply };
 
-  applyTokens(tokensToApply);
+  await applyTokens(tokensToApply);
 }
 
 export async function applyInitialTheme() {
@@ -263,11 +300,18 @@ export async function applyInitialTheme() {
   // Merge with defaults to fill in missing tokens
   tokensToApply = { ...BUILT_IN_THEME_TOKENS, ...tokensToApply };
 
-  applyTokens(tokensToApply);
+  await applyTokens(tokensToApply);
 
   // Set up system theme listener if using auto mode
   if (theme === 'system' || theme === 'auto') {
-    setupSystemThemeListener();
+    const cleanup = setupSystemThemeListener();
+    // Store cleanup function globally if needed
+    if (cleanup) {
+      if (window.__lokusThemeCleanup) {
+        window.__lokusThemeCleanup();
+      }
+      window.__lokusThemeCleanup = cleanup;
+    }
   }
 }
 
@@ -283,8 +327,9 @@ export function getSystemPreferredTheme() {
 }
 
 // Set up listener for system theme changes
+// Returns cleanup function to prevent memory leaks - Bug fix #2
 export function setupSystemThemeListener() {
-  if (typeof window === 'undefined' || !window.matchMedia) return;
+  if (typeof window === 'undefined' || !window.matchMedia) return null;
 
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
@@ -301,9 +346,12 @@ export function setupSystemThemeListener() {
   // Modern browsers
   if (mediaQuery.addEventListener) {
     mediaQuery.addEventListener('change', handleChange);
+    // Return cleanup function
+    return () => mediaQuery.removeEventListener('change', handleChange);
   } else {
     // Fallback for older browsers
     mediaQuery.addListener(handleChange);
+    return () => mediaQuery.removeListener(handleChange);
   }
 }
 

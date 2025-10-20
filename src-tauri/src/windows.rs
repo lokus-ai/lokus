@@ -156,3 +156,56 @@ pub fn open_launcher_window(app: AppHandle) -> Result<(), String> {
     .map_err(|e| e.to_string())?;
   Ok(())
 }
+
+#[tauri::command]
+pub fn sync_window_theme(window: tauri::Window, is_dark: bool, bg_color: String) -> Result<(), String> {
+  println!("[THEME] Syncing window theme - isDark: {}, bgColor: {}", is_dark, bg_color);
+
+  #[cfg(target_os = "macos")]
+  {
+    use cocoa::appkit::{NSWindow, NSAppearance};
+    use cocoa::base::{id, nil};
+
+    let ns_window = window.ns_window().map_err(|e| format!("Failed to get NSWindow: {}", e))? as id;
+    unsafe {
+      let appearance_name = if is_dark {
+        cocoa::appkit::NSAppearanceNameVibrantDark
+      } else {
+        cocoa::appkit::NSAppearanceNameVibrantLight
+      };
+      let appearance: id = cocoa::appkit::NSAppearance::appearanceNamed_(nil, appearance_name);
+      ns_window.setAppearance_(appearance);
+    }
+    println!("[THEME] macOS window appearance updated");
+  }
+
+  #[cfg(target_os = "windows")]
+  {
+    use tauri::window::Color;
+
+    // Parse RGB color from string like "15 23 42"
+    let parts: Vec<&str> = bg_color.split_whitespace().collect();
+    if parts.len() == 3 {
+      if let (Ok(r), Ok(g), Ok(b)) = (
+        parts[0].parse::<u8>(),
+        parts[1].parse::<u8>(),
+        parts[2].parse::<u8>()
+      ) {
+        let _ = window.set_background_color(Some(Color(r, g, b, 255)));
+        println!("[THEME] Windows titlebar background updated to RGB({}, {}, {})", r, g, b);
+      } else {
+        println!("[THEME] Failed to parse RGB values from: {}", bg_color);
+      }
+    } else {
+      println!("[THEME] Invalid RGB format (expected 3 space-separated values): {}", bg_color);
+    }
+  }
+
+  #[cfg(target_os = "linux")]
+  {
+    // Linux doesn't need titlebar theming as it uses system decorations
+    println!("[THEME] Linux uses system decorations, no custom theming needed");
+  }
+
+  Ok(())
+}
