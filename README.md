@@ -12,6 +12,7 @@ Built with React and Rust. Zero lock-in. All data stays on your device.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Us-7289DA?logo=discord&logoColor=white)](https://discord.gg/lokus)
+[![Dev Container](https://img.shields.io/badge/Dev_Container-Ready-blue?logo=docker&logoColor=white)](https://github.com/lokus-ai/lokus/tree/main/.devcontainer)
 
 [Quick Start](#quick-start) • [Features](#features) • [Screenshots](#screenshots) • [Documentation](#documentation) • [Contributing](#contributing)
 
@@ -304,6 +305,26 @@ chmod +x lokus.AppImage
 ```
 
 ### Build from Source
+
+#### Option 1: Dev Container (Recommended for Contributors) 🐳
+
+The **easiest way** to start contributing! Just install Docker Desktop + VS Code:
+
+```bash
+# 1. Install Docker Desktop: https://www.docker.com/products/docker-desktop
+# 2. Install VS Code: https://code.visualstudio.com/
+# 3. Clone and open
+git clone https://github.com/lokus-ai/lokus.git
+cd lokus
+code .
+# 4. Click "Reopen in Container" → Done! 🎉
+```
+
+All dependencies (Node.js, Rust, Tauri) are automatically installed in the container!
+
+**See [CONTRIBUTING.md](CONTRIBUTING.md#-quick-start-with-dev-containers-recommended) for full setup guide.**
+
+#### Option 2: Manual Setup
 
 **Prerequisites**
 - [Node.js](https://nodejs.org/) v18+
