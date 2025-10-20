@@ -606,10 +606,9 @@ impl SystemInfoCollector {
     }
     
     fn get_network_interfaces() -> Vec<String> {
-        let mut interfaces = Vec::new();
-        
         #[cfg(target_os = "linux")]
         {
+            let mut interfaces = Vec::new();
             if let Ok(entries) = std::fs::read_dir("/sys/class/net") {
                 for entry in entries.filter_map(|e| e.ok()) {
                     if let Some(name) = entry.file_name().to_str() {
@@ -619,9 +618,13 @@ impl SystemInfoCollector {
                     }
                 }
             }
+            interfaces
         }
-        
-        interfaces
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            Vec::new()
+        }
     }
 }
 

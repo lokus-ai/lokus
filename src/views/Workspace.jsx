@@ -586,8 +586,8 @@ function OldTabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, on
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="h-12 shrink-0 flex items-end bg-app-panel border-b border-app-border px-0">
-        <div className="flex-1 flex items-center overflow-x-auto no-scrollbar">
+      <div data-tauri-drag-region className="h-12 shrink-0 flex items-end bg-app-panel border-b border-app-border px-0">
+        <div data-tauri-drag-region="false" className="flex-1 flex items-center overflow-x-auto no-scrollbar">
           {tabs.map(tab => (
             <DraggableTab
               key={tab.path}
@@ -601,7 +601,7 @@ function OldTabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, on
             />
           ))}
         </div>
-        <div className="flex items-center gap-1">
+        <div data-tauri-drag-region="false" className="flex items-center gap-1">
           <button
             onClick={onToggleSplitView}
             title={useSplitView ? "Exit split view" : "Enter split view"}

@@ -1567,3 +1567,35 @@ div:focus-visible,
   padding: 2px 8px;
   line-height: 1.5;
 }
+
+/* ========== App Titlebar ========== */
+
+.app-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.app-titlebar {
+  height: 32px;
+  width: 100%;
+  background-color: rgb(var(--bg));
+  flex-shrink: 0;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
+/* macOS specific - add padding for traffic lights */
+.macos .app-titlebar {
+  padding-left: 80px; /* Space for traffic lights on the left */
+}
+
+.app-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}

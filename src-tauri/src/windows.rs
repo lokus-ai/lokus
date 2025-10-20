@@ -163,8 +163,8 @@ pub fn sync_window_theme(window: tauri::Window, is_dark: bool, bg_color: String)
 
   #[cfg(target_os = "macos")]
   {
-    use cocoa::appkit::{NSWindow, NSAppearance};
-    use cocoa::base::{id, nil};
+    use cocoa::base::id;
+    use objc::{msg_send, sel, sel_impl, class};
 
     let ns_window = window.ns_window().map_err(|e| format!("Failed to get NSWindow: {}", e))? as id;
     unsafe {
@@ -173,8 +173,10 @@ pub fn sync_window_theme(window: tauri::Window, is_dark: bool, bg_color: String)
       } else {
         cocoa::appkit::NSAppearanceNameVibrantLight
       };
-      let appearance: id = cocoa::appkit::NSAppearance::appearanceNamed_(nil, appearance_name);
-      ns_window.setAppearance_(appearance);
+
+      let appearance_class = class!(NSAppearance);
+      let appearance: id = msg_send![appearance_class, appearanceNamed: appearance_name];
+      let _: () = msg_send![ns_window, setAppearance: appearance];
     }
     println!("[THEME] macOS window appearance updated");
   }
