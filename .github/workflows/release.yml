@@ -118,6 +118,21 @@ jobs:
 
             ---
 
+            ## ⚠️ macOS Users: Remove Quarantine Attribute
+
+            Since this app is unsigned, macOS will block it by default. After downloading, run this command in Terminal:
+
+            ```bash
+            xattr -cr /Applications/Lokus.app
+            ```
+
+            Or if you installed it elsewhere:
+            ```bash
+            xattr -cr /path/to/Lokus.app
+            ```
+
+            ---
+
             **Full Changelog**: https://github.com/lokus-ai/lokus/compare/v1.3.1...v1.3.3
           releaseDraft: false
           prerelease: false
