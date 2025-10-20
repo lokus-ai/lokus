@@ -137,5 +137,9 @@ Progress.md
 .vscode/*
 !.vscode/extensions.json
 
+# Dev Container
+# Keep .devcontainer/ directory committed, but ignore any local overrides
+.devcontainer/.env
+.devcontainer/*.local.*
 
 nul

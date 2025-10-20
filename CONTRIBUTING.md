@@ -45,6 +45,103 @@ This project and everyone participating in it is governed by our [Code of Conduc
 2. Look at [open pull requests](https://github.com/lokus-ai/lokus/pulls) to avoid duplicate work
 3. For large features, consider opening an [RFC discussion](https://github.com/lokus-ai/lokus/discussions) first
 
+---
+
+## ⚡ Quick Start with Dev Containers (Recommended)
+
+**The easiest way to get started!** Just install Docker and VS Code - everything else is automated.
+
+### Why Dev Containers?
+
+- ✅ **One-click setup** - No manual Rust/Node.js installation needed
+- ✅ **Consistent environment** - Same setup for all contributors
+- ✅ **Works everywhere** - Identical experience on Windows, Mac, and Linux
+- ✅ **Version-controlled** - Dependencies tracked in git
+- ✅ **Fast onboarding** - Start coding in minutes, not hours
+
+### Prerequisites
+
+Only **3 things** to install:
+
+1. **Docker Desktop** - [Download here](https://www.docker.com/products/docker-desktop)
+   - **Windows**: Ensure WSL2 is enabled (Docker installer will help)
+   - **Mac**: Requires macOS 10.15+ (Catalina or later)
+   - **Linux**: [Install Docker Engine](https://docs.docker.com/engine/install/)
+
+2. **Visual Studio Code** - [Download here](https://code.visualstudio.com/)
+
+3. **Dev Containers Extension** - [Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+   - Or install via VS Code: Press `Ctrl/Cmd+P` → `ext install ms-vscode-remote.remote-containers`
+
+### Setup in 3 Steps
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/lokus-ai/lokus.git
+cd lokus
+
+# 2. Open in VS Code
+code .
+
+# 3. Click "Reopen in Container" when prompted
+#    (Or use Command Palette: Ctrl/Cmd+Shift+P → "Dev Containers: Reopen in Container")
+```
+
+**That's it!** The container will automatically:
+- Download and install Node.js 20
+- Install Rust toolchain and Tauri CLI
+- Install all system dependencies
+- Run `npm install`
+- Configure VS Code with recommended extensions
+
+**First-time setup**: 5-10 minutes
+**Subsequent opens**: ~30 seconds (everything's cached!)
+
+### Verify Your Setup
+
+Once the container finishes building, test that everything works:
+
+```bash
+# Inside the Dev Container terminal in VS Code:
+npm run tauri dev
+```
+
+If the app launches, you're all set! 🎉
+
+### What Gets Installed?
+
+**One-Time Downloads (On Your Machine):**
+- Docker Desktop: ~500-600 MB
+- VS Code: ~90-150 MB
+
+**Automatic Container Setup (Runs Inside Container):**
+- Ubuntu base image (~200 MB)
+- Node.js 20 (~50 MB)
+- Rust toolchain (~500 MB)
+- Tauri dependencies (~150 MB)
+- Project dependencies (~400 MB)
+
+**Total**: ~1.5-2 GB first time, but everything is isolated in the container!
+
+### Dev Container FAQ
+
+**Q: Can I use my existing VS Code extensions?**
+A: Extensions need to be installed inside the container. Our setup automatically installs all recommended extensions (rust-analyzer, Tauri, ESLint, etc.).
+
+**Q: What about my VS Code settings?**
+A: Your global settings still apply! The Dev Container only adds project-specific settings.
+
+**Q: Will this mess up my existing Rust/Node.js installation?**
+A: No! Everything runs isolated inside the container. Your system remains untouched.
+
+**Q: Can I still use manual setup?**
+A: Absolutely! See the [Manual Development Setup](#prerequisites-installation) section below.
+
+**Q: What if I don't want to use Docker?**
+A: No problem! Skip to the [Manual Development Setup](#prerequisites-installation) section for traditional installation.
+
+---
+
 ## 💻 Development Setup
 
 ### Prerequisites Installation
