@@ -97,9 +97,6 @@ function App() {
 
   return (
     <div className="app-root">
-      {/* Universal titlebar with drag region for all views */}
-      <div className="app-titlebar" data-tauri-drag-region></div>
-
       <div className="app-content">
         <AuthProvider>
           <GmailProvider>
