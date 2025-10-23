@@ -1593,6 +1593,16 @@ div:focus-visible,
   padding-left: 80px; /* Space for traffic lights on the left */
 }
 
+/* macOS: Add top padding to activity bar to clear traffic lights */
+.macos aside:first-of-type {
+  padding-top: 32px !important;
+}
+
+/* macOS: Add spacing to sidebar header */
+.macos aside:nth-of-type(2) > div:first-child {
+  margin-top: 32px;
+}
+
 .app-content {
   flex: 1;
   overflow: hidden;
