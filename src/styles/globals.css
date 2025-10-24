@@ -1593,21 +1593,14 @@ div:focus-visible,
   padding-left: 80px; /* Space for traffic lights on the left */
 }
 
-/* macOS: Tab bar should span full width and accommodate traffic lights */
-.macos [data-tauri-drag-region].h-12 {
-  padding-left: 80px; /* Space for traffic lights */
-  background: rgb(var(--panel));
-  border-bottom: 1px solid rgb(var(--border));
-}
-
-/* macOS: Activity bar starts at top (no padding needed) */
+/* macOS: Add top padding to activity bar to clear traffic lights */
 .macos aside:first-of-type {
-  padding-top: 0;
+  padding-top: 32px !important;
 }
 
-/* macOS: Sidebar header below tab bar (no extra margin) */
+/* macOS: Add spacing to sidebar header */
 .macos aside:nth-of-type(2) > div:first-child {
-  margin-top: 0;
+  margin-top: 32px;
 }
 
 .app-content {
