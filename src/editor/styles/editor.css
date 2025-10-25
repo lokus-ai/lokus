@@ -1064,3 +1064,63 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
 .ProseMirror .folded-content {
   display: none !important;
 }
+
+
+/* .editor-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 0.875rem;
+  color: var(--muted);
+  user-select: none;
+}
+
+.editor-status-bar .separator {
+  opacity: 0.5;
+} */
+
+.editor-container {
+  position: relative; 
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.editor-status-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 0.875rem;
+  color: var(--muted);
+  user-select: none;
+  backdrop-filter: blur(6px);
+  transition: background 0.3s ease, color 0.3s ease;
+  letter-spacing: 0.3px;
+
+  backdrop-filter: blur(6px);
+  transition: background 0.3s ease, color 0.3s ease;
+  letter-spacing: 0.3px;
+}
+
+.editor-status-bar .separator {
+  opacity: 0.5;
+  user-select: none;
+}
+
+.editor-status-bar span {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
