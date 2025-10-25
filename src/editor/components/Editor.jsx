@@ -43,6 +43,7 @@ import { editorAPI } from "../../plugins/api/EditorAPI.js";
 import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 
 import "../styles/editor.css";
+import EditorStatusBar from "./EditorStatusBar.jsx";
 
 const Editor = forwardRef(({ content, onContentChange }, ref) => {
   const [extensions, setExtensions] = useState(null);
@@ -723,10 +724,13 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         canUndo={editor?.can().undo()}
         canRedo={editor?.can().redo()}
       >
-        <EditorContent
-          editor={editor}
-          className={editorMode === 'live' ? 'live-preview-mode' : ''}
-        />
+        <div className="editor-container">
+          <EditorContent
+            editor={editor}
+            className={editorMode === 'live' ? 'live-preview-mode' : ''}
+          />
+          <EditorStatusBar editor={editor} />
+        </div>
       </EditorContextMenu>
 
       {/* WikiLink Modal */}
