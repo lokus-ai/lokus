@@ -81,7 +81,26 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   const forceGraph2DRef = useRef(null);
   const forceGraph3DRef = useRef(null);
   const performanceTimerRef = useRef(null);
-  
+
+  // Container dimensions state
+  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+
+  // Track container size changes
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        setDimensions({ width, height });
+      }
+    });
+
+    resizeObserver.observe(containerRef.current);
+
+    return () => resizeObserver.disconnect();
+  }, []);
+
   // Initialize graph data manager
   useEffect(() => {
     if (!isVisible || graphDataManager) return; // Prevent duplicate initialization
@@ -811,18 +830,25 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     // Additional preset-specific logic can be added here
   }, []);
   
-  // Enhanced color schemes
+  // Enhanced color schemes - using theme colors
+  const getThemeColor = (varName, fallback) => {
+    if (typeof window === 'undefined') return fallback;
+    const root = getComputedStyle(document.documentElement);
+    const value = root.getPropertyValue(varName).trim();
+    return value ? `rgb(${value})` : fallback;
+  };
+
   const colorSchemes = {
     type: {
-      document: '#10b981',    // Green
-      placeholder: '#6b7280',  // Gray
+      document: getThemeColor('--accent', '#6366f1'),     // Theme accent
+      placeholder: getThemeColor('--muted', '#6b7280'),   // Theme muted
       tag: '#ef4444',         // Red
       folder: '#f59e0b',      // Amber
       attachment: '#8b5cf6'   // Violet
     },
     folder: {
       // Dynamic colors based on folder depth/path
-      default: '#6366f1',     // Indigo
+      default: getThemeColor('--accent', '#6366f1'),      // Theme accent
       depth1: '#10b981',      // Green
       depth2: '#f59e0b',      // Amber
       depth3: '#ef4444',      // Red
@@ -834,16 +860,16 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       research: '#10b981',    // Green
       project: '#f59e0b',     // Amber
       idea: '#8b5cf6',        // Violet
-      note: '#6366f1',        // Indigo
+      note: getThemeColor('--accent', '#6366f1'),         // Theme accent
       todo: '#ef4444',        // Red
-      archive: '#6b7280'      // Gray
+      archive: getThemeColor('--muted', '#6b7280')        // Theme muted
     },
     date: {
       // Colors based on creation/modification date
       recent: '#10b981',      // Green (< 7 days)
       week: '#f59e0b',        // Amber (< 30 days)
-      month: '#6366f1',       // Indigo (< 90 days)
-      old: '#6b7280'          // Gray (> 90 days)
+      month: getThemeColor('--accent', '#6366f1'),        // Theme accent (< 90 days)
+      old: getThemeColor('--muted', '#6b7280')            // Theme muted (> 90 days)
     },
     custom: nodeGroups // User-defined color groups
   };
@@ -851,14 +877,14 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   // Node styling functions
   const getNodeColor = useCallback((node) => {
     if (selectedNodes.includes(node.id)) {
-      return '#ff6b6b'; // Highlight selected nodes
+      return getThemeColor('--accent', '#6366f1'); // Highlight with theme accent
     }
 
     const scheme = colorSchemes[colorScheme] || colorSchemes.type;
 
     switch (colorScheme) {
       case 'type':
-        return scheme[node.type] || scheme.document || '#6366f1';
+        return scheme[node.type] || scheme.document || getThemeColor('--accent', '#6366f1');
 
       case 'folder':
         if (node.metadata?.path) {
@@ -901,10 +927,10 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
             }
           }
         }
-        return '#6366f1';
+        return getThemeColor('--accent', '#6366f1');
 
       default:
-        return colorSchemes.type[node.type] || '#6366f1';
+        return colorSchemes.type[node.type] || getThemeColor('--accent', '#6366f1');
     }
   }, [selectedNodes, colorScheme, nodeGroups]);
   
@@ -927,11 +953,13 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   const getLinkColor = useCallback((link) => {
     const sourceSelected = selectedNodes.includes(link.source?.id || link.source);
     const targetSelected = selectedNodes.includes(link.target?.id || link.target);
-    
+
     if (sourceSelected || targetSelected) {
-      return '#ff6b6b80'; // Highlight links connected to selected nodes
+      const accentColor = getThemeColor('--accent', '#6366f1');
+      return accentColor + '80'; // Theme accent with transparency
     }
-    return link.color || '#ffffff40';
+    const mutedColor = getThemeColor('--muted', '#ffffff');
+    return link.color || mutedColor + '40'; // Theme muted with low opacity
   }, [selectedNodes]);
   
   const getLinkWidth = useCallback((link) => {
@@ -998,7 +1026,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     if (selectedNodes.includes(node.id)) {
       ctx.beginPath();
       ctx.arc(node.x, node.y, size, 0, 2 * Math.PI, false);
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = getThemeColor('--text', '#ffffff');
       ctx.lineWidth = 2;
       ctx.stroke();
     }
@@ -1213,6 +1241,8 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
               <ForceGraph2D
                 ref={forceGraph2DRef}
                 graphData={filteredGraphData}
+                width={dimensions.width}
+                height={dimensions.height}
                 nodeColor={getNodeColor}
                 nodeVal={getNodeSize}
                 nodeLabel={(node) => `${node.label || node.title || node.id}\nType: ${node.type}\nBacklinks: ${node.backlinkCount || 0}`}
@@ -1250,6 +1280,8 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
               <ForceGraph3D
                 ref={forceGraph3DRef}
                 graphData={filteredGraphData}
+                width={dimensions.width}
+                height={dimensions.height}
                 nodeColor={getNodeColor}
                 nodeVal={getNodeSize}
                 nodeLabel={(node) => `${node.label || node.title || node.id}\nType: ${node.type}\nBacklinks: ${node.backlinkCount || 0}`}
@@ -1285,6 +1317,8 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
               <ForceGraph2D
                 ref={forceGraph2DRef}
                 graphData={filteredGraphData}
+                width={dimensions.width}
+                height={dimensions.height}
                 nodeColor={getNodeColor}
                 nodeVal={getNodeSize}
                 nodeLabel={(node) => `${node.label || node.title || node.id}\nType: ${node.type}\nBacklinks: ${node.backlinkCount || 0}`}
