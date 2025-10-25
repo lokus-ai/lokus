@@ -1,32 +1,33 @@
 import React, { useMemo } from "react";
 import { FileText, Timer, Type } from "lucide-react"; // Lucide icons
 
- function countFinder(editor) {
-      let nodes = editor?.state.doc?.content?.content;
-      // console.log(nodes);
-      let WordCount = 0;
-      let CharCount = 0;
+function countFinder(editor) {
+  const nodes = editor?.state.doc?.content?.content;
+  let WordCount = 0;
+  let CharCount = 0;
 
-      nodes?.forEach((node) => { 
-        let contentArray = node?.content?.content;
+  nodes?.forEach((node) => {
+    const contentArray = node?.content?.content;
 
-        if(!contentArray && contentArray.length === 0) return;
+    // Skip empty nodes
+    if (!contentArray || contentArray.length === 0) return;
 
-        let wordPerNodeArray =  contentArray[0]?.text.trim().split(/\s+/);
+    const text = contentArray[0]?.text || "";
 
-        WordCount += wordPerNodeArray.filter(w => w.length > 0).length;
+    // Count characters including everything
+    CharCount += text.length;
 
-        return( 
+    // Split into words and filter out words without alphanumeric characters
+    const words = text
+      .trim()
+      .split(/\s+/)
+      .filter(word => /[a-zA-Z0-9]/.test(word)); // only words with letters/numbers
 
-          CharCount += contentArray.length > 0 ? contentArray[0]?.text?.split(/\s+/)
-                  .reduce((accumulator, currentValue) => {
-                    return accumulator + currentValue.length;
-                  }, 0): 0
-          )
-      });
+    WordCount += words.length;
+  });
 
-      return {WordCount, CharCount}
-  }
+  return { WordCount, CharCount };
+}
 
 const EditorStatusBar = ({ editor, readingSpeed = 200 }) => {
 
