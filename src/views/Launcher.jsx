@@ -119,7 +119,7 @@ export default function Launcher() {
   };
 
   return (
-    <div className="h-screen bg-app-bg text-app-text flex items-center justify-center p-8 transition-colors duration-300">
+    <div className="h-full bg-app-bg text-app-text flex items-center justify-center p-8 transition-colors duration-300">
       {/* Test Mode Indicator */}
       {isTestMode && (
         <div className="fixed top-4 right-4 bg-yellow-500 text-black px-3 py-1 rounded-md text-sm font-medium z-50">

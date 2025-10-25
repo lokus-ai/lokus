@@ -5,7 +5,7 @@ import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database, Trello } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus } from "lucide-react";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
 import Editor from "../editor";
@@ -2874,15 +2874,173 @@ function WorkspaceWithScope({ path }) {
 
   return (
     <PanelManager>
-      <div className="h-screen bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select">
+      <div className="h-full bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select relative">
       {/* Test Mode Indicator */}
       {isTestMode && (
         <div className="fixed top-4 right-4 bg-yellow-500 text-black px-3 py-1 rounded-md text-sm font-medium z-50">
           🧪 Test Mode Active
         </div>
       )}
-      <div className="flex-1 min-h-0 grid overflow-hidden" style={{ gridTemplateColumns: cols }}>
-        <aside className="flex flex-col items-center gap-1 py-3 border-r border-app-border bg-app-panel">
+
+      {/* Workspace Toolbar - positioned in titlebar area */}
+      <div
+        className="fixed top-0 left-0 right-0 h-8 flex items-center justify-between z-50"
+        data-tauri-drag-region
+        style={{
+          paddingLeft: platformService.isMacOS() ? '80px' : '8px',
+          paddingRight: '8px',
+          backgroundColor: 'rgb(var(--bg))'
+        }}
+      >
+        {/* Left Section: New File, New Folder, New Canvas buttons */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleCreateFile}
+            className="obsidian-button icon-only small"
+            title={`New File (${platformService.getModifierSymbol()}+N)`}
+            data-tauri-drag-region="false"
+            style={{ pointerEvents: 'auto' }}
+          >
+            <FileText className="w-5 h-5" strokeWidth={2} />
+          </button>
+          <button
+            onClick={handleCreateFolder}
+            className="obsidian-button icon-only small"
+            title={`New Folder (${platformService.getModifierSymbol()}+Shift+N)`}
+            data-tauri-drag-region="false"
+            style={{ pointerEvents: 'auto' }}
+          >
+            <FolderTree className="w-5 h-5" strokeWidth={2} />
+          </button>
+          <button
+            onClick={handleCreateCanvas}
+            className="obsidian-button icon-only small"
+            title="New Canvas"
+            data-tauri-drag-region="false"
+            style={{ pointerEvents: 'auto' }}
+          >
+            <Grid2X2 className="w-5 h-5" strokeWidth={2} />
+          </button>
+        </div>
+
+        {/* Center Section: Tab bar */}
+        <div
+          className="absolute flex items-center overflow-x-auto no-scrollbar px-2"
+          style={{
+            left: showLeft ? `${leftW + 57}px` : `${platformService.isMacOS() ? 200 : 120}px`, // After sidebar or after left buttons
+            right: showRight ? `${rightW + 120}px` : '120px', // Account for right sidebar when open + right buttons
+            top: 0,
+            height: '32px'
+          }}
+        >
+          {openTabs.map((tab, index) => {
+            const isActive = activeFile === tab.path;
+            return (
+              <button
+                key={tab.path}
+                onClick={() => handleTabClick(tab.path)}
+                data-tauri-drag-region="false"
+                className={`
+                  relative flex items-center gap-2 px-4 h-8 text-xs whitespace-nowrap transition-all duration-200
+                  ${isActive ? 'z-10' : 'z-0'}
+                `}
+                style={{
+                  pointerEvents: 'auto',
+                  marginLeft: index > 0 ? '-12px' : '0',
+                  minWidth: '180px',
+                  maxWidth: '280px',
+                  paddingTop: '6px',
+                  paddingBottom: '6px',
+                  backgroundColor: isActive ? '#3d3d3d' : '#2a2a2a',
+                  color: isActive ? '#ffffff' : '#808080',
+                  borderTopLeftRadius: '8px',
+                  borderTopRightRadius: '8px',
+                  borderBottomLeftRadius: '0',
+                  borderBottomRightRadius: '0',
+                  border: '1px solid #555555',
+                  borderBottom: isActive ? '2px solid #3d3d3d' : '1px solid #555555',
+                  boxShadow: isActive
+                    ? '0 -2px 8px rgba(0, 0, 0, 0.4), 0 1px 0 0 #3d3d3d'
+                    : '0 0 0 0 transparent',
+                  transform: isActive ? 'translateY(0)' : 'translateY(0)',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.backgroundColor = '#353535';
+                    e.currentTarget.style.color = '#ffffff';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = '0 -1px 4px rgba(0, 0, 0, 0.2)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.backgroundColor = '#2a2a2a';
+                    e.currentTarget.style.color = '#808080';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 0 0 0 transparent';
+                  }
+                }}
+              >
+                <span className="truncate flex-1">{tab.name}</span>
+                {unsavedChanges.has(tab.path) && (
+                  <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleTabClose(tab.path);
+                  }}
+                  className="ml-1 hover:bg-white/10 rounded p-1 flex-shrink-0 opacity-0 hover:opacity-100 transition-opacity"
+                  style={isActive ? { opacity: 0.7 } : {}}
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Right Section: Split View, Right Sidebar, and New Tab buttons */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleToggleSplitView}
+            className={`obsidian-button icon-only small ${useSplitView ? 'active' : ''}`}
+            title={useSplitView ? "Exit Split View" : "Enter Split View"}
+            data-tauri-drag-region="false"
+            style={{ pointerEvents: 'auto' }}
+          >
+            <PanelRightOpen className="w-5 h-5" strokeWidth={2} />
+          </button>
+          <button
+            onClick={() => setShowRight(v => !v)}
+            className={`obsidian-button icon-only small ${showRight ? 'active' : ''}`}
+            title={showRight ? "Hide Right Sidebar" : "Show Right Sidebar"}
+            data-tauri-drag-region="false"
+            style={{ pointerEvents: 'auto' }}
+          >
+            {showRight ? (
+              <PanelRightClose className="w-5 h-5" strokeWidth={2} />
+            ) : (
+              <PanelRightOpen className="w-5 h-5" strokeWidth={2} />
+            )}
+          </button>
+          <button
+            onClick={handleCreateFile}
+            className="obsidian-button icon-only small"
+            title="New Tab"
+            data-tauri-drag-region="false"
+            style={{ pointerEvents: 'auto' }}
+          >
+            <Plus className="w-5 h-5" strokeWidth={2.5} />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 min-h-0 grid overflow-hidden border-t border-app-border/30" style={{ gridTemplateColumns: cols, gap: 0 }}>
+        <aside className="flex flex-col items-center gap-1 border-r border-app-border bg-app-panel" style={{ paddingTop: platformService.isMacOS() ? '0.5rem' : '0.75rem', paddingBottom: '0.75rem' }}>
           {/* Menu Toggle */}
           <button
             onClick={() => setShowLeft(v => !v)}
@@ -3023,37 +3181,6 @@ function WorkspaceWithScope({ path }) {
         <div className="bg-app-border/20 w-px" />
         {showLeft && (
           <aside className="overflow-y-auto flex flex-col">
-            {/* Clean Header with Title and Actions - Hide for Kanban */}
-            {!showKanban && (
-              <div className="h-12 shrink-0 px-4 flex items-center justify-between gap-2 border-b border-app-border">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-sm font-medium text-app-text">
-                    {showPlugins ? 'Extensions' : showBases ? 'Bases' : showGraphView ? 'Graph View' : 'Explorer'}
-                  </h2>
-                  {!showPlugins && !showBases && !showGraphView && (
-                    <button onClick={closeAllFolders} title="Close all folders" className="obsidian-button small icon-only">
-                      <FolderMinus className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-                {!showPlugins && !showBases && !showGraphView && (
-                  <div className="flex items-center gap-1">
-                    <button onClick={handleCreateFile} title="New File" className="obsidian-button small icon-only">
-                      <FilePlus className="w-4 h-4" />
-                    </button>
-                    <button onClick={handleCreateCanvas} title="New Canvas" className="obsidian-button small icon-only">
-                      <Layers className="w-4 h-4" />
-                    </button>
-                    <button onClick={handleCreateKanban} title="New Kanban Board" className="obsidian-button small icon-only">
-                      <Trello className="w-4 h-4" />
-                    </button>
-                    <button onClick={handleCreateFolder} title="New Folder" className="obsidian-button small icon-only">
-                      <FolderPlus className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
             {showPlugins ? (
               <div className="flex-1 overflow-hidden">
                 <PluginSettings onOpenPluginDetail={handleOpenPluginDetail} />
@@ -3143,30 +3270,6 @@ function WorkspaceWithScope({ path }) {
                     [splitDirection === 'vertical' ? 'width' : 'height']: `${leftPaneSize}%`
                   }}
                 >
-                  <OldTabBar
-                    tabs={openTabs}
-                    activeTab={activeFile}
-                    onTabClick={(path) => {
-                      // In split view, only change the left pane, don't auto-update right pane
-                      setActiveFile(path);
-                    }}
-                    onTabClose={handleTabClose}
-                    unsavedChanges={unsavedChanges}
-                    onDragEnd={handleTabDragEnd}
-                    onNewTab={handleCreateFile}
-                    onSplitDragStart={handleSplitDragStart}
-                    onSplitDragEnd={handleSplitDragEnd}
-                    useSplitView={useSplitView}
-                    onToggleSplitView={handleToggleSplitView}
-                    splitDirection={splitDirection}
-                    onToggleSplitDirection={toggleSplitDirection}
-                    syncScrolling={syncScrolling}
-                    onToggleSyncScrolling={() => setSyncScrolling(prev => !prev)}
-                    onResetPaneSize={resetPaneSize}
-                    isLeftPane={true}
-                    onToggleRightSidebar={toggleRightSidebar}
-                    showRightSidebar={showRight}
-                  />
                   {/* Left/Top Pane Content */}
                   {activeFile ? (
                     <div 
@@ -3206,69 +3309,12 @@ function WorkspaceWithScope({ path }) {
                 />
                 
                 {/* Right/Bottom Pane */}
-                <div 
+                <div
                   className="flex flex-col overflow-hidden"
                   style={{
                     [splitDirection === 'vertical' ? 'width' : 'height']: `${100 - leftPaneSize}%`
                   }}
                 >
-                  <OldTabBar 
-                    tabs={openTabs}
-                    activeTab={rightPaneFile}
-                    onTabClick={(path) => {
-                      // Prevent scroll jumping when switching tabs
-                      const currentScrollTop = document.documentElement.scrollTop || document.body.scrollTop;
-                      
-                      setRightPaneFile(path);
-                      const tab = openTabs.find(t => t.path === path);
-                      setRightPaneTitle(tab?.name || '');
-                      
-                      // Only load file content for actual files, not special views
-                      const isSpecialView = path === '__kanban__' || path === '__gmail__' || path === '__bases__' || path.startsWith('__graph__') || path.startsWith('__plugin_') || path.endsWith('.canvas');
-                      
-                      if (!isSpecialView && (path.endsWith('.md') || path.endsWith('.txt'))) {
-                        invoke("read_file_content", { path })
-                          .then(content => {
-                            setRightPaneContent(content || '');
-                            
-                            // Restore scroll position after state update
-                            requestAnimationFrame(() => {
-                              if (document.documentElement.scrollTop !== currentScrollTop) {
-                                document.documentElement.scrollTop = currentScrollTop;
-                                document.body.scrollTop = currentScrollTop;
-                              }
-                            });
-                          })
-                          .catch(err => {
-                            console.error('Failed to load content:', err);
-                            setRightPaneContent('');
-                          });
-                      } else {
-                        // For special views, clear content and restore scroll
-                        setRightPaneContent('');
-                        requestAnimationFrame(() => {
-                          if (document.documentElement.scrollTop !== currentScrollTop) {
-                            document.documentElement.scrollTop = currentScrollTop;
-                            document.body.scrollTop = currentScrollTop;
-                          }
-                        });
-                      }
-                    }}
-                    onTabClose={handleTabClose}
-                    unsavedChanges={unsavedChanges}
-                    onDragEnd={handleTabDragEnd}
-                    onNewTab={handleCreateFile}
-                    onSplitDragStart={handleSplitDragStart}
-                    onSplitDragEnd={handleSplitDragEnd}
-                    useSplitView={useSplitView}
-                    onToggleSplitView={handleToggleSplitView}
-                    splitDirection={splitDirection}
-                    onToggleSplitDirection={toggleSplitDirection}
-                    syncScrolling={syncScrolling}
-                    onToggleSyncScrolling={() => setSyncScrolling(prev => !prev)}
-                    onResetPaneSize={resetPaneSize}
-                    isLeftPane={false}
-                  />
                   {/* Right/Bottom Pane Content */}
                   {rightPaneFile ? (
                     rightPaneFile && rightPaneFile.endsWith('.canvas') ? (
@@ -3354,27 +3400,6 @@ function WorkspaceWithScope({ path }) {
             ) : (
               /* Single View */
               <>
-                <OldTabBar
-                  tabs={openTabs}
-                  activeTab={activeFile}
-                  onTabClick={handleTabClick}
-                  onTabClose={handleTabClose}
-                  unsavedChanges={unsavedChanges}
-                  onDragEnd={handleTabDragEnd}
-                  onNewTab={handleCreateFile}
-                  onSplitDragStart={handleSplitDragStart}
-                  onSplitDragEnd={handleSplitDragEnd}
-                  useSplitView={useSplitView}
-                  onToggleSplitView={handleToggleSplitView}
-                  splitDirection={splitDirection}
-                  onToggleSplitDirection={toggleSplitDirection}
-                  syncScrolling={syncScrolling}
-                  onToggleSyncScrolling={() => setSyncScrolling(prev => !prev)}
-                  onResetPaneSize={resetPaneSize}
-                  isLeftPane={true}
-                  onToggleRightSidebar={toggleRightSidebar}
-                  showRightSidebar={showRight}
-                />
               {activeFile && activeFile.endsWith('.canvas') ? (
             <div className="flex-1 overflow-hidden">
               <Canvas
