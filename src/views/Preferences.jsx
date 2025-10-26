@@ -599,7 +599,7 @@ export default function Preferences() {
   // Add error boundary
   try {
     return (
-      <div className="h-screen bg-app-bg text-app-text flex flex-col">
+      <div className="h-full bg-app-bg text-app-text flex flex-col">
         <header className="h-12 px-4 flex items-center border-b border-app-border bg-app-panel">
           <div className="font-medium text-sm">Preferences</div>
         </header>
@@ -2786,7 +2786,7 @@ export default function Preferences() {
   } catch (error) {
     console.error('🔧 Preferences rendering error:', error);
     return (
-      <div className="p-5 bg-app-bg text-app-text min-h-screen">
+      <div className="p-5 bg-app-bg text-app-text min-h-full">
         <h1 className="text-2xl font-bold mb-4">Preferences</h1>
         <p className="text-app-muted mb-4">There was an error loading preferences. Check the console for details.</p>
         <p className="text-red-500 font-mono text-xs mb-4 p-3 bg-red-500/10 rounded">
