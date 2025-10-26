@@ -1,43 +1,37 @@
 import React, { useMemo } from "react";
-import { FileText, Timer, Type } from "lucide-react"; // Lucide icons
+import { FileText, Timer, Type } from "lucide-react"; 
 
 function countFinder(editor) {
-
-  const nodes = editor?.state.doc?.content?.content;
 
   let wordCount = 0;
   let charCount = 0;
 
+  const nodes = editor?.state.doc?.content?.content;
+
   const wordRegex =
     /^(?:\(?\+?\d{1,3}\)?[ -]?)?(?:\(?\d{3}\)?[ -]?\d{3}[ -]?\d{4})$|^[\w@.'’+-]+$/;
 
-
-  console.log("nodes: ", nodes);
-  
   nodes?.forEach((node) => {
     const contentArray = node?.content?.content;
 
     // Skip empty nodes
     if (!contentArray || contentArray.length === 0) return;
 
-  console.log("contentArray: ", contentArray);
-
-  // const text = contentArray[0]?.text || "";
-
+    // Combine all text segments in the node into a single string
+    // This ensures word/char counts include every segment, not just the first
     const text = contentArray.map(seg => seg.text || "").join(" ");
 
     // Count characters including everything
     charCount += text.length;
 
     // Split into words and filter out words without alphanumeric characters
- const words = text
-        .trim()
-        .split(/\s+/)
-        .map((w) => w.replace(/^[^\w@]+|[^\w@]+$/g, "")) // remove punctuation from edges
-        .filter((w) => w.length > 0)
-        .filter((word) => wordRegex.test(word));
+    const words = text
+          .trim()
+          .split(/\s+/)
+          .map((w) => w.replace(/^[^\w@]+|[^\w@]+$/g, "")) // remove punctuation from edges
+          .filter((w) => w.length > 0)
+          .filter((word) => wordRegex.test(word));
 
-console.log(`${text} | ${words.join("-")} | ${words.length}`);
     wordCount += words.length;
   });
 
@@ -45,9 +39,7 @@ console.log(`${text} | ${words.join("-")} | ${words.length}`);
 }
 
 const EditorStatusBar = ({ editor, readingSpeed = 200 }) => {
-
   
-
   const stats = useMemo(() => {
     if (!editor) return null;
 

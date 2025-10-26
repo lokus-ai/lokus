@@ -1066,22 +1066,7 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
 }
 
 
-/* .editor-status-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 1rem;
-  border-top: 1px solid var(--border);
-  background: var(--panel);
-  font-size: 0.875rem;
-  color: var(--muted);
-  user-select: none;
-}
-
-.editor-status-bar .separator {
-  opacity: 0.5;
-} */
-
+/* Editor Container and Status Bar Styles */
 .editor-container {
   position: relative; 
   display: flex;
@@ -1108,9 +1093,6 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
   transition: background 0.3s ease, color 0.3s ease;
   letter-spacing: 0.3px;
 
-  backdrop-filter: blur(6px);
-  transition: background 0.3s ease, color 0.3s ease;
-  letter-spacing: 0.3px;
 }
 
 .editor-status-bar .separator {
