@@ -53,8 +53,14 @@ export const useAutoUpdater = () => {
       }
     } catch (err) {
       console.error('Error checking for updates:', err);
-      setError(err.message || 'Failed to check for updates');
-      setUpdateState('error');
+      // Only show error notification for manual checks
+      if (isManual) {
+        setError(err.message || 'Failed to check for updates');
+        setUpdateState('error');
+      } else {
+        // For automatic checks, silently fail and stay idle
+        setUpdateState('idle');
+      }
     }
   }, [setLastCheckTime]);
 

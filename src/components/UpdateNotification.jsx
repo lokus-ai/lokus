@@ -12,8 +12,8 @@ export default function UpdateNotification({
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Don't render if no update or in idle/error state
-  if (updateState === 'idle' || !updateState) return null;
+  // Don't render if no update, idle, or just checking
+  if (updateState === 'idle' || updateState === 'checking' || !updateState) return null;
 
   const getStatusConfig = () => {
     switch (updateState) {
@@ -65,7 +65,7 @@ export default function UpdateNotification({
 
   return (
     <div
-      className="fixed bottom-6 right-6 w-96 bg-panel rounded-lg border border-app-border shadow-2xl slide-in-bottom-right z-50"
+      className="fixed bottom-6 right-6 w-96 bg-app-panel rounded-lg border border-app-border shadow-2xl slide-in-bottom-right z-50"
       role="dialog"
       aria-labelledby="update-title"
       aria-describedby="update-description"
