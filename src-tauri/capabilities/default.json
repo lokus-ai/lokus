@@ -33,6 +33,8 @@
     "fs:allow-rename",
     "fs:allow-exists",
     "fs:allow-appdata-write",
-    "fs:allow-appdata-write-recursive"
+    "fs:allow-appdata-write-recursive",
+    "process:allow-restart",
+    "process:default"
   ]
 }
