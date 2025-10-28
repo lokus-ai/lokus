@@ -76,6 +76,8 @@ GitHub will create release with all platform installers.
 
 ## Clean Up
 
+### Quick Cleanup
+
 ```bash
 # Clean release artifacts
 npm run clean:release
@@ -83,6 +85,28 @@ npm run clean:release
 # Clean everything (including node_modules)
 npm run clean:build
 ```
+
+### Rust Build Artifacts
+
+The Rust backend generates significant build artifacts in `src-tauri/target/` (can reach 15GB+). These files are ignored by git but consume disk space locally.
+
+**Clean Rust artifacts:**
+```bash
+cd src-tauri && cargo clean
+```
+
+**Or from project root:**
+```bash
+cargo clean --manifest-path src-tauri/Cargo.toml
+```
+
+This removes:
+- Compiled binaries
+- Incremental compilation cache
+- Debug symbols
+- Dependencies artifacts
+
+**Note:** Next build will be slower as Rust recompiles everything. The `target/` directory is automatically excluded from version control via `.gitignore`.
 
 ## Environment Variables
 
@@ -180,7 +204,7 @@ The project has two workflows:
 
 - **Parallel builds:** Can't run macOS and Linux builds simultaneously (both use heavy resources)
 - **Cache:** Rust builds are cached, subsequent builds are faster
-- **Disk space:** Each full build uses ~2-3GB, clean regularly
+- **Disk space:** Build artifacts in `src-tauri/target/` can reach 15GB+. Run `cargo clean --manifest-path src-tauri/Cargo.toml` to free up space
 - **Testing:** Test installers on real machines, not VMs if possible
 
 ## Need Help?
