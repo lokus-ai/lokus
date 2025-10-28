@@ -745,6 +745,8 @@ function WorkspaceWithScope({ path }) {
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versionHistoryFile, setVersionHistoryFile] = useState(null);
   const [versionRefreshKey, setVersionRefreshKey] = useState(0); // Force refresh of version panel
+  const [editor, setEditor] = useState(null);
+
   const lastVersionSaveRef = useRef({}); // Track last version save time per file
   const lastVersionContentRef = useRef({}); // Track last saved content per file
 
@@ -3288,6 +3290,7 @@ function WorkspaceWithScope({ path }) {
                         ref={editorRef}
                         content={editorContent}
                         onContentChange={handleEditorChange}
+                        onEditorReady={setEditor}
                       />
                     </div>
                   ) : (
@@ -3387,6 +3390,7 @@ function WorkspaceWithScope({ path }) {
                           key={`right-pane-${rightPaneFile}`}
                           content={rightPaneContent}
                           onContentChange={(content) => setRightPaneContent(content)}
+                          onEditorReady={setEditor}
                         />
                       </div>
                     )
@@ -3516,6 +3520,7 @@ function WorkspaceWithScope({ path }) {
                             ref={editorRef}
                             content={editorContent}
                             onContentChange={handleEditorChange}
+                            onEditorReady={setEditor}
                           />
                         </div>
                       </ContextMenuTrigger>
@@ -3993,6 +3998,7 @@ function WorkspaceWithScope({ path }) {
         activeFile={activeFile} 
         unsavedChanges={unsavedChanges} 
         openTabs={openTabs}
+        editor={editor}
       />
     </div>
     </PanelManager>
