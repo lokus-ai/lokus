@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Launcher from "./views/Launcher";
 import Workspace from "./views/Workspace";
 import Preferences from "./views/Preferences";
@@ -11,6 +11,8 @@ import platformService from "./services/platform/PlatformService.js";
 import { GmailProvider } from "./contexts/GmailContext.jsx";
 import markdownSyntaxConfig from "./core/markdown/syntax-config.js";
 import editorConfigCache from "./core/editor/config-cache.js";
+import { useAutoUpdater } from "./hooks/useAutoUpdater";
+import UpdateNotification from "./components/UpdateNotification";
 // Import workspace manager to expose developer utilities
 import "./core/workspace/manager.js";
 // Import MCP client for stdio-based connections
@@ -22,6 +24,18 @@ function App() {
   // Use the hooks' values directly (no setter param expected)
   const { isPrefsWindow } = usePreferenceActivation();
   const activePath = useWorkspaceActivation();
+  const [showUpdateNotification, setShowUpdateNotification] = useState(true);
+
+  // Auto-updater hook
+  const {
+    updateState,
+    version,
+    downloadProgress,
+    releaseNotes,
+    error,
+    downloadUpdate,
+    installUpdate,
+  } = useAutoUpdater();
   
   console.log('🎯 App.jsx rendering');
   console.log('🎯 isPrefsWindow:', isPrefsWindow);
@@ -115,6 +129,19 @@ function App() {
           </GmailProvider>
         </AuthProvider>
       </div>
+
+      {/* Update Notification */}
+      {showUpdateNotification && (
+        <UpdateNotification
+          updateState={updateState}
+          version={version}
+          downloadProgress={downloadProgress}
+          releaseNotes={releaseNotes}
+          error={error}
+          onUpdate={updateState === 'available' ? downloadUpdate : installUpdate}
+          onDismiss={() => setShowUpdateNotification(false)}
+        />
+      )}
     </div>
   );
 }
