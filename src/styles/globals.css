@@ -797,6 +797,21 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   }
 }
 
+@keyframes slide-in-bottom-right {
+  from {
+    opacity: 0;
+    transform: translate(20px, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+
+.slide-in-bottom-right {
+  animation: slide-in-bottom-right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 /* Apply smooth transitions to all Obsidian components */
 .obsidian-file-item,
 .obsidian-tab,

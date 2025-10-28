@@ -9,6 +9,7 @@ import { invoke } from "@tauri-apps/api/core";
 import liveEditorSettings from "../core/editor/live-settings.js";
 import markdownSyntaxConfig from "../core/markdown/syntax-config.js";
 import AIAssistant from "./preferences/AIAssistant.jsx";
+import Updates from "./preferences/Updates.jsx";
 import ConnectionStatus from "../components/ConnectionStatus.jsx";
 import GmailLogin from "../components/gmail/GmailLogin.jsx";
 import { useAuth } from "../core/auth/AuthContext";
@@ -616,6 +617,7 @@ export default function Preferences() {
             "Sync",
             "Connections",
             "Account",
+            "Updates",
             "AI Assistant",
           ].map((name) => (
             <button
@@ -2774,6 +2776,10 @@ export default function Preferences() {
                 </>
               )}
             </div>
+          )}
+
+          {section === "Updates" && (
+            <Updates onCheckUpdate={window.__checkForUpdates} />
           )}
 
           {section === "AI Assistant" && (

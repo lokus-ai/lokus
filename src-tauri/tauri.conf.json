@@ -66,6 +66,15 @@
       "desktop": {
         "schemes": ["lokus"]
       }
+    },
+    "updater": {
+      "active": true,
+      "dialog": false,
+      "endpoints": ["https://github.com/lokus-ai/lokus/releases/latest/download/latest.json"],
+      "pubkey": "PLACEHOLDER_FOR_NOW",
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }
