@@ -45,7 +45,7 @@ import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 import "../styles/editor.css";
 import EditorStatusBar from "./EditorStatusBar.jsx";
 
-const Editor = forwardRef(({ content, onContentChange }, ref) => {
+const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => {
   const [extensions, setExtensions] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editorSettings, setEditorSettings] = useState(null);
@@ -361,11 +361,11 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
   }
 
   return (
-    <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} editorMode={editorMode} />
+    <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} editorMode={editorMode} onEditorReady={onEditorReady} />
   );
 });
 
-const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings, editorMode = 'edit' }, ref) => {
+const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings, editorMode = 'edit', onEditorReady }, ref) => {
   const isSettingRef = useRef(false);
   const [isWikiLinkModalOpen, setIsWikiLinkModalOpen] = useState(false);
   const [isTaskCreationModalOpen, setIsTaskCreationModalOpen] = useState(false);
@@ -462,6 +462,12 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     content,
     onUpdate: handleEditorUpdate,
   }, [extensions, handleEditorUpdate]);
+
+  useEffect(() => {
+    if (editor) onEditorReady(editor); 
+    return () => onEditorReady(null);
+  }, [editor, onEditorReady]);
+
 
   // Keyboard shortcuts and event listeners for WikiLink and Task insertion
   useEffect(() => {
@@ -724,13 +730,10 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         canUndo={editor?.can().undo()}
         canRedo={editor?.can().redo()}
       >
-        <div className="editor-container">
           <EditorContent
             editor={editor}
             className={editorMode === 'live' ? 'live-preview-mode' : ''}
           />
-          <EditorStatusBar editor={editor} />
-        </div>
       </EditorContextMenu>
 
       {/* WikiLink Modal */}
