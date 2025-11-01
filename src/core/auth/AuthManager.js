@@ -41,16 +41,19 @@ class AuthManager {
 
     // Listen for localhost auth completion events
     try {
-      await listen('auth-success', (event) => {
-        this.checkAuthStatus(); // Refresh auth state
+      await listen('auth-success', async (event) => {
+        console.log('✅ [AuthManager] Received auth-success event');
+        await this.checkAuthStatus(); // Refresh auth state
+        console.log('✅ [AuthManager] Auth state updated - isAuthenticated:', this.isAuthenticated);
       });
-      
+
       await listen('auth-error', (event) => {
-        console.error('❌ Authentication failed:', event.payload);
+        console.error('❌ [AuthManager] Authentication failed:', event.payload);
+        alert(`Authentication failed: ${JSON.stringify(event.payload)}`);
         this.notifyListeners(); // Update UI to show error state
       });
     } catch (error) {
-      console.error('Failed to register auth event listeners:', error);
+      console.error('[AuthManager] Failed to register auth event listeners:', error);
     }
   }
 
@@ -131,11 +134,17 @@ class AuthManager {
 
   async signIn() {
     try {
+      console.log('[AuthManager] Initiating OAuth flow...');
       // Initiate OAuth flow with PKCE
       const authUrl = await invoke('initiate_oauth_flow');
+      console.log('[AuthManager] OAuth URL generated, opening browser...');
+      console.log('[AuthManager] Waiting for callback at localhost...');
       await invoke('open_auth_url', { authUrl });
+      console.log('[AuthManager] Browser opened. Please complete sign-in in the browser.');
+      console.log('[AuthManager] After signing in, you should see a success page, then return to the app.');
     } catch (error) {
-      console.error('❌ Failed to initiate OAuth flow:', error);
+      console.error('❌ [AuthManager] Failed to initiate OAuth flow:', error);
+      alert(`Failed to start authentication: ${error}`);
       throw error;
     }
   }
