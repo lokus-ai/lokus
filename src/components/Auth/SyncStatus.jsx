@@ -167,7 +167,15 @@ export default function SyncStatus() {
       // Parse structured error
       const gitError = parseGitError(err);
       setErrorType(gitError.type);
-      setErrorMessage(gitError.message);
+
+      // Provide helpful error messages for common issues
+      if (err.toString().includes('find remote')) {
+        setErrorMessage('Git not initialized. Go to Preferences > Sync and click "Initialize Git" then "Connect Remote Repository"');
+      } else if (err.toString().includes('not a git repository')) {
+        setErrorMessage('Git not initialized in workspace. Go to Preferences > Sync and click "Initialize Git"');
+      } else {
+        setErrorMessage(gitError.message);
+      }
 
       // Set specific status for auth errors
       if (gitError.type === 'auth') {
@@ -241,7 +249,15 @@ export default function SyncStatus() {
       // Parse structured error
       const gitError = parseGitError(err);
       setErrorType(gitError.type);
-      setErrorMessage(gitError.message);
+
+      // Provide helpful error messages for common issues
+      if (err.toString().includes('find remote')) {
+        setErrorMessage('Git not initialized. Go to Preferences > Sync and click "Initialize Git" then "Connect Remote Repository"');
+      } else if (err.toString().includes('not a git repository')) {
+        setErrorMessage('Git not initialized in workspace. Go to Preferences > Sync and click "Initialize Git"');
+      } else {
+        setErrorMessage(gitError.message);
+      }
 
       // Set specific status for auth errors
       if (gitError.type === 'auth') {
