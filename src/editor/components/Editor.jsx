@@ -43,7 +43,6 @@ import { editorAPI } from "../../plugins/api/EditorAPI.js";
 import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 
 import "../styles/editor.css";
-import EditorStatusBar from "./EditorStatusBar.jsx";
 
 const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => {
   const [extensions, setExtensions] = useState(null);
