@@ -450,6 +450,11 @@ export default function SyncStatus() {
       return 'Git sync not configured. Open Preferences → Sync to set up.';
     }
 
+    // Check for conflicts first (priority tooltip)
+    if (gitStatus?.conflicts && gitStatus.conflicts.length > 0) {
+      return `⚠️ ${gitStatus.conflicts.length} merge conflict${gitStatus.conflicts.length > 1 ? 's' : ''} detected - Click to resolve`;
+    }
+
     switch (syncStatus) {
       case 'syncing':
         return 'Syncing changes...';
@@ -461,7 +466,7 @@ export default function SyncStatus() {
         if (errorType === 'network') {
           return errorMessage || 'Network error. Check your connection.';
         } else if (errorType === 'conflict') {
-          return errorMessage || 'Merge conflicts detected. Use conflict resolution.';
+          return errorMessage || '⚠️ Merge conflicts detected - Click to resolve';
         }
         return errorMessage || 'Sync failed. Click to retry.';
       default:
@@ -475,6 +480,12 @@ export default function SyncStatus() {
   const handleClick = () => {
     if (!isConfigured) {
       // Open preferences to sync tab
+      return;
+    }
+
+    // If there are conflicts, open the menu to show resolution options
+    if (gitStatus?.conflicts && gitStatus.conflicts.length > 0) {
+      setShowMenu(true);
       return;
     }
 
@@ -563,7 +574,8 @@ export default function SyncStatus() {
 
                   {/* Explanatory text */}
                   <div className="text-xs text-app-muted mb-3 p-2 bg-orange-500/5 rounded border border-orange-500/20">
-                    Choose how to resolve each conflict:
+                    <div className="font-medium text-orange-500 mb-1">⚠️ Conflicting Changes</div>
+                    Your local changes conflict with remote changes. Choose how to resolve:
                   </div>
 
                   {/* Per-file conflict list */}
@@ -584,29 +596,33 @@ export default function SyncStatus() {
                   {/* Resolution options */}
                   <div className="space-y-2">
                     <div className="text-xs text-app-muted font-medium mb-1">
-                      Resolution Options:
+                      Quick Resolution:
                     </div>
                     <button
                       onClick={forcePush}
                       disabled={isSyncing()}
-                      className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs text-app-text bg-blue-500/10 hover:bg-blue-500/20 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-blue-500/20"
+                      className="w-full px-3 py-2 text-xs text-app-text bg-blue-500/10 hover:bg-blue-500/20 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-blue-500/20 text-left"
                     >
-                      <div className="flex items-center gap-2">
-                        <CloudUpload className="w-3.5 h-3.5" />
-                        <span className="font-medium">Keep Local</span>
+                      <div className="flex items-center gap-2 mb-1">
+                        <CloudUpload className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="font-medium">Keep My Local Changes</span>
                       </div>
-                      <span className="text-[10px] text-app-muted">Overwrite remote</span>
+                      <div className="text-[10px] text-app-muted ml-5">
+                        Your local files will replace the remote version
+                      </div>
                     </button>
                     <button
                       onClick={forcePull}
                       disabled={isSyncing()}
-                      className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs text-app-text bg-orange-500/10 hover:bg-orange-500/20 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-orange-500/20"
+                      className="w-full px-3 py-2 text-xs text-app-text bg-orange-500/10 hover:bg-orange-500/20 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-orange-500/20 text-left"
                     >
-                      <div className="flex items-center gap-2">
-                        <ArrowDownToLine className="w-3.5 h-3.5" />
-                        <span className="font-medium">Use Remote</span>
+                      <div className="flex items-center gap-2 mb-1">
+                        <ArrowDownToLine className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="font-medium">Use Remote Changes</span>
                       </div>
-                      <span className="text-[10px] text-app-muted">Discard local</span>
+                      <div className="text-[10px] text-app-muted ml-5">
+                        Remote files will replace your local version
+                      </div>
                     </button>
                   </div>
                 </div>
