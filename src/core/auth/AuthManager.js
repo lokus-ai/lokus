@@ -15,6 +15,10 @@ class AuthManager {
     this.lastCheckTime = 0;
     this.CHECK_THROTTLE = 1000; // Minimum 1 second between checks
 
+    // Token refresh lock to prevent concurrent refresh attempts
+    this.refreshInProgress = false;
+    this.refreshPromise = null;
+
     this.initialize();
   }
 
@@ -150,6 +154,14 @@ class AuthManager {
 
   async getAccessToken() {
     try {
+      // If a refresh is in progress, wait for it to complete
+      if (this.refreshInProgress && this.refreshPromise) {
+        await this.refreshPromise;
+        // After refresh completes, get the new token
+        const tokenData = await invoke('get_auth_token');
+        return tokenData?.access_token || null;
+      }
+
       const tokenData = await invoke('get_auth_token');
       if (!tokenData) return null;
 
@@ -176,14 +188,32 @@ class AuthManager {
   }
 
   async refreshToken() {
-    try {
-      await invoke('refresh_auth_token');
-      await this.checkAuthStatus(); // Refresh auth state
-    } catch (error) {
-      console.error('Failed to refresh token:', error);
-      // If refresh fails, sign out the user
-      await this.signOut();
+    // If already refreshing, return the existing promise
+    if (this.refreshInProgress && this.refreshPromise) {
+      return this.refreshPromise;
     }
+
+    // Mark refresh as in progress and create the promise
+    this.refreshInProgress = true;
+    this.refreshPromise = (async () => {
+      try {
+        console.log('[Auth] Refreshing token...');
+        await invoke('refresh_auth_token');
+        await this.checkAuthStatus(); // Refresh auth state
+        console.log('[Auth] Token refreshed successfully');
+      } catch (error) {
+        console.error('Failed to refresh token:', error);
+        // If refresh fails, sign out the user
+        await this.signOut();
+        throw error;
+      } finally {
+        // Clear the lock
+        this.refreshInProgress = false;
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
   }
 
   // API call helper with automatic auth headers

@@ -216,6 +216,8 @@ pub fn git_pull(
     username: String,
     token: String,
 ) -> Result<String, String> {
+    println!("[Sync] Pull parameters: remote={}, branch={}, username={}, token_length={}",
+        remote_name, branch_name, username, token.len());
     println!("[Sync] Pulling from remote '{}'...", remote_name);
 
     let repo = Repository::open(&workspace_path)
@@ -259,8 +261,25 @@ pub fn git_pull(
         println!("[Sync] Fast-forward merge possible");
         // Fast-forward merge
         let refname = format!("refs/heads/{}", branch_name);
-        let mut reference = repo.find_reference(&refname)
-            .map_err(|e| format!("Failed to find reference: {}", e))?;
+
+        // Try to find existing reference, or create it if it doesn't exist
+        let mut reference = match repo.find_reference(&refname) {
+            Ok(r) => {
+                println!("[Sync] Found existing local branch");
+                r
+            }
+            Err(_) => {
+                // Branch doesn't exist locally, create it
+                println!("[Sync] Creating local branch '{}' for first pull", branch_name);
+                repo.reference(
+                    &refname,
+                    fetch_commit.id(),
+                    false,
+                    "Create branch from remote on first pull"
+                ).map_err(|e| format!("Failed to create local branch: {}", e))?
+            }
+        };
+
         reference.set_target(fetch_commit.id(), "Fast-forward merge")
             .map_err(|e| format!("Failed to fast-forward: {}", e))?;
         repo.set_head(&refname)
