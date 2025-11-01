@@ -2631,7 +2631,57 @@ export default function Preferences() {
                           </div>
                         </div>
 
-                        <div className="pt-2 flex gap-2">
+                        <div className="pt-2 space-y-2">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={async () => {
+                                if (!workspacePath) {
+                                  alert('Workspace path not available. Please reopen Preferences from the workspace.');
+                                  return;
+                                }
+                                setSyncLoading(true);
+                                try {
+                                  const result = await invoke('git_init', { workspacePath });
+                                  alert(result);
+                                } catch (err) {
+                                  alert('Git init failed: ' + err);
+                                }
+                                setSyncLoading(false);
+                              }}
+                              disabled={syncLoading || !workspacePath}
+                              className="flex-1 px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+                            >
+                              Initialize Git
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!workspacePath) {
+                                  alert('Workspace path not available. Please reopen Preferences from the workspace.');
+                                  return;
+                                }
+                                if (!syncRemoteUrl) {
+                                  alert('Please enter a remote URL first.');
+                                  return;
+                                }
+                                setSyncLoading(true);
+                                try {
+                                  const result = await invoke('git_add_remote', {
+                                    workspacePath,
+                                    remoteName: 'origin',
+                                    remoteUrl: syncRemoteUrl
+                                  });
+                                  alert(result);
+                                } catch (err) {
+                                  alert('Add remote failed: ' + err);
+                                }
+                                setSyncLoading(false);
+                              }}
+                              disabled={syncLoading || !workspacePath || !syncRemoteUrl}
+                              className="flex-1 px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+                            >
+                              Connect Remote
+                            </button>
+                          </div>
                           <button
                             onClick={() => {
                               // Clear all sync settings
@@ -2639,7 +2689,7 @@ export default function Preferences() {
                               setSyncUsername('');
                               setSyncConfigExpanded(false);
                             }}
-                            className="px-3 py-1.5 text-sm bg-app-bg border border-app-border hover:border-red-500 hover:text-red-500 rounded-md text-app-text transition-colors"
+                            className="w-full px-3 py-1.5 text-sm bg-app-bg border border-app-border hover:border-red-500 hover:text-red-500 rounded-md text-app-text transition-colors"
                           >
                             Delete Configuration
                           </button>

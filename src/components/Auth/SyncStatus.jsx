@@ -170,9 +170,9 @@ export default function SyncStatus() {
 
       // Provide helpful error messages for common issues
       if (err.toString().includes('find remote')) {
-        setErrorMessage('Git not initialized. Go to Preferences > Sync and click "Initialize Git" then "Connect Remote Repository"');
+        setErrorMessage('Git not initialized. Go to Preferences > Sync, expand "Git Configuration", then click "Initialize Git" and "Connect Remote"');
       } else if (err.toString().includes('not a git repository')) {
-        setErrorMessage('Git not initialized in workspace. Go to Preferences > Sync and click "Initialize Git"');
+        setErrorMessage('Git not initialized in workspace. Go to Preferences > Sync, expand "Git Configuration", then click "Initialize Git"');
       } else {
         setErrorMessage(gitError.message);
       }
@@ -252,9 +252,9 @@ export default function SyncStatus() {
 
       // Provide helpful error messages for common issues
       if (err.toString().includes('find remote')) {
-        setErrorMessage('Git not initialized. Go to Preferences > Sync and click "Initialize Git" then "Connect Remote Repository"');
+        setErrorMessage('Git not initialized. Go to Preferences > Sync, expand "Git Configuration", then click "Initialize Git" and "Connect Remote"');
       } else if (err.toString().includes('not a git repository')) {
-        setErrorMessage('Git not initialized in workspace. Go to Preferences > Sync and click "Initialize Git"');
+        setErrorMessage('Git not initialized in workspace. Go to Preferences > Sync, expand "Git Configuration", then click "Initialize Git"');
       } else {
         setErrorMessage(gitError.message);
       }
