@@ -423,7 +423,7 @@ pub fn git_pull(
 
                 for conflict in conflicts {
                     if let Ok(c) = conflict {
-                        if let Some(our) = c.our {
+                        if let Some(ref our) = c.our {
                             if let Some(path) = std::str::from_utf8(&our.path).ok() {
                                 conflicts_to_resolve.push((path.to_string(), c));
                             }
