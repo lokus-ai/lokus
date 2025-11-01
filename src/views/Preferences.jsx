@@ -40,6 +40,9 @@ export default function Preferences() {
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
   const [markdownSyntax, setMarkdownSyntax] = useState(markdownSyntaxConfig.getAll());
 
+  // Get auth context for sync operations
+  const { isAuthenticated, getAccessToken } = useAuth();
+
   // Sync state
   const [workspacePath, setWorkspacePath] = useState('');
   const [syncRemoteUrl, setSyncRemoteUrl] = useState('');
@@ -47,12 +50,10 @@ export default function Preferences() {
   const [syncAuthorEmail, setSyncAuthorEmail] = useState('');
   const [syncBranch, setSyncBranch] = useState('main');
   const [syncUsername, setSyncUsername] = useState('');
-  const [syncToken, setSyncToken] = useState('');
   const [syncStatus, setSyncStatus] = useState(null);
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [syncConfigExpanded, setSyncConfigExpanded] = useState(false);
-  const [tokenLoaded, setTokenLoaded] = useState(false);
 
   const [expandedSections, setExpandedSections] = useState({
     font: true,
@@ -232,14 +233,6 @@ export default function Preferences() {
           if (cfg.sync.branch) setSyncBranch(cfg.sync.branch);
           if (cfg.sync.username) setSyncUsername(cfg.sync.username);
         }
-
-        // Load encrypted token from secure storage
-        const token = await invoke('retrieve_sync_token');
-        if (token) {
-          setSyncToken(token);
-          setTokenLoaded(true);
-          console.log('[Sync] Loaded token from secure storage');
-        }
       } catch (e) {
         console.error('Failed to load sync settings:', e);
       }
@@ -310,25 +303,6 @@ export default function Preferences() {
       saveSyncSettings();
     }
   }, [syncRemoteUrl, syncAuthorName, syncAuthorEmail, syncBranch, syncUsername]);
-
-  // Auto-save token to secure storage when it changes
-  useEffect(() => {
-    const saveToken = async () => {
-      if (!syncToken) return;
-
-      try {
-        await invoke('store_sync_token', { token: syncToken });
-        console.log('[Sync] Token saved to secure storage');
-      } catch (e) {
-        console.error('Failed to save token:', e);
-      }
-    };
-
-    if (syncToken && !tokenLoaded) {
-      // Only save if user typed it (not loaded from storage)
-      saveToken();
-    }
-  }, [syncToken]);
 
   // Auto-detect branch name when workspace path is available
   useEffect(() => {
@@ -2426,7 +2400,7 @@ export default function Preferences() {
               </div>
 
               {/* Check if sync is configured */}
-              {(!syncRemoteUrl || !syncUsername || !syncToken) ? (
+              {(!syncRemoteUrl || !syncUsername) ? (
                 /* Setup Mode - Show when not configured */
                 <>
                   <section className="p-4 bg-app-panel border border-app-border rounded-md">
@@ -2510,23 +2484,6 @@ export default function Preferences() {
                         placeholder="github-username"
                         className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
                       />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm text-app-muted mb-2">Personal Access Token</label>
-                      <input
-                        type="password"
-                        value={tokenLoaded ? '••••••••••••' : syncToken}
-                        onChange={(e) => {
-                          setSyncToken(e.target.value);
-                          setTokenLoaded(false);
-                        }}
-                        placeholder="ghp_... or glpat-..."
-                        className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
-                      />
-                      <p className="text-xs text-app-muted mt-1">
-                        <strong>GitHub:</strong> <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-app-accent hover:underline">Create token</a> with <code className="bg-app-bg px-1 rounded">repo</code> scope
-                      </p>
                     </div>
 
                     <div>
@@ -2632,10 +2589,7 @@ export default function Preferences() {
                               setSyncAuthorName('');
                               setSyncAuthorEmail('');
                               setSyncUsername('');
-                              setSyncToken('');
-                              setTokenLoaded(false);
                               setSyncConfigExpanded(false);
-                              invoke('delete_sync_token');
                             }}
                             className="px-3 py-1.5 text-sm bg-app-bg border border-app-border hover:border-red-500 hover:text-red-500 rounded-md text-app-text transition-colors"
                           >
@@ -2671,14 +2625,24 @@ export default function Preferences() {
                             alert('Workspace path not available. Please reopen Preferences from the workspace.');
                             return;
                           }
+                          if (!isAuthenticated) {
+                            alert('Please sign in to use sync features.');
+                            return;
+                          }
                           setSyncLoading(true);
                           try {
+                            // Get fresh token from auth system
+                            const token = await getAccessToken();
+                            if (!token) {
+                              throw new Error('Failed to get access token. Please sign in again.');
+                            }
+
                             await invoke('git_pull', {
                               workspacePath,
                               remoteName: 'origin',
-                              branchName: syncBranch,
+                              branchName: syncBranch || 'main',
                               username: syncUsername,
-                              token: syncToken
+                              token: token
                             });
                             alert('Pulled successfully!');
                           } catch (err) {
@@ -2686,7 +2650,7 @@ export default function Preferences() {
                           }
                           setSyncLoading(false);
                         }}
-                        disabled={syncLoading || !workspacePath}
+                        disabled={syncLoading || !workspacePath || !isAuthenticated}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
                       >
                         <CloudOff className="w-4 h-4" />
@@ -2699,22 +2663,32 @@ export default function Preferences() {
                             alert('Workspace path not available. Please reopen Preferences from the workspace.');
                             return;
                           }
+                          if (!isAuthenticated) {
+                            alert('Please sign in to use sync features.');
+                            return;
+                          }
                           setSyncLoading(true);
                           try {
+                            // Get fresh token from auth system
+                            const token = await getAccessToken();
+                            if (!token) {
+                              throw new Error('Failed to get access token. Please sign in again.');
+                            }
+
                             // First commit
                             await invoke('git_commit', {
                               workspacePath,
                               message: syncMessage || 'Update workspace',
-                              authorName: syncAuthorName,
-                              authorEmail: syncAuthorEmail
+                              authorName: syncAuthorName || syncUsername || 'Lokus',
+                              authorEmail: syncAuthorEmail || `${syncUsername}@users.noreply.github.com`
                             });
                             // Then push
                             await invoke('git_push', {
                               workspacePath,
                               remoteName: 'origin',
-                              branchName: syncBranch,
+                              branchName: syncBranch || 'main',
                               username: syncUsername,
-                              token: syncToken
+                              token: token
                             });
                             alert('Pushed successfully!');
                             setSyncMessage('');
@@ -2723,7 +2697,7 @@ export default function Preferences() {
                           }
                           setSyncLoading(false);
                         }}
-                        disabled={syncLoading || !syncMessage || !workspacePath}
+                        disabled={syncLoading || !syncMessage || !workspacePath || !isAuthenticated}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
                       >
                         <CloudUpload className="w-4 h-4" />

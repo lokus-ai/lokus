@@ -3,14 +3,15 @@ import { Cloud, CloudOff, RefreshCw, Check, AlertCircle, GitBranch, CloudUpload,
 import { invoke } from '@tauri-apps/api/core';
 import { readConfig } from '../../core/config/store';
 import { confirm } from '@tauri-apps/plugin-dialog';
+import { useAuth } from '../../core/auth/AuthContext';
 
 export default function SyncStatus() {
+  const { isAuthenticated, getAccessToken } = useAuth();
   const [syncStatus, setSyncStatus] = useState('idle'); // idle, syncing, success, error
   const [gitStatus, setGitStatus] = useState(null);
   const [isConfigured, setIsConfigured] = useState(false);
   const [workspacePath, setWorkspacePath] = useState('');
   const [syncSettings, setSyncSettings] = useState({});
-  const [token, setToken] = useState('');
   const [showMenu, setShowMenu] = useState(false);
   const [lastSync, setLastSync] = useState(null);
 
@@ -54,21 +55,9 @@ export default function SyncStatus() {
       if (cfg.sync) {
         setSyncSettings(cfg.sync);
 
-        // Check if configured
+        // Check if configured (remote URL and username required)
         const configured = !!(cfg.sync.remoteUrl && cfg.sync.username);
         setIsConfigured(configured);
-
-        // Load token from secure storage
-        if (configured) {
-          try {
-            const storedToken = await invoke('retrieve_sync_token');
-            if (storedToken) {
-              setToken(storedToken);
-            }
-          } catch (e) {
-            console.error('[SyncStatus] Failed to load token:', e);
-          }
-        }
       }
     } catch (e) {
       console.error('[SyncStatus] Failed to load config:', e);
@@ -88,18 +77,31 @@ export default function SyncStatus() {
   };
 
   const commitAndPush = async () => {
-    if (!isConfigured || !workspacePath || !token) return;
+    if (!isConfigured || !workspacePath) return;
+
+    // Check authentication
+    if (!isAuthenticated) {
+      console.error('[SyncStatus] Not authenticated');
+      setSyncStatus('error');
+      return;
+    }
 
     setSyncStatus('syncing');
     setShowMenu(false);
 
     try {
+      // Get fresh token from auth system
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error('Failed to get access token');
+      }
+
       // Commit
       await invoke('git_commit', {
         workspacePath,
         message: 'Auto-sync workspace',
-        authorName: syncSettings.authorName || 'Lokus',
-        authorEmail: syncSettings.authorEmail || 'noreply@lokus.app'
+        authorName: syncSettings.authorName || syncSettings.username || 'Lokus',
+        authorEmail: syncSettings.authorEmail || `${syncSettings.username}@users.noreply.github.com`
       });
 
       // Push
@@ -129,12 +131,25 @@ export default function SyncStatus() {
   };
 
   const pull = async () => {
-    if (!isConfigured || !workspacePath || !token) return;
+    if (!isConfigured || !workspacePath) return;
+
+    // Check authentication
+    if (!isAuthenticated) {
+      console.error('[SyncStatus] Not authenticated');
+      setSyncStatus('error');
+      return;
+    }
 
     setSyncStatus('syncing');
     setShowMenu(false);
 
     try {
+      // Get fresh token from auth system
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error('Failed to get access token');
+      }
+
       await invoke('git_pull', {
         workspacePath,
         remoteName: 'origin',
@@ -160,7 +175,14 @@ export default function SyncStatus() {
   };
 
   const forcePush = async () => {
-    if (!isConfigured || !workspacePath || !token) return;
+    if (!isConfigured || !workspacePath) return;
+
+    // Check authentication
+    if (!isAuthenticated) {
+      console.error('[SyncStatus] Not authenticated');
+      setSyncStatus('error');
+      return;
+    }
 
     // Safety confirmation
     const confirmed = await confirm(
@@ -174,6 +196,12 @@ export default function SyncStatus() {
     setShowMenu(false);
 
     try {
+      // Get fresh token from auth system
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error('Failed to get access token');
+      }
+
       await invoke('git_force_push', {
         workspacePath,
         remoteName: 'origin',
@@ -199,7 +227,14 @@ export default function SyncStatus() {
   };
 
   const forcePull = async () => {
-    if (!isConfigured || !workspacePath || !token) return;
+    if (!isConfigured || !workspacePath) return;
+
+    // Check authentication
+    if (!isAuthenticated) {
+      console.error('[SyncStatus] Not authenticated');
+      setSyncStatus('error');
+      return;
+    }
 
     // Safety confirmation
     const confirmed = await confirm(
@@ -213,6 +248,12 @@ export default function SyncStatus() {
     setShowMenu(false);
 
     try {
+      // Get fresh token from auth system
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error('Failed to get access token');
+      }
+
       await invoke('git_force_pull', {
         workspacePath,
         remoteName: 'origin',
@@ -238,6 +279,10 @@ export default function SyncStatus() {
   };
 
   const getStatusIcon = () => {
+    if (!isAuthenticated) {
+      return <CloudOff className="w-3.5 h-3.5 text-app-muted" />;
+    }
+
     if (!isConfigured) {
       return <CloudOff className="w-3.5 h-3.5 text-app-muted" />;
     }
@@ -263,6 +308,10 @@ export default function SyncStatus() {
   };
 
   const getStatusText = () => {
+    if (!isAuthenticated) {
+      return 'Sign in to sync';
+    }
+
     if (!isConfigured) {
       return 'Not configured';
     }

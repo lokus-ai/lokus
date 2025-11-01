@@ -387,10 +387,7 @@ fn main() {
       mcp_setup::check_mcp_status,
       api_server::api_set_workspace,
       api_server::api_clear_workspace,
-      api_server::api_get_current_workspace,
-      secure_storage::store_sync_token,
-      secure_storage::retrieve_sync_token,
-      secure_storage::delete_sync_token
+      api_server::api_get_current_workspace
     ])
     .setup(|app| {
       menu::init(&app.handle())?;
