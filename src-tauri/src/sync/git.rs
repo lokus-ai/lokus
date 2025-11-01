@@ -396,14 +396,92 @@ pub fn git_pull(
         println!("[Sync] ✅ Fast-forward merge completed");
         Ok("Fast-forward merge completed".to_string())
     } else {
-        println!("[Sync] ⚠️  Merge required - potential conflicts");
-        let conflict_error = GitError {
-            error_type: "conflict".to_string(),
-            message: "Merge required - branches have diverged".to_string(),
-            user_message: "Merge conflicts detected.".to_string(),
-            how_to_fix: "Use the conflict resolution options in the sync menu.".to_string(),
-        };
-        Err(conflict_error.to_json_string())
+        println!("[Sync] ⚠️  Normal merge required - performing merge with conflict markers");
+
+        // Perform a normal merge (not fast-forward)
+        // This will leave conflict markers in files if there are conflicts
+        repo.merge(&[&fetch_commit], None, None)
+            .map_err(|e| GitError::from_git2_error(e, "merge").to_json_string())?;
+
+        // Check if there are conflicts after merge
+        let index = repo.index()
+            .map_err(|e| format!("Failed to get index: {}", e))?;
+
+        if index.has_conflicts() {
+            // Conflicts exist - write them to working directory with conflict markers
+            println!("[Sync] ⚠️  Conflicts detected during merge");
+
+            // Checkout the conflicted files with conflict markers
+            let mut checkout_builder = git2::build::CheckoutBuilder::new();
+            checkout_builder.allow_conflicts(true);
+            checkout_builder.conflict_style_merge(true); // Use standard conflict markers
+
+            repo.checkout_index(Some(&mut index.clone()), Some(&mut checkout_builder))
+                .map_err(|e| format!("Failed to checkout conflicts: {}", e))?;
+
+            // Count conflicted files
+            let mut conflict_count = 0;
+            let conflicts = index.conflicts()
+                .map_err(|e| format!("Failed to get conflicts: {}", e))?;
+
+            for conflict in conflicts {
+                conflict_count += 1;
+                if let Ok(c) = conflict {
+                    if let Some(our) = c.our {
+                        if let Some(path) = std::str::from_utf8(&our.path).ok() {
+                            println!("[Sync] Conflict in: {}", path);
+                        }
+                    }
+                }
+            }
+
+            println!("[Sync] ✅ Merge completed with {} conflict(s)", conflict_count);
+            Ok(format!(
+                "Merged with {} conflict{}. Open the conflicted files to resolve them manually (look for <<<<<<< markers).",
+                conflict_count,
+                if conflict_count == 1 { "" } else { "s" }
+            ))
+        } else {
+            // No conflicts - clean merge
+            println!("[Sync] Creating merge commit...");
+
+            // Get the current HEAD commit
+            let head = repo.head()
+                .map_err(|e| format!("Failed to get HEAD: {}", e))?;
+            let head_commit = head.peel_to_commit()
+                .map_err(|e| format!("Failed to get HEAD commit: {}", e))?;
+
+            // Write the merged index as a tree
+            let tree_id = index.write_tree()
+                .map_err(|e| format!("Failed to write tree: {}", e))?;
+            let tree = repo.find_tree(tree_id)
+                .map_err(|e| format!("Failed to find tree: {}", e))?;
+
+            // Get remote commit for merge commit
+            let remote_commit = repo.find_commit(fetch_commit.id())
+                .map_err(|e| format!("Failed to find remote commit: {}", e))?;
+
+            // Create signature
+            let signature = repo.signature()
+                .map_err(|e| format!("Failed to create signature: {}", e))?;
+
+            // Create merge commit
+            repo.commit(
+                Some("HEAD"),
+                &signature,
+                &signature,
+                &format!("Merge remote-tracking branch '{}/{}'", remote_name, branch_name),
+                &tree,
+                &[&head_commit, &remote_commit],
+            ).map_err(|e| format!("Failed to create merge commit: {}", e))?;
+
+            // Cleanup merge state
+            repo.cleanup_state()
+                .map_err(|e| format!("Failed to cleanup state: {}", e))?;
+
+            println!("[Sync] ✅ Merge completed successfully");
+            Ok("Merge completed successfully".to_string())
+        }
     }
 }
 

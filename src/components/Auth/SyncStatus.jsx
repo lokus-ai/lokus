@@ -202,26 +202,42 @@ export default function SyncStatus() {
         token: token
       });
 
-      // Show success message with details
-      setSyncStatus('success');
-      setLastSync(new Date());
+      // Check if there are conflicts after merge
+      if (result && result.includes('conflict')) {
+        // Conflicts detected - files now have conflict markers
+        setSyncStatus('success');
+        setErrorMessage(result); // Shows: "Merged with X conflicts. Open files to resolve..."
+        setErrorType('warning');
 
-      // Show user-friendly message based on result
-      if (result && result.includes('up to date')) {
-        setErrorMessage('Already up to date - no new changes');
-        setErrorType('info');
-      } else if (result && result.includes('Fast-forward')) {
-        setErrorMessage('Pull successful - workspace updated');
-        setErrorType('success');
+        // Refresh git status to show conflicted files
+        await checkGitStatus();
+
+        // Don't auto-clear this message - user needs to see it
+      } else {
+        // Clean merge - no conflicts
+        setSyncStatus('success');
+        setLastSync(new Date());
+
+        // Show user-friendly message based on result
+        if (result && result.includes('up to date')) {
+          setErrorMessage('Already up to date - no new changes');
+          setErrorType('info');
+        } else if (result && result.includes('Fast-forward')) {
+          setErrorMessage('Pull successful - workspace updated');
+          setErrorType('success');
+        } else if (result && result.includes('Merge completed successfully')) {
+          setErrorMessage('Merge successful - workspace updated');
+          setErrorType('success');
+        }
+
+        await checkGitStatus();
+
+        setTimeout(() => {
+          setSyncStatus('idle');
+          setErrorMessage('');
+          setErrorType('');
+        }, 3000);
       }
-
-      await checkGitStatus();
-
-      setTimeout(() => {
-        setSyncStatus('idle');
-        setErrorMessage('');
-        setErrorType('');
-      }, 3000);
     } catch (err) {
       console.error('[SyncStatus] Pull failed:', err);
 
@@ -574,8 +590,16 @@ export default function SyncStatus() {
 
                   {/* Explanatory text */}
                   <div className="text-xs text-app-muted mb-3 p-2 bg-orange-500/5 rounded border border-orange-500/20">
-                    <div className="font-medium text-orange-500 mb-1">⚠️ Conflicting Changes</div>
-                    Your local changes conflict with remote changes. Choose how to resolve:
+                    <div className="font-medium text-orange-500 mb-1">⚠️ Conflicting Changes Detected</div>
+                    <p className="mb-2">Files below contain conflict markers. Open them to see:</p>
+                    <div className="font-mono text-[10px] bg-app-bg p-1 rounded mb-2">
+                      <div>{'<<<<<<< Your Changes'}</div>
+                      <div className="text-blue-500">Your content here</div>
+                      <div>=======</div>
+                      <div className="text-orange-500">Remote content here</div>
+                      <div>{'>>>>>>> Remote'}</div>
+                    </div>
+                    <p>Edit the files manually, remove the markers, and commit your resolution.</p>
                   </div>
 
                   {/* Per-file conflict list */}
@@ -593,38 +617,55 @@ export default function SyncStatus() {
                     ))}
                   </div>
 
-                  {/* Resolution options */}
-                  <div className="space-y-2">
-                    <div className="text-xs text-app-muted font-medium mb-1">
-                      Quick Resolution:
+                  {/* How to resolve */}
+                  <div className="space-y-2 mb-3">
+                    <div className="text-xs font-medium text-app-text mb-1">
+                      📝 How to Resolve:
                     </div>
-                    <button
-                      onClick={forcePush}
-                      disabled={isSyncing()}
-                      className="w-full px-3 py-2 text-xs text-app-text bg-blue-500/10 hover:bg-blue-500/20 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-blue-500/20 text-left"
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <CloudUpload className="w-3.5 h-3.5 flex-shrink-0" />
-                        <span className="font-medium">Keep My Local Changes</span>
-                      </div>
-                      <div className="text-[10px] text-app-muted ml-5">
-                        Your local files will replace the remote version
-                      </div>
-                    </button>
-                    <button
-                      onClick={forcePull}
-                      disabled={isSyncing()}
-                      className="w-full px-3 py-2 text-xs text-app-text bg-orange-500/10 hover:bg-orange-500/20 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-orange-500/20 text-left"
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <ArrowDownToLine className="w-3.5 h-3.5 flex-shrink-0" />
-                        <span className="font-medium">Use Remote Changes</span>
-                      </div>
-                      <div className="text-[10px] text-app-muted ml-5">
-                        Remote files will replace your local version
-                      </div>
-                    </button>
+                    <ol className="text-xs text-app-muted space-y-1 list-decimal list-inside">
+                      <li>Open each conflicted file in the editor</li>
+                      <li>Find the conflict markers (&lt;&lt;&lt;&lt;&lt;&lt;&lt; and &gt;&gt;&gt;&gt;&gt;&gt;&gt;)</li>
+                      <li>Keep the content you want, delete the rest</li>
+                      <li>Remove all conflict markers</li>
+                      <li>Save the file</li>
+                      <li>Commit your changes using "Commit & Push"</li>
+                    </ol>
                   </div>
+
+                  {/* Advanced: Force resolution */}
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-app-muted hover:text-app-text font-medium mb-2">
+                      Advanced: Force Resolution (All or Nothing)
+                    </summary>
+                    <div className="space-y-2 pl-2 pt-2">
+                      <button
+                        onClick={forcePush}
+                        disabled={isSyncing()}
+                        className="w-full px-3 py-2 text-xs text-app-text bg-blue-500/10 hover:bg-blue-500/20 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-blue-500/20 text-left"
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <CloudUpload className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span className="font-medium">Keep My Local Changes</span>
+                        </div>
+                        <div className="text-[10px] text-app-muted ml-5">
+                          ⚠️ Overwrites remote - your local files will replace everything
+                        </div>
+                      </button>
+                      <button
+                        onClick={forcePull}
+                        disabled={isSyncing()}
+                        className="w-full px-3 py-2 text-xs text-app-text bg-orange-500/10 hover:bg-orange-500/20 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-orange-500/20 text-left"
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <ArrowDownToLine className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span className="font-medium">Use Remote Changes</span>
+                        </div>
+                        <div className="text-[10px] text-app-muted ml-5">
+                          ⚠️ Discards local - remote files will replace everything
+                        </div>
+                      </button>
+                    </div>
+                  </details>
                 </div>
               </>
             )}
