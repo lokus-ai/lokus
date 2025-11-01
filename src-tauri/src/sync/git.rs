@@ -404,7 +404,7 @@ pub fn git_pull(
             .map_err(|e| GitError::from_git2_error(e, "merge").to_json_string())?;
 
         // Check if there are conflicts after merge
-        let index = repo.index()
+        let mut index = repo.index()
             .map_err(|e| format!("Failed to get index: {}", e))?;
 
         if index.has_conflicts() {
@@ -416,7 +416,7 @@ pub fn git_pull(
             checkout_builder.allow_conflicts(true);
             checkout_builder.conflict_style_merge(true); // Use standard conflict markers
 
-            repo.checkout_index(Some(&mut index.clone()), Some(&mut checkout_builder))
+            repo.checkout_index(Some(&mut index), Some(&mut checkout_builder))
                 .map_err(|e| format!("Failed to checkout conflicts: {}", e))?;
 
             // Count conflicted files
