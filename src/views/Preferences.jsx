@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { setGlobalActiveTheme, listAvailableThemes, readGlobalVisuals, importThemeFile, validateThemeFile, exportTheme, deleteCustomTheme, getThemeTokens, saveThemeTokens, applyTokens } from "../core/theme/manager.js";
 import { listActions, getActiveShortcuts, setShortcut, resetShortcuts } from "../core/shortcuts/registry.js";
 import { readConfig, updateConfig } from "../core/config/store.js";
 import { formatAccelerator } from "../core/shortcuts/registry.js";
+import { debounce } from "../core/search/index.js";
 import { Search, Pencil, RotateCcw, Upload, Download, Save, RefreshCw, GitBranch, CloudOff, CloudUpload } from "lucide-react";
 import { open, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
@@ -26,7 +27,7 @@ export default function Preferences() {
   const [originalTokens, setOriginalTokens] = useState({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [section, setSection] = useState("Appearance");
-  const { isAuthenticated, user, signIn, signOut, isLoading } = useAuth();
+  const { isAuthenticated, user, signIn, signOut, isLoading, getAccessToken } = useAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
   // Removed mode/accent complexity - themes handle everything now
   const actions = useMemo(() => listActions(), []);
@@ -40,20 +41,16 @@ export default function Preferences() {
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
   const [markdownSyntax, setMarkdownSyntax] = useState(markdownSyntaxConfig.getAll());
 
-  // Get auth context for sync operations
-  const { isAuthenticated, getAccessToken } = useAuth();
-
   // Sync state
   const [workspacePath, setWorkspacePath] = useState('');
   const [syncRemoteUrl, setSyncRemoteUrl] = useState('');
-  const [syncAuthorName, setSyncAuthorName] = useState('');
-  const [syncAuthorEmail, setSyncAuthorEmail] = useState('');
   const [syncBranch, setSyncBranch] = useState('main');
   const [syncUsername, setSyncUsername] = useState('');
   const [syncStatus, setSyncStatus] = useState(null);
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [syncConfigExpanded, setSyncConfigExpanded] = useState(false);
+  const [syncSaving, setSyncSaving] = useState(false);
 
   const [expandedSections, setExpandedSections] = useState({
     font: true,
@@ -129,7 +126,49 @@ export default function Preferences() {
   const toggleSection = (section) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
-  
+
+  // Helper to parse structured error from Rust
+  const parseGitError = (error) => {
+    try {
+      // Try to parse as JSON structured error
+      const errorObj = JSON.parse(error);
+      if (errorObj.error_type && errorObj.user_message) {
+        return {
+          type: errorObj.error_type,
+          message: errorObj.user_message,
+          howToFix: errorObj.how_to_fix,
+          raw: errorObj.message
+        };
+      }
+    } catch (e) {
+      // Not a structured error, return as-is
+    }
+
+    // Fallback: return error as string
+    return {
+      type: 'other',
+      message: String(error),
+      howToFix: 'Check the error details and try again.',
+      raw: String(error)
+    };
+  };
+
+  // Format error message for user display
+  const formatErrorMessage = (error) => {
+    const gitError = parseGitError(error);
+
+    switch (gitError.type) {
+      case 'auth':
+        return 'Authentication failed. Please sign in again.';
+      case 'network':
+        return 'Network error. Check your connection and try again.';
+      case 'conflict':
+        return 'Merge conflicts detected. Use conflict resolution in the sync menu.';
+      default:
+        return gitError.message;
+    }
+  };
+
   // Theme is already initialized by ThemeProvider in main.jsx
 
   // Subscribe to live settings changes
@@ -228,8 +267,6 @@ export default function Preferences() {
         const cfg = await readConfig();
         if (cfg.sync) {
           if (cfg.sync.remoteUrl) setSyncRemoteUrl(cfg.sync.remoteUrl);
-          if (cfg.sync.authorName) setSyncAuthorName(cfg.sync.authorName);
-          if (cfg.sync.authorEmail) setSyncAuthorEmail(cfg.sync.authorEmail);
           if (cfg.sync.branch) setSyncBranch(cfg.sync.branch);
           if (cfg.sync.username) setSyncUsername(cfg.sync.username);
         }
@@ -280,29 +317,34 @@ export default function Preferences() {
     getActiveShortcuts().then(setKeymap).catch(() => {});
   }, []);
 
-  // Auto-save sync settings when they change (except token which is saved separately)
-  useEffect(() => {
-    const saveSyncSettings = async () => {
+  // Create debounced save function with useMemo
+  const debouncedSaveSyncSettings = useMemo(
+    () => debounce(async (settings) => {
       try {
-        await updateConfig({
-          sync: {
-            remoteUrl: syncRemoteUrl,
-            authorName: syncAuthorName,
-            authorEmail: syncAuthorEmail,
-            branch: syncBranch,
-            username: syncUsername
-          }
-        });
+        setSyncSaving(true);
+        await updateConfig({ sync: settings });
+        // Keep saving indicator visible briefly
+        setTimeout(() => setSyncSaving(false), 500);
       } catch (e) {
         console.error('Failed to save sync settings:', e);
+        setSyncSaving(false);
       }
-    };
+    }, 500),
+    []
+  );
 
+  // Auto-save sync settings when they change (debounced)
+  useEffect(() => {
     // Only save if at least one field is filled
-    if (syncRemoteUrl || syncAuthorName || syncAuthorEmail || syncUsername) {
-      saveSyncSettings();
+    if (syncRemoteUrl || syncUsername) {
+      setSyncSaving(true);
+      debouncedSaveSyncSettings({
+        remoteUrl: syncRemoteUrl,
+        branch: syncBranch,
+        username: syncUsername
+      });
     }
-  }, [syncRemoteUrl, syncAuthorName, syncAuthorEmail, syncBranch, syncUsername]);
+  }, [syncRemoteUrl, syncBranch, syncUsername, debouncedSaveSyncSettings]);
 
   // Auto-detect branch name when workspace path is available
   useEffect(() => {
@@ -2436,66 +2478,75 @@ export default function Preferences() {
                     </div>
                   </section>
 
-                  {/* Configuration Form */}
-                  <section className="space-y-4 bg-app-panel border border-app-border rounded-lg p-4">
-                    <h3 className="text-sm font-medium text-app-text uppercase tracking-wide">Repository Configuration</h3>
-
-                    <div>
-                      <label className="block text-sm text-app-muted mb-2">Remote URL</label>
-                      <input
-                        type="text"
-                        value={syncRemoteUrl}
-                        onChange={(e) => setSyncRemoteUrl(e.target.value)}
-                        placeholder="https://github.com/username/repo.git"
-                        className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
-                      />
+                  {/* Saving Indicator */}
+                  {syncSaving && (
+                    <div className="flex items-center gap-2 text-xs text-app-muted">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span>Saving...</span>
                     </div>
+                  )}
 
-                    <div className="grid grid-cols-2 gap-3">
+                  {/* Configuration Form */}
+                  <section className="space-y-4">
+                    {/* Repository Section */}
+                    <div className="p-4 bg-app-panel border border-app-border rounded-md">
+                      <h4 className="text-sm font-semibold mb-3">Repository</h4>
                       <div>
-                        <label className="block text-sm text-app-muted mb-2">Author Name</label>
+                        <label className="block text-sm text-app-muted mb-2">
+                          Remote URL <span className="text-red-500">*</span>
+                        </label>
                         <input
                           type="text"
-                          value={syncAuthorName}
-                          onChange={(e) => setSyncAuthorName(e.target.value)}
-                          placeholder="Your Name"
+                          value={syncRemoteUrl}
+                          onChange={(e) => setSyncRemoteUrl(e.target.value)}
+                          placeholder="https://github.com/username/repo.git"
                           className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
                         />
+                        <p className="text-xs text-app-muted mt-1">Example: https://github.com/username/repo.git</p>
+                        {!syncRemoteUrl && (
+                          <p className="text-xs text-red-500 mt-1">Remote URL is required</p>
+                        )}
                       </div>
+                    </div>
 
+                    {/* Authentication Section */}
+                    <div className="p-4 bg-app-panel border border-app-border rounded-md">
+                      <h4 className="text-sm font-semibold mb-3">Authentication</h4>
                       <div>
-                        <label className="block text-sm text-app-muted mb-2">Author Email</label>
+                        <label className="block text-sm text-app-muted mb-2">
+                          Username <span className="text-red-500">*</span>
+                        </label>
                         <input
-                          type="email"
-                          value={syncAuthorEmail}
-                          onChange={(e) => setSyncAuthorEmail(e.target.value)}
-                          placeholder="your@email.com"
+                          type="text"
+                          value={syncUsername}
+                          onChange={(e) => setSyncUsername(e.target.value)}
+                          placeholder="github-username"
                           className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
                         />
+                        <p className="text-xs text-app-muted mt-2">Your GitHub/GitLab username (not display name)</p>
+                        {!syncUsername && (
+                          <p className="text-xs text-red-500 mt-1">Username is required</p>
+                        )}
                       </div>
+                      <p className="text-xs text-app-muted mt-3">
+                        Authentication is handled via your account. {!isAuthenticated && <a href="#" onClick={(e) => { e.preventDefault(); signIn(); }} className="text-app-accent hover:underline">Sign in</a>} {isAuthenticated && <span className="text-green-500">Signed in</span>} to enable sync.
+                      </p>
                     </div>
 
-                    <div>
-                      <label className="block text-sm text-app-muted mb-2">Username</label>
-                      <input
-                        type="text"
-                        value={syncUsername}
-                        onChange={(e) => setSyncUsername(e.target.value)}
-                        placeholder="github-username"
-                        className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm text-app-muted mb-2">Branch</label>
-                      <input
-                        type="text"
-                        value={syncBranch}
-                        onChange={(e) => setSyncBranch(e.target.value)}
-                        placeholder="main"
-                        className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
-                      />
-                      <p className="text-xs text-app-muted mt-1">Auto-detected from Git repository</p>
+                    {/* Branch Section */}
+                    <div className="p-4 bg-app-panel border border-app-border rounded-md">
+                      <h4 className="text-sm font-semibold mb-3">Branch</h4>
+                      <div>
+                        <label className="block text-sm text-app-muted mb-2">Branch Name</label>
+                        <input
+                          type="text"
+                          value={syncBranch}
+                          onChange={(e) => setSyncBranch(e.target.value)}
+                          placeholder="main"
+                          className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
+                        />
+                        <p className="text-xs text-app-muted mt-1">Auto-detected from Git repository</p>
+                      </div>
                     </div>
 
                     <button
@@ -2564,20 +2615,19 @@ export default function Preferences() {
                       <div className="px-4 pb-4 space-y-3 border-t border-app-border pt-4">
                         <div className="grid grid-cols-2 gap-3 text-sm">
                           <div>
-                            <span className="text-app-muted">Author:</span>
-                            <span className="ml-2 text-app-text">{syncAuthorName}</span>
-                          </div>
-                          <div>
-                            <span className="text-app-muted">Email:</span>
-                            <span className="ml-2 text-app-text">{syncAuthorEmail}</span>
-                          </div>
-                          <div>
                             <span className="text-app-muted">Username:</span>
                             <span className="ml-2 text-app-text">{syncUsername}</span>
                           </div>
                           <div>
-                            <span className="text-app-muted">Token:</span>
-                            <span className="ml-2 text-app-text">••••••••••••</span>
+                            <span className="text-app-muted">Remote URL:</span>
+                            <span className="ml-2 text-app-text text-xs truncate">{syncRemoteUrl}</span>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-app-muted">Author Info:</span>
+                            <span className="ml-2 text-app-text text-xs">
+                              {syncUsername || 'Lokus'} &lt;{syncUsername || 'lokus'}@users.noreply.github.com&gt;
+                            </span>
+                            <p className="text-xs text-app-muted mt-1">Auto-generated from username</p>
                           </div>
                         </div>
 
@@ -2586,8 +2636,6 @@ export default function Preferences() {
                             onClick={() => {
                               // Clear all sync settings
                               setSyncRemoteUrl('');
-                              setSyncAuthorName('');
-                              setSyncAuthorEmail('');
                               setSyncUsername('');
                               setSyncConfigExpanded(false);
                             }}
@@ -2646,7 +2694,8 @@ export default function Preferences() {
                             });
                             alert('Pulled successfully!');
                           } catch (err) {
-                            alert('Pull failed: ' + err);
+                            const errorMessage = formatErrorMessage(err);
+                            alert(`Pull failed:\n\n${errorMessage}`);
                           }
                           setSyncLoading(false);
                         }}
@@ -2675,12 +2724,12 @@ export default function Preferences() {
                               throw new Error('Failed to get access token. Please sign in again.');
                             }
 
-                            // First commit
+                            // First commit - auto-generate author info from username
                             await invoke('git_commit', {
                               workspacePath,
                               message: syncMessage || 'Update workspace',
-                              authorName: syncAuthorName || syncUsername || 'Lokus',
-                              authorEmail: syncAuthorEmail || `${syncUsername}@users.noreply.github.com`
+                              authorName: syncUsername || 'Lokus',
+                              authorEmail: `${syncUsername || 'lokus'}@users.noreply.github.com`
                             });
                             // Then push
                             await invoke('git_push', {
@@ -2693,7 +2742,8 @@ export default function Preferences() {
                             alert('Pushed successfully!');
                             setSyncMessage('');
                           } catch (err) {
-                            alert('Push failed: ' + err);
+                            const errorMessage = formatErrorMessage(err);
+                            alert(`Push failed:\n\n${errorMessage}`);
                           }
                           setSyncLoading(false);
                         }}

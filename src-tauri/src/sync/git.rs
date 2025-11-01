@@ -18,6 +18,83 @@ pub struct GitCredentials {
     pub token: String,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GitError {
+    pub error_type: String,
+    pub message: String,
+    pub user_message: String,
+    pub how_to_fix: String,
+}
+
+impl GitError {
+    /// Categorize a git2::Error into a structured GitError with user-friendly messages
+    pub fn from_git2_error(error: git2::Error, operation: &str) -> Self {
+        let error_msg = error.message().to_lowercase();
+        let error_class = error.class();
+
+        // Categorize based on error message keywords
+        let (error_type, user_message, how_to_fix) = if
+            error_msg.contains("authentication") ||
+            error_msg.contains("credentials") ||
+            error_msg.contains("401") ||
+            error_msg.contains("403") ||
+            error_msg.contains("unauthorized") ||
+            error_msg.contains("permission denied") ||
+            format!("{:?}", error_class).contains("Auth")
+        {
+            (
+                "auth",
+                "Your session has expired or authentication failed.",
+                "Click the sync icon and re-authenticate to continue syncing."
+            )
+        } else if
+            error_msg.contains("connection refused") ||
+            error_msg.contains("timeout") ||
+            error_msg.contains("network") ||
+            error_msg.contains("could not resolve") ||
+            error_msg.contains("failed to connect") ||
+            error_msg.contains("unable to access")
+        {
+            (
+                "network",
+                "Network connection failed.",
+                "Check your internet connection and try again."
+            )
+        } else if
+            error_msg.contains("conflict") ||
+            error_msg.contains("merge") ||
+            error_msg.contains("diverged")
+        {
+            (
+                "conflict",
+                "Merge conflicts detected.",
+                "Use the conflict resolution options in the sync menu."
+            )
+        } else {
+            (
+                "other",
+                &format!("Failed to {}: {}", operation, error.message()),
+                "Check the error details and try again. If the problem persists, check your repository configuration."
+            )
+        };
+
+        GitError {
+            error_type: error_type.to_string(),
+            message: error.message().to_string(),
+            user_message: user_message.to_string(),
+            how_to_fix: how_to_fix.to_string(),
+        }
+    }
+
+    /// Convert to a JSON string for returning to frontend
+    pub fn to_json_string(&self) -> String {
+        serde_json::to_string(self).unwrap_or_else(|_| {
+            format!(r#"{{"error_type":"other","message":"{}","user_message":"{}","how_to_fix":"{}"}}"#,
+                self.message, self.user_message, self.how_to_fix)
+        })
+    }
+}
+
 /// Initialize a Git repository in the workspace
 #[tauri::command]
 pub fn git_init(workspace_path: String) -> Result<String, String> {
@@ -179,10 +256,10 @@ pub fn git_push(
     println!("[Sync] Pushing to remote '{}'...", remote_name);
 
     let repo = Repository::open(&workspace_path)
-        .map_err(|e| format!("Failed to open repository: {}", e))?;
+        .map_err(|e| GitError::from_git2_error(e, "open repository").to_json_string())?;
 
     let mut remote = repo.find_remote(&remote_name)
-        .map_err(|e| format!("Failed to find remote: {}", e))?;
+        .map_err(|e| GitError::from_git2_error(e, "find remote").to_json_string())?;
 
     // Clone credentials for the callback (credentials callback may be called multiple times)
     let username_clone = username.clone();
@@ -201,13 +278,38 @@ pub fn git_push(
     // Push
     let refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
     remote.push(&[&refspec], Some(&mut push_options))
-        .map_err(|e| format!("Failed to push: {}", e))?;
+        .map_err(|e| GitError::from_git2_error(e, "push").to_json_string())?;
 
     println!("[Sync] ✅ Pushed successfully");
     Ok("Pushed successfully".to_string())
 }
 
-/// Pull changes from remote
+/// Pull changes from remote repository and merge them locally.
+///
+/// This command fetches changes from the remote and attempts a fast-forward merge.
+/// Handles first-time pulls by automatically creating local branches if they don't exist.
+///
+/// # Parameters
+/// * `workspace_path` - Absolute path to the workspace directory
+/// * `remote_name` - Name of the remote (typically "origin")
+/// * `branch_name` - Name of the branch to pull (e.g., "main")
+/// * `username` - Git username for authentication
+/// * `token` - Access token from AuthManager (unified token system)
+///
+/// # Auto-Create Local Branches on First Pull
+/// When pulling for the first time, the local branch may not exist yet. This causes
+/// a "src refspec does not match any existing object" error.
+///
+/// To fix this, we automatically create the local branch if it doesn't exist:
+/// 1. Try to find existing local branch reference
+/// 2. If not found, create it pointing to the fetched commit
+/// 3. Continue with fast-forward merge
+///
+/// This allows seamless first-time sync without requiring manual branch creation.
+///
+/// # Returns
+/// * `Ok(String)` - Success message (either "Already up to date" or "Fast-forward merge completed")
+/// * `Err(String)` - Error message if pull fails or merge required
 #[tauri::command]
 pub fn git_pull(
     workspace_path: String,
@@ -221,11 +323,11 @@ pub fn git_pull(
     println!("[Sync] Pulling from remote '{}'...", remote_name);
 
     let repo = Repository::open(&workspace_path)
-        .map_err(|e| format!("Failed to open repository: {}", e))?;
+        .map_err(|e| GitError::from_git2_error(e, "open repository").to_json_string())?;
 
     // Fetch
     let mut remote = repo.find_remote(&remote_name)
-        .map_err(|e| format!("Failed to find remote: {}", e))?;
+        .map_err(|e| GitError::from_git2_error(e, "find remote").to_json_string())?;
 
     // Clone credentials for the callback (credentials callback may be called multiple times)
     let username_clone = username.clone();
@@ -240,17 +342,17 @@ pub fn git_pull(
     fetch_options.remote_callbacks(callbacks);
 
     remote.fetch(&[&branch_name], Some(&mut fetch_options), None)
-        .map_err(|e| format!("Failed to fetch: {}", e))?;
+        .map_err(|e| GitError::from_git2_error(e, "fetch").to_json_string())?;
 
     // Get the fetch head and merge
     let fetch_head = repo.find_reference("FETCH_HEAD")
-        .map_err(|e| format!("Failed to find FETCH_HEAD: {}", e))?;
+        .map_err(|e| GitError::from_git2_error(e, "find FETCH_HEAD").to_json_string())?;
     let fetch_commit = repo.reference_to_annotated_commit(&fetch_head)
-        .map_err(|e| format!("Failed to get fetch commit: {}", e))?;
+        .map_err(|e| GitError::from_git2_error(e, "get fetch commit").to_json_string())?;
 
     // Perform merge analysis
     let analysis = repo.merge_analysis(&[&fetch_commit])
-        .map_err(|e| format!("Failed to analyze merge: {}", e))?;
+        .map_err(|e| GitError::from_git2_error(e, "analyze merge").to_json_string())?;
 
     if analysis.0.is_up_to_date() {
         println!("[Sync] ✅ Already up to date");
@@ -262,36 +364,46 @@ pub fn git_pull(
         // Fast-forward merge
         let refname = format!("refs/heads/{}", branch_name);
 
-        // Try to find existing reference, or create it if it doesn't exist
+        // Auto-create local branches on first pull
+        // This is critical for first-time sync to work without errors.
+        // Without this, pushing fails with "src refspec does not match any existing object"
+        // because there's no local branch yet to track the remote.
         let mut reference = match repo.find_reference(&refname) {
             Ok(r) => {
                 println!("[Sync] Found existing local branch");
                 r
             }
             Err(_) => {
-                // Branch doesn't exist locally, create it
+                // Branch doesn't exist locally, create it pointing to the fetched commit
+                // This allows seamless first-time sync without manual branch creation
                 println!("[Sync] Creating local branch '{}' for first pull", branch_name);
                 repo.reference(
                     &refname,
                     fetch_commit.id(),
                     false,
                     "Create branch from remote on first pull"
-                ).map_err(|e| format!("Failed to create local branch: {}", e))?
+                ).map_err(|e| GitError::from_git2_error(e, "create local branch").to_json_string())?
             }
         };
 
         reference.set_target(fetch_commit.id(), "Fast-forward merge")
-            .map_err(|e| format!("Failed to fast-forward: {}", e))?;
+            .map_err(|e| GitError::from_git2_error(e, "fast-forward").to_json_string())?;
         repo.set_head(&refname)
-            .map_err(|e| format!("Failed to set HEAD: {}", e))?;
+            .map_err(|e| GitError::from_git2_error(e, "set HEAD").to_json_string())?;
         repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))
-            .map_err(|e| format!("Failed to checkout: {}", e))?;
+            .map_err(|e| GitError::from_git2_error(e, "checkout").to_json_string())?;
 
         println!("[Sync] ✅ Fast-forward merge completed");
         Ok("Fast-forward merge completed".to_string())
     } else {
         println!("[Sync] ⚠️  Merge required - potential conflicts");
-        Err("Merge required - please resolve conflicts manually".to_string())
+        let conflict_error = GitError {
+            error_type: "conflict".to_string(),
+            message: "Merge required - branches have diverged".to_string(),
+            user_message: "Merge conflicts detected.".to_string(),
+            how_to_fix: "Use the conflict resolution options in the sync menu.".to_string(),
+        };
+        Err(conflict_error.to_json_string())
     }
 }
 

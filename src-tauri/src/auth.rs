@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
-// use keyring::Entry;
 use tauri::{State, AppHandle, Emitter};
 use uuid::Uuid;
 use base64::{Engine as _, engine::general_purpose};
@@ -63,16 +62,10 @@ pub type SharedAuthState = Arc<Mutex<AuthState>>;
 
 const TOKEN_KEY: &str = "lokus_auth_token";
 const PROFILE_KEY: &str = "lokus_user_profile";
-// const SERVICE_NAME: &str = "com.pratham.lokus";
 
 pub struct AuthService;
 
 impl AuthService {
-    // fn get_keyring_entry(key: &str) -> Result<Entry, String> {
-    //     Entry::new(SERVICE_NAME, key)
-    //         .map_err(|e| format!("Failed to create keyring entry: {}", e))
-    // }
-
     fn generate_pkce_pair() -> (String, String) {
         // Generate code verifier (43-128 chars, URL-safe)
         let random_bytes = Uuid::new_v4().as_bytes().to_vec();
@@ -219,6 +212,29 @@ impl AuthService {
         }
     }
 
+    /// Store authentication token securely with encryption.
+    ///
+    /// This is the core of the unified token system. All tokens (auth and sync)
+    /// are now stored through this single method, ensuring consistency and preventing
+    /// auth-sync disconnect issues.
+    ///
+    /// The token is encrypted before storage and associated with a session that tracks:
+    /// - Session creation time
+    /// - Last access time
+    /// - Session validity
+    ///
+    /// # Parameters
+    /// * `token` - The authentication token to store
+    ///
+    /// # Unified Token System
+    /// Previously, sync operations used separate token storage (sync_token commands).
+    /// This caused issues where users would log in successfully but sync would fail
+    /// because sync tokens weren't updated. Now all operations use this single token
+    /// storage, retrieved via get_token() and passed to git operations.
+    ///
+    /// # Returns
+    /// * `Ok(())` - Token stored successfully
+    /// * `Err(String)` - Error message if storage fails
     pub fn store_token(token: &AuthToken) -> Result<(), String> {
         println!("🔑 Storing token securely with encryption");
 
@@ -243,6 +259,27 @@ impl AuthService {
         Ok(())
     }
 
+    /// Retrieve authentication token from secure storage.
+    ///
+    /// This method is called by AuthManager's getAccessToken() to get tokens
+    /// for both authentication checks and sync operations (unified token system).
+    ///
+    /// Validates the session before returning the token:
+    /// - If session is expired or invalid, clears all tokens and returns None
+    /// - If session is valid, updates the last access time
+    ///
+    /// # Unified Token System Flow
+    /// 1. User logs in → store_token() saves encrypted token
+    /// 2. Sync operation needs credentials → getAccessToken() calls this method
+    /// 3. Token is validated and returned
+    /// 4. Token is passed directly to git_push/git_pull commands
+    ///
+    /// This replaces the old dual-token system that caused auth-sync disconnects.
+    ///
+    /// # Returns
+    /// * `Ok(Some(token))` - Valid token found
+    /// * `Ok(None)` - No token or session expired
+    /// * `Err(String)` - Error retrieving token
     pub fn get_token() -> Result<Option<AuthToken>, String> {
         println!("🔑 Retrieving token from secure storage");
 
@@ -690,28 +727,6 @@ pub async fn open_auth_url(auth_url: String) -> Result<(), String> {
             .arg(&auth_url)
             .spawn()
             .map_err(|e| format!("Failed to open URL: {}", e))?;
-    }
-    
-    Ok(())
-}
-
-// For backwards compatibility with existing deep link handling
-#[allow(dead_code)]
-pub fn handle_deep_link(app: &AppHandle, url: String) -> Result<(), String> {
-    println!("Received deep link: {}", url);
-    
-    if url.starts_with("lokus://auth-callback") {
-        let parsed_url = Url::parse(&url)
-            .map_err(|e| format!("Failed to parse URL: {}", e))?;
-        
-        let mut params: HashMap<String, String> = HashMap::new();
-        for (key, value) in parsed_url.query_pairs() {
-            params.insert(key.to_string(), value.to_string());
-        }
-        
-        // Emit event to frontend with auth data
-        app.emit("auth-callback", params)
-            .map_err(|e| format!("Failed to emit auth event: {}", e))?;
     }
     
     Ok(())

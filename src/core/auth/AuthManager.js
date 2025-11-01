@@ -152,9 +152,24 @@ class AuthManager {
     }
   }
 
+  /**
+   * Get a fresh access token, automatically refreshing if expired.
+   *
+   * This method handles the complete token lifecycle:
+   * - Waits for any in-progress refresh operations (prevents concurrent refresh)
+   * - Checks token expiration and automatically refreshes if needed
+   * - Signs out user if refresh token is unavailable
+   *
+   * Part of the unified token system: All sync operations now use auth tokens
+   * from AuthManager instead of maintaining separate sync tokens. This prevents
+   * auth-sync disconnect issues where sync would fail despite successful login.
+   *
+   * @returns {Promise<string|null>} Access token or null if not authenticated
+   */
   async getAccessToken() {
     try {
       // If a refresh is in progress, wait for it to complete
+      // This prevents multiple concurrent refresh requests which could cause race conditions
       if (this.refreshInProgress && this.refreshPromise) {
         await this.refreshPromise;
         // After refresh completes, get the new token
@@ -187,8 +202,26 @@ class AuthManager {
     }
   }
 
+  /**
+   * Refresh the access token using the refresh token.
+   *
+   * This method implements a refresh lock mechanism to prevent concurrent refresh attempts:
+   * - Only one refresh can be in progress at a time
+   * - Multiple concurrent calls will wait for the same refresh operation
+   * - The lock is cleared after refresh completes (success or failure)
+   *
+   * Why we need the refresh lock:
+   * - Multiple components may call getAccessToken() simultaneously
+   * - Without the lock, each would trigger a separate refresh request
+   * - This could cause race conditions and token invalidation
+   * - The lock ensures all callers share one refresh operation
+   *
+   * @returns {Promise<void>} Resolves when refresh completes, rejects on failure
+   * @throws {Error} If refresh fails, automatically signs out the user
+   */
   async refreshToken() {
     // If already refreshing, return the existing promise
+    // This ensures multiple concurrent refresh calls wait for the same operation
     if (this.refreshInProgress && this.refreshPromise) {
       return this.refreshPromise;
     }
@@ -207,7 +240,7 @@ class AuthManager {
         await this.signOut();
         throw error;
       } finally {
-        // Clear the lock
+        // Clear the lock so future refresh operations can proceed
         this.refreshInProgress = false;
         this.refreshPromise = null;
       }
@@ -216,7 +249,17 @@ class AuthManager {
     return this.refreshPromise;
   }
 
-  // API call helper with automatic auth headers
+  /**
+   * Helper method for making authenticated API requests.
+   *
+   * Automatically fetches a fresh access token and adds authentication headers.
+   * Used by sync operations to ensure they always use valid credentials.
+   *
+   * @param {string} url - The URL to fetch
+   * @param {RequestInit} options - Fetch options (headers, method, body, etc.)
+   * @returns {Promise<Response>} The fetch response
+   * @throws {Error} If user is not authenticated
+   */
   async authenticatedFetch(url, options = {}) {
     const token = await this.getAccessToken();
     if (!token) {
