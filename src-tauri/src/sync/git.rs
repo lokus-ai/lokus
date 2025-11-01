@@ -43,9 +43,9 @@ impl GitError {
             format!("{:?}", error_class).contains("Auth")
         {
             (
-                "auth",
-                "Your session has expired or authentication failed.",
-                "Click the sync icon and re-authenticate to continue syncing."
+                "auth".to_string(),
+                "Your session has expired or authentication failed.".to_string(),
+                "Click the sync icon and re-authenticate to continue syncing.".to_string()
             )
         } else if
             error_msg.contains("connection refused") ||
@@ -56,9 +56,9 @@ impl GitError {
             error_msg.contains("unable to access")
         {
             (
-                "network",
-                "Network connection failed.",
-                "Check your internet connection and try again."
+                "network".to_string(),
+                "Network connection failed.".to_string(),
+                "Check your internet connection and try again.".to_string()
             )
         } else if
             error_msg.contains("conflict") ||
@@ -66,23 +66,23 @@ impl GitError {
             error_msg.contains("diverged")
         {
             (
-                "conflict",
-                "Merge conflicts detected.",
-                "Use the conflict resolution options in the sync menu."
+                "conflict".to_string(),
+                "Merge conflicts detected.".to_string(),
+                "Use the conflict resolution options in the sync menu.".to_string()
             )
         } else {
             (
-                "other",
-                &format!("Failed to {}: {}", operation, error.message()),
-                "Check the error details and try again. If the problem persists, check your repository configuration."
+                "other".to_string(),
+                format!("Failed to {}: {}", operation, error.message()),
+                "Check the error details and try again. If the problem persists, check your repository configuration.".to_string()
             )
         };
 
         GitError {
-            error_type: error_type.to_string(),
+            error_type,
             message: error.message().to_string(),
-            user_message: user_message.to_string(),
-            how_to_fix: how_to_fix.to_string(),
+            user_message,
+            how_to_fix,
         }
     }
 
