@@ -408,39 +408,90 @@ pub fn git_pull(
             .map_err(|e| format!("Failed to get index: {}", e))?;
 
         if index.has_conflicts() {
-            // Conflicts exist - write them to working directory with conflict markers
+            // Conflicts exist - auto-resolve technical files, leave markers for user content
             println!("[Sync] ⚠️  Conflicts detected during merge");
 
-            // Checkout the conflicted files with conflict markers
-            let mut checkout_builder = git2::build::CheckoutBuilder::new();
-            checkout_builder.allow_conflicts(true);
-            checkout_builder.conflict_style_merge(true); // Use standard conflict markers
+            // Auto-resolve technical files before checkout
+            let mut auto_resolved_count = 0;
+            let mut user_conflict_count = 0;
 
-            repo.checkout_index(Some(&mut index), Some(&mut checkout_builder))
-                .map_err(|e| format!("Failed to checkout conflicts: {}", e))?;
+            // Collect conflicts to process
+            let mut conflicts_to_resolve = Vec::new();
+            {
+                let conflicts = index.conflicts()
+                    .map_err(|e| format!("Failed to get conflicts: {}", e))?;
 
-            // Count conflicted files
-            let mut conflict_count = 0;
-            let conflicts = index.conflicts()
-                .map_err(|e| format!("Failed to get conflicts: {}", e))?;
-
-            for conflict in conflicts {
-                conflict_count += 1;
-                if let Ok(c) = conflict {
-                    if let Some(our) = c.our {
-                        if let Some(path) = std::str::from_utf8(&our.path).ok() {
-                            println!("[Sync] Conflict in: {}", path);
+                for conflict in conflicts {
+                    if let Ok(c) = conflict {
+                        if let Some(our) = c.our {
+                            if let Some(path) = std::str::from_utf8(&our.path).ok() {
+                                conflicts_to_resolve.push((path.to_string(), c));
+                            }
                         }
                     }
                 }
             }
 
-            println!("[Sync] ✅ Merge completed with {} conflict(s)", conflict_count);
-            Ok(format!(
-                "Merged with {} conflict{}. Open the conflicted files to resolve them manually (look for <<<<<<< markers).",
-                conflict_count,
-                if conflict_count == 1 { "" } else { "s" }
-            ))
+            // Auto-resolve technical files
+            for (path, conflict) in conflicts_to_resolve {
+                // Check if this is a technical/internal file
+                let is_technical = path.starts_with(".lokus/")
+                    || path.starts_with(".git/")
+                    || path.starts_with("node_modules/")
+                    || path == ".DS_Store"
+                    || path.starts_with(".vscode/")
+                    || path.starts_with(".idea/");
+
+                let is_lock_file = path == "package-lock.json" || path == "yarn.lock";
+
+                if is_technical {
+                    // For app config and internal files: keep local (ours)
+                    println!("[Sync] Auto-resolving (keep local): {}", path);
+                    if let Some(our) = conflict.our {
+                        index.add(&our)
+                            .map_err(|e| format!("Failed to resolve conflict: {}", e))?;
+                        auto_resolved_count += 1;
+                    }
+                } else if is_lock_file {
+                    // For lock files: keep remote (theirs) for consistency
+                    println!("[Sync] Auto-resolving (keep remote): {}", path);
+                    if let Some(their) = conflict.their {
+                        index.add(&their)
+                            .map_err(|e| format!("Failed to resolve conflict: {}", e))?;
+                        auto_resolved_count += 1;
+                    }
+                } else {
+                    // User content file - will have conflict markers
+                    println!("[Sync] User conflict in: {}", path);
+                    user_conflict_count += 1;
+                }
+            }
+
+            // Write the index changes
+            index.write()
+                .map_err(|e| format!("Failed to write index: {}", e))?;
+
+            // Checkout the files (user conflicts will have markers, technical files resolved)
+            let mut checkout_builder = git2::build::CheckoutBuilder::new();
+            checkout_builder.allow_conflicts(true);
+            checkout_builder.conflict_style_merge(true);
+            checkout_builder.force(); // Force checkout to apply our resolutions
+
+            repo.checkout_index(Some(&mut index), Some(&mut checkout_builder))
+                .map_err(|e| format!("Failed to checkout conflicts: {}", e))?;
+
+            println!("[Sync] ✅ Auto-resolved {} technical file(s), {} user conflict(s) remaining",
+                auto_resolved_count, user_conflict_count);
+
+            if user_conflict_count > 0 {
+                Ok(format!(
+                    "Merged with {} conflict{}. Open the conflicted files to resolve them manually (look for <<<<<<< markers).",
+                    user_conflict_count,
+                    if user_conflict_count == 1 { "" } else { "s" }
+                ))
+            } else {
+                Ok("Merge completed successfully (technical conflicts auto-resolved)".to_string())
+            }
         } else {
             // No conflicts - clean merge
             println!("[Sync] Creating merge commit...");
