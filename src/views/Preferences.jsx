@@ -46,6 +46,7 @@ export default function Preferences() {
   const [syncRemoteUrl, setSyncRemoteUrl] = useState('');
   const [syncBranch, setSyncBranch] = useState('main');
   const [syncUsername, setSyncUsername] = useState('');
+  const [syncToken, setSyncToken] = useState('');
   const [syncStatus, setSyncStatus] = useState(null);
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
@@ -269,6 +270,7 @@ export default function Preferences() {
           if (cfg.sync.remoteUrl) setSyncRemoteUrl(cfg.sync.remoteUrl);
           if (cfg.sync.branch) setSyncBranch(cfg.sync.branch);
           if (cfg.sync.username) setSyncUsername(cfg.sync.username);
+          if (cfg.sync.token) setSyncToken(cfg.sync.token);
         }
       } catch (e) {
         console.error('Failed to load sync settings:', e);
@@ -336,15 +338,16 @@ export default function Preferences() {
   // Auto-save sync settings when they change (debounced)
   useEffect(() => {
     // Only save if at least one field is filled
-    if (syncRemoteUrl || syncUsername) {
+    if (syncRemoteUrl || syncUsername || syncToken) {
       setSyncSaving(true);
       debouncedSaveSyncSettings({
         remoteUrl: syncRemoteUrl,
         branch: syncBranch,
-        username: syncUsername
+        username: syncUsername,
+        token: syncToken
       });
     }
-  }, [syncRemoteUrl, syncBranch, syncUsername, debouncedSaveSyncSettings]);
+  }, [syncRemoteUrl, syncBranch, syncUsername, syncToken, debouncedSaveSyncSettings]);
 
   // Auto-detect branch name when workspace path is available
   useEffect(() => {
@@ -2442,7 +2445,7 @@ export default function Preferences() {
               </div>
 
               {/* Check if sync is configured */}
-              {(!syncRemoteUrl || !syncUsername) ? (
+              {(!syncRemoteUrl || !syncUsername || !syncToken) ? (
                 /* Setup Mode - Show when not configured */
                 <>
                   <section className="p-4 bg-app-panel border border-app-border rounded-md">
@@ -2512,25 +2515,44 @@ export default function Preferences() {
                     {/* Authentication Section */}
                     <div className="p-4 bg-app-panel border border-app-border rounded-md">
                       <h4 className="text-sm font-semibold mb-3">Authentication</h4>
-                      <div>
-                        <label className="block text-sm text-app-muted mb-2">
-                          Username <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={syncUsername}
-                          onChange={(e) => setSyncUsername(e.target.value)}
-                          placeholder="github-username"
-                          className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
-                        />
-                        <p className="text-xs text-app-muted mt-2">Your GitHub/GitLab username (not display name)</p>
-                        {!syncUsername && (
-                          <p className="text-xs text-red-500 mt-1">Username is required</p>
-                        )}
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm text-app-muted mb-2">
+                            Username <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={syncUsername}
+                            onChange={(e) => setSyncUsername(e.target.value)}
+                            placeholder="github-username"
+                            className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
+                          />
+                          <p className="text-xs text-app-muted mt-2">Your GitHub/GitLab username (not display name)</p>
+                          {!syncUsername && (
+                            <p className="text-xs text-red-500 mt-1">Username is required</p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm text-app-muted mb-2">
+                            Personal Access Token <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="password"
+                            value={syncToken}
+                            onChange={(e) => setSyncToken(e.target.value)}
+                            placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                            className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent font-mono text-sm"
+                          />
+                          <p className="text-xs text-app-muted mt-2">
+                            GitHub: Settings → Developer settings → Personal access tokens → Generate new token (classic)<br />
+                            Required scopes: <code className="bg-app-bg px-1 py-0.5 rounded">repo</code>
+                          </p>
+                          {!syncToken && (
+                            <p className="text-xs text-red-500 mt-1">Token is required for Git operations</p>
+                          )}
+                        </div>
                       </div>
-                      <p className="text-xs text-app-muted mt-3">
-                        Authentication is handled via your account. {!isAuthenticated && <a href="#" onClick={(e) => { e.preventDefault(); signIn(); }} className="text-app-accent hover:underline">Sign in</a>} {isAuthenticated && <span className="text-green-500">Signed in</span>} to enable sync.
-                      </p>
                     </div>
 
                     {/* Branch Section */}
@@ -2623,6 +2645,12 @@ export default function Preferences() {
                             <span className="ml-2 text-app-text text-xs truncate">{syncRemoteUrl}</span>
                           </div>
                           <div className="col-span-2">
+                            <span className="text-app-muted">Access Token:</span>
+                            <span className="ml-2 text-app-text text-xs font-mono">
+                              {syncToken ? `${syncToken.substring(0, 4)}${'•'.repeat(20)}` : 'Not set'}
+                            </span>
+                          </div>
+                          <div className="col-span-2">
                             <span className="text-app-muted">Author Info:</span>
                             <span className="ml-2 text-app-text text-xs">
                               {syncUsername || 'Lokus'} &lt;{syncUsername || 'lokus'}@users.noreply.github.com&gt;
@@ -2687,6 +2715,7 @@ export default function Preferences() {
                               // Clear all sync settings
                               setSyncRemoteUrl('');
                               setSyncUsername('');
+                              setSyncToken('');
                               setSyncConfigExpanded(false);
                             }}
                             className="w-full px-3 py-1.5 text-sm bg-app-bg border border-app-border hover:border-red-500 hover:text-red-500 rounded-md text-app-text transition-colors"
@@ -2723,24 +2752,18 @@ export default function Preferences() {
                             alert('Workspace path not available. Please reopen Preferences from the workspace.');
                             return;
                           }
-                          if (!isAuthenticated) {
-                            alert('Please sign in to use sync features.');
+                          if (!syncToken) {
+                            alert('Please enter your GitHub Personal Access Token in the sync configuration.');
                             return;
                           }
                           setSyncLoading(true);
                           try {
-                            // Get fresh token from auth system
-                            const token = await getAccessToken();
-                            if (!token) {
-                              throw new Error('Failed to get access token. Please sign in again.');
-                            }
-
                             await invoke('git_pull', {
                               workspacePath,
                               remoteName: 'origin',
                               branchName: syncBranch || 'main',
                               username: syncUsername,
-                              token: token
+                              token: syncToken
                             });
                             alert('Pulled successfully!');
                           } catch (err) {
@@ -2749,7 +2772,7 @@ export default function Preferences() {
                           }
                           setSyncLoading(false);
                         }}
-                        disabled={syncLoading || !workspacePath || !isAuthenticated}
+                        disabled={syncLoading || !workspacePath || !syncToken}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
                       >
                         <CloudOff className="w-4 h-4" />
@@ -2762,18 +2785,12 @@ export default function Preferences() {
                             alert('Workspace path not available. Please reopen Preferences from the workspace.');
                             return;
                           }
-                          if (!isAuthenticated) {
-                            alert('Please sign in to use sync features.');
+                          if (!syncToken) {
+                            alert('Please enter your GitHub Personal Access Token in the sync configuration.');
                             return;
                           }
                           setSyncLoading(true);
                           try {
-                            // Get fresh token from auth system
-                            const token = await getAccessToken();
-                            if (!token) {
-                              throw new Error('Failed to get access token. Please sign in again.');
-                            }
-
                             // First commit - auto-generate author info from username
                             await invoke('git_commit', {
                               workspacePath,
@@ -2787,7 +2804,7 @@ export default function Preferences() {
                               remoteName: 'origin',
                               branchName: syncBranch || 'main',
                               username: syncUsername,
-                              token: token
+                              token: syncToken
                             });
                             alert('Pushed successfully!');
                             setSyncMessage('');
@@ -2797,7 +2814,7 @@ export default function Preferences() {
                           }
                           setSyncLoading(false);
                         }}
-                        disabled={syncLoading || !syncMessage || !workspacePath || !isAuthenticated}
+                        disabled={syncLoading || !syncMessage || !workspacePath || !syncToken}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
                       >
                         <CloudUpload className="w-4 h-4" />

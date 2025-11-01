@@ -3,10 +3,7 @@ import { Cloud, CloudOff, RefreshCw, Check, AlertCircle, GitBranch, CloudUpload,
 import { invoke } from '@tauri-apps/api/core';
 import { readConfig } from '../../core/config/store';
 import { confirm } from '@tauri-apps/plugin-dialog';
-import { useAuth } from '../../core/auth/AuthContext';
-
 export default function SyncStatus() {
-  const { isAuthenticated, getAccessToken, signIn } = useAuth();
   const [syncStatus, setSyncStatus] = useState('idle'); // idle, committing, pushing, pulling, fetching, success, error, auth_error
   const [gitStatus, setGitStatus] = useState(null);
   const [isConfigured, setIsConfigured] = useState(false);
@@ -57,8 +54,8 @@ export default function SyncStatus() {
       if (cfg.sync) {
         setSyncSettings(cfg.sync);
 
-        // Check if configured (remote URL and username required)
-        const configured = !!(cfg.sync.remoteUrl && cfg.sync.username);
+        // Check if configured (remote URL, username, and token required)
+        const configured = !!(cfg.sync.remoteUrl && cfg.sync.username && cfg.sync.token);
         setIsConfigured(configured);
       }
     } catch (e) {
@@ -107,24 +104,15 @@ export default function SyncStatus() {
   const commitAndPush = async () => {
     if (!isConfigured || !workspacePath) return;
 
-    // Check authentication
-    if (!isAuthenticated) {
-      console.error('[SyncStatus] Not authenticated');
-      setSyncStatus('auth_error');
-      setErrorMessage('Please sign in to sync');
-      setErrorType('auth');
-      return;
-    }
-
     setShowMenu(false);
     setErrorMessage('');
     setErrorType('');
 
     try {
-      // Get fresh token from auth system
-      const token = await getAccessToken();
+      // Use GitHub token from sync settings
+      const token = syncSettings.token;
       if (!token) {
-        throw new Error('Failed to get access token');
+        throw new Error('GitHub token not configured. Please add your Personal Access Token in Preferences > Sync.');
       }
 
       // Commit
@@ -194,24 +182,15 @@ export default function SyncStatus() {
   const pull = async () => {
     if (!isConfigured || !workspacePath) return;
 
-    // Check authentication
-    if (!isAuthenticated) {
-      console.error('[SyncStatus] Not authenticated');
-      setSyncStatus('auth_error');
-      setErrorMessage('Please sign in to sync');
-      setErrorType('auth');
-      return;
-    }
-
     setShowMenu(false);
     setErrorMessage('');
     setErrorType('');
 
     try {
-      // Get fresh token from auth system
-      const token = await getAccessToken();
+      // Use GitHub token from sync settings
+      const token = syncSettings.token;
       if (!token) {
-        throw new Error('Failed to get access token');
+        throw new Error('GitHub token not configured. Please add your Personal Access Token in Preferences > Sync.');
       }
 
       setSyncStatus('pulling');
@@ -276,13 +255,6 @@ export default function SyncStatus() {
   const forcePush = async () => {
     if (!isConfigured || !workspacePath) return;
 
-    // Check authentication
-    if (!isAuthenticated) {
-      console.error('[SyncStatus] Not authenticated');
-      setSyncStatus('error');
-      return;
-    }
-
     // Safety confirmation
     const confirmed = await confirm(
       'Force Push will overwrite all remote changes with your local version. This cannot be undone. Continue?',
@@ -294,10 +266,10 @@ export default function SyncStatus() {
     setShowMenu(false);
 
     try {
-      // Get fresh token from auth system
-      const token = await getAccessToken();
+      // Use GitHub token from sync settings
+      const token = syncSettings.token;
       if (!token) {
-        throw new Error('Failed to get access token');
+        throw new Error('GitHub token not configured. Please add your Personal Access Token in Preferences > Sync.');
       }
 
       setSyncStatus('pushing');
@@ -328,13 +300,6 @@ export default function SyncStatus() {
   const forcePull = async () => {
     if (!isConfigured || !workspacePath) return;
 
-    // Check authentication
-    if (!isAuthenticated) {
-      console.error('[SyncStatus] Not authenticated');
-      setSyncStatus('error');
-      return;
-    }
-
     // Safety confirmation
     const confirmed = await confirm(
       'Force Pull will discard all local changes and use the remote version. This cannot be undone. Continue?',
@@ -346,10 +311,10 @@ export default function SyncStatus() {
     setShowMenu(false);
 
     try {
-      // Get fresh token from auth system
-      const token = await getAccessToken();
+      // Use GitHub token from sync settings
+      const token = syncSettings.token;
       if (!token) {
-        throw new Error('Failed to get access token');
+        throw new Error('GitHub token not configured. Please add your Personal Access Token in Preferences > Sync.');
       }
 
       setSyncStatus('pulling');
@@ -382,10 +347,6 @@ export default function SyncStatus() {
   };
 
   const getStatusIcon = () => {
-    if (!isAuthenticated) {
-      return <CloudOff className="w-3.5 h-3.5 text-app-muted" />;
-    }
-
     if (!isConfigured) {
       return <CloudOff className="w-3.5 h-3.5 text-app-muted" />;
     }
@@ -417,10 +378,6 @@ export default function SyncStatus() {
   };
 
   const getStatusText = () => {
-    if (!isAuthenticated) {
-      return 'Sign in to sync';
-    }
-
     if (!isConfigured) {
       return 'Not configured';
     }
@@ -521,15 +478,6 @@ export default function SyncStatus() {
       return;
     }
 
-    // If auth error, trigger re-authentication
-    if (syncStatus === 'auth_error' || errorType === 'auth') {
-      signIn();
-      setSyncStatus('idle');
-      setErrorMessage('');
-      setErrorType('');
-      return;
-    }
-
     if (gitStatus?.has_changes || gitStatus?.ahead > 0) {
       commitAndPush();
     } else {
@@ -571,37 +519,9 @@ export default function SyncStatus() {
 
           {/* Menu */}
           <div className="absolute bottom-full right-0 mb-1 bg-app-panel border border-app-border rounded-md shadow-lg z-50 min-w-[150px]">
-            {/* Auth Error Warning */}
-            {errorType === 'auth' && (
-              <>
-                <div className="px-3 py-2 bg-orange-500/10 border-b border-app-border">
-                  <div className="flex items-center gap-2 text-xs text-orange-500 font-medium mb-1">
-                    <LogIn className="w-3.5 h-3.5" />
-                    Authentication Failed
-                  </div>
-                  <div className="text-xs text-app-muted mb-2">
-                    {errorMessage}
-                  </div>
-                  <button
-                    onClick={() => {
-                      signIn();
-                      setSyncStatus('idle');
-                      setErrorMessage('');
-                      setErrorType('');
-                      setShowMenu(false);
-                    }}
-                    className="w-full flex items-center justify-center gap-2 px-2 py-1.5 text-xs text-white bg-orange-500 hover:bg-orange-600 rounded transition-colors"
-                  >
-                    <LogIn className="w-3.5 h-3.5" />
-                    Re-authenticate
-                  </button>
-                </div>
-              </>
-            )}
-
             <button
               onClick={pull}
-              disabled={isSyncing() || errorType === 'auth'}
+              disabled={isSyncing()}
               className="w-full flex items-center gap-2 px-3 py-2 text-xs text-app-text hover:bg-app-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ArrowDownToLine className="w-3.5 h-3.5" />
@@ -610,7 +530,7 @@ export default function SyncStatus() {
 
             <button
               onClick={commitAndPush}
-              disabled={isSyncing() || errorType === 'auth'}
+              disabled={isSyncing()}
               className="w-full flex items-center gap-2 px-3 py-2 text-xs text-app-text hover:bg-app-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CloudUpload className="w-3.5 h-3.5" />
