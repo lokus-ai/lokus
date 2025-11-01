@@ -138,7 +138,7 @@ export default function SyncStatus() {
 
       // Push
       setSyncStatus('pushing');
-      await invoke('git_push', {
+      const pushResult = await invoke('git_push', {
         workspacePath,
         remoteName: 'origin',
         branchName: syncSettings.branch || 'main',
@@ -148,12 +148,19 @@ export default function SyncStatus() {
 
       setSyncStatus('success');
       setLastSync(new Date());
+
+      // Show success message
+      setErrorMessage('Push successful - workspace synced');
+      setErrorType('success');
+
       await checkGitStatus();
 
       // Reset to idle after showing success
       setTimeout(() => {
         setSyncStatus('idle');
-      }, 2000);
+        setErrorMessage('');
+        setErrorType('');
+      }, 3000);
     } catch (err) {
       console.error('[SyncStatus] Sync failed:', err);
 
@@ -200,7 +207,7 @@ export default function SyncStatus() {
       }
 
       setSyncStatus('pulling');
-      await invoke('git_pull', {
+      const result = await invoke('git_pull', {
         workspacePath,
         remoteName: 'origin',
         branchName: syncSettings.branch || 'main',
@@ -208,13 +215,26 @@ export default function SyncStatus() {
         token: token
       });
 
+      // Show success message with details
       setSyncStatus('success');
       setLastSync(new Date());
+
+      // Show user-friendly message based on result
+      if (result && result.includes('up to date')) {
+        setErrorMessage('Already up to date - no new changes');
+        setErrorType('info');
+      } else if (result && result.includes('Fast-forward')) {
+        setErrorMessage('Pull successful - workspace updated');
+        setErrorType('success');
+      }
+
       await checkGitStatus();
 
       setTimeout(() => {
         setSyncStatus('idle');
-      }, 2000);
+        setErrorMessage('');
+        setErrorType('');
+      }, 3000);
     } catch (err) {
       console.error('[SyncStatus] Pull failed:', err);
 
@@ -406,7 +426,7 @@ export default function SyncStatus() {
       case 'syncing':
         return 'Syncing...';
       case 'success':
-        return 'Synced';
+        return errorMessage || 'Synced';
       case 'auth_error':
         return errorMessage || 'Auth failed';
       case 'error':
