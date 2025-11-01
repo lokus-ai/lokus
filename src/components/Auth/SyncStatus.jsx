@@ -14,6 +14,29 @@ export default function SyncStatus() {
   const [errorMessage, setErrorMessage] = useState('');
   const [errorType, setErrorType] = useState('');
 
+  // Filter out technical/internal files from conflicts shown to users
+  const filterUserContentConflicts = (conflicts) => {
+    if (!conflicts || conflicts.length === 0) return [];
+
+    // Technical patterns to hide from users (app internals they shouldn't touch)
+    const technicalPatterns = [
+      /^\.lokus\//,           // .lokus/ folder (app config, state, cache)
+      /^\.git\//,             // .git/ folder (version control internals)
+      /^node_modules\//,      // node_modules (dependencies)
+      /^\.DS_Store$/,         // macOS metadata
+      /^\.vscode\//,          // VS Code settings
+      /^\.idea\//,            // IntelliJ settings
+      /^package-lock\.json$/, // Lock files
+      /^yarn\.lock$/,         // Lock files
+    ];
+
+    return conflicts.filter(file => {
+      // Check if file matches any technical pattern
+      const isTechnical = technicalPatterns.some(pattern => pattern.test(file));
+      return !isTechnical; // Only show user content files
+    });
+  };
+
   // Load sync configuration on mount
   useEffect(() => {
     loadSyncConfig();
@@ -367,8 +390,9 @@ export default function SyncStatus() {
       return <CloudOff className="w-3.5 h-3.5 text-app-muted" />;
     }
 
-    // Check for conflicts first
-    if (gitStatus?.conflicts && gitStatus.conflicts.length > 0) {
+    // Check for user-facing conflicts first
+    const userConflicts = filterUserContentConflicts(gitStatus?.conflicts);
+    if (userConflicts.length > 0) {
       return <AlertTriangle className="w-3.5 h-3.5 text-orange-500" />;
     }
 
@@ -398,9 +422,10 @@ export default function SyncStatus() {
       return 'Not configured';
     }
 
-    // Check for conflicts first
-    if (gitStatus?.conflicts && gitStatus.conflicts.length > 0) {
-      return `${gitStatus.conflicts.length} conflict${gitStatus.conflicts.length > 1 ? 's' : ''}`;
+    // Check for user-facing conflicts first
+    const userConflicts = filterUserContentConflicts(gitStatus?.conflicts);
+    if (userConflicts.length > 0) {
+      return `${userConflicts.length} conflict${userConflicts.length > 1 ? 's' : ''}`;
     }
 
     switch (syncStatus) {
@@ -455,7 +480,8 @@ export default function SyncStatus() {
     if (!isConfigured) return { status: 'unconfigured', icon: '⚙', text: 'Not configured' };
     if (errorType === 'auth') return { status: 'error', icon: '✗', text: 'Auth error', color: 'text-red-500' };
     if (syncStatus === 'error') return { status: 'error', icon: '✗', text: 'Error', color: 'text-red-500' };
-    if (gitStatus?.conflicts && gitStatus.conflicts.length > 0) return { status: 'warning', icon: '⚠', text: 'Needs attention', color: 'text-orange-500' };
+    const userConflicts = filterUserContentConflicts(gitStatus?.conflicts);
+    if (userConflicts.length > 0) return { status: 'warning', icon: '⚠', text: 'Needs attention', color: 'text-orange-500' };
     if (gitStatus?.has_changes || gitStatus?.ahead > 0) return { status: 'pending', icon: '⋯', text: 'Changes pending', color: 'text-yellow-500' };
     if (lastSync) return { status: 'healthy', icon: '✓', text: 'Healthy', color: 'text-green-500' };
     return { status: 'idle', icon: '○', text: 'Ready', color: 'text-app-muted' };
@@ -466,9 +492,10 @@ export default function SyncStatus() {
       return 'Git sync not configured. Open Preferences → Sync to set up.';
     }
 
-    // Check for conflicts first (priority tooltip)
-    if (gitStatus?.conflicts && gitStatus.conflicts.length > 0) {
-      return `⚠️ ${gitStatus.conflicts.length} merge conflict${gitStatus.conflicts.length > 1 ? 's' : ''} detected - Click to resolve`;
+    // Check for user-facing conflicts first (priority tooltip)
+    const userConflicts = filterUserContentConflicts(gitStatus?.conflicts);
+    if (userConflicts.length > 0) {
+      return `⚠️ ${userConflicts.length} merge conflict${userConflicts.length > 1 ? 's' : ''} detected - Click to resolve`;
     }
 
     switch (syncStatus) {
@@ -499,8 +526,9 @@ export default function SyncStatus() {
       return;
     }
 
-    // If there are conflicts, open the menu to show resolution options
-    if (gitStatus?.conflicts && gitStatus.conflicts.length > 0) {
+    // If there are user-facing conflicts, open the menu to show resolution options
+    const userConflicts = filterUserContentConflicts(gitStatus?.conflicts);
+    if (userConflicts.length > 0) {
       setShowMenu(true);
       return;
     }
@@ -579,13 +607,15 @@ export default function SyncStatus() {
             </button>
 
             {/* Conflict Resolution Section */}
-            {gitStatus?.conflicts && gitStatus.conflicts.length > 0 && (
+            {(() => {
+              const userConflicts = filterUserContentConflicts(gitStatus?.conflicts);
+              return userConflicts.length > 0 && (
               <>
                 <div className="border-t border-app-border my-1" />
                 <div className="px-3 py-2">
                   <div className="flex items-center gap-2 text-xs text-orange-500 font-medium mb-2">
                     <AlertTriangle className="w-3.5 h-3.5" />
-                    {gitStatus.conflicts.length} Conflict{gitStatus.conflicts.length > 1 ? 's' : ''} Detected
+                    {userConflicts.length} Conflict{userConflicts.length > 1 ? 's' : ''} Detected
                   </div>
 
                   {/* Explanatory text */}
@@ -604,7 +634,7 @@ export default function SyncStatus() {
 
                   {/* Per-file conflict list */}
                   <div className="text-xs mb-3 max-h-32 overflow-y-auto space-y-1">
-                    {gitStatus.conflicts.map((file, idx) => (
+                    {userConflicts.map((file, idx) => (
                       <div
                         key={idx}
                         className="flex items-center gap-2 p-2 bg-orange-500/5 rounded border border-orange-500/10"
@@ -668,7 +698,8 @@ export default function SyncStatus() {
                   </details>
                 </div>
               </>
-            )}
+            );
+            })()}
 
             {gitStatus && (
               <>
