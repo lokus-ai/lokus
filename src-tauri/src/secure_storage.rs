@@ -280,37 +280,9 @@ impl SecureStorage {
     }
 }
 
-// Tauri commands for sync token storage
-#[tauri::command]
-pub fn store_sync_token(token: String) -> Result<(), String> {
-    let storage = SecureStorage::new()
-        .map_err(|e| format!("Failed to initialize secure storage: {}", e))?;
-
-    storage.store("sync_token", &token)
-        .map_err(|e| format!("Failed to store sync token: {}", e))?;
-
-    Ok(())
-}
-
-#[tauri::command]
-pub fn retrieve_sync_token() -> Result<Option<String>, String> {
-    let storage = SecureStorage::new()
-        .map_err(|e| format!("Failed to initialize secure storage: {}", e))?;
-
-    storage.retrieve("sync_token")
-        .map_err(|e| format!("Failed to retrieve sync token: {}", e))
-}
-
-#[tauri::command]
-pub fn delete_sync_token() -> Result<(), String> {
-    let storage = SecureStorage::new()
-        .map_err(|e| format!("Failed to initialize secure storage: {}", e))?;
-
-    storage.delete("sync_token")
-        .map_err(|e| format!("Failed to delete sync token: {}", e))?;
-
-    Ok(())
-}
+// Deprecated: Sync token commands removed.
+// Sync now uses auth tokens from AuthManager via get_auth_token command.
+// The dual token system caused auth-sync disconnect issues.
 
 #[cfg(test)]
 mod tests {

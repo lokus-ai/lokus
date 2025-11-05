@@ -1,4 +1,5 @@
 import React from 'react';
+import { ColoredFileIcon } from './FileIcon.jsx';
 
 /**
  * TabBar - Simplified tab bar for editor groups
@@ -53,6 +54,12 @@ export default function TabBar({
               }
             `}
           >
+            <ColoredFileIcon
+              fileName={tab.name}
+              isDirectory={false}
+              className="w-4 h-4 flex-shrink-0"
+              showChevron={false}
+            />
             <span className="text-sm truncate max-w-[150px]">
               {tab.name}
             </span>

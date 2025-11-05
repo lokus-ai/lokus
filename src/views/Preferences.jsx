@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { setGlobalActiveTheme, listAvailableThemes, readGlobalVisuals, importThemeFile, validateThemeFile, exportTheme, deleteCustomTheme, getThemeTokens, saveThemeTokens, applyTokens } from "../core/theme/manager.js";
 import { listActions, getActiveShortcuts, setShortcut, resetShortcuts } from "../core/shortcuts/registry.js";
 import { readConfig, updateConfig } from "../core/config/store.js";
 import { formatAccelerator } from "../core/shortcuts/registry.js";
+import { debounce } from "../core/search/index.js";
 import { Search, Pencil, RotateCcw, Upload, Download, Save, RefreshCw, GitBranch, CloudOff, CloudUpload } from "lucide-react";
 import { open, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
@@ -26,7 +27,7 @@ export default function Preferences() {
   const [originalTokens, setOriginalTokens] = useState({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [section, setSection] = useState("Appearance");
-  const { isAuthenticated, user, signIn, signOut, isLoading } = useAuth();
+  const { isAuthenticated, user, signIn, signOut, isLoading, getAccessToken } = useAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
   // Removed mode/accent complexity - themes handle everything now
   const actions = useMemo(() => listActions(), []);
@@ -43,8 +44,6 @@ export default function Preferences() {
   // Sync state
   const [workspacePath, setWorkspacePath] = useState('');
   const [syncRemoteUrl, setSyncRemoteUrl] = useState('');
-  const [syncAuthorName, setSyncAuthorName] = useState('');
-  const [syncAuthorEmail, setSyncAuthorEmail] = useState('');
   const [syncBranch, setSyncBranch] = useState('main');
   const [syncUsername, setSyncUsername] = useState('');
   const [syncToken, setSyncToken] = useState('');
@@ -52,7 +51,7 @@ export default function Preferences() {
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [syncConfigExpanded, setSyncConfigExpanded] = useState(false);
-  const [tokenLoaded, setTokenLoaded] = useState(false);
+  const [syncSaving, setSyncSaving] = useState(false);
 
   const [expandedSections, setExpandedSections] = useState({
     font: true,
@@ -66,6 +65,14 @@ export default function Preferences() {
     blockquotes: false,
     tables: false,
     presets: false
+  });
+
+  // Daily Notes state
+  const [dailyNotesSettings, setDailyNotesSettings] = useState({
+    format: 'yyyy-MM-dd',
+    folder: 'Daily Notes',
+    template: '',
+    openOnStartup: false
   });
 
   // Preset themes for quick styling
@@ -128,7 +135,49 @@ export default function Preferences() {
   const toggleSection = (section) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
-  
+
+  // Helper to parse structured error from Rust
+  const parseGitError = (error) => {
+    try {
+      // Try to parse as JSON structured error
+      const errorObj = JSON.parse(error);
+      if (errorObj.error_type && errorObj.user_message) {
+        return {
+          type: errorObj.error_type,
+          message: errorObj.user_message,
+          howToFix: errorObj.how_to_fix,
+          raw: errorObj.message
+        };
+      }
+    } catch (e) {
+      // Not a structured error, return as-is
+    }
+
+    // Fallback: return error as string
+    return {
+      type: 'other',
+      message: String(error),
+      howToFix: 'Check the error details and try again.',
+      raw: String(error)
+    };
+  };
+
+  // Format error message for user display
+  const formatErrorMessage = (error) => {
+    const gitError = parseGitError(error);
+
+    switch (gitError.type) {
+      case 'auth':
+        return 'Authentication failed. Please sign in again.';
+      case 'network':
+        return 'Network error. Check your connection and try again.';
+      case 'conflict':
+        return 'Merge conflicts detected. Use conflict resolution in the sync menu.';
+      default:
+        return gitError.message;
+    }
+  };
+
   // Theme is already initialized by ThemeProvider in main.jsx
 
   // Subscribe to live settings changes
@@ -227,21 +276,27 @@ export default function Preferences() {
         const cfg = await readConfig();
         if (cfg.sync) {
           if (cfg.sync.remoteUrl) setSyncRemoteUrl(cfg.sync.remoteUrl);
-          if (cfg.sync.authorName) setSyncAuthorName(cfg.sync.authorName);
-          if (cfg.sync.authorEmail) setSyncAuthorEmail(cfg.sync.authorEmail);
           if (cfg.sync.branch) setSyncBranch(cfg.sync.branch);
           if (cfg.sync.username) setSyncUsername(cfg.sync.username);
-        }
-
-        // Load encrypted token from secure storage
-        const token = await invoke('retrieve_sync_token');
-        if (token) {
-          setSyncToken(token);
-          setTokenLoaded(true);
-          console.log('[Sync] Loaded token from secure storage');
+          if (cfg.sync.token) setSyncToken(cfg.sync.token);
         }
       } catch (e) {
         console.error('Failed to load sync settings:', e);
+      }
+
+      // Load daily notes settings
+      try {
+        const cfg = await readConfig();
+        if (cfg.dailyNotes) {
+          setDailyNotesSettings({
+            format: cfg.dailyNotes.format || 'yyyy-MM-dd',
+            folder: cfg.dailyNotes.folder || 'Daily Notes',
+            template: cfg.dailyNotes.template || '',
+            openOnStartup: cfg.dailyNotes.openOnStartup || false
+          });
+        }
+      } catch (e) {
+        console.error('Failed to load daily notes settings:', e);
       }
 
       // Get workspace path from opener, URL params, or backend API
@@ -287,48 +342,35 @@ export default function Preferences() {
     getActiveShortcuts().then(setKeymap).catch(() => {});
   }, []);
 
-  // Auto-save sync settings when they change (except token which is saved separately)
-  useEffect(() => {
-    const saveSyncSettings = async () => {
+  // Create debounced save function with useMemo
+  const debouncedSaveSyncSettings = useMemo(
+    () => debounce(async (settings) => {
       try {
-        await updateConfig({
-          sync: {
-            remoteUrl: syncRemoteUrl,
-            authorName: syncAuthorName,
-            authorEmail: syncAuthorEmail,
-            branch: syncBranch,
-            username: syncUsername
-          }
-        });
+        setSyncSaving(true);
+        await updateConfig({ sync: settings });
+        // Keep saving indicator visible briefly
+        setTimeout(() => setSyncSaving(false), 500);
       } catch (e) {
         console.error('Failed to save sync settings:', e);
+        setSyncSaving(false);
       }
-    };
+    }, 500),
+    []
+  );
 
-    // Only save if at least one field is filled
-    if (syncRemoteUrl || syncAuthorName || syncAuthorEmail || syncUsername) {
-      saveSyncSettings();
-    }
-  }, [syncRemoteUrl, syncAuthorName, syncAuthorEmail, syncBranch, syncUsername]);
-
-  // Auto-save token to secure storage when it changes
+  // Auto-save sync settings when they change (debounced)
   useEffect(() => {
-    const saveToken = async () => {
-      if (!syncToken) return;
-
-      try {
-        await invoke('store_sync_token', { token: syncToken });
-        console.log('[Sync] Token saved to secure storage');
-      } catch (e) {
-        console.error('Failed to save token:', e);
-      }
-    };
-
-    if (syncToken && !tokenLoaded) {
-      // Only save if user typed it (not loaded from storage)
-      saveToken();
+    // Only save if at least one field is filled
+    if (syncRemoteUrl || syncUsername || syncToken) {
+      setSyncSaving(true);
+      debouncedSaveSyncSettings({
+        remoteUrl: syncRemoteUrl,
+        branch: syncBranch,
+        username: syncUsername,
+        token: syncToken
+      });
     }
-  }, [syncToken]);
+  }, [syncRemoteUrl, syncBranch, syncUsername, syncToken, debouncedSaveSyncSettings]);
 
   // Auto-detect branch name when workspace path is available
   useEffect(() => {
@@ -548,6 +590,14 @@ export default function Preferences() {
     }
   };
 
+  const saveDailyNotesSettings = async () => {
+    try {
+      await updateConfig({ dailyNotes: dailyNotesSettings });
+    } catch (e) {
+      console.error('Failed to save daily notes settings:', e);
+    }
+  };
+
   const resetEditorSettings = () => {
     // Reset live settings to defaults
     liveEditorSettings.reset();
@@ -611,6 +661,7 @@ export default function Preferences() {
             // "General",
             "Appearance",
             "Editor",
+            "Daily Notes",
             "Markdown",
             "Shortcuts",
             "Sync",
@@ -2133,6 +2184,97 @@ export default function Preferences() {
             <div className="text-app-muted">General settings coming soon.</div>
           )}
 
+          {section === "Daily Notes" && (
+            <div className="max-w-2xl space-y-6">
+              <div>
+                <h2 className="text-2xl font-semibold mb-2">Daily Notes</h2>
+                <p className="text-app-muted">Configure your daily journaling workflow with customizable templates and date formats.</p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Date Format</label>
+                  <input
+                    type="text"
+                    className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent"
+                    value={dailyNotesSettings.format}
+                    onChange={(e) => setDailyNotesSettings({ ...dailyNotesSettings, format: e.target.value })}
+                    onBlur={saveDailyNotesSettings}
+                    placeholder="yyyy-MM-dd"
+                  />
+                  <p className="text-xs text-app-muted mt-1">
+                    Uses date-fns format. Examples: yyyy-MM-dd, MM-dd-yyyy, yyyy/MM/dd
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Folder Location</label>
+                  <input
+                    type="text"
+                    className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent"
+                    value={dailyNotesSettings.folder}
+                    onChange={(e) => setDailyNotesSettings({ ...dailyNotesSettings, folder: e.target.value })}
+                    onBlur={saveDailyNotesSettings}
+                    placeholder="Daily Notes"
+                  />
+                  <p className="text-xs text-app-muted mt-1">
+                    Folder path relative to your workspace root
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Daily Note Template</label>
+                  <textarea
+                    className="w-full h-32 px-3 py-2 rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent resize-y font-mono text-sm"
+                    value={dailyNotesSettings.template}
+                    onChange={(e) => setDailyNotesSettings({ ...dailyNotesSettings, template: e.target.value })}
+                    onBlur={saveDailyNotesSettings}
+                    placeholder="# {{date}}&#10;&#10;## Tasks&#10;- &#10;&#10;## Notes&#10;"
+                  />
+                  <div className="text-xs text-app-muted mt-2 space-y-1">
+                    <p className="font-medium">Available template variables:</p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 pl-2">
+                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{date}}'}</code> - Today's date</div>
+                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{yesterday}}'}</code> - Yesterday's date</div>
+                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{tomorrow}}'}</code> - Tomorrow's date</div>
+                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{day}}'}</code> - Day name (Monday)</div>
+                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{day_short}}'}</code> - Day name (Mon)</div>
+                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{month}}'}</code> - Month name</div>
+                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{week}}'}</code> - Week number</div>
+                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{year}}'}</code> - Year (2025)</div>
+                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{time}}'}</code> - Current time</div>
+                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{date:FORMAT}}'}</code> - Custom format</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 py-2">
+                  <input
+                    type="checkbox"
+                    id="openOnStartup"
+                    className="w-4 h-4 rounded border-app-border"
+                    checked={dailyNotesSettings.openOnStartup}
+                    onChange={(e) => {
+                      setDailyNotesSettings({ ...dailyNotesSettings, openOnStartup: e.target.checked });
+                      saveDailyNotesSettings();
+                    }}
+                  />
+                  <label htmlFor="openOnStartup" className="text-sm cursor-pointer">
+                    Open today's daily note on startup
+                  </label>
+                </div>
+
+                <div className="pt-4 border-t border-app-border">
+                  <p className="text-sm text-app-muted mb-2">Quick access:</p>
+                  <ul className="text-sm space-y-1 text-app-muted">
+                    <li>• Press <kbd className="px-2 py-0.5 bg-app-bg border border-app-border rounded text-xs">Cmd/Ctrl + Shift + D</kbd> to open today's note</li>
+                    <li>• Use Command Palette (Cmd/Ctrl + K) → "Open Daily Note"</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
           {section === "Shortcuts" && (
             <div className="max-w-3xl space-y-6">
               <div className="flex items-center justify-between gap-3">
@@ -2462,83 +2604,94 @@ export default function Preferences() {
                     </div>
                   </section>
 
-                  {/* Configuration Form */}
-                  <section className="space-y-4 bg-app-panel border border-app-border rounded-lg p-4">
-                    <h3 className="text-sm font-medium text-app-text uppercase tracking-wide">Repository Configuration</h3>
-
-                    <div>
-                      <label className="block text-sm text-app-muted mb-2">Remote URL</label>
-                      <input
-                        type="text"
-                        value={syncRemoteUrl}
-                        onChange={(e) => setSyncRemoteUrl(e.target.value)}
-                        placeholder="https://github.com/username/repo.git"
-                        className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
-                      />
+                  {/* Saving Indicator */}
+                  {syncSaving && (
+                    <div className="flex items-center gap-2 text-xs text-app-muted">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span>Saving...</span>
                     </div>
+                  )}
 
-                    <div className="grid grid-cols-2 gap-3">
+                  {/* Configuration Form */}
+                  <section className="space-y-4">
+                    {/* Repository Section */}
+                    <div className="p-4 bg-app-panel border border-app-border rounded-md">
+                      <h4 className="text-sm font-semibold mb-3">Repository</h4>
                       <div>
-                        <label className="block text-sm text-app-muted mb-2">Author Name</label>
+                        <label className="block text-sm text-app-muted mb-2">
+                          Remote URL <span className="text-red-500">*</span>
+                        </label>
                         <input
                           type="text"
-                          value={syncAuthorName}
-                          onChange={(e) => setSyncAuthorName(e.target.value)}
-                          placeholder="Your Name"
+                          value={syncRemoteUrl}
+                          onChange={(e) => setSyncRemoteUrl(e.target.value)}
+                          placeholder="https://github.com/username/repo.git"
                           className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
                         />
+                        <p className="text-xs text-app-muted mt-1">Example: https://github.com/username/repo.git</p>
+                        {!syncRemoteUrl && (
+                          <p className="text-xs text-red-500 mt-1">Remote URL is required</p>
+                        )}
                       </div>
+                    </div>
 
+                    {/* Authentication Section */}
+                    <div className="p-4 bg-app-panel border border-app-border rounded-md">
+                      <h4 className="text-sm font-semibold mb-3">Authentication</h4>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm text-app-muted mb-2">
+                            Username <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={syncUsername}
+                            onChange={(e) => setSyncUsername(e.target.value)}
+                            placeholder="github-username"
+                            className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
+                          />
+                          <p className="text-xs text-app-muted mt-2">Your GitHub/GitLab username (not display name)</p>
+                          {!syncUsername && (
+                            <p className="text-xs text-red-500 mt-1">Username is required</p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm text-app-muted mb-2">
+                            Personal Access Token <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="password"
+                            value={syncToken}
+                            onChange={(e) => setSyncToken(e.target.value)}
+                            placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                            className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent font-mono text-sm"
+                          />
+                          <p className="text-xs text-app-muted mt-2">
+                            GitHub: Settings → Developer settings → Personal access tokens → Generate new token (classic)<br />
+                            Required scopes: <code className="bg-app-bg px-1 py-0.5 rounded">repo</code>
+                          </p>
+                          {!syncToken && (
+                            <p className="text-xs text-red-500 mt-1">Token is required for Git operations</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Branch Section */}
+                    <div className="p-4 bg-app-panel border border-app-border rounded-md">
+                      <h4 className="text-sm font-semibold mb-3">Branch</h4>
                       <div>
-                        <label className="block text-sm text-app-muted mb-2">Author Email</label>
+                        <label className="block text-sm text-app-muted mb-2">Branch Name</label>
                         <input
-                          type="email"
-                          value={syncAuthorEmail}
-                          onChange={(e) => setSyncAuthorEmail(e.target.value)}
-                          placeholder="your@email.com"
+                          type="text"
+                          value={syncBranch}
+                          onChange={(e) => setSyncBranch(e.target.value)}
+                          placeholder="main"
                           className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
                         />
+                        <p className="text-xs text-app-muted mt-1">Auto-detected from Git repository</p>
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm text-app-muted mb-2">Username</label>
-                      <input
-                        type="text"
-                        value={syncUsername}
-                        onChange={(e) => setSyncUsername(e.target.value)}
-                        placeholder="github-username"
-                        className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm text-app-muted mb-2">Personal Access Token</label>
-                      <input
-                        type="password"
-                        value={tokenLoaded ? '••••••••••••' : syncToken}
-                        onChange={(e) => {
-                          setSyncToken(e.target.value);
-                          setTokenLoaded(false);
-                        }}
-                        placeholder="ghp_... or glpat-..."
-                        className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
-                      />
-                      <p className="text-xs text-app-muted mt-1">
-                        <strong>GitHub:</strong> <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-app-accent hover:underline">Create token</a> with <code className="bg-app-bg px-1 rounded">repo</code> scope
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm text-app-muted mb-2">Branch</label>
-                      <input
-                        type="text"
-                        value={syncBranch}
-                        onChange={(e) => setSyncBranch(e.target.value)}
-                        placeholder="main"
-                        className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
-                      />
-                      <p className="text-xs text-app-muted mt-1">Auto-detected from Git repository</p>
                     </div>
 
                     <button
@@ -2607,37 +2760,88 @@ export default function Preferences() {
                       <div className="px-4 pb-4 space-y-3 border-t border-app-border pt-4">
                         <div className="grid grid-cols-2 gap-3 text-sm">
                           <div>
-                            <span className="text-app-muted">Author:</span>
-                            <span className="ml-2 text-app-text">{syncAuthorName}</span>
-                          </div>
-                          <div>
-                            <span className="text-app-muted">Email:</span>
-                            <span className="ml-2 text-app-text">{syncAuthorEmail}</span>
-                          </div>
-                          <div>
                             <span className="text-app-muted">Username:</span>
                             <span className="ml-2 text-app-text">{syncUsername}</span>
                           </div>
                           <div>
-                            <span className="text-app-muted">Token:</span>
-                            <span className="ml-2 text-app-text">••••••••••••</span>
+                            <span className="text-app-muted">Remote URL:</span>
+                            <span className="ml-2 text-app-text text-xs truncate">{syncRemoteUrl}</span>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-app-muted">Access Token:</span>
+                            <span className="ml-2 text-app-text text-xs font-mono">
+                              {syncToken ? `${syncToken.substring(0, 4)}${'•'.repeat(20)}` : 'Not set'}
+                            </span>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-app-muted">Author Info:</span>
+                            <span className="ml-2 text-app-text text-xs">
+                              {syncUsername || 'Lokus'} &lt;{syncUsername || 'lokus'}@users.noreply.github.com&gt;
+                            </span>
+                            <p className="text-xs text-app-muted mt-1">Auto-generated from username</p>
                           </div>
                         </div>
 
-                        <div className="pt-2 flex gap-2">
+                        <div className="pt-2 space-y-2">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={async () => {
+                                if (!workspacePath) {
+                                  alert('Workspace path not available. Please reopen Preferences from the workspace.');
+                                  return;
+                                }
+                                setSyncLoading(true);
+                                try {
+                                  const result = await invoke('git_init', { workspacePath });
+                                  alert(result);
+                                } catch (err) {
+                                  alert('Git init failed: ' + err);
+                                }
+                                setSyncLoading(false);
+                              }}
+                              disabled={syncLoading || !workspacePath}
+                              className="flex-1 px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+                            >
+                              Initialize Git
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!workspacePath) {
+                                  alert('Workspace path not available. Please reopen Preferences from the workspace.');
+                                  return;
+                                }
+                                if (!syncRemoteUrl) {
+                                  alert('Please enter a remote URL first.');
+                                  return;
+                                }
+                                setSyncLoading(true);
+                                try {
+                                  const result = await invoke('git_add_remote', {
+                                    workspacePath,
+                                    remoteName: 'origin',
+                                    remoteUrl: syncRemoteUrl
+                                  });
+                                  alert(result);
+                                } catch (err) {
+                                  alert('Add remote failed: ' + err);
+                                }
+                                setSyncLoading(false);
+                              }}
+                              disabled={syncLoading || !workspacePath || !syncRemoteUrl}
+                              className="flex-1 px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+                            >
+                              Connect Remote
+                            </button>
+                          </div>
                           <button
                             onClick={() => {
                               // Clear all sync settings
                               setSyncRemoteUrl('');
-                              setSyncAuthorName('');
-                              setSyncAuthorEmail('');
                               setSyncUsername('');
                               setSyncToken('');
-                              setTokenLoaded(false);
                               setSyncConfigExpanded(false);
-                              invoke('delete_sync_token');
                             }}
-                            className="px-3 py-1.5 text-sm bg-app-bg border border-app-border hover:border-red-500 hover:text-red-500 rounded-md text-app-text transition-colors"
+                            className="w-full px-3 py-1.5 text-sm bg-app-bg border border-app-border hover:border-red-500 hover:text-red-500 rounded-md text-app-text transition-colors"
                           >
                             Delete Configuration
                           </button>
@@ -2671,22 +2875,27 @@ export default function Preferences() {
                             alert('Workspace path not available. Please reopen Preferences from the workspace.');
                             return;
                           }
+                          if (!syncToken) {
+                            alert('Please enter your GitHub Personal Access Token in the sync configuration.');
+                            return;
+                          }
                           setSyncLoading(true);
                           try {
                             await invoke('git_pull', {
                               workspacePath,
                               remoteName: 'origin',
-                              branchName: syncBranch,
+                              branchName: syncBranch || 'main',
                               username: syncUsername,
                               token: syncToken
                             });
                             alert('Pulled successfully!');
                           } catch (err) {
-                            alert('Pull failed: ' + err);
+                            const errorMessage = formatErrorMessage(err);
+                            alert(`Pull failed:\n\n${errorMessage}`);
                           }
                           setSyncLoading(false);
                         }}
-                        disabled={syncLoading || !workspacePath}
+                        disabled={syncLoading || !workspacePath || !syncToken}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
                       >
                         <CloudOff className="w-4 h-4" />
@@ -2699,31 +2908,36 @@ export default function Preferences() {
                             alert('Workspace path not available. Please reopen Preferences from the workspace.');
                             return;
                           }
+                          if (!syncToken) {
+                            alert('Please enter your GitHub Personal Access Token in the sync configuration.');
+                            return;
+                          }
                           setSyncLoading(true);
                           try {
-                            // First commit
+                            // First commit - auto-generate author info from username
                             await invoke('git_commit', {
                               workspacePath,
                               message: syncMessage || 'Update workspace',
-                              authorName: syncAuthorName,
-                              authorEmail: syncAuthorEmail
+                              authorName: syncUsername || 'Lokus',
+                              authorEmail: `${syncUsername || 'lokus'}@users.noreply.github.com`
                             });
                             // Then push
                             await invoke('git_push', {
                               workspacePath,
                               remoteName: 'origin',
-                              branchName: syncBranch,
+                              branchName: syncBranch || 'main',
                               username: syncUsername,
                               token: syncToken
                             });
                             alert('Pushed successfully!');
                             setSyncMessage('');
                           } catch (err) {
-                            alert('Push failed: ' + err);
+                            const errorMessage = formatErrorMessage(err);
+                            alert(`Push failed:\n\n${errorMessage}`);
                           }
                           setSyncLoading(false);
                         }}
-                        disabled={syncLoading || !syncMessage || !workspacePath}
+                        disabled={syncLoading || !syncMessage || !workspacePath || !syncToken}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
                       >
                         <CloudUpload className="w-4 h-4" />

@@ -1,12 +1,7 @@
 import React from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-
-const Icon = ({ path, className = "w-5 h-5" }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-    <path strokeLinecap="round" strokeLinejoin="round" d={path} />
-  </svg>
-);
+import { ColoredFileIcon } from "../components/FileIcon.jsx";
 
 export function DraggableTab({ tab, isActive, isUnsaved, onTabClick, onTabClose }) {
   const { attributes, listeners, setNodeRef: draggableRef, transform, isDragging } = useDraggable({
@@ -42,23 +37,12 @@ export function DraggableTab({ tab, isActive, isUnsaved, onTabClick, onTabClose 
         className={`${baseClasses} ${activeClasses} ${draggingClasses}`}
       >
         {/* File type icon */}
-        {tab.name.endsWith('.md') ? (
-          <svg className="obsidian-file-icon" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
-          </svg>
-        ) : tab.name.endsWith('.canvas') ? (
-          <svg className="obsidian-file-icon" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M4.25 2A2.25 2.25 0 002 4.25v11.5A2.25 2.25 0 004.25 18h11.5A2.25 2.25 0 0018 15.75V4.25A2.25 2.25 0 0015.75 2H4.25zM15 5.75a.75.75 0 00-1.5 0v8.5a.75.75 0 001.5 0v-8.5zm-8.5 6a.75.75 0 000 1.5h3a.75.75 0 000-1.5h-3zm-.75-2.25a.75.75 0 01.75-.75h3a.75.75 0 010 1.5h-3a.75.75 0 01-.75-.75zM6 6.75a.75.75 0 00-.75.75v3a.75.75 0 001.5 0v-3A.75.75 0 006 6.75zM10 6a.75.75 0 01.75.75v3a.75.75 0 01-1.5 0v-3A.75.75 0 0110 6z" clipRule="evenodd" />
-          </svg>
-        ) : tab.name.endsWith('.json') ? (
-          <svg className="obsidian-file-icon" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M3 4a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm2 2V5h1v1H5zM3 13a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1H4a1 1 0 01-1-1v-3zm2 2v-1h1v1H5zM13 3a1 1 0 00-1 1v3a1 1 0 001 1h3a1 1 0 001-1V4a1 1 0 00-1-1h-3zm1 2v1h1V5h-1z" clipRule="evenodd" />
-          </svg>
-        ) : (
-          <svg className="obsidian-file-icon" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
-          </svg>
-        )}
+        <ColoredFileIcon
+          fileName={tab.name}
+          isDirectory={false}
+          className="obsidian-file-icon"
+          showChevron={false}
+        />
         <span className="truncate flex-1 text-sm font-medium">
           {tab.name.replace(/\.(md|txt|json|js|jsx|ts|tsx|py|html|css|canvas)$/, "") || tab.name}
         </span>

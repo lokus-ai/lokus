@@ -31,7 +31,8 @@ import {
   File,
   Target,
   Globe,
-  Database
+  Database,
+  Calendar
 } from 'lucide-react'
 import { getActiveShortcuts, formatAccelerator } from '../core/shortcuts/registry'
 import { useCommandHistory, createFileHistoryItem, createCommandHistoryItem } from '../hooks/useCommandHistory.js'
@@ -44,23 +45,24 @@ import { useFolderScope } from '../contexts/FolderScopeContext'
 import { useBases } from '../bases/BasesContext.jsx'
 import FolderSelector from './FolderSelector.jsx'
 
-export default function CommandPalette({ 
-  open, 
-  setOpen, 
-  fileTree = [], 
-  openFiles = [], 
-  onFileOpen, 
-  onCreateFile, 
-  onCreateFolder, 
-  onSave, 
-  onOpenPreferences, 
-  onToggleSidebar, 
+export default function CommandPalette({
+  open,
+  setOpen,
+  fileTree = [],
+  openFiles = [],
+  onFileOpen,
+  onCreateFile,
+  onCreateFolder,
+  onSave,
+  onOpenPreferences,
+  onToggleSidebar,
   onCloseTab,
   onOpenGraph,
   onOpenGmail,
   onShowTemplatePicker,
   onCreateTemplate,
-  activeFile 
+  onOpenDailyNote,
+  activeFile
 }) {
   const [shortcuts, setShortcuts] = useState({})
   const [recentFiles, setRecentFiles] = useState([])
@@ -1221,6 +1223,11 @@ Best regards,
             <FolderPlus className="mr-2 h-4 w-4" />
             <span>New Folder</span>
             <CommandShortcut>{formatAccelerator(shortcuts['new-folder'])}</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommandWithHistory(onOpenDailyNote, 'Open Daily Note')}>
+            <Calendar className="mr-2 h-4 w-4" />
+            <span>Open Daily Note</span>
+            <CommandShortcut>{formatAccelerator(shortcuts['daily-note'])}</CommandShortcut>
           </CommandItem>
           {activeFile && (
             <>

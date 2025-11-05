@@ -5,7 +5,8 @@ import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar } from "lucide-react";
+import { ColoredFileIcon } from "../components/FileIcon.jsx";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
 import Editor from "../editor";
@@ -41,11 +42,12 @@ import PluginDetail from "./PluginDetail.jsx";
 import { canvasManager } from "../core/canvas/manager.js";
 import TemplatePicker from "../components/TemplatePicker.jsx";
 import { getMarkdownCompiler } from "../core/markdown/compiler.js";
+import dailyNotesManager from "../core/daily-notes/manager.js";
 import CreateTemplate from "../components/CreateTemplate.jsx";
 import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
 import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
 import SplitEditor from "../components/SplitEditor/SplitEditor.jsx";
-import { getFilename, getBasename } from '../utils/pathUtils.js';
+import { getFilename, getBasename, joinPath } from '../utils/pathUtils.js';
 import platformService from "../services/platform/PlatformService.js";
 import Gmail from "./Gmail.jsx";
 import { gmailAuth, gmailEmails } from '../services/gmail.js';
@@ -56,6 +58,7 @@ import DocumentOutline from "../components/DocumentOutline.jsx";
 import GraphSidebar from "../components/GraphSidebar.jsx";
 import VersionHistoryPanel from "../components/VersionHistoryPanel.jsx";
 import BacklinksPanel from "./BacklinksPanel.jsx";
+import { DailyNotesPanel, NavigationButtons, DatePickerModal } from "../components/DailyNotes/index.js";
 
 const MAX_OPEN_TABS = 10;
 
@@ -458,11 +461,13 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
             onAction={handleFileContextAction}
           >
             <button {...listeners} {...attributes} onClick={handleClick} className={`${baseClasses} ${stateClasses} ${dropTargetClasses} ${draggingClasses}`}>
-              {entry.is_directory ? (
-                <Icon path={isExpanded ? "M19.5 8.25l-7.5 7.5-7.5-7.5" : "M8.25 4.5l7.5 7.5-7.5 7.5"} className="obsidian-file-icon" />
-              ) : (
-                <Icon path="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" className="obsidian-file-icon" />
-              )}
+              <ColoredFileIcon
+                fileName={entry.name}
+                isDirectory={entry.is_directory}
+                isExpanded={isExpanded}
+                className="obsidian-file-icon"
+                showChevron={true}
+              />
               {renamingPath === entry.path && entry.is_directory ? (
                 <InlineRenameInput
                   initialValue={entry.name}
@@ -829,6 +834,9 @@ function WorkspaceWithScope({ path }) {
   const [showGmail, setShowGmail] = useState(false);
   // Graph view now opens as a tab instead of sidebar panel
   const [showGraphView, setShowGraphView] = useState(false);
+  const [showDailyNotesPanel, setShowDailyNotesPanel] = useState(false);
+  const [showDatePickerModal, setShowDatePickerModal] = useState(false);
+  const [currentDailyNoteDate, setCurrentDailyNoteDate] = useState(null);
   const [graphData, setGraphData] = useState(null);
   const [isLoadingGraph, setIsLoadingGraph] = useState(false);
 
@@ -2035,6 +2043,69 @@ function WorkspaceWithScope({ path }) {
     }
   };
 
+  const handleOpenDailyNote = async () => {
+    try {
+      const result = await dailyNotesManager.openToday();
+      const fileName = result.path.split('/').pop();
+
+      handleFileOpen({
+        path: result.path,
+        name: fileName,
+        is_directory: false
+      });
+
+      if (result.created) {
+        handleRefreshFiles();
+      }
+    } catch (error) {
+      console.error('Failed to open daily note:', error);
+    }
+  };
+
+  const handleOpenDailyNoteByDate = async (date) => {
+    try {
+      const result = await dailyNotesManager.openDate(date);
+      const fileName = result.path.split('/').pop();
+
+      handleFileOpen({
+        path: result.path,
+        name: fileName,
+        is_directory: false
+      });
+
+      if (result.created) {
+        handleRefreshFiles();
+      }
+
+      setShowDatePickerModal(false);
+    } catch (error) {
+      console.error('Failed to open daily note:', error);
+    }
+  };
+
+  // Check if a file path is a daily note
+  const isDailyNotePath = (filePath) => {
+    if (!filePath || !path) return false;
+
+    const config = dailyNotesManager.getConfig();
+    const dailyNotesFolder = joinPath(path, config.folder);
+
+    return filePath.startsWith(dailyNotesFolder) && filePath.endsWith('.md');
+  };
+
+  // Extract date from daily note filename
+  const getDailyNoteDate = (filePath) => {
+    if (!isDailyNotePath(filePath)) return null;
+
+    try {
+      const fileName = filePath.split('/').pop().replace('.md', '');
+      const date = dailyNotesManager.parseDate(fileName);
+      return date;
+    } catch (error) {
+      return null;
+    }
+  };
+
   const handleCreateFolder = () => {
     setIsCreatingFolder(true);
   };
@@ -2225,6 +2296,23 @@ function WorkspaceWithScope({ path }) {
       initializeGraphProcessor();
     }
   }, [path, initializeGraphProcessor]);
+
+  // Initialize daily notes manager when workspace path changes
+  useEffect(() => {
+    if (path) {
+      dailyNotesManager.init(path);
+    }
+  }, [path]);
+
+  // Detect if current file is a daily note and extract date
+  useEffect(() => {
+    if (activeFile && path) {
+      const noteDate = getDailyNoteDate(activeFile);
+      setCurrentDailyNoteDate(noteDate);
+    } else {
+      setCurrentDailyNoteDate(null);
+    }
+  }, [activeFile, path]);
 
   // Build graph data when files change
   useEffect(() => {
@@ -2474,6 +2562,7 @@ function WorkspaceWithScope({ path }) {
     }));
     const unlistenRefreshFiles = isTauri ? listen("lokus:refresh-files", handleRefreshFiles) : Promise.resolve(addDom('lokus:refresh-files', handleRefreshFiles));
     const unlistenNewCanvas = isTauri ? listen("lokus:new-canvas", handleCreateCanvas) : Promise.resolve(addDom('lokus:new-canvas', handleCreateCanvas));
+    const unlistenDailyNote = isTauri ? listen("lokus:daily-note", handleOpenDailyNote) : Promise.resolve(addDom('lokus:daily-note', handleOpenDailyNote));
     // unlistenOpenKanban removed - no longer using FullKanban
     const unlistenReopenClosedTab = isTauri ? listen("lokus:reopen-closed-tab", handleReopenClosedTab) : Promise.resolve(addDom('lokus:reopen-closed-tab', handleReopenClosedTab));
     
@@ -2774,6 +2863,7 @@ function WorkspaceWithScope({ path }) {
       unlistenShortcutHelp.then(f => { if (typeof f === 'function') f(); });
       unlistenRefreshFiles.then(f => { if (typeof f === 'function') f(); });
       unlistenNewCanvas.then(f => { if (typeof f === 'function') f(); });
+      unlistenDailyNote.then(f => { if (typeof f === 'function') f(); });
       unlistenReopenClosedTab.then(f => { if (typeof f === 'function') f(); });
       unlistenToggleSplitView.then(f => { if (typeof f === 'function') f(); });
       unlistenToggleSplitDirection.then(f => { if (typeof f === 'function') f(); });
@@ -3161,6 +3251,26 @@ function WorkspaceWithScope({ path }) {
             >
               <Network className="w-5 h-5" />
             </button>
+
+            <button
+              onClick={() => {
+                setShowDailyNotesPanel(!showDailyNotesPanel);
+                setShowRight(true);
+                setShowVersionHistory(false);
+              }}
+              title="Daily Notes"
+              className={`obsidian-button icon-only w-full mb-1 ${showDailyNotesPanel ? 'active' : ''}`}
+              onMouseEnter={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = 'rgb(var(--accent))';
+              }}
+              onMouseLeave={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = showDailyNotesPanel ? 'rgb(var(--accent))' : '';
+              }}
+            >
+              <Calendar className="w-5 h-5" style={showDailyNotesPanel ? { color: 'rgb(var(--accent))' } : {}} />
+            </button>
             
             <button
               onClick={handleOpenGmail}
@@ -3246,6 +3356,10 @@ function WorkspaceWithScope({ path }) {
                   <ContextMenuItem onClick={handleCreateFolder}>
                     New Folder
                     <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-folder'])}</span>
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={handleOpenDailyNote}>
+                    Open Daily Note
+                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['daily-note'])}</span>
                   </ContextMenuItem>
                   <ContextMenuSeparator />
                   <ContextMenuItem onClick={handleRefreshFiles}>Refresh</ContextMenuItem>
@@ -3687,7 +3801,7 @@ function WorkspaceWithScope({ path }) {
         {showRight && <div onMouseDown={startRightDrag} className="cursor-col-resize bg-app-border hover:bg-app-accent transition-colors duration-300 w-1 min-h-full" />}
         {showRight && (
           <aside className="overflow-y-auto flex flex-col bg-app-panel border-l border-app-border" style={{ width: `${rightW}px` }}>
-            {/* Show VersionHistory, GraphSidebar, or DocumentOutline */}
+            {/* Show VersionHistory, GraphSidebar, DailyNotesPanel, or DocumentOutline */}
             <div className="flex-1 overflow-hidden">
               {showVersionHistory ? (
                 <VersionHistoryPanel
@@ -3696,6 +3810,12 @@ function WorkspaceWithScope({ path }) {
                   filePath={activeFile}
                   onClose={() => setShowVersionHistory(false)}
                   onRestore={reloadCurrentFile}
+                />
+              ) : showDailyNotesPanel ? (
+                <DailyNotesPanel
+                  workspacePath={path}
+                  onOpenDailyNote={handleOpenDailyNoteByDate}
+                  currentDate={currentDailyNoteDate}
                 />
               ) : activeFile === '__graph__' ? (
                 <GraphSidebar
@@ -3942,6 +4062,7 @@ function WorkspaceWithScope({ path }) {
         }}
         onCreateTemplate={handleCreateTemplate}
         onOpenGmail={handleOpenGmail}
+        onOpenDailyNote={handleOpenDailyNote}
         activeFile={activeFile}
       />
       
@@ -3992,7 +4113,15 @@ function WorkspaceWithScope({ path }) {
         initialContent={createTemplateContent}
         onSaved={handleCreateTemplateSaved}
       />
-      
+
+      {/* Date Picker Modal for Daily Notes */}
+      <DatePickerModal
+        isOpen={showDatePickerModal}
+        onClose={() => setShowDatePickerModal(false)}
+        onDateSelect={handleOpenDailyNoteByDate}
+        workspacePath={path}
+      />
+
       {/* Pluginable Status Bar - replaces the old Obsidian status bar */}
       <StatusBar 
         activeFile={activeFile} 

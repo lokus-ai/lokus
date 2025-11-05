@@ -52,14 +52,12 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
     if (!editor) return null;
 
     const {wordCount, charCount} = countFinder(editor);
-  
+
     const minutes = wordCount ? Math.max(1, Math.ceil(wordCount / readingSpeed)) : 0;
 
     return {wordCount, charCount, minutes };
-    
-  }, [editor?.state?.doc, readingSpeed]);
 
-  if (!stats) return null;
+  }, [editor?.state?.doc, readingSpeed]);
 
   // DEBUG: Log status bar items
 
