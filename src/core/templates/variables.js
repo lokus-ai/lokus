@@ -1,13 +1,19 @@
 /**
  * Built-in Variables Registry
- * 
+ *
  * Defines built-in template variables that are automatically available
  * in all templates without needing to be explicitly provided
+ *
+ * Enhanced with date-fns for powerful date manipulation
  */
+
+import { dateHelpers } from './dates.js';
+import { format } from 'date-fns';
 
 export class BuiltinVariables {
   constructor() {
     this.variables = new Map();
+    this.dateHelpers = dateHelpers;
     this.initializeBuiltins();
   }
 
@@ -15,26 +21,62 @@ export class BuiltinVariables {
    * Initialize built-in variables
    */
   initializeBuiltins() {
-    // Date/Time variables
+    // ========================================
+    // Basic Date/Time variables (backward compatible)
+    // ========================================
     this.register('date', () => new Date().toLocaleDateString());
     this.register('time', () => new Date().toLocaleTimeString());
     this.register('datetime', () => new Date().toLocaleString());
     this.register('timestamp', () => Date.now());
-    this.register('isodate', () => new Date().toISOString().split('T')[0]);
+    this.register('isodate', () => format(new Date(), 'yyyy-MM-dd'));
     this.register('isotime', () => new Date().toISOString());
-    
+
     // Date formatting variants
-    this.register('date.short', () => new Date().toLocaleDateString('en-US', { 
-      month: 'short', day: 'numeric', year: 'numeric' 
-    }));
-    this.register('date.long', () => new Date().toLocaleDateString('en-US', { 
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
-    }));
-    this.register('date.year', () => new Date().getFullYear());
+    this.register('date.short', () => format(new Date(), 'MMM d, yyyy'));
+    this.register('date.long', () => format(new Date(), 'EEEE, MMMM d, yyyy'));
+    this.register('date.year', () => format(new Date(), 'yyyy'));
     this.register('date.month', () => new Date().getMonth() + 1);
-    this.register('date.day', () => new Date().getDate());
-    this.register('date.weekday', () => new Date().toLocaleDateString('en-US', { weekday: 'long' }));
-    
+    this.register('date.day', () => format(new Date(), 'd'));
+    this.register('date.weekday', () => format(new Date(), 'EEEE'));
+
+    // ========================================
+    // Enhanced Date/Time variables (date-fns powered)
+    // ========================================
+
+    // Relative dates
+    this.register('date.tomorrow', () => format(dateHelpers.tomorrow(), 'yyyy-MM-dd'));
+    this.register('date.yesterday', () => format(dateHelpers.yesterday(), 'yyyy-MM-dd'));
+    this.register('date.nextWeek', () => format(dateHelpers.nextWeek(), 'yyyy-MM-dd'));
+    this.register('date.lastWeek', () => format(dateHelpers.lastWeek(), 'yyyy-MM-dd'));
+    this.register('date.nextMonth', () => format(dateHelpers.nextMonth(), 'yyyy-MM-dd'));
+    this.register('date.lastMonth', () => format(dateHelpers.lastMonth(), 'yyyy-MM-dd'));
+
+    // Start/End of periods
+    this.register('date.startOfWeek', () => format(dateHelpers.startOfWeek(), 'yyyy-MM-dd'));
+    this.register('date.endOfWeek', () => format(dateHelpers.endOfWeek(), 'yyyy-MM-dd'));
+    this.register('date.startOfMonth', () => format(dateHelpers.startOfMonth(), 'yyyy-MM-dd'));
+    this.register('date.endOfMonth', () => format(dateHelpers.endOfMonth(), 'yyyy-MM-dd'));
+    this.register('date.startOfYear', () => format(dateHelpers.startOfYear(), 'yyyy-MM-dd'));
+    this.register('date.endOfYear', () => format(dateHelpers.endOfYear(), 'yyyy-MM-dd'));
+
+    // Weekday helpers
+    this.register('date.nextMonday', () => format(dateHelpers.nextMonday(), 'yyyy-MM-dd'));
+    this.register('date.nextFriday', () => format(dateHelpers.nextFriday(), 'yyyy-MM-dd'));
+    this.register('date.previousMonday', () => format(dateHelpers.previousMonday(), 'yyyy-MM-dd'));
+
+    // Common date formats
+    this.register('date.iso', () => format(new Date(), 'yyyy-MM-dd'));
+    this.register('date.us', () => format(new Date(), 'MM/dd/yyyy'));
+    this.register('date.uk', () => format(new Date(), 'dd/MM/yyyy'));
+    this.register('date.full', () => format(new Date(), 'EEEE, MMMM do, yyyy'));
+    this.register('date.monthYear', () => format(new Date(), 'MMMM yyyy'));
+    this.register('date.quarter', () => `Q${dateHelpers.getQuarter()}`);
+    this.register('date.week', () => `Week ${dateHelpers.getWeek()}`);
+
+    // Calendar utilities
+    this.register('date.daysInMonth', () => dateHelpers.getDaysInMonth());
+    this.register('date.isLeapYear', () => dateHelpers.isLeapYear());
+
     // User/System variables
     this.register('user', () => {
       try {
@@ -126,7 +168,7 @@ export class BuiltinVariables {
    */
   resolveAll(context = {}) {
     const resolved = {};
-    
+
     for (const [name, variable] of this.variables) {
       try {
         resolved[name] = variable.resolver(context);
@@ -134,8 +176,16 @@ export class BuiltinVariables {
         resolved[name] = undefined;
       }
     }
-    
+
     return resolved;
+  }
+
+  /**
+   * Get date helpers for advanced date manipulation
+   * This allows templates to access all date-fns functionality
+   */
+  getDateHelpers() {
+    return this.dateHelpers;
   }
 
   /**
@@ -201,18 +251,57 @@ export class BuiltinVariables {
 
   getDefaultDescription(name) {
     const descriptions = {
+      // Basic date/time
       'date': 'Current date in local format',
       'time': 'Current time in local format',
       'datetime': 'Current date and time in local format',
       'timestamp': 'Current Unix timestamp',
       'isodate': 'Current date in ISO format (YYYY-MM-DD)',
       'isotime': 'Current date and time in ISO format',
+
+      // Date formatting
       'date.short': 'Current date in short format (e.g., Jan 1, 2023)',
       'date.long': 'Current date in long format (e.g., Monday, January 1, 2023)',
       'date.year': 'Current year',
       'date.month': 'Current month (1-12)',
       'date.day': 'Current day of month',
       'date.weekday': 'Current day of the week',
+
+      // Relative dates
+      'date.tomorrow': 'Tomorrow\'s date (YYYY-MM-DD)',
+      'date.yesterday': 'Yesterday\'s date (YYYY-MM-DD)',
+      'date.nextWeek': 'Date one week from now (YYYY-MM-DD)',
+      'date.lastWeek': 'Date one week ago (YYYY-MM-DD)',
+      'date.nextMonth': 'Date one month from now (YYYY-MM-DD)',
+      'date.lastMonth': 'Date one month ago (YYYY-MM-DD)',
+
+      // Period boundaries
+      'date.startOfWeek': 'First day of current week (YYYY-MM-DD)',
+      'date.endOfWeek': 'Last day of current week (YYYY-MM-DD)',
+      'date.startOfMonth': 'First day of current month (YYYY-MM-DD)',
+      'date.endOfMonth': 'Last day of current month (YYYY-MM-DD)',
+      'date.startOfYear': 'First day of current year (YYYY-MM-DD)',
+      'date.endOfYear': 'Last day of current year (YYYY-MM-DD)',
+
+      // Weekday helpers
+      'date.nextMonday': 'Date of next Monday (YYYY-MM-DD)',
+      'date.nextFriday': 'Date of next Friday (YYYY-MM-DD)',
+      'date.previousMonday': 'Date of previous Monday (YYYY-MM-DD)',
+
+      // Common formats
+      'date.iso': 'Current date in ISO format (YYYY-MM-DD)',
+      'date.us': 'Current date in US format (MM/DD/YYYY)',
+      'date.uk': 'Current date in UK format (DD/MM/YYYY)',
+      'date.full': 'Current date in full format (e.g., Monday, January 1st, 2023)',
+      'date.monthYear': 'Current month and year (e.g., January 2023)',
+      'date.quarter': 'Current quarter (e.g., Q1)',
+      'date.week': 'Current week number (e.g., Week 15)',
+
+      // Calendar utilities
+      'date.daysInMonth': 'Number of days in current month',
+      'date.isLeapYear': 'Whether current year is a leap year',
+
+      // Other variables
       'user': 'Current username',
       'cursor': 'Cursor position placeholder',
       'selection': 'Selected text placeholder',
@@ -225,7 +314,7 @@ export class BuiltinVariables {
       'filename': 'Document filename',
       'filepath': 'Document file path'
     };
-    
+
     return descriptions[name] || `Built-in variable: ${name}`;
   }
 
