@@ -59,25 +59,34 @@ export class TemplateManager {
    * Create a new template
    */
   async create(templateData) {
+    console.log('[TemplateManager] Creating template:', templateData.name, templateData.id);
+
     const { id, name, content, category, tags, metadata } = templateData;
-    
+
     if (!id || !name || !content) {
       throw new Error('Template ID, name, and content are required');
     }
 
-    if (this.storage.has(id)) {
-      throw new Error(`Template with ID '${id}' already exists`);
+    // Check if template already exists
+    const existing = this.storage.has(id);
+    if (existing) {
+      console.log('[TemplateManager] Template already exists, will overwrite:', id);
+      // Don't throw error - allow overwrite (user confirmed in CreateTemplate)
+      // Instead, we'll update the existing template
     }
 
-    if (this.storage.size >= this.maxTemplates) {
+    if (!existing && this.storage.size >= this.maxTemplates) {
       throw new Error(`Maximum number of templates (${this.maxTemplates}) reached`);
     }
 
     // Validate template syntax
+    console.log('[TemplateManager] Validating template syntax...');
     const validation = this.parser.validate(content);
     if (!validation.valid) {
+      console.error('[TemplateManager] Invalid template syntax:', validation.errors);
       throw new Error(`Invalid template syntax: ${validation.errors.join(', ')}`);
     }
+    console.log('[TemplateManager] Template syntax is valid');
 
     const template = {
       id,
@@ -87,23 +96,31 @@ export class TemplateManager {
       tags: tags || [],
       metadata: {
         ...metadata,
-        createdAt: new Date().toISOString(),
+        createdAt: existing ? (this.storage.get(id)?.metadata?.createdAt || new Date().toISOString()) : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         version: metadata?.version || '1.0.0'
       },
       stats: this.parser.getStatistics(content)
     };
 
+    console.log('[TemplateManager] Adding template to storage...');
     this.storage.set(id, template);
+
+    console.log('[TemplateManager] Updating indexes...');
     this.updateCategoryIndex(template);
     this.updateTagIndex(template);
 
     // Auto-save if using file storage
     if (this.autoSave && this.useFileStorage) {
+      console.log('[TemplateManager] Auto-save enabled, saving to file...');
       // Save individual template as .md file
       await this.storageBackend.saveTemplate(template);
+      console.log('[TemplateManager] Template saved to file successfully');
+    } else {
+      console.log('[TemplateManager] Auto-save disabled or not using file storage');
     }
 
+    console.log('[TemplateManager] Template creation complete:', id);
     return template;
   }
 

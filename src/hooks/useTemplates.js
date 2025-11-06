@@ -56,14 +56,17 @@ export function useTemplates() {
   const loadTemplates = useCallback(async (options = {}) => {
     if (!manager) return { templates: [], total: 0 };
 
+    console.log('[useTemplates] Loading templates...');
     setLoading(true);
     setError(null);
 
     try {
       const result = manager.list(options);
+      console.log('[useTemplates] Loaded', result.templates.length, 'templates');
       setTemplates(result.templates);
       return result;
     } catch (err) {
+      console.error('[useTemplates] Load error:', err);
       setError(err.message);
       return { templates: [], total: 0 };
     } finally {
@@ -73,13 +76,22 @@ export function useTemplates() {
 
   // Create template
   const createTemplate = useCallback(async (templateData) => {
+    console.log('[useTemplates] Creating template:', templateData.name);
     setError(null);
-    
+
     try {
+      console.log('[useTemplates] Calling manager.create...');
       const template = await manager.create(templateData);
+      console.log('[useTemplates] Template created successfully:', template.id);
+
+      console.log('[useTemplates] Refreshing template list...');
       await loadTemplates(); // Refresh list
+      console.log('[useTemplates] Template list refreshed');
+
       return template;
     } catch (err) {
+      console.error('[useTemplates] Create error:', err);
+      console.error('[useTemplates] Error message:', err.message);
       setError(err.message);
       throw err;
     }

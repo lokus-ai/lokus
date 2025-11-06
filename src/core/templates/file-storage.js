@@ -40,8 +40,27 @@ export class FileBasedTemplateStorage {
    */
   async saveTemplate(template) {
     try {
+      console.log('[FileStorage] Saving template:', template.id, template.name);
+
+      // Validate template
+      if (!template.id) {
+        throw new Error('Template ID is required');
+      }
+      if (!template.name) {
+        throw new Error('Template name is required');
+      }
+
       const filename = this.generateFilename(template.id);
       const filepath = `${this.templateDir}/${filename}`;
+
+      console.log('[FileStorage] Target file path:', filepath);
+
+      // Ensure directory exists before writing
+      const dirExists = await exists(this.templateDir);
+      if (!dirExists) {
+        console.log('[FileStorage] Template directory does not exist, creating...');
+        await this.ensureTemplateDir();
+      }
 
       // Create frontmatter
       const frontmatter = this.createFrontmatter(template);
@@ -49,11 +68,22 @@ export class FileBasedTemplateStorage {
       // Combine frontmatter and content
       const fileContent = `---\n${frontmatter}---\n\n${template.content || ''}`;
 
+      console.log('[FileStorage] Writing file, content length:', fileContent.length);
+
       // Write to file
       await writeTextFile(filepath, fileContent);
 
+      // Verify file was written
+      const fileExists = await exists(filepath);
+      if (!fileExists) {
+        throw new Error('File write succeeded but file does not exist');
+      }
+
+      console.log('[FileStorage] File written successfully:', filepath);
+
       // Update cache
       this.cache.set(template.id, template);
+      console.log('[FileStorage] Cache updated, total templates:', this.cache.size);
 
       return {
         success: true,
@@ -61,8 +91,11 @@ export class FileBasedTemplateStorage {
         id: template.id
       };
     } catch (error) {
-      console.error('[FileStorage] Save error:', error);
-      throw new Error(`Failed to save template: ${error.message}`);
+      console.error('[FileStorage] Save error for template:', template?.id, template?.name);
+      console.error('[FileStorage] Error details:', error);
+      console.error('[FileStorage] Error message:', error.message);
+      console.error('[FileStorage] Stack trace:', error.stack);
+      throw new Error(`Failed to save template "${template?.name || template?.id}": ${error.message}`);
     }
   }
 
