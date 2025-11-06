@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Eye, FileText, Tag, Folder, X } from 'lucide-react';
+import { Save, Eye, FileText, Tag, Folder, X, AlertCircle } from 'lucide-react';
 import { useTemplates } from '../hooks/useTemplates.js';
 import { getMarkdownCompiler } from '../core/markdown/compiler.js';
+import { htmlToMarkdown } from '../core/templates/html-to-markdown.js';
 import {
   Dialog,
   DialogContent,
@@ -11,13 +12,13 @@ import {
 } from './ui/dialog.jsx';
 import platformService from '../services/platform/PlatformService.js';
 
-export default function CreateTemplate({ 
-  open, 
-  onClose, 
+export default function CreateTemplate({
+  open,
+  onClose,
   initialContent = '',
-  onSaved 
+  onSaved
 }) {
-  const { createTemplate, getCategories } = useTemplates();
+  const { createTemplate, getCategories, templates } = useTemplates();
   const [name, setName] = useState('');
   const [category, setCategory] = useState('Personal');
   const [tags, setTags] = useState('');
@@ -25,6 +26,7 @@ export default function CreateTemplate({
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState([]);
+  const [duplicateWarning, setDuplicateWarning] = useState(false);
 
   // Load categories
   useEffect(() => {
@@ -39,14 +41,34 @@ export default function CreateTemplate({
   // Reset form when opening
   useEffect(() => {
     if (open) {
-      setContent(initialContent);
+      // Convert HTML to Markdown if content looks like HTML
+      let processedContent = initialContent;
+      if (initialContent && (initialContent.includes('<') || initialContent.includes('>'))) {
+        console.log('[CreateTemplate] Converting HTML to Markdown');
+        processedContent = htmlToMarkdown.convert(initialContent);
+        console.log('[CreateTemplate] Converted content:', processedContent);
+      }
+
+      setContent(processedContent);
       setName('');
       setCategory('Personal');
       setTags('');
       setShowPreview(false);
       setSaving(false);
+      setDuplicateWarning(false);
     }
   }, [open, initialContent]);
+
+  // Check for duplicate template names
+  useEffect(() => {
+    if (name.trim() && templates.length > 0) {
+      const templateId = generateId(name);
+      const exists = templates.some(t => t.id === templateId);
+      setDuplicateWarning(exists);
+    } else {
+      setDuplicateWarning(false);
+    }
+  }, [name, templates]);
 
   // Generate template preview
   const getPreview = () => {
@@ -75,12 +97,23 @@ export default function CreateTemplate({
       return;
     }
 
+    const templateId = generateId(name);
+
+    // Check for duplicate and confirm overwrite
+    if (duplicateWarning) {
+      const confirmed = confirm(
+        `A template named "${name}" already exists. This will overwrite the existing template file. Continue?`
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
     setSaving(true);
-    
+
     try {
-      const templateId = generateId(name);
       const tagArray = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
-      
+
       const templateData = {
         id: templateId,
         name: name.trim(),
@@ -94,7 +127,7 @@ export default function CreateTemplate({
       };
 
       await createTemplate(templateData);
-      
+
       onSaved?.();
       onClose?.();
     } catch (err) {
@@ -130,8 +163,18 @@ export default function CreateTemplate({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Daily Standup Notes"
-                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md outline-none focus:ring-2 focus:ring-app-accent/40"
+                className={`w-full px-3 py-2 bg-app-bg border rounded-md outline-none focus:ring-2 ${
+                  duplicateWarning
+                    ? 'border-yellow-500 focus:ring-yellow-500/40'
+                    : 'border-app-border focus:ring-app-accent/40'
+                }`}
               />
+              {duplicateWarning && (
+                <div className="flex items-center gap-2 mt-2 text-sm text-yellow-500">
+                  <AlertCircle className="h-4 w-4" />
+                  <span>A template with this name already exists and will be overwritten</span>
+                </div>
+              )}
             </div>
 
             {/* Category & Tags */}
@@ -231,7 +274,8 @@ Add your template content here. Use {{variable}} for dynamic values.`}
         {/* Footer */}
         <div className="flex justify-between items-center pt-4 border-t border-app-border">
           <div className="text-sm text-app-muted">
-            Template will be available in Command Palette ({platformService.getModifierSymbol()}+K)
+            <div>Template will be available in Command Palette ({platformService.getModifierSymbol()}+K)</div>
+            <div className="text-xs mt-1">Saved as markdown in templates folder • HTML automatically converted</div>
           </div>
           
           <div className="flex gap-2">
@@ -244,10 +288,23 @@ Add your template content here. Use {{variable}} for dynamic values.`}
             <button
               onClick={handleSave}
               disabled={saving || !name.trim() || !content.trim()}
-              className="flex items-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg rounded-md hover:bg-app-accent/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                duplicateWarning
+                  ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                  : 'bg-app-accent text-app-accent-fg hover:bg-app-accent/80'
+              }`}
             >
-              <Save className="h-4 w-4" />
-              {saving ? 'Saving...' : 'Save Template'}
+              {duplicateWarning ? (
+                <>
+                  <AlertCircle className="h-4 w-4" />
+                  {saving ? 'Overwriting...' : 'Overwrite Template'}
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  {saving ? 'Saving...' : 'Save Template'}
+                </>
+              )}
             </button>
           </div>
         </div>
