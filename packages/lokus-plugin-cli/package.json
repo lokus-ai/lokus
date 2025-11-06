@@ -2,13 +2,17 @@
   "name": "lokus-plugin-cli",
   "version": "2.1.0",
   "description": "Advanced CLI toolkit for developing Lokus plugins with interactive templates, hot-reload, and comprehensive tooling",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
-    "lokus-plugin": "index.js"
+    "lokus-plugin": "./dist/index.js"
   },
   "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "dev": "npm run build:watch",
     "test": "echo \"No tests yet\"",
-    "prepublishOnly": "node index.js --help"
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "lokus",
@@ -81,7 +85,9 @@
     "prettier": "^3.0.3"
   },
   "files": [
-    "index.js",
-    "README.md"
+    "dist/",
+    "templates/",
+    "README.md",
+    "LICENSE"
   ]
 }
