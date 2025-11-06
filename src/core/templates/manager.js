@@ -1,22 +1,58 @@
 /**
  * Template Manager
- * 
+ *
  * Manages template CRUD operations, storage, and organization
  */
 
 import { TemplateParser } from './parser.js';
-import { TemplateProcessor } from './processor.js';
+import { TemplateProcessor } from './processor-integrated.js';
+import { TemplateStorage } from './storage.js';
+import { FileBasedTemplateStorage } from './file-storage.js';
+import { TemplateInclusion } from './inclusion.js';
 
 export class TemplateManager {
   constructor(options = {}) {
-    this.storage = options.storage || new Map();
+    // Support both in-memory Map and file-based storage
+    this.storageBackend = (options.storage instanceof TemplateStorage || options.storage instanceof FileBasedTemplateStorage)
+      ? options.storage
+      : (options.storage || new Map());
+
+    this.useFileStorage = (this.storageBackend instanceof TemplateStorage || this.storageBackend instanceof FileBasedTemplateStorage);
+    this.storage = this.useFileStorage ? this.storageBackend.getCache() : this.storageBackend;
+
     this.parser = new TemplateParser();
     this.processor = new TemplateProcessor(options.processor);
+    this.inclusion = new TemplateInclusion({
+      templateManager: this,
+      ...options.inclusion
+    });
+
     this.categories = new Map();
     this.tags = new Map();
     this.maxTemplates = options.maxTemplates || 1000;
-    
+    this.autoSave = options.autoSave !== false;
+
     this.initializeDefaultCategories();
+  }
+
+  /**
+   * Initialize the template manager (load from file if using file storage)
+   */
+  async initialize() {
+    if (this.useFileStorage) {
+      await this.storageBackend.initialize();
+      const result = await this.storageBackend.load();
+      this.storage = result.templates;
+
+      // Rebuild indexes
+      for (const template of this.storage.values()) {
+        this.updateCategoryIndex(template);
+        this.updateTagIndex(template);
+      }
+
+      return result;
+    }
+    return { success: true, count: this.storage.size };
   }
 
   /**
@@ -61,6 +97,12 @@ export class TemplateManager {
     this.storage.set(id, template);
     this.updateCategoryIndex(template);
     this.updateTagIndex(template);
+
+    // Auto-save if using file storage
+    if (this.autoSave && this.useFileStorage) {
+      // Save individual template as .md file
+      await this.storageBackend.saveTemplate(template);
+    }
 
     return template;
   }
@@ -115,13 +157,19 @@ export class TemplateManager {
     this.updateCategoryIndex(updated);
     this.updateTagIndex(updated);
 
+    // Auto-save if using file storage
+    if (this.autoSave && this.useFileStorage) {
+      // Save individual template as .md file
+      await this.storageBackend.saveTemplate(updated);
+    }
+
     return updated;
   }
 
   /**
    * Delete template
    */
-  delete(id) {
+  async delete(id) {
     const template = this.storage.get(id);
     if (!template) {
       return false;
@@ -129,7 +177,15 @@ export class TemplateManager {
 
     this.removeCategoryIndex(template);
     this.removeTagIndex(template);
-    return this.storage.delete(id);
+    const result = this.storage.delete(id);
+
+    // Delete .md file if using file storage
+    if (this.autoSave && this.useFileStorage && result) {
+      // Delete individual template .md file
+      await this.storageBackend.deleteTemplate(id);
+    }
+
+    return result;
   }
 
   /**
@@ -194,14 +250,22 @@ export class TemplateManager {
    * Process template with variables
    */
   async process(id, variables = {}, options = {}) {
-    
     const template = this.storage.get(id);
     if (!template) {
       throw new Error(`Template '${id}' not found`);
     }
 
-    
-    return await this.processor.process(template.content, variables, options);
+    // First process template inclusions
+    let content = template.content;
+    if (options.processIncludes !== false && this.inclusion.hasIncludes(content)) {
+      content = await this.inclusion.process(content, variables, {
+        depth: 0,
+        includeChain: [id]
+      });
+    }
+
+    // Then process variables and JavaScript blocks
+    return await this.processor.process(content, variables, options);
   }
 
   /**
@@ -361,11 +425,16 @@ export class TemplateManager {
   /**
    * Clear all templates
    */
-  clear() {
+  async clear() {
     this.storage.clear();
     this.categories.clear();
     this.tags.clear();
     this.initializeDefaultCategories();
+
+    // Save cleared state if using file storage
+    if (this.useFileStorage) {
+      await this.storageBackend.clear();
+    }
   }
 
   /**
@@ -373,6 +442,175 @@ export class TemplateManager {
    */
   size() {
     return this.storage.size;
+  }
+
+  /**
+   * Manually save templates (useful when autoSave is disabled)
+   */
+  async save() {
+    if (this.useFileStorage) {
+      return await this.storageBackend.save(this.storage);
+    }
+    return { success: true, count: this.storage.size };
+  }
+
+  /**
+   * Create backup of current templates
+   */
+  async backup() {
+    if (this.useFileStorage) {
+      return await this.storageBackend.backup();
+    }
+    throw new Error('Backup only available with file-based storage');
+  }
+
+  /**
+   * Restore templates from backup
+   */
+  async restore(backupFilename) {
+    if (!this.useFileStorage) {
+      throw new Error('Restore only available with file-based storage');
+    }
+
+    const result = await this.storageBackend.restore(backupFilename);
+    this.storage = this.storageBackend.getCache();
+
+    // Rebuild indexes
+    this.categories.clear();
+    this.tags.clear();
+    this.initializeDefaultCategories();
+
+    for (const template of this.storage.values()) {
+      this.updateCategoryIndex(template);
+      this.updateTagIndex(template);
+    }
+
+    return result;
+  }
+
+  /**
+   * List available backups
+   */
+  async listBackups() {
+    if (this.useFileStorage) {
+      return await this.storageBackend.listBackups();
+    }
+    return [];
+  }
+
+  /**
+   * Migrate from in-memory to file-based storage
+   */
+  async migrateToFileStorage(storageBackend) {
+    if (!(storageBackend instanceof TemplateStorage)) {
+      throw new Error('Invalid storage backend provided');
+    }
+
+    // Save current templates to file
+    await storageBackend.initialize();
+    const result = await storageBackend.migrate(this.storage);
+
+    // Switch to file-based storage
+    this.storageBackend = storageBackend;
+    this.useFileStorage = true;
+
+    return result;
+  }
+
+  /**
+   * Export templates to external file
+   */
+  async exportToFile(exportPath) {
+    if (this.useFileStorage) {
+      return await this.storageBackend.export(this.storage, exportPath);
+    }
+
+    // For in-memory storage, return data without writing to file
+    const templatesArray = Array.from(this.storage.entries());
+    return {
+      success: true,
+      data: {
+        version: '1.0.0',
+        exportedAt: new Date().toISOString(),
+        templates: templatesArray.map(([id, template]) => ({ ...template, id })),
+        metadata: { count: templatesArray.length }
+      }
+    };
+  }
+
+  /**
+   * Import templates from external file
+   */
+  async importFromFile(importPath, options = {}) {
+    let importData;
+
+    if (this.useFileStorage) {
+      const result = await this.storageBackend.import(importPath);
+      importData = result.templates;
+    } else {
+      throw new Error('File import requires file-based storage backend');
+    }
+
+    const { overwrite = false, category = 'imported' } = options;
+    const imported = [];
+    const errors = [];
+
+    for (const templateData of importData) {
+      try {
+        const importOptions = {
+          ...templateData,
+          category: templateData.category || category
+        };
+
+        if (this.storage.has(templateData.id) && !overwrite) {
+          errors.push(`Template '${templateData.id}' already exists`);
+          continue;
+        }
+
+        if (overwrite && this.storage.has(templateData.id)) {
+          await this.update(templateData.id, importOptions);
+        } else {
+          await this.create(importOptions);
+        }
+
+        imported.push(templateData.id);
+      } catch (error) {
+        errors.push(`Failed to import '${templateData.id}': ${error.message}`);
+      }
+    }
+
+    return {
+      success: errors.length === 0,
+      imported: imported.length,
+      errors,
+      importedIds: imported
+    };
+  }
+
+  /**
+   * Get storage statistics including backup info
+   */
+  async getStorageStatistics() {
+    const baseStats = this.getStatistics();
+
+    if (this.useFileStorage) {
+      const storageStats = await this.storageBackend.getStatistics();
+      return {
+        ...baseStats,
+        storage: {
+          type: 'file-based',
+          ...storageStats
+        }
+      };
+    }
+
+    return {
+      ...baseStats,
+      storage: {
+        type: 'in-memory',
+        templates: this.storage.size
+      }
+    };
   }
 
   // Private methods

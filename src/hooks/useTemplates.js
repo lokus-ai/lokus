@@ -1,16 +1,27 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { TemplateManager } from '../core/templates/manager.js';
+import { FileBasedTemplateStorage } from '../core/templates/file-storage.js';
 import { builtinVariables } from '../core/templates/variables.js';
 
 // Template manager singleton
 let templateManager = null;
+let templateStorage = null;
 
-function getTemplateManager() {
+async function getTemplateManager() {
   if (!templateManager) {
+    // Initialize file-based storage (stores templates as .md files)
+    templateStorage = new FileBasedTemplateStorage({
+      templateDir: '/Users/pratham/Desktop/My Knowledge Base/templates'
+    });
+    await templateStorage.initialize();
+
     templateManager = new TemplateManager({
-      storage: new Map(), // In-memory storage for now
+      storage: templateStorage,
       maxTemplates: 1000
     });
+
+    // Load existing templates from files
+    await templateManager.initialize();
   }
   return templateManager;
 }
@@ -20,15 +31,34 @@ function getTemplateManager() {
  */
 export function useTemplates() {
   const [templates, setTemplates] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const manager = useMemo(() => getTemplateManager(), []);
+  const [manager, setManager] = useState(null);
+
+  // Initialize manager
+  useEffect(() => {
+    let mounted = true;
+    getTemplateManager().then(mgr => {
+      if (mounted) {
+        setManager(mgr);
+        setLoading(false);
+      }
+    }).catch(err => {
+      if (mounted) {
+        setError(err.message);
+        setLoading(false);
+      }
+    });
+    return () => { mounted = false; };
+  }, []);
 
   // Load templates
   const loadTemplates = useCallback(async (options = {}) => {
+    if (!manager) return { templates: [], total: 0 };
+
     setLoading(true);
     setError(null);
-    
+
     try {
       const result = manager.list(options);
       setTemplates(result.templates);
@@ -240,14 +270,16 @@ This project is licensed under the MIT License.
     }
   }, [manager]);
 
-  // Load templates on mount
+  // Load templates on mount (after manager is initialized)
   useEffect(() => {
-    const init = async () => {
-      await initializeDemoTemplates();
-      await loadTemplates();
-    };
-    init();
-  }, [initializeDemoTemplates, loadTemplates]);
+    if (manager) {
+      const init = async () => {
+        await initializeDemoTemplates();
+        await loadTemplates();
+      };
+      init();
+    }
+  }, [manager, initializeDemoTemplates, loadTemplates]);
 
   return {
     templates,
@@ -275,19 +307,32 @@ export function useTemplateProcessor() {
   const [processing, setProcessing] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [error, setError] = useState(null);
-  const manager = useMemo(() => getTemplateManager(), []);
+  const [manager, setManager] = useState(null);
+
+  // Initialize manager
+  useEffect(() => {
+    let mounted = true;
+    getTemplateManager().then(mgr => {
+      if (mounted) setManager(mgr);
+    }).catch(err => {
+      if (mounted) setError(err.message);
+    });
+    return () => { mounted = false; };
+  }, []);
 
   // Process template with variables
   const process = useCallback(async (templateId, variables = {}, options = {}) => {
+    if (!manager) throw new Error('Template manager not initialized');
+
     setProcessing(true);
     setError(null);
-    
+
     try {
       // Merge with built-in variables
       const builtins = builtinVariables.resolveAll(options.context || {});
       const allVariables = { ...builtins, ...variables };
-      
-      
+
+
       const result = await manager.process(templateId, allVariables, options);
       return result;
     } catch (err) {
@@ -300,14 +345,16 @@ export function useTemplateProcessor() {
 
   // Preview template processing
   const preview = useCallback(async (templateId, variables = {}, options = {}) => {
+    if (!manager) throw new Error('Template manager not initialized');
+
     setProcessing(true);
     setError(null);
-    
+
     try {
       // Merge with built-in variables
       const builtins = builtinVariables.resolveAll(options.context || {});
       const allVariables = { ...builtins, ...variables };
-      
+
       const result = await manager.preview(templateId, allVariables);
       setPreviewData(result);
       return result;
@@ -388,15 +435,26 @@ export function useBuiltinVariables() {
  * Hook for template validation
  */
 export function useTemplateValidation() {
-  const manager = useMemo(() => getTemplateManager(), []);
+  const [manager, setManager] = useState(null);
+
+  // Initialize manager
+  useEffect(() => {
+    let mounted = true;
+    getTemplateManager().then(mgr => {
+      if (mounted) setManager(mgr);
+    });
+    return () => { mounted = false; };
+  }, []);
 
   // Validate template content
   const validate = useCallback((content) => {
+    if (!manager) return { valid: false, errors: ['Manager not initialized'] };
     return manager.validate(content);
   }, [manager]);
 
   // Get template statistics
   const getStatistics = useCallback((content) => {
+    if (!manager) return {};
     return manager.parser.getStatistics(content);
   }, [manager]);
 
