@@ -2127,15 +2127,16 @@ function WorkspaceWithScope({ path }) {
       if (editorRef.current) {
         const { state } = editorRef.current;
         const { selection } = state;
-        
+
         // Check if there's a selection
         if (!selection.empty) {
-          // Get selected text
+          // Get selected text as plain text (not HTML)
           const selectedText = state.doc.textBetween(selection.from, selection.to);
           return selectedText;
         } else if (activeFile) {
-          // No selection, use current file content
-          const currentContent = editorRef.current.getHTML() || editorRef.current.getText() || stateRef.current.editorContent;
+          // No selection, use current file content (RAW MARKDOWN, not HTML)
+          // Use savedContent which contains the original markdown from the file
+          const currentContent = stateRef.current.savedContent || '';
           return currentContent;
         }
       }
@@ -2574,7 +2575,8 @@ function WorkspaceWithScope({ path }) {
     
     // Template picker event listener
     const handleTemplatePicker = (event) => {
-      setTemplatePickerData(event.detail);
+      const data = event?.detail || event;
+      setTemplatePickerData(data);
       setShowTemplatePicker(true);
     };
     const unlistenTemplatePicker = Promise.resolve(addDom('open-template-picker', handleTemplatePicker));
