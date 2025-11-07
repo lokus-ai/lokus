@@ -87,7 +87,7 @@ export class DocumentationGenerator {
         }
       }
     ], {
-      rendererOptions: { collapse: false }
+      rendererOptions: {}
     });
 
     await tasks.run();
@@ -739,7 +739,7 @@ document.addEventListener('DOMContentLoaded', initSearch);
         stdio: 'inherit'
       });
     } catch (error) {
-      logger.warning(`Failed to start server: ${error.message}`);
+      logger.warning(`Failed to start server: ${(error as Error).message}`);
       logger.info(`Serve manually with: npx http-server ${outputDir} -p ${port}`);
     }
   }
@@ -811,7 +811,7 @@ export const docsEnhancedCommand = new Command('docs')
       logger.info(`Documentation available at: ${chalk.cyan(path.resolve(cwd, outputDir))}`);
       
       if (options.serve) {
-        const port = parseInt(options.port || '8080');
+        const port = parseInt(String(options.port || '8080'));
         logger.info(`Server running at: ${chalk.cyan(`http://localhost:${port}`)}`);
       }
 

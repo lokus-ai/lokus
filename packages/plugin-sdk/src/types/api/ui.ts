@@ -3,7 +3,8 @@
  */
 
 import type { Disposable } from '../utilities.js'
-import type { Command, ThemeIcon } from './commands.js'
+import type { ThemeIcon } from './commands.js'
+import type { Command } from '../manifest.js'
 
 /**
  * UI API interface

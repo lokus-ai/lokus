@@ -12,7 +12,7 @@ import type {
   FileSystemAPI,
   NetworkAPI,
   StorageAPI,
-  EventAPI,
+  // EventAPI, // TODO: Create events.ts - EventAPI doesn't exist yet
   TaskAPI,
   DebugAPI,
   LanguageAPI,
@@ -523,15 +523,16 @@ export class MockStorageAPI implements StorageAPI {
   async clear() { this.storage.clear() }
 }
 
-export class MockEventAPI implements EventAPI {
+// TODO: EventAPI doesn't exist yet - remove implements clause
+export class MockEventAPI {
   private listeners = new Map<string, Function[]>()
-  
+
   on(event: string, handler: Function) {
     if (!this.listeners.has(event)) this.listeners.set(event, [])
     this.listeners.get(event)!.push(handler)
     return { dispose: () => this.off(event, handler) }
   }
-  
+
   off(event: string, handler: Function) {
     const handlers = this.listeners.get(event)
     if (handlers) {
@@ -539,7 +540,7 @@ export class MockEventAPI implements EventAPI {
       if (index >= 0) handlers.splice(index, 1)
     }
   }
-  
+
   emit(event: string, data?: any) {
     const handlers = this.listeners.get(event)
     if (handlers) {

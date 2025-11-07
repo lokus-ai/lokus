@@ -143,7 +143,7 @@ export class PluginPackager {
         }
       }
     ], {
-      rendererOptions: { collapse: false }
+      rendererOptions: {}
     });
 
     await tasks.run();
