@@ -6,7 +6,7 @@ import type { Plugin, PluginContext, LokusAPI, Disposable } from '../types/index
 import { DisposableStore } from './disposable-store.js'
 import { PluginLogger } from './plugin-logger.js'
 import { ConfigManager } from './config-manager.js'
-import { EventBus } from './event-bus.js'
+// import { EventBus } from './event-bus.js' // TODO: Implement EventBus
 
 /**
  * Abstract base plugin class with common functionality
@@ -16,7 +16,7 @@ export abstract class BasePlugin implements Plugin {
   protected api?: LokusAPI
   protected logger?: PluginLogger
   protected config?: ConfigManager
-  protected events?: EventBus
+  // protected events?: EventBus // TODO: Implement EventBus
   private disposables = new DisposableStore()
   private isActivated = false
 
@@ -51,8 +51,9 @@ export abstract class BasePlugin implements Plugin {
     this.addDisposable(this.config)
 
     // Initialize event bus
-    this.events = new EventBus()
-    this.addDisposable(this.events)
+    // TODO: Implement EventBus
+    // this.events = new EventBus()
+    // this.addDisposable(this.events)
 
     this.logger.info('Plugin services initialized')
   }
@@ -106,13 +107,14 @@ export abstract class BasePlugin implements Plugin {
 
   /**
    * Get event bus
+   * TODO: Implement EventBus
    */
-  protected getEvents(): EventBus {
-    if (!this.events) {
-      throw new Error('Plugin not initialized')
-    }
-    return this.events
-  }
+  // protected getEvents(): EventBus {
+  //   if (!this.events) {
+  //     throw new Error('Plugin not initialized')
+  //   }
+  //   return this.events
+  // }
 
   /**
    * Check if plugin is activated
@@ -130,13 +132,18 @@ export abstract class BasePlugin implements Plugin {
     when?: string
   }): void {
     const api = this.getAPI()
-    const disposable = api.commands.register({
+    const commandDef: any = {
       id,
       title: options?.title || id,
-      category: options?.category,
-      when: options?.when,
       handler
-    })
+    }
+    if (options?.category !== undefined) {
+      commandDef.category = options.category
+    }
+    if (options?.when !== undefined) {
+      commandDef.when = options.when
+    }
+    const disposable = api.commands.register(commandDef)
     this.addDisposable(disposable)
   }
 
@@ -145,7 +152,7 @@ export abstract class BasePlugin implements Plugin {
    */
   protected showNotification(message: string, type: 'info' | 'warning' | 'error' | 'success' = 'info'): void {
     const api = this.getAPI()
-    api.ui.showNotification(`[${this.context?.pluginId}] ${message}`, type)
+    api.ui.showNotification(`[${this.context?.pluginId}] ${message}`, type as any)
   }
 
   /**
@@ -306,7 +313,7 @@ export abstract class BasePlugin implements Plugin {
   /**
    * Get plugin statistics
    */
-  protected getStats(): PluginStats {
+  protected getStats(): BasePluginStats {
     return {
       pluginId: this.context?.pluginId || 'unknown',
       isActive: this.isActivated,
@@ -329,7 +336,7 @@ export abstract class BasePlugin implements Plugin {
 /**
  * Plugin statistics interface
  */
-export interface PluginStats {
+export interface BasePluginStats {
   pluginId: string
   isActive: boolean
   disposablesCount: number
@@ -349,12 +356,17 @@ export abstract class EnhancedBasePlugin extends BasePlugin {
    * Register command with palette integration
    */
   protected registerCommandWithPalette(definition: CommandPaletteEntry): void {
-    this.registerCommand(definition.id, definition.handler, {
-      title: definition.title,
-      category: definition.category,
-      when: definition.when
-    })
-    
+    const options: any = {
+      title: definition.title
+    }
+    if (definition.category !== undefined) {
+      options.category = definition.category
+    }
+    if (definition.when !== undefined) {
+      options.when = definition.when
+    }
+    this.registerCommand(definition.id, definition.handler, options)
+
     this.commandPalette.set(definition.id, definition)
   }
 
@@ -372,15 +384,20 @@ export abstract class EnhancedBasePlugin extends BasePlugin {
     }
   ): any {
     const api = this.getAPI()
-    const item = api.ui.registerStatusBarItem({
+    const itemDef: any = {
       id,
       text,
-      tooltip: options?.tooltip,
-      command: options?.command,
-      alignment: options?.alignment || 'left',
+      alignment: (options?.alignment === 'right' ? 2 : 1),
       priority: options?.priority || 100
-    })
-    
+    }
+    if (options?.tooltip !== undefined) {
+      itemDef.tooltip = options.tooltip
+    }
+    if (options?.command !== undefined) {
+      itemDef.command = options.command
+    }
+    const item = api.ui.registerStatusBarItem(itemDef)
+
     this.statusBarItems.set(id, item)
     this.addDisposable(item)
     return item
@@ -389,7 +406,7 @@ export abstract class EnhancedBasePlugin extends BasePlugin {
   /**
    * Show quick pick with custom options
    */
-  protected async showQuickPick<T extends QuickPickItem>(
+  protected async showQuickPick<T extends import('../types/api/ui.js').QuickPickItem>(
     items: T[],
     options?: {
       placeholder?: string
@@ -446,22 +463,13 @@ export interface CommandPaletteEntry {
 }
 
 /**
- * Quick pick item interface
- */
-export interface QuickPickItem {
-  label: string
-  description?: string
-  detail?: string
-  picked?: boolean
-}
-
-/**
  * Quick pick definition
+ * Note: QuickPickItem is imported from types/api/ui.ts
  */
 export interface QuickPickDefinition {
   id: string
   title: string
-  items: QuickPickItem[]
+  items: import('../types/api/ui.js').QuickPickItem[]
   options?: {
     canPickMany?: boolean
     ignoreFocusOut?: boolean

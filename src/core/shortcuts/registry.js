@@ -43,6 +43,7 @@ export const ACTIONS = [
   { id: "save-file",        name: "Save File",           event: "lokus:save-file",        default: "CommandOrControl+S" },
   { id: "new-file",         name: "New File",            event: "lokus:new-file",         default: "CommandOrControl+N" },
   { id: "new-folder",       name: "New Folder",          event: "lokus:new-folder",       default: "CommandOrControl+Shift+N" },
+  { id: "daily-note",       name: "Open Daily Note",     event: "lokus:daily-note",       default: "CommandOrControl+Shift+D" },
   { id: "toggle-sidebar",   name: "Toggle Left Sidebar (Files)",  event: "lokus:toggle-sidebar",   default: "CommandOrControl+B" },
   { id: "toggle-right-sidebar", name: "Toggle Right Sidebar (Plugins)", event: "lokus:toggle-right-sidebar", default: "CommandOrControl+Shift+B" },
   { id: "open-preferences", name: "Open Preferences",     event: "preferences:open",       default: "CommandOrControl+," },

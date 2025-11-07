@@ -74,7 +74,7 @@ export class DependencyManager {
       
       logger.success(`Dependencies installed with ${pm}`);
     } catch (error) {
-      throw new Error(`Failed to install dependencies with ${pm}: ${error.message}`);
+      throw new Error(`Failed to install dependencies with ${pm}: ${(error as Error).message}`);
     }
   }
 
@@ -101,7 +101,7 @@ export class DependencyManager {
       
       logger.success(`Added ${packages.join(', ')} with ${pm}`);
     } catch (error) {
-      throw new Error(`Failed to add dependencies with ${pm}: ${error.message}`);
+      throw new Error(`Failed to add dependencies with ${pm}: ${(error as Error).message}`);
     }
   }
 
@@ -128,7 +128,7 @@ export class DependencyManager {
       
       logger.success(`Removed ${packages.join(', ')} with ${pm}`);
     } catch (error) {
-      throw new Error(`Failed to remove dependencies with ${pm}: ${error.message}`);
+      throw new Error(`Failed to remove dependencies with ${pm}: ${(error as Error).message}`);
     }
   }
 
@@ -153,7 +153,7 @@ export class DependencyManager {
         stdio: 'inherit'
       });
     } catch (error) {
-      throw new Error(`Failed to run script "${script}" with ${pm}: ${error.message}`);
+      throw new Error(`Failed to run script "${script}" with ${pm}: ${(error as Error).message}`);
     }
   }
 
@@ -221,7 +221,7 @@ export class DependencyManager {
       
       logger.success(`Dependencies updated with ${pm}`);
     } catch (error) {
-      throw new Error(`Failed to update dependencies with ${pm}: ${error.message}`);
+      throw new Error(`Failed to update dependencies with ${pm}: ${(error as Error).message}`);
     }
   }
 
@@ -240,9 +240,9 @@ export class DependencyManager {
       return JSON.parse(result.stdout);
     } catch (error) {
       // npm outdated returns exit code 1 when there are outdated packages
-      if (error.stdout) {
+      if ((error as any).stdout) {
         try {
-          return JSON.parse(error.stdout);
+          return JSON.parse((error as any).stdout);
         } catch {
           return {};
         }
@@ -274,9 +274,9 @@ export class DependencyManager {
       
       return pm === 'bun' ? result.stdout : JSON.parse(result.stdout);
     } catch (error) {
-      if (error.stdout && pm !== 'bun') {
+      if ((error as any).stdout && pm !== 'bun') {
         try {
-          return JSON.parse(error.stdout);
+          return JSON.parse((error as any).stdout);
         } catch {
           return null;
         }
@@ -308,7 +308,7 @@ export class DependencyManager {
       
       logger.success(`Security vulnerabilities fixed with ${pm}`);
     } catch (error) {
-      logger.warning(`Failed to fix vulnerabilities with ${pm}: ${error.message}`);
+      logger.warning(`Failed to fix vulnerabilities with ${pm}: ${(error as Error).message}`);
     }
   }
 
@@ -351,7 +351,7 @@ export class DependencyManager {
       await execa(pm, cleanCommands[pm], { stdio: 'pipe' });
       logger.success(`Cleaned ${pm} cache`);
     } catch (error) {
-      logger.warning(`Failed to clean ${pm} cache: ${error.message}`);
+      logger.warning(`Failed to clean ${pm} cache: ${(error as Error).message}`);
     }
   }
 
@@ -375,7 +375,7 @@ export class DependencyManager {
         location: whichResult.stdout.trim()
       };
     } catch (error) {
-      throw new Error(`Failed to get ${pm} info: ${error.message}`);
+      throw new Error(`Failed to get ${pm} info: ${(error as Error).message}`);
     }
   }
 
@@ -463,7 +463,7 @@ export class DependencyManager {
 
       return { valid: errors.length === 0, errors };
     } catch (error) {
-      errors.push(`Failed to parse package.json: ${error.message}`);
+      errors.push(`Failed to parse package.json: ${(error as Error).message}`);
       return { valid: false, errors };
     }
   }

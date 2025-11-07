@@ -1,7 +1,33 @@
 import { invoke } from "@tauri-apps/api/core";
 import { PluginLoader } from "../../plugins/PluginLoader.js";
 
-class PluginManager {
+/**
+ * PluginStateAdapter - UI State Management Facade for Plugin System
+ *
+ * This class is a specialized UI adapter that manages plugin display state
+ * for React components. It is NOT a general plugin manager.
+ *
+ * Architecture:
+ * - Main Plugin System: src/plugins/PluginManager.js (core lifecycle, dependencies, registry)
+ * - UI State Adapter: src/core/plugins/PluginStateAdapter.js (THIS FILE - React state sync)
+ * - Editor Plugin API: src/plugins/api/EditorAPI.js (TipTap editor extensions)
+ *
+ * Responsibilities:
+ * - Manage plugin list UI state (loading, error states)
+ * - Call Tauri backend commands for plugin operations
+ * - Delegate plugin loading to PluginLoader
+ * - Provide event-based state synchronization for React
+ * - Cache plugin data for UI performance
+ *
+ * NOT Responsible For:
+ * - Plugin dependency resolution (handled by main PluginManager)
+ * - Plugin manifest validation (handled by main PluginManager)
+ * - Plugin API provisioning (handled by LokusPluginAPI)
+ * - Editor extension registration (handled by EditorAPI)
+ *
+ * @class PluginStateAdapter
+ */
+class PluginStateAdapter {
   constructor() {
     this.plugins = [];
     this.enabledPlugins = new Set();
@@ -301,6 +327,6 @@ class PluginManager {
 }
 
 // Create singleton instance
-const pluginManager = new PluginManager();
+const pluginStateAdapter = new PluginStateAdapter();
 
-export default pluginManager;
+export default pluginStateAdapter;

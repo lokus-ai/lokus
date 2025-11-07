@@ -18,8 +18,8 @@ export class UIExtensionPluginTemplate implements TemplateGenerator {
       ? this.generateTypeScriptMain(config)
       : this.generateJavaScriptMain(config)
     const webviewHtml = this.generateWebviewHtml(config)
-    const styles = this.generateStyles()
-    const script = this.generateWebviewScript()
+    const styles = this.generateStyles(config)
+    const script = this.generateWebviewScript(config)
     
     console.log('Generating UI extension plugin template:', {
       outputDir,
@@ -49,7 +49,7 @@ export class UIExtensionPluginTemplate implements TemplateGenerator {
       errors.push('Plugin ID is required')
     }
 
-    if (!config.options?.uiType) {
+    if (!config.options || !config.options['uiType']) {
       warnings.push('UI type not specified, defaulting to panel')
     }
 
@@ -150,7 +150,7 @@ export class UIExtensionPluginTemplate implements TemplateGenerator {
   }
 
   private generateManifest(config: TemplateConfig): string {
-    const uiType = config.options?.uiType || 'panel'
+    const uiType = (config.options && config.options['uiType']) || 'panel'
     
     return JSON.stringify({
       id: config.id,
@@ -595,7 +595,7 @@ module.exports = ${this.toPascalCase(config.name || 'UIExtension')}Plugin
 </html>`
   }
 
-  private generateStyles(): string {
+  private generateStyles(config: TemplateConfig): string {
     return `/* ${config.name} Styles */
 
 :root {
@@ -762,7 +762,7 @@ section {
 }`
   }
 
-  private generateWebviewScript(): string {
+  private generateWebviewScript(config: TemplateConfig): string {
     return `// ${config.name} Webview Script
 
 (function() {

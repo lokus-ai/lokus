@@ -31,7 +31,8 @@ import {
   File,
   Target,
   Globe,
-  Database
+  Database,
+  Calendar
 } from 'lucide-react'
 import { getActiveShortcuts, formatAccelerator } from '../core/shortcuts/registry'
 import { useCommandHistory, createFileHistoryItem, createCommandHistoryItem } from '../hooks/useCommandHistory.js'
@@ -44,23 +45,24 @@ import { useFolderScope } from '../contexts/FolderScopeContext'
 import { useBases } from '../bases/BasesContext.jsx'
 import FolderSelector from './FolderSelector.jsx'
 
-export default function CommandPalette({ 
-  open, 
-  setOpen, 
-  fileTree = [], 
-  openFiles = [], 
-  onFileOpen, 
-  onCreateFile, 
-  onCreateFolder, 
-  onSave, 
-  onOpenPreferences, 
-  onToggleSidebar, 
+export default function CommandPalette({
+  open,
+  setOpen,
+  fileTree = [],
+  openFiles = [],
+  onFileOpen,
+  onCreateFile,
+  onCreateFolder,
+  onSave,
+  onOpenPreferences,
+  onToggleSidebar,
   onCloseTab,
   onOpenGraph,
   onOpenGmail,
   onShowTemplatePicker,
   onCreateTemplate,
-  activeFile 
+  onOpenDailyNote,
+  activeFile
 }) {
   const [shortcuts, setShortcuts] = useState({})
   const [recentFiles, setRecentFiles] = useState([])
@@ -465,14 +467,18 @@ export default function CommandPalette({
 
   // Handle template selection
   const handleTemplateSelect = React.useCallback(async (template) => {
-    
+    console.log('[CommandPalette] Template selected:', template);
+    console.log('[CommandPalette] processTemplate function exists:', !!processTemplate);
+
     try {
       // Process the template with built-in variables
+      console.log('[CommandPalette] Calling processTemplate for id:', template.id);
       const result = await processTemplate(template.id, {}, {
         context: {}
       })
-      
-      
+
+      console.log('[CommandPalette] Process result:', result);
+
       // Call onShowTemplatePicker with processed content
       if (onShowTemplatePicker) {
         // Create a mock event that mimics the TemplatePicker selection
@@ -480,14 +486,18 @@ export default function CommandPalette({
           template,
           processedContent: result.result || result.content || result
         }
+        console.log('[CommandPalette] Sending processed content (length):', mockSelection.processedContent?.length);
         onShowTemplatePicker(mockSelection)
       }
-      
+
       // Close command palette
       setOpen(false)
     } catch (err) {
+      console.error('[CommandPalette] ERROR processing template:', err);
+      console.error('[CommandPalette] Error stack:', err.stack);
       // Fallback to raw template content
       if (onShowTemplatePicker) {
+        console.log('[CommandPalette] Using fallback - raw content');
         const mockSelection = {
           template,
           processedContent: template.content
@@ -1221,6 +1231,11 @@ Best regards,
             <FolderPlus className="mr-2 h-4 w-4" />
             <span>New Folder</span>
             <CommandShortcut>{formatAccelerator(shortcuts['new-folder'])}</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommandWithHistory(onOpenDailyNote, 'Open Daily Note')}>
+            <Calendar className="mr-2 h-4 w-4" />
+            <span>Open Daily Note</span>
+            <CommandShortcut>{formatAccelerator(shortcuts['daily-note'])}</CommandShortcut>
           </CommandItem>
           {activeFile && (
             <>

@@ -15,6 +15,10 @@ class AuthManager {
     this.lastCheckTime = 0;
     this.CHECK_THROTTLE = 1000; // Minimum 1 second between checks
 
+    // Token refresh lock to prevent concurrent refresh attempts
+    this.refreshInProgress = false;
+    this.refreshPromise = null;
+
     this.initialize();
   }
 
@@ -37,16 +41,19 @@ class AuthManager {
 
     // Listen for localhost auth completion events
     try {
-      await listen('auth-success', (event) => {
-        this.checkAuthStatus(); // Refresh auth state
+      await listen('auth-success', async (event) => {
+        console.log('✅ [AuthManager] Received auth-success event');
+        await this.checkAuthStatus(); // Refresh auth state
+        console.log('✅ [AuthManager] Auth state updated - isAuthenticated:', this.isAuthenticated);
       });
-      
+
       await listen('auth-error', (event) => {
-        console.error('❌ Authentication failed:', event.payload);
+        console.error('❌ [AuthManager] Authentication failed:', event.payload);
+        alert(`Authentication failed: ${JSON.stringify(event.payload)}`);
         this.notifyListeners(); // Update UI to show error state
       });
     } catch (error) {
-      console.error('Failed to register auth event listeners:', error);
+      console.error('[AuthManager] Failed to register auth event listeners:', error);
     }
   }
 
@@ -127,11 +134,17 @@ class AuthManager {
 
   async signIn() {
     try {
+      console.log('[AuthManager] Initiating OAuth flow...');
       // Initiate OAuth flow with PKCE
       const authUrl = await invoke('initiate_oauth_flow');
+      console.log('[AuthManager] OAuth URL generated, opening browser...');
+      console.log('[AuthManager] Waiting for callback at localhost...');
       await invoke('open_auth_url', { authUrl });
+      console.log('[AuthManager] Browser opened. Please complete sign-in in the browser.');
+      console.log('[AuthManager] After signing in, you should see a success page, then return to the app.');
     } catch (error) {
-      console.error('❌ Failed to initiate OAuth flow:', error);
+      console.error('❌ [AuthManager] Failed to initiate OAuth flow:', error);
+      alert(`Failed to start authentication: ${error}`);
       throw error;
     }
   }
@@ -148,8 +161,31 @@ class AuthManager {
     }
   }
 
+  /**
+   * Get a fresh access token, automatically refreshing if expired.
+   *
+   * This method handles the complete token lifecycle:
+   * - Waits for any in-progress refresh operations (prevents concurrent refresh)
+   * - Checks token expiration and automatically refreshes if needed
+   * - Signs out user if refresh token is unavailable
+   *
+   * Part of the unified token system: All sync operations now use auth tokens
+   * from AuthManager instead of maintaining separate sync tokens. This prevents
+   * auth-sync disconnect issues where sync would fail despite successful login.
+   *
+   * @returns {Promise<string|null>} Access token or null if not authenticated
+   */
   async getAccessToken() {
     try {
+      // If a refresh is in progress, wait for it to complete
+      // This prevents multiple concurrent refresh requests which could cause race conditions
+      if (this.refreshInProgress && this.refreshPromise) {
+        await this.refreshPromise;
+        // After refresh completes, get the new token
+        const tokenData = await invoke('get_auth_token');
+        return tokenData?.access_token || null;
+      }
+
       const tokenData = await invoke('get_auth_token');
       if (!tokenData) return null;
 
@@ -175,18 +211,64 @@ class AuthManager {
     }
   }
 
+  /**
+   * Refresh the access token using the refresh token.
+   *
+   * This method implements a refresh lock mechanism to prevent concurrent refresh attempts:
+   * - Only one refresh can be in progress at a time
+   * - Multiple concurrent calls will wait for the same refresh operation
+   * - The lock is cleared after refresh completes (success or failure)
+   *
+   * Why we need the refresh lock:
+   * - Multiple components may call getAccessToken() simultaneously
+   * - Without the lock, each would trigger a separate refresh request
+   * - This could cause race conditions and token invalidation
+   * - The lock ensures all callers share one refresh operation
+   *
+   * @returns {Promise<void>} Resolves when refresh completes, rejects on failure
+   * @throws {Error} If refresh fails, automatically signs out the user
+   */
   async refreshToken() {
-    try {
-      await invoke('refresh_auth_token');
-      await this.checkAuthStatus(); // Refresh auth state
-    } catch (error) {
-      console.error('Failed to refresh token:', error);
-      // If refresh fails, sign out the user
-      await this.signOut();
+    // If already refreshing, return the existing promise
+    // This ensures multiple concurrent refresh calls wait for the same operation
+    if (this.refreshInProgress && this.refreshPromise) {
+      return this.refreshPromise;
     }
+
+    // Mark refresh as in progress and create the promise
+    this.refreshInProgress = true;
+    this.refreshPromise = (async () => {
+      try {
+        console.log('[Auth] Refreshing token...');
+        await invoke('refresh_auth_token');
+        await this.checkAuthStatus(); // Refresh auth state
+        console.log('[Auth] Token refreshed successfully');
+      } catch (error) {
+        console.error('Failed to refresh token:', error);
+        // If refresh fails, sign out the user
+        await this.signOut();
+        throw error;
+      } finally {
+        // Clear the lock so future refresh operations can proceed
+        this.refreshInProgress = false;
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
   }
 
-  // API call helper with automatic auth headers
+  /**
+   * Helper method for making authenticated API requests.
+   *
+   * Automatically fetches a fresh access token and adds authentication headers.
+   * Used by sync operations to ensure they always use valid credentials.
+   *
+   * @param {string} url - The URL to fetch
+   * @param {RequestInit} options - Fetch options (headers, method, body, etc.)
+   * @returns {Promise<Response>} The fetch response
+   * @throws {Error} If user is not authenticated
+   */
   async authenticatedFetch(url, options = {}) {
     const token = await this.getAccessToken();
     if (!token) {

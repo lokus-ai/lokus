@@ -78,10 +78,13 @@ export function createPlugin(definition: {
   activate: (context: PluginContext) => void | Promise<void>
   deactivate?: () => void | Promise<void>
 }): Plugin {
-  return {
-    activate: definition.activate,
-    deactivate: definition.deactivate
+  const plugin: Plugin = {
+    activate: definition.activate
   }
+  if (definition.deactivate) {
+    plugin.deactivate = definition.deactivate
+  }
+  return plugin
 }
 
 /**
@@ -124,9 +127,11 @@ export namespace PluginSDK {
     template: PluginTemplate,
     config: TemplateConfig
   ): Promise<void> {
-    const { TemplateGenerator } = await import('./templates/index.js')
+    const { BasicPluginTemplate, UIExtensionPluginTemplate } = await import('./templates/index.js')
     // Implementation would create appropriate template generator
+    // For now, just log the request
     console.log(`Creating plugin from template: ${template}`, config)
+    // TODO: Implement template selection and generation logic
   }
 }
 
@@ -179,7 +184,11 @@ export namespace Decorators {
     descriptor.value = function (...args: any[]) {
       const result = originalMethod.apply(this, args)
       if (result && typeof result.dispose === 'function') {
-        this.addDisposable?.(result)
+        // Type assertion to access addDisposable method
+        const self = this as any
+        if (typeof self.addDisposable === 'function') {
+          self.addDisposable(result)
+        }
       }
       return result
     }
@@ -195,28 +204,26 @@ export namespace DevMode {
    * Check if running in development mode
    */
   export function isEnabled(): boolean {
-    return process.env.NODE_ENV === 'development' || process.env.LOKUS_DEV === 'true'
+    return process.env['NODE_ENV'] === 'development' || process.env['LOKUS_DEV'] === 'true'
   }
 
   /**
    * Development logger with enhanced features
    */
-  export function createLogger(pluginId: string) {
-    if (isEnabled()) {
-      return new (class extends PluginLogger {
-        constructor() {
-          // Would need actual API instance in real implementation
-          super(pluginId, {} as any, { level: LogLevel.DEBUG })
-        }
-
-        devLog(message: string, ...args: unknown[]) {
-          if (isEnabled()) {
-            this.debug(`[DEV] ${message}`, ...args)
-          }
-        }
-      })()
+  export function createLogger(pluginId: string): PluginLogger | null {
+    if (!isEnabled()) {
+      return null
     }
-    return null
+
+    const logger: PluginLogger = new PluginLogger(pluginId, {} as any, { level: LogLevel.DEBUG })
+    // Add development logging method
+    const devLog = (message: string, ...args: unknown[]) => {
+      if (isEnabled()) {
+        logger.debug(`[DEV] ${message}`, ...args)
+      }
+    }
+    (logger as any).devLog = devLog
+    return logger
   }
 
   /**
@@ -231,5 +238,5 @@ export namespace DevMode {
 }
 
 // Forward declarations for imports
-import type { PluginContext, Plugin, PluginManifest, TemplateConfig, PluginTemplate, LogLevel } from './types/index.js'
-import type { PluginLogger } from './utils/plugin-logger.js'
+import type { PluginContext, Plugin, PluginManifest, TemplateConfig, PluginTemplate } from './types/index.js'
+import { PluginLogger, LogLevel } from './utils/plugin-logger.js'
