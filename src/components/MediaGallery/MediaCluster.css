@@ -1,0 +1,45 @@
+/* MediaCluster.css */
+
+.media-cluster {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+  padding: 1rem;
+}
+
+.cluster-group {
+  background: var(--bg-secondary);
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.cluster-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--text-primary);
+}
+
+.cluster-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cluster-item {
+  padding: 0.5rem;
+  background: var(--bg-primary);
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cluster-item:hover {
+  background: var(--bg-hover);
+  transform: translateY(-1px);
+}
+
+.item-name {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}

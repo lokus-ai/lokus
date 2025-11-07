@@ -5,7 +5,7 @@ import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, Images, Library } from "lucide-react";
 import { ColoredFileIcon } from "../components/FileIcon.jsx";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
@@ -48,6 +48,7 @@ import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelM
 import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
 import SplitEditor from "../components/SplitEditor/SplitEditor.jsx";
 import { getFilename, getBasename, joinPath } from '../utils/pathUtils.js';
+import MediaGallery from "../components/MediaGallery/MediaGallery.jsx";
 import platformService from "../services/platform/PlatformService.js";
 import Gmail from "./Gmail.jsx";
 import { gmailAuth, gmailEmails } from '../services/gmail.js';
@@ -835,6 +836,7 @@ function WorkspaceWithScope({ path }) {
   // Graph view now opens as a tab instead of sidebar panel
   const [showGraphView, setShowGraphView] = useState(false);
   const [showDailyNotesPanel, setShowDailyNotesPanel] = useState(false);
+  const [showMediaGallery, setShowMediaGallery] = useState(false);
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
   const [currentDailyNoteDate, setCurrentDailyNoteDate] = useState(null);
   const [graphData, setGraphData] = useState(null);
@@ -3189,6 +3191,7 @@ function WorkspaceWithScope({ path }) {
                 setShowPlugins(false);
                 setShowBases(false);
                 setShowGraphView(false);
+                setShowMediaGallery(false);
                 setShowLeft(true);
               }}
               title="Explorer"
@@ -3211,6 +3214,7 @@ function WorkspaceWithScope({ path }) {
                 setShowPlugins(false);
                 setShowBases(false);
                 setShowGraphView(false);
+                setShowMediaGallery(false);
                 setShowLeft(true);
               }}
               title="Task Board"
@@ -3225,6 +3229,24 @@ function WorkspaceWithScope({ path }) {
               }}
             >
               <LayoutGrid className="w-5 h-5" style={showKanban && !showPlugins && !showBases && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
+            </button>
+
+            <button
+              onClick={() => {
+                handleFileOpen({ path: '__media_gallery__', name: 'Media Gallery', is_directory: false });
+              }}
+              title="Media Gallery"
+              className="obsidian-button icon-only w-full mb-1"
+              onMouseEnter={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = 'rgb(var(--accent))';
+              }}
+              onMouseLeave={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = (activeFile === '__media_gallery__') ? 'rgb(var(--accent))' : '';
+              }}
+            >
+              <Library className="w-5 h-5" style={(activeFile === '__media_gallery__') ? { color: 'rgb(var(--accent))' } : {}} />
             </button>
             
             <button
@@ -3600,6 +3622,10 @@ function WorkspaceWithScope({ path }) {
           ) : activeFile === '__gmail__' ? (
             <div className="flex-1 h-full overflow-hidden">
               <Gmail workspacePath={path} />
+            </div>
+          ) : activeFile === '__media_gallery__' ? (
+            <div className="flex-1 h-full overflow-hidden">
+              <MediaGallery workspace={{ path: path, name: getBasename(path) }} />
             </div>
           ) : (
             <div className="flex-1 p-8 md:p-12 overflow-y-auto">

@@ -75,6 +75,25 @@ axum = "0.7"
 git2 = { version = "0.18", default-features = false, features = ["https"] }
 openssl = { version = "0.10", features = ["vendored"] }
 
+# Multimedia processing dependencies
+image = "0.24"
+pdf-extract = "0.7"
+lopdf = "0.33"
+mime_guess = "2.0"
+# OCR will be handled via command-line interface instead of direct binding
+# tesseract = "0.15"  # Removed - requires system dependencies
+# imageproc = "0.25"  # Removed - only needed for OCR preprocessing
+
+# Vector embeddings and similarity search (commented out for now)
+# hnsw = "0.11"
+# ndarray = "0.16"
+
+# LLM and NLP (commented out for now - add when needed)
+# candle-core = "0.8"
+# candle-transformers = "0.8"
+# candle-nn = "0.8"
+# tokenizers = "0.21"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.25"
 objc = "0.2"

@@ -20,6 +20,8 @@ mod oauth_server;
 mod secure_storage;
 mod api_server;
 mod sync;
+mod ocr;
+mod pdf;
 
 use windows::{open_workspace_window, open_preferences_window, open_launcher_window};
 use tauri::Manager;
@@ -387,7 +389,25 @@ fn main() {
       mcp_setup::check_mcp_status,
       api_server::api_set_workspace,
       api_server::api_clear_workspace,
-      api_server::api_get_current_workspace
+      api_server::api_get_current_workspace,
+      // Multimedia processing commands
+      handlers::multimedia::classify_media,
+      handlers::multimedia::extract_metadata,
+      handlers::multimedia::process_media_file,
+      handlers::multimedia::generate_thumbnail,
+      handlers::multimedia::batch_process_media,
+      handlers::multimedia::scan_workspace_media,
+      handlers::multimedia::get_thumbnail,
+      // OCR commands
+      ocr::ocr_process_image,
+      ocr::ocr_batch_process,
+      ocr::check_ocr_availability,
+      ocr::get_ocr_languages,
+      // PDF commands
+      pdf::extract_pdf_content,
+      pdf::extract_pdf_text,
+      pdf::extract_pdf_metadata,
+      pdf::batch_extract_pdfs
     ])
     .setup(|app| {
       menu::init(&app.handle())?;

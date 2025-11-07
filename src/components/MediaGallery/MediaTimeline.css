@@ -1,0 +1,53 @@
+/* MediaTimeline.css */
+
+.media-timeline {
+  padding: 1rem;
+}
+
+.timeline-section {
+  margin-bottom: 2rem;
+}
+
+.timeline-header {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.timeline-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.timeline-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.timeline-item:hover {
+  background: var(--bg-hover);
+  transform: translateX(4px);
+}
+
+.item-name {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.item-type {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  background: var(--bg-primary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+}
