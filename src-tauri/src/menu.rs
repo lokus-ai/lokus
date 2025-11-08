@@ -39,6 +39,7 @@ const VIEW_ZOOM_OUT_ID: &str = "view-zoom-out";
 const VIEW_GRAPH_ID: &str = "view-graph";
 const VIEW_KANBAN_ID: &str = "view-kanban";
 const VIEW_COMMAND_PALETTE_ID: &str = "view-command-palette";
+const VIEW_DEVELOPER_TOOLS_ID: &str = "view-developer-tools";
 const VIEW_THEME_LIGHT_ID: &str = "view-theme-light";
 const VIEW_THEME_DARK_ID: &str = "view-theme-dark";
 const VIEW_THEME_AUTO_ID: &str = "view-theme-auto";
@@ -205,6 +206,9 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
       .build(app)?)
     .item(&MenuItemBuilder::with_id(VIEW_COMMAND_PALETTE_ID, "Show Command Palette")
       .accelerator("CmdOrCtrl+K")
+      .build(app)?)
+    .item(&MenuItemBuilder::with_id(VIEW_DEVELOPER_TOOLS_ID, "Developer Tools")
+      .accelerator("CmdOrCtrl+Shift+D")
       .build(app)?)
     .separator()
     .item(&CheckMenuItemBuilder::with_id(VIEW_THEME_LIGHT_ID, "Light Theme")
@@ -489,6 +493,9 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
       }
       VIEW_COMMAND_PALETTE_ID => {
         let _ = app.emit("lokus:command-palette", ());
+      }
+      VIEW_DEVELOPER_TOOLS_ID => {
+        let _ = crate::windows::open_devtools_window(app.clone());
       }
       VIEW_THEME_LIGHT_ID => {
         let _ = app.emit("lokus:theme-light", ());

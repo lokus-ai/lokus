@@ -6,12 +6,16 @@ import {
   readGlobalVisuals,
   setGlobalActiveTheme,
 } from "../core/theme/manager.js";
+import { useProviderStartup } from "./usePerformanceTracking.js";
 
 const ThemeCtx = createContext(null);
 
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(null);
   const [isThemeLoaded, setIsThemeLoaded] = useState(false);
+
+  // Track ThemeProvider initialization time
+  useProviderStartup("Theme System", isThemeLoaded, { themeName: theme });
 
   // Load initial theme from config with better error handling
   useEffect(() => {

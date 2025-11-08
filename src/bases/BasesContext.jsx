@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { BaseManager } from './core/BaseManager.js';
 import { BasesDataManager } from './data/index.js';
 import { BaseConfigManager } from './core/BaseConfigManager.js';
+import { useProviderStartup } from '../hooks/usePerformanceTracking.js';
 
 const BasesContext = createContext();
 
@@ -15,6 +16,14 @@ export function BasesProvider({ children, workspacePath }) {
   const [activeView, setActiveView] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Track BasesProvider initialization time
+  useProviderStartup("Bases System", !isLoading && workspacePath !== null, {
+    basesCount: bases.length,
+    hasActiveBase: !!activeBase,
+    hasError: !!error,
+    workspacePath: !!workspacePath
+  });
 
   // Initialize the system
   useEffect(() => {

@@ -20,8 +20,11 @@ mod oauth_server;
 mod secure_storage;
 mod api_server;
 mod sync;
+mod ocr;
+mod pdf;
+mod system_monitor;
 
-use windows::{open_workspace_window, open_preferences_window, open_launcher_window};
+use windows::{open_workspace_window, open_preferences_window, open_launcher_window, open_devtools_window};
 use tauri::Manager;
 use tauri_plugin_store::{StoreBuilder, JsonValue};
 use std::path::PathBuf;
@@ -387,12 +390,65 @@ fn main() {
       mcp_setup::check_mcp_status,
       api_server::api_set_workspace,
       api_server::api_clear_workspace,
+<<<<<<< HEAD
       api_server::api_get_current_workspace
+=======
+      api_server::api_get_current_workspace,
+      // Multimedia processing commands
+      handlers::multimedia::classify_media,
+      handlers::multimedia::extract_metadata,
+      handlers::multimedia::process_media_file,
+      handlers::multimedia::generate_thumbnail,
+      handlers::multimedia::batch_process_media,
+      handlers::multimedia::scan_workspace_media,
+      handlers::multimedia::get_thumbnail,
+      // OCR commands
+      ocr::ocr_process_image,
+      ocr::ocr_batch_process,
+      ocr::check_ocr_availability,
+      ocr::get_ocr_languages,
+      // PDF commands
+      pdf::extract_pdf_content,
+      pdf::extract_pdf_text,
+      pdf::extract_pdf_metadata,
+      pdf::batch_extract_pdfs,
+      // System Monitor commands
+      open_devtools_window,
+      system_monitor::monitor_get_metrics,
+      system_monitor::monitor_get_processes,
+      system_monitor::monitor_get_system_info,
+      system_monitor::monitor_start_broadcast,
+      system_monitor::monitor_stop_broadcast,
+      system_monitor::monitor_get_lokus_metrics,
+      system_monitor::monitor_get_startup_metrics,
+      system_monitor::monitor_add_startup_phase,
+      system_monitor::monitor_log_performance_event,
+      system_monitor::monitor_get_performance_events,
+      system_monitor::monitor_log_performance_events_batch
+>>>>>>> bbf33f2 (Add comprehensive performance instrumentation system)
     ])
     .setup(|app| {
+      // Helper function to track initialization steps
+      let track_init = |app_handle: &tauri::AppHandle, name: &str, start: std::time::Instant| {
+        let duration = start.elapsed().as_millis() as u64;
+        if let Some(state) = app_handle.try_state::<std::sync::Arc<std::sync::Mutex<system_monitor::PerformanceTracker>>>() {
+          if let Ok(mut tracker) = state.lock() {
+            tracker.add_startup_phase(name.to_string(), duration);
+          }
+        }
+      };
+
+      // Initialize performance tracker FIRST so we can track everything else
+      let performance_tracker = system_monitor::init_performance_tracker();
+      app.manage(performance_tracker);
+
+      // Track menu initialization
+      let start = std::time::Instant::now();
       menu::init(&app.handle())?;
+      track_init(&app.handle(), "Menu Init", start);
 
       // Initialize platform-specific systems with better error handling
+      let start = std::time::Instant::now();
       match handlers::platform_files::initialize() {
         Ok(_) => println!("✅ Platform file operations initialized successfully"),
         Err(e) => {
@@ -400,7 +456,9 @@ fn main() {
           eprintln!("ℹ️ Some file operations may not work properly");
         }
       }
+      track_init(&app.handle(), "Platform Files Init", start);
 
+      let start = std::time::Instant::now();
       match clipboard_platform::initialize() {
         Ok(_) => println!("✅ Platform clipboard initialized successfully"),
         Err(e) => {
@@ -408,10 +466,13 @@ fn main() {
           eprintln!("ℹ️ Clipboard functionality may be limited");
         }
       }
+      track_init(&app.handle(), "Platform Clipboard Init", start);
 
       // Initialize MCP Server Manager
+      let start = std::time::Instant::now();
       let mcp_manager = mcp::MCPServerManager::new(app.handle().clone());
       app.manage(mcp_manager.clone());
+      track_init(&app.handle(), "MCP Server Manager Init", start);
 
       // Auto-start HTTP MCP server for CLI integration
       let mcp_manager_clone = mcp_manager.clone();
@@ -432,12 +493,22 @@ fn main() {
       });
 
       // Initialize auth state
+      let start = std::time::Instant::now();
       let auth_state = auth::SharedAuthState::default();
       app.manage(auth_state);
+      track_init(&app.handle(), "Auth State Init", start);
+
+      // Initialize system monitor broadcaster state
+      let start = std::time::Instant::now();
+      let broadcaster_state = system_monitor::init_broadcaster_state();
+      app.manage(broadcaster_state);
+      track_init(&app.handle(), "System Monitor Broadcaster Init", start);
 
       // Initialize OAuth Server
+      let start = std::time::Instant::now();
       let oauth_server = oauth_server::OAuthServer::new();
       app.manage(oauth_server.clone());
+      track_init(&app.handle(), "OAuth Server Init", start);
 
       // Start OAuth server after the app is fully initialized
       let oauth_server_clone = oauth_server.clone();
@@ -453,11 +524,13 @@ fn main() {
       });
 
       // Initialize and start API server for MCP integration
+      let start = std::time::Instant::now();
       let api_state = api_server::ApiState {
         app_handle: app.handle().clone(),
         current_workspace: std::sync::Arc::new(tokio::sync::RwLock::new(None)),
       };
       app.manage(api_state.clone());
+      track_init(&app.handle(), "API Server State Init", start);
 
       // Start API server for MCP integration
       let app_handle_for_api = app.handle().clone();
@@ -467,6 +540,7 @@ fn main() {
       });
 
       // Initialize Gmail Connection Manager - always manage even if initialization fails
+      let start = std::time::Instant::now();
       match connections::ConnectionManager::new(app.handle().clone()) {
         Ok(connection_manager) => {
           println!("[GMAIL] 🚀 Connection Manager initialized successfully");
@@ -481,9 +555,12 @@ fn main() {
           }
         }
       }
+      track_init(&app.handle(), "Gmail Connection Manager Init", start);
 
       // Register deep link handler for auth callbacks
+      let start = std::time::Instant::now();
       auth::register_deep_link_handler(&app.handle());
+      track_init(&app.handle(), "Deep Link Handler Registration", start);
 
       // Auto-setup MCP integration on first launch
       let app_clone = app.handle().clone();
@@ -500,8 +577,10 @@ fn main() {
       });
 
       let app_handle = app.handle().clone();
+      let start = std::time::Instant::now();
       let store = StoreBuilder::new(app.handle(), PathBuf::from(".settings.dat")).build().unwrap();
       let _ = store.reload();
+      track_init(&app.handle(), "Settings Store Init", start);
 
       // In development mode, always clear workspace data and show launcher
       if cfg!(debug_assertions) {

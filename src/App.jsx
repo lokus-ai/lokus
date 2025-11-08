@@ -2,7 +2,9 @@ import { useEffect } from "react";
 import Launcher from "./views/Launcher";
 import Workspace from "./views/Workspace";
 import Preferences from "./views/Preferences";
+import SystemMonitor from "./views/SystemMonitor.jsx";
 import { usePreferenceActivation } from "./hooks/usePreferenceActivation";
+import { useDevtoolsActivation } from "./hooks/useDevtoolsActivation";
 import { useWorkspaceActivation } from "./hooks/useWorkspaceActivation";
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/shortcuts/registry.js";
 import { PluginProvider } from "./hooks/usePlugins.jsx";
@@ -21,10 +23,12 @@ import { emit } from "@tauri-apps/api/event";
 function App() {
   // Use the hooks' values directly (no setter param expected)
   const { isPrefsWindow } = usePreferenceActivation();
+  const { isDevtoolsWindow } = useDevtoolsActivation();
   const activePath = useWorkspaceActivation();
-  
+
   console.log('🎯 App.jsx rendering');
   console.log('🎯 isPrefsWindow:', isPrefsWindow);
+  console.log('🎯 isDevtoolsWindow:', isDevtoolsWindow);
   console.log('🎯 activePath:', activePath);
   console.log('🎯 URL search params:', window.location.search);
 
@@ -106,6 +110,8 @@ function App() {
             <PluginProvider>
               {isPrefsWindow ? (
                 <Preferences />
+              ) : isDevtoolsWindow ? (
+                <SystemMonitor />
               ) : activePath ? (
                 <Workspace initialPath={activePath} />
               ) : (

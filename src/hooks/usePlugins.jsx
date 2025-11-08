@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import pluginManager from "../core/plugins/PluginManager.js";
+import { useProviderStartup } from "./usePerformanceTracking.js";
 
 const PluginContext = createContext(null);
 
@@ -10,6 +11,13 @@ export function PluginProvider({ children }) {
   const [error, setError] = useState(pluginManager.currentError);
   const [installingPlugins, setInstallingPlugins] = useState(pluginManager.installingPluginIds);
   const [enabledPlugins, setEnabledPlugins] = useState(pluginManager.enabledPluginIds);
+
+  // Track PluginProvider initialization time
+  useProviderStartup("Plugin System", !loading, {
+    pluginCount: plugins.length,
+    enabledCount: enabledPlugins.length,
+    hasError: !!error
+  });
 
   // Subscribe to plugin manager state changes
   useEffect(() => {

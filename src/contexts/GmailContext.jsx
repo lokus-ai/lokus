@@ -2,24 +2,32 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { listen } from '@tauri-apps/api/event';
 import { useGmailAuth, useGmailQueue } from '../hooks/useGmail.js';
 import gmailService from '../services/gmail.js';
+import { useProviderStartup } from '../hooks/usePerformanceTracking.js';
 
 const GmailContext = createContext(null);
 
 /**
  * Gmail Context Provider
- * 
+ *
  * Provides global Gmail state management including authentication status,
  * current profile data, queue status, and centralized event handling.
- * 
+ *
  * This context acts as the single source of truth for Gmail state across
  * the entire application.
  */
 export function GmailProvider({ children }) {
   // Core authentication state from useGmailAuth hook
   const gmailAuth = useGmailAuth();
-  
+
   // Queue monitoring from useGmailQueue hook
   const gmailQueue = useGmailQueue();
+
+  // Track GmailProvider initialization time
+  useProviderStartup("Gmail System", !gmailAuth.isLoading, {
+    isAuthenticated: gmailAuth.isAuthenticated,
+    hasProfile: !!gmailAuth.profile,
+    queueSize: gmailQueue.queue?.length || 0
+  });
 
   // Additional global state
   const [globalState, setGlobalState] = useState({

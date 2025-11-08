@@ -21,14 +21,22 @@ export function useWorkspaceActivation() {
       // Try multiple times with increasing delays
       for (let attempt = 0; attempt < 3; attempt++) {
         await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
-        
+
         // Strategy 1: Check URL on initial load
         const params = new URLSearchParams(window.location.search);
         const forceWelcome = params.get("forceWelcome");
+        const view = params.get("view");
         const workspacePath = params.get("workspacePath");
 
         // If forceWelcome is set, skip workspace loading and show launcher
         if (forceWelcome === "true") {
+          setPath(null);
+          setIsInitialized(true);
+          return;
+        }
+
+        // If view parameter is set (prefs or devtools), skip workspace loading
+        if (view === "prefs" || view === "devtools") {
           setPath(null);
           setIsInitialized(true);
           return;

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import authManager from './AuthManager';
+import { useProviderStartup } from '../../hooks/usePerformanceTracking.js';
 
 const AuthContext = createContext();
 
@@ -16,6 +17,12 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: false,
     user: null,
     isLoading: true
+  });
+
+  // Track AuthProvider initialization time
+  useProviderStartup("Auth System", !authState.isLoading, {
+    isAuthenticated: authState.isAuthenticated,
+    hasUser: !!authState.user
   });
 
   useEffect(() => {
