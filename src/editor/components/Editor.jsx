@@ -34,6 +34,7 @@ import TaskCreationTrigger from "../extensions/TaskCreationTrigger.js";
 import CodeBlockIndent from "../extensions/CodeBlockIndent.js";
 import Callout from "../extensions/Callout.js";
 import Folding from "../extensions/Folding.js";
+import MermaidDiagram from "../extensions/MermaidDiagram.jsx";
 import liveEditorSettings from "../../core/editor/live-settings.js";
 import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import TaskCreationModal from "../../components/TaskCreationModal.jsx";
@@ -246,6 +247,10 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => 
 
     // Section folding for headings
     exts.push(Folding);
+
+    // Mermaid diagrams
+    exts.push(MermaidDiagram);
+
 
     // Add plugin extensions
     exts.push(...pluginExtensions);
@@ -713,6 +718,8 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     );
   }
 
+  console.log(editor?.state.doc?.content?.content);
+  
   // Edit and Live Preview modes - show TipTap editor
   // In live mode, we keep editor editable but could add visual hints
   return (
