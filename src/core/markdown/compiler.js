@@ -11,6 +11,7 @@ import markdownItStrikethrough from "markdown-it-strikethrough-alt"
 import markdownItTexmath from "markdown-it-texmath"
 import katex from "katex"
 import markdownItWikiLinks from "./plugins/wikilinks.js"
+import markdownItMermaid from "./plugins/mermaid.js"
 
 export class MarkdownCompiler {
   constructor(options = {}) {
@@ -24,6 +25,7 @@ export class MarkdownCompiler {
       .use(markdownItMark)
       .use(markdownItStrikethrough)
       .use(markdownItWikiLinks)
+      .use(markdownItMermaid)
       .use(markdownItTexmath, {
         engine: katex,
         delimiters: 'dollars',  // Support $inline$ and $$block$$

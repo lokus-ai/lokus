@@ -23,10 +23,14 @@ const DEFAULT_CONFIG = {
     // Tables
     'table', 'thead', 'tbody', 'tr', 'td', 'th',
     // Blockquotes
-    'blockquote'
+    'blockquote',
+    // Custom nodes
+    'mermaid-block'
   ],
   ALLOWED_ATTR: [
-    'href', 'title', 'class', 'id', 'data-*'
+    'href', 'title', 'class', 'id', 'data-*',
+    // Mermaid diagram attributes
+    'code', 'theme', 'updatedat', 'data-code'
   ],
   ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
   FORBID_TAGS: ['script', 'object', 'embed', 'link', 'style', 'iframe', 'form', 'input'],
