@@ -518,25 +518,10 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
       isSettingRef.current = true;
-      
-      // Import markdown compiler and process content
-      (async () => {
-        try {
-          const { getMarkdownCompiler } = await import('../../core/markdown/compiler.js');
-          const compiler = getMarkdownCompiler();
-          
-          // Check if content looks like markdown and process it
-          if (compiler.isMarkdown(content)) {
-            const htmlContent = compiler.compile(content);
-            editor.commands.setContent(htmlContent);
-          } else {
-            editor.commands.setContent(content);
-          }
-        } catch (error) {
-          // Fallback if markdown compiler fails
-          editor.commands.setContent(content);
-        }
-      })();
+
+      // Content is already processed in Workspace.jsx, just set it directly
+      // This prevents double markdown-it processing which corrupts custom HTML tags
+      editor.commands.setContent(content);
     }
   }, [content, editor]);
 
