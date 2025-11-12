@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import Launcher from "./views/Launcher";
 import Workspace from "./views/Workspace";
 import Preferences from "./views/Preferences";
+import UpdateChecker from "./components/UpdateChecker";
 import { usePreferenceActivation } from "./hooks/usePreferenceActivation";
 import { useWorkspaceActivation } from "./hooks/useWorkspaceActivation";
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/shortcuts/registry.js";
@@ -32,6 +33,13 @@ function App() {
   useEffect(() => {
     markdownSyntaxConfig.init();
     editorConfigCache.init(); // Pre-load editor config to eliminate "Loading editor..." delay
+
+    // Check for updates 3 seconds after startup
+    const updateTimer = setTimeout(() => {
+      window.dispatchEvent(new Event('check-for-update'));
+    }, 3000);
+
+    return () => clearTimeout(updateTimer);
   }, []);
 
   useEffect(() => {
@@ -114,6 +122,7 @@ function App() {
             </PluginProvider>
           </GmailProvider>
         </AuthProvider>
+        <UpdateChecker />
       </div>
     </div>
   );

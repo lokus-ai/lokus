@@ -32,6 +32,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -65,6 +66,15 @@
       "mobile": [],
       "desktop": {
         "schemes": ["lokus"]
+      }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFDMzQ0M0RENkY0NUMxMjYKUldRbXdVVnYzVU0wckNsZVN0UEVvZm1YeVZBS3RIUFdyYjNwUGNwdC9BTE1NYlVvMHRyNjIxa2IK",
+      "endpoints": [
+        "https://github.com/lokus-ai/lokus/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }
