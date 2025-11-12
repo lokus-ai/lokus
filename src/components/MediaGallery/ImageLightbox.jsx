@@ -35,7 +35,6 @@ const ImageLightbox = ({
         setImageSrc(src);
         setLoading(false);
       } catch (err) {
-        console.error('Error loading image:', err);
         setError('Failed to load image');
         setLoading(false);
       }
@@ -115,7 +114,7 @@ const ImageLightbox = ({
     try {
       await openShell(file.file_path);
     } catch (error) {
-      console.error('Error opening file:', error);
+      // Error opening file in external app
     }
   };
 
@@ -124,7 +123,7 @@ const ImageLightbox = ({
       // Reveal in file manager
       await invoke('reveal_in_finder', { path: file.file_path });
     } catch (error) {
-      console.error('Error revealing file:', error);
+      // Error revealing file in finder
     }
   };
 

@@ -3,17 +3,13 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCw,
-  Download,
-  ExternalLink,
   Info,
   ChevronLeft,
   ChevronRight,
-  Maximize2,
-  Copy,
   FileText
 } from 'lucide-react';
-import { invoke, convertFileSrc } from '@tauri-apps/api/core';
-import { open as openShell } from '@tauri-apps/plugin-shell';
+import { readFile } from '@tauri-apps/plugin-fs';
+import { imageDataToDataURL } from '../../utils/mimeTypes.js';
 import './ImageViewer.css';
 
 const ImageViewer = ({ file, allImages = [], onNavigate, onInsert, workspace }) => {
@@ -26,9 +22,11 @@ const ImageViewer = ({ file, allImages = [], onNavigate, onInsert, workspace }) 
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [showControls, setShowControls] = useState(true);
 
   const imageRef = useRef(null);
   const containerRef = useRef(null);
+  const hideControlsTimer = useRef(null);
 
   // Find current index in allImages
   const currentIndex = allImages.findIndex(img => img.file_path === file.file_path);
@@ -45,12 +43,16 @@ const ImageViewer = ({ file, allImages = [], onNavigate, onInsert, workspace }) 
       setPan({ x: 0, y: 0 });
 
       try {
-        const src = convertFileSrc(file.file_path);
-        setImageSrc(src);
+        // Read the file as binary data
+        const imageData = await readFile(file.file_path);
+
+        // Convert to data URL
+        const dataUrl = imageDataToDataURL(imageData, file.file_path);
+
+        setImageSrc(dataUrl);
         setLoading(false);
       } catch (err) {
-        console.error('Error loading image:', err);
-        setError('Failed to load image');
+        setError('Failed to load image: ' + err.message);
         setLoading(false);
       }
     };
@@ -149,26 +151,6 @@ const ImageViewer = ({ file, allImages = [], onNavigate, onInsert, workspace }) 
     }
   };
 
-  const handleOpenExternal = async () => {
-    try {
-      await openShell(file.file_path);
-    } catch (error) {
-      console.error('Error opening file:', error);
-    }
-  };
-
-  const handleRevealInFinder = async () => {
-    try {
-      await invoke('reveal_in_finder', { path: file.file_path });
-    } catch (error) {
-      console.error('Error revealing file:', error);
-    }
-  };
-
-  const handleCopyPath = () => {
-    navigator.clipboard.writeText(file.file_path);
-  };
-
   const handleInsert = () => {
     if (onInsert) {
       onInsert(file);
@@ -205,6 +187,17 @@ const ImageViewer = ({ file, allImages = [], onNavigate, onInsert, workspace }) 
     }
   };
 
+  // Auto-hide controls on mouse movement
+  const handleMouseMoveContainer = () => {
+    setShowControls(true);
+    if (hideControlsTimer.current) {
+      clearTimeout(hideControlsTimer.current);
+    }
+    hideControlsTimer.current = setTimeout(() => {
+      setShowControls(false);
+    }, 2000);
+  };
+
   const formatFileSize = (bytes) => {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -227,87 +220,61 @@ const ImageViewer = ({ file, allImages = [], onNavigate, onInsert, workspace }) 
   }
 
   return (
-    <div className="image-viewer">
-      {/* Toolbar */}
-      <div className="viewer-toolbar">
-        <div className="toolbar-left">
-          <h3 className="image-title">{file.metadata?.file_name || 'Image'}</h3>
-          {file.metadata?.dimensions && (
-            <span className="image-dimensions">
-              {file.metadata.dimensions.width} × {file.metadata.dimensions.height}
-            </span>
-          )}
-        </div>
-
-        <div className="toolbar-center">
-          {/* Navigation */}
-          {allImages.length > 1 && (
-            <div className="nav-controls">
-              <button
-                onClick={handlePrevious}
-                disabled={!hasPrevious}
-                title="Previous Image (←)"
-              >
-                <ChevronLeft size={20} />
-              </button>
-              <span className="image-counter">
-                {currentIndex + 1} / {allImages.length}
-              </span>
-              <button
-                onClick={handleNext}
-                disabled={!hasNext}
-                title="Next Image (→)"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="toolbar-right">
-          {/* Zoom controls */}
-          <div className="zoom-controls">
-            <button onClick={handleZoomOut} disabled={zoom <= 0.25} title="Zoom Out (-)">
-              <ZoomOut size={18} />
-            </button>
-            <span className="zoom-level">{Math.round(zoom * 100)}%</span>
-            <button onClick={handleZoomIn} disabled={zoom >= 5} title="Zoom In (+)">
-              <ZoomIn size={18} />
-            </button>
-            <button onClick={handleResetZoom} title="Reset Zoom (0)">
-              Reset
-            </button>
-            <button onClick={handleFitToScreen} title="Fit to Screen">
-              <Maximize2 size={18} />
-            </button>
-          </div>
-
-          {/* Action buttons */}
-          <div className="action-buttons">
-            <button onClick={handleRotate} title="Rotate (R)">
-              <RotateCw size={18} />
-            </button>
-            <button onClick={() => setShowInfo(!showInfo)} title="Info (I)">
-              <Info size={18} />
-            </button>
-            {onInsert && (
-              <button onClick={handleInsert} className="insert-btn" title="Insert into Note">
-                <FileText size={18} />
-                Insert
-              </button>
-            )}
-            <button onClick={handleCopyPath} title="Copy Path">
-              <Copy size={18} />
-            </button>
-            <button onClick={handleRevealInFinder} title="Show in Finder">
-              <Download size={18} />
-            </button>
-            <button onClick={handleOpenExternal} title="Open in Default App">
-              <ExternalLink size={18} />
-            </button>
-          </div>
-        </div>
+    <div className="image-viewer" onMouseMove={handleMouseMoveContainer}>
+      {/* Top-right controls */}
+      <div className={`controls-top-right ${showControls ? 'visible' : ''}`}>
+        <button onClick={() => setShowInfo(!showInfo)} title="Info (I)" aria-label="Toggle image information">
+          <Info size={18} />
+        </button>
+        {onInsert && (
+          <button onClick={handleInsert} className="insert-btn" title="Insert into Note" aria-label="Insert image into note">
+            <FileText size={16} />
+          </button>
+        )}
       </div>
+
+      {/* Bottom-right zoom controls */}
+      <div className={`controls-bottom-right ${showControls ? 'visible' : ''}`}>
+        <button onClick={handleZoomOut} disabled={zoom <= 0.25} title="Zoom Out (-)" aria-label="Zoom out">
+          <ZoomOut size={16} />
+        </button>
+        <span className="zoom-level">{Math.round(zoom * 100)}%</span>
+        <button onClick={handleZoomIn} disabled={zoom >= 5} title="Zoom In (+)" aria-label="Zoom in">
+          <ZoomIn size={16} />
+        </button>
+        <button onClick={handleRotate} title="Rotate (R)" aria-label="Rotate image">
+          <RotateCw size={16} />
+        </button>
+      </div>
+
+      {/* Navigation arrows */}
+      {allImages.length > 1 && hasPrevious && (
+        <button
+          className={`nav-arrow nav-left ${showControls ? 'visible' : ''}`}
+          onClick={handlePrevious}
+          title="Previous (←)"
+          aria-label="Previous image"
+        >
+          <ChevronLeft size={32} />
+        </button>
+      )}
+      {allImages.length > 1 && hasNext && (
+        <button
+          className={`nav-arrow nav-right ${showControls ? 'visible' : ''}`}
+          onClick={handleNext}
+          title="Next (→)"
+          aria-label="Next image"
+        >
+          <ChevronRight size={32} />
+        </button>
+      )}
+
+      {/* Image Counter */}
+      {allImages.length > 1 && (
+        <div className={`image-counter ${showControls ? 'visible' : ''}`}>
+          {currentIndex + 1} / {allImages.length}
+        </div>
+      )}
 
       {/* Image Container */}
       <div
@@ -341,6 +308,10 @@ const ImageViewer = ({ file, allImages = [], onNavigate, onInsert, workspace }) 
               ref={imageRef}
               src={imageSrc}
               alt={file.metadata?.file_name}
+              onError={(e) => {
+                setError('Failed to load image file');
+                setLoading(false);
+              }}
               style={{
                 transform: `scale(${zoom}) rotate(${rotation}deg) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
                 cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'

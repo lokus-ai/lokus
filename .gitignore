@@ -142,4 +142,16 @@ Progress.md
 .devcontainer/.env
 .devcontainer/*.local.*
 
+# Worktree management scripts (personal use)
+WORKTREE*.md
+scripts/create-worktree.sh
+scripts/dev-worktree.sh
+scripts/find-free-port.js
+scripts/list-worktrees.sh
+scripts/make-executable.sh
+scripts/remove-worktree.sh
+scripts/worktree-doctor.sh
+scripts/worktree-manager.sh
+scripts/worktree-status.sh
+
 nul

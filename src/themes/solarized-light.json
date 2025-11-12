@@ -6,6 +6,9 @@
     "--app-panel": "#eee8d5",
     "--app-border": "#93a1a1",
     "--app-muted": "#839496",
-    "--accent": "#268bd2"
+    "--accent": "#268bd2",
+    "--scrollbar-thumb": "#93a1a1",
+    "--scrollbar-thumb-hover": "#657b83",
+    "--scrollbar-track": "#fdf6e3"
   }
 }

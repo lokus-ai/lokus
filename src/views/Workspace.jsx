@@ -5,7 +5,7 @@ import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, Images, Library } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, Library } from "lucide-react";
 import { ColoredFileIcon } from "../components/FileIcon.jsx";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
@@ -49,6 +49,7 @@ import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
 import SplitEditor from "../components/SplitEditor/SplitEditor.jsx";
 import { getFilename, getBasename, joinPath } from '../utils/pathUtils.js';
 import MediaGallery from "../components/MediaGallery/MediaGallery.jsx";
+import ImageViewer from "../components/ImageViewer/ImageViewer.jsx";
 import platformService from "../services/platform/PlatformService.js";
 import Gmail from "./Gmail.jsx";
 import { gmailAuth, gmailEmails } from '../services/gmail.js';
@@ -888,6 +889,7 @@ function WorkspaceWithScope({ path }) {
     if (tabPath === '__graph__') return 'Graph View';
     if (tabPath === '__kanban__') return 'Task Board';
     if (tabPath === '__gmail__') return 'Gmail';
+    if (tabPath === '__media_gallery__') return 'Artifacts';
     if (tabPath === '__bases__') return 'Bases';
     if (tabPath.startsWith('__plugin_')) {
       // Extract plugin name from path if possible, otherwise generic name
@@ -895,6 +897,13 @@ function WorkspaceWithScope({ path }) {
     }
     // For regular files, extract filename
     return tabPath.split('/').pop();
+  };
+
+  // Helper function to check if file is an image
+  const isImageFile = (filePath) => {
+    if (!filePath) return false;
+    const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg', '.ico', '.tiff', '.tif'];
+    return imageExtensions.some(ext => filePath.toLowerCase().endsWith(ext));
   };
 
   // Load session state on initial mount
@@ -2310,7 +2319,7 @@ function WorkspaceWithScope({ path }) {
   const handleOpenGmail = useCallback(() => {
     const gmailPath = '__gmail__';
     const gmailName = 'Gmail';
-    
+
     setOpenTabs(prevTabs => {
       const newTabs = prevTabs.filter(t => t.path !== gmailPath);
       newTabs.unshift({ path: gmailPath, name: gmailName });
@@ -2410,6 +2419,7 @@ function WorkspaceWithScope({ path }) {
           setTimeout(async () => {
             const isSpecialView = nextTab.path === '__kanban__' ||
                                 nextTab.path === '__gmail__' ||
+                                nextTab.path === '__media_gallery__' ||
                                 nextTab.path === '__bases__' ||
                                 nextTab.path.startsWith('__graph__') ||
                                 nextTab.path.startsWith('__plugin_') ||
@@ -3014,7 +3024,8 @@ function WorkspaceWithScope({ path }) {
         style={{
           paddingLeft: platformService.isMacOS() ? '80px' : '8px',
           paddingRight: '8px',
-          backgroundColor: 'rgb(var(--bg))'
+          backgroundColor: 'rgb(var(--panel))',
+          height: '28px'
         }}
       >
         {/* Left Section: New File, New Folder, New Canvas buttons */}
@@ -3055,7 +3066,7 @@ function WorkspaceWithScope({ path }) {
             left: showLeft ? `${leftW + 57}px` : `${platformService.isMacOS() ? 200 : 120}px`, // After sidebar or after left buttons
             right: showRight ? `${rightW + 120}px` : '120px', // Account for right sidebar when open + right buttons
             top: 0,
-            height: '32px'
+            height: '28px'
           }}
         >
           {openTabs.map((tab, index) => {
@@ -3164,7 +3175,7 @@ function WorkspaceWithScope({ path }) {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 grid overflow-hidden border-t border-app-border/30" style={{ gridTemplateColumns: cols, gap: 0 }}>
+      <div className="flex-1 min-h-0 grid overflow-hidden" style={{ gridTemplateColumns: cols, gap: 0 }}>
         <aside className="flex flex-col items-center gap-1 border-r border-app-border bg-app-panel" style={{ paddingTop: platformService.isMacOS() ? '0.5rem' : '0.75rem', paddingBottom: '0.75rem' }}>
           {/* Menu Toggle */}
           <button
@@ -3231,11 +3242,12 @@ function WorkspaceWithScope({ path }) {
               <LayoutGrid className="w-5 h-5" style={showKanban && !showPlugins && !showBases && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
             </button>
 
-            <button
+            {/* Artifacts button - temporarily disabled for improvements */}
+            {/* <button
               onClick={() => {
-                handleFileOpen({ path: '__media_gallery__', name: 'Media Gallery', is_directory: false });
+                handleFileOpen({ path: '__media_gallery__', name: 'Artifacts', is_directory: false });
               }}
-              title="Media Gallery"
+              title="Artifacts"
               className="obsidian-button icon-only w-full mb-1"
               onMouseEnter={(e) => {
                 const icon = e.currentTarget.querySelector('svg');
@@ -3247,7 +3259,7 @@ function WorkspaceWithScope({ path }) {
               }}
             >
               <Library className="w-5 h-5" style={(activeFile === '__media_gallery__') ? { color: 'rgb(var(--accent))' } : {}} />
-            </button>
+            </button> */}
             
             <button
               onClick={() => {
@@ -3340,7 +3352,7 @@ function WorkspaceWithScope({ path }) {
             >
               <Mail className="w-5 h-5" />
             </button>
-            
+
           </div>
         </aside>
         <div className="bg-app-border/20 w-px" />
@@ -3530,6 +3542,10 @@ function WorkspaceWithScope({ path }) {
                       <div className="h-full">
                         <Gmail workspacePath={path} />
                       </div>
+                    ) : rightPaneFile === '__media_gallery__' ? (
+                      <div className="h-full">
+                        <MediaGallery workspace={{ path: path, name: getBasename(path) }} />
+                      </div>
                     ) : rightPaneFile === '__bases__' ? (
                       <div className="h-full">
                         <BasesView isVisible={true} onFileOpen={handleFileOpen} />
@@ -3675,6 +3691,71 @@ function WorkspaceWithScope({ path }) {
                       const activeTab = openTabs.find(tab => tab.path === activeFile);
                       return activeTab?.plugin ? <PluginDetail plugin={activeTab.plugin} /> : <div>Plugin not found</div>;
                     })()}
+                  </div>
+                ) : activeFile && isImageFile(activeFile) ? (
+                  <div className="flex-1 h-full overflow-hidden">
+                    <ImageViewer
+                      file={{
+                        file_path: activeFile,
+                        metadata: {
+                          file_name: getFilename(activeFile)
+                        }
+                      }}
+                      workspace={{ path: path }}
+                      onInsert={async (file) => {
+                        // Insert image markdown syntax into editor if editor is open
+                        console.log('[Workspace] onInsert called with file:', file);
+                        if (editor) {
+                          try {
+                            console.log('[Workspace] Reading image file...');
+                            // Read the image file and convert to data URL
+                            const { readFile } = await import('@tauri-apps/plugin-fs');
+                            const imageData = await readFile(file.file_path);
+                            console.log('[Workspace] Image data read, size:', imageData.length);
+
+                            // Get MIME type from extension
+                            const extension = file.file_path.split('.').pop().toLowerCase();
+                            const mimeTypes = {
+                              'png': 'image/png',
+                              'jpg': 'image/jpeg',
+                              'jpeg': 'image/jpeg',
+                              'gif': 'image/gif',
+                              'bmp': 'image/bmp',
+                              'webp': 'image/webp',
+                              'svg': 'image/svg+xml',
+                              'ico': 'image/x-icon',
+                              'tiff': 'image/tiff',
+                              'tif': 'image/tiff'
+                            };
+                            const mimeType = mimeTypes[extension] || 'image/png';
+                            console.log('[Workspace] MIME type:', mimeType);
+
+                            // Convert to base64 data URL
+                            const base64 = btoa(String.fromCharCode(...imageData));
+                            const dataUrl = `data:${mimeType};base64,${base64}`;
+                            console.log('[Workspace] Data URL created, length:', dataUrl.length);
+
+                            // Insert as image with data URL
+                            console.log('[Workspace] Inserting image into editor...');
+                            editor.commands.insertContent({
+                              type: 'image',
+                              attrs: {
+                                src: dataUrl,
+                                alt: file.metadata?.file_name || 'image'
+                              }
+                            });
+                            console.log('[Workspace] Image inserted successfully');
+                          } catch (err) {
+                            console.error('[Workspace] Failed to insert image:', err);
+                            // Fallback to file path
+                            const imagePath = file.file_path.replace(path + '/', '');
+                            editor.commands.insertContent(`![${file.metadata?.file_name || 'image'}](${imagePath})`);
+                          }
+                        } else {
+                          console.log('[Workspace] Editor not available');
+                        }
+                      }}
+                    />
                   </div>
                 ) : activeFile ? (
                   <EditorDropZone>

@@ -22,11 +22,6 @@ function App() {
   // Use the hooks' values directly (no setter param expected)
   const { isPrefsWindow } = usePreferenceActivation();
   const activePath = useWorkspaceActivation();
-  
-  console.log('🎯 App.jsx rendering');
-  console.log('🎯 isPrefsWindow:', isPrefsWindow);
-  console.log('🎯 activePath:', activePath);
-  console.log('🎯 URL search params:', window.location.search);
 
   // Initialize markdown syntax config and editor config cache on app startup
   useEffect(() => {
@@ -98,7 +93,7 @@ function App() {
   return (
     <div className="app-root">
       {/* Universal titlebar with drag region for all views */}
-      <div className="app-titlebar" data-tauri-drag-region></div>
+      <div className="app-titlebar" data-tauri-drag-region style={isPrefsWindow ? { height: 0 } : {}}></div>
 
       <div className="app-content">
         <AuthProvider>

@@ -9,6 +9,7 @@ import * as LinkExt from "@tiptap/extension-link";
 import * as TaskListExt from "@tiptap/extension-task-list";
 import * as TaskItemExt from "@tiptap/extension-task-item";
 import * as ImageExt from "@tiptap/extension-image";
+import { readFile } from '@tauri-apps/plugin-fs';
 import * as SuperscriptExt from "@tiptap/extension-superscript";
 import * as SubscriptExt from "@tiptap/extension-subscript";
 import * as TableExt from "@tiptap/extension-table";
@@ -39,12 +40,13 @@ import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import TaskCreationModal from "../../components/TaskCreationModal.jsx";
 import ExportModal from "../../views/ExportModal.jsx";
 import ReadingModeView from "./ReadingModeView.jsx";
+import ImagePicker from "../../components/ImagePicker/ImagePicker.jsx";
 import { editorAPI } from "../../plugins/api/EditorAPI.js";
 import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 
 import "../styles/editor.css";
 
-const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => {
+const Editor = forwardRef(({ content, onContentChange, onEditorReady, workspacePath }, ref) => {
   const [extensions, setExtensions] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editorSettings, setEditorSettings] = useState(null);
@@ -73,7 +75,6 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => 
     };
 
     const handleMarkdownConfigChange = () => {
-      console.log('[Editor] Markdown config changed, forcing editor reload...');
       setLastPluginUpdate(Date.now());
     };
 
@@ -137,23 +138,6 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => 
         allowBase64: true,
         HTMLAttributes: {
           class: 'editor-image',
-        },
-        addInputRules() {
-          return [
-            new InputRule({
-              find: /!\[([^\]]*)\]\(([^)]+)\)$/,
-              handler: ({ state, range, match, chain }) => {
-                const alt = match[1];
-                const src = match[2];
-                // Handle both local paths and web URLs
-                const resolvedSrc = src.startsWith('http') ? src : src;
-                chain().deleteRange(range).insertContent({
-                  type: 'image',
-                  attrs: { src: resolvedSrc, alt: alt || '' }
-                }).run();
-              },
-            }),
-          ];
         },
       }));
     }
@@ -360,15 +344,16 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => 
   }
 
   return (
-    <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} editorMode={editorMode} onEditorReady={onEditorReady} />
+    <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} editorMode={editorMode} onEditorReady={onEditorReady} workspacePath={workspacePath} />
   );
 });
 
-const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings, editorMode = 'edit', onEditorReady }, ref) => {
+const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings, editorMode = 'edit', onEditorReady, workspacePath }, ref) => {
   const isSettingRef = useRef(false);
   const [isWikiLinkModalOpen, setIsWikiLinkModalOpen] = useState(false);
   const [isTaskCreationModalOpen, setIsTaskCreationModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
 
   // Subscribe to live settings changes for real-time updates
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
@@ -658,10 +643,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         }
         break;
       case 'insertImage':
-        const imageUrl = window.prompt('Enter image URL:');
-        if (imageUrl) {
-          editor.commands.setImage({ src: imageUrl });
-        }
+        setIsImagePickerOpen(true);
         break;
       case 'exportMarkdown':
       case 'exportHTML':
@@ -763,6 +745,22 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         }}
         workspacePath={globalThis.__LOKUS_WORKSPACE_PATH__}
         exportType="single"
+      />
+
+      {/* Image Picker Modal */}
+      <ImagePicker
+        isOpen={isImagePickerOpen}
+        onClose={() => setIsImagePickerOpen(false)}
+        onSelect={(imageData) => {
+          editor.commands.insertContent({
+            type: 'image',
+            attrs: {
+              src: imageData.src,
+              alt: imageData.alt
+            }
+          });
+        }}
+        workspacePath={workspacePath || globalThis.__LOKUS_WORKSPACE_PATH__}
       />
     </>
   );

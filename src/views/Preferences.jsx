@@ -16,11 +16,6 @@ import { useAuth } from "../core/auth/AuthContext";
 import { User, LogIn, LogOut, Crown, Shield, Settings as SettingsIcon } from "lucide-react";
 
 export default function Preferences() {
-  console.log('🔧 Preferences component rendering');
-  console.log('🔧 Window location:', window.location.href);
-  console.log('🔧 Window search params:', new URLSearchParams(window.location.search).toString());
-  console.log('🔧 Document root styles:', window.getComputedStyle(document.documentElement).getPropertyValue('--bg'));
-  console.log('🔧 Document body classes:', document.body.className);
   const [themes, setThemes] = useState([]);
   const [activeTheme, setActiveTheme] = useState("");
   const [themeTokens, setThemeTokens] = useState({});

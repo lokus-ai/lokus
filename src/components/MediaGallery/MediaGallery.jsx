@@ -13,7 +13,6 @@ import {
   FolderOpen,
   Copy,
   Trash2,
-  ScanLine,
   RefreshCw,
   Grid3x3,
   List as ListIcon,
@@ -235,17 +234,24 @@ const MediaGallery = ({ workspace }) => {
     }
   };
 
-  const handleFileClick = async (file) => {
+  const handleFileClick = async (file, event) => {
     setSelectedFile(file);
 
-    // Open lightbox for images, PDF viewer for PDFs
+    // Cmd/Ctrl+Click: Open as tab in workspace
+    if (event?.metaKey || event?.ctrlKey) {
+      // TODO: Implement opening file as tab in workspace
+      // This would require integrating with the workspace's tab system
+      console.log('Opening as tab not yet implemented:', file.file_path);
+      return;
+    }
+
+    // Regular click: Open viewer modal for images
     if (file.media_type === 'Image') {
       setLightboxFile(file);
       setShowLightbox(true);
     } else if (file.media_type === 'Pdf') {
       // TODO: Open PDF viewer (will be implemented in next step)
-      console.log('PDF viewer not yet implemented, opening in system default app');
-      handleFileDoubleClick(file);
+      console.log('PDF viewer not yet implemented');
     }
   };
 
@@ -486,11 +492,11 @@ const MediaGallery = ({ workspace }) => {
                         <div
                           key={file.id}
                           className={`media-card ${selectedFile?.id === file.id ? 'selected' : ''}`}
-                          onClick={() => handleFileClick(file)}
+                          onClick={(e) => handleFileClick(file, e)}
                           onDoubleClick={() => handleFileDoubleClick(file)}
                           onContextMenu={(e) => {
                             e.preventDefault();
-                            handleFileClick(file);
+                            handleFileClick(file, e);
                           }}
                         >
                           {/* Thumbnail */}
@@ -524,32 +530,22 @@ const MediaGallery = ({ workspace }) => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleFileDoubleClick(file);
+                                handleFileClick(file);
                               }}
-                              title="Open"
+                              title="View"
                             >
                               <Eye size={14} />
                             </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleRevealInFinder(file);
+                                handleCopyPath(file);
                               }}
-                              title="Reveal in Finder"
+                              title="Copy Path"
                             >
-                              <FolderOpen size={14} />
+                              <Copy size={14} />
                             </button>
-                            {file.media_type === 'Image' && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOCR(file);
-                                }}
-                                title="Extract Text (OCR)"
-                              >
-                                <ScanLine size={14} />
-                              </button>
-                            )}
+                            {/* OCR feature removed for now */}
                           </div>
                         </div>
                       ))}
@@ -584,7 +580,7 @@ const MediaGallery = ({ workspace }) => {
                   >
                     <div
                       className={`list-item ${selectedFile?.id === file.id ? 'selected' : ''}`}
-                      onClick={() => handleFileClick(file)}
+                      onClick={(e) => handleFileClick(file, e)}
                       onDoubleClick={() => handleFileDoubleClick(file)}
                     >
                       <div className="list-icon">
@@ -651,7 +647,7 @@ const MediaGallery = ({ workspace }) => {
       {showLightbox && lightboxFile && (
         <ImageLightbox
           file={lightboxFile}
-          allFiles={filteredFiles}
+          allFiles={filteredFiles.filter(f => f.media_type === 'Image')}
           onClose={handleCloseLightbox}
           onInsert={handleInsertImage}
           workspace={workspace}
