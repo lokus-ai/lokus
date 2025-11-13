@@ -83,45 +83,53 @@ export class CanvasManager {
    */
   async _loadCanvasInternal(canvasPath) {
     try {
+      console.log(`[Canvas Manager] Loading canvas from: ${canvasPath}`);
+
       // Validate file path
       if (!isValidFilePath(canvasPath)) {
+        console.error(`[Canvas Manager] Invalid file path: ${canvasPath}`);
         throw new Error('Invalid canvas path');
       }
-      
+
       // Wait for any pending saves to complete
       if (this.saveQueue.has(canvasPath)) {
+        console.log(`[Canvas Manager] Waiting for pending save to complete: ${canvasPath}`);
         await this.saveQueue.get(canvasPath);
       }
-      
-      // Check cache first (but clear it if there was a recent save)
-      if (this.canvasCache.has(canvasPath)) {
-        const cached = this.canvasCache.get(canvasPath);
-        return cached;
-      }
+
+      // ALWAYS clear cache before loading to ensure fresh data after saves
+      this.canvasCache.delete(canvasPath);
+      console.log(`[Canvas Manager] Cache cleared for: ${canvasPath}`);
 
       const content = await invoke('read_file_content', { path: canvasPath });
-      
+      console.log(`[Canvas Manager] File read successfully, size: ${content.length} bytes`);
+
       let canvasData;
       try {
         canvasData = JSON.parse(content);
+        console.log(`[Canvas Manager] JSON parsed successfully, nodes: ${canvasData.nodes?.length || 0}, edges: ${canvasData.edges?.length || 0}`);
       } catch (parseError) {
+        console.error(`[Canvas Manager] JSON parse failed for ${canvasPath}:`, parseError.message);
         canvasData = this.createEmptyCanvasData();
       }
 
       // Security validation for canvas data
       if (!isValidCanvasData(canvasData)) {
+        console.error(`[Canvas Manager] Canvas data failed security validation for ${canvasPath}`);
         canvasData = this.createEmptyCanvasData();
       }
 
       // Validate and normalize canvas data
       canvasData = this.validateCanvasData(canvasData);
-      
+      console.log(`[Canvas Manager] Canvas data validated and normalized`);
+
       // Cache the loaded data
       this.canvasCache.set(canvasPath, canvasData);
-      
-      
+      console.log(`[Canvas Manager] Canvas cached for: ${canvasPath}`);
+
       return canvasData;
     } catch (error) {
+      console.error(`[Canvas Manager] Failed to load canvas from ${canvasPath}:`, error.message);
       // Return empty canvas if file doesn't exist or can't be read
       return this.createEmptyCanvasData();
     }
@@ -155,34 +163,44 @@ export class CanvasManager {
    */
   async _saveCanvasInternal(canvasPath, canvasData) {
     try {
+      console.log(`[Canvas Manager] Saving canvas to: ${canvasPath}`);
+      console.log(`[Canvas Manager] Canvas data nodes: ${canvasData.nodes?.length || 0}, edges: ${canvasData.edges?.length || 0}`);
+
       // Validate file path
       if (!isValidFilePath(canvasPath)) {
+        console.error(`[Canvas Manager] Invalid file path for save: ${canvasPath}`);
         throw new Error('Invalid canvas path');
       }
-      
+
       // Security validation for canvas data
       if (!isValidCanvasData(canvasData)) {
+        console.error(`[Canvas Manager] Canvas data failed security validation before save: ${canvasPath}`);
         throw new Error('Invalid canvas data - security validation failed');
       }
-      
+
       // Validate data before saving
       const validatedData = this.validateCanvasData(canvasData);
-      
+      console.log(`[Canvas Manager] Canvas data validated, nodes: ${validatedData.nodes?.length || 0}, edges: ${validatedData.edges?.length || 0}`);
+
       // Convert to JSON Canvas format if needed
       const jsonCanvasData = this.convertToJsonCanvas(validatedData);
-      
+      console.log(`[Canvas Manager] Converted to JSON Canvas format`);
+
       const content = JSON.stringify(jsonCanvasData, null, 2);
-      
-      
+      console.log(`[Canvas Manager] Serialized to JSON, size: ${content.length} bytes`);
+
       await invoke('write_file_content', {
         path: canvasPath,
         content
       });
-      
+      console.log(`[Canvas Manager] File written successfully: ${canvasPath}`);
+
       // Clear cache to force fresh read next time
       this.canvasCache.delete(canvasPath);
-      
+      console.log(`[Canvas Manager] Cache cleared after save: ${canvasPath}`);
+
     } catch (error) {
+      console.error(`[Canvas Manager] Failed to save canvas to ${canvasPath}:`, error.message);
       throw error;
     }
   }
@@ -233,6 +251,7 @@ export class CanvasManager {
    */
   validateCanvasData(data) {
     if (!data || typeof data !== 'object') {
+      console.warn(`[Canvas Manager] Invalid canvas data type, creating empty canvas`);
       return this.createEmptyCanvasData();
     }
 
@@ -253,7 +272,65 @@ export class CanvasManager {
       }
     };
 
+    // Validate individual nodes
+    validated.nodes = validated.nodes.filter((node, index) => {
+      const isValid = this._validateNode(node);
+      if (!isValid) {
+        console.warn(`[Canvas Manager] Removed invalid node at index ${index}:`, node);
+      }
+      return isValid;
+    });
+
+    // Validate individual edges
+    validated.edges = validated.edges.filter((edge, index) => {
+      const isValid = this._validateEdge(edge);
+      if (!isValid) {
+        console.warn(`[Canvas Manager] Removed invalid edge at index ${index}:`, edge);
+      }
+      return isValid;
+    });
+
+    // Verify edge references
+    const nodeIds = new Set(validated.nodes.map(n => n.id));
+    validated.edges = validated.edges.filter((edge) => {
+      const fromExists = nodeIds.has(edge.fromNode);
+      const toExists = nodeIds.has(edge.toNode);
+      if (!fromExists || !toExists) {
+        console.warn(`[Canvas Manager] Removed edge with missing node references:`, edge);
+        return false;
+      }
+      return true;
+    });
+
+    console.log(`[Canvas Manager] Validation complete: ${validated.nodes.length} nodes, ${validated.edges.length} edges`);
+
     return validated;
+  }
+
+  /**
+   * Validate individual node
+   * @private
+   */
+  _validateNode(node) {
+    if (!node || typeof node !== 'object') return false;
+    if (!node.id || typeof node.id !== 'string') return false;
+    if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return false;
+    if (!Number.isFinite(node.width) || !Number.isFinite(node.height)) return false;
+    if (node.width < 0 || node.height < 0) return false;
+    if (!node.type || typeof node.type !== 'string') return false;
+    return true;
+  }
+
+  /**
+   * Validate individual edge
+   * @private
+   */
+  _validateEdge(edge) {
+    if (!edge || typeof edge !== 'object') return false;
+    if (!edge.id || typeof edge.id !== 'string') return false;
+    if (!edge.fromNode || typeof edge.fromNode !== 'string') return false;
+    if (!edge.toNode || typeof edge.toNode !== 'string') return false;
+    return true;
   }
 
   /**
