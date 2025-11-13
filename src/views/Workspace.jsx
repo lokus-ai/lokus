@@ -59,6 +59,8 @@ import GraphSidebar from "../components/GraphSidebar.jsx";
 import VersionHistoryPanel from "../components/VersionHistoryPanel.jsx";
 import BacklinksPanel from "./BacklinksPanel.jsx";
 import { DailyNotesPanel, NavigationButtons, DatePickerModal } from "../components/DailyNotes/index.js";
+import { ImageViewerTab } from "../components/ImageViewer";
+import { isImageFile, findImageFiles } from "../utils/imageUtils.js";
 
 const MAX_OPEN_TABS = 10;
 
@@ -840,6 +842,9 @@ function WorkspaceWithScope({ path }) {
   const [graphData, setGraphData] = useState(null);
   const [isLoadingGraph, setIsLoadingGraph] = useState(false);
 
+  // Image files state for navigation
+  const [allImageFiles, setAllImageFiles] = useState([]);
+
   // Graph sidebar state
   const [graphSidebarData, setGraphSidebarData] = useState({
     selectedNodes: [],
@@ -1019,6 +1024,10 @@ function WorkspaceWithScope({ path }) {
           };
           walk(tree);
           try { window.__LOKUS_FILE_INDEX__ = flat; } catch {}
+
+          // Extract all image files for image viewer navigation
+          const imageFiles = findImageFiles(tree);
+          setAllImageFiles(imageFiles);
         })
         .catch((error) => {
           // Log to backend instead
@@ -1229,7 +1238,7 @@ function WorkspaceWithScope({ path }) {
     if (file.path && file.lineNumber !== undefined) {
       const filePath = file.path;
       const fileName = getFilename(filePath);
-      
+
       setOpenTabs(prevTabs => {
         const newTabs = prevTabs.filter(t => t.path !== filePath);
         newTabs.unshift({ path: filePath, name: fileName });
@@ -1239,27 +1248,30 @@ function WorkspaceWithScope({ path }) {
         return newTabs;
       });
       setActiveFile(filePath);
-      
-      // Jump to line after editor loads
-      setTimeout(() => {
-        if (editorRef.current && file.lineNumber) {
-          try {
-            const doc = editorRef.current.state.doc;
-            const linePos = doc.line(file.lineNumber).from + (file.column || 0);
-            const selection = editorRef.current.state.selection.constructor.create(doc, linePos, linePos);
-            const tr = editorRef.current.state.tr.setSelection(selection);
-            editorRef.current.view.dispatch(tr);
-            editorRef.current.commands.scrollIntoView();
-          } catch (error) {
+
+      // Jump to line after editor loads (only for non-image files)
+      if (!isImageFile(filePath)) {
+        setTimeout(() => {
+          if (editorRef.current && file.lineNumber) {
+            try {
+              const doc = editorRef.current.state.doc;
+              const linePos = doc.line(file.lineNumber).from + (file.column || 0);
+              const selection = editorRef.current.state.selection.constructor.create(doc, linePos, linePos);
+              const tr = editorRef.current.state.tr.setSelection(selection);
+              editorRef.current.view.dispatch(tr);
+              editorRef.current.commands.scrollIntoView();
+            } catch (error) {
+            }
           }
-        }
-      }, 100);
+        }, 100);
+      }
       return;
     }
-    
+
     // Handle regular file format
     if (file.is_directory) return;
 
+    // Add file to tabs (works for all file types including images)
     setOpenTabs(prevTabs => {
       const newTabs = prevTabs.filter(t => t.path !== file.path);
       // Ensure we only use the filename, not a full path
@@ -3583,6 +3595,24 @@ function WorkspaceWithScope({ path }) {
                 onFileOpen={handleFileOpen}
               />
             </div>
+          ) : activeFile && isImageFile(activeFile) ? (
+            <div className="flex-1 overflow-hidden">
+              <ImageViewerTab
+                imagePath={activeFile}
+                allImageFiles={allImageFiles}
+                onImageChange={(newPath) => {
+                  // Update active file and tab name when navigating between images
+                  setActiveFile(newPath);
+                  setOpenTabs(prevTabs => {
+                    return prevTabs.map(tab =>
+                      tab.path === activeFile
+                        ? { ...tab, path: newPath, name: getFilename(newPath) }
+                        : tab
+                    );
+                  });
+                }}
+              />
+            </div>
           ) : activeFile === '__graph__' ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
               <ProfessionalGraphView
@@ -4154,9 +4184,9 @@ function WorkspaceWithScope({ path }) {
       />
 
       {/* Pluginable Status Bar - replaces the old Obsidian status bar */}
-      <StatusBar 
-        activeFile={activeFile} 
-        unsavedChanges={unsavedChanges} 
+      <StatusBar
+        activeFile={activeFile}
+        unsavedChanges={unsavedChanges}
         openTabs={openTabs}
         editor={editor}
       />

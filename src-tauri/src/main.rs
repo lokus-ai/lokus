@@ -270,6 +270,7 @@ fn main() {
       handlers::files::delete_file,
       handlers::files::reveal_in_finder,
       handlers::files::open_terminal,
+      handlers::files::read_image_file,
       handlers::platform_files::platform_reveal_in_file_manager,
       handlers::platform_files::platform_open_terminal,
       handlers::platform_files::get_platform_information,
