@@ -14,20 +14,11 @@ export * from './lifecycle.js'
 // API types
 export * from './api/index.js'
 
-// Extension points
-export * from './extension-points/index.js'
-
-// Communication protocol
-export * from './protocol.js'
-
 // Event system
 export * from './events.js'
 
 // Configuration
 export * from './configuration.js'
-
-// Security
-export * from './security.js'
 
 // Utilities
 export * from './utilities.js'

@@ -29,8 +29,20 @@ npm run test:e2e:headed
 ### **Frontend (React + TipTap)**
 - `src/editor/` - Rich text editor components
 - `src/views/` - Main app views (Workspace, Preferences)
-- `src/core/` - Core functionality (themes, config, wiki)
+- `src/core/` - Core functionality (themes, config, wiki, **templates**)
+  - `src/core/templates/` - Template system implementation
+    - `file-storage.js` - File-based template storage
+    - `processor-integrated.js` - Main template processor
+    - `dates.js` - Date operations (70+ functions)
+    - `filters.js` - Text/array/number filters (60+)
+    - `conditionals.js` - If/else logic
+    - `loops.js` - Array iteration
+    - `sandbox-isolated.js` - JavaScript execution
+    - `html-to-markdown.js` - HTML conversion
 - `src/hooks/` - React hooks
+  - `useTemplates.js` - Template management hook
+- `src/components/` - React components
+  - `CreateTemplate.jsx` - Template creation UI
 - `src/styles/` - CSS and styling
 
 ### **Backend (Tauri + Rust)**
@@ -57,6 +69,17 @@ npm run test:e2e:headed
 - ✅ File management and workspace
 - ✅ Theme system (light/dark + custom themes)
 - ✅ Preferences with real-time editor customization
+- ✅ Daily Notes system with date navigation
+- ✅ Advanced template system with 90+ features
+  - File-based storage (.md files with YAML frontmatter)
+  - 70+ date operations with method chaining
+  - 60+ text/array/number/date filters
+  - Conditionals (if/else/elseif) with operators
+  - Loops (#each) with special variables
+  - JavaScript sandbox execution
+  - Template includes for composition
+  - HTML to Markdown auto-conversion
+  - Duplicate detection and overwrite protection
 
 ## 🔧 **Common Tasks**
 
@@ -74,6 +97,20 @@ npm run test:e2e:headed
 ### **Modifying Themes**
 - Edit `src/core/theme/manager.js`
 - CSS variables in `src/styles/globals.css`
+
+### **Working with Templates**
+- **Documentation**: See `docs/templates/` for complete guides
+  - `README.md` - Overview and quick start
+  - `syntax-reference.md` - Complete syntax guide
+  - `examples.md` - Real-world examples
+  - `architecture.md` - Technical implementation
+- **Storage Location**: `/Users/[username]/Desktop/My Knowledge Base/templates/`
+- **File Format**: Markdown with YAML frontmatter
+- **Testing**: Unit tests in `tests/unit/templates/`
+- **Key Files**:
+  - Template processing: `src/core/templates/processor-integrated.js`
+  - Storage: `src/core/templates/file-storage.js`
+  - UI: `src/components/CreateTemplate.jsx`
 
 ## 🐛 **Known Issues**
 

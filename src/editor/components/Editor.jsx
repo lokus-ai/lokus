@@ -532,6 +532,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     state: editor?.state,
     view: editor?.view,
     getHTML: () => editor?.getHTML(),
+    getText: () => editor?.getText(),
     setContent: (content) => editor?.commands?.setContent(content),
     insertContent: (content) => editor?.commands?.insertContent(content),
     focus: () => editor?.commands?.focus(),

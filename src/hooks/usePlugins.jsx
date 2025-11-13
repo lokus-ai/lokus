@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
-import pluginManager from "../core/plugins/PluginManager.js";
+import pluginManager from "../core/plugins/PluginStateAdapter.js";
 
 const PluginContext = createContext(null);
 

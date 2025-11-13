@@ -467,14 +467,18 @@ export default function CommandPalette({
 
   // Handle template selection
   const handleTemplateSelect = React.useCallback(async (template) => {
-    
+    console.log('[CommandPalette] Template selected:', template);
+    console.log('[CommandPalette] processTemplate function exists:', !!processTemplate);
+
     try {
       // Process the template with built-in variables
+      console.log('[CommandPalette] Calling processTemplate for id:', template.id);
       const result = await processTemplate(template.id, {}, {
         context: {}
       })
-      
-      
+
+      console.log('[CommandPalette] Process result:', result);
+
       // Call onShowTemplatePicker with processed content
       if (onShowTemplatePicker) {
         // Create a mock event that mimics the TemplatePicker selection
@@ -482,14 +486,18 @@ export default function CommandPalette({
           template,
           processedContent: result.result || result.content || result
         }
+        console.log('[CommandPalette] Sending processed content (length):', mockSelection.processedContent?.length);
         onShowTemplatePicker(mockSelection)
       }
-      
+
       // Close command palette
       setOpen(false)
     } catch (err) {
+      console.error('[CommandPalette] ERROR processing template:', err);
+      console.error('[CommandPalette] Error stack:', err.stack);
       // Fallback to raw template content
       if (onShowTemplatePicker) {
+        console.log('[CommandPalette] Using fallback - raw content');
         const mockSelection = {
           template,
           processedContent: template.content

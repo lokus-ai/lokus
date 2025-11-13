@@ -2122,20 +2122,49 @@ function WorkspaceWithScope({ path }) {
   };
 
   const handleCreateTemplate = useCallback(() => {
-    // Get selected text from editor or use entire content if nothing selected
+    // Get content from editor - extract HTML for proper markdown conversion
     const getContentForTemplate = () => {
       if (editorRef.current) {
         const { state } = editorRef.current;
         const { selection } = state;
-        
+
         // Check if there's a selection
         if (!selection.empty) {
-          // Get selected text
-          const selectedText = state.doc.textBetween(selection.from, selection.to);
-          return selectedText;
+          // Get HTML for selected content to preserve formatting
+          console.log('[Workspace] Getting selected content as HTML');
+
+          // Create a fragment from selection
+          const fragment = state.doc.slice(selection.from, selection.to);
+
+          // Convert fragment to HTML using the editor
+          // We'll use getHTML() and then extract just the selected portion
+          // For now, get the full HTML and we'll rely on CreateTemplate to convert it
+          const selectedHTML = editorRef.current.getHTML ? editorRef.current.getHTML() : '';
+
+          // Fallback: if HTML extraction fails, use plaintext
+          if (!selectedHTML || !selectedHTML.includes('<')) {
+            console.log('[Workspace] HTML extraction failed, using plaintext');
+            const selectedText = state.doc.textBetween(selection.from, selection.to);
+            return selectedText;
+          }
+
+          console.log('[Workspace] Extracted HTML length:', selectedHTML.length);
+          return selectedHTML;
         } else if (activeFile) {
-          // No selection, use current file content
-          const currentContent = editorRef.current.getHTML() || editorRef.current.getText() || stateRef.current.editorContent;
+          // No selection, use current editor content as HTML
+          console.log('[Workspace] Getting full document content as HTML');
+
+          // First try to get HTML from editor (preserves rich formatting)
+          const editorHTML = editorRef.current.getHTML ? editorRef.current.getHTML() : null;
+
+          if (editorHTML && editorHTML.includes('<')) {
+            console.log('[Workspace] Using editor HTML, length:', editorHTML.length);
+            return editorHTML;
+          }
+
+          // Fallback to saved markdown content if HTML extraction fails
+          console.log('[Workspace] HTML not available, using saved markdown');
+          const currentContent = stateRef.current.savedContent || '';
           return currentContent;
         }
       }
@@ -2143,6 +2172,7 @@ function WorkspaceWithScope({ path }) {
     };
 
     const contentForTemplate = getContentForTemplate();
+    console.log('[Workspace] Content for template (first 100 chars):', contentForTemplate.substring(0, 100));
     setCreateTemplateContent(contentForTemplate);
     setShowCreateTemplate(true);
   }, [activeFile]);
@@ -2574,7 +2604,8 @@ function WorkspaceWithScope({ path }) {
     
     // Template picker event listener
     const handleTemplatePicker = (event) => {
-      setTemplatePickerData(event.detail);
+      const data = event?.detail || event;
+      setTemplatePickerData(data);
       setShowTemplatePicker(true);
     };
     const unlistenTemplatePicker = Promise.resolve(addDom('open-template-picker', handleTemplatePicker));

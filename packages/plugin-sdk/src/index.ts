@@ -201,20 +201,16 @@ export namespace DevMode {
   /**
    * Development logger with enhanced features
    */
-  export function createLogger(pluginId: string) {
+  export function createLogger(pluginId: string): PluginLogger | null {
     if (isEnabled()) {
-      return new (class extends PluginLogger {
-        constructor() {
-          // Would need actual API instance in real implementation
-          super(pluginId, {} as any, { level: LogLevel.DEBUG })
+      const logger = new PluginLogger(pluginId, {} as any, { level: LogLevel.DEBUG })
+      // Add development logging method
+      (logger as any).devLog = function(message: string, ...args: unknown[]) {
+        if (isEnabled()) {
+          logger.debug(`[DEV] ${message}`, ...args)
         }
-
-        devLog(message: string, ...args: unknown[]) {
-          if (isEnabled()) {
-            this.debug(`[DEV] ${message}`, ...args)
-          }
-        }
-      })()
+      }
+      return logger
     }
     return null
   }

@@ -6,7 +6,7 @@ import type { Plugin, PluginContext, LokusAPI, Disposable } from '../types/index
 import { DisposableStore } from './disposable-store.js'
 import { PluginLogger } from './plugin-logger.js'
 import { ConfigManager } from './config-manager.js'
-import { EventBus } from './event-bus.js'
+// import { EventBus } from './event-bus.js' // TODO: Implement EventBus
 
 /**
  * Abstract base plugin class with common functionality
@@ -16,7 +16,7 @@ export abstract class BasePlugin implements Plugin {
   protected api?: LokusAPI
   protected logger?: PluginLogger
   protected config?: ConfigManager
-  protected events?: EventBus
+  // protected events?: EventBus // TODO: Implement EventBus
   private disposables = new DisposableStore()
   private isActivated = false
 
@@ -51,8 +51,9 @@ export abstract class BasePlugin implements Plugin {
     this.addDisposable(this.config)
 
     // Initialize event bus
-    this.events = new EventBus()
-    this.addDisposable(this.events)
+    // TODO: Implement EventBus
+    // this.events = new EventBus()
+    // this.addDisposable(this.events)
 
     this.logger.info('Plugin services initialized')
   }
@@ -106,13 +107,14 @@ export abstract class BasePlugin implements Plugin {
 
   /**
    * Get event bus
+   * TODO: Implement EventBus
    */
-  protected getEvents(): EventBus {
-    if (!this.events) {
-      throw new Error('Plugin not initialized')
-    }
-    return this.events
-  }
+  // protected getEvents(): EventBus {
+  //   if (!this.events) {
+  //     throw new Error('Plugin not initialized')
+  //   }
+  //   return this.events
+  // }
 
   /**
    * Check if plugin is activated
