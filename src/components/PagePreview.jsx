@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 
 /**
@@ -10,14 +10,60 @@ import { X } from 'lucide-react';
  * - Displays placeholder content
  * - Includes close button
  * - Supports theming
+ * - Smart positioning (avoids going off-screen)
  */
 const PagePreview = ({ target, position, onClose }) => {
+  const previewRef = useRef(null);
+  const [adjustedPosition, setAdjustedPosition] = useState(position);
+
+  useEffect(() => {
+    if (!previewRef.current || !position) return;
+
+    const preview = previewRef.current;
+    const rect = preview.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    let { x, y } = position;
+    const offset = 10; // Offset from cursor
+    const padding = 16; // Padding from viewport edges
+
+    // Check if preview goes beyond right edge
+    if (x + rect.width + padding > viewportWidth) {
+      x = viewportWidth - rect.width - padding;
+    }
+
+    // Check if preview goes beyond left edge
+    if (x < padding) {
+      x = padding;
+    }
+
+    // Check if preview goes beyond bottom edge
+    if (y + rect.height + padding > viewportHeight) {
+      // Position above cursor instead
+      y = position.y - rect.height - offset;
+
+      // If still goes beyond top edge, align to top with padding
+      if (y < padding) {
+        y = padding;
+      }
+    }
+
+    // Check if preview goes beyond top edge
+    if (y < padding) {
+      y = padding;
+    }
+
+    setAdjustedPosition({ x, y });
+  }, [position]);
+
   if (!target) return null;
 
-  const { x, y } = position || { x: 0, y: 0 };
+  const { x, y } = adjustedPosition || position || { x: 0, y: 0 };
 
   return (
     <div
+      ref={previewRef}
       className="page-preview"
       style={{
         position: 'fixed',
