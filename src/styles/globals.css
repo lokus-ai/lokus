@@ -1579,9 +1579,10 @@ div:focus-visible,
 }
 
 .app-titlebar {
-  height: 32px;
+  height: 29px;
   width: 100%;
-  background-color: rgb(var(--bg));
+  background-color: rgb(var(--panel));
+  border-bottom: 1px solid rgb(var(--border));
   flex-shrink: 0;
   -webkit-user-select: none;
   -moz-user-select: none;

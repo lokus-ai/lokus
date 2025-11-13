@@ -3080,12 +3080,14 @@ function WorkspaceWithScope({ path }) {
 
       {/* Workspace Toolbar - positioned in titlebar area */}
       <div
-        className="fixed top-0 left-0 right-0 h-8 flex items-center justify-between z-50"
+        className="fixed top-0 left-0 right-0 flex items-center justify-between z-50"
         data-tauri-drag-region
         style={{
+          height: '29px',
           paddingLeft: platformService.isMacOS() ? '80px' : '8px',
           paddingRight: '8px',
-          backgroundColor: 'rgb(var(--bg))'
+          backgroundColor: 'rgb(var(--panel))',
+          borderBottom: '1px solid rgb(var(--border))'
         }}
       >
         {/* Left Section: New File, New Folder, New Canvas buttons */}
