@@ -135,6 +135,54 @@ export const WikiLink = Node.create({
       },
     }
   },
+  addNodeView() {
+    return ({ node }) => {
+      const dom = document.createElement('a');
+      dom.classList.add('wiki-link');
+      dom.setAttribute('data-type', 'wiki-link');
+      dom.setAttribute('href', node.attrs.href || node.attrs.target);
+      dom.textContent = node.attrs.alt || node.attrs.target;
+
+      let hoverTimeout = null;
+
+      // Hover event handlers
+      dom.addEventListener('mouseenter', (event) => {
+        hoverTimeout = setTimeout(() => {
+          // Dispatch custom event with wiki link details
+          window.dispatchEvent(new CustomEvent('wiki-link-hover', {
+            detail: {
+              target: node.attrs.target,
+              position: {
+                x: event.clientX + 10, // Offset from cursor
+                y: event.clientY + 10
+              }
+            }
+          }));
+        }, 500); // 500ms delay as per requirements
+      });
+
+      dom.addEventListener('mouseleave', () => {
+        // Clear timeout if user moves away before delay
+        if (hoverTimeout) {
+          clearTimeout(hoverTimeout);
+          hoverTimeout = null;
+        }
+
+        // Dispatch event to close preview
+        window.dispatchEvent(new CustomEvent('wiki-link-hover-end'));
+      });
+
+      return {
+        dom,
+        destroy() {
+          if (hoverTimeout) {
+            clearTimeout(hoverTimeout);
+          }
+        }
+      };
+    };
+  },
+
   addInputRules() {
     const currentConfig = markdownSyntaxConfig.get('link', 'wikiLink');
     console.log('[WikiLink] Creating input rules with config:', currentConfig);

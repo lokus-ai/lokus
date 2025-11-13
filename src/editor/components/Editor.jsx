@@ -40,10 +40,12 @@ import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import TaskCreationModal from "../../components/TaskCreationModal.jsx";
 import ExportModal from "../../views/ExportModal.jsx";
 import ReadingModeView from "./ReadingModeView.jsx";
+import PagePreview from "../../components/PagePreview.jsx";
 import { editorAPI } from "../../plugins/api/EditorAPI.js";
 import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 
 import "../styles/editor.css";
+import "../../styles/page-preview.css";
 
 const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => {
   const [extensions, setExtensions] = useState(null);
@@ -375,6 +377,9 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
   const [isTaskCreationModalOpen, setIsTaskCreationModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
+  // Page preview state
+  const [previewData, setPreviewData] = useState(null);
+
   // Subscribe to live settings changes for real-time updates
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
   
@@ -506,12 +511,26 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
       setIsTaskCreationModalOpen(true);
     };
 
+    // Listen for wiki link hover events
+    const handleWikiLinkHover = (event) => {
+      const { target, position } = event.detail;
+      setPreviewData({ target, position });
+    };
+
+    const handleWikiLinkHoverEnd = () => {
+      setPreviewData(null);
+    };
+
     document.addEventListener('keydown', handleKeyDown);
     window.addEventListener('lokus:open-task-modal', handleTaskModalEvent);
+    window.addEventListener('wiki-link-hover', handleWikiLinkHover);
+    window.addEventListener('wiki-link-hover-end', handleWikiLinkHoverEnd);
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('lokus:open-task-modal', handleTaskModalEvent);
+      window.removeEventListener('wiki-link-hover', handleWikiLinkHover);
+      window.removeEventListener('wiki-link-hover-end', handleWikiLinkHoverEnd);
     };
   }, [editor]);
 
@@ -756,6 +775,15 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         workspacePath={globalThis.__LOKUS_WORKSPACE_PATH__}
         exportType="single"
       />
+
+      {/* Page Preview on Hover */}
+      {previewData && (
+        <PagePreview
+          target={previewData.target}
+          position={previewData.position}
+          onClose={() => setPreviewData(null)}
+        />
+      )}
     </>
   );
 });
