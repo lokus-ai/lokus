@@ -40,6 +40,8 @@ import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import TaskCreationModal from "../../components/TaskCreationModal.jsx";
 import ExportModal from "../../views/ExportModal.jsx";
 import ReadingModeView from "./ReadingModeView.jsx";
+import { ImageViewerModal } from "../../components/ImageViewer/ImageViewerModal.jsx";
+import { findImageFiles } from "../../utils/imageUtils.js";
 import { editorAPI } from "../../plugins/api/EditorAPI.js";
 import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 
@@ -374,6 +376,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
   const [isWikiLinkModalOpen, setIsWikiLinkModalOpen] = useState(false);
   const [isTaskCreationModalOpen, setIsTaskCreationModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [imageViewerState, setImageViewerState] = useState({ isOpen: false, imagePath: null });
 
   // Subscribe to live settings changes for real-time updates
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
@@ -429,6 +432,19 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         click: (view, event) => {
           const t = event.target;
           if (!(t instanceof Element)) return false;
+
+          // Handle image clicks
+          const img = t.closest('img.editor-image');
+          if (img) {
+            event.preventDefault();
+            const src = img.getAttribute('src') || '';
+            if (src) {
+              setImageViewerState({ isOpen: true, imagePath: src });
+            }
+            return true;
+          }
+
+          // Handle wiki-link clicks
           const el = t.closest('[data-type="wiki-link"]');
           if (!el) return false;
           const href = el.getAttribute('href') || '';
@@ -755,6 +771,14 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         }}
         workspacePath={globalThis.__LOKUS_WORKSPACE_PATH__}
         exportType="single"
+      />
+
+      {/* Image Viewer Modal */}
+      <ImageViewerModal
+        isOpen={imageViewerState.isOpen}
+        imagePath={imageViewerState.imagePath}
+        allImageFiles={globalThis.__LOKUS_ALL_IMAGE_FILES__ || []}
+        onClose={() => setImageViewerState({ isOpen: false, imagePath: null })}
       />
     </>
   );

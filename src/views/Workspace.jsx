@@ -52,7 +52,7 @@ import platformService from "../services/platform/PlatformService.js";
 import Gmail from "./Gmail.jsx";
 import { gmailAuth, gmailEmails } from '../services/gmail.js';
 import { FolderScopeProvider, useFolderScope } from "../contexts/FolderScopeContext.jsx";
-import { BasesProvider } from "../bases/BasesContext.jsx";
+import { BasesProvider, useBases } from "../bases/BasesContext.jsx";
 import BasesView from "../bases/BasesView.jsx";
 import DocumentOutline from "../components/DocumentOutline.jsx";
 import GraphSidebar from "../components/GraphSidebar.jsx";
@@ -429,6 +429,12 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         } catch (e) {
         }
         break;
+      case 'newFile':
+        await onCreateFileHere();
+        break;
+      case 'newFolder':
+        await onCreateFolderHere();
+        break;
       case 'rename':
         onRename();
         break;
@@ -736,7 +742,8 @@ function EditorDropZone({ children }) {
 
 // --- Inner Workspace Component (with folder scope) ---
 function WorkspaceWithScope({ path }) {
-  const { filterFileTree } = useFolderScope();
+  const { filterFileTree, scopeMode, scopedFolders } = useFolderScope();
+  const { activeBase } = useBases();
   const { leftW, rightW, startLeftDrag, startRightDrag } = useDragColumns({});
   const [showLeft, setShowLeft] = useState(true);
   const [showRight, setShowRight] = useState(false);
@@ -2020,9 +2027,29 @@ function WorkspaceWithScope({ path }) {
 
 
 
+  // Helper function to determine target path for file creation
+  // Priority: 1. Bases folder, 2. Local scope folder, 3. Workspace root
+  const getTargetPath = useCallback(() => {
+    // Priority 1: If bases tab is open and has an active base
+    const hasBasesTab = openTabs.some(tab => tab.path === '__bases__');
+    if (hasBasesTab && activeBase?.sourceFolder) {
+      return activeBase.sourceFolder;
+    }
+
+    // Priority 2: If in local scope mode with folders selected
+    if (scopeMode === 'local' && scopedFolders.length > 0) {
+      // Use the first scoped folder as the default target
+      return scopedFolders[0];
+    }
+
+    // Priority 3: Workspace root
+    return path;
+  }, [openTabs, activeBase, scopeMode, scopedFolders, path]);
+
   const handleCreateFile = async () => {
     try {
-      const newFilePath = await invoke("create_file_in_workspace", { workspacePath: path, name: "Untitled.md" });
+      const targetPath = getTargetPath();
+      const newFilePath = await invoke("create_file_in_workspace", { workspacePath: targetPath, name: "Untitled.md" });
       handleRefreshFiles();
       handleFileOpen({ path: newFilePath, name: "Untitled.md", is_directory: false });
     } catch (error) {
@@ -2031,7 +2058,8 @@ function WorkspaceWithScope({ path }) {
 
   const handleCreateCanvas = async () => {
     try {
-      const newCanvasPath = await canvasManager.createCanvas(path, "Untitled Canvas");
+      const targetPath = getTargetPath();
+      const newCanvasPath = await canvasManager.createCanvas(targetPath, "Untitled Canvas");
       handleRefreshFiles();
       handleFileOpen({ path: newCanvasPath, name: "Untitled Canvas.canvas", is_directory: false });
     } catch (error) {
@@ -2040,15 +2068,16 @@ function WorkspaceWithScope({ path }) {
 
   const handleCreateKanban = async () => {
     try {
+      const targetPath = getTargetPath();
       // Create a real kanban board with file-based storage
       const board = await invoke("create_kanban_board", {
-        workspacePath: path,
+        workspacePath: targetPath,
         name: "New Board",
         columns: ["To Do", "In Progress", "Done"]
       });
       handleRefreshFiles();
       const fileName = "New Board.kanban";
-      const boardPath = `${path}/${fileName}`;
+      const boardPath = `${targetPath}/${fileName}`;
       handleFileOpen({ path: boardPath, name: fileName, is_directory: false });
     } catch (error) {
       console.error("Failed to create kanban board:", error);
@@ -2125,7 +2154,8 @@ function WorkspaceWithScope({ path }) {
   const handleConfirmCreateFolder = async (name) => {
     if (name) {
       try {
-        await invoke("create_folder_in_workspace", { workspacePath: path, name });
+        const targetPath = getTargetPath();
+        await invoke("create_folder_in_workspace", { workspacePath: targetPath, name });
         handleRefreshFiles();
       } catch (error) {
       }
@@ -3004,8 +3034,39 @@ function WorkspaceWithScope({ path }) {
     );
   }
 
-  // Filter file tree based on folder scope
-  const filteredFileTree = filterFileTree(fileTree);
+  // Base-aware file tree filtering
+  const getBaseAwareFileTree = useCallback((tree) => {
+    // Check if bases tab is open (not necessarily active)
+    const hasBasesTab = openTabs.some(tab => tab.path === '__bases__');
+
+    // If viewing a base, filter to show only the base's sourceFolder
+    if (activeBase?.sourceFolder && hasBasesTab) {
+      const filterToBase = (entries) => {
+        return entries.filter(entry => {
+          // Show the base's folder and everything inside it
+          return entry.path === activeBase.sourceFolder ||
+                 entry.path.startsWith(activeBase.sourceFolder + '/');
+        }).map(entry => {
+          // If this entry has children, filter them recursively
+          if (entry.children && entry.children.length > 0) {
+            return {
+              ...entry,
+              children: filterToBase(entry.children)
+            };
+          }
+          return entry;
+        });
+      };
+
+      return filterToBase(tree);
+    }
+
+    // Otherwise use FolderScope filtering
+    return filterFileTree(tree);
+  }, [activeBase, openTabs, filterFileTree]);
+
+  // Filter file tree based on folder scope or base scope
+  const filteredFileTree = getBaseAwareFileTree(fileTree);
 
   return (
     <PanelManager>
