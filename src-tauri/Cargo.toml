@@ -73,7 +73,7 @@ parking_lot = "0.12"
 bincode = "1.3"
 thiserror = "1.0"
 axum = "0.7"
-git2 = { version = "0.18", default-features = false, features = ["https"] }
+git2 = { version = "0.18", default-features = false, features = ["https", "vendored"] }
 openssl = { version = "0.10", features = ["vendored"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
