@@ -4,8 +4,8 @@
 .page-preview {
   max-width: 400px;
   max-height: 300px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: rgb(var(--panel));
+  border: 1px solid rgb(var(--border));
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   overflow: hidden;
@@ -17,15 +17,15 @@
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-primary);
+  border-bottom: 1px solid rgb(var(--border));
+  background: rgb(var(--bg));
 }
 
 .page-preview-title {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: rgb(var(--text));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -37,7 +37,7 @@
   border: none;
   padding: 4px;
   cursor: pointer;
-  color: var(--text-muted);
+  color: rgb(var(--muted));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -48,27 +48,27 @@
 }
 
 .page-preview-close:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  background: rgb(var(--panel-secondary));
+  color: rgb(var(--text));
 }
 
 .page-preview-content {
   padding: 16px;
   max-height: 250px;
   overflow-y: auto;
-  color: var(--text-secondary);
+  color: rgb(var(--text-secondary));
   font-size: 13px;
   line-height: 1.6;
 }
 
 .page-preview-placeholder {
   margin: 0 0 12px 0;
-  color: var(--text-primary);
+  color: rgb(var(--text));
 }
 
 .page-preview-info {
   margin: 0;
-  color: var(--text-muted);
+  color: rgb(var(--muted));
   font-size: 12px;
 }
 
