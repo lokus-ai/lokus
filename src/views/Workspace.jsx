@@ -59,7 +59,7 @@ import GraphSidebar from "../components/GraphSidebar.jsx";
 import VersionHistoryPanel from "../components/VersionHistoryPanel.jsx";
 import BacklinksPanel from "./BacklinksPanel.jsx";
 import { DailyNotesPanel, NavigationButtons, DatePickerModal } from "../components/DailyNotes/index.js";
-import { ImageViewerTab } from "../components/ImageViewer";
+import { ImageViewerTab } from "../components/ImageViewer/ImageViewerTab.jsx";
 import { isImageFile, findImageFiles } from "../utils/imageUtils.js";
 
 const MAX_OPEN_TABS = 10;
