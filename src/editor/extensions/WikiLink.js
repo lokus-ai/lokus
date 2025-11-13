@@ -172,6 +172,17 @@ export const WikiLink = Node.create({
         window.dispatchEvent(new CustomEvent('wiki-link-hover-end'));
       });
 
+      dom.addEventListener('click', () => {
+        // Clear timeout if link is clicked
+        if (hoverTimeout) {
+          clearTimeout(hoverTimeout);
+          hoverTimeout = null;
+        }
+
+        // Close preview when link is clicked
+        window.dispatchEvent(new CustomEvent('wiki-link-hover-end'));
+      });
+
       return {
         dom,
         destroy() {
