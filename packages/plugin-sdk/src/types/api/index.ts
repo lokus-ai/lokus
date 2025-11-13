@@ -10,13 +10,13 @@ import type { FileSystemAPI } from './filesystem.js'
 import type { NetworkAPI } from './network.js'
 import type { StorageAPI } from './storage.js'
 // import type { EventAPI } from './events.js' // TODO: Create events.ts
-// import type { ConfigurationAPI } from './configuration.js' // TODO: Create configuration.ts
+import type { ConfigurationAPI } from './configuration.js'
 import type { TaskAPI } from './tasks.js'
 import type { DebugAPI } from './debug.js'
 import type { LanguageAPI } from './languages.js'
 import type { ThemeAPI } from './themes.js'
 import type { TerminalAPI } from './terminal.js'
-import type { Disposable } from '../utilities.js'
+import type { Disposable, Event } from '../utilities.js'
 import type { PluginManifest } from '../manifest.js'
 import type { Permission } from '../permissions.js'
 
@@ -61,7 +61,7 @@ export interface LokusAPI {
   readonly themes: ThemeAPI
 
   /** Configuration API - Plugin configuration */
-  // readonly config: ConfigurationAPI // TODO: Create configuration.ts
+  readonly config: ConfigurationAPI
 
   /** Terminal API - Terminal operations */
   readonly terminal: TerminalAPI
@@ -390,9 +390,9 @@ export * from './filesystem.js'
 export * from './network.js'
 export * from './storage.js'
 // export * from './events.js' // TODO: Create events.ts
+export * from './configuration.js'
 export * from './tasks.js'
 export * from './debug.js'
 export * from './languages.js'
 export * from './themes.js'
-// export * from './configuration.js' // TODO: Create configuration.ts
 export * from './terminal.js'

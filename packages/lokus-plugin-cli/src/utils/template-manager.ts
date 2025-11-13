@@ -139,7 +139,7 @@ export class TemplateManager {
     try {
       return Mustache.render(content, context);
     } catch (error) {
-      logger.warning(`Failed to process template content: ${error.message}`);
+      logger.warning(`Failed to process template content: ${(error as Error).message}`);
       return content;
     }
   }
@@ -279,7 +279,7 @@ export class TemplateManager {
   }
 
   // Configuration generators
-  private async generateTsConfig(context: TemplateContext): string {
+  private async generateTsConfig(context: TemplateContext): Promise<string> {
     return JSON.stringify({
       compilerOptions: {
         target: 'ES2020',
@@ -305,7 +305,7 @@ export class TemplateManager {
     }, null, 2);
   }
 
-  private async generateJestConfig(context: TemplateContext): string {
+  private async generateJestConfig(context: TemplateContext): Promise<string> {
     return `module.exports = {
   preset: '${context.typescript ? 'ts-jest' : 'jest'}',
   testEnvironment: 'node',
@@ -323,7 +323,7 @@ export class TemplateManager {
 };`;
   }
 
-  private async generateVitestConfig(context: TemplateContext): string {
+  private async generateVitestConfig(context: TemplateContext): Promise<string> {
     return `import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -340,8 +340,8 @@ export default defineConfig({
 });`;
   }
 
-  private async generateESLintConfig(context: TemplateContext): string {
-    const config = {
+  private async generateESLintConfig(context: TemplateContext): Promise<string> {
+    const config: any = {
       env: {
         es2021: true,
         node: true
@@ -362,16 +362,16 @@ export default defineConfig({
 
     if (context.typescript) {
       config.extends.push('@typescript-eslint/recommended');
-      config['parser'] = '@typescript-eslint/parser';
-      config['plugins'] = ['@typescript-eslint'];
+      config.parser = '@typescript-eslint/parser';
+      config.plugins = ['@typescript-eslint'];
       config.rules['@typescript-eslint/no-unused-vars'] = 'error';
-      delete config.rules['no-unused-vars'];
+      config.rules['no-unused-vars'] = undefined;
     }
 
     return `module.exports = ${JSON.stringify(config, null, 2)};`;
   }
 
-  private async generatePrettierConfig(context: TemplateContext): string {
+  private async generatePrettierConfig(context: TemplateContext): Promise<string> {
     return JSON.stringify({
       semi: true,
       trailingComma: 'es5',
@@ -382,7 +382,7 @@ export default defineConfig({
     }, null, 2);
   }
 
-  private async generateGitHubWorkflow(context: TemplateContext): string {
+  private async generateGitHubWorkflow(context: TemplateContext): Promise<string> {
     return `name: CI
 
 on:
@@ -455,7 +455,7 @@ jobs:
         path: dist/`;
   }
 
-  private async generateGitLabCI(context: TemplateContext): string {
+  private async generateGitLabCI(context: TemplateContext): Promise<string> {
     return `stages:
   - test
   - build
@@ -509,7 +509,7 @@ package:
     - tags`;
   }
 
-  private async generateStorybookConfig(context: TemplateContext): string {
+  private async generateStorybookConfig(context: TemplateContext): Promise<string> {
     return `module.exports = {
   stories: ['../src/**/*.stories.@(js|jsx|ts|tsx|mdx)'],
   addons: [

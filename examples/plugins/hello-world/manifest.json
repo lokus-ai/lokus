@@ -1,0 +1,35 @@
+{
+  "id": "hello-world",
+  "name": "Hello World",
+  "version": "1.0.0",
+  "description": "A simple example plugin that demonstrates basic Lokus plugin functionality",
+  "author": "Lokus Team",
+  "main": "index.js",
+  "lokusVersion": ">=1.0.0",
+  "permissions": [
+    "editor.addExtension",
+    "notifications.show",
+    "commands.register"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "id": "helloWorld.greet",
+        "title": "Hello World: Greet",
+        "description": "Shows a friendly greeting notification"
+      },
+      {
+        "id": "helloWorld.insertGreeting",
+        "title": "Hello World: Insert Greeting",
+        "description": "Inserts a greeting into the editor"
+      }
+    ],
+    "slashCommands": [
+      {
+        "name": "hello",
+        "description": "Insert a friendly greeting",
+        "icon": "👋"
+      }
+    ]
+  }
+}

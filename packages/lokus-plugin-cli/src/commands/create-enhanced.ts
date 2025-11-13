@@ -661,7 +661,6 @@ async function createAdvancedPlugin(
   ], {
     concurrent: false,
     rendererOptions: {
-      collapse: false,
       clearOutput: true
     }
   });

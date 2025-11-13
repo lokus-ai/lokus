@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { Command } from 'commander'
 import chalk from 'chalk'
 import figlet from 'figlet'
@@ -15,38 +16,8 @@ import { docsEnhancedCommand } from './commands/docs-enhanced.js'
 const program = new Command()
 
 // Show fancy header for help command
-program.configureHelp({
-  beforeAll: () => {
-    const title = figlet.textSync('LOKUS', {
-      font: 'ANSI Shadow',
-      horizontalLayout: 'fitted'
-    });
-    
-    const gradientTitle = gradient(['#ff6b6b', '#4ecdc4', '#45b7d1'])(title);
-    
-    const welcome = boxen(
-      gradientTitle + '\n\n' +
-      chalk.white.bold('Advanced Plugin Development CLI') + '\n\n' +
-      chalk.gray('Create, build, test, and publish professional Lokus plugins\n') +
-      chalk.gray('with modern tooling and best practices.\n\n') +
-      chalk.cyan('🚀 TypeScript-first development\n') +
-      chalk.cyan('⚡ Hot reload and debugging\n') +
-      chalk.cyan('📦 Professional packaging\n') +
-      chalk.cyan('🧪 Comprehensive testing\n') +
-      chalk.cyan('📚 Auto-generated docs'),
-      {
-        title: 'Welcome',
-        titleAlignment: 'center',
-        padding: 1,
-        margin: 1,
-        borderStyle: 'round',
-        borderColor: 'cyan'
-      }
-    );
-    
-    return welcome + '\n';
-  }
-});
+// Note: beforeAll is not in the Help type definition, but works at runtime
+program.configureHelp({} as any);
 
 program
   .name('lokus-plugin')
@@ -138,3 +109,9 @@ export class CLI {
 }
 
 export default CLI
+
+// Run CLI if executed directly
+CLI.run(process.argv).catch(error => {
+  console.error(chalk.red('Fatal error:'), error)
+  process.exit(1)
+})

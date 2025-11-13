@@ -87,7 +87,6 @@ export class ProjectScaffolder {
     
     // Generate conditional config files
     await templateManager.createConditionalFiles(this.targetDir, {
-      pluginName: this.options.pluginName,
       ...this.options
     } as any);
   }
@@ -663,7 +662,7 @@ MIT © [${this.options.author}](https://github.com/${this.options.author})
 Generated with [Lokus Plugin CLI](https://lokus.dev/docs/plugin-development)`;
   }
 
-  private async generateContributing(): string {
+  private async generateContributing(): Promise<string> {
     return `# Contributing to ${this.options.pluginName}
 
 Thank you for your interest in contributing! This document provides guidelines for contributing to this plugin.
@@ -708,7 +707,7 @@ ${this.options.testing !== 'none' ? `This project uses ${this.options.testing} f
 Feel free to open an issue for any questions or concerns.`;
   }
 
-  private async generateChangelog(): string {
+  private async generateChangelog(): Promise<string> {
     return `# Changelog
 
 All notable changes to this project will be documented in this file.

@@ -97,7 +97,7 @@ export class TestRunner {
         }
       }
     ], {
-      rendererOptions: { collapse: false }
+      rendererOptions: {}
     });
 
     await tasks.run();
@@ -364,7 +364,7 @@ export class TestRunner {
       const subtask = parentTask.newListr([
         {
           title: `Running ${framework.name} tests`,
-          task: async (ctx, task) => {
+          task: async (ctx: any, task: any) => {
             const startTime = Date.now();
             
             try {
@@ -387,7 +387,7 @@ export class TestRunner {
                 framework: framework.name,
                 duration,
                 tests: { total: 0, passed: 0, failed: 0, skipped: 0 },
-                output: error.stdout || error.message
+                output: (error as any).stdout || (error as Error).message
               };
               results.push(testResult);
               
@@ -433,7 +433,7 @@ export class TestRunner {
           break;
       }
     } catch (error) {
-      logger.warning(`Failed to parse test output for ${framework}: ${error.message}`);
+      logger.warning(`Failed to parse test output for ${framework}: ${(error as Error).message}`);
     }
 
     result.success = result.tests.failed === 0;
