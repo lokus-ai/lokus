@@ -85,7 +85,9 @@ export class CanvasManager {
     try {
       // Validate file path
       if (!isValidFilePath(canvasPath)) {
-        console.error(`[Canvas LOAD] Invalid file path: ${canvasPath}`);
+        if (import.meta.env.DEV) {
+          console.error(`[Canvas LOAD] Invalid file path: ${canvasPath}`);
+        }
         throw new Error('Invalid canvas path');
       }
 
@@ -98,16 +100,22 @@ export class CanvasManager {
       this.canvasCache.delete(canvasPath);
 
       const content = await invoke('read_file_content', { path: canvasPath });
-      console.log(`[Canvas LOAD] RAW FILE CONTENT:`, content);
+      if (import.meta.env.DEV) {
+        console.log(`[Canvas LOAD] RAW FILE CONTENT:`, content);
+      }
 
       let tldrawSnapshot;
       try {
         tldrawSnapshot = JSON.parse(content);
-        console.log(`[Canvas LOAD] PARSED SNAPSHOT:`, tldrawSnapshot);
+        if (import.meta.env.DEV) {
+          console.log(`[Canvas LOAD] PARSED SNAPSHOT:`, tldrawSnapshot);
+        }
 
         // If snapshot is missing schema, add it (for backwards compatibility)
         if (!tldrawSnapshot.schema) {
-          console.warn(`[Canvas LOAD] Missing schema, adding default schema`);
+          if (import.meta.env.DEV) {
+            console.warn(`[Canvas LOAD] Missing schema, adding default schema`);
+          }
           tldrawSnapshot.schema = this.createEmptyTldrawSnapshot().schema;
         }
       } catch (parseError) {
@@ -186,11 +194,15 @@ export class CanvasManager {
     try {
       // Validate file path
       if (!isValidFilePath(canvasPath)) {
-        console.error(`[Canvas SAVE] Invalid file path: ${canvasPath}`);
+        if (import.meta.env.DEV) {
+          console.error(`[Canvas SAVE] Invalid file path: ${canvasPath}`);
+        }
         throw new Error('Invalid canvas path');
       }
 
-      console.log(`[Canvas SAVE] SNAPSHOT TO SAVE:`, tldrawSnapshot);
+      if (import.meta.env.DEV) {
+        console.log(`[Canvas SAVE] SNAPSHOT TO SAVE:`, tldrawSnapshot);
+      }
 
       // Save TLDraw snapshot directly - no conversion!
       const content = JSON.stringify(tldrawSnapshot, null, 2);
@@ -199,7 +211,9 @@ export class CanvasManager {
         path: canvasPath,
         content
       });
-      console.log(`[Canvas SAVE] Saved ${content.length} bytes to file`);
+      if (import.meta.env.DEV) {
+        console.log(`[Canvas SAVE] Saved ${content.length} bytes to file`);
+      }
 
       // Clear cache to force fresh read next time
       this.canvasCache.delete(canvasPath);

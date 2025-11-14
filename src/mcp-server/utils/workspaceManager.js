@@ -85,17 +85,12 @@ export class WorkspaceManager {
         } catch (readError) {
           // Can't read directory contents
         }
-        
-        // Only accept specific well-known workspace paths without markdown validation
-        const knownWorkspacePaths = [
-          '/Users/pratham/Documents/Lokus-Workspace',
-          '/Users/pratham/Documents/Lokus Workspace',
-          '/Users/pratham/Programming/Lokud Dir/Lokus/Lokus-Full-Scale-Test'
-        ];
-        
-        return knownWorkspacePaths.includes(workspacePath);
+
+        // If we can't validate with markdown files, check if it's a valid directory
+        // In production, any valid directory can be a workspace
+        return true;
       }
-      
+
       return true;
     } catch (error) {
       return false;
