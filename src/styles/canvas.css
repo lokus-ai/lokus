@@ -4,24 +4,36 @@
 .tldraw-canvas {
   /* Custom grid pattern */
   --tl-grid-size: 20px;
-  --tl-grid-color: var(--app-border);
-  
+  --tl-grid-color: var(--canvas-grid);
+
   /* Custom selection colors */
   --tl-selection-foreground: var(--app-accent);
   --tl-selection-background: var(--app-accent-alpha);
-  
-  /* Custom canvas background */
-  background-color: var(--app-bg);
-  background-image: 
-    radial-gradient(circle, var(--app-border) 1px, transparent 1px);
-  background-size: var(--tl-grid-size) var(--tl-grid-size);
+
+  /* Custom canvas background - uses dedicated canvas variables */
+  background-color: rgb(var(--canvas-bg)) !important;
+  background-image:
+    radial-gradient(circle, var(--canvas-grid) 1px, transparent 1px) !important;
+  background-size: var(--tl-grid-size) var(--tl-grid-size) !important;
 }
 
-/* Dark mode specific styles */
-.dark .tldraw-canvas {
-  --tl-grid-color: rgba(255, 255, 255, 0.1);
-  background-image: 
-    radial-gradient(circle, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+/* Override TLDraw's internal canvas background */
+.tldraw .tl-canvas {
+  background-color: rgb(var(--canvas-bg)) !important;
+}
+
+/* Override the actual drawing surface */
+.tldraw__editor {
+  background-color: rgb(var(--canvas-bg)) !important;
+}
+
+/* Override TLDraw v3 theme background colors - THIS IS THE KEY FIX */
+.tl-theme__light {
+  --color-background: rgb(var(--canvas-bg)) !important;
+}
+
+.tl-theme__dark {
+  --color-background: rgb(var(--canvas-bg)) !important;
 }
 
 /* Custom toolbar styling */
@@ -59,11 +71,7 @@
 /* Custom shape styles */
 .tldraw .tl-shape {
   /* Add custom drop shadows */
-  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.1));
-}
-
-.dark .tldraw .tl-shape {
-  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.2));
 }
 
 /* Custom text styles */
@@ -123,22 +131,22 @@
 
 /* Custom grid patterns */
 .canvas-grid-dots {
-  background-image: radial-gradient(circle, var(--app-border) 1px, transparent 1px);
+  background-image: radial-gradient(circle, var(--canvas-grid) 1px, transparent 1px);
   background-size: 20px 20px;
 }
 
 .canvas-grid-lines {
-  background-image: 
-    linear-gradient(var(--app-border) 1px, transparent 1px),
-    linear-gradient(90deg, var(--app-border) 1px, transparent 1px);
+  background-image:
+    linear-gradient(var(--canvas-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px);
   background-size: 20px 20px;
 }
 
 .canvas-grid-cross {
-  background-image: 
-    linear-gradient(var(--app-border) 1px, transparent 1px),
-    linear-gradient(90deg, var(--app-border) 1px, transparent 1px),
-    radial-gradient(circle, var(--app-border) 2px, transparent 2px);
+  background-image:
+    linear-gradient(var(--canvas-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px),
+    radial-gradient(circle, var(--canvas-grid) 2px, transparent 2px);
   background-size: 20px 20px, 20px 20px, 100px 100px;
 }
 
@@ -158,7 +166,7 @@
 
 /* Custom loading state */
 .canvas-loading {
-  background: var(--app-bg);
+  background: rgb(var(--canvas-bg));
   display: flex;
   align-items: center;
   justify-content: center;

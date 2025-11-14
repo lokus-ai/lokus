@@ -255,3 +255,28 @@ pub fn open_terminal(path: String) -> Result<(), String> {
     // Use platform abstraction for better error handling and consistency
     super::platform_files::platform_open_terminal(path)
 }
+
+#[tauri::command]
+pub fn read_image_file(path: String) -> Result<String, String> {
+    // Read the file as binary
+    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+
+    // Convert to base64
+    use base64::{Engine as _, engine::general_purpose};
+    let base64_string = general_purpose::STANDARD.encode(&bytes);
+
+    // Determine MIME type from extension
+    let mime_type = match Path::new(&path).extension().and_then(|e| e.to_str()) {
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("svg") => "image/svg+xml",
+        Some("bmp") => "image/bmp",
+        Some("ico") => "image/x-icon",
+        _ => "application/octet-stream",
+    };
+
+    // Return data URL
+    Ok(format!("data:{};base64,{}", mime_type, base64_string))
+}

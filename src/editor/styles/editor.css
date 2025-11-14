@@ -237,6 +237,7 @@
     border: 1px solid rgb(var(--border) / 0.2);
     box-shadow: 0 2px 8px rgb(var(--bg) / 0.1);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    cursor: pointer;
 }
 
 .ProseMirror img:hover,

@@ -893,24 +893,24 @@ Best regards,
     }
 
     if (e.key === 'Enter') {
-      e.preventDefault()
-      
       // Handle structured command mode
       if (commandMode) {
+        e.preventDefault()  // Only prevent for command mode
+
         if (commandMode === 'send_gmail') {
           if (filteredOptions.length > 0) {
             // Send Gmail from first matching file
             const selectedFile = filteredOptions[0]
             runCommandWithHistory(
-              () => handleSendGmailFromFile(selectedFile), 
-              `Send Gmail: ${selectedFile.name}`, 
-              { 
+              () => handleSendGmailFromFile(selectedFile),
+              `Send Gmail: ${selectedFile.name}`,
+              {
                 fileName: selectedFile.name,
                 filePath: selectedFile.path,
                 originalCommand: `send gmail ${selectedFile.name}`
               }
             )
-            
+
             // Reset command mode
             setCommandMode(null)
             setCommandParams({})
@@ -922,15 +922,15 @@ Best regards,
             // Save first matching email as note
             const selectedEmail = filteredOptions[0]
             runCommandWithHistory(
-              () => handleSaveEmailAsNote(selectedEmail.id), 
-              `Save Email as Note: "${selectedEmail.subject || 'No Subject'}"`, 
-              { 
+              () => handleSaveEmailAsNote(selectedEmail.id),
+              `Save Email as Note: "${selectedEmail.subject || 'No Subject'}"`,
+              {
                 emailSubject: selectedEmail.subject,
                 emailId: selectedEmail.id,
                 originalCommand: `save email "${selectedEmail.subject}" as note`
               }
             )
-            
+
             // Reset command mode
             setCommandMode(null)
             setCommandParams({})
@@ -940,14 +940,14 @@ Best regards,
         } else if (commandMode === 'search_emails') {
           if (inputValue.trim()) {
             runCommandWithHistory(
-              () => handleGmailSearch(inputValue.trim()), 
-              `Search Gmail: ${inputValue.trim()}`, 
-              { 
+              () => handleGmailSearch(inputValue.trim()),
+              `Search Gmail: ${inputValue.trim()}`,
+              {
                 query: inputValue.trim(),
                 originalCommand: `search emails ${inputValue.trim()}`
               }
             )
-            
+
             // Reset command mode
             setCommandMode(null)
             setCommandParams({})
@@ -955,25 +955,27 @@ Best regards,
             return
           }
         }
+        return  // Exit if in command mode
       }
 
-      // Fallback to legacy parsing for non-structured commands
-      if (!commandMode) {
+      // Handle text-based commands (only if input has text)
+      if (inputValue && inputValue.trim()) {
         // Check for email-note commands first
         const emailNoteCommand = parseEmailNoteCommand(inputValue)
         if (emailNoteCommand) {
+          e.preventDefault()  // Only prevent if we're handling it
+
           if (emailNoteCommand.type === 'saveAsNote') {
             if (emailNoteCommand.email) {
               runCommandWithHistory(
-                () => handleSaveEmailAsNote(emailNoteCommand.email.id), 
-                `Save Email as Note: "${emailNoteCommand.email.subject || 'No Subject'}"`, 
-                { 
+                () => handleSaveEmailAsNote(emailNoteCommand.email.id),
+                `Save Email as Note: "${emailNoteCommand.email.subject || 'No Subject'}"`,
+                {
                   emailSubject: emailNoteCommand.email.subject,
                   emailId: emailNoteCommand.email.id,
-                  originalCommand: emailNoteCommand.originalCommand 
+                  originalCommand: emailNoteCommand.originalCommand
                 }
               )
-            } else {
             }
           }
           setInputValue('')
@@ -983,36 +985,43 @@ Best regards,
         // Fallback to regular Gmail commands
         const gmailCommand = parseGmailCommand(inputValue)
         if (gmailCommand) {
+          e.preventDefault()  // Only prevent if we're handling it
+
           if (gmailCommand.type === 'send') {
-            const recipients = Array.isArray(gmailCommand.recipients) 
-              ? gmailCommand.recipients.join(', ') 
+            const recipients = Array.isArray(gmailCommand.recipients)
+              ? gmailCommand.recipients.join(', ')
               : gmailCommand.recipients || gmailCommand.recipient
             const fileName = gmailCommand.fileName || 'content'
             const subject = gmailCommand.subject || `Email from Lokus`
-            
+
             runCommandWithHistory(
-              () => handleSendEmailSmart(gmailCommand), 
-              `Send Email: ${fileName} → ${recipients}`, 
-              { 
-                fileName, 
-                recipients, 
+              () => handleSendEmailSmart(gmailCommand),
+              `Send Email: ${fileName} → ${recipients}`,
+              {
+                fileName,
+                recipients,
                 subject,
-                originalCommand: gmailCommand.originalCommand 
+                originalCommand: gmailCommand.originalCommand
               }
             )
           } else if (gmailCommand.type === 'search') {
             runCommandWithHistory(
-              () => handleGmailSearch(gmailCommand.query), 
-              `Search Gmail: ${gmailCommand.query}`, 
-              { 
+              () => handleGmailSearch(gmailCommand.query),
+              `Search Gmail: ${gmailCommand.query}`,
+              {
                 query: gmailCommand.query,
-                originalCommand: gmailCommand.originalCommand 
+                originalCommand: gmailCommand.originalCommand
               }
             )
           }
           setInputValue('')
+          return
         }
       }
+
+      // If we reach here, we didn't handle the Enter key
+      // Let cmdk's built-in handler trigger onSelect for regular command items
+      // DON'T call e.preventDefault() - this is the fix!
     }
   }
 

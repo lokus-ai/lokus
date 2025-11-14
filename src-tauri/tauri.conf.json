@@ -69,7 +69,8 @@
       }
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFDMzQ0M0RENkY0NUMxMjYKUldRbXdVVnYzVU0wckNsZVN0UEVvZm1YeVZBS3RIUFdyYjNwUGNwdC9BTE1NYlVvMHRyNjIxa2IK",
+      "active": false,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERBQ0E5NjU0RjYxQTc4OTgKUldSMDhvSFFWTlhSd2V1SUJTMEozVEx2N1FYNnFsWGJaMENGZy9VNUF2Y3MxbnN4cGdHa0VORUsK",
       "endpoints": [
         "https://github.com/lokus-ai/lokus/releases/latest/download/latest.json"
       ],

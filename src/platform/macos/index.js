@@ -63,10 +63,18 @@ export const macosShortcuts = {
 // macOS-specific path utilities
 export const macosPathUtils = {
   // Expand tilde to home directory
-  expandTilde: (path) => {
+  expandTilde: async (path) => {
     if (path.startsWith('~/')) {
-      // Would need to get actual home directory from Tauri
-      return path.replace('~/', '/Users/username/');
+      try {
+        // Get the actual home directory from Tauri
+        const { homeDir } = await import('@tauri-apps/api/path');
+        const home = await homeDir();
+        return path.replace('~/', home.endsWith('/') ? home : `${home}/`);
+      } catch (error) {
+        console.error('Failed to expand tilde path:', error);
+        // Fallback: return path as-is if we can't get home dir
+        return path;
+      }
     }
     return path;
   },

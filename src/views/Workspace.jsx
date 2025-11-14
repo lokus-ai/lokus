@@ -5,7 +5,7 @@ import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, FoldVertical, SquareSplitHorizontal, FilePlus as FilePlusCorner, SquareKanban } from "lucide-react";
 import { ColoredFileIcon } from "../components/FileIcon.jsx";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
@@ -52,13 +52,15 @@ import platformService from "../services/platform/PlatformService.js";
 import Gmail from "./Gmail.jsx";
 import { gmailAuth, gmailEmails } from '../services/gmail.js';
 import { FolderScopeProvider, useFolderScope } from "../contexts/FolderScopeContext.jsx";
-import { BasesProvider } from "../bases/BasesContext.jsx";
+import { BasesProvider, useBases } from "../bases/BasesContext.jsx";
 import BasesView from "../bases/BasesView.jsx";
 import DocumentOutline from "../components/DocumentOutline.jsx";
 import GraphSidebar from "../components/GraphSidebar.jsx";
 import VersionHistoryPanel from "../components/VersionHistoryPanel.jsx";
 import BacklinksPanel from "./BacklinksPanel.jsx";
 import { DailyNotesPanel, NavigationButtons, DatePickerModal } from "../components/DailyNotes/index.js";
+import { ImageViewerTab } from "../components/ImageViewer/ImageViewerTab.jsx";
+import { isImageFile, findImageFiles } from "../utils/imageUtils.js";
 
 const MAX_OPEN_TABS = 10;
 
@@ -427,6 +429,12 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         } catch (e) {
         }
         break;
+      case 'newFile':
+        await onCreateFileHere();
+        break;
+      case 'newFolder':
+        await onCreateFolderHere();
+        break;
       case 'rename':
         onRename();
         break;
@@ -734,7 +742,8 @@ function EditorDropZone({ children }) {
 
 // --- Inner Workspace Component (with folder scope) ---
 function WorkspaceWithScope({ path }) {
-  const { filterFileTree } = useFolderScope();
+  const { filterFileTree, scopeMode, scopedFolders } = useFolderScope();
+  const { activeBase } = useBases();
   const { leftW, rightW, startLeftDrag, startRightDrag } = useDragColumns({});
   const [showLeft, setShowLeft] = useState(true);
   const [showRight, setShowRight] = useState(false);
@@ -839,6 +848,9 @@ function WorkspaceWithScope({ path }) {
   const [currentDailyNoteDate, setCurrentDailyNoteDate] = useState(null);
   const [graphData, setGraphData] = useState(null);
   const [isLoadingGraph, setIsLoadingGraph] = useState(false);
+
+  // Image files state for navigation
+  const [allImageFiles, setAllImageFiles] = useState([]);
 
   // Graph sidebar state
   const [graphSidebarData, setGraphSidebarData] = useState({
@@ -1019,6 +1031,10 @@ function WorkspaceWithScope({ path }) {
           };
           walk(tree);
           try { window.__LOKUS_FILE_INDEX__ = flat; } catch {}
+
+          // Extract all image files for image viewer navigation
+          const imageFiles = findImageFiles(tree);
+          setAllImageFiles(imageFiles);
         })
         .catch((error) => {
           // Log to backend instead
@@ -1229,7 +1245,7 @@ function WorkspaceWithScope({ path }) {
     if (file.path && file.lineNumber !== undefined) {
       const filePath = file.path;
       const fileName = getFilename(filePath);
-      
+
       setOpenTabs(prevTabs => {
         const newTabs = prevTabs.filter(t => t.path !== filePath);
         newTabs.unshift({ path: filePath, name: fileName });
@@ -1239,27 +1255,30 @@ function WorkspaceWithScope({ path }) {
         return newTabs;
       });
       setActiveFile(filePath);
-      
-      // Jump to line after editor loads
-      setTimeout(() => {
-        if (editorRef.current && file.lineNumber) {
-          try {
-            const doc = editorRef.current.state.doc;
-            const linePos = doc.line(file.lineNumber).from + (file.column || 0);
-            const selection = editorRef.current.state.selection.constructor.create(doc, linePos, linePos);
-            const tr = editorRef.current.state.tr.setSelection(selection);
-            editorRef.current.view.dispatch(tr);
-            editorRef.current.commands.scrollIntoView();
-          } catch (error) {
+
+      // Jump to line after editor loads (only for non-image files)
+      if (!isImageFile(filePath)) {
+        setTimeout(() => {
+          if (editorRef.current && file.lineNumber) {
+            try {
+              const doc = editorRef.current.state.doc;
+              const linePos = doc.line(file.lineNumber).from + (file.column || 0);
+              const selection = editorRef.current.state.selection.constructor.create(doc, linePos, linePos);
+              const tr = editorRef.current.state.tr.setSelection(selection);
+              editorRef.current.view.dispatch(tr);
+              editorRef.current.commands.scrollIntoView();
+            } catch (error) {
+            }
           }
-        }
-      }, 100);
+        }, 100);
+      }
       return;
     }
-    
+
     // Handle regular file format
     if (file.is_directory) return;
 
+    // Add file to tabs (works for all file types including images)
     setOpenTabs(prevTabs => {
       const newTabs = prevTabs.filter(t => t.path !== file.path);
       // Ensure we only use the filename, not a full path
@@ -2008,9 +2027,29 @@ function WorkspaceWithScope({ path }) {
 
 
 
+  // Helper function to determine target path for file creation
+  // Priority: 1. Bases folder, 2. Local scope folder, 3. Workspace root
+  const getTargetPath = useCallback(() => {
+    // Priority 1: If bases tab is open and has an active base
+    const hasBasesTab = openTabs.some(tab => tab.path === '__bases__');
+    if (hasBasesTab && activeBase?.sourceFolder) {
+      return activeBase.sourceFolder;
+    }
+
+    // Priority 2: If in local scope mode with folders selected
+    if (scopeMode === 'local' && scopedFolders.length > 0) {
+      // Use the first scoped folder as the default target
+      return scopedFolders[0];
+    }
+
+    // Priority 3: Workspace root
+    return path;
+  }, [openTabs, activeBase, scopeMode, scopedFolders, path]);
+
   const handleCreateFile = async () => {
     try {
-      const newFilePath = await invoke("create_file_in_workspace", { workspacePath: path, name: "Untitled.md" });
+      const targetPath = getTargetPath();
+      const newFilePath = await invoke("create_file_in_workspace", { workspacePath: targetPath, name: "Untitled.md" });
       handleRefreshFiles();
       handleFileOpen({ path: newFilePath, name: "Untitled.md", is_directory: false });
     } catch (error) {
@@ -2019,7 +2058,8 @@ function WorkspaceWithScope({ path }) {
 
   const handleCreateCanvas = async () => {
     try {
-      const newCanvasPath = await canvasManager.createCanvas(path, "Untitled Canvas");
+      const targetPath = getTargetPath();
+      const newCanvasPath = await canvasManager.createCanvas(targetPath, "Untitled Canvas");
       handleRefreshFiles();
       handleFileOpen({ path: newCanvasPath, name: "Untitled Canvas.canvas", is_directory: false });
     } catch (error) {
@@ -2028,15 +2068,16 @@ function WorkspaceWithScope({ path }) {
 
   const handleCreateKanban = async () => {
     try {
+      const targetPath = getTargetPath();
       // Create a real kanban board with file-based storage
       const board = await invoke("create_kanban_board", {
-        workspacePath: path,
+        workspacePath: targetPath,
         name: "New Board",
         columns: ["To Do", "In Progress", "Done"]
       });
       handleRefreshFiles();
       const fileName = "New Board.kanban";
-      const boardPath = `${path}/${fileName}`;
+      const boardPath = `${targetPath}/${fileName}`;
       handleFileOpen({ path: boardPath, name: fileName, is_directory: false });
     } catch (error) {
       console.error("Failed to create kanban board:", error);
@@ -2113,7 +2154,8 @@ function WorkspaceWithScope({ path }) {
   const handleConfirmCreateFolder = async (name) => {
     if (name) {
       try {
-        await invoke("create_folder_in_workspace", { workspacePath: path, name });
+        const targetPath = getTargetPath();
+        await invoke("create_folder_in_workspace", { workspacePath: targetPath, name });
         handleRefreshFiles();
       } catch (error) {
       }
@@ -2992,8 +3034,39 @@ function WorkspaceWithScope({ path }) {
     );
   }
 
-  // Filter file tree based on folder scope
-  const filteredFileTree = filterFileTree(fileTree);
+  // Base-aware file tree filtering
+  const getBaseAwareFileTree = useCallback((tree) => {
+    // Check if bases tab is open (not necessarily active)
+    const hasBasesTab = openTabs.some(tab => tab.path === '__bases__');
+
+    // If viewing a base, filter to show only the base's sourceFolder
+    if (activeBase?.sourceFolder && hasBasesTab) {
+      const filterToBase = (entries) => {
+        return entries.filter(entry => {
+          // Show the base's folder and everything inside it
+          return entry.path === activeBase.sourceFolder ||
+                 entry.path.startsWith(activeBase.sourceFolder + '/');
+        }).map(entry => {
+          // If this entry has children, filter them recursively
+          if (entry.children && entry.children.length > 0) {
+            return {
+              ...entry,
+              children: filterToBase(entry.children)
+            };
+          }
+          return entry;
+        });
+      };
+
+      return filterToBase(tree);
+    }
+
+    // Otherwise use FolderScope filtering
+    return filterFileTree(tree);
+  }, [activeBase, openTabs, filterFileTree]);
+
+  // Filter file tree based on folder scope or base scope
+  const filteredFileTree = getBaseAwareFileTree(fileTree);
 
   return (
     <PanelManager>
@@ -3007,12 +3080,14 @@ function WorkspaceWithScope({ path }) {
 
       {/* Workspace Toolbar - positioned in titlebar area */}
       <div
-        className="fixed top-0 left-0 right-0 h-8 flex items-center justify-between z-50"
+        className="fixed top-0 left-0 right-0 flex items-center justify-between z-50"
         data-tauri-drag-region
         style={{
+          height: '29px',
           paddingLeft: platformService.isMacOS() ? '80px' : '8px',
           paddingRight: '8px',
-          backgroundColor: 'rgb(var(--bg))'
+          backgroundColor: 'rgb(var(--panel))',
+          borderBottom: '1px solid rgb(var(--border))'
         }}
       >
         {/* Left Section: New File, New Folder, New Canvas buttons */}
@@ -3024,7 +3099,7 @@ function WorkspaceWithScope({ path }) {
             data-tauri-drag-region="false"
             style={{ pointerEvents: 'auto' }}
           >
-            <FileText className="w-5 h-5" strokeWidth={2} />
+            <FilePlusCorner className="w-5 h-5" strokeWidth={2} />
           </button>
           <button
             onClick={handleCreateFolder}
@@ -3033,7 +3108,7 @@ function WorkspaceWithScope({ path }) {
             data-tauri-drag-region="false"
             style={{ pointerEvents: 'auto' }}
           >
-            <FolderTree className="w-5 h-5" strokeWidth={2} />
+            <FolderOpen className="w-5 h-5" strokeWidth={2} />
           </button>
           <button
             onClick={handleCreateCanvas}
@@ -3042,7 +3117,7 @@ function WorkspaceWithScope({ path }) {
             data-tauri-drag-region="false"
             style={{ pointerEvents: 'auto' }}
           >
-            <Grid2X2 className="w-5 h-5" strokeWidth={2} />
+            <SquareKanban className="w-5 h-5" strokeWidth={2} />
           </button>
         </div>
 
@@ -3135,7 +3210,7 @@ function WorkspaceWithScope({ path }) {
             data-tauri-drag-region="false"
             style={{ pointerEvents: 'auto' }}
           >
-            <PanelRightOpen className="w-5 h-5" strokeWidth={2} />
+            <SquareSplitHorizontal className="w-5 h-5" strokeWidth={2} />
           </button>
           <button
             onClick={() => setShowRight(v => !v)}
@@ -3356,26 +3431,39 @@ function WorkspaceWithScope({ path }) {
                 </div>
               </div>
             ) : (
-              <ContextMenu>
-                <ContextMenuTrigger asChild>
-                  <div className="p-2 flex-1 overflow-y-auto">
-                    <FileTreeView
-                      entries={filteredFileTree}
-                      onFileClick={handleFileOpen}
-                      activeFile={activeFile}
-                      onRefresh={handleRefreshFiles}
-                      data-testid="file-tree"
-                      expandedFolders={expandedFolders}
-                      toggleFolder={toggleFolder}
-                      isCreating={isCreatingFolder}
-                      onCreateConfirm={handleConfirmCreateFolder}
-                      keymap={keymap}
-                      renamingPath={renamingPath}
-                      setRenamingPath={setRenamingPath}
-                      onViewHistory={toggleVersionHistory}
-                    />
-                  </div>
-                </ContextMenuTrigger>
+              <>
+                {/* Explorer Header */}
+                <div className="h-10 px-4 flex items-center justify-between border-b border-app-border bg-app-panel">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-app-muted">Explorer</span>
+                  <button
+                    onClick={closeAllFolders}
+                    className="obsidian-button icon-only small"
+                    title="Collapse All Folders"
+                  >
+                    <FoldVertical className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <ContextMenu>
+                  <ContextMenuTrigger asChild>
+                    <div className="p-2 flex-1 overflow-y-auto">
+                      <FileTreeView
+                        entries={filteredFileTree}
+                        onFileClick={handleFileOpen}
+                        activeFile={activeFile}
+                        onRefresh={handleRefreshFiles}
+                        data-testid="file-tree"
+                        expandedFolders={expandedFolders}
+                        toggleFolder={toggleFolder}
+                        isCreating={isCreatingFolder}
+                        onCreateConfirm={handleConfirmCreateFolder}
+                        keymap={keymap}
+                        renamingPath={renamingPath}
+                        setRenamingPath={setRenamingPath}
+                        onViewHistory={toggleVersionHistory}
+                      />
+                    </div>
+                  </ContextMenuTrigger>
                 <ContextMenuContent>
                   <ContextMenuItem onClick={handleCreateFile}>
                     New File
@@ -3396,6 +3484,7 @@ function WorkspaceWithScope({ path }) {
                   <ContextMenuItem onClick={handleRefreshFiles}>Refresh</ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>
+              </>
             )}
           </aside>
         )}
@@ -3581,6 +3670,24 @@ function WorkspaceWithScope({ path }) {
                 workspacePath={path}
                 boardPath={activeFile}
                 onFileOpen={handleFileOpen}
+              />
+            </div>
+          ) : activeFile && isImageFile(activeFile) ? (
+            <div className="flex-1 overflow-hidden">
+              <ImageViewerTab
+                imagePath={activeFile}
+                allImageFiles={allImageFiles}
+                onImageChange={(newPath) => {
+                  // Update active file and tab name when navigating between images
+                  setActiveFile(newPath);
+                  setOpenTabs(prevTabs => {
+                    return prevTabs.map(tab =>
+                      tab.path === activeFile
+                        ? { ...tab, path: newPath, name: getFilename(newPath) }
+                        : tab
+                    );
+                  });
+                }}
               />
             </div>
           ) : activeFile === '__graph__' ? (
@@ -4154,9 +4261,9 @@ function WorkspaceWithScope({ path }) {
       />
 
       {/* Pluginable Status Bar - replaces the old Obsidian status bar */}
-      <StatusBar 
-        activeFile={activeFile} 
-        unsavedChanges={unsavedChanges} 
+      <StatusBar
+        activeFile={activeFile}
+        unsavedChanges={unsavedChanges}
         openTabs={openTabs}
         editor={editor}
       />

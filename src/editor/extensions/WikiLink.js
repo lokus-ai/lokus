@@ -14,7 +14,9 @@ function buildWikiLinkPattern(imageEmbed = false) {
   const close = config?.close || ']]'
   const imageMarker = markdownSyntaxConfig.get('image', 'marker') || '!'
 
-  console.log('[WikiLink] Building pattern with:', { open, close, imageMarker, imageEmbed })
+  if (import.meta.env.DEV) {
+    console.log('[WikiLink] Building pattern with:', { open, close, imageMarker, imageEmbed })
+  }
 
   const escapedOpen = escapeRegex(open)
   const escapedClose = escapeRegex(close)
@@ -27,7 +29,9 @@ function buildWikiLinkPattern(imageEmbed = false) {
     ? new RegExp(`${escapedImage}${escapedOpen}([^${notClose}]+?)${escapedClose}$`)
     : new RegExp(`${escapedOpen}([^${notClose}]+?)${escapedClose}$`)
 
-  console.log('[WikiLink] Created pattern:', pattern)
+  if (import.meta.env.DEV) {
+    console.log('[WikiLink] Created pattern:', pattern)
+  }
 
   return pattern
 }
@@ -54,15 +58,21 @@ export const WikiLink = Node.create({
   selectable: true,
 
   onCreate() {
-    console.log('[WikiLink] Extension created, registering config listener');
+    if (import.meta.env.DEV) {
+      console.log('[WikiLink] Extension created, registering config listener');
+    }
     // Listen for markdown syntax config changes and reload editor
     this.configListener = markdownSyntaxConfig.onChange((category, key, value) => {
-      console.log('[WikiLink] Config changed detected:', { category, key, value });
-      console.log('[WikiLink] Current editor instance:', this.editor ? 'exists' : 'null');
+      if (import.meta.env.DEV) {
+        console.log('[WikiLink] Config changed detected:', { category, key, value });
+        console.log('[WikiLink] Current editor instance:', this.editor ? 'exists' : 'null');
+      }
 
       // Recreate the extension by destroying and recreating the editor
       if (this.editor) {
-        console.log('[WikiLink] Dispatching markdown-config-changed event');
+        if (import.meta.env.DEV) {
+          console.log('[WikiLink] Dispatching markdown-config-changed event');
+        }
         // Trigger a full reload by emitting a custom event
         window.dispatchEvent(new CustomEvent('markdown-config-changed', {
           detail: { category, key, value }
@@ -71,7 +81,9 @@ export const WikiLink = Node.create({
         console.warn('[WikiLink] Editor instance not available for reload');
       }
     });
-    console.log('[WikiLink] Config listener registered successfully');
+    if (import.meta.env.DEV) {
+      console.log('[WikiLink] Config listener registered successfully');
+    }
   },
 
   onDestroy() {
@@ -196,7 +208,9 @@ export const WikiLink = Node.create({
 
   addInputRules() {
     const currentConfig = markdownSyntaxConfig.get('link', 'wikiLink');
-    console.log('[WikiLink] Creating input rules with config:', currentConfig);
+    if (import.meta.env.DEV) {
+      console.log('[WikiLink] Creating input rules with config:', currentConfig);
+    }
     return [
       // ![[...]] image embed (dynamic pattern)
       new InputRule({

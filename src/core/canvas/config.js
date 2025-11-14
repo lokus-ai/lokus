@@ -66,16 +66,16 @@ export const canvasConfigs = {
 // Theme-specific configurations
 export const themeConfigs = {
   light: {
-    background: '#ffffff',
-    grid: 'rgba(0,0,0,0.1)',
-    selection: '#0066ff',
-    text: '#000000'
+    background: 'rgb(var(--canvas-bg))',
+    grid: 'var(--canvas-grid)',
+    selection: 'var(--accent)',
+    text: 'var(--app-text)'
   },
   dark: {
-    background: '#1a1a1a',
-    grid: 'rgba(255,255,255,0.1)', 
-    selection: '#4dabf7',
-    text: '#ffffff'
+    background: 'rgb(var(--canvas-bg))',
+    grid: 'var(--canvas-grid)',
+    selection: 'var(--accent)',
+    text: 'var(--app-text)'
   }
 }
 
