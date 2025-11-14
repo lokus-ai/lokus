@@ -16,11 +16,13 @@ import { useAuth } from "../core/auth/AuthContext";
 import { User, LogIn, LogOut, Crown, Shield, Settings as SettingsIcon } from "lucide-react";
 
 export default function Preferences() {
-  console.log('🔧 Preferences component rendering');
-  console.log('🔧 Window location:', window.location.href);
-  console.log('🔧 Window search params:', new URLSearchParams(window.location.search).toString());
-  console.log('🔧 Document root styles:', window.getComputedStyle(document.documentElement).getPropertyValue('--bg'));
-  console.log('🔧 Document body classes:', document.body.className);
+  if (import.meta.env.DEV) {
+    console.log('🔧 Preferences component rendering');
+    console.log('🔧 Window location:', window.location.href);
+    console.log('🔧 Window search params:', new URLSearchParams(window.location.search).toString());
+    console.log('🔧 Document root styles:', window.getComputedStyle(document.documentElement).getPropertyValue('--bg'));
+    console.log('🔧 Document body classes:', document.body.className);
+  }
   const [themes, setThemes] = useState([]);
   const [activeTheme, setActiveTheme] = useState("");
   const [themeTokens, setThemeTokens] = useState({});
@@ -322,10 +324,14 @@ export default function Preferences() {
           try {
             const currentWorkspace = await invoke('api_get_current_workspace');
             if (currentWorkspace) {
-              console.log('Got workspace path from API:', currentWorkspace);
+              if (import.meta.env.DEV) {
+                console.log('Got workspace path from API:', currentWorkspace);
+              }
               setWorkspacePath(currentWorkspace);
             } else {
-              console.warn('No current workspace in API state');
+              if (import.meta.env.DEV) {
+                console.warn('No current workspace in API state');
+              }
             }
           } catch (e) {
             console.error('Failed to get current workspace from API:', e);
@@ -381,11 +387,15 @@ export default function Preferences() {
         const branchName = await invoke('git_get_current_branch', { workspacePath });
         if (branchName && branchName !== syncBranch) {
           setSyncBranch(branchName);
-          console.log('[Sync] Auto-detected branch:', branchName);
+          if (import.meta.env.DEV) {
+            console.log('[Sync] Auto-detected branch:', branchName);
+          }
         }
       } catch (e) {
         // Ignore error if Git not initialized yet
-        console.log('[Sync] Could not detect branch (Git may not be initialized)');
+        if (import.meta.env.DEV) {
+          console.log('[Sync] Could not detect branch (Git may not be initialized)');
+        }
       }
     };
 
@@ -2167,7 +2177,9 @@ export default function Preferences() {
                         await emit('lokus:markdown-config-changed', {
                           config: markdownSyntaxConfig.getAll()
                         });
-                        console.log('[Preferences] Emitted lokus:markdown-config-changed event');
+                        if (import.meta.env.DEV) {
+                          console.log('[Preferences] Emitted lokus:markdown-config-changed event');
+                        }
                       } catch (e) {
                         console.error('[Preferences] Failed to emit config change event:', e);
                       }

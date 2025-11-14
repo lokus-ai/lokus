@@ -2,15 +2,18 @@
  * File-Based Template Storage
  *
  * Stores templates as individual .md files with frontmatter
- * Templates directory: /Users/pratham/Desktop/My Knowledge Base/templates/
+ * Templates directory: <workspace>/templates/
  */
 
 import { readTextFile, writeTextFile, readDir, exists, mkdir, remove } from '@tauri-apps/plugin-fs';
 
 export class FileBasedTemplateStorage {
   constructor(options = {}) {
-    // Use absolute path for templates directory
-    this.templateDir = options.templateDir || '/Users/pratham/Desktop/My Knowledge Base/templates';
+    // Template directory must be provided (workspace-relative path)
+    if (!options.templateDir) {
+      throw new Error('templateDir is required for FileBasedTemplateStorage');
+    }
+    this.templateDir = options.templateDir;
     this.cache = new Map(); // In-memory cache for performance
     this.initialized = false;
   }

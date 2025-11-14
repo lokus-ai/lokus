@@ -253,33 +253,8 @@ export default function BaseTableView({
   const [expandedPaths, setExpandedPaths] = useState(new Set()) // Set of expanded path cells (format: "rowPath:column")
 
   // COMPUTED VALUES AFTER STATE
-  // Use data prop if available, otherwise fall back to notes prop, or use test data
-  const items = data?.length > 0 ? data : notes?.length > 0 ? notes : [
-    {
-      path: '/Users/pratham/Desktop/My Knowledge Base/Test File 1.md',
-      properties: { status: 'published', priority: 'high' },
-      name: 'Test File 1.md',
-      title: 'Test File 1',
-      created: new Date(),
-      modified: new Date()
-    },
-    {
-      path: '/Users/pratham/Desktop/My Knowledge Base/Test File 2.md',
-      properties: { status: 'draft', priority: 'medium' },
-      name: 'Test File 2.md',
-      title: 'Test File 2',
-      created: new Date(),
-      modified: new Date()
-    },
-    {
-      path: '/Users/pratham/Desktop/My Knowledge Base/Marketing Plan.md',
-      properties: { status: 'review', priority: 'low', tags: ['business', 'strategy'] },
-      name: 'Marketing Plan.md',
-      title: 'Marketing Plan',
-      created: new Date(),
-      modified: new Date()
-    }
-  ];
+  // Use data prop if available, otherwise fall back to notes prop, or empty array
+  const items = data?.length > 0 ? data : notes?.length > 0 ? notes : [];
 
   // Get columns based on enabled state and custom order
   const displayColumns = useMemo(() => {

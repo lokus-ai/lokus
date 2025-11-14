@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { TemplateManager } from '../core/templates/manager.js';
 import { FileBasedTemplateStorage } from '../core/templates/file-storage.js';
 import { builtinVariables } from '../core/templates/variables.js';
+import { WorkspaceManager } from '../core/workspace/manager.js';
 
 // Template manager singleton
 let templateManager = null;
@@ -9,9 +10,17 @@ let templateStorage = null;
 
 async function getTemplateManager() {
   if (!templateManager) {
+    // Get workspace path dynamically instead of hardcoding
+    const workspacePath = await WorkspaceManager.getValidatedWorkspacePath();
+    const templateDir = workspacePath ? `${workspacePath}/templates` : null;
+
+    if (!templateDir) {
+      throw new Error('No workspace selected. Please open a workspace first.');
+    }
+
     // Initialize file-based storage (stores templates as .md files)
     templateStorage = new FileBasedTemplateStorage({
-      templateDir: '/Users/pratham/Desktop/My Knowledge Base/templates'
+      templateDir
     });
     await templateStorage.initialize();
 
@@ -56,13 +65,17 @@ export function useTemplates() {
   const loadTemplates = useCallback(async (options = {}) => {
     if (!manager) return { templates: [], total: 0 };
 
-    console.log('[useTemplates] Loading templates...');
+    if (import.meta.env.DEV) {
+      console.log('[useTemplates] Loading templates...');
+    }
     setLoading(true);
     setError(null);
 
     try {
       const result = manager.list(options);
-      console.log('[useTemplates] Loaded', result.templates.length, 'templates');
+      if (import.meta.env.DEV) {
+        console.log('[useTemplates] Loaded', result.templates.length, 'templates');
+      }
       setTemplates(result.templates);
       return result;
     } catch (err) {
@@ -76,17 +89,24 @@ export function useTemplates() {
 
   // Create template
   const createTemplate = useCallback(async (templateData) => {
-    console.log('[useTemplates] Creating template:', templateData.name);
+    if (import.meta.env.DEV) {
+      console.log('[useTemplates] Creating template:', templateData.name);
+    }
     setError(null);
 
     try {
-      console.log('[useTemplates] Calling manager.create...');
+      if (import.meta.env.DEV) {
+        console.log('[useTemplates] Calling manager.create...');
+      }
       const template = await manager.create(templateData);
-      console.log('[useTemplates] Template created successfully:', template.id);
-
-      console.log('[useTemplates] Refreshing template list...');
+      if (import.meta.env.DEV) {
+        console.log('[useTemplates] Template created successfully:', template.id);
+        console.log('[useTemplates] Refreshing template list...');
+      }
       await loadTemplates(); // Refresh list
-      console.log('[useTemplates] Template list refreshed');
+      if (import.meta.env.DEV) {
+        console.log('[useTemplates] Template list refreshed');
+      }
 
       return template;
     } catch (err) {

@@ -5,7 +5,7 @@ import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, FoldVertical, SquareSplitHorizontal, FilePlus as FilePlusCorner, SquareKanban } from "lucide-react";
 import { ColoredFileIcon } from "../components/FileIcon.jsx";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
@@ -3080,12 +3080,14 @@ function WorkspaceWithScope({ path }) {
 
       {/* Workspace Toolbar - positioned in titlebar area */}
       <div
-        className="fixed top-0 left-0 right-0 h-8 flex items-center justify-between z-50"
+        className="fixed top-0 left-0 right-0 flex items-center justify-between z-50"
         data-tauri-drag-region
         style={{
+          height: '29px',
           paddingLeft: platformService.isMacOS() ? '80px' : '8px',
           paddingRight: '8px',
-          backgroundColor: 'rgb(var(--bg))'
+          backgroundColor: 'rgb(var(--panel))',
+          borderBottom: '1px solid rgb(var(--border))'
         }}
       >
         {/* Left Section: New File, New Folder, New Canvas buttons */}
@@ -3097,7 +3099,7 @@ function WorkspaceWithScope({ path }) {
             data-tauri-drag-region="false"
             style={{ pointerEvents: 'auto' }}
           >
-            <FileText className="w-5 h-5" strokeWidth={2} />
+            <FilePlusCorner className="w-5 h-5" strokeWidth={2} />
           </button>
           <button
             onClick={handleCreateFolder}
@@ -3106,7 +3108,7 @@ function WorkspaceWithScope({ path }) {
             data-tauri-drag-region="false"
             style={{ pointerEvents: 'auto' }}
           >
-            <FolderTree className="w-5 h-5" strokeWidth={2} />
+            <FolderOpen className="w-5 h-5" strokeWidth={2} />
           </button>
           <button
             onClick={handleCreateCanvas}
@@ -3115,7 +3117,7 @@ function WorkspaceWithScope({ path }) {
             data-tauri-drag-region="false"
             style={{ pointerEvents: 'auto' }}
           >
-            <Grid2X2 className="w-5 h-5" strokeWidth={2} />
+            <SquareKanban className="w-5 h-5" strokeWidth={2} />
           </button>
         </div>
 
@@ -3208,7 +3210,7 @@ function WorkspaceWithScope({ path }) {
             data-tauri-drag-region="false"
             style={{ pointerEvents: 'auto' }}
           >
-            <PanelRightOpen className="w-5 h-5" strokeWidth={2} />
+            <SquareSplitHorizontal className="w-5 h-5" strokeWidth={2} />
           </button>
           <button
             onClick={() => setShowRight(v => !v)}
@@ -3429,26 +3431,39 @@ function WorkspaceWithScope({ path }) {
                 </div>
               </div>
             ) : (
-              <ContextMenu>
-                <ContextMenuTrigger asChild>
-                  <div className="p-2 flex-1 overflow-y-auto">
-                    <FileTreeView
-                      entries={filteredFileTree}
-                      onFileClick={handleFileOpen}
-                      activeFile={activeFile}
-                      onRefresh={handleRefreshFiles}
-                      data-testid="file-tree"
-                      expandedFolders={expandedFolders}
-                      toggleFolder={toggleFolder}
-                      isCreating={isCreatingFolder}
-                      onCreateConfirm={handleConfirmCreateFolder}
-                      keymap={keymap}
-                      renamingPath={renamingPath}
-                      setRenamingPath={setRenamingPath}
-                      onViewHistory={toggleVersionHistory}
-                    />
-                  </div>
-                </ContextMenuTrigger>
+              <>
+                {/* Explorer Header */}
+                <div className="h-10 px-4 flex items-center justify-between border-b border-app-border bg-app-panel">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-app-muted">Explorer</span>
+                  <button
+                    onClick={closeAllFolders}
+                    className="obsidian-button icon-only small"
+                    title="Collapse All Folders"
+                  >
+                    <FoldVertical className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <ContextMenu>
+                  <ContextMenuTrigger asChild>
+                    <div className="p-2 flex-1 overflow-y-auto">
+                      <FileTreeView
+                        entries={filteredFileTree}
+                        onFileClick={handleFileOpen}
+                        activeFile={activeFile}
+                        onRefresh={handleRefreshFiles}
+                        data-testid="file-tree"
+                        expandedFolders={expandedFolders}
+                        toggleFolder={toggleFolder}
+                        isCreating={isCreatingFolder}
+                        onCreateConfirm={handleConfirmCreateFolder}
+                        keymap={keymap}
+                        renamingPath={renamingPath}
+                        setRenamingPath={setRenamingPath}
+                        onViewHistory={toggleVersionHistory}
+                      />
+                    </div>
+                  </ContextMenuTrigger>
                 <ContextMenuContent>
                   <ContextMenuItem onClick={handleCreateFile}>
                     New File
@@ -3469,6 +3484,7 @@ function WorkspaceWithScope({ path }) {
                   <ContextMenuItem onClick={handleRefreshFiles}>Refresh</ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>
+              </>
             )}
           </aside>
         )}

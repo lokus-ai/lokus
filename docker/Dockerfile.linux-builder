@@ -20,6 +20,8 @@ RUN apt-get update && apt-get install -y \
     libayatana-appindicator3-dev \
     librsvg2-dev \
     patchelf \
+    libgit2-dev \
+    libsecret-1-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 20

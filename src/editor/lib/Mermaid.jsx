@@ -32,15 +32,19 @@ const getThemeColors = () => {
 const MermaidComponent = ({ node, updateAttributes }) => {
   const { code = "" } = node.attrs;
 
-  console.log('[MermaidComponent] Mount/Update - code length:', code.length);
-  console.log('[MermaidComponent] Mount/Update - first 100 chars:', code.substring(0, 100));
+  if (import.meta.env.DEV) {
+    console.log('[MermaidComponent] Mount/Update - code length:', code.length);
+    console.log('[MermaidComponent] Mount/Update - first 100 chars:', code.substring(0, 100));
+  }
 
   const [isEditing, setIsEditing] = useState(!code);  // Start in edit mode only if no code
   const [localCode, setLocalCode] = useState(code);
   const [themeVersion, setThemeVersion] = useState(0);
   const [forceRender, setForceRender] = useState(0);
 
-  console.log('[MermaidComponent] State - isEditing:', isEditing, 'localCode length:', localCode.length);
+  if (import.meta.env.DEV) {
+    console.log('[MermaidComponent] State - isEditing:', isEditing, 'localCode length:', localCode.length);
+  }
 
   const containerRef = useRef(null);
   const diagramIdRef = useRef(`m-${Math.random().toString(36).substring(2, 9)}`);
@@ -56,7 +60,9 @@ const MermaidComponent = ({ node, updateAttributes }) => {
   // Sync localCode when node code changes
   useEffect(() => {
     if (code !== localCode) {
-      console.log('[MermaidComponent] Code changed, updating localCode');
+      if (import.meta.env.DEV) {
+        console.log('[MermaidComponent] Code changed, updating localCode');
+      }
       setLocalCode(code);
     }
   }, [code]);
@@ -78,25 +84,35 @@ const MermaidComponent = ({ node, updateAttributes }) => {
 
   // Initialize and render Mermaid diagram
   useEffect(() => {
-    console.log('[MermaidComponent] Render effect triggered - localCode length:', localCode.length);
-    console.log('[MermaidComponent] Render effect - localCode.trim():', localCode.trim().substring(0, 50));
+    if (import.meta.env.DEV) {
+      console.log('[MermaidComponent] Render effect triggered - localCode length:', localCode.length);
+      console.log('[MermaidComponent] Render effect - localCode.trim():', localCode.trim().substring(0, 50));
+    }
 
     if (!localCode.trim()) {
-      console.log('[MermaidComponent] Render effect - skipping, no code');
+      if (import.meta.env.DEV) {
+        console.log('[MermaidComponent] Render effect - skipping, no code');
+      }
       return;
     }
 
-    console.log('[MermaidComponent] Render effect - will render diagram');
+    if (import.meta.env.DEV) {
+      console.log('[MermaidComponent] Render effect - will render diagram');
+    }
 
     const renderDiagram = async () => {
       try {
-        console.log('[MermaidComponent] Starting mermaid render...');
+        if (import.meta.env.DEV) {
+          console.log('[MermaidComponent] Starting mermaid render...');
+        }
 
         // Get dynamic theme colors
         const themeColors = getThemeColors();
         const isDark = document.documentElement.classList.contains("dark");
 
-        console.log('[MermaidComponent] Theme colors:', themeColors);
+        if (import.meta.env.DEV) {
+          console.log('[MermaidComponent] Theme colors:', themeColors);
+        }
 
         // Initialize Mermaid with dynamic theme
         mermaid.initialize({
@@ -106,16 +122,22 @@ const MermaidComponent = ({ node, updateAttributes }) => {
           themeVariables: themeColors,
         });
 
-        console.log('[MermaidComponent] Mermaid initialized, calling render...');
+        if (import.meta.env.DEV) {
+          console.log('[MermaidComponent] Mermaid initialized, calling render...');
+        }
 
         // Render diagram
         const { svg } = await mermaid.render(diagramIdRef.current, localCode);
 
-        console.log('[MermaidComponent] Mermaid render success, svg length:', svg.length);
+        if (import.meta.env.DEV) {
+          console.log('[MermaidComponent] Mermaid render success, svg length:', svg.length);
+        }
 
         if (containerRef.current) {
           containerRef.current.innerHTML = svg;
-          console.log('[MermaidComponent] SVG inserted into container');
+          if (import.meta.env.DEV) {
+            console.log('[MermaidComponent] SVG inserted into container');
+          }
 
           const dimensions = {
             width: containerRef.current.offsetWidth,
@@ -123,21 +145,29 @@ const MermaidComponent = ({ node, updateAttributes }) => {
             clientHeight: containerRef.current.clientHeight,
             scrollHeight: containerRef.current.scrollHeight
           };
-          console.log('[MermaidComponent] Container dimensions:', dimensions);
-          console.log('[MermaidComponent] Container innerHTML length:', containerRef.current.innerHTML.length);
+          if (import.meta.env.DEV) {
+            console.log('[MermaidComponent] Container dimensions:', dimensions);
+            console.log('[MermaidComponent] Container innerHTML length:', containerRef.current.innerHTML.length);
+          }
 
           // If container has no dimensions, retry after layout
           if (dimensions.width === 0 || dimensions.height === 0) {
-            console.log('[MermaidComponent] Container has no dimensions, retrying after layout...');
+            if (import.meta.env.DEV) {
+              console.log('[MermaidComponent] Container has no dimensions, retrying after layout...');
+            }
             setTimeout(() => {
               if (containerRef.current) {
                 containerRef.current.innerHTML = svg;
-                console.log('[MermaidComponent] SVG re-inserted after delay');
+                if (import.meta.env.DEV) {
+                  console.log('[MermaidComponent] SVG re-inserted after delay');
+                }
               }
             }, 100);
           }
         } else {
-          console.log('[MermaidComponent] ERROR: containerRef.current is null!');
+          if (import.meta.env.DEV) {
+            console.log('[MermaidComponent] ERROR: containerRef.current is null!');
+          }
         }
       } catch (e) {
         console.error('[MermaidComponent] Mermaid render error:', e);

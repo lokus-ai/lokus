@@ -85,46 +85,83 @@ export class CanvasManager {
     try {
       // Validate file path
       if (!isValidFilePath(canvasPath)) {
+        if (import.meta.env.DEV) {
+          console.error(`[Canvas LOAD] Invalid file path: ${canvasPath}`);
+        }
         throw new Error('Invalid canvas path');
       }
-      
+
       // Wait for any pending saves to complete
       if (this.saveQueue.has(canvasPath)) {
         await this.saveQueue.get(canvasPath);
       }
-      
-      // Check cache first (but clear it if there was a recent save)
-      if (this.canvasCache.has(canvasPath)) {
-        const cached = this.canvasCache.get(canvasPath);
-        return cached;
-      }
+
+      // ALWAYS clear cache before loading to ensure fresh data after saves
+      this.canvasCache.delete(canvasPath);
 
       const content = await invoke('read_file_content', { path: canvasPath });
-      
-      let canvasData;
+      if (import.meta.env.DEV) {
+        console.log(`[Canvas LOAD] RAW FILE CONTENT:`, content);
+      }
+
+      let tldrawSnapshot;
       try {
-        canvasData = JSON.parse(content);
+        tldrawSnapshot = JSON.parse(content);
+        if (import.meta.env.DEV) {
+          console.log(`[Canvas LOAD] PARSED SNAPSHOT:`, tldrawSnapshot);
+        }
+
+        // If snapshot is missing schema, add it (for backwards compatibility)
+        if (!tldrawSnapshot.schema) {
+          if (import.meta.env.DEV) {
+            console.warn(`[Canvas LOAD] Missing schema, adding default schema`);
+          }
+          tldrawSnapshot.schema = this.createEmptyTldrawSnapshot().schema;
+        }
       } catch (parseError) {
-        canvasData = this.createEmptyCanvasData();
+        console.error(`[Canvas LOAD] Parse error:`, parseError.message);
+        tldrawSnapshot = this.createEmptyTldrawSnapshot();
       }
 
-      // Security validation for canvas data
-      if (!isValidCanvasData(canvasData)) {
-        canvasData = this.createEmptyCanvasData();
-      }
+      // Cache the loaded snapshot
+      this.canvasCache.set(canvasPath, tldrawSnapshot);
 
-      // Validate and normalize canvas data
-      canvasData = this.validateCanvasData(canvasData);
-      
-      // Cache the loaded data
-      this.canvasCache.set(canvasPath, canvasData);
-      
-      
-      return canvasData;
+      return tldrawSnapshot;
     } catch (error) {
-      // Return empty canvas if file doesn't exist or can't be read
-      return this.createEmptyCanvasData();
+      console.error(`[Canvas LOAD] Error:`, error.message);
+      return this.createEmptyTldrawSnapshot();
     }
+  }
+
+  /**
+   * Create empty TLDraw snapshot
+   * @returns {Object} - Empty TLDraw snapshot
+   */
+  createEmptyTldrawSnapshot() {
+    return {
+      records: [],
+      schema: {
+        schemaVersion: 1,
+        storeVersion: 4,
+        recordVersions: {
+          asset: { version: 1, subTypeKey: 'type', subTypeVersions: { image: 2, video: 2, bookmark: 0 } },
+          camera: { version: 1 },
+          document: { version: 2 },
+          instance: { version: 22 },
+          instance_page_state: { version: 5 },
+          page: { version: 1 },
+          shape: {
+            version: 3,
+            subTypeKey: 'type',
+            subTypeVersions: {
+              group: 0, geo: 1, arrow: 1, highlight: 0, embed: 4, image: 2, video: 1, text: 1
+            }
+          },
+          instance_presence: { version: 5 },
+          pointer: { version: 1 }
+        }
+      }
+    };
   }
 
   /**
@@ -153,36 +190,36 @@ export class CanvasManager {
    * Internal save implementation
    * @private
    */
-  async _saveCanvasInternal(canvasPath, canvasData) {
+  async _saveCanvasInternal(canvasPath, tldrawSnapshot) {
     try {
       // Validate file path
       if (!isValidFilePath(canvasPath)) {
+        if (import.meta.env.DEV) {
+          console.error(`[Canvas SAVE] Invalid file path: ${canvasPath}`);
+        }
         throw new Error('Invalid canvas path');
       }
-      
-      // Security validation for canvas data
-      if (!isValidCanvasData(canvasData)) {
-        throw new Error('Invalid canvas data - security validation failed');
+
+      if (import.meta.env.DEV) {
+        console.log(`[Canvas SAVE] SNAPSHOT TO SAVE:`, tldrawSnapshot);
       }
-      
-      // Validate data before saving
-      const validatedData = this.validateCanvasData(canvasData);
-      
-      // Convert to JSON Canvas format if needed
-      const jsonCanvasData = this.convertToJsonCanvas(validatedData);
-      
-      const content = JSON.stringify(jsonCanvasData, null, 2);
-      
-      
+
+      // Save TLDraw snapshot directly - no conversion!
+      const content = JSON.stringify(tldrawSnapshot, null, 2);
+
       await invoke('write_file_content', {
         path: canvasPath,
         content
       });
-      
+      if (import.meta.env.DEV) {
+        console.log(`[Canvas SAVE] Saved ${content.length} bytes to file`);
+      }
+
       // Clear cache to force fresh read next time
       this.canvasCache.delete(canvasPath);
-      
+
     } catch (error) {
+      console.error(`[Canvas SAVE] Error:`, error.message);
       throw error;
     }
   }
@@ -233,6 +270,7 @@ export class CanvasManager {
    */
   validateCanvasData(data) {
     if (!data || typeof data !== 'object') {
+      console.warn(`[Canvas Manager] Invalid canvas data type, creating empty canvas`);
       return this.createEmptyCanvasData();
     }
 
@@ -253,7 +291,65 @@ export class CanvasManager {
       }
     };
 
+    // Validate individual nodes
+    validated.nodes = validated.nodes.filter((node, index) => {
+      const isValid = this._validateNode(node);
+      if (!isValid) {
+        console.warn(`[Canvas Manager] Removed invalid node at index ${index}:`, node);
+      }
+      return isValid;
+    });
+
+    // Validate individual edges
+    validated.edges = validated.edges.filter((edge, index) => {
+      const isValid = this._validateEdge(edge);
+      if (!isValid) {
+        console.warn(`[Canvas Manager] Removed invalid edge at index ${index}:`, edge);
+      }
+      return isValid;
+    });
+
+    // Verify edge references
+    const nodeIds = new Set(validated.nodes.map(n => n.id));
+    validated.edges = validated.edges.filter((edge) => {
+      const fromExists = nodeIds.has(edge.fromNode);
+      const toExists = nodeIds.has(edge.toNode);
+      if (!fromExists || !toExists) {
+        console.warn(`[Canvas Manager] Removed edge with missing node references:`, edge);
+        return false;
+      }
+      return true;
+    });
+
+    console.log(`[Canvas Manager] Validation complete: ${validated.nodes.length} nodes, ${validated.edges.length} edges`);
+
     return validated;
+  }
+
+  /**
+   * Validate individual node
+   * @private
+   */
+  _validateNode(node) {
+    if (!node || typeof node !== 'object') return false;
+    if (!node.id || typeof node.id !== 'string') return false;
+    if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return false;
+    if (!Number.isFinite(node.width) || !Number.isFinite(node.height)) return false;
+    if (node.width < 0 || node.height < 0) return false;
+    if (!node.type || typeof node.type !== 'string') return false;
+    return true;
+  }
+
+  /**
+   * Validate individual edge
+   * @private
+   */
+  _validateEdge(edge) {
+    if (!edge || typeof edge !== 'object') return false;
+    if (!edge.id || typeof edge.id !== 'string') return false;
+    if (!edge.fromNode || typeof edge.fromNode !== 'string') return false;
+    if (!edge.toNode || typeof edge.toNode !== 'string') return false;
+    return true;
   }
 
   /**
