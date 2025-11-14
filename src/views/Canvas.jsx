@@ -186,15 +186,18 @@ export default function Canvas({
           throw new Error('Invalid canvas file path')
         }
         
-        // Get current TLDraw snapshot (includes both records and schema!)
-        const tldrawSnapshot = getSnapshot(editor.store)
-        console.log(`[Canvas.jsx] SNAPSHOT TO SAVE:`, tldrawSnapshot);
+        // Get current TLDraw snapshot - let's see what format it actually returns
+        const rawSnapshot = getSnapshot(editor.store)
+        console.log(`[Canvas SAVE] RAW getSnapshot() RESULT:`, rawSnapshot);
+        console.log(`[Canvas SAVE] Keys in snapshot:`, Object.keys(rawSnapshot));
+        console.log(`[Canvas SAVE] Is it { document, session }?`, 'document' in rawSnapshot, 'session' in rawSnapshot);
+        console.log(`[Canvas SAVE] Is it { records, schema }?`, 'records' in rawSnapshot, 'schema' in rawSnapshot);
 
-        // Save the TLDraw snapshot directly (no conversion!)
-        await canvasManager.saveCanvas(canvasPath, tldrawSnapshot)
+        // Save exactly what TLDraw gives us
+        await canvasManager.saveCanvas(canvasPath, rawSnapshot)
 
         // Verify the save was successful
-        const isVerified = await verifyFileSave(canvasPath, tldrawSnapshot)
+        const isVerified = await verifyFileSave(canvasPath, rawSnapshot)
         if (!isVerified) {
           throw new Error('File verification failed - data may not have been saved correctly')
         }

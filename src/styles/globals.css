@@ -52,6 +52,10 @@
   /* Editor colors */
   --editor-placeholder: 148 163 184; /* slate-400 */
 
+  /* Canvas colors */
+  --canvas-bg: 38 38 38;           /* #262626 - Lighter than main bg for canvas */
+  --canvas-grid: rgba(255, 255, 255, 0.15); /* Subtle white grid dots */
+
   /* Graph visualization colors */
   --graph-bg-primary: #1e1e1e;
   --graph-bg-secondary: #6366f1;
@@ -93,6 +97,10 @@
 
   /* Editor colors */
   --editor-placeholder: 107 114 128; /* gray-500 */
+
+  /* Canvas colors */
+  --canvas-bg: 255 255 255;         /* #ffffff - Pure white for light mode canvas */
+  --canvas-grid: rgba(0, 0, 0, 0.12); /* Subtle dark grid dots */
 
   /* Graph visualization colors */
   --graph-bg-primary: #f8fafc;
@@ -138,6 +146,10 @@
 
   /* Editor colors */
   --editor-placeholder: 148 163 184; /* slate-400 */
+
+  /* Canvas colors */
+  --canvas-bg: 38 38 38;           /* #262626 - Lighter than main bg for canvas */
+  --canvas-grid: rgba(255, 255, 255, 0.15); /* Subtle white grid dots */
 
   /* Graph visualization colors */
   --graph-bg-primary: #1e1e1e;

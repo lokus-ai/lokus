@@ -16,6 +16,8 @@
     "--success": "#a6e22e",
     "--warning": "#e6db74",
     "--info": "#66d9ef",
+    "--canvas-bg": "#3e3d32",
+    "--canvas-grid": "rgba(248, 248, 242, 0.15)",
     "--graph-bg-primary": "#272822",
     "--graph-bg-secondary": "#fd971f",
     "--graph-node-document": "#a6e22e",

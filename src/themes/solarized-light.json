@@ -6,6 +6,8 @@
     "--app-panel": "#eee8d5",
     "--app-border": "#93a1a1",
     "--app-muted": "#839496",
-    "--accent": "#268bd2"
+    "--accent": "#268bd2",
+    "--canvas-bg": "#ffffff",
+    "--canvas-grid": "rgba(101, 123, 131, 0.12)"
   }
 }
