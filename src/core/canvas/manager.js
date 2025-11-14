@@ -83,56 +83,77 @@ export class CanvasManager {
    */
   async _loadCanvasInternal(canvasPath) {
     try {
-      console.log(`[Canvas Manager] Loading canvas from: ${canvasPath}`);
-
       // Validate file path
       if (!isValidFilePath(canvasPath)) {
-        console.error(`[Canvas Manager] Invalid file path: ${canvasPath}`);
+        console.error(`[Canvas LOAD] Invalid file path: ${canvasPath}`);
         throw new Error('Invalid canvas path');
       }
 
       // Wait for any pending saves to complete
       if (this.saveQueue.has(canvasPath)) {
-        console.log(`[Canvas Manager] Waiting for pending save to complete: ${canvasPath}`);
         await this.saveQueue.get(canvasPath);
       }
 
       // ALWAYS clear cache before loading to ensure fresh data after saves
       this.canvasCache.delete(canvasPath);
-      console.log(`[Canvas Manager] Cache cleared for: ${canvasPath}`);
 
       const content = await invoke('read_file_content', { path: canvasPath });
-      console.log(`[Canvas Manager] File read successfully, size: ${content.length} bytes`);
+      console.log(`[Canvas LOAD] RAW FILE CONTENT:`, content);
 
-      let canvasData;
+      let tldrawSnapshot;
       try {
-        canvasData = JSON.parse(content);
-        console.log(`[Canvas Manager] JSON parsed successfully, nodes: ${canvasData.nodes?.length || 0}, edges: ${canvasData.edges?.length || 0}`);
+        tldrawSnapshot = JSON.parse(content);
+        console.log(`[Canvas LOAD] PARSED SNAPSHOT:`, tldrawSnapshot);
+
+        // If snapshot is missing schema, add it (for backwards compatibility)
+        if (!tldrawSnapshot.schema) {
+          console.warn(`[Canvas LOAD] Missing schema, adding default schema`);
+          tldrawSnapshot.schema = this.createEmptyTldrawSnapshot().schema;
+        }
       } catch (parseError) {
-        console.error(`[Canvas Manager] JSON parse failed for ${canvasPath}:`, parseError.message);
-        canvasData = this.createEmptyCanvasData();
+        console.error(`[Canvas LOAD] Parse error:`, parseError.message);
+        tldrawSnapshot = this.createEmptyTldrawSnapshot();
       }
 
-      // Security validation for canvas data
-      if (!isValidCanvasData(canvasData)) {
-        console.error(`[Canvas Manager] Canvas data failed security validation for ${canvasPath}`);
-        canvasData = this.createEmptyCanvasData();
-      }
+      // Cache the loaded snapshot
+      this.canvasCache.set(canvasPath, tldrawSnapshot);
 
-      // Validate and normalize canvas data
-      canvasData = this.validateCanvasData(canvasData);
-      console.log(`[Canvas Manager] Canvas data validated and normalized`);
-
-      // Cache the loaded data
-      this.canvasCache.set(canvasPath, canvasData);
-      console.log(`[Canvas Manager] Canvas cached for: ${canvasPath}`);
-
-      return canvasData;
+      return tldrawSnapshot;
     } catch (error) {
-      console.error(`[Canvas Manager] Failed to load canvas from ${canvasPath}:`, error.message);
-      // Return empty canvas if file doesn't exist or can't be read
-      return this.createEmptyCanvasData();
+      console.error(`[Canvas LOAD] Error:`, error.message);
+      return this.createEmptyTldrawSnapshot();
     }
+  }
+
+  /**
+   * Create empty TLDraw snapshot
+   * @returns {Object} - Empty TLDraw snapshot
+   */
+  createEmptyTldrawSnapshot() {
+    return {
+      records: [],
+      schema: {
+        schemaVersion: 1,
+        storeVersion: 4,
+        recordVersions: {
+          asset: { version: 1, subTypeKey: 'type', subTypeVersions: { image: 2, video: 2, bookmark: 0 } },
+          camera: { version: 1 },
+          document: { version: 2 },
+          instance: { version: 22 },
+          instance_page_state: { version: 5 },
+          page: { version: 1 },
+          shape: {
+            version: 3,
+            subTypeKey: 'type',
+            subTypeVersions: {
+              group: 0, geo: 1, arrow: 1, highlight: 0, embed: 4, image: 2, video: 1, text: 1
+            }
+          },
+          instance_presence: { version: 5 },
+          pointer: { version: 1 }
+        }
+      }
+    };
   }
 
   /**
@@ -161,46 +182,30 @@ export class CanvasManager {
    * Internal save implementation
    * @private
    */
-  async _saveCanvasInternal(canvasPath, canvasData) {
+  async _saveCanvasInternal(canvasPath, tldrawSnapshot) {
     try {
-      console.log(`[Canvas Manager] Saving canvas to: ${canvasPath}`);
-      console.log(`[Canvas Manager] Canvas data nodes: ${canvasData.nodes?.length || 0}, edges: ${canvasData.edges?.length || 0}`);
-
       // Validate file path
       if (!isValidFilePath(canvasPath)) {
-        console.error(`[Canvas Manager] Invalid file path for save: ${canvasPath}`);
+        console.error(`[Canvas SAVE] Invalid file path: ${canvasPath}`);
         throw new Error('Invalid canvas path');
       }
 
-      // Security validation for canvas data
-      if (!isValidCanvasData(canvasData)) {
-        console.error(`[Canvas Manager] Canvas data failed security validation before save: ${canvasPath}`);
-        throw new Error('Invalid canvas data - security validation failed');
-      }
+      console.log(`[Canvas SAVE] SNAPSHOT TO SAVE:`, tldrawSnapshot);
 
-      // Validate data before saving
-      const validatedData = this.validateCanvasData(canvasData);
-      console.log(`[Canvas Manager] Canvas data validated, nodes: ${validatedData.nodes?.length || 0}, edges: ${validatedData.edges?.length || 0}`);
-
-      // Convert to JSON Canvas format if needed
-      const jsonCanvasData = this.convertToJsonCanvas(validatedData);
-      console.log(`[Canvas Manager] Converted to JSON Canvas format`);
-
-      const content = JSON.stringify(jsonCanvasData, null, 2);
-      console.log(`[Canvas Manager] Serialized to JSON, size: ${content.length} bytes`);
+      // Save TLDraw snapshot directly - no conversion!
+      const content = JSON.stringify(tldrawSnapshot, null, 2);
 
       await invoke('write_file_content', {
         path: canvasPath,
         content
       });
-      console.log(`[Canvas Manager] File written successfully: ${canvasPath}`);
+      console.log(`[Canvas SAVE] Saved ${content.length} bytes to file`);
 
       // Clear cache to force fresh read next time
       this.canvasCache.delete(canvasPath);
-      console.log(`[Canvas Manager] Cache cleared after save: ${canvasPath}`);
 
     } catch (error) {
-      console.error(`[Canvas Manager] Failed to save canvas to ${canvasPath}:`, error.message);
+      console.error(`[Canvas SAVE] Error:`, error.message);
       throw error;
     }
   }

@@ -23,6 +23,43 @@ export function jsonCanvasToTldraw(jsonCanvas) {
     meta: {}
   });
 
+  // Create camera record - defines viewport position and zoom
+  records.push({
+    typeName: 'camera',
+    id: 'camera:page:page',
+    x: jsonCanvas.metadata?.viewport?.x || 0,
+    y: jsonCanvas.metadata?.viewport?.y || 0,
+    z: jsonCanvas.metadata?.viewport?.zoom || 1,
+    meta: {}
+  });
+
+  // Create instance record - defines current instance state
+  records.push({
+    typeName: 'instance',
+    id: 'instance:instance',
+    currentPageId: pageId,
+    followingUserId: null,
+    brush: null,
+    opacityForNextShape: 1,
+    stylesForNextShape: {},
+    meta: {}
+  });
+
+  // Create instance page state record - defines current page state
+  records.push({
+    typeName: 'instance_page_state',
+    id: 'instance_page_state:page:page',
+    pageId: pageId,
+    selectedShapeIds: [],
+    hintingShapeIds: [],
+    erasingShapeIds: [],
+    hoveredShapeId: null,
+    editingShapeId: null,
+    croppingShapeId: null,
+    focusedGroupId: null,
+    meta: {}
+  });
+
   // Convert nodes to tldraw shapes
   if (jsonCanvas.nodes) {
     jsonCanvas.nodes.forEach((node, index) => {
@@ -49,8 +86,7 @@ export function jsonCanvasToTldraw(jsonCanvas) {
     id: 'document:document',
     gridSize: 10,
     name: '',
-    meta: {},
-    id: 'document:document'
+    meta: {}
   });
 
   return {

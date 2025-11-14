@@ -63,16 +63,24 @@ export default function Canvas({
           await new Promise(resolve => setTimeout(resolve, 100))
         }
         
-        // Use CanvasManager for consistent load operations
-        const canvasData = await canvasManager.loadCanvas(canvasPath)
-        
-        
-        // Convert to tldraw format
-        const tldrawData = jsonCanvasToTldraw(canvasData)
-        
-        
+        // Load the TLDraw snapshot directly (no conversion needed!)
+        const tldrawSnapshot = await canvasManager.loadCanvas(canvasPath)
+        console.log(`[Canvas.jsx] SNAPSHOT LOADED FROM MANAGER:`, tldrawSnapshot);
+        console.log(`[Canvas.jsx] SNAPSHOT.SCHEMA:`, tldrawSnapshot.schema);
+        console.log(`[Canvas.jsx] SNAPSHOT.RECORDS:`, tldrawSnapshot.records);
+
         // Load into store
-        loadSnapshot(store, tldrawData)
+        console.log(`[Canvas.jsx] CALLING loadSnapshot with:`, tldrawSnapshot);
+        loadSnapshot(store, tldrawSnapshot)
+        console.log(`[Canvas.jsx] LOADED INTO TLDRAW STORE`);
+
+        // Check what's actually in the store after loading
+        const storeRecords = store.allRecords();
+        console.log(`[Canvas.jsx] STORE RECORDS AFTER LOAD (count: ${storeRecords.length}):`, storeRecords);
+
+        // Check specifically for shapes
+        const shapes = storeRecords.filter(r => r.typeName === 'shape');
+        console.log(`[Canvas.jsx] SHAPES IN STORE (count: ${shapes.length}):`, shapes);
         
         // Mark as clean after loading
         setIsDirty(false)
@@ -178,25 +186,15 @@ export default function Canvas({
           throw new Error('Invalid canvas file path')
         }
         
-        // Get current canvas data
-        const snapshot = getSnapshot(editor.store)
-        const allRecords = editor.store.allRecords()
-        const finalSnapshot = snapshot.records?.length > 0 ? snapshot : { records: allRecords }
-        
-        
-        // Convert to JSON Canvas format
-        const canvasData = tldrawToJsonCanvas(finalSnapshot)
-        
-        // Security validation
-        if (!isValidCanvasData(canvasData)) {
-          throw new Error('Canvas data validation failed')
-        }
-        
-        // Use CanvasManager for consistent save operations
-        await canvasManager.saveCanvas(canvasPath, canvasData)
-        
+        // Get current TLDraw snapshot (includes both records and schema!)
+        const tldrawSnapshot = getSnapshot(editor.store)
+        console.log(`[Canvas.jsx] SNAPSHOT TO SAVE:`, tldrawSnapshot);
+
+        // Save the TLDraw snapshot directly (no conversion!)
+        await canvasManager.saveCanvas(canvasPath, tldrawSnapshot)
+
         // Verify the save was successful
-        const isVerified = await verifyFileSave(canvasPath, canvasData)
+        const isVerified = await verifyFileSave(canvasPath, tldrawSnapshot)
         if (!isVerified) {
           throw new Error('File verification failed - data may not have been saved correctly')
         }
