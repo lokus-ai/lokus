@@ -76,12 +76,13 @@ const WikiLinkSuggest = Extension.create({
         // Only allow after double bracket [[ and not in list items or task items
         allow: ({ state, range }) => {
           // When suggestion triggers on '[', range.from is AFTER that character
-          // So we need to check if the char immediately before range.from is '['
-          const charBefore = state.doc.textBetween(Math.max(0, range.from - 1), range.from)
-          const isAfterDoubleBracket = charBefore === '['
+          // Check the actual text to see if we have [[ pattern
+          const $pos = state.selection.$from
+          const textBefore = $pos.parent.textContent.slice(Math.max(0, $pos.parentOffset - 2), $pos.parentOffset)
+          dbg('textBefore check', { textBefore, parentOffset: $pos.parentOffset, rangeFrom: range.from })
+          const isAfterDoubleBracket = textBefore.endsWith('[[') || textBefore === '['
 
           // Use ProseMirror node types for more reliable list detection
-          const $pos = state.selection.$from
           const parentNode = $pos.node($pos.depth)
           const isInListItem = parentNode.type.name === 'listItem'
           const isInTaskItem = parentNode.type.name === 'taskItem'
@@ -97,7 +98,7 @@ const WikiLinkSuggest = Extension.create({
 
           const shouldAllow = isAfterDoubleBracket && !isInList
           dbg('allow check', {
-            charBefore,
+            textBefore,
             isAfterDoubleBracket,
             isInList,
             parentType: parentNode.type.name,
@@ -220,7 +221,7 @@ const WikiLinkSuggest = Extension.create({
             onExit: () => {
               try { if (container?.parentNode) container.parentNode.removeChild(container) } catch {}
               container = null
-              component.destroy()
+              if (component) component.destroy()
             },
           }
         },
