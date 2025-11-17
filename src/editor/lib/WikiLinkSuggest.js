@@ -328,12 +328,36 @@ const WikiLinkSuggest = Extension.create({
 
           dbg('^ items', { fileName, blockQuery, query })
 
-          // Return mock blocks for now
-          // TODO: Load real blocks from file
+          // Return mock blocks formatted for WikiLinkList
+          // Use title/path format that WikiLinkList expects, but add block metadata
           return [
-            { type: 'block', blockId: 'intro', text: 'Introduction paragraph...', line: 5, fileName },
-            { type: 'block', blockId: 'summary', text: 'Summary of key points...', line: 25, fileName },
-            { type: 'block', blockId: 'conclusion', text: 'Final thoughts and conclusion...', line: 45, fileName }
+            {
+              type: 'block',
+              blockId: 'intro',
+              title: 'intro',
+              path: `${fileName}^intro`,
+              text: 'Introduction paragraph with some content here...',
+              line: 5,
+              fileName
+            },
+            {
+              type: 'block',
+              blockId: 'summary',
+              title: 'summary',
+              path: `${fileName}^summary`,
+              text: 'Summary of key points and main findings from research...',
+              line: 25,
+              fileName
+            },
+            {
+              type: 'block',
+              blockId: 'conclusion',
+              title: 'conclusion',
+              path: `${fileName}^conclusion`,
+              text: 'Final thoughts and conclusion with recommendations...',
+              line: 45,
+              fileName
+            }
           ]
         },
         command: ({ editor, range, props }) => {
