@@ -73,14 +73,28 @@ const WikiLinkSuggest = Extension.create({
         char: '[',
         allowSpaces: true,
         startOfLine: false,
-        // Only allow after double bracket [[ and not in list items or task items
+        // Allow after [[ for files OR after ^ for blocks
         allow: ({ state, range }) => {
-          // When suggestion triggers on '[', range.from is AFTER that character
-          // Check the actual text to see if we have [[ pattern
           const $pos = state.selection.$from
-          const textBefore = $pos.parent.textContent.slice(Math.max(0, $pos.parentOffset - 2), $pos.parentOffset)
-          dbg('textBefore check', { textBefore, parentOffset: $pos.parentOffset, rangeFrom: range.from })
+          const parentContent = $pos.parent.textContent
+          const textBefore = parentContent.slice(Math.max(0, $pos.parentOffset - 2), $pos.parentOffset)
+
+          // Check for [[ pattern (file linking)
           const isAfterDoubleBracket = textBefore.endsWith('[[')
+
+          // Check for ^ pattern within [[ ]] (block linking)
+          // Look for pattern: [[Filename^ or [[Filename.md^
+          const wikiLinkPattern = /\[\[([^\]]+)\^$/
+          const fullTextBefore = parentContent.slice(0, $pos.parentOffset)
+          const isAfterCaret = wikiLinkPattern.test(fullTextBefore)
+
+          dbg('textBefore check', {
+            textBefore,
+            fullTextBefore: fullTextBefore.slice(-20),
+            parentOffset: $pos.parentOffset,
+            rangeFrom: range.from,
+            isAfterCaret
+          })
 
           // Use ProseMirror node types for more reliable list detection
           const parentNode = $pos.node($pos.depth)
@@ -96,10 +110,11 @@ const WikiLinkSuggest = Extension.create({
 
           const isInList = isInListItem || isInTaskItem || isInNestedList
 
-          const shouldAllow = isAfterDoubleBracket && !isInList
+          const shouldAllow = (isAfterDoubleBracket || isAfterCaret) && !isInList
           dbg('allow check', {
             textBefore,
             isAfterDoubleBracket,
+            isAfterCaret,
             isInList,
             parentType: parentNode.type.name,
             shouldAllow,
@@ -107,12 +122,39 @@ const WikiLinkSuggest = Extension.create({
           })
           return shouldAllow
         },
-        items: ({ query }) => {
+        items: async ({ query, editor }) => {
           const active = (globalThis.__LOKUS_ACTIVE_FILE__ || '')
 
           // Clean query: remove leading [ if present (happens when typing [[)
           const cleanQuery = query.startsWith('[') ? query.slice(1) : query
 
+          // Check if we're in block reference mode by looking at editor content
+          // Pattern: [[Filename^query
+          const { state } = editor
+          const $pos = state.selection.$from
+          const parentContent = $pos.parent.textContent
+          const textBefore = parentContent.slice(0, $pos.parentOffset)
+
+          // Check if we have [[...^ pattern
+          const blockRefMatch = /\[\[([^\]^]+)\^(.*)$/.exec(textBefore)
+
+          if (blockRefMatch) {
+            // BLOCK MODE: Show blocks from the specified file
+            const fileName = blockRefMatch[1].trim()
+            const blockQuery = blockRefMatch[2]
+
+            dbg('items (block mode)', { fileName, blockQuery })
+
+            // TODO: Load blocks from file and filter by blockQuery
+            // For now, return mock blocks
+            return [
+              { type: 'block', blockId: 'intro', text: 'Introduction paragraph...', line: 5, fileName },
+              { type: 'block', blockId: 'summary', text: 'Summary of key points...', line: 25, fileName },
+              { type: 'block', blockId: 'conclusion', text: 'Final thoughts and conclusion...', line: 45, fileName }
+            ]
+          }
+
+          // FILE MODE: Show files (existing behavior)
           // For empty query or very short queries, return immediately without debouncing
           if (!cleanQuery || cleanQuery.length < 2) {
             const results = filterAndScoreItems(cleanQuery, active)
@@ -143,32 +185,48 @@ const WikiLinkSuggest = Extension.create({
           return immediateResults
         },
         command: ({ editor, range, props }) => {
-          // Range covers second '[' and query; include previous '[' as well
           const from = Math.max((range?.from ?? editor.state.selection.from) - 1, 1)
           const to = range?.to ?? editor.state.selection.to
-          const fileName = props.title || props.path
 
-          dbg('command select', { fileName, from, to })
+          if (props.type === 'block') {
+            // BLOCK MODE: Insert block reference
+            const blockId = props.blockId
+            dbg('command select (block)', { blockId, from, to })
 
-          // Delete the [[ and query
-          try { editor.chain().focus().deleteRange({ from, to }).run() } catch (e) { dbg('deleteRange error', e) }
+            // Just insert the blockid (the [[filename^ is already there)
+            try {
+              editor.chain()
+                .focus()
+                .deleteRange({ from, to })
+                .insertContent(blockId + ']]')
+                .run()
+            } catch (e) {
+              dbg('insertContent error', e)
+            }
+          } else {
+            // FILE MODE: Insert file reference
+            const fileName = props.title || props.path
+            dbg('command select (file)', { fileName, from, to })
 
-          // Insert as plain text (not WikiLink node) so user can add ^blockid
-          // This allows editing before converting to WikiLink node
-          const wikiText = `[[${fileName}]]`
-          editor.chain()
-            .focus()
-            .insertContent(wikiText)
-            .run()
+            // Delete the [[ and query
+            try { editor.chain().focus().deleteRange({ from, to }).run() } catch (e) { dbg('deleteRange error', e) }
 
-          // Position cursor before ]] so user can type ^
-          const cursorPos = from + fileName.length + 2 // After [[ and fileName
-          editor.chain()
-            .focus()
-            .setTextSelection(cursorPos)
-            .run()
+            // Insert as plain text (not WikiLink node) so user can add ^blockid
+            const wikiText = `[[${fileName}]]`
+            editor.chain()
+              .focus()
+              .insertContent(wikiText)
+              .run()
 
-          dbg('inserted text', { wikiText, cursorPos })
+            // Position cursor before ]] so user can type ^
+            const cursorPos = from + fileName.length + 2 // After [[ and fileName
+            editor.chain()
+              .focus()
+              .setTextSelection(cursorPos)
+              .run()
+
+            dbg('inserted text', { wikiText, cursorPos })
+          }
         },
         render: () => {
           let component
