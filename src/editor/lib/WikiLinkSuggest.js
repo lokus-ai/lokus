@@ -6,6 +6,7 @@ const WIKI_SUGGESTION_KEY = new PluginKey('wikiLinkSuggestion')
 import { ReactRenderer } from '@tiptap/react'
 // Use a simple fixed-position portal instead of tippy to avoid overlay issues
 import WikiLinkList from '../components/WikiLinkList.jsx'
+import { debounce } from '../../core/search/index.js'
 
 function getIndex() {
   const list = (globalThis.__LOKUS_FILE_INDEX__ || [])
@@ -37,6 +38,25 @@ function scoreItem(item, query, activePath) {
   score -= Math.min(name.length, 20) * 0.1
   return score
 }
+
+// Cache for debounced filter results
+let cachedResults = []
+let lastQuery = ''
+
+function filterAndScoreItems(query, activePath) {
+  const idx = getIndex()
+  const filtered = idx.filter(f => !query || f.title.toLowerCase().includes(query.toLowerCase()) || f.path.toLowerCase().includes(query.toLowerCase()))
+  const sorted = filtered.sort((a,b) => scoreItem(b, query, activePath) - scoreItem(a, query, activePath))
+  return sorted.slice(0, 30)
+}
+
+// Debounced version for performance with large file counts
+const debouncedFilter = debounce((query, activePath, callback) => {
+  const results = filterAndScoreItems(query, activePath)
+  cachedResults = results
+  lastQuery = query
+  if (callback) callback(results)
+}, 100)
 
 const WikiLinkSuggest = Extension.create({
   name: 'wikiLinkSuggest',
@@ -78,13 +98,36 @@ const WikiLinkSuggest = Extension.create({
           return shouldAllow
         },
         items: ({ query }) => {
-          const idx = getIndex()
           const active = (globalThis.__LOKUS_ACTIVE_FILE__ || '')
-          const filtered = idx.filter(f => !query || f.title.toLowerCase().includes(query.toLowerCase()) || f.path.toLowerCase().includes(query.toLowerCase()))
-          const sorted = filtered.sort((a,b) => scoreItem(b, query, active) - scoreItem(a, query, active))
-          const out = sorted.slice(0, 30)
-          dbg('items', { query, idx: idx.length, out: out.length, sample: out.slice(0,3) })
-          return out
+
+          // For empty query or very short queries, return immediately without debouncing
+          if (!query || query.length < 2) {
+            const results = filterAndScoreItems(query, active)
+            cachedResults = results
+            lastQuery = query
+            dbg('items (immediate)', { query, results: results.length })
+            return results
+          }
+
+          // Use cached results while debouncing
+          if (query.startsWith(lastQuery) && cachedResults.length > 0) {
+            // If query extends last query, filter cached results for instant feedback
+            const quickFiltered = cachedResults.filter(f =>
+              f.title.toLowerCase().includes(query.toLowerCase()) ||
+              f.path.toLowerCase().includes(query.toLowerCase())
+            )
+            dbg('items (cached)', { query, lastQuery, cached: cachedResults.length, quickFiltered: quickFiltered.length })
+
+            // Trigger debounced update in background
+            debouncedFilter(query, active, null)
+
+            return quickFiltered.length > 0 ? quickFiltered : cachedResults
+          }
+
+          // For new queries, return immediate results but trigger debounced update
+          const immediateResults = filterAndScoreItems(query, active)
+          dbg('items (new query)', { query, results: immediateResults.length })
+          return immediateResults
         },
         command: ({ editor, range, props }) => {
           // Range covers second '[' and query; include previous '[' as well
