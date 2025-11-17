@@ -50,27 +50,31 @@ const WikiLinkSuggest = Extension.create({
       suggestion({
         pluginKey: WIKI_SUGGESTION_KEY,
         editor: this.editor,
-        char: '<',
+        char: '[',
         allowSpaces: true,
         startOfLine: false,
-        // Only allow after double angle bracket << and not in any kind of list context
+        // Only allow after double bracket [[ and not in list items or task items
         allow: ({ state, range }) => {
           const textBefore = state.doc.textBetween(Math.max(0, range.from - 2), range.from)
-          const isAfterDoubleAngle = textBefore.endsWith('<') || textBefore === '<'
-          
-          // Check broader context to detect lists and task items
-          const lineContext = state.doc.textBetween(Math.max(0, range.from - 50), range.from)
-          
-          // Match various list patterns
-          const isInList = (
-            /[-*+]\s*\[/.test(lineContext) ||  // Task list pattern
-            /^\s*[-*+]\s/.test(lineContext) ||  // Bullet list start
-            /^\s*\d+\.\s/.test(lineContext) ||  // Numbered list start  
-            /\n\s*[-*+]\s*[^\n]*\[/.test(lineContext) // Bullet with bracket anywhere on line
-          )
-          
-          const shouldAllow = isAfterDoubleAngle && !isInList
-          dbg('allow check', { textBefore, lineContext, isAfterDoubleAngle, isInList, shouldAllow, from: range.from })
+          const isAfterDoubleBracket = textBefore.endsWith('[') || textBefore === '['
+
+          // Use ProseMirror node types for more reliable list detection
+          const $pos = state.selection.$from
+          const parentNode = $pos.node($pos.depth)
+          const isInListItem = parentNode.type.name === 'listItem'
+          const isInTaskItem = parentNode.type.name === 'taskItem'
+
+          // Additional check for parent's parent (nested lists)
+          let isInNestedList = false
+          if ($pos.depth > 1) {
+            const grandParent = $pos.node($pos.depth - 1)
+            isInNestedList = grandParent.type.name === 'listItem' || grandParent.type.name === 'taskItem'
+          }
+
+          const isInList = isInListItem || isInTaskItem || isInNestedList
+
+          const shouldAllow = isAfterDoubleBracket && !isInList
+          dbg('allow check', { textBefore, isAfterDoubleBracket, isInList, parentType: parentNode.type.name, shouldAllow, from: range.from })
           return shouldAllow
         },
         items: ({ query }) => {
@@ -83,7 +87,7 @@ const WikiLinkSuggest = Extension.create({
           return out
         },
         command: ({ editor, range, props }) => {
-          // Range covers second '<' and query; include previous '<' as well
+          // Range covers second '[' and query; include previous '[' as well
           const from = Math.max((range?.from ?? editor.state.selection.from) - 1, 1)
           const to = range?.to ?? editor.state.selection.to
           // Store the full path for resolution, but show the short title.
@@ -92,12 +96,12 @@ const WikiLinkSuggest = Extension.create({
           try { editor.chain().focus().deleteRange({ from, to }).run() } catch (e) { dbg('deleteRange error', e) }
           // Insert our wiki node directly
           editor.commands.setWikiLink(raw, { embed: false })
-          // Remove trailing >> if present right after the cursor
+          // Remove trailing ]] if present right after the cursor (from auto-pairing)
           editor.commands.command(({ state, tr, dispatch }) => {
             try {
               const { from: pos } = state.selection
               const next = state.doc.textBetween(Math.max(0, pos), Math.min(state.doc.content.size, pos + 2))
-              if (next === '>>') {
+              if (next === ']]') {
                 tr.delete(pos, pos + 2)
                 dispatch(tr)
               }
