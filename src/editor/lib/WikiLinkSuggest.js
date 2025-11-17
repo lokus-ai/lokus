@@ -146,24 +146,29 @@ const WikiLinkSuggest = Extension.create({
           // Range covers second '[' and query; include previous '[' as well
           const from = Math.max((range?.from ?? editor.state.selection.from) - 1, 1)
           const to = range?.to ?? editor.state.selection.to
-          // Store the full path for resolution, but show the short title.
-          const raw = `${props.path || props.title}|${props.title}`
-          dbg('command select', { raw, from, to })
+          const fileName = props.title || props.path
+
+          dbg('command select', { fileName, from, to })
+
+          // Delete the [[ and query
           try { editor.chain().focus().deleteRange({ from, to }).run() } catch (e) { dbg('deleteRange error', e) }
-          // Insert our wiki node directly
-          editor.commands.setWikiLink(raw, { embed: false })
-          // Remove trailing ]] if present right after the cursor (from auto-pairing)
-          editor.commands.command(({ state, tr, dispatch }) => {
-            try {
-              const { from: pos } = state.selection
-              const next = state.doc.textBetween(Math.max(0, pos), Math.min(state.doc.content.size, pos + 2))
-              if (next === ']]') {
-                tr.delete(pos, pos + 2)
-                dispatch(tr)
-              }
-            } catch (e) { dbg('cleanup error', e) }
-            return true
-          })
+
+          // Insert as plain text (not WikiLink node) so user can add ^blockid
+          // This allows editing before converting to WikiLink node
+          const wikiText = `[[${fileName}]]`
+          editor.chain()
+            .focus()
+            .insertContent(wikiText)
+            .run()
+
+          // Position cursor before ]] so user can type ^
+          const cursorPos = from + fileName.length + 2 // After [[ and fileName
+          editor.chain()
+            .focus()
+            .setTextSelection(cursorPos)
+            .run()
+
+          dbg('inserted text', { wikiText, cursorPos })
         },
         render: () => {
           let component
