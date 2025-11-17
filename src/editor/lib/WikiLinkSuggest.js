@@ -110,33 +110,36 @@ const WikiLinkSuggest = Extension.create({
         items: ({ query }) => {
           const active = (globalThis.__LOKUS_ACTIVE_FILE__ || '')
 
+          // Clean query: remove leading [ if present (happens when typing [[)
+          const cleanQuery = query.startsWith('[') ? query.slice(1) : query
+
           // For empty query or very short queries, return immediately without debouncing
-          if (!query || query.length < 2) {
-            const results = filterAndScoreItems(query, active)
+          if (!cleanQuery || cleanQuery.length < 2) {
+            const results = filterAndScoreItems(cleanQuery, active)
             cachedResults = results
-            lastQuery = query
-            dbg('items (immediate)', { query, results: results.length })
+            lastQuery = cleanQuery
+            dbg('items (immediate)', { query, cleanQuery, results: results.length })
             return results
           }
 
           // Use cached results while debouncing
-          if (query.startsWith(lastQuery) && cachedResults.length > 0) {
+          if (cleanQuery.startsWith(lastQuery) && cachedResults.length > 0) {
             // If query extends last query, filter cached results for instant feedback
             const quickFiltered = cachedResults.filter(f =>
-              f.title.toLowerCase().includes(query.toLowerCase()) ||
-              f.path.toLowerCase().includes(query.toLowerCase())
+              f.title.toLowerCase().includes(cleanQuery.toLowerCase()) ||
+              f.path.toLowerCase().includes(cleanQuery.toLowerCase())
             )
-            dbg('items (cached)', { query, lastQuery, cached: cachedResults.length, quickFiltered: quickFiltered.length })
+            dbg('items (cached)', { query, cleanQuery, lastQuery, cached: cachedResults.length, quickFiltered: quickFiltered.length })
 
             // Trigger debounced update in background
-            debouncedFilter(query, active, null)
+            debouncedFilter(cleanQuery, active, null)
 
             return quickFiltered.length > 0 ? quickFiltered : cachedResults
           }
 
           // For new queries, return immediate results but trigger debounced update
-          const immediateResults = filterAndScoreItems(query, active)
-          dbg('items (new query)', { query, results: immediateResults.length })
+          const immediateResults = filterAndScoreItems(cleanQuery, active)
+          dbg('items (new query)', { query, cleanQuery, results: immediateResults.length })
           return immediateResults
         },
         command: ({ editor, range, props }) => {
