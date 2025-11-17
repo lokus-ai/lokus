@@ -80,7 +80,7 @@ const WikiLinkSuggest = Extension.create({
           const $pos = state.selection.$from
           const textBefore = $pos.parent.textContent.slice(Math.max(0, $pos.parentOffset - 2), $pos.parentOffset)
           dbg('textBefore check', { textBefore, parentOffset: $pos.parentOffset, rangeFrom: range.from })
-          const isAfterDoubleBracket = textBefore.endsWith('[[') || textBefore === '['
+          const isAfterDoubleBracket = textBefore.endsWith('[[')
 
           // Use ProseMirror node types for more reliable list detection
           const parentNode = $pos.node($pos.depth)
