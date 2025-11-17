@@ -67,6 +67,7 @@ const WikiLinkSuggest = Extension.create({
       } catch {}
     }
     return [
+      // Plugin 1: Handle [[ for file suggestions
       suggestion({
         pluginKey: WIKI_SUGGESTION_KEY,
         editor: this.editor,
@@ -279,6 +280,115 @@ const WikiLinkSuggest = Extension.create({
                 return true
               }
               // Guard against null component
+              if (!component || !component.ref) {
+                return false;
+              }
+              return component.ref.onKeyDown(props)
+            },
+            onExit: () => {
+              try { if (container?.parentNode) container.parentNode.removeChild(container) } catch {}
+              container = null
+              if (component) component.destroy()
+            },
+          }
+        },
+      }),
+
+      // Plugin 2: Handle ^ for block suggestions
+      suggestion({
+        pluginKey: new PluginKey('blockSuggestion'),
+        editor: this.editor,
+        char: '^',
+        allowSpaces: true,
+        startOfLine: false,
+        // Only allow ^ inside [[...^
+        allow: ({ state, range }) => {
+          const $pos = state.selection.$from
+          const parentContent = $pos.parent.textContent
+          const textBefore = parentContent.slice(0, $pos.parentOffset)
+
+          // Check if we have [[Filename pattern before ^
+          const hasWikiLink = /\[\[([^\]]+)$/.test(textBefore)
+          dbg('^ allow check', { textBefore: textBefore.slice(-20), hasWikiLink })
+
+          return hasWikiLink
+        },
+        items: async ({ query, editor }) => {
+          // Extract filename from [[Filename^
+          const { state } = editor
+          const $pos = state.selection.$from
+          const parentContent = $pos.parent.textContent
+          const textBefore = parentContent.slice(0, $pos.parentOffset)
+
+          const match = /\[\[([^\]^]+)\^(.*)$/.exec(textBefore)
+          if (!match) return []
+
+          const fileName = match[1].trim()
+          const blockQuery = match[2] || query
+
+          dbg('^ items', { fileName, blockQuery, query })
+
+          // Return mock blocks for now
+          // TODO: Load real blocks from file
+          return [
+            { type: 'block', blockId: 'intro', text: 'Introduction paragraph...', line: 5, fileName },
+            { type: 'block', blockId: 'summary', text: 'Summary of key points...', line: 25, fileName },
+            { type: 'block', blockId: 'conclusion', text: 'Final thoughts and conclusion...', line: 45, fileName }
+          ]
+        },
+        command: ({ editor, range, props }) => {
+          const from = range?.from ?? editor.state.selection.from
+          const to = range?.to ?? editor.state.selection.to
+          const blockId = props.blockId
+
+          dbg('^ command', { blockId, from, to })
+
+          // Delete the ^ and query, insert blockid]]
+          try {
+            editor.chain()
+              .focus()
+              .deleteRange({ from: from - 1, to }) // Include the ^
+              .insertContent(`^${blockId}]]`)
+              .run()
+          } catch (e) {
+            dbg('^ insert error', e)
+          }
+        },
+        // Reuse the same render logic
+        render: () => {
+          let component
+          let container
+          const place = (rect) => {
+            if (!container || !rect) return
+            container.style.left = `${Math.max(8, rect.left)}px`
+            container.style.top = `${Math.min(window.innerHeight - 16, rect.bottom + 6)}px`
+            container.style.width = '384px'
+          }
+          return {
+            onStart: (props) => {
+              dbg('^ onStart', { range: props.range, query: props.query })
+              component = new ReactRenderer(WikiLinkList, { props, editor: props.editor })
+              container = document.createElement('div')
+              container.style.position = 'fixed'
+              container.style.zIndex = '2147483647'
+              container.style.pointerEvents = 'auto'
+              container.style.maxHeight = '60vh'
+              container.style.overflow = 'hidden'
+              container.appendChild(component.element)
+              document.body.appendChild(container)
+              if (props.clientRect) place(props.clientRect())
+            },
+            onUpdate: (props) => {
+              dbg('^ onUpdate', { query: props.query })
+              component.updateProps(props)
+              if (props.clientRect) place(props.clientRect())
+            },
+            onKeyDown: (props) => {
+              if (props.event.key === 'Escape') {
+                if (container?.parentNode) container.parentNode.removeChild(container)
+                container = null
+                return true
+              }
               if (!component || !component.ref) {
                 return false;
               }
