@@ -75,10 +75,11 @@ const WikiLinkSuggest = Extension.create({
         startOfLine: false,
         // Only allow after double bracket [[ and not in list items or task items
         allow: ({ state, range }) => {
-          // Check if we have [[ before the current position
-          // range.from is where the second [ is, so we need to check position before it
-          const textBefore = state.doc.textBetween(Math.max(0, range.from - 1), range.from)
-          const isAfterDoubleBracket = textBefore === '['
+          // The suggestion plugin triggers on '[', so range.from points to the char AFTER '['
+          // We need to check if there's a '[' right before range.from
+          // Get a bit more context to see the actual '[['
+          const contextBefore = state.doc.textBetween(Math.max(0, range.from - 2), range.from + 1)
+          const isAfterDoubleBracket = contextBefore.includes('[[') || contextBefore === '[['
 
           // Use ProseMirror node types for more reliable list detection
           const $pos = state.selection.$from
@@ -97,14 +98,14 @@ const WikiLinkSuggest = Extension.create({
 
           const shouldAllow = isAfterDoubleBracket && !isInList
           dbg('allow check', {
-            textBefore,
+            contextBefore,
             isAfterDoubleBracket,
             isInList,
             parentType: parentNode.type.name,
             shouldAllow,
             from: range.from,
-            rangeStart: Math.max(0, range.from - 1),
-            rangeEnd: range.from
+            rangeStart: Math.max(0, range.from - 2),
+            rangeEnd: range.from + 1
           })
           return shouldAllow
         },
