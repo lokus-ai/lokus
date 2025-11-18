@@ -239,11 +239,35 @@ export const WikiLink = Node.create({
       console.log('[WikiLink] Creating input rules with config:', currentConfig);
     }
     return [
+      // ![[File^blockid]] block embed (must come BEFORE image embed)
+      new InputRule({
+        find: /!\[\[([^\]]+)\^([^\]]+)\]\]$/,
+        handler: async ({ range, match, chain }) => {
+          const fileName = match[1].trim()
+          const blockId = match[2].trim()
+
+          // Resolve file path
+          const resolved = await resolveWikiTarget(fileName)
+          const filePath = resolved.href || fileName
+
+          // Delete the ![[...]] and insert embed
+          chain().deleteRange(range).run()
+
+          // Use the WikiLinkEmbed command
+          this.editor.commands.setWikiLinkEmbed(fileName, blockId, filePath)
+        }
+      }),
       // ![[...]] image embed (dynamic pattern)
       new InputRule({
         find: buildWikiLinkPattern(true),
         handler: ({ range, match, chain }) => {
           const raw = match[1]
+
+          // Skip if this is a block reference (contains ^)
+          if (raw.includes('^')) {
+            return
+          }
+
           const id = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)
           const parts = parseParts(raw)
           const baseAttrs = { id, target: raw, alt: parts.alt, embed: true, href: toHref(parts), src: '' }

@@ -23,6 +23,7 @@ import MathExt from "../extensions/Math.js";
 import WikiLink from "../extensions/WikiLink.js";
 import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
 import BlockId from "../extensions/BlockId.js";
+import WikiLinkEmbed from "../extensions/WikiLinkEmbed.js";
 import TagAutocomplete from "../extensions/TagAutocomplete.js";
 import HeadingAltInput from "../extensions/HeadingAltInput.js";
 import MarkdownPaste from "../extensions/MarkdownPaste.js";
@@ -48,6 +49,7 @@ import { editorAPI } from "../../plugins/api/EditorAPI.js";
 import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 
 import "../styles/editor.css";
+import "../styles/block-embeds.css";
 import "../../styles/page-preview.css";
 
 const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => {
@@ -230,6 +232,9 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => 
 
     // Obsidian-style block IDs (^blockid)
     exts.push(BlockId);
+
+    // Obsidian-style block embeds (![[File^blockid]])
+    exts.push(WikiLinkEmbed);
 
     // Tag autocomplete
     exts.push(TagAutocomplete);

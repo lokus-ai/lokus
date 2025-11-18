@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { BacklinkManager } from '../core/links/backlink-manager.js';
 import { MentionDetector } from '../core/links/mention-detector.js';
-import { Search, ChevronDown, ChevronRight, Link2, FileText } from 'lucide-react';
+import blockBacklinkManager from '../core/links/block-backlink-manager.js';
+import { Search, ChevronDown, ChevronRight, Link2, FileText, Hash } from 'lucide-react';
 
 /**
  * BacklinksPanel - Show all notes linking to current note
@@ -13,8 +14,10 @@ export default function BacklinksPanel({
 }) {
   const [backlinks, setBacklinks] = useState([]);
   const [unlinkedMentions, setUnlinkedMentions] = useState([]);
+  const [blockBacklinks, setBlockBacklinks] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [linkedExpanded, setLinkedExpanded] = useState(true);
+  const [blockBacklinksExpanded, setBlockBacklinksExpanded] = useState(false);
   const [unlinkedExpanded, setUnlinkedExpanded] = useState(false);
   const [expandedSources, setExpandedSources] = useState(new Set());
 
@@ -70,6 +73,7 @@ export default function BacklinksPanel({
     if (!currentNodeId || !backlinkManagerRef.current || !mentionDetectorRef.current) {
       setBacklinks([]);
       setUnlinkedMentions([]);
+      setBlockBacklinks([]);
       return;
     }
 
@@ -79,10 +83,26 @@ export default function BacklinksPanel({
 
       const mentions = mentionDetectorRef.current.getUnlinkedMentions(currentNodeId);
       setUnlinkedMentions(mentions);
+
+      // Get block backlinks
+      if (currentFile) {
+        const fileName = currentFile.split('/').pop()?.replace('.md', '') || ''
+
+        // Index if not already indexed
+        if (!blockBacklinkManager.indexed && graphData?.nodes) {
+          const fileIndex = graphData.nodes.map(node => ({ path: node.id }))
+          blockBacklinkManager.indexBlockLinks(fileIndex).catch(err => {
+            console.error('[BacklinksPanel] Error indexing block links:', err)
+          })
+        }
+
+        const blockLinks = blockBacklinkManager.getFileBlockBacklinks(fileName)
+        setBlockBacklinks(blockLinks)
+      }
     } catch (error) {
       console.error('Error updating backlinks:', error);
     }
-  }, [currentNodeId]);
+  }, [currentNodeId, currentFile, graphData]);
 
   // Filter backlinks by search query
   const filteredBacklinks = useMemo(() => {
@@ -483,6 +503,117 @@ export default function BacklinksPanel({
                 </div>
               ) : (
                 groupedBacklinks.map(renderBacklinkGroup)
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Block Backlinks Section */}
+        <div>
+          <div
+            onClick={() => setBlockBacklinksExpanded(!blockBacklinksExpanded)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 8px',
+              cursor: 'pointer',
+              borderRadius: '4px',
+              marginBottom: '8px',
+              transition: 'background 0.15s ease'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--panel)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            {blockBacklinksExpanded ? (
+              <ChevronDown size={16} style={{ color: 'var(--text)' }} />
+            ) : (
+              <ChevronRight size={16} style={{ color: 'var(--text)' }} />
+            )}
+            <Hash size={16} style={{ color: 'var(--accent)' }} />
+            <span style={{
+              flex: 1,
+              fontSize: '14px',
+              fontWeight: '600',
+              color: 'var(--text)'
+            }}>
+              Block references
+            </span>
+            <span style={{
+              fontSize: '12px',
+              color: 'var(--muted)',
+              backgroundColor: 'var(--panel)',
+              padding: '2px 8px',
+              borderRadius: '10px',
+              fontWeight: '500'
+            }}>
+              {blockBacklinks.length}
+            </span>
+          </div>
+
+          {blockBacklinksExpanded && (
+            <div>
+              {blockBacklinks.length === 0 ? (
+                <div style={{
+                  padding: '16px',
+                  color: 'var(--muted)',
+                  fontSize: '12px',
+                  textAlign: 'center'
+                }}>
+                  No block references found
+                </div>
+              ) : (
+                blockBacklinks.map((link, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => onOpenFile(link.sourceFile)}
+                    style={{
+                      padding: '8px 12px',
+                      marginBottom: '4px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      transition: 'background 0.15s ease',
+                      fontSize: '13px'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--panel)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      marginBottom: '4px'
+                    }}>
+                      <FileText size={14} style={{ color: 'var(--muted)' }} />
+                      <span style={{ fontWeight: '500', color: 'var(--text)' }}>
+                        {link.sourceFile.split('/').pop()?.replace('.md', '')}
+                      </span>
+                      {link.isEmbed && (
+                        <span style={{
+                          fontSize: '10px',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          backgroundColor: 'var(--accent)',
+                          color: 'white',
+                          fontWeight: '600'
+                        }}>
+                          EMBED
+                        </span>
+                      )}
+                    </div>
+                    <div style={{
+                      fontSize: '12px',
+                      color: 'var(--muted)',
+                      paddingLeft: '20px'
+                    }}>
+                      Line {link.lineNumber}: {link.context.before}
+                      <span style={{ color: 'var(--accent)', fontWeight: '600' }}>
+                        [[{link.targetFile}^{link.blockId}]]
+                      </span>
+                      {link.context.after}
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           )}
