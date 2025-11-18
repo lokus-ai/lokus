@@ -253,19 +253,32 @@ const WikiLinkSuggest = Extension.create({
 
           // For single character, use first-char cache for instant results
           if (cleanQuery.length === 1) {
-            // Rebuild cache if empty (first time)
-            if (firstCharCache.size === 0) {
+            const idx = getIndex()
+
+            // Rebuild cache if empty OR if file index size changed (files added/removed)
+            if (firstCharCache.size === 0 || Array.from(firstCharCache.values()).reduce((sum, arr) => sum + arr.length, 0) !== idx.length) {
               rebuildFirstCharCache()
+              dbg('items (rebuilt cache)', { cacheSize: firstCharCache.size, fileCount: idx.length })
             }
 
             const firstChar = cleanQuery.toLowerCase()
             const cached = firstCharCache.get(firstChar) || []
+
+            // If cache is empty for this character, fall back to full search
+            if (cached.length === 0) {
+              const results = filterAndScoreItems(cleanQuery, active)
+              cachedResults = results
+              lastQuery = cleanQuery
+              dbg('items (cache miss, full search)', { query: cleanQuery, results: results.length })
+              return results
+            }
+
             const sorted = cached.sort((a,b) => scoreItem(b, cleanQuery, active) - scoreItem(a, cleanQuery, active))
             const results = sorted.slice(0, 30)
 
             cachedResults = results
             lastQuery = cleanQuery
-            dbg('items (first char cache)', { query: cleanQuery, results: results.length })
+            dbg('items (first char cache hit)', { query: cleanQuery, cached: cached.length, results: results.length })
             return results
           }
 
