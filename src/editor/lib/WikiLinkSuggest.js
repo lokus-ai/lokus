@@ -91,6 +91,24 @@ function scoreItem(item, query, activePath) {
 let cachedResults = []
 let lastQuery = ''
 
+// Pre-cache for instant first-character results
+let firstCharCache = new Map()
+
+function rebuildFirstCharCache() {
+  firstCharCache.clear()
+  const idx = getIndex()
+
+  for (const file of idx) {
+    const firstChar = file.title[0]?.toLowerCase()
+    if (!firstChar) continue
+
+    if (!firstCharCache.has(firstChar)) {
+      firstCharCache.set(firstChar, [])
+    }
+    firstCharCache.get(firstChar).push(file)
+  }
+}
+
 function filterAndScoreItems(query, activePath) {
   const idx = getIndex()
   const filtered = idx.filter(f => !query || f.title.toLowerCase().includes(query.toLowerCase()) || f.path.toLowerCase().includes(query.toLowerCase()))
@@ -222,17 +240,36 @@ const WikiLinkSuggest = Extension.create({
             return filtered
           }
 
-          // FILE MODE: Show files (existing behavior)
-          // For empty query or very short queries, return immediately without debouncing
-          if (!cleanQuery || cleanQuery.length < 2) {
-            const results = filterAndScoreItems(cleanQuery, active)
+          // FILE MODE: Show files with instant results
+
+          // For empty query, show all files (sorted by recency)
+          if (!cleanQuery) {
+            const results = filterAndScoreItems('', active)
             cachedResults = results
-            lastQuery = cleanQuery
-            dbg('items (immediate)', { query, cleanQuery, results: results.length })
+            lastQuery = ''
+            dbg('items (empty query)', { results: results.length })
             return results
           }
 
-          // Use cached results while debouncing
+          // For single character, use first-char cache for instant results
+          if (cleanQuery.length === 1) {
+            // Rebuild cache if empty (first time)
+            if (firstCharCache.size === 0) {
+              rebuildFirstCharCache()
+            }
+
+            const firstChar = cleanQuery.toLowerCase()
+            const cached = firstCharCache.get(firstChar) || []
+            const sorted = cached.sort((a,b) => scoreItem(b, cleanQuery, active) - scoreItem(a, cleanQuery, active))
+            const results = sorted.slice(0, 30)
+
+            cachedResults = results
+            lastQuery = cleanQuery
+            dbg('items (first char cache)', { query: cleanQuery, results: results.length })
+            return results
+          }
+
+          // Use cached results while debouncing for longer queries
           if (cleanQuery.startsWith(lastQuery) && cachedResults.length > 0) {
             // If query extends last query, filter cached results for instant feedback
             const quickFiltered = cachedResults.filter(f =>
@@ -252,10 +289,49 @@ const WikiLinkSuggest = Extension.create({
           dbg('items (new query)', { query, cleanQuery, results: immediateResults.length })
           return immediateResults
         },
-        command: ({ editor, range, props }) => {
+        command: async ({ editor, range, props }) => {
           if (props.type === 'block') {
             // BLOCK MODE: Insert block reference
-            const blockId = props.blockId
+            let blockId = props.blockId
+
+            // Check if this block has an auto-generated ID or no ID
+            // Auto-generated = slug from heading text, or virtual ID from content
+            const needsExplicitId = !blockId || props.auto === true || props.virtual === true
+
+            if (needsExplicitId) {
+              // Import block writer dynamically
+              const { queueBlockIdWrite } = await import('../../core/blocks/block-writer.js')
+              const blockIdManager = (await import('../../core/blocks/block-id-manager.js')).default
+
+              // Generate new random ID
+              const newBlockId = blockIdManager.generateId()
+              dbg('Auto-generating block ID:', newBlockId, 'for block:', props)
+
+              // Write ID back to source file
+              const fileIndex = getIndex()
+              const fileEntry = fileIndex.find(f =>
+                f.title === props.fileName || f.path.endsWith(props.fileName)
+              )
+
+              if (fileEntry && props.line) {
+                queueBlockIdWrite(fileEntry.path, props.line, newBlockId)
+                  .then((success) => {
+                    if (success) {
+                      // Invalidate cache for this file
+                      blockIdManager.invalidateFile(fileEntry.path)
+                      dbg('✅ Generated and wrote block ID:', newBlockId, 'to', fileEntry.path)
+                    } else {
+                      dbg('⚠️ Failed to write block ID to file')
+                    }
+                  })
+                  .catch(err => {
+                    console.error('[WikiLinkSuggest] Error writing block ID:', err)
+                  })
+              }
+
+              // Use the new ID in the link
+              blockId = newBlockId
+            }
 
             // Find the position of ^ in the document
             const { state } = editor

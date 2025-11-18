@@ -755,6 +755,75 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         };
         input.click();
         break;
+      case 'copyBlockReference':
+        (async () => {
+          try {
+            // Get current block
+            const { state } = editor
+            const { $from } = state.selection
+            const node = $from.parent
+
+            // Import dynamically to avoid circular dependencies
+            const blockIdManager = (await import('../../core/blocks/block-id-manager.js')).default
+            const { queueBlockIdWrite } = await import('../../core/blocks/block-writer.js')
+
+            // Check if block has ID
+            let blockId = node.attrs.blockId
+
+            if (!blockId) {
+              // Generate new ID
+              blockId = blockIdManager.generateId()
+              console.log('[Editor] Generating block ID for copy:', blockId)
+
+              // Add to node
+              const pos = $from.before($from.depth)
+              editor.chain()
+                .focus()
+                .command(({ tr }) => {
+                  tr.setNodeMarkup(pos, null, { ...node.attrs, blockId })
+                  return true
+                })
+                .run()
+
+              // Write back to file (if activeFile is available)
+              if (typeof window !== 'undefined' && window.__LOKUS_ACTIVE_FILE__) {
+                const activeFile = window.__LOKUS_ACTIVE_FILE__
+
+                // Calculate line number from position
+                let lineNumber = 1
+                state.doc.nodesBetween(0, pos, (node, pos) => {
+                  if (node.isBlock) lineNumber++
+                })
+
+                queueBlockIdWrite(activeFile, lineNumber, blockId)
+                  .then((success) => {
+                    if (success) {
+                      blockIdManager.invalidateFile(activeFile)
+                      console.log('[Editor] ✅ Wrote block ID to file:', blockId)
+                    }
+                  })
+                  .catch(err => {
+                    console.error('[Editor] Error writing block ID:', err)
+                  })
+              }
+            }
+
+            // Format reference
+            const activeFile = window.__LOKUS_ACTIVE_FILE__ || ''
+            const fileName = activeFile.split('/').pop()?.replace('.md', '') || 'Unknown'
+            const reference = `[[${fileName}^${blockId}]]`
+
+            // Copy to clipboard
+            await navigator.clipboard.writeText(reference)
+            console.log('[Editor] ✅ Copied block reference:', reference)
+
+            // Optional: Show toast notification (if you have a toast system)
+            // toast.success('Block reference copied to clipboard')
+          } catch (error) {
+            console.error('[Editor] Error copying block reference:', error)
+          }
+        })()
+        break;
       default:
     }
   };

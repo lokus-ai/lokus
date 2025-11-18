@@ -18,7 +18,7 @@ export const BlockId = Extension.create({
   addGlobalAttributes() {
     return [
       {
-        types: ['paragraph', 'heading', 'listItem', 'blockquote', 'codeBlock'],
+        types: ['paragraph', 'heading', 'listItem', 'blockquote', 'codeBlock', 'table', 'tableRow'],
         attributes: {
           blockId: {
             default: null,

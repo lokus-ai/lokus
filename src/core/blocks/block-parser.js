@@ -100,6 +100,47 @@ function parseHTMLBlocks(content, filePath) {
     blockIdManager.registerBlock(filePath, blockId, block)
   }
 
+  // Strategy 3: Virtual IDs for ALL paragraphs, lists, blockquotes (for search)
+  // These are searchable but not explicitly in the file
+  const allBlocksRegex = /<(p|li|blockquote)(?![^>]*data-block-id)([^>]*)>(.*?)<\/\1>/gi
+  let blockMatch2
+
+  while ((blockMatch2 = allBlocksRegex.exec(content)) !== null) {
+    const tagName = blockMatch2[1]
+    let text = blockMatch2[3]
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/\s+\^[a-zA-Z0-9_-]+\s*$/, '') // Remove any ^blockid marker
+      .trim()
+
+    // Skip empty blocks
+    if (!text || text.length < 3) continue
+
+    // Generate virtual ID from content hash
+    const virtualId = generateContentHash(text)
+
+    let type = 'paragraph'
+    if (tagName === 'li') type = 'list'
+    if (tagName === 'blockquote') type = 'quote'
+
+    const block = {
+      blockId: virtualId,
+      id: virtualId,
+      type,
+      text: text.slice(0, 100),
+      line: lineNumber++,
+      position: blockMatch2.index,
+      auto: true,
+      virtual: true // Mark as virtual (searchable but not in file)
+    }
+
+    blocks.push(block)
+    // Don't register virtual blocks in block manager (they're transient)
+  }
+
   return blocks
 }
 
@@ -216,6 +257,25 @@ function generateSlug(text) {
 }
 
 /**
+ * Generate a content hash for virtual block IDs
+ * @param {string} text - Block content
+ * @returns {string} Hash-based ID (e.g., "v1a2b3c")
+ */
+function generateContentHash(text) {
+  // Simple hash for virtual IDs
+  let hash = 0
+  const str = text.slice(0, 200) // Use first 200 chars for hash
+
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32-bit integer
+  }
+
+  return `v${Math.abs(hash).toString(36)}`
+}
+
+/**
  * Parse blocks from file (async version)
  * Reads file and parses blocks
  * @param {string} filePath - Path to markdown file
@@ -239,6 +299,48 @@ export async function parseBlocksFromFile(filePath) {
 }
 
 /**
+ * Extract block from HTML content
+ * @param {string} html - HTML content
+ * @param {string} blockId - Block identifier
+ * @returns {string|null} Block HTML or null
+ */
+function extractBlockFromHTML(html, blockId) {
+  try {
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(html, 'text/html')
+
+    const element = doc.querySelector(`[data-block-id="${blockId}"]`)
+    if (!element) return null
+
+    // For tables, get the entire table if a row/cell has the ID
+    if (element.closest('table')) {
+      return element.closest('table').outerHTML
+    }
+
+    // For list items, include nested items
+    if (element.tagName === 'LI') {
+      const parent = element.closest('ul, ol')
+      const startIndex = Array.from(parent.children).indexOf(element)
+
+      // Collect this item and any nested lists
+      let endIndex = startIndex + 1
+      const nextSibling = parent.children[startIndex + 1]
+      if (nextSibling && (nextSibling.tagName === 'UL' || nextSibling.tagName === 'OL')) {
+        endIndex = startIndex + 2
+      }
+
+      const items = Array.from(parent.children).slice(startIndex, endIndex)
+      return items.map(item => item.outerHTML).join('\n')
+    }
+
+    return element.outerHTML
+  } catch (error) {
+    console.error('[BlockParser] Error extracting block from HTML:', error)
+    return null
+  }
+}
+
+/**
  * Extract block content from file
  * Gets the actual content of a specific block
  * @param {string} filePath - Path to file
@@ -257,9 +359,15 @@ export async function extractBlockContent(filePath, blockId) {
     if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
       const { readTextFile } = await import('@tauri-apps/plugin-fs')
       const content = await readTextFile(filePath)
+
+      // Check if HTML or markdown
+      if (content.trim().startsWith('<')) {
+        return extractBlockFromHTML(content, blockId)
+      }
+
       const lines = content.split('\n')
 
-      // Extract block content
+      // Extract block content based on type
       if (blockMeta.type === 'heading') {
         // For headings, include the heading and content until next heading of same or higher level
         const startLine = blockMeta.line - 1
@@ -275,10 +383,57 @@ export async function extractBlockContent(filePath, blockId) {
         }
 
         return lines.slice(startLine, endLine).join('\n')
-      } else {
-        // For other blocks, just return the line
-        return lines[blockMeta.line - 1] || null
       }
+
+      if (blockMeta.type === 'list') {
+        // For list items, include the item and any nested items
+        const startLine = blockMeta.line - 1
+        let endLine = startLine + 1
+
+        const indent = lines[startLine].match(/^\s*/)[0].length
+
+        // Include all more-indented lines (nested items)
+        for (let i = startLine + 1; i < lines.length; i++) {
+          const lineIndent = lines[i].match(/^\s*/)[0].length
+          if (lines[i].trim() === '') continue // Skip empty lines
+          if (lineIndent <= indent && lines[i].trim() !== '') break
+          endLine = i + 1
+        }
+
+        return lines.slice(startLine, endLine).join('\n')
+      }
+
+      if (blockMeta.type === 'code') {
+        // For code blocks, include entire block
+        const startLine = blockMeta.line - 1
+        let endLine = startLine + 1
+
+        // Find closing ```
+        for (let i = startLine + 1; i < lines.length; i++) {
+          if (lines[i].trim().startsWith('```')) {
+            endLine = i + 1
+            break
+          }
+        }
+
+        return lines.slice(startLine, endLine).join('\n')
+      }
+
+      if (blockMeta.type === 'quote') {
+        // For blockquotes, include all consecutive quote lines
+        const startLine = blockMeta.line - 1
+        let endLine = startLine + 1
+
+        for (let i = startLine + 1; i < lines.length; i++) {
+          if (!lines[i].trim().startsWith('>')) break
+          endLine = i + 1
+        }
+
+        return lines.slice(startLine, endLine).join('\n')
+      }
+
+      // For other blocks (paragraph, etc), just return the line
+      return lines[blockMeta.line - 1] || null
     }
 
     return null
