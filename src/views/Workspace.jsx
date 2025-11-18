@@ -42,6 +42,7 @@ import PluginDetail from "./PluginDetail.jsx";
 import { canvasManager } from "../core/canvas/manager.js";
 import TemplatePicker from "../components/TemplatePicker.jsx";
 import { getMarkdownCompiler } from "../core/markdown/compiler.js";
+import { MarkdownExporter } from "../core/export/markdown-exporter.js";
 import dailyNotesManager from "../core/daily-notes/manager.js";
 import CreateTemplate from "../components/CreateTemplate.jsx";
 import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
@@ -1049,27 +1050,64 @@ function WorkspaceWithScope({ path }) {
   useEffect(() => {
     if (activeFile) {
       try { window.__LOKUS_ACTIVE_FILE__ = activeFile; } catch {}
-      const activeTab = openTabs.find(tab => tab.path === activeFile);
-      if (activeTab) {
-        invoke("read_file_content", { path: activeFile })
-          .then(content => {
-            // Process markdown content to ensure proper formatting
-            const compiler = getMarkdownCompiler();
-            let processedContent = content;
-            
-            // If this is a markdown file and the content looks like markdown, process it
-            if (activeTab.name.endsWith('.md') && compiler.isMarkdown(content)) {
-              processedContent = compiler.compile(content);
-            }
-            
-            setEditorContent(processedContent);
-            // Extract just the filename from the tab name (in case it contains a path)
-            const fileName = getFilename(activeTab.name);
-            setEditorTitle(fileName.replace(/\.md$/, ""));
-            setSavedContent(content); // Keep original content for saving
-          })
-          .catch(() => {});
-      }
+
+      // Capture activeFile in local variable to prevent stale closure issues
+      const fileToLoad = activeFile;
+
+      console.log('\n========================================');
+      console.log('📂 LOADING FILE CONTENT');
+      console.log('========================================');
+      console.log('Path:', fileToLoad);
+
+      invoke("read_file_content", { path: fileToLoad })
+        .then(content => {
+          // Guard against stale promise resolutions - only update if this file is still active
+          if (fileToLoad !== activeFile) {
+            console.log('⚠️  STALE CONTENT DETECTED - Ignoring load for:', fileToLoad);
+            console.log('   Current active file:', activeFile);
+            console.log('========================================\n');
+            return;
+          }
+
+          const fileName = getFilename(fileToLoad);
+          console.log('✅ Content loaded successfully');
+          console.log('File Name:', fileName);
+          console.log('Content Length:', content.length, 'characters');
+
+          // Show first 10 lines of content
+          const lines = content.split('\n');
+          const preview = lines.slice(0, 10);
+          console.log('\n📄 First 10 lines of content:');
+          console.log('---');
+          preview.forEach((line, idx) => {
+            console.log(`${idx + 1}: ${line}`);
+          });
+          if (lines.length > 10) {
+            console.log(`... (${lines.length - 10} more lines)`);
+          }
+          console.log('---');
+
+          // Process markdown content to ensure proper formatting
+          const compiler = getMarkdownCompiler();
+          let processedContent = content;
+
+          // If this is a markdown file and the content looks like markdown, process it
+          if (fileToLoad.endsWith('.md') && compiler.isMarkdown(content)) {
+            processedContent = compiler.compile(content);
+            console.log('🔄 Markdown processed (HTML length:', processedContent.length, 'chars)');
+          }
+
+          setEditorContent(processedContent);
+          setEditorTitle(fileName.replace(/\.md$/, ""));
+          setSavedContent(content); // Keep original content for saving
+          console.log('✅ Editor content updated');
+          console.log('========================================\n');
+        })
+        .catch((err) => {
+          console.log('❌ ERROR loading file:', fileToLoad);
+          console.log('Error:', err);
+          console.log('========================================\n');
+        });
     } else {
       setEditorContent("");
       setEditorTitle("");
@@ -1087,26 +1125,55 @@ function WorkspaceWithScope({ path }) {
 
   // Open file events from editor (wiki link clicks)
   useEffect(() => {
-    const openPath = (p) => {
+    const openPath = (p, switchToTab = true) => {
       if (!p) return;
+
+      console.log('\n========================================');
+      console.log('📑 TAB OPENING');
+      console.log('========================================');
+      console.log('Path:', p);
+      console.log('File Name:', getFilename(p));
+      console.log('Switch to Tab:', switchToTab ? 'Yes (navigate)' : 'No (background)');
+
       setOpenTabs(prevTabs => {
         const name = getFilename(p);
+        const wasAlreadyOpen = prevTabs.some(t => t.path === p);
         const newTabs = prevTabs.filter(t => t.path !== p);
         newTabs.unshift({ path: p, name });
         if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
+
+        console.log('Was Already Open:', wasAlreadyOpen);
+        console.log('Total Open Tabs:', newTabs.length);
+        console.log('Tab Order:', newTabs.map(t => t.name).join(' → '));
+
         return newTabs;
       });
-      setActiveFile(p);
+
+      // Only switch to the new tab if requested (regular click)
+      // For Cmd/Ctrl+Click, keep current tab active
+      if (switchToTab) {
+        console.log('✅ Switching to new tab');
+        setActiveFile(p);
+      } else {
+        console.log('✅ Keeping current tab active (background open)');
+      }
+      console.log('========================================\n');
     };
 
     let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
     if (isTauri) {
-      const un = listen('lokus:open-file', (e) => openPath(String(e.payload || '')));
-      return () => { un.then(u => u()); };
+      const un1 = listen('lokus:open-file', (e) => openPath(String(e.payload || ''), true));
+      const un2 = listen('lokus:open-file-new-tab', (e) => openPath(String(e.payload || ''), false));
+      return () => { un1.then(u => u()); un2.then(u => u()); };
     } else {
-      const onDom = (e) => openPath(String(e.detail || ''));
-      window.addEventListener('lokus:open-file', onDom);
-      return () => window.removeEventListener('lokus:open-file', onDom);
+      const onDom1 = (e) => openPath(String(e.detail || ''), true);
+      const onDom2 = (e) => openPath(String(e.detail || ''), false);
+      window.addEventListener('lokus:open-file', onDom1);
+      window.addEventListener('lokus:open-file-new-tab', onDom2);
+      return () => {
+        window.removeEventListener('lokus:open-file', onDom1);
+        window.removeEventListener('lokus:open-file-new-tab', onDom2);
+      };
     }
   }, []);
 
@@ -1141,10 +1208,120 @@ function WorkspaceWithScope({ path }) {
     // Listen for wiki link creation events
     window.addEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
     document.addEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
-    
+
+    // Listen for block scroll requests (from wiki link clicks)
+    const handleScrollToBlock = (e) => {
+      const blockId = e.detail
+      if (!blockId) return
+
+      console.log('\n========================================')
+      console.log('📜 BLOCK SCROLL REQUEST')
+      console.log('========================================')
+      console.log('Block ID:', blockId)
+      console.log('Active File:', activeFile)
+
+      // Try scrolling multiple times with increasing delays (wait for editor to render)
+      const attemptScroll = (delay, attemptNum) => {
+        setTimeout(() => {
+          console.log(`🔍 Scroll Attempt #${attemptNum} (after ${delay}ms)`)
+
+          const editorEl = document.querySelector('.tiptap.ProseMirror')
+          if (!editorEl) {
+            console.warn('   ⚠️ Editor element not found')
+            return
+          }
+
+          // Strategy 1: Look for elements with data-block-id attribute
+          const blockWithId = editorEl.querySelector(`[data-block-id="${blockId}"]`)
+          if (blockWithId) {
+            console.log('   ✅ Found block with data-block-id:', blockId)
+            blockWithId.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+            // Highlight the parent element (usually a paragraph or heading)
+            const target = blockWithId.closest('p, h1, h2, h3, h4, h5, h6, li, blockquote') || blockWithId
+            target.style.backgroundColor = 'rgba(255, 200, 0, 0.3)'
+            setTimeout(() => { target.style.backgroundColor = '' }, 2000)
+
+            console.log('========================================\n')
+            return
+          }
+
+          // Strategy 2: Search headings
+          const headings = editorEl.querySelectorAll('h1, h2, h3, h4, h5, h6')
+          console.log(`   🔍 Searching ${headings.length} headings`)
+
+          let foundHeading = null
+
+          for (const heading of headings) {
+            const headingText = heading.textContent.trim()
+
+            // Check for explicit ID in heading (e.g., {#custom-id})
+            const idMatch = headingText.match(/\{#([^}]+)\}/)
+            if (idMatch && idMatch[1] === blockId) {
+              foundHeading = heading
+              console.log('   ✅ Found heading with explicit ID:', headingText)
+              break
+            }
+
+            // Generate slug from heading text
+            const headingSlug = headingText
+              .toLowerCase()
+              .replace(/\{#[^}]+\}/g, '') // Remove explicit IDs
+              .replace(/[^\w\s-]/g, '')
+              .replace(/\s+/g, '-')
+              .replace(/-+/g, '-')
+              .trim()
+              .slice(0, 50)
+
+            // Try slug match
+            if (headingSlug === blockId.toLowerCase()) {
+              foundHeading = heading
+              console.log('   ✅ Found heading by slug:', headingText, '→', headingSlug)
+              break
+            }
+
+            // Try partial match
+            const searchText = blockId.replace(/-/g, ' ').toLowerCase()
+            if (headingText.toLowerCase().includes(searchText)) {
+              foundHeading = heading
+              console.log('   ✅ Partial match found:', headingText)
+              break
+            }
+          }
+
+          if (foundHeading) {
+            foundHeading.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            console.log('   ✅ Scrolled to heading:', foundHeading.textContent.trim())
+
+            // Highlight briefly
+            foundHeading.style.backgroundColor = 'rgba(255, 200, 0, 0.3)'
+            setTimeout(() => {
+              foundHeading.style.backgroundColor = ''
+            }, 2000)
+
+            console.log('========================================\n')
+          } else {
+            console.warn('   ❌ Block not found:', blockId)
+            if (attemptNum === 3) {
+              console.log('   ℹ️ All attempts exhausted')
+              console.log('========================================\n')
+            }
+          }
+        }, delay)
+      }
+
+      // Try multiple times with increasing delays
+      attemptScroll(100, 1)
+      attemptScroll(300, 2)
+      attemptScroll(600, 3)
+    }
+
+    window.addEventListener('lokus:scroll-to-block', handleScrollToBlock)
+
     return () => {
       window.removeEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
       document.removeEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
+      window.removeEventListener('lokus:scroll-to-block', handleScrollToBlock)
     };
   }, [activeFile]);
 
@@ -1504,11 +1681,12 @@ function WorkspaceWithScope({ path }) {
       // For .md files, we need to convert HTML content back to markdown
       let contentToSave = editorContent;
       if (path_to_save.endsWith('.md')) {
-        // TODO: Implement HTML to Markdown conversion
-        // For now, we'll save the HTML content as-is
-        // This should be replaced with proper HTML->Markdown conversion
+        // Convert HTML back to markdown, preserving wiki links
+        const exporter = new MarkdownExporter();
+        contentToSave = exporter.htmlToMarkdown(editorContent, { preserveWikiLinks: true });
+        console.log('[Workspace] Converted HTML to markdown for save');
       }
-      
+
       await invoke("write_file_content", { path: path_to_save, content: contentToSave });
       setSavedContent(editorContent);
       setUnsavedChanges(prev => {
@@ -3520,7 +3698,6 @@ function WorkspaceWithScope({ path }) {
                         className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
                       />
                       <Editor
-                        key={`left-pane-${activeFile}`}
                         ref={editorRef}
                         content={editorContent}
                         onContentChange={handleEditorChange}

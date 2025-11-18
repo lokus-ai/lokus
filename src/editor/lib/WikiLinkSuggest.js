@@ -7,10 +7,58 @@ import { ReactRenderer } from '@tiptap/react'
 // Use a simple fixed-position portal instead of tippy to avoid overlay issues
 import WikiLinkList from '../components/WikiLinkList.jsx'
 import { debounce } from '../../core/search/index.js'
+import blockIdManager from '../../core/blocks/block-id-manager.js'
 
 function getIndex() {
   const list = (globalThis.__LOKUS_FILE_INDEX__ || [])
   return Array.isArray(list) ? list : []
+}
+
+async function getFileBlocks(fileName) {
+  try {
+    console.log('[WikiLinkSuggest] getFileBlocks called for:', fileName)
+
+    // Find the file in the index
+    const fileIndex = getIndex()
+    console.log('[WikiLinkSuggest] File index has', fileIndex.length, 'files')
+
+    const fileEntry = fileIndex.find(f =>
+      f.title === fileName ||
+      f.title === fileName.replace('.md', '') ||
+      f.path.endsWith(fileName) ||
+      f.path.endsWith(fileName.replace('.md', ''))
+    )
+
+    if (!fileEntry) {
+      console.log('[WikiLinkSuggest] File not found in index:', fileName)
+      console.log('[WikiLinkSuggest] Available files:', fileIndex.slice(0, 5).map(f => f.title))
+      return []
+    }
+
+    console.log('[WikiLinkSuggest] Found file:', fileEntry.path)
+
+    // Check if blocks are already cached
+    let blocks = blockIdManager.getFileBlocks(fileEntry.path)
+    console.log('[WikiLinkSuggest] Cached blocks:', blocks.length)
+
+    if (blocks.length === 0) {
+      // Need to parse the file
+      const { readTextFile } = await import('@tauri-apps/plugin-fs')
+      const { parseBlocks } = await import('../../core/blocks/block-parser.js')
+
+      console.log('[WikiLinkSuggest] Reading file:', fileEntry.path)
+      const content = await readTextFile(fileEntry.path)
+      console.log('[WikiLinkSuggest] File content length:', content.length, 'Preview:', content.slice(0, 100))
+
+      blocks = parseBlocks(content, fileEntry.path)
+      console.log('[WikiLinkSuggest] Parsed blocks:', blocks.length)
+    }
+
+    return blocks
+  } catch (error) {
+    console.error('[WikiLinkSuggest] Error loading blocks:', error)
+    return []
+  }
 }
 
 function dirname(p) {
@@ -146,13 +194,32 @@ const WikiLinkSuggest = Extension.create({
 
             dbg('items (block mode)', { fileName, blockQuery })
 
-            // TODO: Load blocks from file and filter by blockQuery
-            // For now, return mock blocks
-            return [
-              { type: 'block', blockId: 'intro', text: 'Introduction paragraph...', line: 5, fileName },
-              { type: 'block', blockId: 'summary', text: 'Summary of key points...', line: 25, fileName },
-              { type: 'block', blockId: 'conclusion', text: 'Final thoughts and conclusion...', line: 45, fileName }
-            ]
+            // Load real blocks from file
+            const blocks = await getFileBlocks(fileName)
+
+            // Format blocks for WikiLinkList
+            const formattedBlocks = blocks.map(block => ({
+              type: 'block',
+              blockId: block.blockId,
+              title: block.text || block.blockId,
+              path: `${fileName}^${block.blockId}`,
+              text: block.text,
+              line: block.line,
+              fileName,
+              blockType: block.type,
+              level: block.level
+            }))
+
+            // Filter by query if provided
+            const filtered = blockQuery
+              ? formattedBlocks.filter(b =>
+                  b.title.toLowerCase().includes(blockQuery.toLowerCase()) ||
+                  b.blockId.toLowerCase().includes(blockQuery.toLowerCase())
+                )
+              : formattedBlocks
+
+            dbg('items (block mode) returning', { blocks: filtered, count: filtered.length })
+            return filtered
           }
 
           // FILE MODE: Show files (existing behavior)
@@ -186,26 +253,79 @@ const WikiLinkSuggest = Extension.create({
           return immediateResults
         },
         command: ({ editor, range, props }) => {
-          const from = Math.max((range?.from ?? editor.state.selection.from) - 1, 1)
-          const to = range?.to ?? editor.state.selection.to
-
           if (props.type === 'block') {
             // BLOCK MODE: Insert block reference
             const blockId = props.blockId
-            dbg('command select (block)', { blockId, from, to })
 
-            // Just insert the blockid (the [[filename^ is already there)
+            // Find the position of ^ in the document
+            const { state } = editor
+            const $pos = state.selection.$from
+            const parentContent = $pos.parent.textContent
+            const textBefore = parentContent.slice(0, $pos.parentOffset)
+
+            // Find where ^ starts
+            const caretMatch = /\[\[([^\]^]+)\^(.*)$/.exec(textBefore)
+            if (!caretMatch) {
+              dbg('command: no caret found in textBefore', { textBefore })
+              return
+            }
+
+            const fileName = caretMatch[1].trim()
+            const caretPos = textBefore.lastIndexOf('^')
+            const absoluteCaretPos = state.selection.from - (textBefore.length - caretPos)
+
+            // Check if ]] already exists after cursor
+            const textAfter = parentContent.slice($pos.parentOffset)
+            const closingBracketsPos = textAfter.indexOf(']]')
+            const hasClosingBrackets = closingBracketsPos !== -1
+
+            // Calculate absolute position of ]]
+            const absoluteClosingPos = hasClosingBrackets
+              ? state.selection.from + closingBracketsPos
+              : state.selection.to
+
+            dbg('command select (block)', {
+              blockId,
+              fileName,
+              textBefore,
+              textAfter: textAfter.slice(0, 20),
+              hasClosingBrackets,
+              closingBracketsPos,
+              absoluteClosingPos,
+              caretPos,
+              absoluteCaretPos,
+              selectionFrom: state.selection.from,
+              selectionTo: state.selection.to
+            })
+
+            // Delete entire [[...]] and insert as WikiLink node
             try {
+              // Find the [[ start
+              const openBracketPos = textBefore.lastIndexOf('[[')
+              const absoluteOpenPos = state.selection.from - (textBefore.length - openBracketPos)
+
+              const deleteEnd = hasClosingBrackets ? absoluteClosingPos + 2 : state.selection.to
+              const wikiLinkText = `${fileName}^${blockId}`
+
+              dbg('Creating WikiLink node', {
+                wikiLinkText,
+                deleteFrom: absoluteOpenPos,
+                deleteTo: deleteEnd
+              })
+
+              // Delete [[Filename^...]] and insert WikiLink node
               editor.chain()
                 .focus()
-                .deleteRange({ from, to })
-                .insertContent(blockId + ']]')
+                .deleteRange({ from: absoluteOpenPos, to: deleteEnd })
+                .setWikiLink(wikiLinkText)
                 .run()
             } catch (e) {
               dbg('insertContent error', e)
             }
           } else {
             // FILE MODE: Insert file reference
+            const from = Math.max((range?.from ?? editor.state.selection.from) - 1, 1)
+            const to = range?.to ?? editor.state.selection.to
             const fileName = props.title || props.path
             dbg('command select (file)', { fileName, from, to })
 
@@ -321,44 +441,41 @@ const WikiLinkSuggest = Extension.create({
           const textBefore = parentContent.slice(0, $pos.parentOffset)
 
           const match = /\[\[([^\]^]+)\^(.*)$/.exec(textBefore)
-          if (!match) return []
+          if (!match) {
+            dbg('^ items - no match', { textBefore })
+            return []
+          }
 
           const fileName = match[1].trim()
           const blockQuery = match[2] || query
 
           dbg('^ items', { fileName, blockQuery, query })
 
-          // Return mock blocks formatted for WikiLinkList
-          // Use title/path format that WikiLinkList expects, but add block metadata
-          return [
-            {
-              type: 'block',
-              blockId: 'intro',
-              title: 'intro',
-              path: `${fileName}^intro`,
-              text: 'Introduction paragraph with some content here...',
-              line: 5,
-              fileName
-            },
-            {
-              type: 'block',
-              blockId: 'summary',
-              title: 'summary',
-              path: `${fileName}^summary`,
-              text: 'Summary of key points and main findings from research...',
-              line: 25,
-              fileName
-            },
-            {
-              type: 'block',
-              blockId: 'conclusion',
-              title: 'conclusion',
-              path: `${fileName}^conclusion`,
-              text: 'Final thoughts and conclusion with recommendations...',
-              line: 45,
-              fileName
-            }
-          ]
+          // Load real blocks from the file using getFileBlocks
+          const blocks = await getFileBlocks(fileName)
+          dbg('^ loaded blocks from file', { fileName, count: blocks.length })
+
+          // Format blocks for WikiLinkList (title/path format)
+          const formattedBlocks = blocks.map(block => ({
+            type: 'block',
+            blockId: block.id,
+            title: block.id,
+            path: `${fileName}^${block.id}`,
+            text: block.text,
+            line: block.line,
+            fileName
+          }))
+
+          // Filter blocks based on query
+          const filtered = blockQuery
+            ? formattedBlocks.filter(b =>
+                b.blockId.toLowerCase().includes(blockQuery.toLowerCase()) ||
+                b.text.toLowerCase().includes(blockQuery.toLowerCase())
+              )
+            : formattedBlocks
+
+          dbg('^ items returning', { blocks: filtered, count: filtered.length })
+          return filtered
         },
         command: ({ editor, range, props }) => {
           const from = range?.from ?? editor.state.selection.from
@@ -390,7 +507,12 @@ const WikiLinkSuggest = Extension.create({
           }
           return {
             onStart: (props) => {
-              dbg('^ onStart', { range: props.range, query: props.query })
+              dbg('^ onStart', {
+                range: props.range,
+                query: props.query,
+                itemsCount: props.items?.length,
+                items: props.items
+              })
               component = new ReactRenderer(WikiLinkList, { props, editor: props.editor })
               container = document.createElement('div')
               container.style.position = 'fixed'

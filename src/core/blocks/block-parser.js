@@ -12,6 +12,98 @@
 import blockIdManager from './block-id-manager.js'
 
 /**
+ * Parse blocks from HTML content (used by Lokus editor)
+ * @param {string} content - HTML file content
+ * @param {string} filePath - Path to the file (for registration)
+ * @returns {Array<object>} Array of parsed blocks
+ */
+function parseHTMLBlocks(content, filePath) {
+  if (!content) return []
+
+  const blocks = []
+  let lineNumber = 1
+
+  // Strategy 1: Extract ALL elements with data-block-id attributes
+  const blockIdRegex = /<([a-z][a-z0-9]*)[^>]*data-block-id=["']([^"']+)["'][^>]*>(.*?)<\/\1>/gi
+  let blockMatch
+
+  while ((blockMatch = blockIdRegex.exec(content)) !== null) {
+    const tagName = blockMatch[1]
+    const blockId = blockMatch[2]
+    let text = blockMatch[3]
+      .replace(/<[^>]+>/g, '') // Strip HTML tags
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/\s+\^[a-zA-Z0-9_-]+\s*$/, '') // Remove the ^blockid marker from display
+      .trim()
+
+    // Determine block type from HTML tag
+    let type = 'paragraph'
+    let level = null
+    if (/^h[1-6]$/.test(tagName)) {
+      type = 'heading'
+      level = parseInt(tagName[1])
+    } else if (tagName === 'blockquote') {
+      type = 'quote'
+    } else if (tagName === 'li') {
+      type = 'list'
+    } else if (tagName === 'pre' || tagName === 'code') {
+      type = 'code'
+    }
+
+    const block = {
+      blockId,
+      id: blockId, // Alias for compatibility
+      type,
+      level,
+      text: text.slice(0, 100), // Limit preview
+      line: lineNumber++,
+      position: blockMatch.index,
+      auto: false // Explicitly set by user
+    }
+
+    blocks.push(block)
+    blockIdManager.registerBlock(filePath, blockId, block)
+  }
+
+  // Strategy 2: Auto-generate IDs for headings without explicit data-block-id
+  const headingRegex = /<h([1-6])(?![^>]*data-block-id)([^>]*)>(.*?)<\/h\1>/gi
+  let match
+
+  while ((match = headingRegex.exec(content)) !== null) {
+    const level = parseInt(match[1])
+    let text = match[3]
+      .replace(/<[^>]+>/g, '') // Strip HTML tags
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .trim()
+
+    // Generate slug from heading text
+    const blockId = generateSlug(text)
+
+    const block = {
+      blockId,
+      id: blockId, // Alias for compatibility
+      type: 'heading',
+      level,
+      text,
+      line: lineNumber++,
+      position: match.index,
+      auto: true // Auto-generated
+    }
+
+    blocks.push(block)
+    blockIdManager.registerBlock(filePath, blockId, block)
+  }
+
+  return blocks
+}
+
+/**
  * Parse blocks from markdown content
  * @param {string} content - Markdown file content
  * @param {string} filePath - Path to the file (for registration)
@@ -19,6 +111,11 @@ import blockIdManager from './block-id-manager.js'
  */
 export function parseBlocks(content, filePath) {
   if (!content) return []
+
+  // Check if content is HTML (Lokus stores as HTML)
+  if (content.trim().startsWith('<')) {
+    return parseHTMLBlocks(content, filePath)
+  }
 
   const lines = content.split('\n')
   const blocks = []
