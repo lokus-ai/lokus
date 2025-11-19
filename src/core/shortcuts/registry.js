@@ -35,7 +35,8 @@ const DANGEROUS_GLOBAL_SHORTCUTS = [
 
 // Action IDs that should not be registered as global shortcuts
 const NON_GLOBAL_ACTIONS = [
-  'copy', 'paste', 'cut', 'select-all', 'undo', 'redo'
+  'copy', 'paste', 'cut', 'select-all', 'undo', 'redo',
+  'next-tab', 'prev-tab'  // Handled by menu bar
 ];
 
 // Action catalog: add here as you grow
@@ -51,8 +52,8 @@ export const ACTIONS = [
   { id: "global-search",    name: "Global Search",       event: "lokus:global-search",    default: "CommandOrControl+Shift+F" },
   { id: "command-palette",  name: "Command Palette",     event: "lokus:command-palette",  default: "CommandOrControl+K" },
   { id: "wikilink-modal",   name: "Insert WikiLink",     event: "lokus:wikilink-modal",   default: "CommandOrControl+L" },
-  { id: "next-tab",         name: "Next Tab",            event: "lokus:next-tab",         default: "CommandOrControl+Alt+Right" },
-  { id: "prev-tab",         name: "Previous Tab",        event: "lokus:prev-tab",         default: "CommandOrControl+Alt+Left" },
+  { id: "next-tab",         name: "Next Tab",            event: "lokus:next-tab",         default: "Control+Tab" },
+  { id: "prev-tab",         name: "Previous Tab",        event: "lokus:prev-tab",         default: "Control+Shift+Tab" },
   { id: "close-tab",        name: "Close Current Tab",   event: "lokus:close-tab",        default: "CommandOrControl+W" },
   { id: "reopen-closed-tab", name: "Reopen Closed Tab",  event: "lokus:reopen-closed-tab", default: "CommandOrControl+Shift+T" },
   { id: "graph-view",       name: "Open Graph View",     event: "lokus:graph-view",       default: "CommandOrControl+Shift+G" },
@@ -167,13 +168,6 @@ export async function registerGlobalShortcuts() {
   if (!isTauri) {
     return; // no-op in browser
   }
-
-  // CRITICAL: Disable ALL global shortcuts to prevent overriding macOS system shortcuts
-  // Global shortcuts work system-wide and break shortcuts in other apps
-  // Shortcuts should only work when the app is focused (handled by menu bar and local listeners)
-  console.log('[Shortcuts] Global shortcuts disabled to prevent system conflicts');
-  await unregisterAll();
-  return;
 
   // Skip global shortcuts in development to avoid conflicts
   if (DISABLE_GLOBAL_SHORTCUTS_IN_DEV && typeof window !== 'undefined' && window.location?.hostname === 'localhost') {

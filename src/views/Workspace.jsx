@@ -324,13 +324,13 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
   const draggingClasses = isDragging ? 'opacity-50' : '';
 
   const onRename = () => {
-    // For files: just open them (the note header handles renaming)
-    if (!entry.is_directory) {
+    // For .md files: open them (the note header handles renaming)
+    if (!entry.is_directory && entry.path.endsWith('.md')) {
       onFileClick(entry);
       return;
     }
 
-    // For folders: enter inline rename mode
+    // For other files and folders: enter inline rename mode
     setRenamingPath(entry.path);
   };
 
@@ -477,7 +477,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
                 className="obsidian-file-icon"
                 showChevron={true}
               />
-              {renamingPath === entry.path && entry.is_directory ? (
+              {renamingPath === entry.path ? (
                 <InlineRenameInput
                   initialValue={entry.name}
                   onSubmit={handleRenameSubmit}
@@ -926,15 +926,23 @@ function WorkspaceWithScope({ path }) {
             setActiveFile(tabsWithNames[0].path);
           }
 
-          // Set recent files (filter out special views, keep only actual files)
-          const actualFiles = session.open_tabs.filter(p =>
-            !p.startsWith('__') &&
-            (p.endsWith('.md') || p.endsWith('.txt') || p.endsWith('.canvas') || p.endsWith('.kanban'))
-          );
-          setRecentFiles(actualFiles.slice(0, 5).map(p => ({
-            path: p,
-            name: getFilename(p)
-          })));
+          // Load recent files from session state if available, otherwise use open tabs
+          if (session.recent_files && session.recent_files.length > 0) {
+            setRecentFiles(session.recent_files.slice(0, 5).map(p => ({
+              path: p,
+              name: getFilename(p)
+            })));
+          } else {
+            // Fallback: use open tabs as recent files
+            const actualFiles = session.open_tabs.filter(p =>
+              !p.startsWith('__') &&
+              (p.endsWith('.md') || p.endsWith('.txt') || p.endsWith('.canvas') || p.endsWith('.kanban'))
+            );
+            setRecentFiles(actualFiles.slice(0, 5).map(p => ({
+              path: p,
+              name: getFilename(p)
+            })));
+          }
         }
       });
     }
@@ -983,18 +991,12 @@ function WorkspaceWithScope({ path }) {
       if (path) {
         const tabPaths = openTabs.map(t => t.path);
         const folderPaths = Array.from(expandedFolders);
-        invoke("save_session_state", { workspacePath: path, openTabs: tabPaths, expandedFolders: folderPaths });
-
-        // Update recent files list
-        const actualFiles = openTabs.filter(t =>
-          !t.path.startsWith('__') &&
-          (t.path.endsWith('.md') || t.path.endsWith('.txt') || t.path.endsWith('.canvas') || t.path.endsWith('.kanban'))
-        );
-        setRecentFiles(actualFiles.slice(0, 5));
+        const recentPaths = recentFiles.map(f => f.path);
+        invoke("save_session_state", { workspacePath: path, openTabs: tabPaths, expandedFolders: folderPaths, recentFiles: recentPaths });
       }
     }, 500);
     return () => clearTimeout(saveTimeout);
-  }, [openTabs, expandedFolders, path]);
+  }, [openTabs, expandedFolders, path, recentFiles]);
 
   // Fetch file tree
   useEffect(() => {
@@ -1382,6 +1384,34 @@ function WorkspaceWithScope({ path }) {
     }
   }, [openTabs, activeFile]);
 
+  // Direct keyboard handler for Ctrl+Tab (fallback if menu doesn't work)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+Tab or Ctrl+Shift+Tab
+      if (e.ctrlKey && e.key === 'Tab') {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (openTabs.length <= 1) return;
+
+        const currentIndex = openTabs.findIndex(tab => tab.path === activeFile);
+
+        if (e.shiftKey) {
+          // Previous tab
+          const prevIndex = currentIndex === 0 ? openTabs.length - 1 : currentIndex - 1;
+          setActiveFile(openTabs[prevIndex].path);
+        } else {
+          // Next tab
+          const nextIndex = (currentIndex + 1) % openTabs.length;
+          setActiveFile(openTabs[nextIndex].path);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true); // Use capture phase
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [openTabs, activeFile]);
+
   // Global right-click context menu
   // Removed global context menu handler - context menus are now component-specific
   // EditorContextMenu handles editor right-clicks, FileContextMenu handles file sidebar right-clicks
@@ -1433,6 +1463,15 @@ function WorkspaceWithScope({ path }) {
       });
       setActiveFile(filePath);
 
+      // Update recent files list
+      if (!filePath.startsWith('__') && (filePath.endsWith('.md') || filePath.endsWith('.txt') || filePath.endsWith('.canvas') || filePath.endsWith('.kanban'))) {
+        setRecentFiles(prev => {
+          const filtered = prev.filter(f => f.path !== filePath);
+          const newRecent = [{ path: filePath, name: fileName }, ...filtered].slice(0, 5);
+          return newRecent;
+        });
+      }
+
       // Jump to line after editor loads (only for non-image files)
       if (!isImageFile(filePath)) {
         setTimeout(() => {
@@ -1467,6 +1506,16 @@ function WorkspaceWithScope({ path }) {
       return newTabs;
     });
     setActiveFile(file.path);
+
+    // Update recent files list
+    if (!file.path.startsWith('__') && (file.path.endsWith('.md') || file.path.endsWith('.txt') || file.path.endsWith('.canvas') || file.path.endsWith('.kanban'))) {
+      const fileName = getFilename(file.name || file.path);
+      setRecentFiles(prev => {
+        const filtered = prev.filter(f => f.path !== file.path);
+        const newRecent = [{ path: file.path, name: fileName }, ...filtered].slice(0, 5);
+        return newRecent;
+      });
+    }
   };
 
   const handleReopenClosedTab = useCallback(() => {
@@ -3996,7 +4045,7 @@ function WorkspaceWithScope({ path }) {
                             </div>
                             <h3 className="font-medium text-app-text mb-2">New Note</h3>
                             <p className="text-sm text-app-muted">Create your first note and start writing</p>
-                            <div className="mt-3 text-xs text-app-muted/70">{platformService.formatShortcut("CommandOrControl+N")}</div>
+                            <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+N")}</div>
                           </button>
                           
                           <button
@@ -4019,7 +4068,7 @@ function WorkspaceWithScope({ path }) {
                             </div>
                             <h3 className="font-medium text-app-text mb-2">New Folder</h3>
                             <p className="text-sm text-app-muted">Organize your notes with folders</p>
-                            <div className="mt-3 text-xs text-app-muted/70">{platformService.formatShortcut("CommandOrControl+Shift+N")}</div>
+                            <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+Shift+N")}</div>
                           </button>
                           
                           <button
@@ -4031,7 +4080,7 @@ function WorkspaceWithScope({ path }) {
                             </div>
                             <h3 className="font-medium text-app-text mb-2">Command Palette</h3>
                             <p className="text-sm text-app-muted">Quick access to all commands</p>
-                            <div className="mt-3 text-xs text-app-muted/70">{platformService.formatShortcut("CommandOrControl+K")}</div>
+                            <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+K")}</div>
                           </button>
                         </div>
                       </div>
