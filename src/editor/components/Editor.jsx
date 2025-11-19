@@ -22,6 +22,8 @@ import { InputRule } from "@tiptap/core";
 import MathExt from "../extensions/Math.js";
 import WikiLink from "../extensions/WikiLink.js";
 import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
+import BlockId from "../extensions/BlockId.js";
+import WikiLinkEmbed from "../extensions/WikiLinkEmbed.js";
 import TagAutocomplete from "../extensions/TagAutocomplete.js";
 import HeadingAltInput from "../extensions/HeadingAltInput.js";
 import MarkdownPaste from "../extensions/MarkdownPaste.js";
@@ -47,6 +49,7 @@ import { editorAPI } from "../../plugins/api/EditorAPI.js";
 import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 
 import "../styles/editor.css";
+import "../styles/block-embeds.css";
 import "../../styles/page-preview.css";
 
 const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => {
@@ -226,6 +229,12 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => 
     // Obsidian‑style wikilinks and image embeds
     exts.push(WikiLink);
     exts.push(WikiLinkSuggest);
+
+    // Obsidian-style block IDs (^blockid)
+    exts.push(BlockId);
+
+    // Obsidian-style block embeds (![[File^blockid]])
+    exts.push(WikiLinkEmbed);
 
     // Tag autocomplete
     exts.push(TagAutocomplete);
@@ -458,11 +467,41 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
 
           event.preventDefault();
 
-          // Log for debugging
+          // Detect modifier keys for "open in new tab" behavior
+          const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+          const openInNewTab = isMac ? event.metaKey : event.ctrlKey;
+
+          console.log('\n========================================');
+          console.log('🔗 WIKILINK CLICKED');
+          console.log('========================================');
+          console.log('Target:', target);
+          console.log('Href (resolved path):', href);
+          console.log('Modifier Key Held:', openInNewTab ? (isMac ? 'Cmd' : 'Ctrl') : 'None');
+          console.log('Action:', openInNewTab ? 'Open in background tab' : 'Navigate to file');
+
+          // Check if this is a block reference (contains ^)
+          // Check BOTH href and target since target might be empty when loaded from disk
+          const hasBlockRef = (href && href.includes('^')) || (target && target.includes('^'));
+          let blockId = null;
+          let cleanHref = href;  // Clean path without block reference
+
+          if (hasBlockRef) {
+            // Extract blockId from href (format: "/path/to/Filename.md^blockid")
+            const parts = href.split('^');
+            cleanHref = parts[0];  // Remove ^blockid from path
+            blockId = parts[1];    // Get the block ID
+
+            console.log('🎯 Block Reference Detected:');
+            console.log('   Block ID:', blockId);
+            console.log('   Original Path:', href);
+            console.log('   Clean Path:', cleanHref);
+          }
 
           // Check if this is a resolved file path that exists in the index
           const index = globalThis.__LOKUS_FILE_INDEX__ || [];
-          const fileExists = index.some(f => f.path === href);
+          const fileExists = index.some(f => f.path === cleanHref);
+          console.log('File Exists:', fileExists);
+          console.log('========================================\n');
 
           if (!fileExists && target) {
             // Show a user-friendly message
@@ -475,9 +514,22 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           (async () => {
             try {
               const { emit } = await import('@tauri-apps/api/event');
-              await emit('lokus:open-file', href);
+              // Use different event based on modifier key
+              const eventName = openInNewTab ? 'lokus:open-file-new-tab' : 'lokus:open-file';
+              console.log(`📤 Emitting event: ${eventName} with path:`, cleanHref);
+              await emit(eventName, cleanHref);  // Use clean path without ^blockid
             } catch {
-              try { window.dispatchEvent(new CustomEvent('lokus:open-file', { detail: href })); } catch {}
+              try {
+                const eventName = openInNewTab ? 'lokus:open-file-new-tab' : 'lokus:open-file';
+                console.log(`📤 Dispatching DOM event: ${eventName} with path:`, cleanHref);
+                window.dispatchEvent(new CustomEvent(eventName, { detail: cleanHref }));  // Use clean path
+              } catch {}
+            }
+
+            // If block reference, also emit scroll event
+            if (hasBlockRef && blockId) {
+              console.log('📜 Emitting scroll-to-block event for:', blockId);
+              window.dispatchEvent(new CustomEvent('lokus:scroll-to-block', { detail: blockId }));
             }
           })();
           return true;
@@ -707,6 +759,75 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           }
         };
         input.click();
+        break;
+      case 'copyBlockReference':
+        (async () => {
+          try {
+            // Get current block
+            const { state } = editor
+            const { $from } = state.selection
+            const node = $from.parent
+
+            // Import dynamically to avoid circular dependencies
+            const blockIdManager = (await import('../../core/blocks/block-id-manager.js')).default
+            const { queueBlockIdWrite } = await import('../../core/blocks/block-writer.js')
+
+            // Check if block has ID
+            let blockId = node.attrs.blockId
+
+            if (!blockId) {
+              // Generate new ID
+              blockId = blockIdManager.generateId()
+              console.log('[Editor] Generating block ID for copy:', blockId)
+
+              // Add to node
+              const pos = $from.before($from.depth)
+              editor.chain()
+                .focus()
+                .command(({ tr }) => {
+                  tr.setNodeMarkup(pos, null, { ...node.attrs, blockId })
+                  return true
+                })
+                .run()
+
+              // Write back to file (if activeFile is available)
+              if (typeof window !== 'undefined' && window.__LOKUS_ACTIVE_FILE__) {
+                const activeFile = window.__LOKUS_ACTIVE_FILE__
+
+                // Calculate line number from position
+                let lineNumber = 1
+                state.doc.nodesBetween(0, pos, (node, pos) => {
+                  if (node.isBlock) lineNumber++
+                })
+
+                queueBlockIdWrite(activeFile, lineNumber, blockId)
+                  .then((success) => {
+                    if (success) {
+                      blockIdManager.invalidateFile(activeFile)
+                      console.log('[Editor] ✅ Wrote block ID to file:', blockId)
+                    }
+                  })
+                  .catch(err => {
+                    console.error('[Editor] Error writing block ID:', err)
+                  })
+              }
+            }
+
+            // Format reference
+            const activeFile = window.__LOKUS_ACTIVE_FILE__ || ''
+            const fileName = activeFile.split('/').pop()?.replace('.md', '') || 'Unknown'
+            const reference = `[[${fileName}^${blockId}]]`
+
+            // Copy to clipboard
+            await navigator.clipboard.writeText(reference)
+            console.log('[Editor] ✅ Copied block reference:', reference)
+
+            // Optional: Show toast notification (if you have a toast system)
+            // toast.success('Block reference copied to clipboard')
+          } catch (error) {
+            console.error('[Editor] Error copying block reference:', error)
+          }
+        })()
         break;
       default:
     }

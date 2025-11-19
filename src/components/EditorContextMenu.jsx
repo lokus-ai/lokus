@@ -187,6 +187,17 @@ export default function EditorContextMenu({
           </ContextMenuSubContent>
         </ContextMenuSub>
 
+        <ContextMenuSeparator />
+
+        {/* Copy Block Reference */}
+        <ContextMenuItem
+          onClick={() => handleAction('copyBlockReference')}
+          disabled={!editor}
+        >
+          <Link className="mr-2 h-4 w-4" />
+          Copy block reference
+        </ContextMenuItem>
+
         {/* Headings */}
         <ContextMenuSub>
           <ContextMenuSubTrigger>

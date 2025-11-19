@@ -45,12 +45,16 @@ const WikiLinkList = forwardRef((props, ref) => {
     }
   }))
 
+  const isBlockMode = items.length > 0 && items[0].type === 'block'
+
   return (
     <Command value={value} onValueChange={setValue} className="w-96 rounded-lg border border-app-border shadow-md bg-app-panel text-app-text">
       <CommandList className="max-h-[60vh] overflow-auto">
-        <CommandEmpty>No files</CommandEmpty>
+        <CommandEmpty>{isBlockMode ? 'No blocks found' : 'No files'}</CommandEmpty>
         {items.map(item => {
           const active = value === item.path
+          const isBlock = item.type === 'block'
+
           return (
             <CommandItem
               key={`${item.path}`}
@@ -59,16 +63,39 @@ const WikiLinkList = forwardRef((props, ref) => {
               aria-selected={active}
               className={active ? 'bg-app-accent/20 text-app-text' : ''}
             >
-              <div className="flex flex-col min-w-0">
-                <span className="font-medium truncate">{item.title}</span>
-                <span className="text-xs text-app-muted truncate">{relPath(item.path)}</span>
-              </div>
+              {isBlock ? (
+                <div className="flex flex-col min-w-0 gap-1">
+                  <div className="flex items-center gap-2">
+                    {item.blockType === 'heading' && (
+                      <span className="text-app-muted text-xs">
+                        {'#'.repeat(item.level || 1)}
+                      </span>
+                    )}
+                    <span className="font-medium truncate">{item.title}</span>
+                  </div>
+                  {item.text && item.text !== item.title && (
+                    <span className="text-xs text-app-muted truncate line-clamp-2">
+                      {item.text}
+                    </span>
+                  )}
+                  <span className="text-xs text-app-muted/60 truncate">
+                    ^{item.blockId} • Line {item.line}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex flex-col min-w-0">
+                  <span className="font-medium truncate">{item.title}</span>
+                  <span className="text-xs text-app-muted truncate">{relPath(item.path)}</span>
+                </div>
+              )}
             </CommandItem>
           )
         })}
       </CommandList>
       <div className="px-3 py-2 text-xs text-app-muted border-t border-app-border">
-        Enter select • ↑↓ navigate • Type | to set display
+        {isBlockMode
+          ? 'Enter select • ↑↓ navigate'
+          : 'Enter select • ↑↓ navigate • Type | to set display'}
       </div>
     </Command>
   )

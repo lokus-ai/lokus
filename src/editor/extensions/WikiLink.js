@@ -23,6 +23,7 @@ function buildWikiLinkPattern(imageEmbed = false) {
   const escapedImage = escapeRegex(imageMarker)
 
   // Build character class for what's NOT allowed inside (everything except close markers)
+  // Allow ^ for block references
   const notClose = close.split('').map(c => escapeRegex(c)).join('')
 
   const pattern = imageEmbed
@@ -37,17 +38,20 @@ function buildWikiLinkPattern(imageEmbed = false) {
 }
 
 function parseParts(raw) {
-  // [[path#hash|alt]] or [[path|alt]] or [[path]]
-  const m = /^(?<path>[^#|]+)(?:#(?<hash>[^|]+))?(?:\|(?<alt>.*))?$/.exec(raw || '')
+  // [[path^blockid|alt]] or [[path#hash|alt]] or [[path|alt]] or [[path]]
+  // Support both # (heading hash) and ^ (block reference)
+  const m = /^(?<path>[^#^|]+)(?:(?<separator>[#^])(?<hash>[^|]+))?(?:\|(?<alt>.*))?$/.exec(raw || '')
   return {
     path: m?.groups?.path?.trim() || raw,
     hash: m?.groups?.hash?.trim() || '',
+    separator: m?.groups?.separator || '', // Keep track of # vs ^
     alt: (m?.groups?.alt ?? '').trim(),
   }
 }
 
-function toHref({ path, hash }) {
-  return hash ? `${path}#${hash}` : path
+function toHref({ path, hash, separator }) {
+  // Preserve the separator (# or ^) when building href
+  return hash ? `${path}${separator}${hash}` : path
 }
 
 export const WikiLink = Node.create({
@@ -153,7 +157,26 @@ export const WikiLink = Node.create({
       dom.classList.add('wiki-link');
       dom.setAttribute('data-type', 'wiki-link');
       dom.setAttribute('href', node.attrs.href || node.attrs.target);
-      dom.textContent = node.attrs.alt || node.attrs.target;
+
+      // Format display text for block references
+      const target = node.attrs.alt || node.attrs.target
+      let displayText = target
+
+      // Check if this is a block reference (contains ^)
+      if (target.includes('^')) {
+        const [filename, blockId] = target.split('^')
+        const cleanFilename = filename.replace('.md', '').trim()
+
+        // Convert block ID slug to readable text
+        const blockText = blockId
+          .split('-')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ')
+
+        displayText = `${cleanFilename} › ${blockText}`
+      }
+
+      dom.textContent = displayText
 
       let hoverTimeout = null;
 
@@ -193,6 +216,10 @@ export const WikiLink = Node.create({
 
         // Close preview when link is clicked
         window.dispatchEvent(new CustomEvent('wiki-link-hover-end'));
+
+        // Let the click bubble up to Editor.jsx's handleDOMEvents
+        // The editor already has a working click handler for wiki links at line 453
+        // that dispatches 'lokus:open-file' event which Workspace listens to
       });
 
       return {
@@ -212,11 +239,35 @@ export const WikiLink = Node.create({
       console.log('[WikiLink] Creating input rules with config:', currentConfig);
     }
     return [
+      // ![[File^blockid]] block embed (must come BEFORE image embed)
+      new InputRule({
+        find: /!\[\[([^\]]+)\^([^\]]+)\]\]$/,
+        handler: async ({ range, match, chain }) => {
+          const fileName = match[1].trim()
+          const blockId = match[2].trim()
+
+          // Resolve file path
+          const resolved = await resolveWikiTarget(fileName)
+          const filePath = resolved.href || fileName
+
+          // Delete the ![[...]] and insert embed
+          chain().deleteRange(range).run()
+
+          // Use the WikiLinkEmbed command
+          this.editor.commands.setWikiLinkEmbed(fileName, blockId, filePath)
+        }
+      }),
       // ![[...]] image embed (dynamic pattern)
       new InputRule({
         find: buildWikiLinkPattern(true),
         handler: ({ range, match, chain }) => {
           const raw = match[1]
+
+          // Skip if this is a block reference (contains ^)
+          if (raw.includes('^')) {
+            return
+          }
+
           const id = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)
           const parts = parseParts(raw)
           const baseAttrs = { id, target: raw, alt: parts.alt, embed: true, href: toHref(parts), src: '' }
