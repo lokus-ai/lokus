@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { NodeViewWrapper } from "@tiptap/react";
 import mermaid from "mermaid";
-import { Eye, SquarePen } from "lucide-react";
+import { Eye, SquarePen, Maximize2 } from "lucide-react";
+import { MermaidViewerModal } from "../../components/MermaidViewerModal.jsx";
 
 // Helper function to read CSS custom property and convert RGB to hex
 const getCSSVariable = (varName) => {
@@ -33,14 +34,26 @@ const MermaidComponent = ({ node, updateAttributes }) => {
   const { code = "" } = node.attrs;
 
   if (import.meta.env.DEV) {
+    console.log('[MermaidComponent] Mount/Update - code:', JSON.stringify(code));
     console.log('[MermaidComponent] Mount/Update - code length:', code.length);
-    console.log('[MermaidComponent] Mount/Update - first 100 chars:', code.substring(0, 100));
+    console.log('[MermaidComponent] Mount/Update - code is falsy?', !code || code.trim().length === 0);
   }
 
-  const [isEditing, setIsEditing] = useState(!code);  // Start in edit mode only if no code
+  // Start in edit mode if there's no code or only whitespace
+  const [isEditing, setIsEditing] = useState(() => {
+    const hasCode = code && code.trim().length > 0;
+    if (import.meta.env.DEV) {
+      console.log('[MermaidComponent] Initial state - hasCode:', hasCode, 'starting in edit mode:', !hasCode);
+    }
+    return !hasCode;
+  });
   const [localCode, setLocalCode] = useState(code);
   const [themeVersion, setThemeVersion] = useState(0);
   const [forceRender, setForceRender] = useState(0);
+
+  // Fullscreen viewer state
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
+  const [svgContent, setSvgContent] = useState(null);
 
   if (import.meta.env.DEV) {
     console.log('[MermaidComponent] State - isEditing:', isEditing, 'localCode length:', localCode.length);
@@ -199,6 +212,9 @@ const MermaidComponent = ({ node, updateAttributes }) => {
   };
 
   const handleBlur = () => {
+    if (import.meta.env.DEV) {
+      console.log('[MermaidComponent] handleBlur - saving code, length:', localCode.length);
+    }
     updateAttributes({ code: localCode });
     setIsEditing(false);
   };
@@ -206,8 +222,35 @@ const MermaidComponent = ({ node, updateAttributes }) => {
   const handleKeyDown = (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
+      if (import.meta.env.DEV) {
+        console.log('[MermaidComponent] handleKeyDown (Cmd+Enter) - saving code, length:', localCode.length);
+      }
       updateAttributes({ code: localCode });
       setIsEditing(false);
+    }
+  };
+
+  // Fullscreen viewer handlers
+  const handleOpenViewer = () => {
+    if (containerRef.current && !isEditing) {
+      const svgElement = containerRef.current.querySelector('svg');
+      if (svgElement) {
+        // Serialize SVG to string
+        const svgString = new XMLSerializer().serializeToString(svgElement);
+        setSvgContent(svgString);
+        setIsViewerOpen(true);
+      }
+    }
+  };
+
+  const handleCloseViewer = () => {
+    setIsViewerOpen(false);
+    setSvgContent(null);
+  };
+
+  const handleDiagramClick = () => {
+    if (!isEditing) {
+      handleOpenViewer();
     }
   };
 
@@ -221,26 +264,50 @@ const MermaidComponent = ({ node, updateAttributes }) => {
       }}
       onDoubleClick={handleDoubleClick}
     >
-      <button
-        onClick={() => setIsEditing((prev) => !prev)}
-        className="absolute top-1 right-0 p-1 rounded-md"
-        style={{
-          color: 'rgb(var(--text))',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = 'rgb(var(--panel))';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = 'transparent';
-        }}
-        title={isEditing ? "View Diagram" : "Edit Diagram"}
-      >
-        {isEditing ? (
-          <Eye className="w-4 h-4" />
-        ) : (
-          <SquarePen className="w-4 h-4" />
+      {/* Control buttons */}
+      <div className="absolute top-1 right-0 flex gap-1">
+        {/* Fullscreen button - only show when viewing diagram */}
+        {!isEditing && localCode.trim() && (
+          <button
+            onClick={handleOpenViewer}
+            className="p-1 rounded-md"
+            style={{
+              color: 'rgb(var(--text))',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgb(var(--panel))';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+            title="View fullscreen"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
         )}
-      </button>
+
+        {/* Edit/View toggle button */}
+        <button
+          onClick={() => setIsEditing((prev) => !prev)}
+          className="p-1 rounded-md"
+          style={{
+            color: 'rgb(var(--text))',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgb(var(--panel))';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+          }}
+          title={isEditing ? "View Diagram" : "Edit Diagram"}
+        >
+          {isEditing ? (
+            <Eye className="w-4 h-4" />
+          ) : (
+            <SquarePen className="w-4 h-4" />
+          )}
+        </button>
+      </div>
 
       {isEditing && (
         <div className="flex flex-col items-center">
@@ -267,8 +334,26 @@ const MermaidComponent = ({ node, updateAttributes }) => {
         className="mermaid-diagram w-full overflow-x-auto p-2"
         style={{
           minHeight: '100px',
-          display: isEditing ? 'none' : 'block'
+          display: isEditing ? 'none' : 'block',
+          cursor: !isEditing && localCode.trim() ? 'pointer' : 'default',
+          transition: 'filter 0.2s ease'
         }}
+        onClick={handleDiagramClick}
+        onMouseEnter={(e) => {
+          if (!isEditing && localCode.trim()) {
+            e.currentTarget.style.filter = 'brightness(1.1)';
+          }
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.filter = 'brightness(1)';
+        }}
+      />
+
+      {/* Fullscreen Mermaid Viewer Modal */}
+      <MermaidViewerModal
+        isOpen={isViewerOpen}
+        svgContent={svgContent}
+        onClose={handleCloseViewer}
       />
     </NodeViewWrapper>
   );
