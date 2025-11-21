@@ -282,6 +282,13 @@ export default function BaseTableView({
     return finalColumns
   }, [enabledColumns, columnOrder])
 
+  // Calculate total table width based on column widths
+  const totalTableWidth = useMemo(() => {
+    const checkboxWidth = 48
+    const columnsWidth = displayColumns.reduce((sum, col) => sum + (columnWidths[col] || 200), 0)
+    return checkboxWidth + columnsWidth
+  }, [displayColumns, columnWidths])
+
   // Filter items based on folder scope and apply sorting
   const scopedItems = useMemo(() => {
     // If ignoreScope is true, don't filter by folder scope
@@ -1037,9 +1044,8 @@ export default function BaseTableView({
       )}
 
       {/* Modern clean table with Notion/Linear aesthetic */}
-      <div className="flex-1 bg-app-bg relative" style={{ overflow: 'auto' }}>
-        <div style={{ display: 'inline-block', minWidth: 'max-content' }}>
-          <table className="border-separate" style={{ borderSpacing: 0, width: 'max-content', minWidth: '100%' }}>
+      <div className="flex-1 bg-app-bg relative overflow-auto">
+        <table className="border-separate" style={{ borderSpacing: 0, width: '100%', minWidth: `${totalTableWidth}px` }}>
           {/* Table header */}
           <thead className="sticky top-0 z-10 bg-app-bg border-b-2 border-app-border">
             <tr>
@@ -1442,7 +1448,6 @@ export default function BaseTableView({
             </div>
           </div>
         )}
-        </div>
       </div>
 
       {/* Sort Dropdown Portal */}
