@@ -18,7 +18,7 @@ import * as TableCellExt from "@tiptap/extension-table-cell";
 import * as StrikeExt from "@tiptap/extension-strike";
 import * as HighlightExt from "@tiptap/extension-highlight";
 import * as HorizontalRuleExt from "@tiptap/extension-horizontal-rule";
-import { InputRule } from "@tiptap/core";
+import { InputRule, nodeInputRule } from "@tiptap/core";
 import MathExt from "../extensions/Math.js";
 import WikiLink from "../extensions/WikiLink.js";
 import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
@@ -140,28 +140,32 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => 
     if (Link) exts.push(Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true }));
     if (TaskList && TaskItem) exts.push(TaskList, TaskItem);
     if (Image) {
-      exts.push(Image.configure({
+      // Properly extend Image extension to override addInputRules
+      const CustomImage = Image.extend({
+        addInputRules() {
+          return [
+            nodeInputRule({
+              find: /!\[([^\]]*)\]\(([^)]+)\)$/,
+              type: this.type,
+              getAttributes: (match) => {
+                const src = match[2];
+                const alt = match[1];
+                console.log('🖼️ Image nodeInputRule triggered:', { src, alt, fullMatch: match[0] });
+                return {
+                  src,
+                  alt
+                };
+              },
+            }),
+          ];
+        },
+      });
+
+      exts.push(CustomImage.configure({
         inline: true,
         allowBase64: true,
         HTMLAttributes: {
           class: 'editor-image',
-        },
-        addInputRules() {
-          return [
-            new InputRule({
-              find: /!\[([^\]]*)\]\(([^)]+)\)$/,
-              handler: ({ state, range, match, chain }) => {
-                const alt = match[1];
-                const src = match[2];
-                // Handle both local paths and web URLs
-                const resolvedSrc = src.startsWith('http') ? src : src;
-                chain().deleteRange(range).insertContent({
-                  type: 'image',
-                  attrs: { src: resolvedSrc, alt: alt || '' }
-                }).run();
-              },
-            }),
-          ];
         },
       }));
     }
@@ -452,6 +456,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           if (img) {
             event.preventDefault();
             const src = img.getAttribute('src') || '';
+            console.log('🖼️ Image clicked, src attribute:', src);
             if (src) {
               setImageViewerState({ isOpen: true, imagePath: src });
             }

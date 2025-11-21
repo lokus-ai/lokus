@@ -20,6 +20,7 @@ export class MarkdownCompiler {
       linkify: true,
       typographer: true,
       breaks: true,  // Convert line breaks
+      tables: true,  // Enable GFM table parsing
       ...options.markdownIt
     })
       .use(markdownItMark)
@@ -117,9 +118,47 @@ export class MarkdownCompiler {
     
     const threshold = this.options.aggressive ? 3 : 5
     const isLikely = score >= threshold
-    
+
     this.log(`Markdown likelihood score: ${score}/${threshold}, likely: ${isLikely}`)
     return isLikely
+  }
+
+  /**
+   * Fix malformed tables that are missing separator rows
+   * Detects tables without | --- | separators and adds them
+   */
+  fixMalformedTables(text) {
+    const lines = text.split('\n');
+    const result = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const prevLine = i > 0 ? lines[i - 1] : '';
+      const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
+
+      // Check if this line is a table row (starts with |)
+      const isTableRow = /^\s*\|.*\|/.test(line);
+      const prevIsTableRow = /^\s*\|.*\|/.test(prevLine);
+      const nextIsTableRow = /^\s*\|.*\|/.test(nextLine);
+      const nextIsSeparator = /^\s*\|\s*[-:]+\s*(\|\s*[-:]+\s*)*\|/.test(nextLine);
+
+      result.push(line);
+
+      // If this is first table row (prev line is NOT a table) and next line exists but is NOT a separator
+      if (isTableRow && !prevIsTableRow && nextIsTableRow && !nextIsSeparator) {
+        // This is the first row of a table without a separator
+        // Count columns
+        const columnCount = (line.match(/\|/g) || []).length - 1;
+        if (columnCount > 0) {
+          // Add separator row
+          const separator = '| ' + Array(columnCount).fill('---').join(' | ') + ' |';
+          result.push(separator);
+          console.log('🔧 [Compiler] Added missing table separator');
+        }
+      }
+    }
+
+    return result.join('\n');
   }
 
   /**
@@ -132,12 +171,24 @@ export class MarkdownCompiler {
 
     try {
       this.log('Compiling markdown:', text.substring(0, 100))
-      
+
+      // Debug: Check if text contains table syntax
+      const hasTableSyntax = /^\|.+\|/m.test(text);
+      if (hasTableSyntax) {
+        console.log('🔍 [Compiler] Table syntax detected in markdown');
+        console.log('🔍 [Compiler] markdown-it tables enabled:', this.md.options.tables);
+      }
+
       // Normalize line endings and preserve structure
       let normalizedText = text
         .replace(/\r\n/g, '\n')  // Windows line endings
-        .replace(/\r/g, '\n')   // Mac line endings
-        .trim()
+        .replace(/\r/g, '\n');   // Mac line endings
+
+      // Fix malformed tables (missing separator rows)
+      // This handles tables from old exports that don't have the | --- | separator
+      normalizedText = this.fixMalformedTables(normalizedText);
+
+      normalizedText = normalizedText.trim()
       
       // Ensure proper paragraph breaks for multi-line content
       // Replace single line breaks with double line breaks where appropriate
@@ -157,7 +208,19 @@ export class MarkdownCompiler {
       }
       
       const html = this.md.render(normalizedText)
-      
+
+      // Debug: Check if HTML contains table
+      if (hasTableSyntax) {
+        const hasTableHTML = /<table/.test(html);
+        console.log('🔍 [Compiler] Table HTML generated:', hasTableHTML);
+        if (hasTableHTML) {
+          console.log('🔍 [Compiler] Table HTML preview:', html.substring(0, 300));
+        } else {
+          console.log('⚠️ [Compiler] Table syntax found but NO table HTML generated!');
+          console.log('⚠️ [Compiler] Raw markdown:', normalizedText.substring(0, 200));
+        }
+      }
+
       this.log('Compiled HTML:', html.substring(0, 200))
       return html
     } catch (error) {

@@ -274,8 +274,9 @@ export class MarkdownExporter {
   processTable(tableElement) {
     let result = '\n';
     const rows = [];
+    let hasProcessedHeader = false;
 
-    // Process thead
+    // Process thead (standard HTML tables)
     const thead = tableElement.querySelector('thead');
     if (thead) {
       const headerRow = thead.querySelector('tr');
@@ -287,10 +288,11 @@ export class MarkdownExporter {
         // Add separator
         const separator = headers.map(() => '---');
         rows.push(separator);
+        hasProcessedHeader = true;
       }
     }
 
-    // Process tbody
+    // Process tbody (standard HTML tables)
     const tbody = tableElement.querySelector('tbody');
     if (tbody) {
       const bodyRows = tbody.querySelectorAll('tr');
@@ -298,6 +300,27 @@ export class MarkdownExporter {
         const cells = Array.from(tr.querySelectorAll('th, td'))
           .map(cell => cell.textContent.trim());
         rows.push(cells);
+      }
+    }
+
+    // If no thead/tbody (TipTap style), process all <tr> directly
+    if (!thead && !tbody) {
+      const allRows = tableElement.querySelectorAll('tr');
+      for (let i = 0; i < allRows.length; i++) {
+        const tr = allRows[i];
+        const cells = Array.from(tr.querySelectorAll('th, td'))
+          .map(cell => cell.textContent.trim());
+
+        // First row with <th> elements = header row
+        if (i === 0 && tr.querySelector('th')) {
+          rows.push(cells);
+          // Add separator after header
+          const separator = cells.map(() => '---');
+          rows.push(separator);
+          hasProcessedHeader = true;
+        } else {
+          rows.push(cells);
+        }
       }
     }
 

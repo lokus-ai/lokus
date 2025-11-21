@@ -24,6 +24,15 @@ export function useImageViewer(initialImagePath, allImageFiles, onPathChange) {
     setLoading(true);
     setError(null);
 
+    // Check if imagePath is already a data URL (base64)
+    if (imagePath.startsWith('data:')) {
+      // Already a data URL, use it directly without calling Rust backend
+      setImageData(imagePath);
+      setLoading(false);
+      return;
+    }
+
+    // File path - load via Rust backend
     invoke('read_image_file', { path: imagePath })
       .then((dataUrl) => {
         setImageData(dataUrl);
@@ -39,6 +48,18 @@ export function useImageViewer(initialImagePath, allImageFiles, onPathChange) {
   // Extract image info from file
   useEffect(() => {
     if (!imagePath || !allImageFiles) return;
+
+    // If it's a data URL, set basic info
+    if (imagePath.startsWith('data:')) {
+      setImageInfo({
+        name: 'Embedded Image',
+        path: null,
+        size: null,
+        modified: null,
+        created: null,
+      });
+      return;
+    }
 
     const file = allImageFiles.find(f => f.path === imagePath);
     if (file) {
