@@ -780,10 +780,9 @@ export class BaseManager {
         } else {
           console.warn('Could not find .lokus in path:', basesDir)
         }
-      } catch (createError) {
-        console.warn('Could not create bases directory:', createError)
-        // Continue anyway - maybe the directory exists but we can't read it
-      }
+    } catch (createError) {
+      console.warn('Could not create bases directory:', createError)
+      // Continue anyway - maybe the directory exists but we can't read it
     }
   }
 
