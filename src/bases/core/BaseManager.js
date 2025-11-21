@@ -741,12 +741,9 @@ export class BaseManager {
   }
 
   async ensureBasesDirectory(basesDir) {
+    // Always try to create the directory - if it exists, the operation will fail harmlessly
+    // This avoids the expensive read_workspace_files call just to check existence
     try {
-      // Try to read the directory to see if it exists
-      await invoke('read_workspace_files', { workspacePath: basesDir })
-    } catch (error) {
-      // Directory doesn't exist, create it
-      try {
         // Split the path to find workspace root and create directories step by step
         // basesDir should look like: "C:/Users/.../Desktop/Knowledge/.lokus/bases"
         const normalizedPath = basesDir.replace(/\\/g, '/')

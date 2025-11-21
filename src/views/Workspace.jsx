@@ -396,12 +396,19 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 
         // Load content if it's a markdown file
         if (file.path.endsWith('.md') || file.path.endsWith('.txt')) {
-          try {
-            const content = await invoke('read_file_content', { path: file.path });
-            setRightPaneContent(content || '');
-          } catch (err) {
-            console.error('Failed to load file content:', err);
-            setRightPaneContent('');
+          // Check if this file is already loaded in the left pane to avoid duplicate load
+          if (file.path === activeFile && editorContent) {
+            console.log('✅ [Workspace] Reusing left pane content for right pane (same file)');
+            setRightPaneContent(editorContent);
+          } else {
+            try {
+              console.log('📄 [Workspace] Loading file content for right pane:', file.path);
+              const content = await invoke('read_file_content', { path: file.path });
+              setRightPaneContent(content || '');
+            } catch (err) {
+              console.error('Failed to load file content:', err);
+              setRightPaneContent('');
+            }
           }
         } else {
           setRightPaneContent('');
@@ -1600,14 +1607,21 @@ function WorkspaceWithScope({ path }) {
         const fileName = getFilename(nextTab.name);
         setRightPaneTitle(fileName.replace(/\.md$/, ""));
         if (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt')) {
-          invoke("read_file_content", { path: nextTab.path })
-            .then(content => {
-              setRightPaneContent(content || '');
-            })
-            .catch(err => {
-              console.error('Failed to load right pane content:', err);
-              setRightPaneContent('');
-            });
+          // Check if this file is already loaded in the left pane
+          if (nextTab.path === path && editorContent) {
+            console.log('✅ [Workspace] Reusing left pane content for right pane (same file)');
+            setRightPaneContent(editorContent);
+          } else {
+            console.log('📄 [Workspace] Loading file content for right pane:', nextTab.path);
+            invoke("read_file_content", { path: nextTab.path })
+              .then(content => {
+                setRightPaneContent(content || '');
+              })
+              .catch(err => {
+                console.error('Failed to load right pane content:', err);
+                setRightPaneContent('');
+              });
+          }
         }
       }
     }
@@ -2738,12 +2752,19 @@ function WorkspaceWithScope({ path }) {
                                 nextTab.path.endsWith('.canvas') || nextTab.path.endsWith('.kanban');
             
             if (!isSpecialView && (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt'))) {
-              try {
-                const content = await invoke("read_file_content", { path: nextTab.path });
-                setRightPaneContent(content || '');
-              } catch (err) {
-                console.error('Failed to load right pane content:', err);
-                setRightPaneContent('');
+              // Check if this file is already loaded in the left pane
+              if (nextTab.path === activeFile && editorContent) {
+                console.log('✅ [Workspace] Reusing left pane content for right pane (same file)');
+                setRightPaneContent(editorContent);
+              } else {
+                try {
+                  console.log('📄 [Workspace] Loading file content for right pane:', nextTab.path);
+                  const content = await invoke("read_file_content", { path: nextTab.path });
+                  setRightPaneContent(content || '');
+                } catch (err) {
+                  console.error('Failed to load right pane content:', err);
+                  setRightPaneContent('');
+                }
               }
             } else {
               // For special views, just clear content

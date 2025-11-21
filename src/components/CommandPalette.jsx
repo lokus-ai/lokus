@@ -738,11 +738,11 @@ Best regards,
       .slice(0, 8) // Show top 8 matches
   }, [recentEmails])
 
-  // Load files from Bases when palette opens
+  // Load files from Bases when palette opens (only if not cached)
   useEffect(() => {
-    console.log('🔍 [CommandPalette] useEffect triggered - open:', open, 'dataManager:', !!dataManager)
-    if (open && dataManager) {
-      console.log('🔍 [CommandPalette] Loading files from Bases...')
+    console.log('🔍 [CommandPalette] useEffect triggered - open:', open, 'dataManager:', !!dataManager, 'cached:', basesFiles.length > 0)
+    if (open && dataManager && basesFiles.length === 0) {
+      console.log('🔍 [CommandPalette] Loading files from Bases (cache miss)...')
       dataManager.getAllFiles()
         .then(files => {
           console.log('📁 [CommandPalette] Loaded', files.length, 'files from Bases')
@@ -753,10 +753,12 @@ Best regards,
           // Fallback to current file tree
           setBasesFiles(flattenFileTree(fileTree))
         })
+    } else if (open && basesFiles.length > 0) {
+      console.log('✅ [CommandPalette] Using cached files:', basesFiles.length)
     } else {
       console.log('⏭️ [CommandPalette] Skipping file load - open:', open, 'dataManager:', !!dataManager)
     }
-  }, [open, dataManager, fileTree])
+  }, [open, dataManager]) // Removed fileTree to prevent excessive re-runs
 
   // Filter files as user types
   useEffect(() => {
