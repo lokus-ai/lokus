@@ -62,6 +62,7 @@ import BacklinksPanel from "./BacklinksPanel.jsx";
 import { DailyNotesPanel, NavigationButtons, DatePickerModal } from "../components/DailyNotes/index.js";
 import { ImageViewerTab } from "../components/ImageViewer/ImageViewerTab.jsx";
 import { isImageFile, findImageFiles } from "../utils/imageUtils.js";
+import TagManagementModal from "../components/TagManagementModal.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -295,7 +296,7 @@ function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
 }
 
 // --- File Entry Component ---
-function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory }) {
+function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent }) {
   const { attributes, listeners, setNodeRef: draggableRef, isDragging } = useDraggable({
     id: entry.path,
     data: { type: "file-entry", entry },
@@ -377,7 +378,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
     } catch (e) { }
   };
 
-  const handleFileContextAction = async (action, data) => {
+  const handleFileContextAction = useCallback(async (action, data) => {
     const { file } = data;
 
     switch (action) {
@@ -385,7 +386,26 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         onFileClick(file);
         break;
       case 'openToSide':
-        // TODO: Implement open to side functionality
+        // Enable split view and open file in right pane
+        setUseSplitView(true);
+        setRightPaneFile(file.path);
+
+        // Set title (remove .md extension)
+        const fileName = getFilename(file.name);
+        setRightPaneTitle(fileName.replace(/\.md$/, ''));
+
+        // Load content if it's a markdown file
+        if (file.path.endsWith('.md') || file.path.endsWith('.txt')) {
+          try {
+            const content = await invoke('read_file_content', { path: file.path });
+            setRightPaneContent(content || '');
+          } catch (err) {
+            console.error('Failed to load file content:', err);
+            setRightPaneContent('');
+          }
+        } else {
+          setRightPaneContent('');
+        }
         break;
       case 'viewHistory':
         if (onViewHistory && file.type === 'file') {
@@ -457,9 +477,30 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       case 'shareTeams':
         // TODO: Implement sharing functionality
         break;
+      case 'addTag':
+      case 'manageTags':
+        // Open tag management modal for markdown files
+        if (file && (file.name.endsWith('.md') || file.name.endsWith('.markdown'))) {
+          setTagModalFile(file);
+          setShowTagModal(true);
+        }
+        break;
       default:
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    onFileClick,
+    setUseSplitView,
+    setRightPaneFile,
+    setRightPaneTitle,
+    setRightPaneContent,
+    onViewHistory,
+    onRefresh,
+    setTagModalFile,
+    setShowTagModal
+    // Note: onCreateFileHere, onCreateFolderHere, onRename excluded to prevent infinite loop
+    // They're accessible via closure and don't need to be in deps
+  ]);
 
   return (
     <li style={{ paddingLeft: `${level * 1.25}rem` }}>
@@ -506,6 +547,12 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
               renamingPath={renamingPath}
               setRenamingPath={setRenamingPath}
               onViewHistory={onViewHistory}
+              setTagModalFile={setTagModalFile}
+              setShowTagModal={setShowTagModal}
+              setUseSplitView={setUseSplitView}
+              setRightPaneFile={setRightPaneFile}
+              setRightPaneTitle={setRightPaneTitle}
+              setRightPaneContent={setRightPaneContent}
             />
           ))}
         </ul>
@@ -515,7 +562,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 }
 
 // --- File Tree View Component ---
-function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm, keymap, renamingPath, setRenamingPath, onViewHistory }) {
+function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent }) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -563,6 +610,12 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
             renamingPath={renamingPath}
             setRenamingPath={setRenamingPath}
             onViewHistory={onViewHistory}
+            setTagModalFile={setTagModalFile}
+            setShowTagModal={setShowTagModal}
+            setUseSplitView={setUseSplitView}
+            setRightPaneFile={setRightPaneFile}
+            setRightPaneTitle={setRightPaneTitle}
+            setRightPaneContent={setRightPaneContent}
           />
         ))}
       </ul>
@@ -842,6 +895,8 @@ function WorkspaceWithScope({ path }) {
   const [showBases, setShowBases] = useState(false);
   const [showMarketplace, setShowMarketplace] = useState(false);
   const [showGmail, setShowGmail] = useState(false);
+  const [showTagModal, setShowTagModal] = useState(false);
+  const [tagModalFile, setTagModalFile] = useState(null);
   // Graph view now opens as a tab instead of sidebar panel
   const [showGraphView, setShowGraphView] = useState(false);
   const [showDailyNotesPanel, setShowDailyNotesPanel] = useState(false);
@@ -3688,6 +3743,12 @@ function WorkspaceWithScope({ path }) {
                         renamingPath={renamingPath}
                         setRenamingPath={setRenamingPath}
                         onViewHistory={toggleVersionHistory}
+                        setTagModalFile={setTagModalFile}
+                        setShowTagModal={setShowTagModal}
+                        setUseSplitView={setUseSplitView}
+                        setRightPaneFile={setRightPaneFile}
+                        setRightPaneTitle={setRightPaneTitle}
+                        setRightPaneContent={setRightPaneContent}
                       />
                     </div>
                   </ContextMenuTrigger>
@@ -4484,6 +4545,20 @@ function WorkspaceWithScope({ path }) {
         onClose={() => setShowDatePickerModal(false)}
         onDateSelect={handleOpenDailyNoteByDate}
         workspacePath={path}
+      />
+
+      {/* Tag Management Modal */}
+      <TagManagementModal
+        isOpen={showTagModal}
+        onClose={() => {
+          setShowTagModal(false);
+          setTagModalFile(null);
+        }}
+        file={tagModalFile}
+        onTagsUpdated={(file, tags) => {
+          // Refresh file tree and Bases to show updated tags
+          setRefreshId(prev => prev + 1);
+        }}
       />
 
       {/* Pluginable Status Bar - replaces the old Obsidian status bar */}

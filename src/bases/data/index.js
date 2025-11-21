@@ -288,6 +288,15 @@ export class BasesDataManager {
           };
         });
 
+      // Enrich files with properties from PropertyIndexer
+      // This connects the pre-indexed frontmatter data without re-parsing files
+      if (this.propertyIndexer) {
+        results.forEach(file => {
+          const indexedProperties = this.propertyIndexer.getIndex().getFileProperties(file.path);
+          // Merge indexed properties with cached properties (cached takes precedence)
+          file.properties = { ...indexedProperties, ...file.properties };
+        });
+      }
 
       return results;
     } catch (error) {
