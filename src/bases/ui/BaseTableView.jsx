@@ -1038,8 +1038,8 @@ export default function BaseTableView({
 
       {/* Modern clean table with Notion/Linear aesthetic */}
       <div className="flex-1 bg-app-bg relative" style={{ overflow: 'auto' }}>
-        <div style={{ display: 'inline-block', minWidth: '100%' }}>
-          <table className="w-full border-separate" style={{ borderSpacing: 0 }}>
+        <div style={{ display: 'inline-block', minWidth: 'max-content' }}>
+          <table className="border-separate" style={{ borderSpacing: 0, width: 'max-content', minWidth: '100%' }}>
           {/* Table header */}
           <thead className="sticky top-0 z-10 bg-app-bg border-b-2 border-app-border">
             <tr>
