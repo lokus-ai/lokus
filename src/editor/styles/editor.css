@@ -155,8 +155,9 @@
 
 .tableWrapper th,
 .ProseMirror th {
-    background: var(--editor-table-header-bg, rgb(var(--panel))) !important;
+    background: var(--editor-table-header-bg, rgb(var(--panel-secondary))) !important;
     font-weight: 600;
+    color: rgb(var(--text)) !important;
 }
 .tableWrapper .selectedCell::after,
 .ProseMirror .selectedCell::after {

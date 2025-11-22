@@ -77,7 +77,7 @@ class LiveEditorSettings {
       // Tables
       tableBorder: '#dee2e6',
       tableBorderWidth: 1,
-      tableHeaderBg: '#f8f9fa',
+      tableHeaderBg: null, // null = use theme default (CSS fallback to --panel-secondary)
       tableCellPadding: 12,
 
       // Selection
@@ -97,6 +97,15 @@ class LiveEditorSettings {
 
       if (config && config.editorSettings) {
         // Merge saved settings with defaults
+        console.log('🎨 [LiveSettings] Loading saved editorSettings:', config.editorSettings.tableHeaderBg);
+
+        // Migration: Remove old tableHeaderBg light theme default (#f8f9fa)
+        // Let it use the theme's default color instead
+        if (config.editorSettings.tableHeaderBg === '#f8f9fa') {
+          console.log('🎨 [LiveSettings] Removing old light theme tableHeaderBg, will use theme default');
+          delete config.editorSettings.tableHeaderBg;
+        }
+
         this.settings = { ...this.defaultSettings, ...config.editorSettings };
       }
     } catch (e) {
@@ -183,7 +192,15 @@ class LiveEditorSettings {
     // Tables
     root.style.setProperty('--editor-table-border', this.settings.tableBorder);
     root.style.setProperty('--editor-table-border-width', this.settings.tableBorderWidth + 'px');
-    root.style.setProperty('--editor-table-header-bg', this.settings.tableHeaderBg);
+    // Only set header bg if customized (null = use CSS fallback to theme)
+    console.log('🎨 [LiveSettings] tableHeaderBg value:', this.settings.tableHeaderBg);
+    if (this.settings.tableHeaderBg) {
+      console.log('🎨 [LiveSettings] Setting --editor-table-header-bg to:', this.settings.tableHeaderBg);
+      root.style.setProperty('--editor-table-header-bg', this.settings.tableHeaderBg);
+    } else {
+      console.log('🎨 [LiveSettings] Removing --editor-table-header-bg, will use CSS fallback');
+      root.style.removeProperty('--editor-table-header-bg');
+    }
     root.style.setProperty('--editor-table-cell-padding', this.settings.tableCellPadding + 'px');
 
     // Selection

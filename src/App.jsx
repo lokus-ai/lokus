@@ -105,8 +105,10 @@ function App() {
 
   return (
     <div className="app-root">
-      {/* Universal titlebar with drag region for all views */}
-      <div className="app-titlebar" data-tauri-drag-region></div>
+      {/* Titlebar only for Workspace - Preferences and Launcher don't need it */}
+      {!isPrefsWindow && activePath && (
+        <div className="app-titlebar" data-tauri-drag-region></div>
+      )}
 
       <div className="app-content">
         <AuthProvider>

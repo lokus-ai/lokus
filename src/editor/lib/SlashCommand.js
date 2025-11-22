@@ -14,6 +14,8 @@ const SlashCommand = Extension.create({
         pluginKey: SLASH_SUGGESTION_KEY,
         editor: this.editor,
         char: '/',
+        allowSpaces: false,
+        startOfLine: false,
         command: ({ editor, range, props }) => {
           props.command({ editor, range });
         },

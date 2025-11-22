@@ -73,7 +73,7 @@ export default function CommandPalette({
   const { templates } = useTemplates()
   const { process: processTemplate } = useTemplateProcessor()
   const { scopeMode, setLocalScope, setGlobalScope, getScopeStatus } = useFolderScope()
-  const { createBase, bases, loadBase } = useBases()
+  const { createBase, bases, loadBase, dataManager } = useBases()
 
   useEffect(() => {
     getActiveShortcuts().then(setShortcuts)
@@ -514,7 +514,11 @@ export default function CommandPalette({
   const [commandMode, setCommandMode] = useState(null) // 'send_email', 'search_emails', 'save_note', etc.
   const [commandParams, setCommandParams] = useState({}) // Parameters for current command
   const [filteredOptions, setFilteredOptions] = useState([]) // Options to show based on current input
-  
+
+  // Bases file search
+  const [basesFiles, setBasesFiles] = useState([])
+  const [filteredFiles, setFilteredFiles] = useState([])
+
   // Email templates
   const emailTemplates = {
     meeting: {
@@ -733,6 +737,51 @@ Best regards,
       })
       .slice(0, 8) // Show top 8 matches
   }, [recentEmails])
+
+  // Load files from Bases when palette opens (only if not cached)
+  useEffect(() => {
+    console.log('🔍 [CommandPalette] useEffect triggered - open:', open, 'dataManager:', !!dataManager, 'cached:', basesFiles.length > 0)
+    if (open && dataManager && basesFiles.length === 0) {
+      console.log('🔍 [CommandPalette] Loading files from Bases (cache miss)...')
+      dataManager.getAllFiles()
+        .then(files => {
+          console.log('📁 [CommandPalette] Loaded', files.length, 'files from Bases')
+          setBasesFiles(files)
+        })
+        .catch(error => {
+          console.error('❌ [CommandPalette] Failed to load files from Bases:', error)
+          // Fallback to current file tree
+          setBasesFiles(flattenFileTree(fileTree))
+        })
+    } else if (open && basesFiles.length > 0) {
+      console.log('✅ [CommandPalette] Using cached files:', basesFiles.length)
+    } else {
+      console.log('⏭️ [CommandPalette] Skipping file load - open:', open, 'dataManager:', !!dataManager)
+    }
+  }, [open, dataManager]) // Removed fileTree to prevent excessive re-runs
+
+  // Filter files as user types
+  useEffect(() => {
+    console.log('🔍 [CommandPalette] Filter effect - inputValue:', inputValue, 'commandMode:', commandMode, 'basesFiles.length:', basesFiles.length)
+
+    if (!inputValue.trim() || commandMode) {
+      console.log('⏭️ [CommandPalette] Clearing filtered files')
+      setFilteredFiles([])
+      return
+    }
+
+    const searchTerm = inputValue.toLowerCase()
+    const filtered = basesFiles
+      .filter(file => {
+        const fileName = file.name.toLowerCase()
+        const filePath = (file.path || '').toLowerCase()
+        return fileName.includes(searchTerm) || filePath.includes(searchTerm)
+      })
+      .slice(0, 10)
+
+    console.log('🔍 [CommandPalette] Filtered to', filtered.length, 'files for query:', inputValue, '- Files:', filtered.map(f => f.name))
+    setFilteredFiles(filtered)
+  }, [inputValue, commandMode, basesFiles])
 
   // Update filtered options based on current command mode and input
   useEffect(() => {
@@ -1424,26 +1473,22 @@ Best regards,
           </>
         )}
 
-        {/* All Files Search */}
-        {allFiles.length > 0 && (
+        {/* File Search - Only show when user is typing */}
+        {filteredFiles.length > 0 && inputValue.trim() && !commandMode && (
           <>
             <CommandSeparator />
             <CommandGroup heading="Files">
-              {allFiles.slice(0, 10).map((file) => (
+              {filteredFiles.map((file) => (
                 <CommandItem
                   key={file.path}
+                  value={file.name}
                   onSelect={() => openFileWithHistory(file)}
                 >
                   <FileText className="mr-2 h-4 w-4" />
                   <span>{file.name}</span>
-                  <CommandShortcut className="text-xs">{file.fullPath}</CommandShortcut>
+                  <CommandShortcut className="text-xs">{file.path}</CommandShortcut>
                 </CommandItem>
               ))}
-              {allFiles.length > 10 && (
-                <CommandItem disabled>
-                  <span className="text-app-muted">...and {allFiles.length - 10} more files</span>
-                </CommandItem>
-              )}
             </CommandGroup>
           </>
         )}

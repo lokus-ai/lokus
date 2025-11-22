@@ -34,6 +34,8 @@ export class BasesDataManager {
     this.fileMetadata = null;
     this.frontmatterParser = null;
     this.frontmatterCache = new Map(); // Cache for parsed frontmatter
+    this.fileListCache = null; // Cache for getAllFiles() results
+    this.fileListCacheTime = 0; // Timestamp of last cache
     this.isInitialized = false;
     this.workspacePath = null;
   }
@@ -198,6 +200,16 @@ export class BasesDataManager {
       throw new Error('BasesDataManager not initialized');
     }
 
+    // Check cache first (5 minute TTL)
+    const now = Date.now();
+    const cacheAge = now - this.fileListCacheTime;
+    if (this.fileListCache && cacheAge < this.options.cacheTimeout) {
+      console.log(`📋 [BasesDataManager] Using cached file list (age: ${Math.round(cacheAge / 1000)}s)`);
+      return this.fileListCache;
+    }
+
+    console.log('🔄 [BasesDataManager] Cache miss or expired, loading files from backend');
+
     try {
       // Use Tauri backend to get workspace files
       const { invoke } = await import('@tauri-apps/api/core');
@@ -288,6 +300,20 @@ export class BasesDataManager {
           };
         });
 
+      // Enrich files with properties from PropertyIndexer
+      // This connects the pre-indexed frontmatter data without re-parsing files
+      if (this.propertyIndexer) {
+        results.forEach(file => {
+          const indexedProperties = this.propertyIndexer.getIndex().getFileProperties(file.path);
+          // Merge indexed properties with cached properties (cached takes precedence)
+          file.properties = { ...indexedProperties, ...file.properties };
+        });
+      }
+
+      // Cache the results
+      this.fileListCache = results;
+      this.fileListCacheTime = Date.now();
+      console.log(`✅ [BasesDataManager] Cached ${results.length} files`);
 
       return results;
     } catch (error) {

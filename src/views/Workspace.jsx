@@ -62,6 +62,7 @@ import BacklinksPanel from "./BacklinksPanel.jsx";
 import { DailyNotesPanel, NavigationButtons, DatePickerModal } from "../components/DailyNotes/index.js";
 import { ImageViewerTab } from "../components/ImageViewer/ImageViewerTab.jsx";
 import { isImageFile, findImageFiles } from "../utils/imageUtils.js";
+import TagManagementModal from "../components/TagManagementModal.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -295,7 +296,7 @@ function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
 }
 
 // --- File Entry Component ---
-function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory }) {
+function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent }) {
   const { attributes, listeners, setNodeRef: draggableRef, isDragging } = useDraggable({
     id: entry.path,
     data: { type: "file-entry", entry },
@@ -324,13 +325,13 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
   const draggingClasses = isDragging ? 'opacity-50' : '';
 
   const onRename = () => {
-    // For files: just open them (the note header handles renaming)
-    if (!entry.is_directory) {
+    // For .md files: open them (the note header handles renaming)
+    if (!entry.is_directory && entry.path.endsWith('.md')) {
       onFileClick(entry);
       return;
     }
 
-    // For folders: enter inline rename mode
+    // For other files and folders: enter inline rename mode
     setRenamingPath(entry.path);
   };
 
@@ -377,7 +378,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
     } catch (e) { }
   };
 
-  const handleFileContextAction = async (action, data) => {
+  const handleFileContextAction = useCallback(async (action, data) => {
     const { file } = data;
 
     switch (action) {
@@ -385,7 +386,33 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         onFileClick(file);
         break;
       case 'openToSide':
-        // TODO: Implement open to side functionality
+        // Enable split view and open file in right pane
+        setUseSplitView(true);
+        setRightPaneFile(file.path);
+
+        // Set title (remove .md extension)
+        const fileName = getFilename(file.name);
+        setRightPaneTitle(fileName.replace(/\.md$/, ''));
+
+        // Load content if it's a markdown file
+        if (file.path.endsWith('.md') || file.path.endsWith('.txt')) {
+          // Check if this file is already loaded in the left pane to avoid duplicate load
+          if (file.path === activeFile && editorContent) {
+            console.log('✅ [Workspace] Reusing left pane content for right pane (same file)');
+            setRightPaneContent(editorContent);
+          } else {
+            try {
+              console.log('📄 [Workspace] Loading file content for right pane:', file.path);
+              const content = await invoke('read_file_content', { path: file.path });
+              setRightPaneContent(content || '');
+            } catch (err) {
+              console.error('Failed to load file content:', err);
+              setRightPaneContent('');
+            }
+          }
+        } else {
+          setRightPaneContent('');
+        }
         break;
       case 'viewHistory':
         if (onViewHistory && file.type === 'file') {
@@ -457,9 +484,30 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       case 'shareTeams':
         // TODO: Implement sharing functionality
         break;
+      case 'addTag':
+      case 'manageTags':
+        // Open tag management modal for markdown files
+        if (file && (file.name.endsWith('.md') || file.name.endsWith('.markdown'))) {
+          setTagModalFile(file);
+          setShowTagModal(true);
+        }
+        break;
       default:
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    onFileClick,
+    setUseSplitView,
+    setRightPaneFile,
+    setRightPaneTitle,
+    setRightPaneContent,
+    onViewHistory,
+    onRefresh,
+    setTagModalFile,
+    setShowTagModal
+    // Note: onCreateFileHere, onCreateFolderHere, onRename excluded to prevent infinite loop
+    // They're accessible via closure and don't need to be in deps
+  ]);
 
   return (
     <li style={{ paddingLeft: `${level * 1.25}rem` }}>
@@ -477,7 +525,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
                 className="obsidian-file-icon"
                 showChevron={true}
               />
-              {renamingPath === entry.path && entry.is_directory ? (
+              {renamingPath === entry.path ? (
                 <InlineRenameInput
                   initialValue={entry.name}
                   onSubmit={handleRenameSubmit}
@@ -506,6 +554,12 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
               renamingPath={renamingPath}
               setRenamingPath={setRenamingPath}
               onViewHistory={onViewHistory}
+              setTagModalFile={setTagModalFile}
+              setShowTagModal={setShowTagModal}
+              setUseSplitView={setUseSplitView}
+              setRightPaneFile={setRightPaneFile}
+              setRightPaneTitle={setRightPaneTitle}
+              setRightPaneContent={setRightPaneContent}
             />
           ))}
         </ul>
@@ -515,7 +569,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 }
 
 // --- File Tree View Component ---
-function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm, keymap, renamingPath, setRenamingPath, onViewHistory }) {
+function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent }) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -563,6 +617,12 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
             renamingPath={renamingPath}
             setRenamingPath={setRenamingPath}
             onViewHistory={onViewHistory}
+            setTagModalFile={setTagModalFile}
+            setShowTagModal={setShowTagModal}
+            setUseSplitView={setUseSplitView}
+            setRightPaneFile={setRightPaneFile}
+            setRightPaneTitle={setRightPaneTitle}
+            setRightPaneContent={setRightPaneContent}
           />
         ))}
       </ul>
@@ -842,6 +902,8 @@ function WorkspaceWithScope({ path }) {
   const [showBases, setShowBases] = useState(false);
   const [showMarketplace, setShowMarketplace] = useState(false);
   const [showGmail, setShowGmail] = useState(false);
+  const [showTagModal, setShowTagModal] = useState(false);
+  const [tagModalFile, setTagModalFile] = useState(null);
   // Graph view now opens as a tab instead of sidebar panel
   const [showGraphView, setShowGraphView] = useState(false);
   const [showDailyNotesPanel, setShowDailyNotesPanel] = useState(false);
@@ -926,15 +988,23 @@ function WorkspaceWithScope({ path }) {
             setActiveFile(tabsWithNames[0].path);
           }
 
-          // Set recent files (filter out special views, keep only actual files)
-          const actualFiles = session.open_tabs.filter(p =>
-            !p.startsWith('__') &&
-            (p.endsWith('.md') || p.endsWith('.txt') || p.endsWith('.canvas') || p.endsWith('.kanban'))
-          );
-          setRecentFiles(actualFiles.slice(0, 5).map(p => ({
-            path: p,
-            name: getFilename(p)
-          })));
+          // Load recent files from session state if available, otherwise use open tabs
+          if (session.recent_files && session.recent_files.length > 0) {
+            setRecentFiles(session.recent_files.slice(0, 5).map(p => ({
+              path: p,
+              name: getFilename(p)
+            })));
+          } else {
+            // Fallback: use open tabs as recent files
+            const actualFiles = session.open_tabs.filter(p =>
+              !p.startsWith('__') &&
+              (p.endsWith('.md') || p.endsWith('.txt') || p.endsWith('.canvas') || p.endsWith('.kanban'))
+            );
+            setRecentFiles(actualFiles.slice(0, 5).map(p => ({
+              path: p,
+              name: getFilename(p)
+            })));
+          }
         }
       });
     }
@@ -983,18 +1053,12 @@ function WorkspaceWithScope({ path }) {
       if (path) {
         const tabPaths = openTabs.map(t => t.path);
         const folderPaths = Array.from(expandedFolders);
-        invoke("save_session_state", { workspacePath: path, openTabs: tabPaths, expandedFolders: folderPaths });
-
-        // Update recent files list
-        const actualFiles = openTabs.filter(t =>
-          !t.path.startsWith('__') &&
-          (t.path.endsWith('.md') || t.path.endsWith('.txt') || t.path.endsWith('.canvas') || t.path.endsWith('.kanban'))
-        );
-        setRecentFiles(actualFiles.slice(0, 5));
+        const recentPaths = recentFiles.map(f => f.path);
+        invoke("save_session_state", { workspacePath: path, openTabs: tabPaths, expandedFolders: folderPaths, recentFiles: recentPaths });
       }
     }, 500);
     return () => clearTimeout(saveTimeout);
-  }, [openTabs, expandedFolders, path]);
+  }, [openTabs, expandedFolders, path, recentFiles]);
 
   // Fetch file tree
   useEffect(() => {
@@ -1382,6 +1446,34 @@ function WorkspaceWithScope({ path }) {
     }
   }, [openTabs, activeFile]);
 
+  // Direct keyboard handler for Ctrl+Tab (fallback if menu doesn't work)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+Tab or Ctrl+Shift+Tab
+      if (e.ctrlKey && e.key === 'Tab') {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (openTabs.length <= 1) return;
+
+        const currentIndex = openTabs.findIndex(tab => tab.path === activeFile);
+
+        if (e.shiftKey) {
+          // Previous tab
+          const prevIndex = currentIndex === 0 ? openTabs.length - 1 : currentIndex - 1;
+          setActiveFile(openTabs[prevIndex].path);
+        } else {
+          // Next tab
+          const nextIndex = (currentIndex + 1) % openTabs.length;
+          setActiveFile(openTabs[nextIndex].path);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true); // Use capture phase
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [openTabs, activeFile]);
+
   // Global right-click context menu
   // Removed global context menu handler - context menus are now component-specific
   // EditorContextMenu handles editor right-clicks, FileContextMenu handles file sidebar right-clicks
@@ -1433,6 +1525,15 @@ function WorkspaceWithScope({ path }) {
       });
       setActiveFile(filePath);
 
+      // Update recent files list
+      if (!filePath.startsWith('__') && (filePath.endsWith('.md') || filePath.endsWith('.txt') || filePath.endsWith('.canvas') || filePath.endsWith('.kanban'))) {
+        setRecentFiles(prev => {
+          const filtered = prev.filter(f => f.path !== filePath);
+          const newRecent = [{ path: filePath, name: fileName }, ...filtered].slice(0, 5);
+          return newRecent;
+        });
+      }
+
       // Jump to line after editor loads (only for non-image files)
       if (!isImageFile(filePath)) {
         setTimeout(() => {
@@ -1467,6 +1568,16 @@ function WorkspaceWithScope({ path }) {
       return newTabs;
     });
     setActiveFile(file.path);
+
+    // Update recent files list
+    if (!file.path.startsWith('__') && (file.path.endsWith('.md') || file.path.endsWith('.txt') || file.path.endsWith('.canvas') || file.path.endsWith('.kanban'))) {
+      const fileName = getFilename(file.name || file.path);
+      setRecentFiles(prev => {
+        const filtered = prev.filter(f => f.path !== file.path);
+        const newRecent = [{ path: file.path, name: fileName }, ...filtered].slice(0, 5);
+        return newRecent;
+      });
+    }
   };
 
   const handleReopenClosedTab = useCallback(() => {
@@ -1496,14 +1607,21 @@ function WorkspaceWithScope({ path }) {
         const fileName = getFilename(nextTab.name);
         setRightPaneTitle(fileName.replace(/\.md$/, ""));
         if (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt')) {
-          invoke("read_file_content", { path: nextTab.path })
-            .then(content => {
-              setRightPaneContent(content || '');
-            })
-            .catch(err => {
-              console.error('Failed to load right pane content:', err);
-              setRightPaneContent('');
-            });
+          // Check if this file is already loaded in the left pane
+          if (nextTab.path === path && editorContent) {
+            console.log('✅ [Workspace] Reusing left pane content for right pane (same file)');
+            setRightPaneContent(editorContent);
+          } else {
+            console.log('📄 [Workspace] Loading file content for right pane:', nextTab.path);
+            invoke("read_file_content", { path: nextTab.path })
+              .then(content => {
+                setRightPaneContent(content || '');
+              })
+              .catch(err => {
+                console.error('Failed to load right pane content:', err);
+                setRightPaneContent('');
+              });
+          }
         }
       }
     }
@@ -2634,12 +2752,19 @@ function WorkspaceWithScope({ path }) {
                                 nextTab.path.endsWith('.canvas') || nextTab.path.endsWith('.kanban');
             
             if (!isSpecialView && (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt'))) {
-              try {
-                const content = await invoke("read_file_content", { path: nextTab.path });
-                setRightPaneContent(content || '');
-              } catch (err) {
-                console.error('Failed to load right pane content:', err);
-                setRightPaneContent('');
+              // Check if this file is already loaded in the left pane
+              if (nextTab.path === activeFile && editorContent) {
+                console.log('✅ [Workspace] Reusing left pane content for right pane (same file)');
+                setRightPaneContent(editorContent);
+              } else {
+                try {
+                  console.log('📄 [Workspace] Loading file content for right pane:', nextTab.path);
+                  const content = await invoke("read_file_content", { path: nextTab.path });
+                  setRightPaneContent(content || '');
+                } catch (err) {
+                  console.error('Failed to load right pane content:', err);
+                  setRightPaneContent('');
+                }
               }
             } else {
               // For special views, just clear content
@@ -3639,6 +3764,12 @@ function WorkspaceWithScope({ path }) {
                         renamingPath={renamingPath}
                         setRenamingPath={setRenamingPath}
                         onViewHistory={toggleVersionHistory}
+                        setTagModalFile={setTagModalFile}
+                        setShowTagModal={setShowTagModal}
+                        setUseSplitView={setUseSplitView}
+                        setRightPaneFile={setRightPaneFile}
+                        setRightPaneTitle={setRightPaneTitle}
+                        setRightPaneContent={setRightPaneContent}
                       />
                     </div>
                   </ContextMenuTrigger>
@@ -3996,7 +4127,7 @@ function WorkspaceWithScope({ path }) {
                             </div>
                             <h3 className="font-medium text-app-text mb-2">New Note</h3>
                             <p className="text-sm text-app-muted">Create your first note and start writing</p>
-                            <div className="mt-3 text-xs text-app-muted/70">{platformService.formatShortcut("CommandOrControl+N")}</div>
+                            <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+N")}</div>
                           </button>
                           
                           <button
@@ -4019,7 +4150,7 @@ function WorkspaceWithScope({ path }) {
                             </div>
                             <h3 className="font-medium text-app-text mb-2">New Folder</h3>
                             <p className="text-sm text-app-muted">Organize your notes with folders</p>
-                            <div className="mt-3 text-xs text-app-muted/70">{platformService.formatShortcut("CommandOrControl+Shift+N")}</div>
+                            <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+Shift+N")}</div>
                           </button>
                           
                           <button
@@ -4031,7 +4162,7 @@ function WorkspaceWithScope({ path }) {
                             </div>
                             <h3 className="font-medium text-app-text mb-2">Command Palette</h3>
                             <p className="text-sm text-app-muted">Quick access to all commands</p>
-                            <div className="mt-3 text-xs text-app-muted/70">{platformService.formatShortcut("CommandOrControl+K")}</div>
+                            <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+K")}</div>
                           </button>
                         </div>
                       </div>
@@ -4435,6 +4566,20 @@ function WorkspaceWithScope({ path }) {
         onClose={() => setShowDatePickerModal(false)}
         onDateSelect={handleOpenDailyNoteByDate}
         workspacePath={path}
+      />
+
+      {/* Tag Management Modal */}
+      <TagManagementModal
+        isOpen={showTagModal}
+        onClose={() => {
+          setShowTagModal(false);
+          setTagModalFile(null);
+        }}
+        file={tagModalFile}
+        onTagsUpdated={(file, tags) => {
+          // Refresh file tree and Bases to show updated tags
+          setRefreshId(prev => prev + 1);
+        }}
       />
 
       {/* Pluginable Status Bar - replaces the old Obsidian status bar */}

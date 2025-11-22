@@ -880,22 +880,30 @@ const commandItems = [
 
 const slashCommand = {
   items: ({ query, editor }) => {
-    const matches = (title) => title.toLowerCase().startsWith(query.toLowerCase());
+    console.log('🔍 [SlashCommand] Query:', `"${query}"`);
+
+    const matches = (title) => {
+      const result = title.toLowerCase().includes(query.toLowerCase());
+      return result;
+    };
     const available = (_item) => true; // Always show; execution is guarded.
 
     // Get plugin slash commands
     const pluginCommandGroups = editorAPI.getSlashCommands();
-    
+
     // Combine core commands with plugin commands
     const allCommandGroups = [...commandItems, ...pluginCommandGroups];
-    
 
-    return allCommandGroups
+    const filtered = allCommandGroups
       .map((group) => ({
         ...group,
         commands: group.commands.filter((item) => matches(item.title) && available(item)),
       }))
       .filter((group) => group.commands.length > 0);
+
+    console.log('🔍 [SlashCommand] Filtered to', filtered.flatMap(g => g.commands).length, 'commands');
+
+    return filtered;
   },
 
   render: () => {
@@ -904,22 +912,24 @@ const slashCommand = {
 
     return {
       onStart: (props) => {
+        console.log('🎬 [SlashCommand] onStart - query:', props.query);
         // keep latest rect for sub‑popovers (e.g., table size picker)
         if (props.clientRect) lastClientRect = props.clientRect;
-        
+
         // Refresh plugin commands on each open in case they changed
         const currentItems = slashCommand.items(props);
         const enhancedProps = {
           ...props,
           items: currentItems
         };
-        
+
         component = new ReactRenderer(SlashCommandList, {
           props: enhancedProps,
           editor: props.editor,
         });
 
         if (!props.clientRect) {
+          console.warn('⚠️ [SlashCommand] No clientRect in onStart');
           return;
         }
 
@@ -932,9 +942,11 @@ const slashCommand = {
           trigger: "manual",
           placement: "bottom-start",
         });
+        console.log('✅ [SlashCommand] Popup created');
       },
 
       onUpdate(props) {
+        console.log('🔄 [SlashCommand] onUpdate - query:', props.query);
         // Refresh items with latest plugin commands
         const currentItems = slashCommand.items(props);
         const enhancedProps = {
@@ -944,7 +956,13 @@ const slashCommand = {
 
         component.updateProps(enhancedProps);
 
-        if (!props.clientRect || !popup) {
+        if (!props.clientRect) {
+          console.warn('⚠️ [SlashCommand] No clientRect in onUpdate');
+          return;
+        }
+
+        if (!popup) {
+          console.warn('⚠️ [SlashCommand] No popup in onUpdate');
           return;
         }
 
@@ -967,6 +985,7 @@ const slashCommand = {
       },
 
       onExit() {
+        console.log('❌ [SlashCommand] onExit - destroying popup');
         if (popup && popup[0]) popup[0].destroy();
         if (component) component.destroy();
       },

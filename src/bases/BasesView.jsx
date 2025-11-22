@@ -232,9 +232,10 @@ const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
-      {/* Consolidated Header - Single Line */}
-      <div className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-b border-app-border/50 bg-app-bg">
-        <div className="flex items-center gap-3">
+      {/* Consolidated Header - Responsive */}
+      <div className="flex-shrink-0 px-6 py-3 border-b border-app-border/50 bg-app-bg overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-wrap min-w-0">
           <h1 className="text-base font-semibold text-app-text">
             {activeBase.name}
           </h1>
@@ -318,7 +319,7 @@ const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {/* View Type Switcher - Always visible */}
           <div className="flex items-center bg-app-surface border border-app-border rounded">
             <button
@@ -469,11 +470,12 @@ const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
               </div>
             )}
           </div>
+          </div>
         </div>
       </div>
 
       {/* Main content - Conditional rendering based on view type */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-hidden">
         {/* Always render BaseTableView for dropdown functionality */}
         <div style={{ display: viewType === 'table' ? 'flex' : 'none' }} className="flex-1 h-full">
           <BaseTableView
