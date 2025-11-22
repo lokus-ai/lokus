@@ -48,6 +48,8 @@ import CreateTemplate from "../components/CreateTemplate.jsx";
 import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
 import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
 import SplitEditor from "../components/SplitEditor/SplitEditor.jsx";
+import PDFViewerTab from "../components/PDFViewer/PDFViewerTab.jsx";
+import { isPDFFile } from "../utils/pdfUtils.js";
 import { getFilename, getBasename, joinPath } from '../utils/pathUtils.js';
 import platformService from "../services/platform/PlatformService.js";
 import Gmail from "./Gmail.jsx";
@@ -998,7 +1000,7 @@ function WorkspaceWithScope({ path }) {
             // Fallback: use open tabs as recent files
             const actualFiles = session.open_tabs.filter(p =>
               !p.startsWith('__') &&
-              (p.endsWith('.md') || p.endsWith('.txt') || p.endsWith('.canvas') || p.endsWith('.kanban'))
+              (p.endsWith('.md') || p.endsWith('.txt') || p.endsWith('.canvas') || p.endsWith('.kanban') || p.endsWith('.pdf'))
             );
             setRecentFiles(actualFiles.slice(0, 5).map(p => ({
               path: p,
@@ -1114,6 +1116,18 @@ function WorkspaceWithScope({ path }) {
   useEffect(() => {
     if (activeFile) {
       try { window.__LOKUS_ACTIVE_FILE__ = activeFile; } catch {}
+
+      // Skip loading content for special views and binary files
+      if (
+        activeFile.startsWith('__') ||
+        activeFile.endsWith('.canvas') ||
+        activeFile.endsWith('.kanban') ||
+        activeFile.endsWith('.pdf') ||
+        isImageFile(activeFile)
+      ) {
+        console.log('Skipping content load for special view:', activeFile);
+        return;
+      }
 
       // Capture activeFile in local variable to prevent stale closure issues
       const fileToLoad = activeFile;
@@ -1526,7 +1540,7 @@ function WorkspaceWithScope({ path }) {
       setActiveFile(filePath);
 
       // Update recent files list
-      if (!filePath.startsWith('__') && (filePath.endsWith('.md') || filePath.endsWith('.txt') || filePath.endsWith('.canvas') || filePath.endsWith('.kanban'))) {
+      if (!filePath.startsWith('__') && (filePath.endsWith('.md') || filePath.endsWith('.txt') || filePath.endsWith('.canvas') || filePath.endsWith('.kanban') || filePath.endsWith('.pdf'))) {
         setRecentFiles(prev => {
           const filtered = prev.filter(f => f.path !== filePath);
           const newRecent = [{ path: filePath, name: fileName }, ...filtered].slice(0, 5);
@@ -1570,7 +1584,7 @@ function WorkspaceWithScope({ path }) {
     setActiveFile(file.path);
 
     // Update recent files list
-    if (!file.path.startsWith('__') && (file.path.endsWith('.md') || file.path.endsWith('.txt') || file.path.endsWith('.canvas') || file.path.endsWith('.kanban'))) {
+    if (!file.path.startsWith('__') && (file.path.endsWith('.md') || file.path.endsWith('.txt') || file.path.endsWith('.canvas') || file.path.endsWith('.kanban') || file.path.endsWith('.pdf'))) {
       const fileName = getFilename(file.name || file.path);
       setRecentFiles(prev => {
         const filtered = prev.filter(f => f.path !== file.path);
@@ -3892,6 +3906,16 @@ function WorkspaceWithScope({ path }) {
                           onFileOpen={handleFileOpen}
                         />
                       </div>
+                    ) : rightPaneFile && rightPaneFile.endsWith('.pdf') ? (
+                      <div className="flex-1 overflow-hidden">
+                        <PDFViewerTab
+                          file={rightPaneFile}
+                          onClose={() => {
+                            setOpenTabs(prev => prev.filter(tab => tab.path !== rightPaneFile));
+                            setRightPaneFile(null);
+                          }}
+                        />
+                      </div>
                     ) : rightPaneFile.startsWith('__graph__') ? (
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
                         <ProfessionalGraphView
@@ -3978,6 +4002,16 @@ function WorkspaceWithScope({ path }) {
                 workspacePath={path}
                 boardPath={activeFile}
                 onFileOpen={handleFileOpen}
+              />
+            </div>
+          ) : activeFile && activeFile.endsWith('.pdf') ? (
+            <div className="flex-1 overflow-hidden">
+              <PDFViewerTab
+                file={activeFile}
+                onClose={() => {
+                  setOpenTabs(prev => prev.filter(tab => tab.path !== activeFile));
+                  setActiveFile(null);
+                }}
               />
             </div>
           ) : activeFile && isImageFile(activeFile) ? (
@@ -4187,6 +4221,10 @@ function WorkspaceWithScope({ path }) {
                                     ) : file.path.endsWith('.canvas') || file.path.endsWith('.kanban') ? (
                                       <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
                                         <path fillRule="evenodd" d="M4.25 2A2.25 2.25 0 002 4.25v11.5A2.25 2.25 0 004.25 18h11.5A2.25 2.25 0 0018 15.75V4.25A2.25 2.25 0 0015.75 2H4.25z" clipRule="evenodd" />
+                                      </svg>
+                                    ) : file.path.endsWith('.pdf') ? (
+                                      <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M4 4a2 2 0 012-2h8l4 4v10a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8v-8h-4V4H6zm6 0v3h3l-3-3zM8 13a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1zm0-3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
                                       </svg>
                                     ) : (
                                       <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">

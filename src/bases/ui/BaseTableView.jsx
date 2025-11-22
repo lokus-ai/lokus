@@ -1045,7 +1045,12 @@ export default function BaseTableView({
 
       {/* Modern clean table with Notion/Linear aesthetic */}
       <div className="flex-1 bg-app-bg relative overflow-auto">
-        <table className="border-separate" style={{ borderSpacing: 0, width: '100%', minWidth: `${totalTableWidth}px` }}>
+        <div style={{ width: 'max-content', minWidth: '100%' }}>
+          <table className="border-separate" style={{
+            borderSpacing: 0,
+            width: `${totalTableWidth}px`,
+            tableLayout: 'fixed'
+          }}>
           {/* Table header */}
           <thead className="sticky top-0 z-10 bg-app-bg border-b-2 border-app-border">
             <tr>
@@ -1438,6 +1443,7 @@ export default function BaseTableView({
             )}
           </tbody>
         </table>
+        </div>
 
         {/* Empty state */}
         {scopedItems.length === 0 && (

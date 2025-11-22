@@ -107,6 +107,11 @@ pub fn read_file_content(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub fn read_binary_file(path: String) -> Result<Vec<u8>, String> {
+    fs::read(path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn write_file_content(path: String, content: String) -> Result<(), String> {
     // Write the file first
     fs::write(&path, &content).map_err(|e| e.to_string())?;

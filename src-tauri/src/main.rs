@@ -265,6 +265,7 @@ fn main() {
       handlers::files::create_file_in_workspace,
       handlers::files::create_folder_in_workspace,
       handlers::files::read_file_content,
+      handlers::files::read_binary_file,
       handlers::files::write_file_content,
       handlers::files::save_file_version_manual,
       handlers::files::rename_file,
