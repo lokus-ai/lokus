@@ -58,6 +58,12 @@ jobs:
           VITE_AUTH_BASE_URL: https://lokusmd.com
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH_BASE64: ${{ secrets.APPLE_API_KEY_PATH_BASE64 }}
         with:
           includeUpdaterJson: true
           tagName: ${{ github.ref_name }}
@@ -118,21 +124,6 @@ jobs:
             - Ubuntu/Debian: `.deb`
             - Fedora/RHEL: `.rpm`
             - Universal: `.AppImage`
-
-            ---
-
-            ## ⚠️ macOS Users: Remove Quarantine Attribute
-
-            Since this app is unsigned, macOS will block it by default. After downloading, run this command in Terminal:
-
-            ```bash
-            xattr -cr /Applications/Lokus.app
-            ```
-
-            Or if you installed it elsewhere:
-            ```bash
-            xattr -cr /path/to/Lokus.app
-            ```
 
             ---
 
