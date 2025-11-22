@@ -30,6 +30,8 @@ use std::path::PathBuf;
 struct SessionState {
     open_tabs: Vec<String>,
     expanded_folders: Vec<String>,
+    #[serde(default)]
+    recent_files: Vec<String>,
 }
 
 #[tauri::command]
@@ -133,10 +135,10 @@ fn force_launcher_mode(app: tauri::AppHandle) -> bool {
 }
 
 #[tauri::command]
-fn save_session_state(app: tauri::AppHandle, workspace_path: String, open_tabs: Vec<String>, expanded_folders: Vec<String>) {
+fn save_session_state(app: tauri::AppHandle, workspace_path: String, open_tabs: Vec<String>, expanded_folders: Vec<String>, recent_files: Vec<String>) {
     let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
     let _ = store.reload();
-    let session = SessionState { open_tabs, expanded_folders };
+    let session = SessionState { open_tabs, expanded_folders, recent_files };
 
     // Create workspace-specific key by hashing the path
     use std::collections::hash_map::DefaultHasher;
