@@ -339,6 +339,7 @@ pub fn create_directory(path: String, recursive: bool) -> Result<(), String> {
         fs::create_dir(path).map_err(|e| e.to_string())
     }
 }
+
 #[tauri::command]
 pub async fn read_all_files(paths: Vec<String>) -> Result<std::collections::HashMap<String, String>, String> {
     use futures::future::join_all;
@@ -360,7 +361,7 @@ pub async fn read_all_files(paths: Vec<String>) -> Result<std::collections::Hash
     }).collect();
 
     let results = join_all(futures).await;
-    
+
     let mut file_map = std::collections::HashMap::new();
     for result in results {
         if let Some((path, content)) = result {
