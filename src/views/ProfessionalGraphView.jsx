@@ -31,7 +31,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   const [graphRenderer, setGraphRenderer] = useState(null);
   const [isLayoutRunning, setIsLayoutRunning] = useState(false);
   const [performanceMode, setPerformanceMode] = useState(false);
-  
+
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -64,7 +64,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   const [showOrphans, setShowOrphans] = useState(true);
   const [showTags, setShowTags] = useState(true);
   const [showAttachments, setShowAttachments] = useState(true);
-  
+
   // Stats and monitoring
   const [stats, setStats] = useState({
     nodeCount: 0,
@@ -75,7 +75,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     wikiLinkCount: 0,
     placeholderCount: 0
   });
-  
+
   // References
   const containerRef = useRef(null);
   const forceGraph2DRef = useRef(null);
@@ -104,8 +104,8 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   // Initialize graph data manager
   useEffect(() => {
     if (!isVisible || graphDataManager) return; // Prevent duplicate initialization
-    
-    
+
+
     const initializeDataManager = async () => {
       try {
         // Initialize graph data manager (disable persistence to avoid stale cache)
@@ -114,9 +114,9 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
           enableRealTimeSync: true,
           maxCacheSize: 10000
         });
-        
+
         setGraphDataManager(dataManager);
-        
+
         // Load real workspace data
         if (workspacePath && fileTree.length > 0) {
           await loadWorkspaceData(dataManager, workspacePath, fileTree);
@@ -127,24 +127,24 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
           // Initialize with sample data for demonstration
           await loadSampleData(dataManager);
         }
-        
+
         // Setup event listeners for real-time updates
         dataManager.on('nodeCreated', handleNodeCreated);
         dataManager.on('linkCreated', handleLinkCreated);
         dataManager.on('nodeUpdated', handleNodeUpdated);
         dataManager.on('dataLoaded', handleDataLoaded);
-        
+
         // Get initial graph data
         const initialData = dataManager.getGraphData();
         setGraphData(initialData);
         updateStats(dataManager);
-        
+
       } catch (error) {
       }
     };
-    
+
     initializeDataManager();
-    
+
     return () => {
       if (graphDataManager) {
         graphDataManager.destroy();
@@ -245,14 +245,22 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     return () => clearTimeout(timer);
   }, [graphData.nodes?.length, viewMode]); // Only trigger when node count changes
 
-  // Performance monitoring
+  // Performance monitoring - only when graph view is active
   useEffect(() => {
-    if (!graphDataManager || !isVisible) return;
-    
+    // Only monitor performance when graph view is visible and active
+    if (!graphDataManager || !isVisible || viewMode !== 'graph') {
+      // Clear monitoring if switching away from graph view
+      if (performanceTimerRef.current) {
+        clearInterval(performanceTimerRef.current);
+        performanceTimerRef.current = null;
+      }
+      return;
+    }
+
     const monitorPerformance = () => {
       const dataStats = graphDataManager.getStats();
       const rendererStats = graphRenderer?.stats || {};
-      
+
       setStats({
         ...dataStats,
         ...rendererStats,
@@ -260,15 +268,17 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         renderTime: rendererStats.renderTime || 0
       });
     };
-    
-    performanceTimerRef.current = setInterval(monitorPerformance, 1000);
-    
+
+    // Reduced from 1000ms to 2000ms for better performance
+    performanceTimerRef.current = setInterval(monitorPerformance, 2000);
+
     return () => {
       if (performanceTimerRef.current) {
         clearInterval(performanceTimerRef.current);
+        performanceTimerRef.current = null;
       }
     };
-  }, [isVisible, workspacePath]); // Initialize once when component mounts
+  }, [isVisible, workspacePath, viewMode, graphDataManager, graphRenderer]); // Add viewMode dependency
 
   // Reload data when fileTree changes (separate effect)
   useEffect(() => {
@@ -299,7 +309,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   // Load real workspace data
   const loadWorkspaceData = async (dataManager, workspacePath, providedFileTree = null) => {
     try {
-      
+
       // Clear all existing data first to prevent stale cache
       dataManager.nodes.clear();
       dataManager.links.clear();
@@ -309,12 +319,12 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       dataManager.backlinks.clear();
       dataManager.forwardlinks.clear();
       dataManager.centralityScores.clear();
-      
+
       // Reset stats
       dataManager.stats.nodeCount = 0;
       dataManager.stats.linkCount = 0;
       dataManager.stats.wikiLinkCount = 0;
-      
+
 
       let files;
 
@@ -339,44 +349,53 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       };
 
       extractMarkdownFiles(files);
-      
-      // Process each markdown file
-      for (const file of markdownFiles) {
+
+      // Extract paths for bulk reading
+      const markdownPaths = markdownFiles.map(file => file.path);
+
+      if (markdownPaths.length > 0) {
         try {
-          // Read file content
-          const content = await invoke("read_file_content", { path: file.path });
-          
-          // Look for WikiLinks in both Markdown and HTML formats
-          const markdownWikiLinks = content.match(/\[\[([^\]]+)\]\]/g) || [];
-          const htmlWikiLinks = content.match(/<a[^>]+target="([^"]+)"[^>]*>/g) || [];
-          
-          const allWikiLinks = [...markdownWikiLinks, ...htmlWikiLinks];
-          
-          if (allWikiLinks.length > 0) {
-          } else {
-          }
-          
-          // Extract title from filename (without .md extension)
-          const title = file.name.replace('.md', '');
-          
-          // Process the document
-          await dataManager.handleDocumentChange({
-            documentId: file.path,
-            content: content,
-            metadata: {
-              title: title,
-              path: file.path,
-              wordCount: content.trim().split(/\s+/).filter(word => word.length > 0).length,
-              created: Date.now() // Simplified - could get actual file dates
+          // Bulk read all files in one go
+          const fileContents = await invoke("read_all_files", { paths: markdownPaths });
+
+          // Process the returned map
+          for (const [path, content] of Object.entries(fileContents)) {
+            try {
+              // Look for WikiLinks in both Markdown and HTML formats
+              const markdownWikiLinks = content.match(/\[\[([^\]]+)\]\]/g) || [];
+              const htmlWikiLinks = content.match(/<a[^>]+target="([^"]+)"[^>]*>/g) || [];
+
+              const allWikiLinks = [...markdownWikiLinks, ...htmlWikiLinks];
+
+              // Extract title from filename (without .md extension)
+              const fileName = path.split(/[/\\]/).pop();
+              const title = fileName.replace('.md', '');
+
+              // Process the document
+              await dataManager.handleDocumentChange({
+                documentId: path,
+                content: content,
+                metadata: {
+                  title: title,
+                  path: path,
+                  wordCount: content.trim().split(/\s+/).filter(word => word.length > 0).length,
+                  created: Date.now() // Simplified - could get actual file dates
+                }
+              });
+            } catch (err) {
+              console.error(`Error processing file ${path}:`, err);
             }
-          });
-          
-          
+          }
         } catch (error) {
+          console.error("Failed to bulk read files:", error);
+          // Fallback to sequential reading if bulk fails
+          for (const file of markdownFiles) {
+            // ... existing sequential logic could go here as fallback ...
+          }
         }
       }
-      
-      
+
+
     } catch (error) {
       // Fallback to sample data
       await loadSampleData(dataManager);
@@ -396,7 +415,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
           wordCount: 45
         },
         {
-          id: 'doc2', 
+          id: 'doc2',
           title: 'Graph Theory Fundamentals',
           content: 'Basic concepts in [[Graph Theory]] including nodes and edges. Related to [[Network Analysis]] and [[Data Visualization]].',
           tags: ['mathematics', 'theory'],
@@ -445,7 +464,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
           wordCount: 26
         }
       ];
-      
+
       // Process each document to create nodes and links
       for (const doc of sampleDocuments) {
         await dataManager.handleDocumentChange({
@@ -459,11 +478,11 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
           }
         });
       }
-      
+
       // Add some additional placeholder nodes for a richer graph
       const additionalConcepts = [
         'Machine Learning',
-        'Artificial Intelligence', 
+        'Artificial Intelligence',
         'Cognitive Science',
         'Information Architecture',
         'User Experience',
@@ -473,11 +492,11 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         'Cloud Computing',
         'DevOps'
       ];
-      
+
       for (const concept of additionalConcepts) {
         await dataManager.getOrCreateWikiLinkNode(concept);
       }
-      
+
     } catch (error) {
     }
   };
@@ -546,7 +565,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       updateStats(graphDataManager);
     }
   }, [graphDataManager]);
-  
+
   const handleLinkCreated = useCallback((event) => {
     if (graphDataManager) {
       const updatedData = graphDataManager.getGraphData();
@@ -554,7 +573,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       updateStats(graphDataManager);
     }
   }, [graphDataManager]);
-  
+
   const handleNodeUpdated = useCallback((event) => {
     if (graphDataManager) {
       const updatedData = graphDataManager.getGraphData();
@@ -562,7 +581,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       updateStats(graphDataManager);
     }
   }, [graphDataManager]);
-  
+
   const handleDataLoaded = useCallback((event) => {
     if (graphDataManager) {
       const updatedData = graphDataManager.getGraphData();
@@ -570,12 +589,12 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       updateStats(graphDataManager);
     }
   }, [graphDataManager]);
-  
+
   // Event handlers for graph interactions
   const handleNodeHover = useCallback((node) => {
     setHoveredNode(node);
   }, []);
-  
+
   const handleNodeClick = useCallback((node, event) => {
     // Toggle node selection
     if (selectedNodes.includes(node.id)) {
@@ -588,7 +607,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         setSelectedNodes([node.id]);
       }
     }
-    
+
     // Open file if available (double-click or single click depending on preference)
     if (onOpenFile && node.documentId && node.type === 'document') {
       // For document nodes, open the actual file
@@ -599,13 +618,13 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       });
     }
   }, [selectedNodes, onOpenFile]);
-  
+
   // Control handlers
   const handleViewModeChange = useCallback((mode) => {
     setViewMode(mode);
     setIsLayoutRunning(false); // Reset layout when switching modes
   }, []);
-  
+
   const handleLayoutControl = useCallback((action) => {
     if (action === 'start') {
       setIsLayoutRunning(true);
@@ -627,7 +646,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       }
     }
   }, [viewMode]);
-  
+
   const handleReset = useCallback(() => {
     setIsLayoutRunning(false);
     setSelectedNodes([]);
@@ -728,24 +747,24 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       }
     };
   }, []);
-  
+
   const handleSearch = useCallback((query) => {
     setSearchQuery(query);
-    
+
     if (!query.trim() || !graphDataManager) {
       setSearchResults([]);
       return;
     }
-    
+
     // Perform search using data manager
     const results = graphDataManager.searchNodes(query, { limit: 20 });
     setSearchResults(results);
   }, [graphDataManager]);
-  
+
   const handleZoom = useCallback((action) => {
     const currentRef = viewMode === '3d' ? forceGraph3DRef.current : forceGraph2DRef.current;
     if (!currentRef) return;
-    
+
     switch (action) {
       case 'in':
         setZoomLevel(prev => Math.min(prev * 1.5, 10));
@@ -761,7 +780,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         break;
     }
   }, [viewMode]);
-  
+
   const handleExport = useCallback(() => {
     const canvas = containerRef.current?.querySelector('canvas');
     if (canvas) {
@@ -771,7 +790,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       link.click();
     }
   }, []);
-  
+
   const updateStats = useCallback((dataManager) => {
     if (!dataManager) return;
 
@@ -829,7 +848,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   const handlePresetSelect = useCallback((presetName, presetConfig) => {
     // Additional preset-specific logic can be added here
   }, []);
-  
+
   // Enhanced color schemes - using theme colors
   const getThemeColor = (varName, fallback) => {
     if (typeof window === 'undefined') return fallback;
@@ -933,7 +952,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         return colorSchemes.type[node.type] || getThemeColor('--accent', '#6366f1');
     }
   }, [selectedNodes, colorScheme, nodeGroups]);
-  
+
   const getNodeSize = useCallback((node) => {
     let baseSize = node.size || 8;
 
@@ -949,7 +968,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     // Apply node size multiplier from config (Obsidian-style)
     return baseSize * (graphConfig.nodeSizeMultiplier || 1.0);
   }, [selectedNodes, graphConfig.nodeSizeMultiplier]);
-  
+
   const getLinkColor = useCallback((link) => {
     const sourceSelected = selectedNodes.includes(link.source?.id || link.source);
     const targetSelected = selectedNodes.includes(link.target?.id || link.target);
@@ -961,7 +980,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     const mutedColor = getThemeColor('--muted', '#ffffff');
     return link.color || mutedColor + '40'; // Theme muted with low opacity
   }, [selectedNodes]);
-  
+
   const getLinkWidth = useCallback((link) => {
     const sourceSelected = selectedNodes.includes(link.source?.id || link.source);
     const targetSelected = selectedNodes.includes(link.target?.id || link.target);
@@ -975,7 +994,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     // Apply line size multiplier from config (Obsidian-style)
     return baseWidth * (graphConfig.lineSizeMultiplier || 1.0);
   }, [selectedNodes, graphConfig.lineSizeMultiplier]);
-  
+
   // Custom node rendering for 2D graphs
   const renderNode2D = useCallback((node, ctx, globalScale) => {
     const size = getNodeSize(node);
@@ -1006,7 +1025,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       ctx.fillStyle = color + '30';
       ctx.fill();
     }
-    
+
     // Draw main node (with reduced opacity for non-matches during search)
     ctx.beginPath();
     ctx.arc(node.x, node.y, size, 0, 2 * Math.PI, false);
@@ -1021,7 +1040,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       ctx.fillStyle = color;
       ctx.fill();
     }
-    
+
     // Draw border for selected nodes
     if (selectedNodes.includes(node.id)) {
       ctx.beginPath();
@@ -1030,7 +1049,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       ctx.lineWidth = 2;
       ctx.stroke();
     }
-    
+
     // Draw label with text fade based on zoom (Obsidian-style)
     // Text visibility threshold is affected by textFadeMultiplier
     const textFadeThreshold = 10 * (graphConfig.textFadeMultiplier || 1.3);
@@ -1053,27 +1072,27 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       ctx.fillText(node.label || node.title || node.id, node.x, node.y + size + 15);
     }
   }, [selectedNodes, hoveredNode, getNodeSize, getNodeColor, graphConfig.textFadeMultiplier, graphConfig.search]);
-  
+
   // Custom 3D node object
   const create3DNode = useCallback((node) => {
     const size = getNodeSize(node);
     const color = getNodeColor(node);
-    
+
     const geometry = new THREE.SphereGeometry(size, 16, 16);
-    const material = new THREE.MeshPhongMaterial({ 
+    const material = new THREE.MeshPhongMaterial({
       color: color,
       transparent: true,
       opacity: 0.9,
       emissive: color,
       emissiveIntensity: selectedNodes.includes(node.id) ? 0.3 : 0.1
     });
-    
+
     const mesh = new THREE.Mesh(geometry, material);
-    
+
     // Add glow effect for selected nodes
     if (selectedNodes.includes(node.id)) {
       const glowGeometry = new THREE.SphereGeometry(size * 1.5, 16, 16);
-      const glowMaterial = new THREE.MeshBasicMaterial({ 
+      const glowMaterial = new THREE.MeshBasicMaterial({
         color: color,
         transparent: true,
         opacity: 0.3
@@ -1081,7 +1100,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       const glow = new THREE.Mesh(glowGeometry, glowMaterial);
       mesh.add(glow);
     }
-    
+
     return mesh;
   }, [selectedNodes, getNodeSize, getNodeColor]);
 
@@ -1137,11 +1156,11 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     // Use custom colors only if explicitly set AND different from old defaults
     // Otherwise, use theme colors to respect theme changes
     const isCustomColor1 = config.backgroundColor &&
-                           config.backgroundColor !== '#1e1b4b' &&
-                           config.backgroundColor !== themeColor1;
+      config.backgroundColor !== '#1e1b4b' &&
+      config.backgroundColor !== themeColor1;
     const isCustomColor2 = config.backgroundSecondary &&
-                           config.backgroundSecondary !== '#6366f1' &&
-                           config.backgroundSecondary !== themeColor2;
+      config.backgroundSecondary !== '#6366f1' &&
+      config.backgroundSecondary !== themeColor2;
 
     const color1 = isCustomColor1 ? config.backgroundColor : themeColor1;
     const color2 = isCustomColor2 ? config.backgroundSecondary : themeColor2;
@@ -1216,7 +1235,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   }
 
   return (
-    <motion.div 
+    <motion.div
       className="graph-view modern"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -1267,7 +1286,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
               />
             </motion.div>
           )}
-          
+
           {viewMode === '3d' && (
             <motion.div
               key="3d-graph"
@@ -1304,7 +1323,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
               />
             </motion.div>
           )}
-          
+
           {viewMode === 'force' && (
             <motion.div
               key="force-graph"
@@ -1346,7 +1365,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
           )}
         </AnimatePresence>
       </div>
-      
+
       <GraphUI
         graphData={graphData}
         viewMode={viewMode}

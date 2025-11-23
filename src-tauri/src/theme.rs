@@ -23,6 +23,7 @@ pub enum ThemeError {
     #[error("Validation error: {0}")]
     Validation(String),
     #[error("Theme already exists: {0}")]
+    #[allow(dead_code)]
     AlreadyExists(String),
 }
 

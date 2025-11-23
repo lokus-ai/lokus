@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https: wss:; media-src 'self' data: blob:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests;"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https: wss:; media-src 'self' data: blob:; object-src 'none'; frame-src 'self' blob:; base-uri 'self'; form-action 'none'; upgrade-insecure-requests;"
     }
   },
   "bundle": {
@@ -42,11 +42,15 @@
       "digestAlgorithm": "sha256",
       "timestampUrl": "http://timestamp.sectigo.com",
       "wix": {
-        "language": ["en-US"]
+        "language": [
+          "en-US"
+        ]
       },
       "nsis": {
         "installerIcon": "icons/icon.ico",
-        "languages": ["English"],
+        "languages": [
+          "English"
+        ],
         "displayLanguageSelector": false
       }
     }

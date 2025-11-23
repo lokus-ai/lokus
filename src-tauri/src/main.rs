@@ -20,6 +20,8 @@ mod oauth_server;
 mod secure_storage;
 mod api_server;
 mod sync;
+mod credentials;
+mod file_locking;
 
 use windows::{open_workspace_window, open_preferences_window, open_launcher_window};
 use tauri::Manager;
@@ -279,6 +281,7 @@ fn main() {
       handlers::files::read_directory,
       handlers::files::write_file,
       handlers::files::create_directory,
+      handlers::files::read_all_files,
       handlers::platform_files::platform_reveal_in_file_manager,
       handlers::platform_files::platform_open_terminal,
       handlers::platform_files::get_platform_information,
@@ -300,6 +303,9 @@ fn main() {
       sync::git_get_current_branch,
       sync::git_force_push,
       sync::git_force_pull,
+      credentials::store_git_credentials,
+      credentials::retrieve_git_credentials,
+      credentials::delete_git_credentials,
       clipboard::clipboard_write_text,
       clipboard::clipboard_read_text,
       clipboard::clipboard_write_html,

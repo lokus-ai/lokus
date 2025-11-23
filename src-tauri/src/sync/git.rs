@@ -311,16 +311,26 @@ pub fn git_push(
 /// * `Ok(String)` - Success message (either "Already up to date" or "Fast-forward merge completed")
 /// * `Err(String)` - Error message if pull fails or merge required
 #[tauri::command]
-pub fn git_pull(
+pub async fn git_pull(
     workspace_path: String,
+    workspace_id: String,
     remote_name: String,
     branch_name: String,
-    username: String,
-    token: String,
 ) -> Result<String, String> {
+    println!("[Sync] Pulling from remote '{}' for workspace '{}'...", remote_name, workspace_id);
+
+    // Retrieve credentials from secure storage
+    let credentials = crate::credentials::retrieve_git_credentials(workspace_id.clone())
+        .await
+        .map_err(|e| {
+            format!("Failed to retrieve git credentials. Please configure credentials in settings. Error: {}", e)
+        })?;
+
+    let username = credentials.username;
+    let token = credentials.token;
+
     println!("[Sync] Pull parameters: remote={}, branch={}, username={}, token_length={}",
         remote_name, branch_name, username, token.len());
-    println!("[Sync] Pulling from remote '{}'...", remote_name);
 
     let repo = Repository::open(&workspace_path)
         .map_err(|e| GitError::from_git2_error(e, "open repository").to_json_string())?;

@@ -1,363 +1,366 @@
 /**
- * Plugin utility functions for Lokus
+ * Secure Plugin Sandbox using iframe isolation
+ * 
+ * This implementation uses iframe sandboxing with postMessage communication
+ * to properly isolate plugin code execution and enforce permissions.
  */
 
-/**
- * Validate plugin manifest structure
- * @param {Object} manifest - Plugin manifest object
- * @returns {Object} - { valid: boolean, errors: string[] }
- */
-export function validatePluginManifest(manifest) {
-  const errors = [];
-  const requiredFields = ['id', 'name', 'version', 'description', 'author'];
-  
-  // Check required fields
-  for (const field of requiredFields) {
-    if (!manifest[field]) {
-      errors.push(`Missing required field: ${field}`);
-    }
+export class SecurePluginSandbox {
+  constructor(plugin) {
+    this.plugin = plugin;
+    this.iframe = null;
+    this.messageHandlers = new Map();
+    this.messageId = 0;
+    this.initialized = false;
   }
-  
-  // Validate ID format (alphanumeric with hyphens)
-  if (manifest.id && !/^[a-z0-9-]+$/.test(manifest.id)) {
-    errors.push('Plugin ID must contain only lowercase letters, numbers, and hyphens');
-  }
-  
-  // Validate version format (semver)
-  if (manifest.version && !/^\d+\.\d+\.\d+/.test(manifest.version)) {
-    errors.push('Version must follow semantic versioning (x.y.z)');
-  }
-  
-  // Validate permissions array
-  if (manifest.permissions && !Array.isArray(manifest.permissions)) {
-    errors.push('Permissions must be an array');
-  }
-  
-  // Validate dependencies array
-  if (manifest.dependencies && !Array.isArray(manifest.dependencies)) {
-    errors.push('Dependencies must be an array');
-  }
-  
-  // Validate UI configuration
-  if (manifest.ui) {
-    if (manifest.ui.panels && !Array.isArray(manifest.ui.panels)) {
-      errors.push('UI panels must be an array');
-    }
-    
-    if (manifest.ui.panels) {
-      manifest.ui.panels.forEach((panel, index) => {
-        if (!panel.id) {
-          errors.push(`Panel ${index} is missing required field: id`);
-        }
-        if (!panel.title) {
-          errors.push(`Panel ${index} is missing required field: title`);
-        }
-        if (!panel.type) {
-          errors.push(`Panel ${index} is missing required field: type`);
-        }
-        if (!['react-component', 'iframe', 'webview'].includes(panel.type)) {
-          errors.push(`Panel ${index} has invalid type: ${panel.type}`);
-        }
-      });
-    }
-  }
-  
-  return {
-    valid: errors.length === 0,
-    errors
-  };
-}
 
-/**
- * Check if a plugin has conflicts with installed plugins
- * @param {Object} plugin - Plugin to check
- * @param {Array} installedPlugins - Array of installed plugins
- * @returns {Array} - Array of conflicting plugin IDs
- */
-export function checkPluginConflicts(plugin, installedPlugins) {
-  const conflicts = [];
-  
-  if (!plugin.conflicts || !Array.isArray(plugin.conflicts)) {
-    return conflicts;
+  /**
+   * Initialize the sandbox iframe
+   */
+  async initialize() {
+    if (this.initialized) return;
+
+    // Create isolated iframe
+    this.iframe = document.createElement('iframe');
+    this.iframe.sandbox = 'allow-scripts'; // Minimal permissions
+    this.iframe.style.display = 'none';
+
+    // Create sandbox HTML with plugin code
+    const sandboxHTML = this.createSandboxHTML();
+    const blob = new Blob([sandboxHTML], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+
+    this.iframe.src = url;
+    document.body.appendChild(this.iframe);
+
+    // Setup message listener
+    window.addEventListener('message', this.handleMessage.bind(this));
+
+    // Wait for sandbox to be ready
+    await this.waitForReady();
+    this.initialized = true;
   }
-  
-  for (const conflictId of plugin.conflicts) {
-    const conflictingPlugin = installedPlugins.find(p => p.id === conflictId && p.enabled);
-    if (conflictingPlugin) {
-      conflicts.push(conflictingPlugin);
+
+  /**
+   * Create sandbox HTML with restricted API
+   */
+  createSandboxHTML() {
+    const restrictedAPI = this.createRestrictedAPI();
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline';">
+      </head>
+      <body>
+        <script>
+          // Restricted global environment
+          (function() {
+            'use strict';
+            
+            // Remove dangerous globals
+            window.eval = undefined;
+            window.Function = undefined;
+            window.XMLHttpRequest = undefined;
+            window.fetch = undefined;
+            window.WebSocket = undefined;
+            window.Worker = undefined;
+            window.SharedWorker = undefined;
+            window.ServiceWorker = undefined;
+            
+            // Lokus API based on permissions
+            const lokusAPI = ${restrictedAPI};
+            
+            // Message handler for plugin code execution
+            window.addEventListener('message', async function(event) {
+              if (event.data.type === 'EXECUTE_PLUGIN') {
+                try {
+                  // Execute plugin code in restricted environment
+                  const pluginFunction = new Function('lokus', event.data.code);
+                  const result = await pluginFunction(lokusAPI);
+                  
+                  window.parent.postMessage({
+                    type: 'PLUGIN_RESULT',
+                    id: event.data.id,
+                    success: true,
+                    result: result
+                  }, '*');
+                } catch (error) {
+                  window.parent.postMessage({
+                    type: 'PLUGIN_RESULT',
+                    id: event.data.id,
+                    success: false,
+                    error: error.message
+                  }, '*');
+                }
+              } else if (event.data.type === 'PING') {
+                window.parent.postMessage({ type: 'PONG' }, '*');
+              }
+            });
+            
+            // Signal ready
+            window.parent.postMessage({ type: 'SANDBOX_READY' }, '*');
+          })();
+        </script>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Create restricted API based on plugin permissions
+   */
+  createRestrictedAPI() {
+    const api = {
+      pluginId: this.plugin.id,
+      version: '1.0.0'
+    };
+
+    // Add APIs based on permissions
+    const permissions = this.plugin.permissions || [];
+
+    if (permissions.includes('file-system')) {
+      api.fileSystem = this.createFileSystemAPI();
+    }
+
+    if (permissions.includes('editor-extensions')) {
+      api.editor = this.createEditorAPI();
+    }
+
+    if (permissions.includes('ui-extensions')) {
+      api.ui = this.createUIAPI();
+    }
+
+    // Network is never allowed for security
+    // If needed, use controlled proxy through main app
+
+    return JSON.stringify(api);
+  }
+
+  /**
+   * Create restricted file system API
+   */
+  createFileSystemAPI() {
+    return {
+      readFile: 'function(path) { return window.parent.postMessage({ type: "API_CALL", method: "fileSystem.readFile", args: [path] }, "*"); }',
+      writeFile: 'function(path, content) { return window.parent.postMessage({ type: "API_CALL", method: "fileSystem.writeFile", args: [path, content] }, "*"); }',
+      listFiles: 'function(path) { return window.parent.postMessage({ type: "API_CALL", method: "fileSystem.listFiles", args: [path] }, "*"); }'
+    };
+  }
+
+  /**
+   * Create restricted editor API
+   */
+  createEditorAPI() {
+    return {
+      insertText: 'function(text) { return window.parent.postMessage({ type: "API_CALL", method: "editor.insertText", args: [text] }, "*"); }',
+      getSelection: 'function() { return window.parent.postMessage({ type: "API_CALL", method: "editor.getSelection", args: [] }, "*"); }',
+      replaceSelection: 'function(text) { return window.parent.postMessage({ type: "API_CALL", method: "editor.replaceSelection", args: [text] }, "*"); }'
+    };
+  }
+
+  /**
+   * Create restricted UI API
+   */
+  createUIAPI() {
+    return {
+      showNotification: 'function(message, type) { return window.parent.postMessage({ type: "API_CALL", method: "ui.showNotification", args: [message, type] }, "*"); }',
+      showDialog: 'function(options) { return window.parent.postMessage({ type: "API_CALL", method: "ui.showDialog", args: [options] }, "*"); }'
+    };
+  }
+
+  /**
+   * Wait for sandbox to be ready
+   */
+  waitForReady() {
+    return new Promise((resolve) => {
+      const handler = (event) => {
+        if (event.data.type === 'SANDBOX_READY') {
+          window.removeEventListener('message', handler);
+          resolve();
+        }
+      };
+      window.addEventListener('message', handler);
+
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        window.removeEventListener('message', handler);
+        resolve();
+      }, 5000);
+    });
+  }
+
+  /**
+   * Handle messages from sandbox
+   */
+  handleMessage(event) {
+    if (event.source !== this.iframe?.contentWindow) return;
+
+    const { type, id, method, args, result, error, success } = event.data;
+
+    switch (type) {
+      case 'PLUGIN_RESULT':
+        const handler = this.messageHandlers.get(id);
+        if (handler) {
+          if (success) {
+            handler.resolve(result);
+          } else {
+            handler.reject(new Error(error));
+          }
+          this.messageHandlers.delete(id);
+        }
+        break;
+
+      case 'API_CALL':
+        this.handleAPICall(method, args, id);
+        break;
     }
   }
-  
-  return conflicts;
-}
 
-/**
- * Check if all plugin dependencies are satisfied
- * @param {Object} plugin - Plugin to check
- * @param {Array} installedPlugins - Array of installed plugins
- * @returns {Object} - { satisfied: boolean, missing: string[] }
- */
-export function checkPluginDependencies(plugin, installedPlugins) {
-  const missing = [];
-  
-  if (!plugin.dependencies || !Array.isArray(plugin.dependencies)) {
-    return { satisfied: true, missing: [] };
-  }
-  
-  for (const depId of plugin.dependencies) {
-    const dependency = installedPlugins.find(p => p.id === depId && p.enabled);
-    if (!dependency) {
-      missing.push(depId);
+  /**
+   * Handle API calls from plugin
+   */
+  async handleAPICall(method, args, id) {
+    try {
+      const [namespace, functionName] = method.split('.');
+      let result;
+
+      switch (namespace) {
+        case 'fileSystem':
+          result = await this.handleFileSystemCall(functionName, args);
+          break;
+        case 'editor':
+          result = await this.handleEditorCall(functionName, args);
+          break;
+        case 'ui':
+          result = await this.handleUICall(functionName, args);
+          break;
+        default:
+          throw new Error(`Unknown API namespace: ${namespace}`);
+      }
+
+      this.iframe.contentWindow.postMessage({
+        type: 'API_RESULT',
+        id,
+        success: true,
+        result
+      }, '*');
+    } catch (error) {
+      this.iframe.contentWindow.postMessage({
+        type: 'API_RESULT',
+        id,
+        success: false,
+        error: error.message
+      }, '*');
     }
   }
-  
-  return {
-    satisfied: missing.length === 0,
-    missing
-  };
-}
 
-/**
- * Sort plugins by various criteria
- * @param {Array} plugins - Array of plugins to sort
- * @param {string} sortBy - Sort criteria ('name', 'downloads', 'rating', 'updated')
- * @param {string} order - Sort order ('asc' or 'desc')
- * @returns {Array} - Sorted plugins array
- */
-export function sortPlugins(plugins, sortBy = 'name', order = 'asc') {
-  const sorted = [...plugins].sort((a, b) => {
-    let aVal, bVal;
-    
-    switch (sortBy) {
-      case 'name':
-        aVal = a.name.toLowerCase();
-        bVal = b.name.toLowerCase();
-        break;
-      case 'downloads':
-        aVal = a.downloads || 0;
-        bVal = b.downloads || 0;
-        break;
-      case 'rating':
-        aVal = a.rating || 0;
-        bVal = b.rating || 0;
-        break;
-      case 'updated':
-        aVal = new Date(a.lastUpdated || 0);
-        bVal = new Date(b.lastUpdated || 0);
-        break;
+  /**
+   * Handle file system API calls with permission checks
+   */
+  async handleFileSystemCall(functionName, args) {
+    if (!this.plugin.permissions?.includes('file-system')) {
+      throw new Error('Plugin does not have file-system permission');
+    }
+
+    // Import Tauri invoke only when needed
+    const { invoke } = await import('@tauri-apps/api/core');
+
+    switch (functionName) {
+      case 'readFile':
+        return await invoke('read_file_content', { path: args[0] });
+      case 'writeFile':
+        return await invoke('write_file', { path: args[0], content: args[1] });
+      case 'listFiles':
+        return await invoke('list_directory', { path: args[0] });
       default:
-        aVal = a.name.toLowerCase();
-        bVal = b.name.toLowerCase();
+        throw new Error(`Unknown file system function: ${functionName}`);
     }
-    
-    if (aVal < bVal) return order === 'asc' ? -1 : 1;
-    if (aVal > bVal) return order === 'asc' ? 1 : -1;
-    return 0;
-  });
-  
-  return sorted;
-}
+  }
 
-/**
- * Filter plugins by search query and criteria
- * @param {Array} plugins - Array of plugins to filter
- * @param {string} searchQuery - Search query string
- * @param {Object} filters - Filter criteria
- * @returns {Array} - Filtered plugins array
- */
-export function filterPlugins(plugins, searchQuery = '', filters = {}) {
-  let filtered = [...plugins];
-  
-  // Search filter
-  if (searchQuery.trim()) {
-    const query = searchQuery.toLowerCase();
-    filtered = filtered.filter(plugin => 
-      plugin.name.toLowerCase().includes(query) ||
-      plugin.description.toLowerCase().includes(query) ||
-      plugin.author.toLowerCase().includes(query) ||
-      (plugin.tags && plugin.tags.some(tag => tag.toLowerCase().includes(query)))
-    );
-  }
-  
-  // Category filter
-  if (filters.category && filters.category !== 'all') {
-    filtered = filtered.filter(plugin => plugin.category === filters.category);
-  }
-  
-  // Status filter
-  if (filters.status) {
-    switch (filters.status) {
-      case 'enabled':
-        filtered = filtered.filter(plugin => plugin.enabled);
-        break;
-      case 'disabled':
-        filtered = filtered.filter(plugin => !plugin.enabled);
-        break;
-      case 'installed':
-        // This would be used in marketplace to filter out already installed plugins
-        break;
+  /**
+   * Handle editor API calls
+   */
+  async handleEditorCall(functionName, args) {
+    if (!this.plugin.permissions?.includes('editor-extensions')) {
+      throw new Error('Plugin does not have editor-extensions permission');
     }
-  }
-  
-  // Rating filter
-  if (filters.minRating) {
-    filtered = filtered.filter(plugin => (plugin.rating || 0) >= filters.minRating);
-  }
-  
-  return filtered;
-}
 
-/**
- * Format plugin permissions for display
- * @param {Array} permissions - Array of permission strings
- * @returns {Array} - Array of formatted permission objects
- */
-export function formatPluginPermissions(permissions = []) {
-  const permissionMap = {
-    'file-system': {
-      label: 'File System Access',
-      description: 'Read and write files in your workspace',
-      risk: 'medium'
-    },
-    'network': {
-      label: 'Network Access',
-      description: 'Make requests to external services',
-      risk: 'medium'
-    },
-    'shell-commands': {
-      label: 'Shell Commands',
-      description: 'Execute system commands',
-      risk: 'high'
-    },
-    'editor-extensions': {
-      label: 'Editor Extensions',
-      description: 'Extend editor functionality',
-      risk: 'low'
-    },
-    'user-data': {
-      label: 'User Data Access',
-      description: 'Access your notes and personal data',
-      risk: 'high'
-    },
-    'settings': {
-      label: 'Settings Access',
-      description: 'Modify application settings',
-      risk: 'low'
-    },
-    'themes': {
-      label: 'Theme System',
-      description: 'Modify appearance and themes',
-      risk: 'low'
-    },
-    'notifications': {
-      label: 'Notifications',
-      description: 'Show system notifications',
-      risk: 'low'
-    },
-    'analytics': {
-      label: 'Analytics',
-      description: 'Collect usage statistics',
-      risk: 'medium'
-    }
-  };
-  
-  return permissions.map(permission => ({
-    id: permission,
-    ...permissionMap[permission] || {
-      label: permission.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()),
-      description: 'Unknown permission',
-      risk: 'unknown'
-    }
-  }));
-}
+    // Emit events that the editor can listen to
+    const event = new CustomEvent('plugin-editor-call', {
+      detail: { functionName, args, pluginId: this.plugin.id }
+    });
+    window.dispatchEvent(event);
 
-/**
- * Generate plugin component ID for safe rendering
- * @param {string} pluginId - Plugin ID
- * @param {string} componentName - Component name
- * @returns {string} - Safe component ID
- */
-export function generatePluginComponentId(pluginId, componentName) {
-  return `plugin-${pluginId}-${componentName}`.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
-}
-
-/**
- * Validate plugin settings schema
- * @param {Object} settings - Plugin settings object
- * @param {Object} schema - Settings schema
- * @returns {Object} - { valid: boolean, errors: string[] }
- */
-export function validatePluginSettings(settings, schema) {
-  const errors = [];
-  
-  if (!schema || typeof schema !== 'object') {
-    return { valid: true, errors: [] };
+    return { success: true };
   }
-  
-  for (const [key, definition] of Object.entries(schema)) {
-    const value = settings[key];
-    
-    // Check required fields
-    if (definition.required && (value === undefined || value === null)) {
-      errors.push(`Setting '${key}' is required`);
-      continue;
+
+  /**
+   * Handle UI API calls
+   */
+  async handleUICall(functionName, args) {
+    if (!this.plugin.permissions?.includes('ui-extensions')) {
+      throw new Error('Plugin does not have ui-extensions permission');
     }
-    
-    if (value !== undefined && value !== null) {
-      // Type validation
-      if (definition.type) {
-        const expectedType = definition.type;
-        const actualType = typeof value;
-        
-        if (expectedType === 'array' && !Array.isArray(value)) {
-          errors.push(`Setting '${key}' must be an array`);
-        } else if (expectedType !== 'array' && actualType !== expectedType) {
-          errors.push(`Setting '${key}' must be of type ${expectedType}, got ${actualType}`);
+
+    // Emit events that the UI can listen to
+    const event = new CustomEvent('plugin-ui-call', {
+      detail: { functionName, args, pluginId: this.plugin.id }
+    });
+    window.dispatchEvent(event);
+
+    return { success: true };
+  }
+
+  /**
+   * Execute plugin code in sandbox
+   */
+  async execute(code) {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+
+    const id = ++this.messageId;
+
+    return new Promise((resolve, reject) => {
+      this.messageHandlers.set(id, { resolve, reject });
+
+      this.iframe.contentWindow.postMessage({
+        type: 'EXECUTE_PLUGIN',
+        id,
+        code
+      }, '*');
+
+      // Timeout after 30 seconds
+      setTimeout(() => {
+        if (this.messageHandlers.has(id)) {
+          this.messageHandlers.delete(id);
+          reject(new Error('Plugin execution timeout'));
         }
-      }
-      
-      // Range validation for numbers
-      if (typeof value === 'number' && definition.range) {
-        const [min, max] = definition.range;
-        if (value < min || value > max) {
-          errors.push(`Setting '${key}' must be between ${min} and ${max}`);
-        }
-      }
-      
-      // Options validation
-      if (definition.options && !definition.options.includes(value)) {
-        errors.push(`Setting '${key}' must be one of: ${definition.options.join(', ')}`);
-      }
-    }
+      }, 30000);
+    });
   }
-  
-  return {
-    valid: errors.length === 0,
-    errors
-  };
+
+  /**
+   * Cleanup sandbox
+   */
+  destroy() {
+    if (this.iframe) {
+      document.body.removeChild(this.iframe);
+      this.iframe = null;
+    }
+    this.messageHandlers.clear();
+    this.initialized = false;
+  }
 }
 
 /**
- * Create a safe sandbox environment for plugin execution
- * @param {Object} plugin - Plugin object
- * @returns {Object} - Sandbox context
+ * Create a secure sandbox for plugin execution
+ * @param {Object} plugin - Plugin object with id, code, and permissions
+ * @returns {SecurePluginSandbox} - Secure sandbox instance
  */
 export function createPluginSandbox(plugin) {
-  // This would create a secure execution environment for plugins
-  // For now, return a mock sandbox
-  return {
-    pluginId: plugin.id,
-    api: {
-      // Lokus API methods would be exposed here based on permissions
-      fileSystem: plugin.permissions?.includes('file-system') ? {} : null,
-      network: plugin.permissions?.includes('network') ? {} : null,
-      editor: plugin.permissions?.includes('editor-extensions') ? {} : null,
-    },
-    // Restricted global access
-    console: {
-      log: (...args) => {},
-      warn: (...args) => {},
-      error: (...args) => {}
-    }
-  };
+  return new SecurePluginSandbox(plugin);
 }
