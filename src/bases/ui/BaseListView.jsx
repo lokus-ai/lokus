@@ -43,7 +43,7 @@ export default function BaseListView({
         {data.map((item, index) => {
           const fileName = getFileName(item.path);
           const isDirectory = item.path?.endsWith('/');
-          const tags = item.properties?.tags || [];
+          const tags = Array.isArray(item.properties?.tags) ? item.properties.tags : [];
           const size = item.size || item.properties?.size;
           const modified = item.modified || item.properties?.modified;
 

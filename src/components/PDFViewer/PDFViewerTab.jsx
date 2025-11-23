@@ -83,11 +83,12 @@ export default function PDFViewerTab({ file, onClose }) {
     setScale(1.0);
   }
 
-  // Memoize file and options to prevent unnecessary reloads
-  const fileConfig = useMemo(() => ({ data: pdfData }), [pdfData]);
-  const workerOptions = useMemo(() => ({
-    workerSrc: `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
-  }), []);
+  // Memoize file config to prevent unnecessary reloads
+  // Note: We don't pass options to Document since worker is configured globally
+  const fileConfig = useMemo(() => {
+    if (!pdfData) return null;
+    return { data: pdfData };
+  }, [pdfData]);
 
   return (
     <div className="pdf-viewer-container">
@@ -175,13 +176,12 @@ export default function PDFViewerTab({ file, onClose }) {
           </div>
         )}
 
-        {!error && pdfData && (
+        {!error && fileConfig && (
           <Document
             file={fileConfig}
             onLoadSuccess={onDocumentLoadSuccess}
             onLoadError={onDocumentLoadError}
             loading={<div className="pdf-loading"><div className="pdf-spinner"></div></div>}
-            options={workerOptions}
           >
             <Page
               pageNumber={pageNumber}

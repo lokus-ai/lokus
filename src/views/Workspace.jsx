@@ -5,7 +5,7 @@ import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, Mail, Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, FoldVertical, SquareSplitHorizontal, FilePlus as FilePlusCorner, SquareKanban } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, /* Mail, */ Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, FoldVertical, SquareSplitHorizontal, FilePlus as FilePlusCorner, SquareKanban } from "lucide-react";
 import { ColoredFileIcon } from "../components/FileIcon.jsx";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
@@ -52,8 +52,8 @@ import PDFViewerTab from "../components/PDFViewer/PDFViewerTab.jsx";
 import { isPDFFile } from "../utils/pdfUtils.js";
 import { getFilename, getBasename, joinPath } from '../utils/pathUtils.js';
 import platformService from "../services/platform/PlatformService.js";
-import Gmail from "./Gmail.jsx";
-import { gmailAuth, gmailEmails } from '../services/gmail.js';
+// import Gmail from "./Gmail.jsx"; // DISABLED: Slowing down app startup
+// import { gmailAuth, gmailEmails } from '../services/gmail.js'; // DISABLED: Slowing down app startup
 import { FolderScopeProvider, useFolderScope } from "../contexts/FolderScopeContext.jsx";
 import { BasesProvider, useBases } from "../bases/BasesContext.jsx";
 import BasesView from "../bases/BasesView.jsx";
@@ -962,7 +962,7 @@ function WorkspaceWithScope({ path }) {
   const getTabDisplayName = (tabPath) => {
     if (tabPath === '__graph__') return 'Graph View';
     if (tabPath === '__kanban__') return 'Task Board';
-    if (tabPath === '__gmail__') return 'Gmail';
+    // if (tabPath === '__gmail__') return 'Gmail'; // Gmail disabled
     if (tabPath === '__bases__') return 'Bases';
     if (tabPath.startsWith('__plugin_')) {
       // Extract plugin name from path if possible, otherwise generic name
@@ -1746,8 +1746,8 @@ function WorkspaceWithScope({ path }) {
     });
   }, []);
 
-  // Gmail template detection and parsing
-  const parseGmailTemplate = (content) => {
+  // Gmail template detection and parsing - DISABLED
+  /* const parseGmailTemplate = (content) => {
     try {
       // Check if content starts with YAML frontmatter
       if (!content.startsWith('---')) {
@@ -1788,9 +1788,9 @@ function WorkspaceWithScope({ path }) {
       }
     } catch (error) {
     }
-    
+
     return null;
-  };
+  }; */
 
   const handleSave = useCallback(async () => {
     const { activeFile, openTabs, editorContent, editorTitle } = stateRef.current;
@@ -1854,11 +1854,11 @@ function WorkspaceWithScope({ path }) {
         console.log("[Version] Skipped - content unchanged");
       }
 
-      // Check if this is a Gmail template and send email
-      const gmailTemplate = parseGmailTemplate(contentToSave);
+      // Gmail template checking disabled
+      /* const gmailTemplate = parseGmailTemplate(contentToSave);
       if (gmailTemplate) {
         try {
-          
+
           // Check if user is authenticated with Gmail
           const isAuthenticated = await gmailAuth.isAuthenticated();
           if (isAuthenticated && gmailTemplate.to.length > 0 && gmailTemplate.subject) {
@@ -1872,7 +1872,7 @@ function WorkspaceWithScope({ path }) {
               attachments: [] // For future implementation
             });
 
-            
+
             // Optional: Show success notification to user
             // You could add a toast notification here
           } else if (!isAuthenticated) {
@@ -1882,7 +1882,7 @@ function WorkspaceWithScope({ path }) {
         } catch (emailError) {
           // Optional: Show error notification to user
         }
-      }
+      } */
 
       if (needsStateUpdate) {
         const newName = path_to_save.split("/").pop();
@@ -2657,10 +2657,11 @@ function WorkspaceWithScope({ path }) {
     setActiveFile(basesPath);
   }, []);
 
-  const handleOpenGmail = useCallback(() => {
+  // Gmail functionality disabled
+  /* const handleOpenGmail = useCallback(() => {
     const gmailPath = '__gmail__';
     const gmailName = 'Gmail';
-    
+
     setOpenTabs(prevTabs => {
       const newTabs = prevTabs.filter(t => t.path !== gmailPath);
       newTabs.unshift({ path: gmailPath, name: gmailName });
@@ -2670,7 +2671,7 @@ function WorkspaceWithScope({ path }) {
       return newTabs;
     });
     setActiveFile(gmailPath);
-  }, []);
+  }, []); */
 
   // Initialize graph processor when workspace path changes
   useEffect(() => {
@@ -2759,7 +2760,7 @@ function WorkspaceWithScope({ path }) {
           // Load the content for the right pane asynchronously
           setTimeout(async () => {
             const isSpecialView = nextTab.path === '__kanban__' ||
-                                nextTab.path === '__gmail__' ||
+                                // nextTab.path === '__gmail__' || // Gmail disabled
                                 nextTab.path === '__bases__' ||
                                 nextTab.path.startsWith('__graph__') ||
                                 nextTab.path.startsWith('__plugin_') ||
@@ -3694,8 +3695,9 @@ function WorkspaceWithScope({ path }) {
             >
               <Calendar className="w-5 h-5" style={showDailyNotesPanel ? { color: 'rgb(var(--accent))' } : {}} />
             </button>
-            
-            <button
+
+            {/* Gmail button disabled to improve startup performance */}
+            {/* <button
               onClick={handleOpenGmail}
               title="Gmail"
               className="obsidian-button icon-only w-full"
@@ -3709,8 +3711,8 @@ function WorkspaceWithScope({ path }) {
               }}
             >
               <Mail className="w-5 h-5" />
-            </button>
-            
+            </button> */}
+
           </div>
         </aside>
         <div className="bg-app-border/20 w-px" />
@@ -3925,11 +3927,11 @@ function WorkspaceWithScope({ path }) {
                           workspacePath={path}
                         />
                       </div>
-                    ) : rightPaneFile === '__gmail__' ? (
+                    ) : /* rightPaneFile === '__gmail__' ? (
                       <div className="h-full">
                         <Gmail workspacePath={path} />
                       </div>
-                    ) : rightPaneFile === '__bases__' ? (
+                    ) : */ rightPaneFile === '__bases__' ? (
                       <div className="h-full">
                         <BasesView isVisible={true} onFileOpen={handleFileOpen} />
                       </div>
@@ -4046,11 +4048,11 @@ function WorkspaceWithScope({ path }) {
             <div className="flex-1 h-full overflow-hidden">
               <BasesView isVisible={true} onFileOpen={handleFileOpen} />
             </div>
-          ) : activeFile === '__gmail__' ? (
+          ) : /* activeFile === '__gmail__' ? (
             <div className="flex-1 h-full overflow-hidden">
               <Gmail workspacePath={path} />
             </div>
-          ) : (
+          ) : */ (
             <div className="flex-1 p-8 md:p-12 overflow-y-auto">
               <div className="max-w-full mx-auto h-full">
                 {false ? (
@@ -4545,7 +4547,7 @@ function WorkspaceWithScope({ path }) {
           });
         }}
         onCreateTemplate={handleCreateTemplate}
-        onOpenGmail={handleOpenGmail}
+        // onOpenGmail={handleOpenGmail} // Gmail disabled
         onOpenDailyNote={handleOpenDailyNote}
         activeFile={activeFile}
       />

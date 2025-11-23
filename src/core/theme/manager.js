@@ -11,8 +11,10 @@ const WS_CONFIG_REL = ".lokus/config.json";
 const THEME_TOKEN_KEYS = [
   // Core tokens
   "--bg", "--text", "--panel", "--border", "--muted", "--accent", "--accent-fg",
+  // Tab colors
+  "--tab-active",
   // Task status colors
-  "--task-todo", "--task-progress", "--task-urgent", "--task-question", 
+  "--task-todo", "--task-progress", "--task-urgent", "--task-question",
   "--task-completed", "--task-cancelled", "--task-delegated",
   // Semantic colors
   "--danger", "--success", "--warning", "--info",
@@ -21,10 +23,12 @@ const THEME_TOKEN_KEYS = [
   // App-prefixed tokens (for compatibility)
   "--app-bg", "--app-text", "--app-panel", "--app-border", "--app-muted", "--app-accent", "--app-accent-fg"
 ];
-const BUILT_IN_THEME_TOKENS = { 
+const BUILT_IN_THEME_TOKENS = {
   // Core tokens
-  "--bg": "15 23 42", "--text": "241 245 249", "--panel": "30 41 59", 
+  "--bg": "15 23 42", "--text": "241 245 249", "--panel": "30 41 59",
   "--border": "51 65 85", "--muted": "148 163 184", "--accent": "139 92 246", "--accent-fg": "255 255 255",
+  // Tab colors
+  "--tab-active": "30 41 59",
   // Task status colors (gray, blue, red, amber, green, gray, purple)
   "--task-todo": "107 114 128", "--task-progress": "59 130 246", "--task-urgent": "239 68 68",
   "--task-question": "245 158 11", "--task-completed": "16 185 129", "--task-cancelled": "107 114 128",
