@@ -285,3 +285,57 @@ pub fn read_image_file(path: String) -> Result<String, String> {
     // Return data URL
     Ok(format!("data:{};base64,{}", mime_type, base64_string))
 }
+
+// --- Import/Migration Helper Commands ---
+
+#[tauri::command]
+pub fn path_exists(path: String) -> bool {
+    Path::new(&path).exists()
+}
+
+#[tauri::command]
+pub fn is_directory(path: String) -> bool {
+    Path::new(&path).is_dir()
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DirectoryEntry {
+    pub name: String,
+    pub is_dir: bool,
+}
+
+#[tauri::command]
+pub fn read_directory(path: String) -> Result<Vec<DirectoryEntry>, String> {
+    let entries = fs::read_dir(&path).map_err(|e| e.to_string())?;
+    let mut result = vec![];
+
+    for entry in entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        let name = path.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        let is_dir = path.is_dir();
+
+        result.push(DirectoryEntry { name, is_dir });
+    }
+
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn write_file(path: String, content: String) -> Result<(), String> {
+    // Alias for write_file_content for consistency with importers
+    fs::write(&path, &content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_directory(path: String, recursive: bool) -> Result<(), String> {
+    let path = Path::new(&path);
+    if recursive {
+        fs::create_dir_all(path).map_err(|e| e.to_string())
+    } else {
+        fs::create_dir(path).map_err(|e| e.to_string())
+    }
+}
