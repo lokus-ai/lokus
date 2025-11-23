@@ -69,7 +69,7 @@
 
 :root[data-theme="light"] {
   --app-titlebar: 226 232 240; /* slate-200 */
-  
+
   /* Core theme tokens */
   --bg: 248 250 252;       /* slate-50 */
   --panel: 241 245 249;    /* slate-100 */
@@ -79,6 +79,9 @@
   --muted: 71 85 105;      /* slate-600 */
   --accent: 99 102 241;    /* indigo-500 */
   --accent-fg: 255 255 255;
+
+  /* Tab colors */
+  --tab-active: 241 245 249;   /* slate-100 - Active tab background (same as panel) */
 
   /* Task status colors */
   --task-todo: 107 114 128;     /* gray-500 */
@@ -556,8 +559,8 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
 .obsidian-tab.active {
   background: linear-gradient(
     to bottom,
-    rgb(var(--panel) / 0.95) 0%,
-    rgb(var(--panel)) 100%
+    rgb(var(--tab-active) / 0.95) 0%,
+    rgb(var(--tab-active)) 100%
   );
   color: rgb(var(--text));
   font-weight: 500;
@@ -566,7 +569,7 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   box-shadow:
     0 -1px 3px rgb(var(--shadow) / 0.1),
     0 4px 6px -1px rgb(var(--shadow) / 0.1);
-  border-bottom: 2px solid rgb(var(--panel));
+  border-bottom: 2px solid rgb(var(--tab-active));
   margin-bottom: -2px;
 }
 

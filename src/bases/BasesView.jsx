@@ -475,7 +475,7 @@ const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
       </div>
 
       {/* Main content - Conditional rendering based on view type */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         {/* Always render BaseTableView for dropdown functionality */}
         <div style={{ display: viewType === 'table' ? 'flex' : 'none' }} className="flex-1 h-full">
           <BaseTableView

@@ -9,7 +9,7 @@ import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/short
 import { PluginProvider } from "./hooks/usePlugins.jsx";
 import { AuthProvider } from "./core/auth/AuthContext.jsx";
 import platformService from "./services/platform/PlatformService.js";
-import { GmailProvider } from "./contexts/GmailContext.jsx";
+// import { GmailProvider } from "./contexts/GmailContext.jsx"; // DISABLED: Slowing down app startup
 import markdownSyntaxConfig from "./core/markdown/syntax-config.js";
 import editorConfigCache from "./core/editor/config-cache.js";
 // Import workspace manager to expose developer utilities
@@ -112,7 +112,8 @@ function App() {
 
       <div className="app-content">
         <AuthProvider>
-          <GmailProvider>
+          {/* GmailProvider disabled to improve startup performance */}
+          {/* <GmailProvider> */}
             <PluginProvider>
               {isPrefsWindow ? (
                 <Preferences />
@@ -122,7 +123,7 @@ function App() {
                 <Launcher />
               )}
             </PluginProvider>
-          </GmailProvider>
+          {/* </GmailProvider> */}
         </AuthProvider>
         <UpdateChecker />
       </div>
