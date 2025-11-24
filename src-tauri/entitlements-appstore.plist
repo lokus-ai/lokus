@@ -3,6 +3,12 @@
 <plist version="1.0">
 <dict>
 	<!-- ============================================ -->
+	<!-- Application Identifier                       -->
+	<!-- ============================================ -->
+	<key>com.apple.application-identifier</key>
+	<string>UH5Z2K4G9H.io.lokus.app</string>
+
+	<!-- ============================================ -->
 	<!-- REQUIRED: App Store Sandbox                  -->
 	<!-- All App Store apps MUST include this         -->
 	<!-- ============================================ -->

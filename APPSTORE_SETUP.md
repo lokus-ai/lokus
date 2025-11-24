@@ -276,3 +276,199 @@ The sandbox has restrictions. Check `src-tauri/entitlements-appstore.plist` matc
 4. ❌ Create provisioning profile
 5. ❌ Create app in App Store Connect
 6. ✅ Build configuration: Ready
+
+
+
+
+
+
+
+
+
+
+---
+---
+---
+ ---
+  Step 3: Create Provisioning Profile
+
+  1. Go to https://developer.apple.com/account/resources/profiles/list
+  2. Click "+"
+  3. Select "Mac App Store" (under Distribution)
+  4. Select your App ID: io.lokus.app
+  5. Select certificate: "Mac App Distribution" certificate
+  6. Name: Lokus Mac App Store
+  7. Download and double-click to install
+
+  ---
+  Step 4: Create App in App Store Connect
+
+  1. Go to https://appstoreconnect.apple.com
+  2. Click "My Apps" → "+" → "New App"
+  3. Fill in:
+    - Platform: macOS
+    - Name: Lokus
+    - Primary Language: English (U.S.)
+    - Bundle ID: Select io.lokus.app
+    - SKU: lokus-macos (unique identifier for your records)
+    - User Access: Full Access
+  4. Click "Create"
+
+  ---
+  Step 5: Build Your App
+
+  Run the build command:
+
+  npm run build:appstore
+
+  Build output location:
+  src-tauri/target/universal-apple-darwin/release/bundle/macos/Lokus.app
+
+  The build will:
+  - Use sandbox-compliant entitlements
+  - Sign with your Mac App Distribution certificate
+  - Create a universal binary (Intel + Apple Silicon)
+  - Include the privacy manifest
+
+  ---
+  Step 6: Create .pkg Installer
+
+  Navigate to the build directory and create the installer:
+
+  cd src-tauri/target/universal-apple-darwin/release/bundle/macos
+
+  productbuild --component Lokus.app /Applications \
+    --sign "3rd Party Mac Developer Installer: Pratham Patel (UH5Z2K4G9H)" \
+    Lokus.pkg
+
+  Verify the .pkg:
+  pkgutil --check-signature Lokus.pkg
+
+  You should see your installer certificate in the output.
+
+  ---
+  Step 7: Upload to App Store Connect
+
+  Option 1: Transporter App (Easiest)
+
+  1. Download https://apps.apple.com/app/transporter/id1450874784 from Mac App Store
+  2. Open Transporter
+  3. Sign in with your Apple ID
+  4. Drag Lokus.pkg into Transporter window
+  5. Click "Deliver"
+  6. Wait for upload (processing takes 10-30 minutes)
+
+  Option 2: Command Line
+
+  xcrun altool --upload-app \
+    --type macos \
+    --file "Lokus.pkg" \
+    --apiKey "FMDQ88Z88Z" \
+    --apiIssuer "3eb573cb-25ce-418f-a97b-2c92b7c18636"
+
+  ---
+  Step 8: Configure TestFlight
+
+  After Apple processes your upload (10-30 minutes):
+
+  1. Go to https://appstoreconnect.apple.com → Your App → TestFlight
+  2. Select your build (version 1.3.3)
+  3. Fill in "What to Test" description
+  4. Add Export Compliance information:
+    - If only using HTTPS, select "No" for encryption
+  5. Internal Testing (immediate):
+    - Add internal testers
+    - They'll receive TestFlight invitation immediately
+  6. External Testing (24-48 hours review):
+    - Submit for Beta App Review
+    - Add external testers after approval
+
+  ---
+  Step 9: Prepare App Store Listing
+
+  While TestFlight is being tested, prepare your App Store listing:
+
+  1. Go to App Store Connect → Your App → "App Information"
+  2. Fill in:
+    - Subtitle (max 30 characters)
+    - Privacy Policy URL
+    - Category: Productivity
+    - Secondary Category: Developer Tools (optional)
+  3. Go to "Pricing and Availability":
+    - Set price (or Free)
+    - Select countries
+  4. Go to "1.3.3 Prepare for Submission":
+    - Screenshots (Required):
+        - 1280x800px minimum
+      - 2880x1800px recommended
+      - Need at least 3 screenshots
+    - Description (max 4000 characters)
+    - Keywords (max 100 characters)
+    - Support URL
+    - Marketing URL (optional)
+
+  ---
+  Step 10: Submit for Review
+
+  1. In App Store Connect, go to your app version "1.3.3"
+  2. Select your build from TestFlight
+  3. Fill in "App Review Information":
+    - Contact information
+    - Demo account (if needed)
+    - Notes for reviewer
+  4. Answer "Content Rights" questions
+  5. Answer "Advertising Identifier" questions
+  6. Click "Submit for Review"
+
+  Review timeline: Typically 24-48 hours
+
+  ---
+  🚨 Important Notes
+
+  Sandbox Testing Before Submission
+
+  Test with sandbox restrictions locally:
+
+  cd src-tauri/target/universal-apple-darwin/release/bundle/macos
+
+  # Add quarantine attribute to simulate App Store sandbox
+  xattr -w com.apple.quarantine "0181;00000000;TestFlight" Lokus.app
+
+  # Run and test
+  open Lokus.app
+
+  Test that these work:
+  - File operations (open, save, create)
+  - Network requests
+  - User preferences
+  - All core features
+
+  Note: Global shortcuts won't work in sandbox (Apple restriction).
+
+  Rejection Common Causes
+
+  - Missing or incorrect privacy manifest
+  - Using private APIs
+  - Incorrect entitlements
+  - Crashes on launch
+  - Missing functionality descriptions
+
+  ---
+  📋 Quick Reference Checklist
+
+  - Mac Installer Distribution certificate created and installed
+  - App ID created for io.lokus.app
+  - Provisioning Profile created and installed
+  - App created in App Store Connect
+  - App built with npm run build:appstore
+  - Tested with sandbox quarantine attribute
+  - .pkg created and signed
+  - Uploaded via Transporter or command line
+  - TestFlight configured with test info
+  - Internal testers added
+  - App Store listing completed (screenshots, description)
+  - Submitted for App Review
+
+  ---
+  Next immediate action: Create the Mac Installer Distribution certificate (Step 1) - this is the only missing piece before you
+  can build and upload.
