@@ -44,6 +44,7 @@ import TemplatePicker from "../components/TemplatePicker.jsx";
 import { getMarkdownCompiler } from "../core/markdown/compiler.js";
 import { MarkdownExporter } from "../core/export/markdown-exporter.js";
 import dailyNotesManager from "../core/daily-notes/manager.js";
+import analytics from "../services/analytics.js";
 import CreateTemplate from "../components/CreateTemplate.jsx";
 import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
 import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
@@ -2425,6 +2426,9 @@ function WorkspaceWithScope({ path }) {
       if (result.created) {
         handleRefreshFiles();
       }
+
+      // Track daily note access
+      analytics.trackDailyNote();
     } catch (error) {
       console.error('Failed to open daily note:', error);
     }
@@ -2446,6 +2450,9 @@ function WorkspaceWithScope({ path }) {
       }
 
       setShowDatePickerModal(false);
+
+      // Track daily note access
+      analytics.trackDailyNote();
     } catch (error) {
       console.error('Failed to open daily note:', error);
     }
@@ -2648,6 +2655,9 @@ function WorkspaceWithScope({ path }) {
     const graphPath = '__graph__';
     const graphName = 'Graph View';
 
+    // Track graph view opening (defaults to 2D)
+    analytics.trackGraphView('2d');
+
     setOpenTabs(prevTabs => {
       const newTabs = prevTabs.filter(t => t.path !== graphPath);
       newTabs.unshift({ path: graphPath, name: graphName });
@@ -2662,6 +2672,9 @@ function WorkspaceWithScope({ path }) {
   const handleOpenBasesTab = useCallback(() => {
     const basesPath = '__bases__';
     const basesName = 'Bases';
+
+    // Track database view opening (defaults to table view)
+    analytics.trackDatabaseView('table');
 
     setOpenTabs(prevTabs => {
       const newTabs = prevTabs.filter(t => t.path !== basesPath);

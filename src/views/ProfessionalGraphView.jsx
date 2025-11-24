@@ -22,6 +22,7 @@ import { GraphUI } from '../components/graph/GraphUI.jsx';
 import '../components/graph/GraphUI.css';
 import { invoke } from "@tauri-apps/api/core";
 import { loadGraphConfig, saveGraphConfig, getDefaultConfig, debouncedSaveGraphConfig } from '../core/graph/config-manager.js';
+import analytics from '../services/analytics.js';
 
 export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile, fileTree = [], onGraphStateChange }) => {
   // Core state
@@ -623,6 +624,9 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   const handleViewModeChange = useCallback((mode) => {
     setViewMode(mode);
     setIsLayoutRunning(false); // Reset layout when switching modes
+
+    // Track graph view mode change
+    analytics.trackGraphView(mode);
   }, []);
 
   const handleLayoutControl = useCallback((action) => {
