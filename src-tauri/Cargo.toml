@@ -77,6 +77,8 @@ git2 = { version = "0.18", default-features = false, features = ["https"] }
 libgit2-sys = { version = "0.16", features = ["vendored"] }
 openssl = { version = "0.10", features = ["vendored"] }
 lazy_static = "1.4"
+# Crash reporting
+sentry = { version = "0.34", default-features = false, features = ["backtrace", "contexts", "panic", "rustls", "reqwest"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.25"

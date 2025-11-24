@@ -80,6 +80,14 @@ npm run test:e2e:headed
   - Template includes for composition
   - HTML to Markdown auto-conversion
   - Duplicate detection and overwrite protection
+- ✅ Crash reporting with GlitchTip/Sentry
+  - Self-hosted at crash.lokusmd.com
+  - Frontend (React) and backend (Rust) error tracking
+  - React Error Boundary for component crashes
+  - Automatic breadcrumb tracking for user actions
+  - Session replay for error debugging
+  - Production source maps for debugging
+  - Development crash testing tools
 
 ## 🔧 **Common Tasks**
 
@@ -111,6 +119,30 @@ npm run test:e2e:headed
   - Template processing: `src/core/templates/processor-integrated.js`
   - Storage: `src/core/templates/file-storage.js`
   - UI: `src/components/CreateTemplate.jsx`
+
+### **Crash Reporting Setup (GlitchTip/Sentry)**
+- **Dashboard**: https://crash.lokusmd.com
+- **Configuration**:
+  - DSN configured in `.env` and `.env.production`
+  - Permanent DSN (never changes, stored in PostgreSQL)
+  - Enable/disable with `VITE_ENABLE_CRASH_REPORTS` env var
+- **Frontend Integration** (`src/main.jsx`):
+  - Sentry SDK with browser tracing and session replay
+  - React Error Boundary wraps entire app
+  - Automatic breadcrumb tracking in `App.jsx`
+  - Development crash testing tools (`src/components/error/CrashTest.jsx`)
+- **Backend Integration** (`src-tauri/src/main.rs`):
+  - Sentry Rust SDK with panic handling
+  - Filters WebView2 cleanup warnings
+  - Reports all unhandled panics
+- **Testing Crashes**:
+  - Development mode shows crash testing panel (bottom-right)
+  - Four test buttons: React Error Boundary, Async Error, Handled Error, Breadcrumb Trail
+  - Check crash.lokusmd.com for reports after testing
+- **Production Builds**:
+  - Hidden source maps generated automatically
+  - Manual chunking for better caching
+  - Session replay captures 10% of sessions, 100% of errors
 
 ## 🐛 **Known Issues**
 

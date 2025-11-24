@@ -18,6 +18,7 @@ import "./core/workspace/manager.js";
 import mcpClient from "./core/mcp/client.js";
 // Guard window access in non-Tauri environments
 import { emit } from "@tauri-apps/api/event";
+import * as Sentry from "@sentry/react";
 
 function App() {
   // Use the hooks' values directly (no setter param expected)
@@ -28,6 +29,30 @@ function App() {
   console.log('🎯 isPrefsWindow:', isPrefsWindow);
   console.log('🎯 activePath:', activePath);
   console.log('🎯 URL search params:', window.location.search);
+
+  // Track view navigation with breadcrumbs
+  useEffect(() => {
+    if (isPrefsWindow) {
+      Sentry.addBreadcrumb({
+        category: 'navigation',
+        message: 'Navigated to Preferences',
+        level: 'info',
+      });
+    } else if (activePath) {
+      Sentry.addBreadcrumb({
+        category: 'navigation',
+        message: 'Navigated to Workspace',
+        level: 'info',
+        data: { path: activePath },
+      });
+    } else {
+      Sentry.addBreadcrumb({
+        category: 'navigation',
+        message: 'Navigated to Launcher',
+        level: 'info',
+      });
+    }
+  }, [isPrefsWindow, activePath]);
 
   // Initialize markdown syntax config and editor config cache on app startup
   useEffect(() => {
@@ -50,10 +75,25 @@ function App() {
       if (navigator.userAgent.includes('Windows NT 10.0')) {
         document.body.classList.add('windows-11');
       }
+      Sentry.addBreadcrumb({
+        category: 'platform',
+        message: 'Windows platform detected',
+        level: 'info',
+      });
     } else if (platformService.isMacOS()) {
       document.body.classList.add('macos');
+      Sentry.addBreadcrumb({
+        category: 'platform',
+        message: 'macOS platform detected',
+        level: 'info',
+      });
     } else if (platformService.isLinux()) {
       document.body.classList.add('linux');
+      Sentry.addBreadcrumb({
+        category: 'platform',
+        message: 'Linux platform detected',
+        level: 'info',
+      });
     }
   }, []);
 
