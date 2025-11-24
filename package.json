@@ -55,6 +55,7 @@
     "bundle:mcp": "node scripts/bundle-mcp.cjs",
     "build:windows": "npm run bundle:mcp && node scripts/build-windows.js",
     "build:macos": "npm run bundle:mcp && node scripts/build-macos.js",
+    "build:appstore": "npm run bundle:mcp && npm run build && tauri build --config src-tauri/tauri.appstore.conf.json --target universal-apple-darwin",
     "build:linux": "npm run bundle:mcp && node scripts/build-linux.js",
     "build:all": "node scripts/check-platform.js && npm run build:all:cross",
     "build:all:cross": "npm run build:windows && npm run build:macos && npm run build:linux",

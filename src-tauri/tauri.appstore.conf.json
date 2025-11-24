@@ -1,0 +1,66 @@
+{
+  "$schema": "https://schema.tauri.app/config/2.0.0",
+  "productName": "Lokus",
+  "version": "1.3.3",
+  "identifier": "io.lokus.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Lokus",
+        "width": 800,
+        "height": 600,
+        "minWidth": 600,
+        "minHeight": 400,
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay",
+        "transparent": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https: wss:; media-src 'self' data: blob:; object-src 'none'; frame-src 'self' blob:; base-uri 'self'; form-action 'none'; upgrade-insecure-requests;"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns"
+    ],
+    "resources": [
+      "../src/themes",
+      "PrivacyInfo.xcprivacy"
+    ],
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.15",
+      "exceptionDomain": "",
+      "signingIdentity": null,
+      "provisioningProfile": null,
+      "hardenedRuntime": false,
+      "entitlements": "entitlements-appstore.plist"
+    }
+  },
+  "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false
+    },
+    "clipboardManager": {
+      "all": true,
+      "writeText": true,
+      "readText": true
+    },
+    "shell": {
+      "all": false,
+      "open": "^https?://.*"
+    }
+  }
+}
