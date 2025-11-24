@@ -43,7 +43,7 @@
       "frameworks": [],
       "minimumSystemVersion": "10.15",
       "exceptionDomain": "",
-      "signingIdentity": null,
+      "signingIdentity": "3rd Party Mac Developer Application: Pratham Patel (UH5Z2K4G9H)",
       "provisioningProfile": null,
       "hardenedRuntime": false,
       "entitlements": "entitlements-appstore.plist"
