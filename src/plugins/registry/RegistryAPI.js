@@ -33,13 +33,13 @@ export const AUTH_METHODS = {
 export class RegistryAPI extends EventEmitter {
   constructor(config = {}) {
     super()
-    
+
     this.config = {
       baseUrl: 'https://registry.lokus.dev/api/v1',
       timeout: 30000,
-      retryAttempts: 3,
-      retryDelay: 1000,
-      maxRetryDelay: 10000,
+      retryAttempts: 1,
+      retryDelay: 500,
+      maxRetryDelay: 2000,
       cacheTimeout: 300000, // 5 minutes
       offlineMode: false,
       ...config
@@ -56,7 +56,7 @@ export class RegistryAPI extends EventEmitter {
     // Request cache for offline support
     this.cache = new Map()
     this.pendingRequests = new Map()
-    
+
     // Rate limiting
     this.rateLimiter = {
       requests: 0,
@@ -95,7 +95,7 @@ export class RegistryAPI extends EventEmitter {
 
         this.emit('authenticated', { method, token: this.auth.token })
         this.logger.info(`Authenticated successfully using ${method}`)
-        
+
         return {
           success: true,
           token: this.auth.token,
@@ -126,7 +126,7 @@ export class RegistryAPI extends EventEmitter {
       if (response.status === API_STATUS.SUCCESS) {
         this.auth.token = response.data.token
         this.auth.expires = response.data.expires ? new Date(response.data.expires) : null
-        
+
         this.emit('token_refreshed', { token: this.auth.token })
         return true
       }
@@ -145,7 +145,7 @@ export class RegistryAPI extends EventEmitter {
       expires: null,
       refreshToken: null
     }
-    
+
     this.emit('logged_out')
     this.logger.info('Logged out successfully')
   }
@@ -200,7 +200,7 @@ export class RegistryAPI extends EventEmitter {
     })
 
     // Track download
-    this.trackDownload(pluginId, version).catch(err => 
+    this.trackDownload(pluginId, version).catch(err =>
       this.logger.warn('Failed to track download:', err)
     )
 
@@ -215,11 +215,11 @@ export class RegistryAPI extends EventEmitter {
       const formData = new FormData()
       formData.append('manifest', JSON.stringify(pluginData.manifest))
       formData.append('package', packageFile)
-      
+
       if (pluginData.readme) {
         formData.append('readme', pluginData.readme)
       }
-      
+
       if (pluginData.changelog) {
         formData.append('changelog', pluginData.changelog)
       }
@@ -241,11 +241,11 @@ export class RegistryAPI extends EventEmitter {
     try {
       const formData = new FormData()
       formData.append('manifest', JSON.stringify(updateData.manifest))
-      
+
       if (packageFile) {
         formData.append('package', packageFile)
       }
-      
+
       if (updateData.changelog) {
         formData.append('changelog', updateData.changelog)
       }
@@ -261,10 +261,10 @@ export class RegistryAPI extends EventEmitter {
   }
 
   async deletePlugin(pluginId, version = null) {
-    const endpoint = version 
+    const endpoint = version
       ? `/plugins/${pluginId}/${version}`
       : `/plugins/${pluginId}`
-      
+
     return this.request('DELETE', endpoint, null, {
       skipCache: true,
       requireAuth: true
@@ -460,7 +460,7 @@ export class RegistryAPI extends EventEmitter {
 
     try {
       const response = await requestPromise
-      
+
       // Cache successful responses
       if (cacheable && cacheKey && response.status === API_STATUS.SUCCESS) {
         this.setCachedResponse(cacheKey, response)
@@ -475,7 +475,7 @@ export class RegistryAPI extends EventEmitter {
   async executeRequest(url, options, context) {
     const { skipRetry, method, endpoint } = context
     let lastError = null
-    
+
     for (let attempt = 0; attempt <= (skipRetry ? 0 : this.config.retryAttempts); attempt++) {
       try {
         if (attempt > 0) {
@@ -489,16 +489,16 @@ export class RegistryAPI extends EventEmitter {
 
         const response = await this.performRequest(url, options)
         this.updateRateLimit(response.headers)
-        
+
         return this.processResponse(response)
       } catch (error) {
         lastError = error
-        
+
         // Don't retry on certain errors
         if (this.isNonRetryableError(error)) {
           break
         }
-        
+
         // Check if we should refresh token and retry
         if (error.status === 401 && this.auth.refreshToken && attempt === 0) {
           const refreshed = await this.refreshAuthentication()
@@ -533,21 +533,21 @@ export class RegistryAPI extends EventEmitter {
       return response
     } catch (error) {
       clearTimeout(timeoutId)
-      
+
       if (error.name === 'AbortError') {
         throw new Error('Request timeout')
       }
-      
+
       throw error
     }
   }
 
   async processResponse(response) {
     let data = null
-    
+
     try {
       const contentType = response.headers.get('content-type')
-      
+
       if (contentType?.includes('application/json')) {
         data = await response.json()
       } else if (contentType?.includes('text/')) {
@@ -581,7 +581,7 @@ export class RegistryAPI extends EventEmitter {
   /**
    * Helper methods
    */
-  
+
   buildUrl(endpoint) {
     const baseUrl = this.config.baseUrl.replace(/\/$/, '')
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
@@ -590,7 +590,7 @@ export class RegistryAPI extends EventEmitter {
 
   buildRequestOptions(method, data, options) {
     const { skipAuth, headers, responseType } = options
-    
+
     const requestOptions = {
       method: method.toUpperCase(),
       headers: this.buildHeaders(headers, skipAuth)
@@ -630,7 +630,7 @@ export class RegistryAPI extends EventEmitter {
 
   getAuthHeader() {
     if (!this.auth.token) return null
-    
+
     switch (this.auth.method) {
       case AUTH_METHODS.API_KEY:
         return `Bearer ${this.auth.token}`
@@ -731,7 +731,7 @@ export class RegistryAPI extends EventEmitter {
    */
   async checkRateLimit() {
     const now = Date.now()
-    
+
     if (now > this.rateLimiter.resetTime) {
       this.rateLimiter.requests = 0
       this.rateLimiter.resetTime = now + 60000
@@ -751,11 +751,11 @@ export class RegistryAPI extends EventEmitter {
   updateRateLimit(headers) {
     const remaining = headers['x-ratelimit-remaining']
     const reset = headers['x-ratelimit-reset']
-    
+
     if (remaining !== undefined) {
       this.rateLimiter.requests = this.rateLimiter.limit - parseInt(remaining)
     }
-    
+
     if (reset !== undefined) {
       this.rateLimiter.resetTime = parseInt(reset) * 1000
     }

@@ -2,6 +2,7 @@ import Sigma from 'sigma';
 import Graph from 'graphology';
 import forceAtlas2 from 'graphology-layout-forceatlas2';
 import PerformanceManager from './PerformanceManager.js';
+import GraphWorker from './GraphWorker.js?worker';
 
 /**
  * GraphEngine - Core graph visualization engine using Sigma.js
@@ -23,7 +24,7 @@ export class GraphEngine {
     this.isPaused = false;
     this.performanceManager = null;
     this.webWorker = null;
-    
+
     // Physics-based interaction system
     this.physics = {
       isDragging: false,
@@ -37,7 +38,7 @@ export class GraphEngine {
       maxForce: 75,               // Higher max force for better responsiveness
       animationId: null
     };
-    
+
     // Aggressive caching system
     this.cache = {
       layouts: new Map(),         // Cached layout positions
@@ -51,7 +52,7 @@ export class GraphEngine {
       maxCacheSize: 1000,         // Maximum cached items
       enabled: true
     };
-    
+
     // Memory allocation pools for performance
     this.memoryPools = {
       vectors: [],                // Reusable vector objects
@@ -59,7 +60,7 @@ export class GraphEngine {
       buffers: [],                // Reusable render buffers
       geometries: []              // Reusable geometry objects
     };
-    
+
     // Default options with performance optimizations
     this.options = {
       maxNodes: 10000,
@@ -90,10 +91,10 @@ export class GraphEngine {
     };
 
     this.eventListeners = new Map();
-    
+
     // Initialize memory pools
     this.initializeMemoryPools();
-    
+
     // Setup cache cleanup
     this.setupCacheCleanup();
   }
@@ -114,13 +115,13 @@ export class GraphEngine {
           webgl: true,
           antialias: true
         },
-        
+
         // Node rendering settings
         defaultNodeColor: this.options.nodeColorScheme.default,
         defaultNodeSize: 8,
         minNodeSize: 4,
         maxNodeSize: 20,
-        
+
         // Edge rendering settings - ensure edges are visible
         defaultEdgeColor: this.options.edgeColorScheme.default,
         defaultEdgeSize: 4,     // Increased to 4 for maximum visibility
@@ -128,12 +129,12 @@ export class GraphEngine {
         maxEdgeSize: 8,         // Increased to 8
         renderEdges: true,      // Explicitly enable edge rendering
         edgesPowRatio: 0.5,     // Edge size power ratio for better scaling
-        
+
         // Performance settings - disabled hiding for debugging
         hideEdgesOnMove: false,  // Changed to false to ensure edges are always visible
         hideLabelsOnMove: true,
         enableHoverEffects: true,
-        
+
         // Interaction settings
         allowInvalidContainer: false,
         doubleClickEnabled: true,
@@ -145,18 +146,18 @@ export class GraphEngine {
       this.setupEventHandlers();
       this.setupNodeRenderers();
       this.setupEdgeRenderers();
-      
+
       // Initialize performance manager - temporarily disabled due to recursion issue
       // this.performanceManager = new PerformanceManager(this);
       this.performanceManager = null;
-      
+
       // Initialize web worker for background calculations
       this.initializeWebWorker();
-      
+
       // Debug: Log Sigma settings related to edges
-      
+
       return true;
-      
+
     } catch (error) {
       throw error;
     }
@@ -170,7 +171,7 @@ export class GraphEngine {
 
     // For now, use default Sigma.js node renderer to avoid WebGL program issues
     // All nodes will be rendered as circles by default
-    
+
     // Set default node type for all unspecified types
     this.sigma.setSetting('defaultNodeType', 'circle');
   }
@@ -183,11 +184,11 @@ export class GraphEngine {
 
     // Use the default Sigma.js edge renderer for better compatibility
     // Custom edge renderer was causing issues with node position access
-    
+
     // Configure edge display settings instead
     this.sigma.setSetting('defaultEdgeType', 'line');
     this.sigma.setSetting('enableEdgeHoverEvents', true);
-    
+
     // Add edge hover effects if needed
     this.sigma.on('enterEdge', (event) => {
       // Highlight edge on hover
@@ -196,7 +197,7 @@ export class GraphEngine {
       this.graph.setEdgeAttribute(edgeId, 'size', (edge.size || 2) * 1.5);
       this.sigma.refresh();
     });
-    
+
     this.sigma.on('leaveEdge', (event) => {
       // Reset edge on leave hover
       const edgeId = event.edge;
@@ -277,7 +278,7 @@ export class GraphEngine {
 
     // Add resize event listener
     window.addEventListener('resize', this.resizeHandler);
-    
+
     // Also handle container resize with ResizeObserver if available
     if (typeof ResizeObserver !== 'undefined' && this.container) {
       this.resizeObserver = new ResizeObserver(() => {
@@ -292,19 +293,19 @@ export class GraphEngine {
    */
   getDisplayLabel(nodeId, label) {
     const displayLabel = label || nodeId;
-    
+
     // If it looks like a file path, extract just the filename
     if (typeof displayLabel === 'string' && displayLabel.includes('/')) {
       const parts = displayLabel.split('/');
       return parts[parts.length - 1] || displayLabel;
     }
-    
+
     // If it looks like a Windows path, extract just the filename
     if (typeof displayLabel === 'string' && displayLabel.includes('\\')) {
       const parts = displayLabel.split('\\');
       return parts[parts.length - 1] || displayLabel;
     }
-    
+
     return displayLabel;
   }
 
@@ -312,9 +313,9 @@ export class GraphEngine {
    * Add a node to the graph
    */
   addNode(nodeId, attributes = {}) {
-    
+
     const displayLabel = this.getDisplayLabel(nodeId, attributes.label);
-    
+
     const defaultAttributes = {
       x: Math.random() * 1000,
       y: Math.random() * 1000,
@@ -327,16 +328,16 @@ export class GraphEngine {
 
     // Override any incoming type with 'circle' to prevent renderer errors
     const nodeAttributes = { ...defaultAttributes, ...attributes, type: 'circle', label: displayLabel };
-    
+
     if (!this.graph.hasNode(nodeId)) {
       this.graph.addNode(nodeId, nodeAttributes);
       this.stats.nodeCount++;
       this.emit('nodeAdded', { nodeId, attributes: nodeAttributes });
     } else {
       // Update existing node
-      this.graph.updateNodeAttributes(nodeId, (current) => ({ 
-        ...current, 
-        ...attributes, 
+      this.graph.updateNodeAttributes(nodeId, (current) => ({
+        ...current,
+        ...attributes,
         label: displayLabel,
         fullPath: attributes.label || current.fullPath || nodeId
       }));
@@ -349,7 +350,7 @@ export class GraphEngine {
    */
   addEdge(edgeId, source, target, attributes = {}) {
     // Check if source and target nodes exist
-    
+
     if (!this.graph.hasNode(source) || !this.graph.hasNode(target)) {
       return;
     }
@@ -361,8 +362,8 @@ export class GraphEngine {
       originalSize: attributes.size || 4  // Store original size for hover effects
     };
 
-    const edgeAttributes = { 
-      ...defaultAttributes, 
+    const edgeAttributes = {
+      ...defaultAttributes,
       ...attributes,
       color: '#ffffff', // Force white color for all edges
       type: 'line'      // Force line type for Sigma.js compatibility
@@ -374,7 +375,7 @@ export class GraphEngine {
         this.stats.edgeCount++;
         this.emit('edgeAdded', { edgeId, source, target, attributes: edgeAttributes });
       } catch (error) {
-        
+
         // Try adding without custom ID for undirected graphs
         try {
           const autoEdgeId = this.graph.addEdge(source, target, edgeAttributes);
@@ -470,11 +471,11 @@ export class GraphEngine {
 
       this.isLayoutRunning = true;
       this.layoutWorker = forceAtlas2.assign(this.graph, settings);
-      
+
       // Monitor layout progress
       let iterations = 0;
       let lastEnergy = Infinity;
-      
+
       const layoutStep = () => {
         if (!this.isLayoutRunning || iterations >= this.options.maxLayoutIterations) {
           this.stopLayout();
@@ -501,25 +502,25 @@ export class GraphEngine {
         if (this.options.stopPhysicsWhenStable && iterations % 10 === 0) {
           const currentEnergy = this.calculateLayoutEnergy();
           const energyChange = Math.abs(lastEnergy - currentEnergy) / lastEnergy;
-          
+
           if (energyChange < this.options.stabilityThreshold) {
             this.stopLayout();
             return;
           }
-          
+
           lastEnergy = currentEnergy;
         }
 
         // Refresh sigma display
         this.sigma.refresh();
-        
+
         // Continue layout
         requestAnimationFrame(layoutStep);
       };
 
       layoutStep();
       this.emit('layoutStarted');
-      
+
     } catch (error) {
       this.isLayoutRunning = false;
     }
@@ -542,12 +543,12 @@ export class GraphEngine {
   pause() {
     this.isPaused = true;
     this.stopLayout();
-    
+
     // Disable sigma rendering to save performance
     if (this.sigma) {
       this.sigma.getCamera().disable();
     }
-    
+
     this.emit('paused');
   }
 
@@ -556,13 +557,13 @@ export class GraphEngine {
    */
   resume() {
     this.isPaused = false;
-    
+
     // Re-enable sigma rendering
     if (this.sigma) {
       this.sigma.getCamera().enable();
       this.sigma.refresh();
     }
-    
+
     this.emit('resumed');
   }
 
@@ -611,7 +612,7 @@ export class GraphEngine {
    */
   resetLayout() {
     this.stopLayout();
-    
+
     // Reset all node positions to random
     this.graph.forEachNode((nodeId) => {
       this.graph.updateNodeAttributes(nodeId, (current) => ({
@@ -620,12 +621,12 @@ export class GraphEngine {
         y: Math.random() * 1000
       }));
     });
-    
+
     if (this.sigma) {
       this.sigma.refresh();
       this.fitToViewport();
     }
-    
+
     this.emit('layoutReset');
   }
 
@@ -634,26 +635,26 @@ export class GraphEngine {
    */
   exportToPNG() {
     if (!this.sigma) return;
-    
+
     try {
       // Get the canvas from sigma
       const canvas = this.sigma.getCanvas();
       if (!canvas) {
         return;
       }
-      
+
       // Create download link
       const link = document.createElement('a');
       link.download = `graph-${new Date().toISOString().slice(0, 10)}.png`;
       link.href = canvas.toDataURL('image/png');
-      
+
       // Trigger download
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       this.emit('graphExported', { format: 'png', filename: link.download });
-      
+
     } catch (error) {
       // Fallback: capture using html2canvas if available
       this.exportFallback();
@@ -694,13 +695,13 @@ export class GraphEngine {
         background: 'transparent'
       }
     };
-    
+
     const colors = schemes[scheme] || schemes.default;
-    
+
     // Update default colors
     this.options.nodeColorScheme.default = colors.node;
     this.options.edgeColorScheme.default = colors.edge;
-    
+
     // Apply to existing nodes and edges
     this.graph.forEachNode((nodeId) => {
       const currentColor = this.graph.getNodeAttribute(nodeId, 'color');
@@ -708,18 +709,18 @@ export class GraphEngine {
         this.graph.setNodeAttribute(nodeId, 'color', colors.node);
       }
     });
-    
+
     this.graph.forEachEdge((edgeId) => {
       const currentColor = this.graph.getEdgeAttribute(edgeId, 'color');
       if (currentColor === this.options.edgeColorScheme.default) {
         this.graph.setEdgeAttribute(edgeId, 'color', colors.edge);
       }
     });
-    
+
     if (this.sigma) {
       this.sigma.refresh();
     }
-    
+
     this.emit('colorSchemeChanged', { scheme, colors });
   }
 
@@ -728,11 +729,11 @@ export class GraphEngine {
    */
   setPerformanceMode(enabled) {
     if (!this.sigma) return;
-    
+
     this.sigma.setSetting('hideEdgesOnMove', enabled);
     this.sigma.setSetting('hideLabelsOnMove', enabled);
     this.sigma.setSetting('enableHoverEffects', !enabled);
-    
+
     // Adjust render quality based on performance mode
     if (enabled) {
       this.sigma.setSetting('minNodeSize', 2);
@@ -741,7 +742,7 @@ export class GraphEngine {
       this.sigma.setSetting('minNodeSize', 4);
       this.sigma.setSetting('maxNodeSize', 20);
     }
-    
+
     this.emit('performanceModeChanged', { enabled });
   }
 
@@ -750,11 +751,11 @@ export class GraphEngine {
    */
   getViewportBounds() {
     if (!this.sigma) return null;
-    
+
     const camera = this.sigma.getCamera();
     const state = camera.getState();
     const { width, height } = this.sigma.getDimensions();
-    
+
     return {
       x: state.x,
       y: state.y,
@@ -793,7 +794,7 @@ export class GraphEngine {
    * Debug method to log all edges in the graph
    */
   debugEdges() {
-    
+
     if (this.graph.size === 0) {
       return;
     }
@@ -821,13 +822,13 @@ export class GraphEngine {
    * Import graph data with stack overflow protection
    */
   importData(data, maxDepth = 1000) {
-    
+
     this.clear();
-    
+
     if (data.nodes) {
       const nodes = Array.isArray(data.nodes) ? data.nodes : [];
       const batchSize = 50; // Process in batches to prevent stack overflow
-      
+
       for (let i = 0; i < nodes.length; i += batchSize) {
         const batch = nodes.slice(i, i + batchSize);
         batch.forEach(({ key, attributes }) => {
@@ -838,32 +839,32 @@ export class GraphEngine {
         });
       }
     }
-    
+
     if (data.edges) {
       const edges = Array.isArray(data.edges) ? data.edges : [];
       const batchSize = 50; // Process in batches to prevent stack overflow
-      
+
       for (let i = 0; i < edges.length; i += batchSize) {
         const batch = edges.slice(i, i + batchSize);
         batch.forEach((edge) => {
           try {
             // More robust edge handling with logging
             const { key, source, target, attributes } = edge;
-            
+
             if (!key || !source || !target) {
               return;
             }
-            
+
             // Ensure attributes is an object
             const edgeAttributes = attributes || {};
-            
+
             this.addEdge(key, source, target, edgeAttributes);
           } catch (error) {
           }
         });
       }
     }
-    
+
     this.emit('dataImported', data);
   }
 
@@ -909,7 +910,7 @@ export class GraphEngine {
       this.memoryPools.vectors.push({ x: 0, y: 0 });
       this.memoryPools.matrices.push(new Array(6).fill(0));
     }
-    
+
     for (let i = 0; i < 50; i++) {
       this.memoryPools.buffers.push(new ArrayBuffer(1024));
       this.memoryPools.geometries.push({
@@ -951,40 +952,40 @@ export class GraphEngine {
    */
   cleanupCache() {
     if (!this.cache.enabled) return;
-    
+
     const now = Date.now();
     const maxAge = this.cache.maxCacheAge;
-    
+
     // Clean layout cache
     for (const [key, entry] of this.cache.layouts) {
       if (now - entry.timestamp > maxAge) {
         this.cache.layouts.delete(key);
       }
     }
-    
+
     // Clean node position cache
     for (const [key, entry] of this.cache.nodePositions) {
       if (now - entry.timestamp > maxAge) {
         this.cache.nodePositions.delete(key);
       }
     }
-    
+
     // Clean geometry caches
     for (const [key, entry] of this.cache.nodeGeometry) {
       if (now - entry.timestamp > maxAge) {
         this.cache.nodeGeometry.delete(key);
       }
     }
-    
+
     for (const [key, entry] of this.cache.edgeGeometry) {
       if (now - entry.timestamp > maxAge) {
         this.cache.edgeGeometry.delete(key);
       }
     }
-    
+
     // Enforce cache size limits
     this.enforceeCacheSizeLimits();
-    
+
     this.cache.lastCacheCleanup = now;
   }
 
@@ -993,24 +994,24 @@ export class GraphEngine {
    */
   enforceeCacheSizeLimits() {
     const maxSize = this.cache.maxCacheSize;
-    
+
     // Remove oldest entries if cache is too large
     if (this.cache.layouts.size > maxSize) {
       const entries = Array.from(this.cache.layouts.entries());
       entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
-      
+
       const toRemove = entries.slice(0, entries.length - maxSize);
       for (const [key] of toRemove) {
         this.cache.layouts.delete(key);
       }
     }
-    
+
     // Similar cleanup for other caches
     [this.cache.nodePositions, this.cache.nodeGeometry, this.cache.edgeGeometry].forEach(cache => {
       if (cache.size > maxSize) {
         const entries = Array.from(cache.entries());
         entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
-        
+
         const toRemove = entries.slice(0, entries.length - maxSize);
         for (const [key] of toRemove) {
           cache.delete(key);
@@ -1024,59 +1025,32 @@ export class GraphEngine {
    */
   initializeWebWorker() {
     try {
-      // Create worker from the GraphWorker file
-      const workerBlob = new Blob([this.getWorkerScript()], { type: 'application/javascript' });
-      this.webWorker = new Worker(URL.createObjectURL(workerBlob));
-      
+      // Create worker from the imported GraphWorker
+      this.webWorker = new GraphWorker();
+
       // Setup worker message handling
       this.webWorker.onmessage = (event) => {
         this.handleWorkerMessage(event.data);
       };
-      
+
       this.webWorker.onerror = (error) => {
+        console.error('GraphWorker error:', error);
       };
-      
-      // Initialize worker with current configuration
-      this.sendWorkerMessage('init', {
-        gravity: this.options.gravity || 1,
-        scalingRatio: this.options.scalingRatio || 10,
-        barnesHutOptimize: true,
-        maxIterations: this.options.maxLayoutIterations
-      });
-      
-      
+
     } catch (error) {
-      // Fall back to main thread calculations
+      console.error('Failed to initialize worker', error);
+      // Fall back to main thread calculations handled elsewhere
     }
   }
 
-  /**
-   * Get the worker script content
-   */
-  getWorkerScript() {
-    // In a real implementation, this would load the GraphWorker.js content
-    // For now, return a minimal worker script
-    return `
-      // Minimal worker implementation
-      self.onmessage = function(event) {
-        const { type, data, id } = event.data;
-        
-        // Echo back for now - would implement actual calculations
-        self.postMessage({
-          type: type + 'Response',
-          id,
-          data
-        });
-      };
-    `;
-  }
+
 
   /**
    * Send message to worker
    */
   sendWorkerMessage(type, data) {
     if (!this.webWorker) return;
-    
+
     const id = Date.now() + Math.random();
     this.webWorker.postMessage({ type, data, id });
     return id;
@@ -1086,17 +1060,23 @@ export class GraphEngine {
    * Handle messages from worker
    */
   handleWorkerMessage(message) {
-    const { type, data, id } = message;
-    
+    const { type, data } = message;
+
     switch (type) {
-      case 'layoutProgress':
+      case 'TICK_UPDATE':
         this.handleWorkerLayoutProgress(data);
         break;
-      case 'layoutCompleted':
+      case 'SIMULATION_ENDED':
         this.handleWorkerLayoutCompleted(data);
         break;
-      case 'metricsCalculated':
-        this.handleWorkerMetrics(data);
+      case 'CENTRALITY_CALCULATED':
+        this.emit('metricsCalculated', data);
+        break;
+      case 'COMMUNITIES_FOUND':
+        this.emit('communitiesFound', data);
+        break;
+      case 'PATH_FOUND':
+        this.emit('pathFound', data);
         break;
       default:
         // Handle other worker responses
@@ -1108,15 +1088,34 @@ export class GraphEngine {
    * Handle layout progress from worker
    */
   handleWorkerLayoutProgress(data) {
-    if (data.nodePositions) {
+    if (data.nodes && Array.isArray(data.nodes)) {
       // Update node positions from worker calculations
-      this.updateNodePositionsFromWorker(data.nodePositions);
-      
-      // Cache the positions
-      this.cacheNodePositions(data.nodePositions);
-      
+      for (const nodeUpdate of data.nodes) {
+        if (this.graph.hasNode(nodeUpdate.id)) {
+          this.graph.updateNodeAttributes(nodeUpdate.id, (current) => ({
+            ...current,
+            x: nodeUpdate.x,
+            y: nodeUpdate.y,
+            z: nodeUpdate.z,
+            vx: nodeUpdate.vx,
+            vy: nodeUpdate.vy,
+            vz: nodeUpdate.vz
+          }));
+        }
+      }
+
       // Refresh display
-      this.sigma.refresh();
+      if (this.sigma) {
+        this.sigma.refresh();
+      }
+    }
+
+    // Emit progress event with FPS and alpha
+    if (data.fps || data.alpha !== undefined) {
+      this.emit('layoutProgress', {
+        fps: data.fps,
+        alpha: data.alpha
+      });
     }
   }
 
@@ -1125,6 +1124,25 @@ export class GraphEngine {
    */
   handleWorkerLayoutCompleted(data) {
     this.isLayoutRunning = false;
+
+    // Apply final positions if provided
+    if (data.finalPositions && Array.isArray(data.finalPositions)) {
+      for (const nodeUpdate of data.finalPositions) {
+        if (this.graph.hasNode(nodeUpdate.id)) {
+          this.graph.updateNodeAttributes(nodeUpdate.id, (current) => ({
+            ...current,
+            x: nodeUpdate.x,
+            y: nodeUpdate.y,
+            z: nodeUpdate.z
+          }));
+        }
+      }
+
+      if (this.sigma) {
+        this.sigma.refresh();
+      }
+    }
+
     this.emit('layoutCompleted', data);
   }
 
@@ -1136,7 +1154,7 @@ export class GraphEngine {
   }
 
   /**
-   * Update node positions from worker calculations
+   * Update node positions from worker calculations (legacy support)
    */
   updateNodePositionsFromWorker(positions) {
     for (const position of positions) {
@@ -1152,10 +1170,10 @@ export class GraphEngine {
    */
   cacheNodePositions(positions) {
     if (!this.cache.enabled) return;
-    
+
     const timestamp = Date.now();
     const cacheKey = this.generateCacheKey('positions', positions.length);
-    
+
     this.cache.nodePositions.set(cacheKey, {
       positions,
       timestamp,
@@ -1168,14 +1186,14 @@ export class GraphEngine {
    */
   getCachedNodePositions(nodeCount) {
     if (!this.cache.enabled) return null;
-    
+
     const cacheKey = this.generateCacheKey('positions', nodeCount);
     const cached = this.cache.nodePositions.get(cacheKey);
-    
+
     if (cached && Date.now() - cached.timestamp < this.cache.maxCacheAge) {
       return cached.positions;
     }
-    
+
     return null;
   }
 
@@ -1184,7 +1202,7 @@ export class GraphEngine {
    */
   cacheLayoutResult(config, result) {
     if (!this.cache.enabled) return;
-    
+
     const cacheKey = this.generateLayoutCacheKey(config);
     this.cache.layouts.set(cacheKey, {
       config,
@@ -1198,14 +1216,14 @@ export class GraphEngine {
    */
   getCachedLayoutResult(config) {
     if (!this.cache.enabled) return null;
-    
+
     const cacheKey = this.generateLayoutCacheKey(config);
     const cached = this.cache.layouts.get(cacheKey);
-    
+
     if (cached && Date.now() - cached.timestamp < this.cache.maxCacheAge) {
       return cached.result;
     }
-    
+
     return null;
   }
 
@@ -1220,7 +1238,7 @@ export class GraphEngine {
       scalingRatio: config.scalingRatio || 10,
       barnesHut: config.barnesHutOptimize || false
     };
-    
+
     return JSON.stringify(keyData);
   }
 
@@ -1236,10 +1254,10 @@ export class GraphEngine {
    */
   cacheViewportState(camera, visibleNodes, visibleEdges) {
     if (!this.cache.enabled) return;
-    
+
     const state = camera.getState();
     const cacheKey = `viewport_${state.x}_${state.y}_${state.ratio}`;
-    
+
     this.cache.viewportStates.set(cacheKey, {
       camera: state,
       visibleNodes: new Set(visibleNodes),
@@ -1253,15 +1271,15 @@ export class GraphEngine {
    */
   getCachedViewportState(camera) {
     if (!this.cache.enabled) return null;
-    
+
     const state = camera.getState();
     const cacheKey = `viewport_${state.x}_${state.y}_${state.ratio}`;
     const cached = this.cache.viewportStates.get(cacheKey);
-    
+
     if (cached && Date.now() - cached.timestamp < 5000) { // 5 second cache for viewport
       return cached;
     }
-    
+
     return null;
   }
 
@@ -1275,13 +1293,13 @@ export class GraphEngine {
       scalingRatio: this.options.scalingRatio || 10,
       barnesHutOptimize: this.graph.order > 100
     };
-    
+
     const cachedResult = this.getCachedLayoutResult(config);
     if (cachedResult) {
       this.applyLayoutResult(cachedResult);
       return;
     }
-    
+
     // No cache hit, start new layout
     if (this.webWorker && this.graph.order > 500) {
       // Use worker for large graphs
@@ -1296,12 +1314,48 @@ export class GraphEngine {
    * Start layout calculation in worker
    */
   startWorkerLayout(config) {
+    if (!this.webWorker) return;
+
     // Send graph data to worker
     const graphData = this.exportData();
-    
-    this.sendWorkerMessage('setGraph', graphData);
-    this.sendWorkerMessage('startLayout', config);
-    
+
+    // Transform data to match worker expectation
+    const nodes = graphData.nodes.map(n => ({
+      id: n.key,
+      ...n.attributes
+    }));
+
+    const links = graphData.edges.map(e => ({
+      source: e.source,
+      target: e.target,
+      ...e.attributes
+    }));
+
+    // Send INIT_SIMULATION
+    this.webWorker.postMessage({
+      type: 'INIT_SIMULATION',
+      data: {
+        nodes,
+        links,
+        settings: {
+          // Map config to worker settings
+          forceStrength: {
+            charge: config.gravity ? -300 * config.gravity : -300,
+            link: 1,
+            center: 0.1,
+            collision: 1
+          },
+          alphaDecay: 0.02,
+          velocityDecay: 0.3
+        }
+      }
+    });
+
+    // Send START_SIMULATION
+    this.webWorker.postMessage({
+      type: 'START_SIMULATION'
+    });
+
     this.isLayoutRunning = true;
     this.emit('layoutStarted');
   }
@@ -1318,27 +1372,27 @@ export class GraphEngine {
    * Start dragging a node with physics simulation
    */
   startNodeDrag(nodeId, mouseEvent) {
-    
+
     this.physics.isDragging = true;
     this.physics.draggedNode = nodeId;
-    
+
     // Convert screen coordinates to graph coordinates
     const graphPoint = this.sigma.viewportToGraph(mouseEvent);
     this.physics.mousePosition = { x: graphPoint.x, y: graphPoint.y };
-    
+
     // Initialize velocities for all nodes if not exist
     this.graph.forEachNode((node) => {
       if (!this.physics.nodeVelocities.has(node)) {
         this.physics.nodeVelocities.set(node, { vx: 0, vy: 0 });
       }
     });
-    
+
     // Stop layout algorithm during drag
     this.stopLayout();
-    
+
     // Start physics animation
     this.startPhysicsAnimation();
-    
+
     this.emit('dragStart', { nodeId, position: this.physics.mousePosition });
   }
 
@@ -1347,21 +1401,21 @@ export class GraphEngine {
    */
   updateNodeDrag(mouseEvent) {
     if (!this.physics.isDragging || !this.physics.draggedNode) return;
-    
+
     // Convert screen coordinates to graph coordinates
     const graphPoint = this.sigma.viewportToGraph(mouseEvent);
     this.physics.mousePosition = { x: graphPoint.x, y: graphPoint.y };
-    
+
     // Update dragged node position immediately
     this.graph.updateNodeAttributes(this.physics.draggedNode, (current) => ({
       ...current,
       x: graphPoint.x,
       y: graphPoint.y
     }));
-    
-    this.emit('dragMove', { 
-      nodeId: this.physics.draggedNode, 
-      position: this.physics.mousePosition 
+
+    this.emit('dragMove', {
+      nodeId: this.physics.draggedNode,
+      position: this.physics.mousePosition
     });
   }
 
@@ -1370,15 +1424,15 @@ export class GraphEngine {
    */
   endNodeDrag() {
     if (!this.physics.isDragging) return;
-    
-    
+
+
     const draggedNode = this.physics.draggedNode;
     this.physics.isDragging = false;
     this.physics.draggedNode = null;
-    
+
     // Re-enable camera panning
     this.sigma.getCamera().enable();
-    
+
     // Let physics continue for a moment to settle
     setTimeout(() => {
       this.stopPhysicsAnimation();
@@ -1387,7 +1441,7 @@ export class GraphEngine {
         this.startLayout();
       }
     }, 2000); // 2 seconds of settling time
-    
+
     this.emit('dragEnd', { nodeId: draggedNode });
   }
 
@@ -1396,18 +1450,18 @@ export class GraphEngine {
    */
   startPhysicsAnimation() {
     if (this.physics.animationId) return; // Already running
-    
+
     const animate = () => {
       this.applyPhysicsForces();
       this.sigma.refresh();
-      
+
       if (this.physics.isDragging || this.hasSignificantMovement()) {
         this.physics.animationId = requestAnimationFrame(animate);
       } else {
         this.physics.animationId = null;
       }
     };
-    
+
     this.physics.animationId = requestAnimationFrame(animate);
   }
 
@@ -1426,40 +1480,40 @@ export class GraphEngine {
    */
   applyPhysicsForces() {
     if (!this.physics.draggedNode) return;
-    
+
     // Get ALL nodes within physics range, not just connected ones
     const draggedPos = this.graph.getNodeAttributes(this.physics.draggedNode);
     const affectedNodes = new Set();
-    
+
     // Add dragged node and all nodes within reasonable distance
     this.graph.forEachNode((nodeId, attributes) => {
       if (nodeId === this.physics.draggedNode) {
         affectedNodes.add(nodeId);
         return;
       }
-      
+
       const dx = attributes.x - draggedPos.x;
       const dy = attributes.y - draggedPos.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      
+
       // Include nodes within physics range (increased range for better effect)
       if (distance < 300) {
         affectedNodes.add(nodeId);
       }
     });
-    
+
     // Clear forces for all affected nodes
     affectedNodes.forEach(nodeId => {
       this.physics.forces.set(nodeId, { fx: 0, fy: 0 });
     });
-    
+
     // Apply spring forces between connected nodes
     this.graph.forEachEdge((edgeId, attributes, source, target) => {
       if (affectedNodes.has(source) || affectedNodes.has(target)) {
         this.applySpringForce(source, target);
       }
     });
-    
+
     // Apply repulsion forces between ALL affected nodes (not just connected ones)
     const affectedArray = Array.from(affectedNodes);
     for (let i = 0; i < affectedArray.length; i++) {
@@ -1467,29 +1521,29 @@ export class GraphEngine {
         this.applyRepulsionForce(affectedArray[i], affectedArray[j]);
       }
     }
-    
+
     // Update positions based on forces
     affectedNodes.forEach(nodeId => {
       if (nodeId === this.physics.draggedNode) return; // Skip dragged node
-      
+
       const force = this.physics.forces.get(nodeId);
       const velocity = this.physics.nodeVelocities.get(nodeId);
-      
+
       if (!force || !velocity) return;
-      
+
       // Apply force to velocity
       velocity.vx += force.fx;
       velocity.vy += force.fy;
-      
+
       // Apply damping
       velocity.vx *= this.physics.dampingFactor;
       velocity.vy *= this.physics.dampingFactor;
-      
+
       // Limit maximum velocity - increased for more responsive movement
       const maxVel = 15;
       velocity.vx = Math.max(-maxVel, Math.min(maxVel, velocity.vx));
       velocity.vy = Math.max(-maxVel, Math.min(maxVel, velocity.vy));
-      
+
       // Update position
       this.graph.updateNodeAttributes(nodeId, (current) => ({
         ...current,
@@ -1505,56 +1559,56 @@ export class GraphEngine {
   applySpringForce(nodeA, nodeB) {
     const posA = this.graph.getNodeAttributes(nodeA);
     const posB = this.graph.getNodeAttributes(nodeB);
-    
+
     const dx = posB.x - posA.x;
     const dy = posB.y - posA.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    
+
     if (distance === 0) return;
-    
+
     // Shorter spring length for tighter connections
     const springLength = 60;
-    
+
     // Stronger spring force when one node is being dragged
     const isDraggedConnection = (nodeA === this.physics.draggedNode || nodeB === this.physics.draggedNode);
     const springStrength = isDraggedConnection ? this.physics.springConstant * 3 : this.physics.springConstant;
-    
+
     const force = springStrength * (distance - springLength);
-    
+
     // Maximum allowed stretch distance - beyond this, nodes move together
     const maxStretch = 100;
     if (distance > maxStretch && isDraggedConnection) {
       // Calculate how much to move the connected node directly
       const excessDistance = distance - maxStretch;
       const moveDistance = Math.min(excessDistance * 0.8, distance * 0.4); // Move up to 40% of total distance
-      
+
       if (nodeA === this.physics.draggedNode) {
         // Directly move connected node (B) towards dragged node (A)
         const moveX = (dx / distance) * moveDistance;
         const moveY = (dy / distance) * moveDistance;
-        
+
         // Apply large instantaneous force for immediate movement
         const forceB = this.physics.forces.get(nodeB);
         forceB.fx += moveX * 8; // Very strong force
         forceB.fy += moveY * 8;
-        
+
         // Also set velocity directly for immediate response
         const velocityB = this.physics.nodeVelocities.get(nodeB);
         if (velocityB) {
           velocityB.vx += moveX * 0.3;
           velocityB.vy += moveY * 0.3;
         }
-        
+
       } else if (nodeB === this.physics.draggedNode) {
         // Directly move connected node (A) towards dragged node (B)
         const moveX = (dx / distance) * moveDistance;
         const moveY = (dy / distance) * moveDistance;
-        
+
         // Apply large instantaneous force for immediate movement
         const forceA = this.physics.forces.get(nodeA);
         forceA.fx -= moveX * 8; // Very strong force
         forceA.fy -= moveY * 8;
-        
+
         // Also set velocity directly for immediate response
         const velocityA = this.physics.nodeVelocities.get(nodeA);
         if (velocityA) {
@@ -1564,14 +1618,14 @@ export class GraphEngine {
       }
       return;
     }
-    
+
     const fx = (dx / distance) * force;
     const fy = (dy / distance) * force;
-    
+
     // Apply force to both nodes
     const forceA = this.physics.forces.get(nodeA);
     const forceB = this.physics.forces.get(nodeB);
-    
+
     if (isDraggedConnection) {
       // When dragging, apply stronger forces to connected nodes
       if (nodeA === this.physics.draggedNode) {
@@ -1596,40 +1650,40 @@ export class GraphEngine {
   applyRepulsionForce(nodeA, nodeB) {
     const posA = this.graph.getNodeAttributes(nodeA);
     const posB = this.graph.getNodeAttributes(nodeB);
-    
+
     const dx = posB.x - posA.x;
     const dy = posB.y - posA.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    
+
     // Increased repulsion range and handle zero distance
     if (distance === 0) {
       // Add small random displacement for overlapping nodes
       const randomAngle = Math.random() * 2 * Math.PI;
       const fx = Math.cos(randomAngle) * this.physics.repulsionForce * 0.1;
       const fy = Math.sin(randomAngle) * this.physics.repulsionForce * 0.1;
-      
+
       const forceA = this.physics.forces.get(nodeA);
       const forceB = this.physics.forces.get(nodeB);
-      
+
       forceA.fx -= fx;
       forceA.fy -= fy;
       forceB.fx += fx;
       forceB.fy += fy;
       return;
     }
-    
+
     if (distance > 300) return; // Match the physics range
-    
+
     // Enhanced repulsion force calculation
     const force = this.physics.repulsionForce / (distance * distance * 0.5); // Stronger force
-    
+
     const fx = (dx / distance) * force;
     const fy = (dy / distance) * force;
-    
+
     // Apply repulsion force
     const forceA = this.physics.forces.get(nodeA);
     const forceB = this.physics.forces.get(nodeB);
-    
+
     if (forceA && forceB) {
       forceA.fx -= fx;
       forceA.fy -= fy;
@@ -1645,15 +1699,15 @@ export class GraphEngine {
     const connected = new Set();
     const toProcess = [{ node: startNode, degree: 0 }];
     const processed = new Set();
-    
+
     while (toProcess.length > 0) {
       const { node, degree } = toProcess.shift();
-      
+
       if (processed.has(node) || degree > maxDegrees) continue;
-      
+
       connected.add(node);
       processed.add(node);
-      
+
       // Add neighbors for next degree
       if (degree < maxDegrees) {
         this.graph.forEachNeighbor(node, (neighbor) => {
@@ -1663,7 +1717,7 @@ export class GraphEngine {
         });
       }
     }
-    
+
     return connected;
   }
 
@@ -1672,11 +1726,11 @@ export class GraphEngine {
    */
   hasSignificantMovement() {
     if (!this.physics.draggedNode) return false;
-    
+
     // Only check movement among connected nodes
     const affectedNodes = this.getConnectedNodes(this.physics.draggedNode, 2);
     let maxVelocity = 0;
-    
+
     affectedNodes.forEach(nodeId => {
       const velocity = this.physics.nodeVelocities.get(nodeId);
       if (velocity) {
@@ -1684,7 +1738,7 @@ export class GraphEngine {
         maxVelocity = Math.max(maxVelocity, vel);
       }
     });
-    
+
     return maxVelocity > 0.1; // Threshold for significant movement
   }
 
@@ -1695,12 +1749,12 @@ export class GraphEngine {
     // Get connected nodes
     const connectedNodes = new Set();
     const connectedEdges = new Set();
-    
+
     this.graph.forEachEdge(nodeId, (edgeId, source, target) => {
       connectedEdges.add(edgeId);
       connectedNodes.add(source === nodeId ? target : source);
     });
-    
+
     // Update node visual states
     this.graph.forEachNode((node) => {
       this.graph.updateNodeAttributes(node, (current) => ({
@@ -1709,7 +1763,7 @@ export class GraphEngine {
         dimmed: !connectedNodes.has(node) && node !== nodeId
       }));
     });
-    
+
     // Update edge visual states
     this.graph.forEachEdge((edgeId) => {
       this.graph.updateEdgeAttributes(edgeId, (current) => ({
@@ -1718,7 +1772,7 @@ export class GraphEngine {
         dimmed: !connectedEdges.has(edgeId)
       }));
     });
-    
+
     this.sigma.refresh();
   }
 
@@ -1730,7 +1784,7 @@ export class GraphEngine {
       this.updateNodePositionsFromWorker(result.nodePositions);
       this.sigma.refresh();
     }
-    
+
     this.emit('layoutCompleted', result);
   }
 
@@ -1741,7 +1795,7 @@ export class GraphEngine {
     // Check cache for similar node geometry
     const geometryKey = this.generateNodeGeometryKey(attributes);
     const cachedGeometry = this.cache.nodeGeometry.get(geometryKey);
-    
+
     if (cachedGeometry) {
       // Reuse cached geometry
       attributes = { ...attributes, ...cachedGeometry.geometry };
@@ -1754,7 +1808,7 @@ export class GraphEngine {
       });
       attributes = { ...attributes, ...geometry };
     }
-    
+
     // Use existing add node method
     this.addNode(nodeId, attributes);
   }
@@ -1784,7 +1838,7 @@ export class GraphEngine {
    */
   getPerformanceStats() {
     const baseStats = this.getStats();
-    
+
     return {
       ...baseStats,
       cache: {
@@ -1821,7 +1875,7 @@ export class GraphEngine {
    */
   setCacheEnabled(enabled) {
     this.cache.enabled = enabled;
-    
+
     if (!enabled) {
       // Clear all caches when disabled
       this.cache.layouts.clear();
@@ -1830,7 +1884,7 @@ export class GraphEngine {
       this.cache.edgeGeometry.clear();
       this.cache.viewportStates.clear();
     }
-    
+
   }
 
   /**
@@ -1846,8 +1900,8 @@ export class GraphEngine {
   getCacheStats() {
     return {
       enabled: this.cache.enabled,
-      totalEntries: this.cache.layouts.size + this.cache.nodePositions.size + 
-                   this.cache.nodeGeometry.size + this.cache.edgeGeometry.size,
+      totalEntries: this.cache.layouts.size + this.cache.nodePositions.size +
+        this.cache.nodeGeometry.size + this.cache.edgeGeometry.size,
       layouts: this.cache.layouts.size,
       positions: this.cache.nodePositions.size,
       nodeGeometry: this.cache.nodeGeometry.size,
@@ -1864,51 +1918,51 @@ export class GraphEngine {
    */
   destroy() {
     this.stopLayout();
-    
+
     // Destroy performance manager
     if (this.performanceManager) {
       this.performanceManager.destroy();
       this.performanceManager = null;
     }
-    
+
     // Terminate web worker
     if (this.webWorker) {
       this.webWorker.terminate();
       this.webWorker = null;
     }
-    
+
     // Clear all caches
     this.cache.layouts.clear();
     this.cache.nodePositions.clear();
     this.cache.nodeGeometry.clear();
     this.cache.edgeGeometry.clear();
     this.cache.viewportStates.clear();
-    
+
     // Clear memory pools
     this.memoryPools.vectors.length = 0;
     this.memoryPools.matrices.length = 0;
     this.memoryPools.buffers.length = 0;
     this.memoryPools.geometries.length = 0;
-    
+
     // Clean up resize event listeners
     if (this.resizeHandler) {
       window.removeEventListener('resize', this.resizeHandler);
       this.resizeHandler = null;
     }
-    
+
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
     }
-    
+
     if (this.sigma) {
       this.sigma.kill();
       this.sigma = null;
     }
-    
+
     this.graph.clear();
     this.eventListeners.clear();
-    
+
   }
 }
 

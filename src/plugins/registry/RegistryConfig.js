@@ -103,8 +103,10 @@ export const DEFAULT_CONFIG = {
   // Network settings
   network: {
     timeout: 30000,
-    retryAttempts: 3,
-    retryDelay: 1000,
+    // Performance optimization: Reduced from 3 retries to 1
+    // Faster failure when registry is offline/unavailable
+    retryAttempts: 1,
+    retryDelay: 500,
     maxConcurrentDownloads: 3,
     useProxy: false,
     proxyUrl: null,
@@ -170,12 +172,12 @@ export const DEFAULT_CONFIG = {
 export class RegistryConfig extends EventEmitter {
   constructor(configPath = null) {
     super()
-    
+
     this.configPath = configPath
     this.config = this.deepClone(DEFAULT_CONFIG)
     this.watchers = new Set()
     this.isInitialized = false
-    
+
     this.logger = console // TODO: Replace with proper logger
   }
 
@@ -192,7 +194,7 @@ export class RegistryConfig extends EventEmitter {
       await this.loadConfig()
       await this.validateConfig()
       await this.migrateConfig()
-      
+
       this.isInitialized = true
       this.emit('initialized', this.config)
       this.logger.info('Registry configuration initialized successfully')
@@ -210,10 +212,10 @@ export class RegistryConfig extends EventEmitter {
       if (await exists(this.configPath)) {
         const content = await readTextFile(this.configPath)
         const userConfig = JSON.parse(content)
-        
+
         // Merge with defaults
         this.config = this.deepMerge(DEFAULT_CONFIG, userConfig)
-        
+
         this.emit('config_loaded', this.config)
         this.logger.info('Configuration loaded from file')
       } else {
@@ -232,7 +234,7 @@ export class RegistryConfig extends EventEmitter {
     try {
       const content = JSON.stringify(this.config, null, 2)
       await writeTextFile(this.configPath, content)
-      
+
       this.emit('config_saved', this.config)
       this.logger.info('Configuration saved to file')
     } catch (error) {
@@ -308,7 +310,7 @@ export class RegistryConfig extends EventEmitter {
   get(key, defaultValue = null) {
     const keys = key.split('.')
     let value = this.config
-    
+
     for (const k of keys) {
       if (value && typeof value === 'object' && k in value) {
         value = value[k]
@@ -316,7 +318,7 @@ export class RegistryConfig extends EventEmitter {
         return defaultValue
       }
     }
-    
+
     return value
   }
 
@@ -324,41 +326,41 @@ export class RegistryConfig extends EventEmitter {
     const keys = key.split('.')
     const lastKey = keys.pop()
     let target = this.config
-    
+
     for (const k of keys) {
       if (!(k in target) || typeof target[k] !== 'object') {
         target[k] = {}
       }
       target = target[k]
     }
-    
+
     const oldValue = target[lastKey]
     target[lastKey] = value
-    
+
     if (save) {
       await this.saveConfig()
     }
-    
+
     this.emit('config_changed', { key, oldValue, newValue: value })
-    
+
     return true
   }
 
   async update(updates, save = true) {
     const changes = []
-    
+
     for (const [key, value] of Object.entries(updates)) {
       const oldValue = this.get(key)
       await this.set(key, value, false)
       changes.push({ key, oldValue, newValue: value })
     }
-    
+
     if (save) {
       await this.saveConfig()
     }
-    
+
     this.emit('config_updated', changes)
-    
+
     return changes
   }
 
@@ -395,7 +397,7 @@ export class RegistryConfig extends EventEmitter {
 
     await this.saveConfig()
     this.emit('registry_added', { id, registry: this.config.registries[id] })
-    
+
     return true
   }
 
@@ -411,7 +413,7 @@ export class RegistryConfig extends EventEmitter {
     delete this.config.registries[id]
     await this.saveConfig()
     this.emit('registry_removed', { id })
-    
+
     return true
   }
 
@@ -425,7 +427,7 @@ export class RegistryConfig extends EventEmitter {
 
     await this.saveConfig()
     this.emit('registry_updated', { id, registry })
-    
+
     return true
   }
 
@@ -540,7 +542,7 @@ export class RegistryConfig extends EventEmitter {
 
       this.emit('config_imported', { merge, version: configData.version })
       this.logger.info('Configuration imported successfully')
-      
+
       return true
     } catch (error) {
       this.logger.error('Failed to import configuration:', error)
@@ -570,12 +572,12 @@ export class RegistryConfig extends EventEmitter {
   /**
    * Utility methods
    */
-  
+
   deepClone(obj) {
     if (obj === null || typeof obj !== 'object') return obj
     if (obj instanceof Date) return new Date(obj)
     if (Array.isArray(obj)) return obj.map(item => this.deepClone(item))
-    
+
     const cloned = {}
     for (const key in obj) {
       if (obj.hasOwnProperty(key)) {
@@ -587,14 +589,14 @@ export class RegistryConfig extends EventEmitter {
 
   deepMerge(target, source) {
     const result = this.deepClone(target)
-    
+
     for (const key in source) {
       if (source.hasOwnProperty(key)) {
         if (
-          result[key] && 
-          typeof result[key] === 'object' && 
+          result[key] &&
+          typeof result[key] === 'object' &&
           !Array.isArray(result[key]) &&
-          typeof source[key] === 'object' && 
+          typeof source[key] === 'object' &&
           !Array.isArray(source[key])
         ) {
           result[key] = this.deepMerge(result[key], source[key])
@@ -603,7 +605,7 @@ export class RegistryConfig extends EventEmitter {
         }
       }
     }
-    
+
     return result
   }
 
@@ -647,7 +649,7 @@ export class RegistryConfig extends EventEmitter {
   async applyPreset(presetName) {
     const presets = this.getPresets()
     const preset = presets[presetName]
-    
+
     if (!preset) {
       throw new Error(`Unknown preset: ${presetName}`)
     }
@@ -675,7 +677,7 @@ export class RegistryConfig extends EventEmitter {
                 enabled: { type: 'boolean' },
                 priority: { type: 'number' },
                 verified: { type: 'boolean' },
-                mirrors: { 
+                mirrors: {
                   type: 'array',
                   items: { type: 'string', format: 'uri' }
                 }
@@ -713,7 +715,7 @@ export class RegistryConfig extends EventEmitter {
   async shutdown() {
     await this.unwatchConfig()
     await this.saveConfig()
-    
+
     this.emit('shutdown')
     this.removeAllListeners()
   }

@@ -12,6 +12,7 @@ use crate::mcp_embedded;
 
 #[derive(Debug)]
 pub struct MCPSetup {
+    #[allow(dead_code)]
     app_handle: tauri::AppHandle,
 }
 

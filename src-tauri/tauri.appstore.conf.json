@@ -28,7 +28,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["app"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -36,38 +36,21 @@
       "icons/icon.icns"
     ],
     "resources": [
-      "../src/themes"
+      "../src/themes",
+      "PrivacyInfo.xcprivacy"
     ],
     "macOS": {
       "frameworks": [],
-      "minimumSystemVersion": "10.15",
+      "minimumSystemVersion": "12.0",
       "exceptionDomain": "",
-      "signingIdentity": "-",
-      "hardenedRuntime": true,
-      "entitlements": "entitlements.plist",
-      "dmg": {
-        "appPosition": {
-          "x": 180,
-          "y": 170
-        },
-        "applicationFolderPosition": {
-          "x": 480,
-          "y": 170
-        },
-        "windowSize": {
-          "width": 660,
-          "height": 400
-        },
-        "backgroundScript": null
-      }
+      "signingIdentity": "3rd Party Mac Developer Application: Pratham Patel (UH5Z2K4G9H)",
+      "hardenedRuntime": false,
+      "entitlements": "entitlements-appstore.plist"
     }
   },
   "plugins": {
     "fs": {
       "requireLiteralLeadingDot": false
-    },
-    "globalShortcut": {
-      "all": true
     },
     "clipboardManager": {
       "all": true,

@@ -13,7 +13,7 @@
  */
 
 // Import required libraries for physics calculations
-importScripts('https://d3js.org/d3-force.v3.min.js');
+import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force';
 
 class GraphPhysicsWorker {
   constructor() {
@@ -32,20 +32,20 @@ class GraphPhysicsWorker {
       },
       targetAlpha: 0.01
     };
-    
+
     // Performance monitoring
     this.frameCount = 0;
     this.lastUpdate = performance.now();
     this.fps = 60;
-    
+
     // Setup message handlers
     this.setupMessageHandlers();
   }
-  
+
   setupMessageHandlers() {
     self.addEventListener('message', (event) => {
       const { type, data } = event.data;
-      
+
       switch (type) {
         case 'INIT_SIMULATION':
           this.initSimulation(data);
@@ -81,28 +81,28 @@ class GraphPhysicsWorker {
       }
     });
   }
-  
+
   initSimulation(data) {
     const { nodes, links, settings = {} } = data;
-    
+
     // Update settings
     this.settings = { ...this.settings, ...settings };
-    
+
     // Store data
     this.nodes = nodes.map(node => ({ ...node }));
     this.links = links.map(link => ({ ...link }));
-    
+
     // Create d3-force simulation
-    this.simulation = d3.forceSimulation(this.nodes)
-      .force('link', d3.forceLink(this.links).id(d => d.id).distance(50).strength(this.settings.forceStrength.link))
-      .force('charge', d3.forceManyBody().strength(this.settings.forceStrength.charge))
-      .force('center', d3.forceCenter(0, 0).strength(this.settings.forceStrength.center))
-      .force('collision', d3.forceCollide().radius(d => (d.size || 5) + 2).strength(this.settings.forceStrength.collision))
+    this.simulation = forceSimulation(this.nodes)
+      .force('link', forceLink(this.links).id(d => d.id).distance(50).strength(this.settings.forceStrength.link))
+      .force('charge', forceManyBody().strength(this.settings.forceStrength.charge))
+      .force('center', forceCenter(0, 0).strength(this.settings.forceStrength.center))
+      .force('collision', forceCollide().radius(d => (d.size || 5) + 2).strength(this.settings.forceStrength.collision))
       .alphaDecay(this.settings.alphaDecay)
       .velocityDecay(this.settings.velocityDecay)
       .on('tick', () => this.onTick())
       .on('end', () => this.onSimulationEnd());
-    
+
     this.postMessage({
       type: 'SIMULATION_INITIALIZED',
       data: {
@@ -111,48 +111,48 @@ class GraphPhysicsWorker {
       }
     });
   }
-  
+
   updateNodes(nodes) {
     this.nodes = nodes.map(node => ({ ...node }));
     if (this.simulation) {
       this.simulation.nodes(this.nodes);
     }
   }
-  
+
   updateLinks(links) {
     this.links = links.map(link => ({ ...link }));
     if (this.simulation) {
       this.simulation.force('link').links(this.links);
     }
   }
-  
+
   startSimulation() {
     if (this.simulation) {
       this.isRunning = true;
       this.simulation.restart();
       this.lastUpdate = performance.now();
       this.frameCount = 0;
-      
+
       this.postMessage({
         type: 'SIMULATION_STARTED'
       });
     }
   }
-  
+
   stopSimulation() {
     if (this.simulation) {
       this.isRunning = false;
       this.simulation.stop();
-      
+
       this.postMessage({
         type: 'SIMULATION_STOPPED'
       });
     }
   }
-  
+
   updateSettings(settings) {
     this.settings = { ...this.settings, ...settings };
-    
+
     if (this.simulation) {
       // Update force strengths
       if (settings.forceStrength) {
@@ -169,7 +169,7 @@ class GraphPhysicsWorker {
           this.simulation.force('collision').strength(settings.forceStrength.collision);
         }
       }
-      
+
       // Update simulation parameters
       if (settings.alphaDecay !== undefined) {
         this.simulation.alphaDecay(settings.alphaDecay);
@@ -179,34 +179,360 @@ class GraphPhysicsWorker {
       }
     }
   }
-  
+
   setNodePosition(nodeId, x, y, z = 0) {
     const node = this.nodes.find(n => n.id === nodeId);
     if (node) {
       node.fx = x;
       node.fy = y;
       if (z !== undefined) node.fz = z;
-      
+
       // Reheat simulation to respond to position change
       if (this.simulation && this.isRunning) {
         this.simulation.alpha(0.3).restart();
       }
     }
   }
-  
+
   onTick() {
     this.frameCount++;
     const now = performance.now();
-    
+
     // Calculate FPS every 60 frames
     if (this.frameCount % 60 === 0) {
       const deltaTime = now - this.lastUpdate;
       this.fps = 60000 / deltaTime; // 60 frames / deltaTime in ms
       this.lastUpdate = now;
     }
-    
+
     // Send position updates to main thread
     this.postMessage({
       type: 'TICK_UPDATE',
       data: {
-        nodes: this.nodes.map(node => ({\n          id: node.id,\n          x: node.x,\n          y: node.y,\n          z: node.z,\n          vx: node.vx,\n          vy: node.vy,\n          vz: node.vz\n        })),\n        alpha: this.simulation.alpha(),\n        fps: this.fps\n      }\n    });\n    \n    // Auto-stop when simulation stabilizes\n    if (this.simulation.alpha() < this.settings.targetAlpha) {\n      this.stopSimulation();\n    }\n  }\n  \n  onSimulationEnd() {\n    this.isRunning = false;\n    \n    this.postMessage({\n      type: 'SIMULATION_ENDED',\n      data: {\n        finalPositions: this.nodes.map(node => ({\n          id: node.id,\n          x: node.x,\n          y: node.y,\n          z: node.z\n        }))\n      }\n    });\n  }\n  \n  // Advanced graph analysis methods\n  \n  calculateCentrality() {\n    const centrality = new Map();\n    \n    // Calculate degree centrality\n    for (const node of this.nodes) {\n      const degree = this.links.filter(link => \n        link.source.id === node.id || link.target.id === node.id\n      ).length;\n      \n      centrality.set(node.id, {\n        degree,\n        normalized: degree / (this.nodes.length - 1)\n      });\n    }\n    \n    // Calculate betweenness centrality (simplified)\n    const betweenness = this.calculateBetweennessCentrality();\n    \n    // Calculate PageRank (simplified)\n    const pagerank = this.calculatePageRank();\n    \n    // Combine results\n    const results = new Map();\n    for (const node of this.nodes) {\n      results.set(node.id, {\n        ...centrality.get(node.id),\n        betweenness: betweenness.get(node.id) || 0,\n        pagerank: pagerank.get(node.id) || 0\n      });\n    }\n    \n    this.postMessage({\n      type: 'CENTRALITY_CALCULATED',\n      data: Object.fromEntries(results)\n    });\n  }\n  \n  calculateBetweennessCentrality() {\n    const betweenness = new Map();\n    \n    // Initialize\n    for (const node of this.nodes) {\n      betweenness.set(node.id, 0);\n    }\n    \n    // Simplified betweenness calculation\n    // In a full implementation, this would use Brandes' algorithm\n    for (const node of this.nodes) {\n      const connectedNodes = this.links\n        .filter(link => link.source.id === node.id || link.target.id === node.id)\n        .map(link => link.source.id === node.id ? link.target.id : link.source.id);\n      \n      // Simple approximation based on connectivity\n      const score = connectedNodes.length * (connectedNodes.length - 1) / 2;\n      betweenness.set(node.id, score);\n    }\n    \n    return betweenness;\n  }\n  \n  calculatePageRank(damping = 0.85, iterations = 10) {\n    const pagerank = new Map();\n    const nodeCount = this.nodes.length;\n    \n    // Initialize PageRank values\n    for (const node of this.nodes) {\n      pagerank.set(node.id, 1 / nodeCount);\n    }\n    \n    // Build adjacency structure\n    const inLinks = new Map();\n    const outDegree = new Map();\n    \n    for (const node of this.nodes) {\n      inLinks.set(node.id, []);\n      outDegree.set(node.id, 0);\n    }\n    \n    for (const link of this.links) {\n      const sourceId = link.source.id || link.source;\n      const targetId = link.target.id || link.target;\n      \n      inLinks.get(targetId).push(sourceId);\n      outDegree.set(sourceId, outDegree.get(sourceId) + 1);\n    }\n    \n    // Iterative calculation\n    for (let i = 0; i < iterations; i++) {\n      const newPageRank = new Map();\n      \n      for (const node of this.nodes) {\n        const nodeId = node.id;\n        let sum = 0;\n        \n        for (const inNodeId of inLinks.get(nodeId)) {\n          const outDeg = outDegree.get(inNodeId);\n          if (outDeg > 0) {\n            sum += pagerank.get(inNodeId) / outDeg;\n          }\n        }\n        \n        newPageRank.set(nodeId, (1 - damping) / nodeCount + damping * sum);\n      }\n      \n      // Update PageRank values\n      for (const [nodeId, value] of newPageRank) {\n        pagerank.set(nodeId, value);\n      }\n    }\n    \n    return pagerank;\n  }\n  \n  findCommunities() {\n    // Simplified community detection using label propagation\n    const communities = new Map();\n    \n    // Initialize each node as its own community\n    for (const node of this.nodes) {\n      communities.set(node.id, node.id);\n    }\n    \n    // Build adjacency list\n    const adjacency = new Map();\n    for (const node of this.nodes) {\n      adjacency.set(node.id, []);\n    }\n    \n    for (const link of this.links) {\n      const sourceId = link.source.id || link.source;\n      const targetId = link.target.id || link.target;\n      \n      adjacency.get(sourceId).push(targetId);\n      adjacency.get(targetId).push(sourceId);\n    }\n    \n    // Label propagation iterations\n    let changed = true;\n    let iteration = 0;\n    const maxIterations = 10;\n    \n    while (changed && iteration < maxIterations) {\n      changed = false;\n      \n      // Randomize node order\n      const shuffledNodes = [...this.nodes].sort(() => Math.random() - 0.5);\n      \n      for (const node of shuffledNodes) {\n        const nodeId = node.id;\n        const neighbors = adjacency.get(nodeId);\n        \n        if (neighbors.length === 0) continue;\n        \n        // Count neighbor communities\n        const communityCount = new Map();\n        for (const neighborId of neighbors) {\n          const community = communities.get(neighborId);\n          communityCount.set(community, (communityCount.get(community) || 0) + 1);\n        }\n        \n        // Find most frequent community\n        let maxCount = 0;\n        let bestCommunity = communities.get(nodeId);\n        \n        for (const [community, count] of communityCount) {\n          if (count > maxCount) {\n            maxCount = count;\n            bestCommunity = community;\n          }\n        }\n        \n        // Update community if changed\n        if (bestCommunity !== communities.get(nodeId)) {\n          communities.set(nodeId, bestCommunity);\n          changed = true;\n        }\n      }\n      \n      iteration++;\n    }\n    \n    // Group nodes by community\n    const communityGroups = new Map();\n    for (const [nodeId, communityId] of communities) {\n      if (!communityGroups.has(communityId)) {\n        communityGroups.set(communityId, []);\n      }\n      communityGroups.get(communityId).push(nodeId);\n    }\n    \n    this.postMessage({\n      type: 'COMMUNITIES_FOUND',\n      data: {\n        communities: Object.fromEntries(communities),\n        groups: Object.fromEntries(communityGroups),\n        iteration\n      }\n    });\n  }\n  \n  findPath(sourceId, targetId) {\n    // Breadth-first search for shortest path\n    const visited = new Set();\n    const queue = [{ nodeId: sourceId, path: [sourceId] }];\n    const adjacency = new Map();\n    \n    // Build adjacency list\n    for (const node of this.nodes) {\n      adjacency.set(node.id, []);\n    }\n    \n    for (const link of this.links) {\n      const source = link.source.id || link.source;\n      const target = link.target.id || link.target;\n      \n      adjacency.get(source).push(target);\n      adjacency.get(target).push(source);\n    }\n    \n    while (queue.length > 0) {\n      const { nodeId, path } = queue.shift();\n      \n      if (nodeId === targetId) {\n        this.postMessage({\n          type: 'PATH_FOUND',\n          data: {\n            path,\n            distance: path.length - 1\n          }\n        });\n        return;\n      }\n      \n      if (visited.has(nodeId)) continue;\n      visited.add(nodeId);\n      \n      const neighbors = adjacency.get(nodeId) || [];\n      for (const neighborId of neighbors) {\n        if (!visited.has(neighborId)) {\n          queue.push({\n            nodeId: neighborId,\n            path: [...path, neighborId]\n          });\n        }\n      }\n    }\n    \n    // No path found\n    this.postMessage({\n      type: 'PATH_NOT_FOUND',\n      data: {\n        source: sourceId,\n        target: targetId\n      }\n    });\n  }\n  \n  postMessage(message) {\n    self.postMessage(message);\n  }\n}\n\n// Initialize worker\nconst worker = new GraphPhysicsWorker();\n\n// Handle worker errors\nself.addEventListener('error', (error) => {\n  \n  worker.postMessage({\n    type: 'WORKER_ERROR',\n    data: {\n      message: error.message,\n      filename: error.filename,\n      lineno: error.lineno\n    }\n  });\n});\n\n// Handle unhandled promise rejections\nself.addEventListener('unhandledrejection', (event) => {\n  \n  worker.postMessage({\n    type: 'WORKER_ERROR',\n    data: {\n      message: 'Unhandled promise rejection',\n      reason: event.reason\n    }\n  });\n});
+        nodes: this.nodes.map(node => ({
+          id: node.id,
+          x: node.x,
+          y: node.y,
+          z: node.z,
+          vx: node.vx,
+          vy: node.vy,
+          vz: node.vz
+        })),
+        alpha: this.simulation.alpha(),
+        fps: this.fps
+      }
+    });
+
+    // Auto-stop when simulation stabilizes
+    if (this.simulation.alpha() < this.settings.targetAlpha) {
+      this.stopSimulation();
+    }
+  }
+
+  onSimulationEnd() {
+    this.isRunning = false;
+
+    this.postMessage({
+      type: 'SIMULATION_ENDED',
+      data: {
+        finalPositions: this.nodes.map(node => ({
+          id: node.id,
+          x: node.x,
+          y: node.y,
+          z: node.z
+        }))
+      }
+    });
+  }
+
+  // Advanced graph analysis methods
+
+  calculateCentrality() {
+    const centrality = new Map();
+
+    // Calculate degree centrality
+    for (const node of this.nodes) {
+      const degree = this.links.filter(link =>
+        link.source.id === node.id || link.target.id === node.id
+      ).length;
+
+      centrality.set(node.id, {
+        degree,
+        normalized: degree / (this.nodes.length - 1)
+      });
+    }
+
+    // Calculate betweenness centrality (simplified)
+    const betweenness = this.calculateBetweennessCentrality();
+
+    // Calculate PageRank (simplified)
+    const pagerank = this.calculatePageRank();
+
+    // Combine results
+    const results = new Map();
+    for (const node of this.nodes) {
+      results.set(node.id, {
+        ...centrality.get(node.id),
+        betweenness: betweenness.get(node.id) || 0,
+        pagerank: pagerank.get(node.id) || 0
+      });
+    }
+
+    this.postMessage({
+      type: 'CENTRALITY_CALCULATED',
+      data: Object.fromEntries(results)
+    });
+  }
+
+  calculateBetweennessCentrality() {
+    const betweenness = new Map();
+
+    // Initialize
+    for (const node of this.nodes) {
+      betweenness.set(node.id, 0);
+    }
+
+    // Simplified betweenness calculation
+    // In a full implementation, this would use Brandes' algorithm
+    for (const node of this.nodes) {
+      const connectedNodes = this.links
+        .filter(link => link.source.id === node.id || link.target.id === node.id)
+        .map(link => link.source.id === node.id ? link.target.id : link.source.id);
+
+      // Simple approximation based on connectivity
+      const score = connectedNodes.length * (connectedNodes.length - 1) / 2;
+      betweenness.set(node.id, score);
+    }
+
+    return betweenness;
+  }
+
+  calculatePageRank(damping = 0.85, iterations = 10) {
+    const pagerank = new Map();
+    const nodeCount = this.nodes.length;
+
+    // Initialize PageRank values
+    for (const node of this.nodes) {
+      pagerank.set(node.id, 1 / nodeCount);
+    }
+
+    // Build adjacency structure
+    const inLinks = new Map();
+    const outDegree = new Map();
+
+    for (const node of this.nodes) {
+      inLinks.set(node.id, []);
+      outDegree.set(node.id, 0);
+    }
+
+    for (const link of this.links) {
+      const sourceId = link.source.id || link.source;
+      const targetId = link.target.id || link.target;
+
+      inLinks.get(targetId).push(sourceId);
+      outDegree.set(sourceId, outDegree.get(sourceId) + 1);
+    }
+
+    // Iterative calculation
+    for (let i = 0; i < iterations; i++) {
+      const newPageRank = new Map();
+
+      for (const node of this.nodes) {
+        const nodeId = node.id;
+        let sum = 0;
+
+        for (const inNodeId of inLinks.get(nodeId)) {
+          const outDeg = outDegree.get(inNodeId);
+          if (outDeg > 0) {
+            sum += pagerank.get(inNodeId) / outDeg;
+          }
+        }
+
+        newPageRank.set(nodeId, (1 - damping) / nodeCount + damping * sum);
+      }
+
+      // Update PageRank values
+      for (const [nodeId, value] of newPageRank) {
+        pagerank.set(nodeId, value);
+      }
+    }
+
+    return pagerank;
+  }
+
+  findCommunities() {
+    // Simplified community detection using label propagation
+    const communities = new Map();
+
+    // Initialize each node as its own community
+    for (const node of this.nodes) {
+      communities.set(node.id, node.id);
+    }
+
+    // Build adjacency list
+    const adjacency = new Map();
+    for (const node of this.nodes) {
+      adjacency.set(node.id, []);
+    }
+
+    for (const link of this.links) {
+      const sourceId = link.source.id || link.source;
+      const targetId = link.target.id || link.target;
+
+      adjacency.get(sourceId).push(targetId);
+      adjacency.get(targetId).push(sourceId);
+    }
+
+    // Label propagation iterations
+    let changed = true;
+    let iteration = 0;
+    const maxIterations = 10;
+
+    while (changed && iteration < maxIterations) {
+      changed = false;
+
+      // Randomize node order
+      const shuffledNodes = [...this.nodes].sort(() => Math.random() - 0.5);
+
+      for (const node of shuffledNodes) {
+        const nodeId = node.id;
+        const neighbors = adjacency.get(nodeId);
+
+        if (neighbors.length === 0) continue;
+
+        // Count neighbor communities
+        const communityCount = new Map();
+        for (const neighborId of neighbors) {
+          const community = communities.get(neighborId);
+          communityCount.set(community, (communityCount.get(community) || 0) + 1);
+        }
+
+        // Find most frequent community
+        let maxCount = 0;
+        let bestCommunity = communities.get(nodeId);
+
+        for (const [community, count] of communityCount) {
+          if (count > maxCount) {
+            maxCount = count;
+            bestCommunity = community;
+          }
+        }
+
+        // Update community if changed
+        if (bestCommunity !== communities.get(nodeId)) {
+          communities.set(nodeId, bestCommunity);
+          changed = true;
+        }
+      }
+
+      iteration++;
+    }
+
+    // Group nodes by community
+    const communityGroups = new Map();
+    for (const [nodeId, communityId] of communities) {
+      if (!communityGroups.has(communityId)) {
+        communityGroups.set(communityId, []);
+      }
+      communityGroups.get(communityId).push(nodeId);
+    }
+
+    this.postMessage({
+      type: 'COMMUNITIES_FOUND',
+      data: {
+        communities: Object.fromEntries(communities),
+        groups: Object.fromEntries(communityGroups),
+        iteration
+      }
+    });
+  }
+
+  findPath(sourceId, targetId) {
+    // Breadth-first search for shortest path
+    const visited = new Set();
+    const queue = [{ nodeId: sourceId, path: [sourceId] }];
+    const adjacency = new Map();
+
+    // Build adjacency list
+    for (const node of this.nodes) {
+      adjacency.set(node.id, []);
+    }
+
+    for (const link of this.links) {
+      const source = link.source.id || link.source;
+      const target = link.target.id || link.target;
+
+      adjacency.get(source).push(target);
+      adjacency.get(target).push(source);
+    }
+
+    while (queue.length > 0) {
+      const { nodeId, path } = queue.shift();
+
+      if (nodeId === targetId) {
+        this.postMessage({
+          type: 'PATH_FOUND',
+          data: {
+            path,
+            distance: path.length - 1
+          }
+        });
+        return;
+      }
+
+      if (visited.has(nodeId)) continue;
+      visited.add(nodeId);
+
+      const neighbors = adjacency.get(nodeId) || [];
+      for (const neighborId of neighbors) {
+        if (!visited.has(neighborId)) {
+          queue.push({
+            nodeId: neighborId,
+            path: [...path, neighborId]
+          });
+        }
+      }
+    }
+
+    // No path found
+    this.postMessage({
+      type: 'PATH_NOT_FOUND',
+      data: {
+        source: sourceId,
+        target: targetId
+      }
+    });
+  }
+
+  postMessage(message) {
+    self.postMessage(message);
+  }
+}
+
+// Initialize worker
+const worker = new GraphPhysicsWorker();
+
+// Handle worker errors
+self.addEventListener('error', (error) => {
+
+  worker.postMessage({
+    type: 'WORKER_ERROR',
+    data: {
+      message: error.message,
+      filename: error.filename,
+      lineno: error.lineno
+    }
+  });
+});
+
+// Handle unhandled promise rejections
+self.addEventListener('unhandledrejection', (event) => {
+
+  worker.postMessage({
+    type: 'WORKER_ERROR',
+    data: {
+      message: 'Unhandled promise rejection',
+      reason: event.reason
+    }
+  });
+});

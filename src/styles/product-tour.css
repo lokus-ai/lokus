@@ -1,0 +1,135 @@
+/* Product Tour Custom Styling */
+
+.lokus-tour-popover {
+  max-width: 420px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  background: var(--popover-bg, #1e1e1e);
+  border: 1px solid var(--popover-border, rgba(255, 255, 255, 0.1));
+}
+
+.lokus-tour-popover .driver-popover-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--popover-title, #ffffff);
+  margin-bottom: 8px;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif);
+}
+
+.lokus-tour-popover .driver-popover-description {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--popover-description, rgba(255, 255, 255, 0.85));
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif);
+}
+
+.lokus-tour-popover .driver-popover-navigation-btns {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.lokus-tour-popover .driver-popover-navigation-btns button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif);
+}
+
+.lokus-tour-popover .driver-popover-prev-btn {
+  background: transparent;
+  color: var(--popover-secondary-btn, rgba(255, 255, 255, 0.7));
+  border: 1px solid var(--popover-secondary-border, rgba(255, 255, 255, 0.2));
+}
+
+.lokus-tour-popover .driver-popover-prev-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--popover-secondary-btn-hover, rgba(255, 255, 255, 0.9));
+}
+
+.lokus-tour-popover .driver-popover-next-btn {
+  background: var(--primary-color, #6366f1);
+  color: #ffffff;
+  border: none;
+}
+
+.lokus-tour-popover .driver-popover-next-btn:hover {
+  background: var(--primary-hover, #4f46e5);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+.lokus-tour-popover .driver-popover-close-btn {
+  background: transparent;
+  color: var(--popover-close, rgba(255, 255, 255, 0.5));
+  border: none;
+  padding: 8px;
+  border-radius: 6px;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lokus-tour-popover .driver-popover-close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--popover-close-hover, rgba(255, 255, 255, 0.8));
+}
+
+.lokus-tour-popover .driver-popover-progress-text {
+  font-size: 0.85rem;
+  color: var(--popover-progress, rgba(255, 255, 255, 0.6));
+  margin-bottom: 12px;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif);
+}
+
+/* Arrow styling */
+.lokus-tour-popover .driver-popover-arrow {
+  border-color: var(--popover-bg, #1e1e1e);
+}
+
+.lokus-tour-popover .driver-popover-arrow-side-top {
+  border-top-color: var(--popover-bg, #1e1e1e);
+}
+
+.lokus-tour-popover .driver-popover-arrow-side-bottom {
+  border-bottom-color: var(--popover-bg, #1e1e1e);
+}
+
+.lokus-tour-popover .driver-popover-arrow-side-left {
+  border-left-color: var(--popover-bg, #1e1e1e);
+}
+
+.lokus-tour-popover .driver-popover-arrow-side-right {
+  border-right-color: var(--popover-bg, #1e1e1e);
+}
+
+/* Spotlight effect enhancement */
+.driver-active-element {
+  border-radius: 8px;
+  box-shadow: none !important;
+  opacity: 1 !important;
+  filter: none !important;
+  outline: none !important;
+  border: none !important;
+}
+
+/* Dark overlay customization */
+.driver-overlay {
+  backdrop-filter: none;
+}
+
+/* Fix overlay padding - make it tighter around elements */
+.driver-popover {
+  --driver-popover-offset: 10px;
+}
+
+/* Adjust highlighted element padding */
+.driver-highlighted-element {
+  padding: 0 !important;
+  margin: 0 !important;
+}

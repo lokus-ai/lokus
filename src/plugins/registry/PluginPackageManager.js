@@ -46,17 +46,17 @@ export const RESOLUTION_STRATEGY = {
 export class PluginPackageManager extends EventEmitter {
   constructor(pluginManager, registryAPI, pluginStore, config = {}) {
     super()
-    
+
     this.pluginManager = pluginManager
     this.registryAPI = registryAPI
     this.pluginStore = pluginStore
-    
+
     this.config = {
       maxConcurrentDownloads: 3,
       downloadTimeout: 300000, // 5 minutes
       extractTimeout: 60000,   // 1 minute
-      retryAttempts: 3,
-      retryDelay: 2000,
+      retryAttempts: 1,
+      retryDelay: 500,
       tempDirectory: '/tmp/lokus-plugins',
       backupOnUpdate: true,
       autoResolveDependencies: true,
@@ -141,7 +141,7 @@ export class PluginPackageManager extends EventEmitter {
             manifest.dependencies,
             resolutionStrategy
           )
-          
+
           if (operation.dependencies.length > 0) {
             this.logger.info(`Resolved ${operation.dependencies.length} dependencies for ${pluginId}`)
           }
@@ -166,7 +166,7 @@ export class PluginPackageManager extends EventEmitter {
         // Step 4: Download plugin package
         operation.status = INSTALL_STATUS.DOWNLOADING
         this.emit('install_progress', { pluginId, operation })
-        
+
         const downloadResult = await this.downloadPlugin(operation)
         operation.tempPath = downloadResult.tempPath
         operation.progress = 50
@@ -174,7 +174,7 @@ export class PluginPackageManager extends EventEmitter {
         // Step 5: Extract and validate
         operation.status = INSTALL_STATUS.EXTRACTING
         this.emit('install_progress', { pluginId, operation })
-        
+
         const extractResult = await this.extractPlugin(operation)
         operation.extractPath = extractResult.extractPath
         operation.progress = 75
@@ -182,14 +182,14 @@ export class PluginPackageManager extends EventEmitter {
         // Step 6: Validate plugin
         operation.status = INSTALL_STATUS.VALIDATING
         this.emit('install_progress', { pluginId, operation })
-        
+
         await this.validatePluginPackage(operation)
         operation.progress = 90
 
         // Step 7: Install plugin
         operation.status = INSTALL_STATUS.INSTALLING
         this.emit('install_progress', { pluginId, operation })
-        
+
         await this.performInstallation(operation)
         operation.progress = 100
         operation.status = INSTALL_STATUS.COMPLETED
@@ -218,10 +218,10 @@ export class PluginPackageManager extends EventEmitter {
       } catch (error) {
         operation.status = INSTALL_STATUS.FAILED
         operation.error = error.message
-        
+
         // Cleanup on failure
         await this.cleanupInstallation(operation)
-        
+
         this.emit('install_failed', { pluginId, version: actualVersion, error, operation })
         throw error
       } finally {
@@ -251,7 +251,7 @@ export class PluginPackageManager extends EventEmitter {
       }
 
       const installedVersion = await this.getInstalledVersion(pluginId)
-      
+
       // Check for dependents if not force
       if (!force) {
         const dependents = await this.findDependents(pluginId)
@@ -328,7 +328,7 @@ export class PluginPackageManager extends EventEmitter {
       }
 
       const currentVersion = await this.getInstalledVersion(pluginId)
-      
+
       // Get available updates
       const availableVersions = await this.registryAPI.getPluginVersions(pluginId)
       if (!availableVersions || availableVersions.status !== 'success') {
@@ -336,7 +336,7 @@ export class PluginPackageManager extends EventEmitter {
       }
 
       const versions = availableVersions.data.versions.map(v => v.version)
-      const resolvedVersion = targetVersion === 'latest' 
+      const resolvedVersion = targetVersion === 'latest'
         ? this.getLatestVersion(versions)
         : targetVersion
 
@@ -366,10 +366,10 @@ export class PluginPackageManager extends EventEmitter {
       }
 
       // Perform update by uninstalling current and installing new
-      const uninstallResult = await this.uninstallPlugin(pluginId, { 
-        force: true, 
+      const uninstallResult = await this.uninstallPlugin(pluginId, {
+        force: true,
         backup: false,
-        removeDependencies: false 
+        removeDependencies: false
       })
 
       try {
@@ -378,11 +378,11 @@ export class PluginPackageManager extends EventEmitter {
           resolutionStrategy: strategy
         })
 
-        this.emit('update_completed', { 
-          pluginId, 
-          oldVersion: currentVersion, 
+        this.emit('update_completed', {
+          pluginId,
+          oldVersion: currentVersion,
           newVersion: resolvedVersion,
-          updateType 
+          updateType
         })
 
         return {
@@ -397,7 +397,7 @@ export class PluginPackageManager extends EventEmitter {
       } catch (installError) {
         // Rollback on installation failure
         this.logger.error(`Update failed, attempting rollback for ${pluginId}`)
-        
+
         try {
           await this.restorePluginBackup(pluginId, currentVersion)
           this.emit('update_rolled_back', { pluginId, version: currentVersion })
@@ -428,11 +428,11 @@ export class PluginPackageManager extends EventEmitter {
         try {
           const currentVersion = await this.getInstalledVersion(pluginId)
           const availableVersions = await this.registryAPI.getPluginVersions(pluginId)
-          
+
           if (availableVersions && availableVersions.status === 'success') {
             const versions = availableVersions.data.versions.map(v => v.version)
             const latestVersion = this.getLatestVersion(versions)
-            
+
             if (this.compareVersions(latestVersion, currentVersion) > 0) {
               updates.push({
                 pluginId,
@@ -527,15 +527,15 @@ export class PluginPackageManager extends EventEmitter {
   compareVersions(v1, v2) {
     const parts1 = v1.split('.').map(Number)
     const parts2 = v2.split('.').map(Number)
-    
+
     for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
       const part1 = parts1[i] || 0
       const part2 = parts2[i] || 0
-      
+
       if (part1 < part2) return -1
       if (part1 > part2) return 1
     }
-    
+
     return 0
   }
 
@@ -549,11 +549,11 @@ export class PluginPackageManager extends EventEmitter {
   getUpdateType(currentVersion, newVersion) {
     const current = currentVersion.split('.').map(Number)
     const next = newVersion.split('.').map(Number)
-    
+
     if (next[0] > current[0]) return UPDATE_TYPE.MAJOR
     if (next[1] > current[1]) return UPDATE_TYPE.MINOR
     if (next[2] > current[2]) return UPDATE_TYPE.PATCH
-    
+
     return UPDATE_TYPE.PRERELEASE
   }
 
@@ -564,25 +564,25 @@ export class PluginPackageManager extends EventEmitter {
       const required = requiredSpec.slice(1)
       return this.compareVersions(installedVersion, required) >= 0
     }
-    
+
     if (requiredSpec.startsWith('~')) {
       const required = requiredSpec.slice(1)
       const installedParts = installedVersion.split('.').map(Number)
       const requiredParts = required.split('.').map(Number)
-      
-      return installedParts[0] === requiredParts[0] && 
-             installedParts[1] === requiredParts[1] &&
-             installedParts[2] >= requiredParts[2]
+
+      return installedParts[0] === requiredParts[0] &&
+        installedParts[1] === requiredParts[1] &&
+        installedParts[2] >= requiredParts[2]
     }
-    
+
     return installedVersion === requiredSpec
   }
 
   findCompatibleVersion(versions, versionSpec, strategy) {
     const compatible = versions.filter(v => this.isVersionCompatible(v, versionSpec))
-    
+
     if (compatible.length === 0) return null
-    
+
     switch (strategy) {
       case RESOLUTION_STRATEGY.LATEST:
         return this.getLatestVersion(compatible)
@@ -598,7 +598,7 @@ export class PluginPackageManager extends EventEmitter {
    */
   async downloadPlugin(operation) {
     const { pluginId, downloadUrl, checksum, downloadSize } = operation
-    
+
     if (!downloadUrl) {
       throw new Error(`No download URL available for ${pluginId}`)
     }
@@ -612,7 +612,7 @@ export class PluginPackageManager extends EventEmitter {
 
     // Download with progress tracking
     const response = await this.registryAPI.downloadPlugin(pluginId, operation.version)
-    
+
     if (!response || !response.data) {
       throw new Error(`Failed to download ${pluginId}`)
     }
@@ -634,19 +634,19 @@ export class PluginPackageManager extends EventEmitter {
   async extractPlugin(operation) {
     const { tempPath } = operation
     const extractPath = `${tempPath}/extracted`
-    
+
     await this.ensureDirectory(extractPath)
-    
+
     // Extract plugin package (assuming ZIP format)
     // TODO: Implement actual extraction logic
     await this.extractZip(operation.tempPath, extractPath)
-    
+
     return { extractPath }
   }
 
   async validatePluginPackage(operation) {
     const { extractPath, pluginId } = operation
-    
+
     // Validate manifest exists and is valid
     const manifestPath = `${extractPath}/plugin.json`
     if (!await this.fileExists(manifestPath)) {
@@ -655,10 +655,10 @@ export class PluginPackageManager extends EventEmitter {
 
     const manifestContent = await this.readFile(manifestPath)
     const manifest = JSON.parse(manifestContent)
-    
+
     const validator = new PluginManifestV2()
     const validation = validator.load(manifest)
-    
+
     if (!validation.valid) {
       throw new Error(`Invalid manifest: ${validation.errors.map(e => e.message).join(', ')}`)
     }
@@ -674,12 +674,12 @@ export class PluginPackageManager extends EventEmitter {
   async performInstallation(operation) {
     const { pluginId, extractPath } = operation
     const installPath = await this.getPluginInstallPath(pluginId)
-    
+
     await this.ensureDirectory(installPath)
-    
+
     // Copy plugin files to installation directory
     await this.copyDirectory(extractPath, installPath)
-    
+
     // Register with plugin manager
     await this.pluginManager.loadPlugin(installPath)
   }

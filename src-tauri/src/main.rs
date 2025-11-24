@@ -20,6 +20,8 @@ mod oauth_server;
 mod secure_storage;
 mod api_server;
 mod sync;
+mod credentials;
+mod file_locking;
 
 use windows::{open_workspace_window, open_preferences_window, open_launcher_window};
 use tauri::Manager;
@@ -215,18 +217,48 @@ fn main() {
     }
   }
 
-  // Set up panic hook to handle WebView2 cleanup errors gracefully
-  std::panic::set_hook(Box::new(|panic_info| {
+  // Initialize Sentry for crash reporting
+  let sentry_dsn = std::env::var("TAURI_SENTRY_DSN").ok();
+  let sentry_enabled = std::env::var("VITE_ENABLE_CRASH_REPORTS")
+    .unwrap_or_else(|_| "false".to_string())
+    .to_lowercase() == "true";
+  let sentry_environment = std::env::var("VITE_SENTRY_ENVIRONMENT")
+    .unwrap_or_else(|_| "production".to_string());
+
+  let _sentry_guard = if let (Some(dsn), true) = (sentry_dsn.as_ref(), sentry_enabled) {
+    let guard = sentry::init((
+      dsn.as_str(),
+      sentry::ClientOptions {
+        release: sentry::release_name!(),
+        environment: Some(sentry_environment.clone().into()),
+        attach_stacktrace: true,
+        ..Default::default()
+      },
+    ));
+    println!("✅ Sentry initialized (Rust): environment={}, dsn={}", sentry_environment, &dsn[..50]);
+    Some(guard)
+  } else {
+    println!("⚠️ Sentry disabled (Rust): dsn={}, enabled={}", sentry_dsn.is_some(), sentry_enabled);
+    None
+  };
+
+  // Set up panic hook to handle WebView2 cleanup errors gracefully and report to Sentry
+  let default_panic = std::panic::take_hook();
+  std::panic::set_hook(Box::new(move |panic_info| {
     let payload = panic_info.payload();
     if let Some(s) = payload.downcast_ref::<&str>() {
-      // Ignore WebView2 window cleanup errors
+      // Ignore WebView2 window cleanup errors (don't report to Sentry)
       if s.contains("Failed to unregister class") || s.contains("Chrome_WidgetWin") {
         eprintln!("WebView2 cleanup warning (non-critical): {}", s);
         return;
       }
     }
-    // For other panics, print the normal panic message
-    eprintln!("Application panic: {}", panic_info);
+
+    // Report panic to Sentry
+    sentry::integrations::panic::panic_handler(panic_info);
+
+    // Also print the normal panic message
+    default_panic(panic_info);
   }));
 
   tauri::Builder::default()
@@ -279,6 +311,7 @@ fn main() {
       handlers::files::read_directory,
       handlers::files::write_file,
       handlers::files::create_directory,
+      handlers::files::read_all_files,
       handlers::platform_files::platform_reveal_in_file_manager,
       handlers::platform_files::platform_open_terminal,
       handlers::platform_files::get_platform_information,
@@ -300,6 +333,9 @@ fn main() {
       sync::git_get_current_branch,
       sync::git_force_push,
       sync::git_force_pull,
+      credentials::store_git_credentials,
+      credentials::retrieve_git_credentials,
+      credentials::delete_git_credentials,
       clipboard::clipboard_write_text,
       clipboard::clipboard_read_text,
       clipboard::clipboard_write_html,

@@ -80,6 +80,14 @@ npm run test:e2e:headed
   - Template includes for composition
   - HTML to Markdown auto-conversion
   - Duplicate detection and overwrite protection
+- ✅ Crash reporting with GlitchTip/Sentry
+  - Self-hosted at crash.lokusmd.com
+  - Frontend (React) and backend (Rust) error tracking
+  - React Error Boundary for component crashes
+  - Automatic breadcrumb tracking for user actions
+  - Session replay for error debugging
+  - Production source maps for debugging
+  - Development crash testing tools
 
 ## 🔧 **Common Tasks**
 
@@ -111,6 +119,56 @@ npm run test:e2e:headed
   - Template processing: `src/core/templates/processor-integrated.js`
   - Storage: `src/core/templates/file-storage.js`
   - UI: `src/components/CreateTemplate.jsx`
+
+### **Crash Reporting Setup (GlitchTip/Sentry)**
+- **Dashboard**: https://crash.lokusmd.com
+- **Configuration**:
+  - DSN configured in `.env` and `.env.production`
+  - Permanent DSN (never changes, stored in PostgreSQL)
+  - Enable/disable with `VITE_ENABLE_CRASH_REPORTS` env var
+- **Frontend Integration** (`src/main.jsx`):
+  - Sentry SDK with browser tracing and session replay
+  - React Error Boundary wraps entire app
+  - Automatic breadcrumb tracking in `App.jsx`
+  - Development crash testing tools (`src/components/error/CrashTest.jsx`)
+- **Backend Integration** (`src-tauri/src/main.rs`):
+  - Sentry Rust SDK with panic handling
+  - Filters WebView2 cleanup warnings
+  - Reports all unhandled panics
+- **Testing Crashes**:
+  - Development mode shows crash testing panel (bottom-right)
+  - Four test buttons: React Error Boundary, Async Error, Handled Error, Breadcrumb Trail
+  - Check crash.lokusmd.com for reports after testing
+- **Production Builds**:
+  - Hidden source maps generated automatically
+  - Manual chunking for better caching
+  - Session replay captures 10% of sessions, 100% of errors
+
+### **Mac App Store Deployment**
+- **Build Command**: `npm run build:appstore`
+- **Configuration**: Uses `src-tauri/tauri.appstore.conf.json`
+- **Key Differences from Direct Distribution**:
+  - **Sandbox**: App Store requires App Sandbox (`com.apple.security.app-sandbox`)
+  - **Entitlements**: Uses `entitlements-appstore.plist` (restricted permissions)
+  - **Signing**: Requires "3rd Party Mac Developer" certificate (not Developer ID)
+  - **Restrictions**: No JIT, no unsigned executable memory, no library validation bypass
+- **Files**:
+  - `src-tauri/tauri.appstore.conf.json` - App Store build configuration
+  - `src-tauri/entitlements-appstore.plist` - Sandbox-compliant entitlements
+  - `src-tauri/PrivacyInfo.xcprivacy` - Required privacy manifest
+- **Important Notes**:
+  - Auto-updater must be disabled for App Store builds (handled in config)
+  - Global shortcuts may not work in sandbox (requires special permission)
+  - Test thoroughly with sandbox before submission (`xattr -w com.apple.quarantine`)
+  - You need TWO signing configurations: App Store and direct distribution
+- **Submission Process**:
+  1. Build with `npm run build:appstore`
+  2. Sign with Mac App Distribution certificate
+  3. Create .pkg installer with `productbuild`
+  4. Upload to App Store Connect via Transporter
+  5. Configure TestFlight for beta testing
+  6. Submit for App Review
+- **See Also**: Comprehensive guide in research notes for full submission process
 
 ## 🐛 **Known Issues**
 

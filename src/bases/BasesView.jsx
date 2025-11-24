@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useBases } from './BasesContext.jsx';
 import { useFolderScope } from '../contexts/FolderScopeContext.jsx';
 import { DebouncedInput } from '../components/OptimizedWrapper.jsx';
+import analytics from '../services/analytics.js';
 import BaseTableView from './ui/BaseTableView.jsx';
 import BaseListView from './ui/BaseListView.jsx';
 import BaseGridView from './ui/BaseGridView.jsx';
@@ -99,6 +100,12 @@ const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
   // Handle data refresh
   const handleRefresh = () => {
     setRefreshKey(prev => prev + 1);
+  };
+
+  // Handle view type change with analytics
+  const handleViewTypeChange = (type) => {
+    setViewType(type);
+    analytics.trackDatabaseView(type);
   };
 
   // Handle filter rules update from BaseTableView
@@ -323,7 +330,7 @@ const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
           {/* View Type Switcher - Always visible */}
           <div className="flex items-center bg-app-surface border border-app-border rounded">
             <button
-              onClick={() => setViewType('table')}
+              onClick={() => handleViewTypeChange('table')}
               className={`p-1.5 transition-colors ${
                 viewType === 'table'
                   ? 'bg-app-accent text-white'
@@ -334,7 +341,7 @@ const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
               <Table className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setViewType('list')}
+              onClick={() => handleViewTypeChange('list')}
               className={`p-1.5 transition-colors ${
                 viewType === 'list'
                   ? 'bg-app-accent text-white'
@@ -345,7 +352,7 @@ const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
               <List className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setViewType('grid')}
+              onClick={() => handleViewTypeChange('grid')}
               className={`p-1.5 transition-colors ${
                 viewType === 'grid'
                   ? 'bg-app-accent text-white'

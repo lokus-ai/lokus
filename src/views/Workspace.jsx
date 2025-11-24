@@ -44,6 +44,7 @@ import TemplatePicker from "../components/TemplatePicker.jsx";
 import { getMarkdownCompiler } from "../core/markdown/compiler.js";
 import { MarkdownExporter } from "../core/export/markdown-exporter.js";
 import dailyNotesManager from "../core/daily-notes/manager.js";
+import analytics from "../services/analytics.js";
 import CreateTemplate from "../components/CreateTemplate.jsx";
 import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
 import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
@@ -65,6 +66,8 @@ import { DailyNotesPanel, NavigationButtons, DatePickerModal } from "../componen
 import { ImageViewerTab } from "../components/ImageViewer/ImageViewerTab.jsx";
 import { isImageFile, findImageFiles } from "../utils/imageUtils.js";
 import TagManagementModal from "../components/TagManagementModal.jsx";
+import ProductTour from "../components/ProductTour.jsx";
+import "../styles/product-tour.css";
 
 const MAX_OPEN_TABS = 10;
 
@@ -73,14 +76,22 @@ const EditorModeSwitcher = () => {
   const [editorMode, setEditorMode] = useState('edit');
 
   useEffect(() => {
-    // Sync with global editor mode
-    const interval = setInterval(() => {
-      if (window.__LOKUS_EDITOR_MODE__) {
-        setEditorMode(window.__LOKUS_EDITOR_MODE__);
-      }
-    }, 100);
+    // Event-driven mode sync instead of polling
+    const handleModeChange = (event) => {
+      setEditorMode(event.detail || 'edit');
+    };
 
-    return () => clearInterval(interval);
+    // Listen for custom event
+    window.addEventListener('lokusEditorModeChange', handleModeChange);
+
+    // Get initial mode
+    if (window.__LOKUS_EDITOR_MODE__) {
+      setEditorMode(window.__LOKUS_EDITOR_MODE__);
+    }
+
+    return () => {
+      window.removeEventListener('lokusEditorModeChange', handleModeChange);
+    };
   }, []);
 
   const handleModeChange = (mode) => {
@@ -88,6 +99,9 @@ const EditorModeSwitcher = () => {
       window.__LOKUS_SET_EDITOR_MODE__(mode);
     }
     setEditorMode(mode);
+
+    // Dispatch event so other components can listen
+    window.dispatchEvent(new CustomEvent('lokusEditorModeChange', { detail: mode }));
   };
 
   return (
@@ -187,9 +201,9 @@ function useDragColumns({ minLeft = 220, maxLeft = 500, minRight = 220, maxRight
   const dragRef = useRef(null);
 
 
-  const startLeftDrag = useCallback((e) => { 
+  const startLeftDrag = useCallback((e) => {
     dragRef.current = { side: "left", startX: e.clientX, left0: leftW, right0: rightW };
-    
+
     function onMove(e) {
       const d = dragRef.current;
       if (!d) return;
@@ -200,14 +214,14 @@ function useDragColumns({ minLeft = 220, maxLeft = 500, minRight = 220, maxRight
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
     }
-    
+
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
   }, [leftW, rightW, maxLeft, minLeft]);
-  
-  const startRightDrag = useCallback((e) => { 
+
+  const startRightDrag = useCallback((e) => {
     dragRef.current = { side: "right", startX: e.clientX, left0: leftW, right0: rightW };
-    
+
     function onMove(e) {
       const d = dragRef.current;
       if (!d) return;
@@ -218,7 +232,7 @@ function useDragColumns({ minLeft = 220, maxLeft = 500, minRight = 220, maxRight
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
     }
-    
+
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
   }, [leftW, rightW, maxRight, minRight]);
@@ -496,7 +510,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         break;
       default:
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     onFileClick,
     setUseSplitView,
@@ -515,8 +529,8 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
     <li style={{ paddingLeft: `${level * 1.25}rem` }}>
       <div ref={droppableRef} className="rounded">
         <div ref={draggableRef} className="flex items-center">
-          <FileContextMenu 
-            file={{ ...entry, type: entry.is_directory ? 'folder' : 'file' }} 
+          <FileContextMenu
+            file={{ ...entry, type: entry.is_directory ? 'folder' : 'file' }}
             onAction={handleFileContextAction}
           >
             <button {...listeners} {...attributes} onClick={handleClick} className={`${baseClasses} ${stateClasses} ${dropTargetClasses} ${draggingClasses}`}>
@@ -636,7 +650,7 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
 function OldTabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDragEnd, onNewTab, onSplitDragStart, onSplitDragEnd, useSplitView, onToggleSplitView, splitDirection, onToggleSplitDirection, syncScrolling, onToggleSyncScrolling, onResetPaneSize, isLeftPane = true, onToggleRightSidebar, showRightSidebar }) {
   const [activeId, setActiveId] = useState(null);
   const [draggedTab, setDraggedTab] = useState(null);
-  
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -687,7 +701,7 @@ function OldTabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, on
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
             </svg>
           </button>
-          
+
           {/* Split direction toggle - only show in split view and on left pane */}
           {useSplitView && isLeftPane && (
             <>
@@ -708,7 +722,7 @@ function OldTabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, on
                   </svg>
                 )}
               </button>
-              
+
               <button
                 onClick={onResetPaneSize}
                 title="Reset pane sizes (50/50)"
@@ -718,7 +732,7 @@ function OldTabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, on
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
                 </svg>
               </button>
-              
+
               <button
                 onClick={onToggleSyncScrolling}
                 title={`${syncScrolling ? 'Disable' : 'Enable'} synchronized scrolling`}
@@ -730,7 +744,7 @@ function OldTabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, on
               </button>
             </>
           )}
-          
+
           {/* Outline toggle button - only show on main pane */}
           {isLeftPane && onToggleRightSidebar && (
             <button
@@ -755,10 +769,10 @@ function OldTabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, on
           </button>
         </div>
       </div>
-      
+
       <DragOverlay dropAnimation={null}>
         {activeId && draggedTab ? (
-          <div className="dragging-tab-preview" style={{ 
+          <div className="dragging-tab-preview" style={{
             opacity: 0.9,
             transform: 'rotate(-2deg)',
             zIndex: 99999
@@ -786,7 +800,7 @@ function EditorDropZone({ children }) {
   });
 
   return (
-    <div 
+    <div
       ref={setNodeRef}
       className={`relative w-full h-full ${isOver ? 'bg-app-accent bg-opacity-10' : ''}`}
       style={{ position: 'relative' }}
@@ -943,7 +957,7 @@ function WorkspaceWithScope({ path }) {
   const [rightPaneContent, setRightPaneContent] = useState('');
   const [rightPaneTitle, setRightPaneTitle] = useState('');
   const [syncScrolling, setSyncScrolling] = useState(false);
-  
+
   // --- Refs for stable callbacks ---
   const stateRef = useRef({});
   const editorRef = useRef(null);
@@ -975,7 +989,11 @@ function WorkspaceWithScope({ path }) {
   // Load session state on initial mount
   useEffect(() => {
     if (path) {
-      invoke("load_session_state", { workspacePath: path }).then(session => {
+      // Load session and workspace files concurrently for faster startup
+      Promise.all([
+        invoke("load_session_state", { workspacePath: path }),
+        invoke("validate_workspace_path", { path })
+      ]).then(([session, valid]) => {
         if (session && session.open_tabs) {
           setExpandedFolders(new Set(session.expanded_folders || []));
 
@@ -1008,14 +1026,16 @@ function WorkspaceWithScope({ path }) {
             })));
           }
         }
+      }).catch(err => {
+        console.error('[Workspace] Failed to load session:', err);
       });
     }
   }, [path]);
 
   // Load shortcuts map for hints and keep it fresh
   useEffect(() => {
-    getActiveShortcuts().then(setKeymap).catch(() => {});
-    let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
+    getActiveShortcuts().then(setKeymap).catch(() => { });
+    let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch { }
     if (isTauri) {
       const sub = listen('shortcuts:updated', async () => {
         const m = await getActiveShortcuts();
@@ -1032,7 +1052,7 @@ function WorkspaceWithScope({ path }) {
   // Listen for markdown config changes from Preferences window
   useEffect(() => {
     let isTauri = false;
-    try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
+    try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch { }
 
     if (isTauri) {
       const sub = listen('lokus:markdown-config-changed', async () => {
@@ -1071,8 +1091,8 @@ function WorkspaceWithScope({ path }) {
         }
       }).catch(err => {
       });
-      
-      try { window.__LOKUS_WORKSPACE_PATH__ = path; } catch {}
+
+      try { window.__LOKUS_WORKSPACE_PATH__ = path; } catch { }
       invoke("read_workspace_files", { workspacePath: path })
         .then(files => {
           const filterIgnored = (entries) => {
@@ -1097,7 +1117,7 @@ function WorkspaceWithScope({ path }) {
             }
           };
           walk(tree);
-          try { window.__LOKUS_FILE_INDEX__ = flat; } catch {}
+          try { window.__LOKUS_FILE_INDEX__ = flat; } catch { }
 
           // Extract all image files for image viewer navigation
           const imageFiles = findImageFiles(tree);
@@ -1115,7 +1135,7 @@ function WorkspaceWithScope({ path }) {
   // Fetch content for active file
   useEffect(() => {
     if (activeFile) {
-      try { window.__LOKUS_ACTIVE_FILE__ = activeFile; } catch {}
+      try { window.__LOKUS_ACTIVE_FILE__ = activeFile; } catch { }
 
       // Skip loading content for special views and binary files
       if (
@@ -1238,7 +1258,7 @@ function WorkspaceWithScope({ path }) {
       console.log('========================================\n');
     };
 
-    let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
+    let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch { }
     if (isTauri) {
       const un1 = listen('lokus:open-file', (e) => openPath(String(e.payload || ''), true));
       const un2 = listen('lokus:open-file-new-tab', (e) => openPath(String(e.payload || ''), false));
@@ -1259,19 +1279,19 @@ function WorkspaceWithScope({ path }) {
   useEffect(() => {
     const handleWikiLinkCreated = async (event) => {
       const { sourceFile, targetFile, linkText, timestamp } = event.detail;
-      
+
       if (graphProcessorRef.current) {
         try {
           // Get current editor content for real-time update
-          const currentContent = editorRef.current ? 
-            (editorRef.current.getText() || stateRef.current.editorContent) : 
+          const currentContent = editorRef.current ?
+            (editorRef.current.getText() || stateRef.current.editorContent) :
             stateRef.current.editorContent;
-          
+
           if (currentContent && sourceFile === stateRef.current.activeFile) {
-            
+
             // Use the real-time update method
             const updateResult = await graphProcessorRef.current.updateFileContent(sourceFile, currentContent);
-            
+
             // Update graph data if there were changes and graph is visible
             if ((updateResult.added > 0 || updateResult.removed > 0) && activeFile === '__graph__') {
               const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
@@ -1436,9 +1456,9 @@ function WorkspaceWithScope({ path }) {
     const handlePrevTab = throttle(handlePrevTabImmediate, 200);
 
 
-    let isTauri = false; 
-    try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
-    
+    let isTauri = false;
+    try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch { }
+
     if (isTauri) {
       const nextTabSub = listen('lokus:next-tab', handleNextTab);
       const prevTabSub = listen('lokus:prev-tab', handlePrevTab);
@@ -1449,10 +1469,10 @@ function WorkspaceWithScope({ path }) {
     } else {
       const onNextTab = () => handleNextTab();
       const onPrevTab = () => handlePrevTab();
-      
+
       window.addEventListener('lokus:next-tab', onNextTab);
       window.addEventListener('lokus:prev-tab', onPrevTab);
-      
+
       return () => {
         window.removeEventListener('lokus:next-tab', onNextTab);
         window.removeEventListener('lokus:prev-tab', onPrevTab);
@@ -1497,7 +1517,7 @@ function WorkspaceWithScope({ path }) {
   const handleOpenPluginDetail = (plugin) => {
     const pluginPath = `__plugin_${plugin.id}__`;
     const pluginName = `${plugin.name} Plugin`;
-    
+
     setOpenTabs(prevTabs => {
       const newTabs = prevTabs.filter(t => t.path !== pluginPath);
       newTabs.unshift({ path: pluginPath, name: pluginName, plugin });
@@ -1596,12 +1616,12 @@ function WorkspaceWithScope({ path }) {
 
   const handleReopenClosedTab = useCallback(() => {
     if (recentlyClosedTabs.length === 0) return;
-    
+
     const [mostRecentTab, ...remaining] = recentlyClosedTabs;
-    
+
     // Remove from recently closed list
     setRecentlyClosedTabs(remaining);
-    
+
     // Reopen the tab
     handleFileOpen(mostRecentTab);
   }, [recentlyClosedTabs]);
@@ -1610,7 +1630,7 @@ function WorkspaceWithScope({ path }) {
 
   const handleTabClick = (path) => {
     setActiveFile(path);
-    
+
     // If split view is active, update the right pane to show the next tab
     if (useSplitView) {
       const currentIndex = openTabs.findIndex(t => t.path === path);
@@ -1668,13 +1688,13 @@ function WorkspaceWithScope({ path }) {
     lastCloseTimeRef.current = now;
 
     console.log('[TabClose] Starting close process for:', path);
-    
+
     const closeTab = () => {
       setOpenTabs(prevTabs => {
         const tabIndex = prevTabs.findIndex(t => t.path === path);
         const closedTab = prevTabs.find(t => t.path === path);
         const newTabs = prevTabs.filter(t => t.path !== path);
-        
+
         // Save the closed tab to recently closed list (max 10 items)
         if (closedTab && !closedTab.path.startsWith('__')) { // Don't track special tabs like graph, kanban
           setRecentlyClosedTabs(prev => {
@@ -1682,7 +1702,7 @@ function WorkspaceWithScope({ path }) {
             return newClosed;
           });
         }
-        
+
         if (stateRef.current.activeFile === path) {
           if (newTabs.length === 0) {
             setActiveFile(null);
@@ -1795,7 +1815,7 @@ function WorkspaceWithScope({ path }) {
   const handleSave = useCallback(async () => {
     const { activeFile, openTabs, editorContent, editorTitle } = stateRef.current;
     if (!activeFile) return;
-    
+
     let path_to_save = activeFile;
     let needsStateUpdate = false;
 
@@ -1895,7 +1915,7 @@ function WorkspaceWithScope({ path }) {
           try {
             // Use the new real-time update method for file content
             const updateResult = await graphProcessorRef.current.updateFileContent(path_to_save, editorContent);
-            
+
             // Only rebuild graph structure if there were actual changes
             if (updateResult.added > 0 || updateResult.removed > 0) {
               const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
@@ -2408,6 +2428,9 @@ function WorkspaceWithScope({ path }) {
       if (result.created) {
         handleRefreshFiles();
       }
+
+      // Track daily note access
+      analytics.trackDailyNote();
     } catch (error) {
       console.error('Failed to open daily note:', error);
     }
@@ -2429,6 +2452,9 @@ function WorkspaceWithScope({ path }) {
       }
 
       setShowDatePickerModal(false);
+
+      // Track daily note access
+      analytics.trackDailyNote();
     } catch (error) {
       console.error('Failed to open daily note:', error);
     }
@@ -2552,7 +2578,7 @@ function WorkspaceWithScope({ path }) {
 
     // Set up event listeners for real-time graph updates
     const graphDatabase = graphProcessorRef.current.getGraphDatabase();
-    
+
     // Listen for file link updates and rebuild graph if active
     const handleFileLinksUpdated = (event) => {
       if (activeFile === '__graph__' && graphData) {
@@ -2561,7 +2587,7 @@ function WorkspaceWithScope({ path }) {
         setGraphData(updatedGraphData);
       }
     };
-    
+
     // Listen for connection changes
     const handleConnectionChanged = (event) => {
       if (activeFile === '__graph__' && graphData) {
@@ -2570,11 +2596,11 @@ function WorkspaceWithScope({ path }) {
         setGraphData(updatedGraphData);
       }
     };
-    
+
     graphDatabase.on('fileLinksUpdated', handleFileLinksUpdated);
     graphDatabase.on('connectionAdded', handleConnectionChanged);
     graphDatabase.on('connectionRemoved', handleConnectionChanged);
-    
+
     // Store cleanup function
     graphProcessorRef.current._cleanup = () => {
       graphDatabase.off('fileLinksUpdated', handleFileLinksUpdated);
@@ -2615,14 +2641,14 @@ function WorkspaceWithScope({ path }) {
 
   const handleGraphNodeClick = useCallback((event) => {
     const { nodeId, nodeData } = event;
-    
+
     // If it's a file node (not phantom), open the file
     if (nodeData && nodeData.path && !nodeData.isPhantom) {
       const fileName = nodeData.path.split('/').pop();
-      handleFileOpen({ 
-        path: nodeData.path, 
-        name: fileName, 
-        is_directory: nodeData.isDirectory || false 
+      handleFileOpen({
+        path: nodeData.path,
+        name: fileName,
+        is_directory: nodeData.isDirectory || false
       });
     }
   }, []);
@@ -2630,6 +2656,9 @@ function WorkspaceWithScope({ path }) {
   const handleOpenGraphView = useCallback(() => {
     const graphPath = '__graph__';
     const graphName = 'Graph View';
+
+    // Track graph view opening (defaults to 2D)
+    analytics.trackGraphView('2d');
 
     setOpenTabs(prevTabs => {
       const newTabs = prevTabs.filter(t => t.path !== graphPath);
@@ -2645,6 +2674,9 @@ function WorkspaceWithScope({ path }) {
   const handleOpenBasesTab = useCallback(() => {
     const basesPath = '__bases__';
     const basesName = 'Bases';
+
+    // Track database view opening (defaults to table view)
+    analytics.trackDatabaseView('table');
 
     setOpenTabs(prevTabs => {
       const newTabs = prevTabs.filter(t => t.path !== basesPath);
@@ -2722,7 +2754,7 @@ function WorkspaceWithScope({ path }) {
         persistentGraphEngineRef.current.destroy();
         persistentGraphEngineRef.current = null;
       }
-      
+
       if (graphProcessorRef.current) {
         // Call cleanup function for event listeners
         if (graphProcessorRef.current._cleanup) {
@@ -2754,18 +2786,18 @@ function WorkspaceWithScope({ path }) {
         if (nextTab && nextTab.path !== activeFile) {
           setRightPaneFile(nextTab.path);
           // Extract just the filename in case name contains a path
-        const fileName = getFilename(nextTab.name);
-        setRightPaneTitle(fileName.replace(/\.md$/, ""));
-          
+          const fileName = getFilename(nextTab.name);
+          setRightPaneTitle(fileName.replace(/\.md$/, ""));
+
           // Load the content for the right pane asynchronously
           setTimeout(async () => {
             const isSpecialView = nextTab.path === '__kanban__' ||
-                                // nextTab.path === '__gmail__' || // Gmail disabled
-                                nextTab.path === '__bases__' ||
-                                nextTab.path.startsWith('__graph__') ||
-                                nextTab.path.startsWith('__plugin_') ||
-                                nextTab.path.endsWith('.canvas') || nextTab.path.endsWith('.kanban');
-            
+              // nextTab.path === '__gmail__' || // Gmail disabled
+              nextTab.path === '__bases__' ||
+              nextTab.path.startsWith('__graph__') ||
+              nextTab.path.startsWith('__plugin_') ||
+              nextTab.path.endsWith('.canvas') || nextTab.path.endsWith('.kanban');
+
             if (!isSpecialView && (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt'))) {
               // Check if this file is already loaded in the left pane
               if (nextTab.path === activeFile && editorContent) {
@@ -2800,10 +2832,10 @@ function WorkspaceWithScope({ path }) {
   // Pane resize handlers
   const handlePaneResize = useCallback((e) => {
     if (!useSplitView) return;
-    
+
     const container = e.currentTarget.parentElement;
     const rect = container.getBoundingClientRect();
-    
+
     let newSize;
     if (splitDirection === 'vertical') {
       const mouseX = e.clientX - rect.left;
@@ -2812,7 +2844,7 @@ function WorkspaceWithScope({ path }) {
       const mouseY = e.clientY - rect.top;
       newSize = (mouseY / rect.height) * 100;
     }
-    
+
     // Clamp between 20% and 80%
     newSize = Math.max(20, Math.min(80, newSize));
     setLeftPaneSize(newSize);
@@ -2825,7 +2857,7 @@ function WorkspaceWithScope({ path }) {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-    
+
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
   }, [handlePaneResize]);
@@ -2841,12 +2873,12 @@ function WorkspaceWithScope({ path }) {
   // Synchronized scrolling handlers
   const handleLeftPaneScroll = useCallback((e) => {
     if (!syncScrolling || !rightPaneScrollRef.current) return;
-    
+
     const scrollTop = e.target.scrollTop;
     const scrollHeight = e.target.scrollHeight;
     const clientHeight = e.target.clientHeight;
     const scrollPercent = scrollTop / (scrollHeight - clientHeight);
-    
+
     const rightPane = rightPaneScrollRef.current;
     const rightScrollTop = scrollPercent * (rightPane.scrollHeight - rightPane.clientHeight);
     rightPane.scrollTop = rightScrollTop;
@@ -2854,12 +2886,12 @@ function WorkspaceWithScope({ path }) {
 
   const handleRightPaneScroll = useCallback((e) => {
     if (!syncScrolling || !leftPaneScrollRef.current) return;
-    
+
     const scrollTop = e.target.scrollTop;
     const scrollHeight = e.target.scrollHeight;
     const clientHeight = e.target.clientHeight;
     const scrollPercent = scrollTop / (scrollHeight - clientHeight);
-    
+
     const leftPane = leftPaneScrollRef.current;
     const leftScrollTop = scrollPercent * (leftPane.scrollHeight - leftPane.clientHeight);
     leftPane.scrollTop = leftScrollTop;
@@ -2867,13 +2899,13 @@ function WorkspaceWithScope({ path }) {
 
   const handleTabDragEnd = (event) => {
     const { active, over } = event;
-    
+
     // Handle split creation if dragged to editor area
     if (over && over.id === 'editor-drop-zone') {
       setUseSplitView(true);
       return;
     }
-    
+
     // Handle tab reordering
     if (over && active.id !== over.id) {
       setOpenTabs((tabs) => {
@@ -2915,15 +2947,15 @@ function WorkspaceWithScope({ path }) {
   }, [handleSave, activeFile, toggleVersionHistory]);
 
   useEffect(() => {
-    let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
+    let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch { }
     const addDom = (name, fn) => { const h = () => fn(); window.addEventListener(name, h); return () => window.removeEventListener(name, h); };
     const unlistenSave = isTauri ? listen("lokus:save-file", handleSave) : Promise.resolve(addDom('lokus:save-file', handleSave));
     const unlistenClose = isTauri ? listen("lokus:close-tab", () => {
       if (stateRef.current.activeFile) {
         handleTabClose(stateRef.current.activeFile);
       }
-    }) : Promise.resolve(addDom('lokus:close-tab', () => { 
-      if (stateRef.current.activeFile) handleTabClose(stateRef.current.activeFile); 
+    }) : Promise.resolve(addDom('lokus:close-tab', () => {
+      if (stateRef.current.activeFile) handleTabClose(stateRef.current.activeFile);
     }));
     const unlistenNewFile = isTauri ? listen("lokus:new-file", handleCreateFile) : Promise.resolve(addDom('lokus:new-file', handleCreateFile));
     const unlistenNewFolder = isTauri ? listen("lokus:new-folder", () => setIsCreatingFolder(true)) : Promise.resolve(addDom('lokus:new-folder', () => setIsCreatingFolder(true)));
@@ -2931,13 +2963,13 @@ function WorkspaceWithScope({ path }) {
     const unlistenCommandPalette = isTauri ? listen("lokus:command-palette", () => {
       // Don't open command palette when graph view is active
       const isGraphActive = stateRef.current.activeFile === '__graph__' ||
-                           stateRef.current.activeFile?.startsWith('__graph__');
+        stateRef.current.activeFile?.startsWith('__graph__');
       if (!isGraphActive) {
         setShowCommandPalette(true);
       }
     }) : Promise.resolve(addDom('lokus:command-palette', () => {
       const isGraphActive = stateRef.current.activeFile === '__graph__' ||
-                           stateRef.current.activeFile?.startsWith('__graph__');
+        stateRef.current.activeFile?.startsWith('__graph__');
       if (!isGraphActive) {
         setShowCommandPalette(true);
       }
@@ -2955,13 +2987,13 @@ function WorkspaceWithScope({ path }) {
     const unlistenDailyNote = isTauri ? listen("lokus:daily-note", handleOpenDailyNote) : Promise.resolve(addDom('lokus:daily-note', handleOpenDailyNote));
     // unlistenOpenKanban removed - no longer using FullKanban
     const unlistenReopenClosedTab = isTauri ? listen("lokus:reopen-closed-tab", handleReopenClosedTab) : Promise.resolve(addDom('lokus:reopen-closed-tab', handleReopenClosedTab));
-    
+
     // Split editor shortcuts
     const unlistenToggleSplitView = isTauri ? listen("lokus:toggle-split-view", handleToggleSplitView) : Promise.resolve(addDom('lokus:toggle-split-view', handleToggleSplitView));
     const unlistenToggleSplitDirection = isTauri ? listen("lokus:toggle-split-direction", toggleSplitDirection) : Promise.resolve(addDom('lokus:toggle-split-direction', toggleSplitDirection));
     const unlistenResetPaneSize = isTauri ? listen("lokus:reset-pane-size", resetPaneSize) : Promise.resolve(addDom('lokus:reset-pane-size', resetPaneSize));
     const unlistenToggleSyncScrolling = isTauri ? listen("lokus:toggle-sync-scrolling", () => setSyncScrolling(prev => !prev)) : Promise.resolve(addDom('lokus:toggle-sync-scrolling', () => setSyncScrolling(prev => !prev)));
-    
+
     // Template picker event listener
     const handleTemplatePicker = (event) => {
       const data = event?.detail || event;
@@ -2974,7 +3006,7 @@ function WorkspaceWithScope({ path }) {
     const handleEditorFormat = (formatType) => {
       if (!editorRef.current) return;
       const editor = editorRef.current;
-      
+
       switch (formatType) {
         case 'bold':
           editor.chain().focus().toggleBold().run();
@@ -3009,7 +3041,7 @@ function WorkspaceWithScope({ path }) {
     const handleEditorEdit = (action) => {
       if (!editorRef.current) return;
       const editor = editorRef.current;
-      
+
       switch (action) {
         case 'undo':
           editor.chain().focus().undo().run();
@@ -3035,7 +3067,7 @@ function WorkspaceWithScope({ path }) {
     const handleEditorInsert = (insertType) => {
       if (!editorRef.current) return;
       const editor = editorRef.current;
-      
+
       switch (insertType) {
         case 'wikilink':
           setShowWikiLinkModal(true);
@@ -3143,7 +3175,7 @@ function WorkspaceWithScope({ path }) {
 
     // File menu events
     const unlistenExportPdf = isTauri ? listen("lokus:export-pdf", handleExportPdf) : Promise.resolve(addDom('lokus:export-pdf', handleExportPdf));
-    
+
     const unlistenPrint = isTauri ? listen("lokus:print", () => {
       window.print();
     }) : Promise.resolve(addDom('lokus:print', () => { window.print(); }));
@@ -3151,7 +3183,7 @@ function WorkspaceWithScope({ path }) {
     // Additional missing file menu events
     const unlistenShowAbout = isTauri ? listen("lokus:show-about", () => {
       // TODO: Show about dialog
-    }) : Promise.resolve(addDom('lokus:show-about', () => {}));
+    }) : Promise.resolve(addDom('lokus:show-about', () => { }));
 
     const unlistenSaveAs = isTauri ? listen("lokus:save-as", handleSaveAs) : Promise.resolve(addDom('lokus:save-as', handleSaveAs));
 
@@ -3182,15 +3214,15 @@ function WorkspaceWithScope({ path }) {
     // Theme switching events
     const unlistenThemeLight = isTauri ? listen("lokus:theme-light", () => {
       // TODO: Connect to theme manager to set light theme
-    }) : Promise.resolve(addDom('lokus:theme-light', () => {}));
+    }) : Promise.resolve(addDom('lokus:theme-light', () => { }));
 
     const unlistenThemeDark = isTauri ? listen("lokus:theme-dark", () => {
       // TODO: Connect to theme manager to set dark theme
-    }) : Promise.resolve(addDom('lokus:theme-dark', () => {}));
+    }) : Promise.resolve(addDom('lokus:theme-dark', () => { }));
 
     const unlistenThemeAuto = isTauri ? listen("lokus:theme-auto", () => {
       // TODO: Connect to theme manager to set auto theme
-    }) : Promise.resolve(addDom('lokus:theme-auto', () => {}));
+    }) : Promise.resolve(addDom('lokus:theme-auto', () => { }));
 
     // Insert menu events
     const unlistenInsertWikiLink = isTauri ? listen("lokus:insert-wikilink", () => handleEditorInsert('wikilink')) : Promise.resolve(addDom('lokus:insert-wikilink', () => handleEditorInsert('wikilink')));
@@ -3261,7 +3293,7 @@ function WorkspaceWithScope({ path }) {
       unlistenResetPaneSize.then(f => { if (typeof f === 'function') f(); });
       unlistenToggleSyncScrolling.then(f => { if (typeof f === 'function') f(); });
       unlistenTemplatePicker.then(f => { if (typeof f === 'function') f(); });
-      
+
       // Cleanup menu event listeners
       unlistenExportPdf.then(f => { if (typeof f === 'function') f(); });
       unlistenPrint.then(f => { if (typeof f === 'function') f(); });
@@ -3328,13 +3360,13 @@ function WorkspaceWithScope({ path }) {
   // Add a simple fallback if path is not set
   if (!path && !initialPath) {
     return (
-      <div style={{ 
-        background: 'black', 
-        color: 'white', 
-        height: '100vh', 
-        display: 'flex', 
+      <div style={{
+        background: 'black',
+        color: 'white',
+        height: '100vh',
+        display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center', 
+        alignItems: 'center',
         justifyContent: 'center',
         fontSize: '20px',
         fontFamily: 'monospace'
@@ -3363,7 +3395,7 @@ function WorkspaceWithScope({ path }) {
         return entries.filter(entry => {
           // Show the base's folder and everything inside it
           return entry.path === activeBase.sourceFolder ||
-                 entry.path.startsWith(activeBase.sourceFolder + '/');
+            entry.path.startsWith(activeBase.sourceFolder + '/');
         }).map(entry => {
           // If this entry has children, filter them recursively
           if (entry.children && entry.children.length > 0) {
@@ -3389,315 +3421,324 @@ function WorkspaceWithScope({ path }) {
   return (
     <PanelManager>
       <div className="h-full bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select relative">
-      {/* Test Mode Indicator */}
-      {isTestMode && (
-        <div className="fixed top-4 right-4 bg-yellow-500 text-black px-3 py-1 rounded-md text-sm font-medium z-50">
-          🧪 Test Mode Active
-        </div>
-      )}
+        {/* Product Tour */}
+        <ProductTour autoStart={true} delay={1500} />
 
-      {/* Workspace Toolbar - positioned in titlebar area */}
-      <div
-        className="fixed top-0 left-0 right-0 flex items-center justify-between z-50"
-        data-tauri-drag-region
-        style={{
-          height: '29px',
-          paddingLeft: platformService.isMacOS() ? '80px' : '8px',
-          paddingRight: '8px',
-          backgroundColor: 'rgb(var(--panel))',
-          borderBottom: '1px solid rgb(var(--border))'
-        }}
-      >
-        {/* Left Section: New File, New Folder, New Canvas buttons */}
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleCreateFile}
-            className="obsidian-button icon-only small"
-            title={`New File (${platformService.getModifierSymbol()}+N)`}
-            data-tauri-drag-region="false"
-            style={{ pointerEvents: 'auto' }}
-          >
-            <FilePlusCorner className="w-5 h-5" strokeWidth={2} />
-          </button>
-          <button
-            onClick={handleCreateFolder}
-            className="obsidian-button icon-only small"
-            title={`New Folder (${platformService.getModifierSymbol()}+Shift+N)`}
-            data-tauri-drag-region="false"
-            style={{ pointerEvents: 'auto' }}
-          >
-            <FolderOpen className="w-5 h-5" strokeWidth={2} />
-          </button>
-          <button
-            onClick={handleCreateCanvas}
-            className="obsidian-button icon-only small"
-            title="New Canvas"
-            data-tauri-drag-region="false"
-            style={{ pointerEvents: 'auto' }}
-          >
-            <SquareKanban className="w-5 h-5" strokeWidth={2} />
-          </button>
-        </div>
+        {/* Test Mode Indicator */}
+        {isTestMode && (
+          <div className="fixed top-4 right-4 bg-yellow-500 text-black px-3 py-1 rounded-md text-sm font-medium z-50">
+            🧪 Test Mode Active
+          </div>
+        )}
 
-        {/* Center Section: Tab bar */}
+        {/* Workspace Toolbar - positioned in titlebar area */}
         <div
-          className="absolute flex items-center overflow-x-auto no-scrollbar px-2"
+          className="fixed top-0 left-0 right-0 flex items-center justify-between z-50"
+          data-tauri-drag-region
           style={{
-            left: showLeft ? `${leftW + 57}px` : `${platformService.isMacOS() ? 200 : 120}px`, // After sidebar or after left buttons
-            right: showRight ? `${rightW + 120}px` : '120px', // Account for right sidebar when open + right buttons
-            top: 0,
-            height: '32px'
+            height: '29px',
+            paddingLeft: platformService.isMacOS() ? '80px' : '8px',
+            paddingRight: '8px',
+            backgroundColor: 'rgb(var(--panel))',
+            borderBottom: '1px solid rgb(var(--border))'
           }}
         >
-          {openTabs.map((tab, index) => {
-            const isActive = activeFile === tab.path;
-            return (
-              <button
-                key={tab.path}
-                onClick={() => handleTabClick(tab.path)}
-                data-tauri-drag-region="false"
-                className={`
+          {/* Left Section: New File, New Folder, New Canvas buttons */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleCreateFile}
+              className="obsidian-button icon-only small"
+              title={`New File (${platformService.getModifierSymbol()}+N)`}
+              data-tauri-drag-region="false"
+              data-tour="create-note"
+              style={{ pointerEvents: 'auto' }}
+            >
+              <FilePlusCorner className="w-5 h-5" strokeWidth={2} />
+            </button>
+            <button
+              onClick={handleCreateFolder}
+              className="obsidian-button icon-only small"
+              title={`New Folder (${platformService.getModifierSymbol()}+Shift+N)`}
+              data-tauri-drag-region="false"
+              style={{ pointerEvents: 'auto' }}
+            >
+              <FolderOpen className="w-5 h-5" strokeWidth={2} />
+            </button>
+            <button
+              onClick={handleCreateCanvas}
+              className="obsidian-button icon-only small"
+              title="New Canvas"
+              data-tauri-drag-region="false"
+              style={{ pointerEvents: 'auto' }}
+            >
+              <SquareKanban className="w-5 h-5" strokeWidth={2} />
+            </button>
+          </div>
+
+          {/* Center Section: Tab bar */}
+          <div
+            className="absolute flex items-center overflow-x-auto no-scrollbar px-2"
+            style={{
+              left: showLeft ? `${leftW + 57}px` : `${platformService.isMacOS() ? 200 : 120}px`, // After sidebar or after left buttons
+              right: showRight ? `${rightW + 120}px` : '120px', // Account for right sidebar when open + right buttons
+              top: 0,
+              height: '32px'
+            }}
+          >
+            {openTabs.map((tab, index) => {
+              const isActive = activeFile === tab.path;
+              return (
+                <button
+                  key={tab.path}
+                  onClick={() => handleTabClick(tab.path)}
+                  data-tauri-drag-region="false"
+                  className={`
                   relative flex items-center gap-2 px-4 h-8 text-xs whitespace-nowrap transition-all duration-200
                   ${isActive ? 'z-10' : 'z-0'}
                 `}
-                style={{
-                  pointerEvents: 'auto',
-                  marginLeft: index > 0 ? '-12px' : '0',
-                  minWidth: '180px',
-                  maxWidth: '280px',
-                  paddingTop: '6px',
-                  paddingBottom: '6px',
-                  backgroundColor: isActive ? '#3d3d3d' : '#2a2a2a',
-                  color: isActive ? '#ffffff' : '#808080',
-                  borderTopLeftRadius: '8px',
-                  borderTopRightRadius: '8px',
-                  borderBottomLeftRadius: '0',
-                  borderBottomRightRadius: '0',
-                  border: '1px solid #555555',
-                  borderBottom: isActive ? '2px solid #3d3d3d' : '1px solid #555555',
-                  boxShadow: isActive
-                    ? '0 -2px 8px rgba(0, 0, 0, 0.4), 0 1px 0 0 #3d3d3d'
-                    : '0 0 0 0 transparent',
-                  transform: isActive ? 'translateY(0)' : 'translateY(0)',
-                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  style={{
+                    pointerEvents: 'auto',
+                    marginLeft: index > 0 ? '-12px' : '0',
+                    minWidth: '180px',
+                    maxWidth: '280px',
+                    paddingTop: '6px',
+                    paddingBottom: '6px',
+                    backgroundColor: isActive ? '#3d3d3d' : '#2a2a2a',
+                    color: isActive ? '#ffffff' : '#808080',
+                    borderTopLeftRadius: '8px',
+                    borderTopRightRadius: '8px',
+                    borderBottomLeftRadius: '0',
+                    borderBottomRightRadius: '0',
+                    border: '1px solid #555555',
+                    borderBottom: isActive ? '2px solid #3d3d3d' : '1px solid #555555',
+                    boxShadow: isActive
+                      ? '0 -2px 8px rgba(0, 0, 0, 0.4), 0 1px 0 0 #3d3d3d'
+                      : '0 0 0 0 transparent',
+                    transform: isActive ? 'translateY(0)' : 'translateY(0)',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.backgroundColor = '#353535';
+                      e.currentTarget.style.color = '#ffffff';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 -1px 4px rgba(0, 0, 0, 0.2)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.backgroundColor = '#2a2a2a';
+                      e.currentTarget.style.color = '#808080';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 0 0 0 transparent';
+                    }
+                  }}
+                >
+                  <span className="truncate flex-1">{tab.name}</span>
+                  {unsavedChanges.has(tab.path) && (
+                    <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTabClose(tab.path);
+                    }}
+                    className="ml-1 hover:bg-white/10 rounded p-1 flex-shrink-0 opacity-0 hover:opacity-100 transition-opacity"
+                    style={isActive ? { opacity: 0.7 } : {}}
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right Section: Split View, Right Sidebar, and New Tab buttons */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleToggleSplitView}
+              className={`obsidian-button icon-only small ${useSplitView ? 'active' : ''}`}
+              title={useSplitView ? "Exit Split View" : "Enter Split View"}
+              data-tauri-drag-region="false"
+              data-tour="split-view"
+              style={{ pointerEvents: 'auto' }}
+            >
+              <SquareSplitHorizontal className="w-5 h-5" strokeWidth={2} />
+            </button>
+            <button
+              onClick={() => setShowRight(v => !v)}
+              className={`obsidian-button icon-only small ${showRight ? 'active' : ''}`}
+              title={showRight ? "Hide Right Sidebar" : "Show Right Sidebar"}
+              data-tauri-drag-region="false"
+              style={{ pointerEvents: 'auto' }}
+            >
+              {showRight ? (
+                <PanelRightClose className="w-5 h-5" strokeWidth={2} />
+              ) : (
+                <PanelRightOpen className="w-5 h-5" strokeWidth={2} />
+              )}
+            </button>
+            <button
+              onClick={handleCreateFile}
+              className="obsidian-button icon-only small"
+              title="New Tab"
+              data-tauri-drag-region="false"
+              style={{ pointerEvents: 'auto' }}
+            >
+              <Plus className="w-5 h-5" strokeWidth={2.5} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 min-h-0 grid overflow-hidden border-t border-app-border/30" style={{ gridTemplateColumns: cols, gap: 0 }}>
+          <aside className="flex flex-col items-center gap-1 border-r border-app-border bg-app-panel" style={{ paddingTop: platformService.isMacOS() ? '0.5rem' : '0.75rem', paddingBottom: '0.75rem' }}>
+            {/* Menu Toggle */}
+            <button
+              onClick={() => setShowLeft(v => !v)}
+              title={showLeft ? "Hide sidebar" : "Show sidebar"}
+              className="obsidian-button icon-only mb-2"
+              onMouseEnter={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = 'rgb(var(--accent))';
+              }}
+              onMouseLeave={(e) => {
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) icon.style.color = showLeft ? 'white' : 'black';
+              }}
+            >
+              <LokusLogo className="w-6 h-6" style={{ color: showLeft ? 'white' : 'black' }} />
+            </button>
+
+            {/* Activity Bar - VS Code Style */}
+            <div className="w-full pt-2">
+              <button
+                onClick={() => {
+                  setShowKanban(false);
+                  setShowPlugins(false);
+                  setShowBases(false);
+                  setShowGraphView(false);
+                  setShowLeft(true);
                 }}
+                title="Explorer"
+                data-tour="files"
+                className="obsidian-button icon-only w-full mb-1"
                 onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.backgroundColor = '#353535';
-                    e.currentTarget.style.color = '#ffffff';
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                    e.currentTarget.style.boxShadow = '0 -1px 4px rgba(0, 0, 0, 0.2)';
-                  }
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = 'rgb(var(--accent))';
                 }}
                 onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.backgroundColor = '#2a2a2a';
-                    e.currentTarget.style.color = '#808080';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 0 0 0 transparent';
-                  }
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = (!showKanban && !showPlugins && !showBases && !showGraphView && showLeft) ? 'rgb(var(--accent))' : '';
                 }}
               >
-                <span className="truncate flex-1">{tab.name}</span>
-                {unsavedChanges.has(tab.path) && (
-                  <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
-                )}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleTabClose(tab.path);
-                  }}
-                  className="ml-1 hover:bg-white/10 rounded p-1 flex-shrink-0 opacity-0 hover:opacity-100 transition-opacity"
-                  style={isActive ? { opacity: 0.7 } : {}}
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                <FolderOpen className="w-5 h-5" style={!showKanban && !showPlugins && !showBases && !showGraphView && showLeft ? { color: 'rgb(var(--accent))' } : {}} />
               </button>
-            );
-          })}
-        </div>
 
-        {/* Right Section: Split View, Right Sidebar, and New Tab buttons */}
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleToggleSplitView}
-            className={`obsidian-button icon-only small ${useSplitView ? 'active' : ''}`}
-            title={useSplitView ? "Exit Split View" : "Enter Split View"}
-            data-tauri-drag-region="false"
-            style={{ pointerEvents: 'auto' }}
-          >
-            <SquareSplitHorizontal className="w-5 h-5" strokeWidth={2} />
-          </button>
-          <button
-            onClick={() => setShowRight(v => !v)}
-            className={`obsidian-button icon-only small ${showRight ? 'active' : ''}`}
-            title={showRight ? "Hide Right Sidebar" : "Show Right Sidebar"}
-            data-tauri-drag-region="false"
-            style={{ pointerEvents: 'auto' }}
-          >
-            {showRight ? (
-              <PanelRightClose className="w-5 h-5" strokeWidth={2} />
-            ) : (
-              <PanelRightOpen className="w-5 h-5" strokeWidth={2} />
-            )}
-          </button>
-          <button
-            onClick={handleCreateFile}
-            className="obsidian-button icon-only small"
-            title="New Tab"
-            data-tauri-drag-region="false"
-            style={{ pointerEvents: 'auto' }}
-          >
-            <Plus className="w-5 h-5" strokeWidth={2.5} />
-          </button>
-        </div>
-      </div>
+              <button
+                onClick={() => {
+                  setShowKanban(true);
+                  setShowPlugins(false);
+                  setShowBases(false);
+                  setShowGraphView(false);
+                  setShowLeft(true);
+                }}
+                title="Task Board"
+                className="obsidian-button icon-only w-full mb-1"
+                onMouseEnter={(e) => {
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = 'rgb(var(--accent))';
+                }}
+                onMouseLeave={(e) => {
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = (showKanban && !showPlugins && !showBases && !showGraphView) ? 'rgb(var(--accent))' : '';
+                }}
+              >
+                <LayoutGrid className="w-5 h-5" style={showKanban && !showPlugins && !showBases && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
+              </button>
 
-      <div className="flex-1 min-h-0 grid overflow-hidden border-t border-app-border/30" style={{ gridTemplateColumns: cols, gap: 0 }}>
-        <aside className="flex flex-col items-center gap-1 border-r border-app-border bg-app-panel" style={{ paddingTop: platformService.isMacOS() ? '0.5rem' : '0.75rem', paddingBottom: '0.75rem' }}>
-          {/* Menu Toggle */}
-          <button
-            onClick={() => setShowLeft(v => !v)}
-            title={showLeft ? "Hide sidebar" : "Show sidebar"}
-            className="obsidian-button icon-only mb-2"
-            onMouseEnter={(e) => {
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) icon.style.color = 'rgb(var(--accent))';
-            }}
-            onMouseLeave={(e) => {
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) icon.style.color = showLeft ? 'white' : 'black';
-            }}
-          >
-            <LokusLogo className="w-6 h-6" style={{ color: showLeft ? 'white' : 'black' }} />
-          </button>
-          
-          {/* Activity Bar - VS Code Style */}
-          <div className="w-full pt-2">
-            <button
-              onClick={() => { 
-                setShowKanban(false);
-                setShowPlugins(false);
-                setShowBases(false);
-                setShowGraphView(false);
-                setShowLeft(true);
-              }}
-              title="Explorer"
-              className="obsidian-button icon-only w-full mb-1"
-              onMouseEnter={(e) => {
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = 'rgb(var(--accent))';
-              }}
-              onMouseLeave={(e) => {
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = (!showKanban && !showPlugins && !showBases && !showGraphView && showLeft) ? 'rgb(var(--accent))' : '';
-              }}
-            >
-              <FolderOpen className="w-5 h-5" style={!showKanban && !showPlugins && !showBases && !showGraphView && showLeft ? { color: 'rgb(var(--accent))' } : {}} />
-            </button>
-            
-            <button
-              onClick={() => {
-                setShowKanban(true);
-                setShowPlugins(false);
-                setShowBases(false);
-                setShowGraphView(false);
-                setShowLeft(true);
-              }}
-              title="Task Board"
-              className="obsidian-button icon-only w-full mb-1"
-              onMouseEnter={(e) => {
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = 'rgb(var(--accent))';
-              }}
-              onMouseLeave={(e) => {
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = (showKanban && !showPlugins && !showBases && !showGraphView) ? 'rgb(var(--accent))' : '';
-              }}
-            >
-              <LayoutGrid className="w-5 h-5" style={showKanban && !showPlugins && !showBases && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
-            </button>
-            
-            <button
-              onClick={() => {
-                setShowPlugins(true);
-                setShowKanban(false);
-                setShowBases(false);
-                setShowGraphView(false);
-                setShowLeft(true);
-              }}
-              title="Extensions"
-              className="obsidian-button icon-only w-full mb-1"
-              onMouseEnter={(e) => {
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = 'rgb(var(--accent))';
-              }}
-              onMouseLeave={(e) => {
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = (showPlugins && !showKanban && !showBases && !showGraphView) ? 'rgb(var(--accent))' : '';
-              }}
-            >
-              <Puzzle className="w-5 h-5" style={showPlugins && !showKanban && !showBases && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
-            </button>
+              <button
+                onClick={() => {
+                  setShowPlugins(true);
+                  setShowKanban(false);
+                  setShowBases(false);
+                  setShowGraphView(false);
+                  setShowLeft(true);
+                }}
+                title="Extensions"
+                className="obsidian-button icon-only w-full mb-1"
+                onMouseEnter={(e) => {
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = 'rgb(var(--accent))';
+                }}
+                onMouseLeave={(e) => {
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = (showPlugins && !showKanban && !showBases && !showGraphView) ? 'rgb(var(--accent))' : '';
+                }}
+              >
+                <Puzzle className="w-5 h-5" style={showPlugins && !showKanban && !showBases && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
+              </button>
 
-            <button
-              onClick={() => {
-                handleOpenBasesTab();
-              }}
-              title="Bases"
-              className="obsidian-button icon-only w-full mb-1"
-              onMouseEnter={(e) => {
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = 'rgb(var(--accent))';
-              }}
-              onMouseLeave={(e) => {
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = (showBases && !showKanban && !showPlugins && !showGraphView) ? 'rgb(var(--accent))' : '';
-              }}
-            >
-              <Database className="w-5 h-5" style={showBases && !showKanban && !showPlugins && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
-            </button>
+              <button
+                onClick={() => {
+                  handleOpenBasesTab();
+                }}
+                title="Bases"
+                data-tour="bases"
+                className="obsidian-button icon-only w-full mb-1"
+                onMouseEnter={(e) => {
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = 'rgb(var(--accent))';
+                }}
+                onMouseLeave={(e) => {
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = (showBases && !showKanban && !showPlugins && !showGraphView) ? 'rgb(var(--accent))' : '';
+                }}
+              >
+                <Database className="w-5 h-5" style={showBases && !showKanban && !showPlugins && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
+              </button>
 
-            <button
-              onClick={handleOpenGraphView}
-              title="Graph View"
-              className="obsidian-button icon-only w-full mb-1"
-              onMouseEnter={(e) => {
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = 'rgb(var(--accent))';
-              }}
-              onMouseLeave={(e) => {
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = '';
-              }}
-            >
-              <Network className="w-5 h-5" />
-            </button>
+              <button
+                onClick={handleOpenGraphView}
+                title="Graph View"
+                data-tour="graph"
+                className="obsidian-button icon-only w-full mb-1"
+                onMouseEnter={(e) => {
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = 'rgb(var(--accent))';
+                }}
+                onMouseLeave={(e) => {
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = '';
+                }}
+              >
+                <Network className="w-5 h-5" />
+              </button>
 
-            <button
-              onClick={() => {
-                setShowDailyNotesPanel(!showDailyNotesPanel);
-                setShowRight(true);
-                setShowVersionHistory(false);
-              }}
-              title="Daily Notes"
-              className={`obsidian-button icon-only w-full mb-1 ${showDailyNotesPanel ? 'active' : ''}`}
-              onMouseEnter={(e) => {
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = 'rgb(var(--accent))';
-              }}
-              onMouseLeave={(e) => {
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = showDailyNotesPanel ? 'rgb(var(--accent))' : '';
-              }}
-            >
-              <Calendar className="w-5 h-5" style={showDailyNotesPanel ? { color: 'rgb(var(--accent))' } : {}} />
-            </button>
+              <button
+                onClick={() => {
+                  setShowDailyNotesPanel(!showDailyNotesPanel);
+                  setShowRight(true);
+                  setShowVersionHistory(false);
+                }}
+                title="Daily Notes"
+                className={`obsidian-button icon-only w-full mb-1 ${showDailyNotesPanel ? 'active' : ''}`}
+                data-tour="daily-notes"
+                onMouseEnter={(e) => {
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = 'rgb(var(--accent))';
+                }}
+                onMouseLeave={(e) => {
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = showDailyNotesPanel ? 'rgb(var(--accent))' : '';
+                }}
+              >
+                <Calendar className="w-5 h-5" style={showDailyNotesPanel ? { color: 'rgb(var(--accent))' } : {}} />
+              </button>
 
-            {/* Gmail button disabled to improve startup performance */}
-            {/* <button
+              {/* Gmail button disabled to improve startup performance */}
+              {/* <button
               onClick={handleOpenGmail}
               title="Gmail"
               className="obsidian-button icon-only w-full"
@@ -3713,628 +3754,629 @@ function WorkspaceWithScope({ path }) {
               <Mail className="w-5 h-5" />
             </button> */}
 
-          </div>
-        </aside>
-        <div className="bg-app-border/20 w-px" />
-        {showLeft && (
-          <aside className="overflow-y-auto flex flex-col">
-            {showPlugins ? (
-              <div className="flex-1 overflow-hidden">
-                <PluginSettings onOpenPluginDetail={handleOpenPluginDetail} />
-              </div>
-            ) : showBases ? (
-              <div className="flex-1 overflow-hidden">
-                <BasesView isVisible={true} onFileOpen={handleFileOpen} />
-              </div>
-            ) : showKanban ? (
-              <div className="flex-1 overflow-hidden">
-                <KanbanList
-                  workspacePath={path}
-                  onBoardOpen={handleFileOpen}
-                  onCreateBoard={handleCreateKanban}
-                />
-              </div>
-            ) : showGraphView ? (
-              <div className="flex-1 overflow-hidden p-4">
-                <div className="text-center mb-4">
-                  <button
-                    onClick={handleOpenGraphView}
-                    className="obsidian-button primary w-full"
-                  >
-                    Open Graph View
-                  </button>
-                </div>
-                <div className="text-sm text-app-muted">
-                  <p className="mb-2">The graph view shows the connections between your notes.</p>
-                  <p>Use <kbd className="px-1 py-0.5 text-xs bg-app-panel rounded">Cmd+Shift+G</kbd> to quickly open the graph view.</p>
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* Explorer Header */}
-                <div className="h-10 px-4 flex items-center justify-between border-b border-app-border bg-app-panel">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-app-muted">Explorer</span>
-                  <button
-                    onClick={closeAllFolders}
-                    className="obsidian-button icon-only small"
-                    title="Collapse All Folders"
-                  >
-                    <FoldVertical className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <ContextMenu>
-                  <ContextMenuTrigger asChild>
-                    <div className="p-2 flex-1 overflow-y-auto">
-                      <FileTreeView
-                        entries={filteredFileTree}
-                        onFileClick={handleFileOpen}
-                        activeFile={activeFile}
-                        onRefresh={handleRefreshFiles}
-                        data-testid="file-tree"
-                        expandedFolders={expandedFolders}
-                        toggleFolder={toggleFolder}
-                        isCreating={isCreatingFolder}
-                        onCreateConfirm={handleConfirmCreateFolder}
-                        keymap={keymap}
-                        renamingPath={renamingPath}
-                        setRenamingPath={setRenamingPath}
-                        onViewHistory={toggleVersionHistory}
-                        setTagModalFile={setTagModalFile}
-                        setShowTagModal={setShowTagModal}
-                        setUseSplitView={setUseSplitView}
-                        setRightPaneFile={setRightPaneFile}
-                        setRightPaneTitle={setRightPaneTitle}
-                        setRightPaneContent={setRightPaneContent}
-                      />
-                    </div>
-                  </ContextMenuTrigger>
-                <ContextMenuContent>
-                  <ContextMenuItem onClick={handleCreateFile}>
-                    New File
-                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-file'])}</span>
-                  </ContextMenuItem>
-                  <ContextMenuItem onClick={handleCreateCanvas}>
-                    New Canvas
-                  </ContextMenuItem>
-                  <ContextMenuItem onClick={handleCreateFolder}>
-                    New Folder
-                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-folder'])}</span>
-                  </ContextMenuItem>
-                  <ContextMenuItem onClick={handleOpenDailyNote}>
-                    Open Daily Note
-                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['daily-note'])}</span>
-                  </ContextMenuItem>
-                  <ContextMenuSeparator />
-                  <ContextMenuItem onClick={handleRefreshFiles}>Refresh</ContextMenuItem>
-                </ContextMenuContent>
-              </ContextMenu>
-              </>
-            )}
+            </div>
           </aside>
-        )}
-        {showLeft && <div onMouseDown={startLeftDrag} className="cursor-col-resize bg-app-border hover:bg-app-accent transition-colors duration-300 w-1 min-h-full" />}
-        <main className="min-w-0 min-h-0 flex flex-col bg-app-bg">
-          {/* Main content area */}
-          <>
-            {useSplitView ? (
-              /* Split View - Two Complete Panes */
-              <div className={`h-full overflow-hidden ${splitDirection === 'vertical' ? 'flex' : 'flex flex-col'}`}>
-                {/* Left/Top Pane */}
-                <div 
-                  className={`flex flex-col overflow-hidden ${
-                    splitDirection === 'vertical' 
-                      ? 'border-r border-app-border' 
-                      : 'border-b border-app-border'
-                  }`}
-                  style={{
-                    [splitDirection === 'vertical' ? 'width' : 'height']: `${leftPaneSize}%`
-                  }}
-                >
-                  {/* Left/Top Pane Content */}
-                  {activeFile ? (
-                    <div 
-                      ref={leftPaneScrollRef}
-                      className="flex-1 p-4 overflow-y-auto"
-                      onScroll={handleLeftPaneScroll}
-                    >
-                      <input
-                        type="text"
-                        value={editorTitle}
-                        onChange={(e) => setEditorTitle(e.target.value)}
-                        className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
-                      />
-                      <Editor
-                        ref={editorRef}
-                        content={editorContent}
-                        onContentChange={handleEditorChange}
-                        onEditorReady={setEditor}
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex-1 flex items-center justify-center text-app-muted">
-                      No file selected
-                    </div>
-                  )}
+          <div className="bg-app-border/20 w-px" />
+          {showLeft && (
+            <aside className="overflow-y-auto flex flex-col">
+              {showPlugins ? (
+                <div className="flex-1 overflow-hidden">
+                  <PluginSettings onOpenPluginDetail={handleOpenPluginDetail} />
                 </div>
-                
-                {/* Resizer */}
-                <div 
-                  className={`${
-                    splitDirection === 'vertical' 
-                      ? 'w-1 cursor-col-resize hover:bg-app-accent' 
+              ) : showBases ? (
+                <div className="flex-1 overflow-hidden">
+                  <BasesView isVisible={true} onFileOpen={handleFileOpen} />
+                </div>
+              ) : showKanban ? (
+                <div className="flex-1 overflow-hidden">
+                  <KanbanList
+                    workspacePath={path}
+                    onBoardOpen={handleFileOpen}
+                    onCreateBoard={handleCreateKanban}
+                  />
+                </div>
+              ) : showGraphView ? (
+                <div className="flex-1 overflow-hidden p-4">
+                  <div className="text-center mb-4">
+                    <button
+                      onClick={handleOpenGraphView}
+                      className="obsidian-button primary w-full"
+                    >
+                      Open Graph View
+                    </button>
+                  </div>
+                  <div className="text-sm text-app-muted">
+                    <p className="mb-2">The graph view shows the connections between your notes.</p>
+                    <p>Use <kbd className="px-1 py-0.5 text-xs bg-app-panel rounded">Cmd+Shift+G</kbd> to quickly open the graph view.</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Explorer Header */}
+                  <div className="h-10 px-4 flex items-center justify-between border-b border-app-border bg-app-panel">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-app-muted">Explorer</span>
+                    <button
+                      onClick={closeAllFolders}
+                      className="obsidian-button icon-only small"
+                      title="Collapse All Folders"
+                    >
+                      <FoldVertical className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <div className="p-2 flex-1 overflow-y-auto">
+                        <FileTreeView
+                          entries={filteredFileTree}
+                          onFileClick={handleFileOpen}
+                          activeFile={activeFile}
+                          onRefresh={handleRefreshFiles}
+                          data-testid="file-tree"
+                          expandedFolders={expandedFolders}
+                          toggleFolder={toggleFolder}
+                          isCreating={isCreatingFolder}
+                          onCreateConfirm={handleConfirmCreateFolder}
+                          keymap={keymap}
+                          renamingPath={renamingPath}
+                          setRenamingPath={setRenamingPath}
+                          onViewHistory={toggleVersionHistory}
+                          setTagModalFile={setTagModalFile}
+                          setShowTagModal={setShowTagModal}
+                          setUseSplitView={setUseSplitView}
+                          setRightPaneFile={setRightPaneFile}
+                          setRightPaneTitle={setRightPaneTitle}
+                          setRightPaneContent={setRightPaneContent}
+                        />
+                      </div>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent>
+                      <ContextMenuItem onClick={handleCreateFile}>
+                        New File
+                        <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-file'])}</span>
+                      </ContextMenuItem>
+                      <ContextMenuItem onClick={handleCreateCanvas}>
+                        New Canvas
+                      </ContextMenuItem>
+                      <ContextMenuItem onClick={handleCreateFolder}>
+                        New Folder
+                        <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-folder'])}</span>
+                      </ContextMenuItem>
+                      <ContextMenuItem onClick={handleOpenDailyNote}>
+                        Open Daily Note
+                        <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['daily-note'])}</span>
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem onClick={handleRefreshFiles}>Refresh</ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                </>
+              )}
+            </aside>
+          )}
+          {showLeft && <div onMouseDown={startLeftDrag} className="cursor-col-resize bg-app-border hover:bg-app-accent transition-colors duration-300 w-1 min-h-full" />}
+          <main className="min-w-0 min-h-0 flex flex-col bg-app-bg">
+            {/* Main content area */}
+            <>
+              {useSplitView ? (
+                /* Split View - Two Complete Panes */
+                <div className={`h-full overflow-hidden ${splitDirection === 'vertical' ? 'flex' : 'flex flex-col'}`}>
+                  {/* Left/Top Pane */}
+                  <div
+                    className={`flex flex-col overflow-hidden ${splitDirection === 'vertical'
+                      ? 'border-r border-app-border'
+                      : 'border-b border-app-border'
+                      }`}
+                    style={{
+                      [splitDirection === 'vertical' ? 'width' : 'height']: `${leftPaneSize}%`
+                    }}
+                  >
+                    {/* Left/Top Pane Content */}
+                    {activeFile ? (
+                      <div
+                        ref={leftPaneScrollRef}
+                        className="flex-1 p-4 overflow-y-auto"
+                        onScroll={handleLeftPaneScroll}
+                      >
+                        <input
+                          type="text"
+                          value={editorTitle}
+                          onChange={(e) => setEditorTitle(e.target.value)}
+                          className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
+                        />
+                        <Editor
+                          ref={editorRef}
+                          content={editorContent}
+                          onContentChange={handleEditorChange}
+                          onEditorReady={setEditor}
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex-1 flex items-center justify-center text-app-muted">
+                        No file selected
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Resizer */}
+                  <div
+                    className={`${splitDirection === 'vertical'
+                      ? 'w-1 cursor-col-resize hover:bg-app-accent'
                       : 'h-1 cursor-row-resize hover:bg-app-accent'
-                  } bg-app-border transition-colors duration-200 flex-shrink-0`}
-                  onMouseDown={handleMouseDown}
-                  onDoubleClick={resetPaneSize}
-                />
-                
-                {/* Right/Bottom Pane */}
-                <div
-                  className="flex flex-col overflow-hidden"
-                  style={{
-                    [splitDirection === 'vertical' ? 'width' : 'height']: `${100 - leftPaneSize}%`
-                  }}
-                >
-                  {/* Right/Bottom Pane Content */}
-                  {rightPaneFile ? (
-                    rightPaneFile && rightPaneFile.endsWith('.canvas') ? (
-                      <div className="flex-1 overflow-hidden">
-                        <Canvas
-                          canvasPath={rightPaneFile}
-                          canvasName={openTabs.find(tab => tab.path === rightPaneFile)?.name}
-                          onSave={async (canvasData) => {
-                            try {
-                              await canvasManager.saveCanvas(rightPaneFile, canvasData);
-                              setUnsavedChanges(prev => {
-                                const newSet = new Set(prev);
-                                newSet.delete(rightPaneFile);
-                                return newSet;
-                              });
-                            } catch (error) {
-                              console.error('Failed to save canvas:', error);
-                            }
-                          }}
-                          onChange={() => {
-                            setUnsavedChanges(prev => new Set(prev).add(rightPaneFile));
-                          }}
-                        />
-                      </div>
-                    ) : rightPaneFile && rightPaneFile.endsWith('.kanban') ? (
-                      <div className="flex-1 overflow-hidden">
-                        <KanbanBoard
-                          workspacePath={path}
-                          boardPath={rightPaneFile}
-                          onFileOpen={handleFileOpen}
-                        />
-                      </div>
-                    ) : rightPaneFile && rightPaneFile.endsWith('.pdf') ? (
-                      <div className="flex-1 overflow-hidden">
-                        <PDFViewerTab
-                          file={rightPaneFile}
-                          onClose={() => {
-                            setOpenTabs(prev => prev.filter(tab => tab.path !== rightPaneFile));
-                            setRightPaneFile(null);
-                          }}
-                        />
-                      </div>
-                    ) : rightPaneFile.startsWith('__graph__') ? (
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-                        <ProfessionalGraphView
-                          fileTree={filteredFileTree}
-                          activeFile={rightPaneFile}
-                          onFileOpen={handleFileOpen}
-                          workspacePath={path}
-                        />
-                      </div>
-                    ) : /* rightPaneFile === '__gmail__' ? (
+                      } bg-app-border transition-colors duration-200 flex-shrink-0`}
+                    onMouseDown={handleMouseDown}
+                    onDoubleClick={resetPaneSize}
+                  />
+
+                  {/* Right/Bottom Pane */}
+                  <div
+                    className="flex flex-col overflow-hidden"
+                    style={{
+                      [splitDirection === 'vertical' ? 'width' : 'height']: `${100 - leftPaneSize}%`
+                    }}
+                  >
+                    {/* Right/Bottom Pane Content */}
+                    {rightPaneFile ? (
+                      rightPaneFile && rightPaneFile.endsWith('.canvas') ? (
+                        <div className="flex-1 overflow-hidden">
+                          <Canvas
+                            canvasPath={rightPaneFile}
+                            canvasName={openTabs.find(tab => tab.path === rightPaneFile)?.name}
+                            onSave={async (canvasData) => {
+                              try {
+                                await canvasManager.saveCanvas(rightPaneFile, canvasData);
+                                setUnsavedChanges(prev => {
+                                  const newSet = new Set(prev);
+                                  newSet.delete(rightPaneFile);
+                                  return newSet;
+                                });
+                              } catch (error) {
+                                console.error('Failed to save canvas:', error);
+                              }
+                            }}
+                            onChange={() => {
+                              setUnsavedChanges(prev => new Set(prev).add(rightPaneFile));
+                            }}
+                          />
+                        </div>
+                      ) : rightPaneFile && rightPaneFile.endsWith('.kanban') ? (
+                        <div className="flex-1 overflow-hidden">
+                          <KanbanBoard
+                            workspacePath={path}
+                            boardPath={rightPaneFile}
+                            onFileOpen={handleFileOpen}
+                          />
+                        </div>
+                      ) : rightPaneFile && rightPaneFile.endsWith('.pdf') ? (
+                        <div className="flex-1 overflow-hidden">
+                          <PDFViewerTab
+                            file={rightPaneFile}
+                            onClose={() => {
+                              setOpenTabs(prev => prev.filter(tab => tab.path !== rightPaneFile));
+                              setRightPaneFile(null);
+                            }}
+                          />
+                        </div>
+                      ) : rightPaneFile.startsWith('__graph__') ? (
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+                          <ProfessionalGraphView
+                            fileTree={filteredFileTree}
+                            activeFile={rightPaneFile}
+                            onFileOpen={handleFileOpen}
+                            workspacePath={path}
+                          />
+                        </div>
+                      ) : /* rightPaneFile === '__gmail__' ? (
                       <div className="h-full">
                         <Gmail workspacePath={path} />
                       </div>
                     ) : */ rightPaneFile === '__bases__' ? (
-                      <div className="h-full">
-                        <BasesView isVisible={true} onFileOpen={handleFileOpen} />
-                      </div>
-                    ) : rightPaneFile.startsWith('__plugin_') ? (
-                      <div className="flex-1 overflow-hidden">
-                        {(() => {
-                          const activeTab = openTabs.find(tab => tab.path === rightPaneFile);
-                          return activeTab?.plugin ? <PluginDetail plugin={activeTab.plugin} /> : <div>Plugin not found</div>;
-                        })()}
-                      </div>
+                          <div className="h-full">
+                            <BasesView isVisible={true} onFileOpen={handleFileOpen} />
+                          </div>
+                        ) : rightPaneFile.startsWith('__plugin_') ? (
+                          <div className="flex-1 overflow-hidden">
+                            {(() => {
+                              const activeTab = openTabs.find(tab => tab.path === rightPaneFile);
+                              return activeTab?.plugin ? <PluginDetail plugin={activeTab.plugin} /> : <div>Plugin not found</div>;
+                            })()}
+                          </div>
+                        ) : (
+                          <div
+                            ref={rightPaneScrollRef}
+                            className="flex-1 p-4 overflow-y-auto"
+                            onScroll={handleRightPaneScroll}
+                          >
+                            <input
+                              type="text"
+                              value={rightPaneTitle}
+                              onChange={(e) => setRightPaneTitle(e.target.value)}
+                              className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
+                            />
+                            <Editor
+                              key={`right-pane-${rightPaneFile}`}
+                              content={rightPaneContent}
+                              onContentChange={(content) => setRightPaneContent(content)}
+                              onEditorReady={setEditor}
+                            />
+                          </div>
+                        )
                     ) : (
-                      <div 
-                        ref={rightPaneScrollRef}
-                        className="flex-1 p-4 overflow-y-auto"
-                        onScroll={handleRightPaneScroll}
-                      >
-                        <input
-                          type="text"
-                          value={rightPaneTitle}
-                          onChange={(e) => setRightPaneTitle(e.target.value)}
-                          className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
-                        />
-                        <Editor
-                          key={`right-pane-${rightPaneFile}`}
-                          content={rightPaneContent}
-                          onContentChange={(content) => setRightPaneContent(content)}
-                          onEditorReady={setEditor}
-                        />
+                      <div className="flex-1 flex items-center justify-center text-app-muted">
+                        Click a tab to open file in this pane
                       </div>
-                    )
-                  ) : (
-                    <div className="flex-1 flex items-center justify-center text-app-muted">
-                      Click a tab to open file in this pane
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              /* Single View */
-              <>
-              {activeFile && activeFile.endsWith('.canvas') ? (
-            <div className="flex-1 overflow-hidden">
-              <Canvas
-                canvasPath={activeFile}
-                canvasName={openTabs.find(tab => tab.path === activeFile)?.name}
-                onSave={async (canvasData) => {
-                  try {
-                    await canvasManager.saveCanvas(activeFile, canvasData);
-                    setUnsavedChanges(prev => {
-                      const newSet = new Set(prev);
-                      newSet.delete(activeFile);
-                      return newSet;
-                    });
-                  } catch (error) {
-                  }
-                }}
-                onContentChange={(canvasData) => {
-                  setUnsavedChanges(prev => {
-                    const newSet = new Set(prev);
-                    newSet.add(activeFile);
-                    return newSet;
-                  });
-                }}
-                initialData={null} // Will be loaded by Canvas component
-              />
-            </div>
-          ) : activeFile && activeFile.endsWith('.kanban') ? (
-            <div className="flex-1 overflow-hidden">
-              <KanbanBoard
-                workspacePath={path}
-                boardPath={activeFile}
-                onFileOpen={handleFileOpen}
-              />
-            </div>
-          ) : activeFile && activeFile.endsWith('.pdf') ? (
-            <div className="flex-1 overflow-hidden">
-              <PDFViewerTab
-                file={activeFile}
-                onClose={() => {
-                  setOpenTabs(prev => prev.filter(tab => tab.path !== activeFile));
-                  setActiveFile(null);
-                }}
-              />
-            </div>
-          ) : activeFile && isImageFile(activeFile) ? (
-            <div className="flex-1 overflow-hidden">
-              <ImageViewerTab
-                imagePath={activeFile}
-                allImageFiles={allImageFiles}
-                onImageChange={(newPath) => {
-                  // Update active file and tab name when navigating between images
-                  setActiveFile(newPath);
-                  setOpenTabs(prevTabs => {
-                    return prevTabs.map(tab =>
-                      tab.path === activeFile
-                        ? { ...tab, path: newPath, name: getFilename(newPath) }
-                        : tab
-                    );
-                  });
-                }}
-              />
-            </div>
-          ) : activeFile === '__graph__' ? (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-              <ProfessionalGraphView
-                isVisible={true}
-                fileTree={filteredFileTree}
-                workspacePath={path}
-                onOpenFile={handleFileOpen}
-                onGraphStateChange={handleGraphStateChange}
-              />
-            </div>
-          ) : activeFile === '__bases__' ? (
-            <div className="flex-1 h-full overflow-hidden">
-              <BasesView isVisible={true} onFileOpen={handleFileOpen} />
-            </div>
-          ) : /* activeFile === '__gmail__' ? (
+              ) : (
+                /* Single View */
+                <>
+                  {activeFile && activeFile.endsWith('.canvas') ? (
+                    <div className="flex-1 overflow-hidden">
+                      <Canvas
+                        canvasPath={activeFile}
+                        canvasName={openTabs.find(tab => tab.path === activeFile)?.name}
+                        onSave={async (canvasData) => {
+                          try {
+                            await canvasManager.saveCanvas(activeFile, canvasData);
+                            setUnsavedChanges(prev => {
+                              const newSet = new Set(prev);
+                              newSet.delete(activeFile);
+                              return newSet;
+                            });
+                          } catch (error) {
+                          }
+                        }}
+                        onContentChange={(canvasData) => {
+                          setUnsavedChanges(prev => {
+                            const newSet = new Set(prev);
+                            newSet.add(activeFile);
+                            return newSet;
+                          });
+                        }}
+                        initialData={null} // Will be loaded by Canvas component
+                      />
+                    </div>
+                  ) : activeFile && activeFile.endsWith('.kanban') ? (
+                    <div className="flex-1 overflow-hidden">
+                      <KanbanBoard
+                        workspacePath={path}
+                        boardPath={activeFile}
+                        onFileOpen={handleFileOpen}
+                      />
+                    </div>
+                  ) : activeFile && activeFile.endsWith('.pdf') ? (
+                    <div className="flex-1 overflow-hidden">
+                      <PDFViewerTab
+                        file={activeFile}
+                        onClose={() => {
+                          setOpenTabs(prev => prev.filter(tab => tab.path !== activeFile));
+                          setActiveFile(null);
+                        }}
+                      />
+                    </div>
+                  ) : activeFile && isImageFile(activeFile) ? (
+                    <div className="flex-1 overflow-hidden">
+                      <ImageViewerTab
+                        imagePath={activeFile}
+                        allImageFiles={allImageFiles}
+                        onImageChange={(newPath) => {
+                          // Update active file and tab name when navigating between images
+                          setActiveFile(newPath);
+                          setOpenTabs(prevTabs => {
+                            return prevTabs.map(tab =>
+                              tab.path === activeFile
+                                ? { ...tab, path: newPath, name: getFilename(newPath) }
+                                : tab
+                            );
+                          });
+                        }}
+                      />
+                    </div>
+                  ) : activeFile === '__graph__' ? (
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+                      <ProfessionalGraphView
+                        isVisible={true}
+                        fileTree={filteredFileTree}
+                        workspacePath={path}
+                        onOpenFile={handleFileOpen}
+                        onGraphStateChange={handleGraphStateChange}
+                      />
+                    </div>
+                  ) : activeFile === '__bases__' ? (
+                    <div className="flex-1 h-full overflow-hidden">
+                      <BasesView isVisible={true} onFileOpen={handleFileOpen} />
+                    </div>
+                  ) : /* activeFile === '__gmail__' ? (
             <div className="flex-1 h-full overflow-hidden">
               <Gmail workspacePath={path} />
             </div>
           ) : */ (
-            <div className="flex-1 p-8 md:p-12 overflow-y-auto">
-              <div className="max-w-full mx-auto h-full">
-                {false ? (
-                  <div className="h-full flex flex-col">
-                    {/* Graph view moved above */}
-                  </div>
-                ) : activeFile === '__old_graph__' ? (
-                  <div className="h-full flex flex-col">
-                    {isLoadingGraph ? (
-                      <div className="flex-1 flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="animate-spin w-8 h-8 border-2 border-app-accent border-t-transparent rounded-full mx-auto mb-4"></div>
-                          <h2 className="text-xl font-medium text-app-text mb-2">Building Graph</h2>
-                          <p className="text-app-muted">Processing your workspace files...</p>
+                      <div className="flex-1 p-8 md:p-12 overflow-y-auto">
+                        <div className="max-w-full mx-auto h-full">
+                          {false ? (
+                            <div className="h-full flex flex-col">
+                              {/* Graph view moved above */}
+                            </div>
+                          ) : activeFile === '__old_graph__' ? (
+                            <div className="h-full flex flex-col">
+                              {isLoadingGraph ? (
+                                <div className="flex-1 flex items-center justify-center">
+                                  <div className="text-center">
+                                    <div className="animate-spin w-8 h-8 border-2 border-app-accent border-t-transparent rounded-full mx-auto mb-4"></div>
+                                    <h2 className="text-xl font-medium text-app-text mb-2">Building Graph</h2>
+                                    <p className="text-app-muted">Processing your workspace files...</p>
+                                  </div>
+                                </div>
+                              ) : graphData ? (
+                                <div className="flex-1 h-full">
+                                  <div>Old Graph View - REMOVED</div>
+                                </div>
+                              ) : (
+                                <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+                                  <div className="mb-6">
+                                    <Network className="w-16 h-16 text-app-muted/50 mx-auto mb-4" />
+                                    <h2 className="text-xl font-medium text-app-text mb-2">Graph View</h2>
+                                    <p className="text-app-muted mb-6 max-w-md">
+                                      {isLoadingGraph
+                                        ? 'Building your knowledge graph...'
+                                        : 'Visualize the connections between your notes and discover hidden relationships in your knowledge base.'
+                                      }
+                                    </p>
+                                  </div>
+                                  {isLoadingGraph && (
+                                    <div className="flex items-center gap-2 text-app-accent">
+                                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-current border-t-transparent"></div>
+                                      <span>Processing notes...</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ) : activeFile && activeFile.startsWith('__plugin_') ? (
+                            <div className="flex-1 overflow-hidden">
+                              {(() => {
+                                const activeTab = openTabs.find(tab => tab.path === activeFile);
+                                return activeTab?.plugin ? <PluginDetail plugin={activeTab.plugin} /> : <div>Plugin not found</div>;
+                              })()}
+                            </div>
+                          ) : activeFile ? (
+                            <EditorDropZone>
+                              <ContextMenu>
+                                <ContextMenuTrigger asChild>
+                                  <div>
+                                    <input
+                                      type="text"
+                                      value={editorTitle}
+                                      onChange={(e) => setEditorTitle(e.target.value)}
+                                      className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
+                                    />
+                                    <div data-tour="editor">
+                                      <Editor
+                                        ref={editorRef}
+                                        content={editorContent}
+                                        onContentChange={handleEditorChange}
+                                        onEditorReady={setEditor}
+                                      />
+                                    </div>
+                                  </div>
+                                </ContextMenuTrigger>
+                                <ContextMenuContent>
+                                  <ContextMenuItem onClick={handleSave}>
+                                    Save
+                                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['save-file'])}</span>
+                                  </ContextMenuItem>
+                                  <ContextMenuItem onClick={() => stateRef.current.activeFile && handleTabClose(stateRef.current.activeFile)}>
+                                    Close Tab
+                                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['close-tab'])}</span>
+                                  </ContextMenuItem>
+                                  <ContextMenuSeparator />
+                                  <ContextMenuItem onClick={() => document.execCommand && document.execCommand('selectAll')}>Select All</ContextMenuItem>
+                                </ContextMenuContent>
+                              </ContextMenu>
+                            </EditorDropZone>
+                          ) : (
+                            <>
+                              {/* Modern Welcome Screen - VS Code Inspired */}
+                              <div className="h-full flex flex-col">
+                                <div className="flex-1 flex items-center justify-center p-8">
+                                  <div className="max-w-4xl w-full">
+
+                                    {/* Header Section */}
+                                    <div className="text-center mb-10">
+                                      <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-app-accent/20 to-app-accent/10 border border-app-accent/20 flex items-center justify-center">
+                                        <LokusLogo className="w-10 h-10 text-app-accent" />
+                                      </div>
+                                      <h1 className="text-3xl font-bold text-app-text mb-2">Welcome to Lokus</h1>
+                                      <p className="text-app-muted text-lg">Your modern knowledge management platform</p>
+                                    </div>
+
+                                    {/* Quick Actions */}
+                                    <div className="mb-12">
+                                      <h2 className="text-lg font-semibold text-app-text mb-6">Start</h2>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        <button
+                                          onClick={handleCreateFile}
+                                          className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
+                                        >
+                                          <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
+                                            <FilePlus2 className="w-5 h-5 text-app-accent" />
+                                          </div>
+                                          <h3 className="font-medium text-app-text mb-2">New Note</h3>
+                                          <p className="text-sm text-app-muted">Create your first note and start writing</p>
+                                          <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+N")}</div>
+                                        </button>
+
+                                        <button
+                                          onClick={handleCreateCanvas}
+                                          className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
+                                        >
+                                          <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
+                                            <Layers className="w-5 h-5 text-app-accent" />
+                                          </div>
+                                          <h3 className="font-medium text-app-text mb-2">New Canvas</h3>
+                                          <p className="text-sm text-app-muted">Create visual mind maps and diagrams</p>
+                                        </button>
+
+                                        <button
+                                          onClick={handleCreateFolder}
+                                          className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
+                                        >
+                                          <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
+                                            <FolderPlus className="w-5 h-5 text-app-accent" />
+                                          </div>
+                                          <h3 className="font-medium text-app-text mb-2">New Folder</h3>
+                                          <p className="text-sm text-app-muted">Organize your notes with folders</p>
+                                          <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+Shift+N")}</div>
+                                        </button>
+
+                                        <button
+                                          onClick={() => setShowCommandPalette(true)}
+                                          className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
+                                          data-tour="templates"
+                                        >
+                                          <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
+                                            <Search className="w-5 h-5 text-app-accent" />
+                                          </div>
+                                          <h3 className="font-medium text-app-text mb-2">Command Palette</h3>
+                                          <p className="text-sm text-app-muted">Quick access to all commands</p>
+                                          <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+K")}</div>
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {/* Recent & Help */}
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                      <div>
+                                        <h2 className="text-lg font-semibold text-app-text mb-4">Recent</h2>
+                                        <div className="space-y-2">
+                                          {recentFiles.length > 0 ? (
+                                            recentFiles.map((file, idx) => (
+                                              <button
+                                                key={idx}
+                                                onClick={() => handleFileOpen(file)}
+                                                className="w-full p-3 rounded-lg bg-app-panel/20 border border-app-border/50 hover:bg-app-panel/40 hover:border-app-accent/50 transition-all text-left group"
+                                              >
+                                                <div className="flex items-center gap-3">
+                                                  {file.path.endsWith('.md') ? (
+                                                    <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
+                                                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                                                    </svg>
+                                                  ) : file.path.endsWith('.canvas') || file.path.endsWith('.kanban') ? (
+                                                    <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
+                                                      <path fillRule="evenodd" d="M4.25 2A2.25 2.25 0 002 4.25v11.5A2.25 2.25 0 004.25 18h11.5A2.25 2.25 0 0018 15.75V4.25A2.25 2.25 0 0015.75 2H4.25z" clipRule="evenodd" />
+                                                    </svg>
+                                                  ) : file.path.endsWith('.pdf') ? (
+                                                    <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
+                                                      <path d="M4 4a2 2 0 012-2h8l4 4v10a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8v-8h-4V4H6zm6 0v3h3l-3-3zM8 13a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1zm0-3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                                                    </svg>
+                                                  ) : (
+                                                    <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
+                                                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                                                    </svg>
+                                                  )}
+                                                  <span className="text-sm font-medium text-app-text group-hover:text-app-accent transition-colors truncate">
+                                                    {file.name.replace(/\.(md|txt|canvas)$/, '')}
+                                                  </span>
+                                                </div>
+                                              </button>
+                                            ))
+                                          ) : (
+                                            <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
+                                              <p className="text-sm text-app-muted">No recent files yet. Start by creating your first note!</p>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <div>
+                                        <h2 className="text-lg font-semibold text-app-text mb-4">Learn</h2>
+                                        <div className="space-y-3">
+                                          <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
+                                            <h3 className="font-medium text-app-text text-sm mb-2">✨ Features</h3>
+                                            <ul className="text-sm text-app-muted space-y-1">
+                                              <li>• Rich text editing with math equations</li>
+                                              <li>• Wiki-style linking with <code className="px-1 py-0.5 bg-app-bg/50 rounded text-xs">[[brackets]]</code></li>
+                                              <li>• Task management and kanban boards</li>
+                                              <li>• Plugin system for extensibility</li>
+                                            </ul>
+                                          </div>
+
+                                          <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
+                                            <h3 className="font-medium text-app-text text-sm mb-2">⌨️ Quick Tips</h3>
+                                            <ul className="text-sm text-app-muted space-y-1">
+                                              <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+K</kbd> Command palette</li>
+                                              <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+S</kbd> Save current file</li>
+                                              <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+P</kbd> Quick file open</li>
+                                              <li>• Drag files to move them between folders</li>
+                                            </ul>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          )}
                         </div>
-                      </div>
-                    ) : graphData ? (
-                      <div className="flex-1 h-full">
-                        <div>Old Graph View - REMOVED</div>
-                      </div>
-                    ) : (
-                      <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-                        <div className="mb-6">
-                          <Network className="w-16 h-16 text-app-muted/50 mx-auto mb-4" />
-                          <h2 className="text-xl font-medium text-app-text mb-2">Graph View</h2>
-                          <p className="text-app-muted mb-6 max-w-md">
-                            {isLoadingGraph 
-                              ? 'Building your knowledge graph...'
-                              : 'Visualize the connections between your notes and discover hidden relationships in your knowledge base.'
-                            }
-                          </p>
-                        </div>
-                        {isLoadingGraph && (
-                          <div className="flex items-center gap-2 text-app-accent">
-                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-current border-t-transparent"></div>
-                            <span>Processing notes...</span>
-                          </div>
-                        )}
                       </div>
                     )}
-                  </div>
-                ) : activeFile && activeFile.startsWith('__plugin_') ? (
-                  <div className="flex-1 overflow-hidden">
-                    {(() => {
-                      const activeTab = openTabs.find(tab => tab.path === activeFile);
-                      return activeTab?.plugin ? <PluginDetail plugin={activeTab.plugin} /> : <div>Plugin not found</div>;
-                    })()}
-                  </div>
-                ) : activeFile ? (
-                  <EditorDropZone>
-                    <ContextMenu>
-                      <ContextMenuTrigger asChild>
-                        <div>
-                          <input
-                            type="text"
-                            value={editorTitle}
-                            onChange={(e) => setEditorTitle(e.target.value)}
-                            className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
-                          />
-                          <Editor
-                            ref={editorRef}
-                            content={editorContent}
-                            onContentChange={handleEditorChange}
-                            onEditorReady={setEditor}
-                          />
-                        </div>
-                      </ContextMenuTrigger>
-                    <ContextMenuContent>
-                      <ContextMenuItem onClick={handleSave}>
-                        Save
-                        <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['save-file'])}</span>
-                      </ContextMenuItem>
-                      <ContextMenuItem onClick={() => stateRef.current.activeFile && handleTabClose(stateRef.current.activeFile)}>
-                        Close Tab
-                        <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['close-tab'])}</span>
-                      </ContextMenuItem>
-                      <ContextMenuSeparator />
-                      <ContextMenuItem onClick={() => document.execCommand && document.execCommand('selectAll')}>Select All</ContextMenuItem>
-                    </ContextMenuContent>
-                  </ContextMenu>
-                  </EditorDropZone>
-                ) : (
-                <>
-                  {/* Modern Welcome Screen - VS Code Inspired */}
-                  <div className="h-full flex flex-col">
-                  <div className="flex-1 flex items-center justify-center p-8">
-                    <div className="max-w-4xl w-full">
-                      
-                      {/* Header Section */}
-                      <div className="text-center mb-10">
-                        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-app-accent/20 to-app-accent/10 border border-app-accent/20 flex items-center justify-center">
-                          <LokusLogo className="w-10 h-10 text-app-accent" />
-                        </div>
-                        <h1 className="text-3xl font-bold text-app-text mb-2">Welcome to Lokus</h1>
-                        <p className="text-app-muted text-lg">Your modern knowledge management platform</p>
-                      </div>
-
-                      {/* Quick Actions */}
-                      <div className="mb-12">
-                        <h2 className="text-lg font-semibold text-app-text mb-6">Start</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                          <button
-                            onClick={handleCreateFile}
-                            className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
-                          >
-                            <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
-                              <FilePlus2 className="w-5 h-5 text-app-accent" />
-                            </div>
-                            <h3 className="font-medium text-app-text mb-2">New Note</h3>
-                            <p className="text-sm text-app-muted">Create your first note and start writing</p>
-                            <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+N")}</div>
-                          </button>
-                          
-                          <button
-                            onClick={handleCreateCanvas}
-                            className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
-                          >
-                            <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
-                              <Layers className="w-5 h-5 text-app-accent" />
-                            </div>
-                            <h3 className="font-medium text-app-text mb-2">New Canvas</h3>
-                            <p className="text-sm text-app-muted">Create visual mind maps and diagrams</p>
-                          </button>
-                          
-                          <button
-                            onClick={handleCreateFolder}
-                            className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
-                          >
-                            <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
-                              <FolderPlus className="w-5 h-5 text-app-accent" />
-                            </div>
-                            <h3 className="font-medium text-app-text mb-2">New Folder</h3>
-                            <p className="text-sm text-app-muted">Organize your notes with folders</p>
-                            <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+Shift+N")}</div>
-                          </button>
-                          
-                          <button
-                            onClick={() => setShowCommandPalette(true)}
-                            className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
-                          >
-                            <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
-                              <Search className="w-5 h-5 text-app-accent" />
-                            </div>
-                            <h3 className="font-medium text-app-text mb-2">Command Palette</h3>
-                            <p className="text-sm text-app-muted">Quick access to all commands</p>
-                            <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+K")}</div>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Recent & Help */}
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        <div>
-                          <h2 className="text-lg font-semibold text-app-text mb-4">Recent</h2>
-                          <div className="space-y-2">
-                            {recentFiles.length > 0 ? (
-                              recentFiles.map((file, idx) => (
-                                <button
-                                  key={idx}
-                                  onClick={() => handleFileOpen(file)}
-                                  className="w-full p-3 rounded-lg bg-app-panel/20 border border-app-border/50 hover:bg-app-panel/40 hover:border-app-accent/50 transition-all text-left group"
-                                >
-                                  <div className="flex items-center gap-3">
-                                    {file.path.endsWith('.md') ? (
-                                      <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
-                                      </svg>
-                                    ) : file.path.endsWith('.canvas') || file.path.endsWith('.kanban') ? (
-                                      <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M4.25 2A2.25 2.25 0 002 4.25v11.5A2.25 2.25 0 004.25 18h11.5A2.25 2.25 0 0018 15.75V4.25A2.25 2.25 0 0015.75 2H4.25z" clipRule="evenodd" />
-                                      </svg>
-                                    ) : file.path.endsWith('.pdf') ? (
-                                      <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
-                                        <path d="M4 4a2 2 0 012-2h8l4 4v10a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8v-8h-4V4H6zm6 0v3h3l-3-3zM8 13a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1zm0-3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
-                                      </svg>
-                                    ) : (
-                                      <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
-                                      </svg>
-                                    )}
-                                    <span className="text-sm font-medium text-app-text group-hover:text-app-accent transition-colors truncate">
-                                      {file.name.replace(/\.(md|txt|canvas)$/, '')}
-                                    </span>
-                                  </div>
-                                </button>
-                              ))
-                            ) : (
-                              <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
-                                <p className="text-sm text-app-muted">No recent files yet. Start by creating your first note!</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        
-                        <div>
-                          <h2 className="text-lg font-semibold text-app-text mb-4">Learn</h2>
-                          <div className="space-y-3">
-                            <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
-                              <h3 className="font-medium text-app-text text-sm mb-2">✨ Features</h3>
-                              <ul className="text-sm text-app-muted space-y-1">
-                                <li>• Rich text editing with math equations</li>
-                                <li>• Wiki-style linking with <code className="px-1 py-0.5 bg-app-bg/50 rounded text-xs">[[brackets]]</code></li>
-                                <li>• Task management and kanban boards</li>
-                                <li>• Plugin system for extensibility</li>
-                              </ul>
-                            </div>
-                            
-                            <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
-                              <h3 className="font-medium text-app-text text-sm mb-2">⌨️ Quick Tips</h3>
-                              <ul className="text-sm text-app-muted space-y-1">
-                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+K</kbd> Command palette</li>
-                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+S</kbd> Save current file</li>
-                                <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+P</kbd> Quick file open</li>
-                                <li>• Drag files to move them between folders</li>
-                              </ul>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
                 </>
               )}
-              </div>
-            </div>
-          )}
-              </>
-            )}
-          </>
-        </main>
-        {showRight && <div onMouseDown={startRightDrag} className="cursor-col-resize bg-app-border hover:bg-app-accent transition-colors duration-300 w-1 min-h-full" />}
-        {showRight && (
-          <aside className="overflow-y-auto flex flex-col bg-app-panel border-l border-app-border" style={{ width: `${rightW}px` }}>
-            {/* Show VersionHistory, GraphSidebar, DailyNotesPanel, or DocumentOutline */}
-            <div className="flex-1 overflow-hidden">
-              {showVersionHistory ? (
-                <VersionHistoryPanel
-                  key={`version-${activeFile}-${versionRefreshKey}`}
-                  workspacePath={path}
-                  filePath={activeFile}
-                  onClose={() => setShowVersionHistory(false)}
-                  onRestore={reloadCurrentFile}
-                />
-              ) : showDailyNotesPanel ? (
-                <DailyNotesPanel
-                  workspacePath={path}
-                  onOpenDailyNote={handleOpenDailyNoteByDate}
-                  currentDate={currentDailyNoteDate}
-                />
-              ) : activeFile === '__graph__' ? (
-                <GraphSidebar
-                  selectedNodes={graphSidebarData.selectedNodes}
-                  hoveredNode={graphSidebarData.hoveredNode}
-                  graphData={graphSidebarData.graphData}
-                  stats={graphSidebarData.stats}
-                  config={graphSidebarData.graphConfig}
-                  onConfigChange={graphSidebarData.onConfigChange}
-                  onNodeClick={(node) => {
-                    // Focus on the clicked node in the graph
-                    if (graphSidebarData.onFocusNode) {
-                      graphSidebarData.onFocusNode(node);
-                    }
-                  }}
-                  // Animation tour controls
-                  isAnimating={graphSidebarData.isAnimating}
-                  animationSpeed={graphSidebarData.animationSpeed}
-                  onToggleAnimation={graphSidebarData.onToggleAnimation}
-                  onAnimationSpeedChange={graphSidebarData.onAnimationSpeedChange}
-                />
-              ) : (
-                <>
-                  {/* Editor Mode Switcher */}
-                  <EditorModeSwitcher />
+            </>
+          </main>
+          {showRight && <div onMouseDown={startRightDrag} className="cursor-col-resize bg-app-border hover:bg-app-accent transition-colors duration-300 w-1 min-h-full" />}
+          {showRight && (
+            <aside className="overflow-y-auto flex flex-col bg-app-panel border-l border-app-border" style={{ width: `${rightW}px` }}>
+              {/* Show VersionHistory, GraphSidebar, DailyNotesPanel, or DocumentOutline */}
+              <div className="flex-1 overflow-hidden">
+                {showVersionHistory ? (
+                  <VersionHistoryPanel
+                    key={`version-${activeFile}-${versionRefreshKey}`}
+                    workspacePath={path}
+                    filePath={activeFile}
+                    onClose={() => setShowVersionHistory(false)}
+                    onRestore={reloadCurrentFile}
+                  />
+                ) : showDailyNotesPanel ? (
+                  <DailyNotesPanel
+                    workspacePath={path}
+                    onOpenDailyNote={handleOpenDailyNoteByDate}
+                    currentDate={currentDailyNoteDate}
+                  />
+                ) : activeFile === '__graph__' ? (
+                  <GraphSidebar
+                    selectedNodes={graphSidebarData.selectedNodes}
+                    hoveredNode={graphSidebarData.hoveredNode}
+                    graphData={graphSidebarData.graphData}
+                    stats={graphSidebarData.stats}
+                    config={graphSidebarData.graphConfig}
+                    onConfigChange={graphSidebarData.onConfigChange}
+                    onNodeClick={(node) => {
+                      // Focus on the clicked node in the graph
+                      if (graphSidebarData.onFocusNode) {
+                        graphSidebarData.onFocusNode(node);
+                      }
+                    }}
+                    // Animation tour controls
+                    isAnimating={graphSidebarData.isAnimating}
+                    animationSpeed={graphSidebarData.animationSpeed}
+                    onToggleAnimation={graphSidebarData.onToggleAnimation}
+                    onAnimationSpeedChange={graphSidebarData.onAnimationSpeedChange}
+                  />
+                ) : (
+                  <>
+                    {/* Editor Mode Switcher */}
+                    <EditorModeSwitcher />
 
-                  {/* Document Outline */}
-                  <div style={{ minHeight: '200px', maxHeight: '30%', overflowY: 'auto', borderBottom: '1px solid var(--border)' }}>
-                    <DocumentOutline editor={editorRef.current?.editor} />
-                  </div>
+                    {/* Document Outline */}
+                    <div style={{ minHeight: '200px', maxHeight: '30%', overflowY: 'auto', borderBottom: '1px solid var(--border)' }}>
+                      <DocumentOutline editor={editorRef.current?.editor} />
+                    </div>
 
-                  {/* Outgoing Links Panel - TODO: Implement OutgoingLinksPanel component */}
-                  {/* <div style={{ minHeight: '200px', maxHeight: '30%', overflowY: 'auto', borderBottom: '1px solid var(--border)' }}>
+                    {/* Outgoing Links Panel - TODO: Implement OutgoingLinksPanel component */}
+                    {/* <div style={{ minHeight: '200px', maxHeight: '30%', overflowY: 'auto', borderBottom: '1px solid var(--border)' }}>
                     <OutgoingLinksPanel
                       editor={editorRef.current?.editor}
                       onNavigate={handleFileOpen}
@@ -4346,290 +4388,290 @@ function WorkspaceWithScope({ path }) {
                     />
                   </div> */}
 
-                  {/* Backlinks Panel */}
-                  <div style={{ minHeight: '200px', flex: 1, overflowY: 'auto' }}>
-                    <BacklinksPanel
-                      graphData={graphProcessorRef.current?.getGraphDatabase()}
-                      currentFile={activeFile}
-                      onOpenFile={handleFileOpen}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
+                    {/* Backlinks Panel */}
+                    <div style={{ minHeight: '200px', flex: 1, overflowY: 'auto' }}>
+                      <BacklinksPanel
+                        graphData={graphProcessorRef.current?.getGraphDatabase()}
+                        currentFile={activeFile}
+                        onOpenFile={handleFileOpen}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
 
-            {/* Plugin Panels */}
-            <PanelRegion
-              position={PANEL_POSITIONS.SIDEBAR_RIGHT}
-              className="border-t border-app-border"
-            />
-          </aside>
-        )}
-      </div>
-      
-      {/* Bottom Panel Region */}
-      <PanelRegion 
-        position={PANEL_POSITIONS.BOTTOM}
-        className="border-t border-app-border"
-      />
-      
-      <CommandPalette
-        open={showCommandPalette}
-        setOpen={setShowCommandPalette}
-        fileTree={filteredFileTree}
-        openFiles={openTabs}
-        onFileOpen={handleFileOpen}
-        onCreateFile={handleCreateFile}
-        onCreateFolder={() => setIsCreatingFolder(true)}
-        onSave={handleSave}
-        onOpenPreferences={() => {
-          const openPreferences = () => {
-            (async () => {
-              try {
-                const { emit } = await import('@tauri-apps/api/event');
-                await emit('preferences:open');
-              } catch {
-                try { window.dispatchEvent(new CustomEvent('preferences:open')); } catch {}
-              }
-            })();
-          };
-          openPreferences();
-        }}
-        onToggleSidebar={() => setShowLeft(v => !v)}
-        onCloseTab={handleTabClose}
-        onOpenGraph={() => {
-          const graphPath = '__professional_graph__';
-          const graphName = 'Professional Graph';
-          
-          setOpenTabs(prevTabs => {
-            const newTabs = prevTabs.filter(t => t.path !== graphPath);
-            newTabs.unshift({ path: graphPath, name: graphName });
-            if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
-            return newTabs;
-          });
-          setActiveFile(graphPath);
-        }}
-        onShowTemplatePicker={(templateSelection) => {
-          // Handle direct template selection from Command Palette
-          if (templateSelection && templateSelection.template && templateSelection.processedContent) {
-            const { template, processedContent } = templateSelection;
-            
-            if (editorRef.current && processedContent) {
-              // Process template content through markdown compiler
-              const compiler = getMarkdownCompiler()
-              
-              // Process template content through markdown compiler
-              const processedWithMarkdown = compiler.processTemplate(processedContent)
-              
-              // Smart template insertion with cursor positioning
-              const insertTemplateContent = (content) => {
-                // Check if content has {{cursor}} placeholder
-                const cursorIndex = content.indexOf('{{cursor}}');
-                
-                if (cursorIndex !== -1) {
-                  // Split content at cursor position
-                  const beforeCursor = content.substring(0, cursorIndex);
-                  const afterCursor = content.substring(cursorIndex + 10); // 10 = '{{cursor}}'.length
-                  
-                  
-                  // Insert content in parts to position cursor correctly
-                  return editorRef.current.chain()
-                    .focus()
-                    .insertContent(beforeCursor)
-                    .insertContent(afterCursor)
-                    .setTextSelection(beforeCursor.length + editorRef.current.state.selection.from)
-                    .run();
-                } else {
-                  // No cursor placeholder, just insert normally
-                  return editorRef.current.chain()
-                    .focus()
-                    .insertContent(content)
-                    .run();
-                }
-              };
-              
-              try {
-                insertTemplateContent(processedWithMarkdown);
-              } catch (err) {
-              }
-            }
-            return;
-          }
-          
-          // Fall back to opening template picker modal
-          setShowTemplatePicker(true);
-          setTemplatePickerData({
-            editorState: { editor: editorRef.current },
-            onSelect: (template, processedContent) => {
-              
-              if (editorRef.current && processedContent) {
+              {/* Plugin Panels */}
+              <PanelRegion
+                position={PANEL_POSITIONS.SIDEBAR_RIGHT}
+                className="border-t border-app-border"
+              />
+            </aside>
+          )}
+        </div>
+
+        {/* Bottom Panel Region */}
+        <PanelRegion
+          position={PANEL_POSITIONS.BOTTOM}
+          className="border-t border-app-border"
+        />
+
+        <CommandPalette
+          open={showCommandPalette}
+          setOpen={setShowCommandPalette}
+          fileTree={filteredFileTree}
+          openFiles={openTabs}
+          onFileOpen={handleFileOpen}
+          onCreateFile={handleCreateFile}
+          onCreateFolder={() => setIsCreatingFolder(true)}
+          onSave={handleSave}
+          onOpenPreferences={() => {
+            const openPreferences = () => {
+              (async () => {
                 try {
-                  
-                  // Process template content through markdown compiler
-                  const compiler = getMarkdownCompiler()
-                  
-                  // Process template content through markdown compiler
-                  const processedWithMarkdown = compiler.processTemplate(processedContent)
-                  
-                  // Smart template insertion with cursor positioning
-                  const insertTemplateContent = (content) => {
-                    // Check if content has {{cursor}} placeholder
-                    const cursorIndex = content.indexOf('{{cursor}}');
-                    
-                    if (cursorIndex !== -1) {
-                      // Split content at cursor position
-                      const beforeCursor = content.substring(0, cursorIndex);
-                      const afterCursor = content.substring(cursorIndex + 10); // 10 = '{{cursor}}'.length
-                      
-                      
-                      // Insert content in parts to position cursor correctly
-                      return editorRef.current.chain()
-                        .focus()
-                        .insertContent(beforeCursor)
-                        .insertContent(afterCursor)
-                        .setTextSelection(beforeCursor.length + editorRef.current.state.selection.from)
-                        .run();
-                    } else {
-                      // No cursor placeholder, just insert normally
-                      return editorRef.current.chain()
-                        .focus()
-                        .insertContent(content)
-                        .run();
-                    }
-                  };
-                  
-                  // Try multiple insertion methods with smart cursor handling
-                  const insertMethods = [
-                    // Method 1: Smart template insertion with cursor positioning (markdown processed)
-                    () => insertTemplateContent(processedWithMarkdown),
-                    
-                    // Method 2: Standard chain operation (markdown processed)
-                    () => editorRef.current.chain().focus().insertContent(processedWithMarkdown).run(),
-                    
-                    // Method 3: Simple commands (markdown processed)
-                    () => {
-                      editorRef.current.commands.focus();
-                      return editorRef.current.commands.insertContent(processedWithMarkdown);
-                    },
-                    
-                    // Method 4: Direct content insertion (markdown processed)
-                    () => editorRef.current.commands.insertContent(processedWithMarkdown),
-                    
-                    // Method 5: Manual transaction (fallback, clean content)
-                    () => {
-                      const { view } = editorRef.current;
-                      const { state } = view;
-                      const { tr } = state;
-                      const pos = state.selection.from;
-                      // Remove {{cursor}} and use markdown processed content for fallback
-                      const cleanContent = processedWithMarkdown.replace(/\{\{cursor\}\}/g, '');
-                      view.dispatch(tr.insertText(cleanContent, pos));
-                    }
-                  ];
-                  
-                  let inserted = false;
-                  for (let i = 0; i < insertMethods.length && !inserted; i++) {
-                    try {
-                      const result = insertMethods[i]();
-                      inserted = true;
-                    } catch (err) {
-                    }
+                  const { emit } = await import('@tauri-apps/api/event');
+                  await emit('preferences:open');
+                } catch {
+                  try { window.dispatchEvent(new CustomEvent('preferences:open')); } catch { }
+                }
+              })();
+            };
+            openPreferences();
+          }}
+          onToggleSidebar={() => setShowLeft(v => !v)}
+          onCloseTab={handleTabClose}
+          onOpenGraph={() => {
+            const graphPath = '__professional_graph__';
+            const graphName = 'Professional Graph';
+
+            setOpenTabs(prevTabs => {
+              const newTabs = prevTabs.filter(t => t.path !== graphPath);
+              newTabs.unshift({ path: graphPath, name: graphName });
+              if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
+              return newTabs;
+            });
+            setActiveFile(graphPath);
+          }}
+          onShowTemplatePicker={(templateSelection) => {
+            // Handle direct template selection from Command Palette
+            if (templateSelection && templateSelection.template && templateSelection.processedContent) {
+              const { template, processedContent } = templateSelection;
+
+              if (editorRef.current && processedContent) {
+                // Process template content through markdown compiler
+                const compiler = getMarkdownCompiler()
+
+                // Process template content through markdown compiler
+                const processedWithMarkdown = compiler.processTemplate(processedContent)
+
+                // Smart template insertion with cursor positioning
+                const insertTemplateContent = (content) => {
+                  // Check if content has {{cursor}} placeholder
+                  const cursorIndex = content.indexOf('{{cursor}}');
+
+                  if (cursorIndex !== -1) {
+                    // Split content at cursor position
+                    const beforeCursor = content.substring(0, cursorIndex);
+                    const afterCursor = content.substring(cursorIndex + 10); // 10 = '{{cursor}}'.length
+
+
+                    // Insert content in parts to position cursor correctly
+                    return editorRef.current.chain()
+                      .focus()
+                      .insertContent(beforeCursor)
+                      .insertContent(afterCursor)
+                      .setTextSelection(beforeCursor.length + editorRef.current.state.selection.from)
+                      .run();
+                  } else {
+                    // No cursor placeholder, just insert normally
+                    return editorRef.current.chain()
+                      .focus()
+                      .insertContent(content)
+                      .run();
                   }
-                  
-                  if (!inserted) {
-                  }
-                  
+                };
+
+                try {
+                  insertTemplateContent(processedWithMarkdown);
                 } catch (err) {
                 }
-              } else {
               }
+              return;
             }
-          });
-        }}
-        onCreateTemplate={handleCreateTemplate}
-        // onOpenGmail={handleOpenGmail} // Gmail disabled
-        onOpenDailyNote={handleOpenDailyNote}
-        activeFile={activeFile}
-      />
-      
-      <InFileSearch
-        editor={editorRef.current}
-        isVisible={showInFileSearch}
-        onClose={() => setShowInFileSearch(false)}
-      />
-      
-      {showTemplatePicker && templatePickerData && (
-        <TemplatePicker
-          open={showTemplatePicker}
-          onClose={() => {
-            setShowTemplatePicker(false);
-            setTemplatePickerData(null);
+
+            // Fall back to opening template picker modal
+            setShowTemplatePicker(true);
+            setTemplatePickerData({
+              editorState: { editor: editorRef.current },
+              onSelect: (template, processedContent) => {
+
+                if (editorRef.current && processedContent) {
+                  try {
+
+                    // Process template content through markdown compiler
+                    const compiler = getMarkdownCompiler()
+
+                    // Process template content through markdown compiler
+                    const processedWithMarkdown = compiler.processTemplate(processedContent)
+
+                    // Smart template insertion with cursor positioning
+                    const insertTemplateContent = (content) => {
+                      // Check if content has {{cursor}} placeholder
+                      const cursorIndex = content.indexOf('{{cursor}}');
+
+                      if (cursorIndex !== -1) {
+                        // Split content at cursor position
+                        const beforeCursor = content.substring(0, cursorIndex);
+                        const afterCursor = content.substring(cursorIndex + 10); // 10 = '{{cursor}}'.length
+
+
+                        // Insert content in parts to position cursor correctly
+                        return editorRef.current.chain()
+                          .focus()
+                          .insertContent(beforeCursor)
+                          .insertContent(afterCursor)
+                          .setTextSelection(beforeCursor.length + editorRef.current.state.selection.from)
+                          .run();
+                      } else {
+                        // No cursor placeholder, just insert normally
+                        return editorRef.current.chain()
+                          .focus()
+                          .insertContent(content)
+                          .run();
+                      }
+                    };
+
+                    // Try multiple insertion methods with smart cursor handling
+                    const insertMethods = [
+                      // Method 1: Smart template insertion with cursor positioning (markdown processed)
+                      () => insertTemplateContent(processedWithMarkdown),
+
+                      // Method 2: Standard chain operation (markdown processed)
+                      () => editorRef.current.chain().focus().insertContent(processedWithMarkdown).run(),
+
+                      // Method 3: Simple commands (markdown processed)
+                      () => {
+                        editorRef.current.commands.focus();
+                        return editorRef.current.commands.insertContent(processedWithMarkdown);
+                      },
+
+                      // Method 4: Direct content insertion (markdown processed)
+                      () => editorRef.current.commands.insertContent(processedWithMarkdown),
+
+                      // Method 5: Manual transaction (fallback, clean content)
+                      () => {
+                        const { view } = editorRef.current;
+                        const { state } = view;
+                        const { tr } = state;
+                        const pos = state.selection.from;
+                        // Remove {{cursor}} and use markdown processed content for fallback
+                        const cleanContent = processedWithMarkdown.replace(/\{\{cursor\}\}/g, '');
+                        view.dispatch(tr.insertText(cleanContent, pos));
+                      }
+                    ];
+
+                    let inserted = false;
+                    for (let i = 0; i < insertMethods.length && !inserted; i++) {
+                      try {
+                        const result = insertMethods[i]();
+                        inserted = true;
+                      } catch (err) {
+                      }
+                    }
+
+                    if (!inserted) {
+                    }
+
+                  } catch (err) {
+                  }
+                } else {
+                }
+              }
+            });
           }}
-          onSelect={(template, processedContent) => {
-            if (templatePickerData.onSelect) {
-              templatePickerData.onSelect(template, processedContent);
-            }
-            setShowTemplatePicker(false);
-            setTemplatePickerData(null);
-          }}
-          editorState={templatePickerData.editorState}
+          onCreateTemplate={handleCreateTemplate}
+          // onOpenGmail={handleOpenGmail} // Gmail disabled
+          onOpenDailyNote={handleOpenDailyNote}
+          activeFile={activeFile}
         />
-      )}
-      
-      <FullTextSearchPanel
-        isOpen={showGlobalSearch}
-        onClose={() => setShowGlobalSearch(false)}
-        onResultClick={(result) => {
-          if (result.path) {
-            handleFileOpen(result.path);
-          }
-          setShowGlobalSearch(false);
-        }}
-        workspacePath={path}
-      />
 
-      <ShortcutHelpModal
-        isOpen={showShortcutHelp}
-        onClose={() => setShowShortcutHelp(false)}
-      />
-      
-      <CreateTemplate
-        open={showCreateTemplate}
-        onClose={() => setShowCreateTemplate(false)}
-        initialContent={createTemplateContent}
-        onSaved={handleCreateTemplateSaved}
-      />
+        <InFileSearch
+          editor={editorRef.current}
+          isVisible={showInFileSearch}
+          onClose={() => setShowInFileSearch(false)}
+        />
 
-      {/* Date Picker Modal for Daily Notes */}
-      <DatePickerModal
-        isOpen={showDatePickerModal}
-        onClose={() => setShowDatePickerModal(false)}
-        onDateSelect={handleOpenDailyNoteByDate}
-        workspacePath={path}
-      />
+        {showTemplatePicker && templatePickerData && (
+          <TemplatePicker
+            open={showTemplatePicker}
+            onClose={() => {
+              setShowTemplatePicker(false);
+              setTemplatePickerData(null);
+            }}
+            onSelect={(template, processedContent) => {
+              if (templatePickerData.onSelect) {
+                templatePickerData.onSelect(template, processedContent);
+              }
+              setShowTemplatePicker(false);
+              setTemplatePickerData(null);
+            }}
+            editorState={templatePickerData.editorState}
+          />
+        )}
 
-      {/* Tag Management Modal */}
-      <TagManagementModal
-        isOpen={showTagModal}
-        onClose={() => {
-          setShowTagModal(false);
-          setTagModalFile(null);
-        }}
-        file={tagModalFile}
-        onTagsUpdated={(file, tags) => {
-          // Refresh file tree and Bases to show updated tags
-          setRefreshId(prev => prev + 1);
-        }}
-      />
+        <FullTextSearchPanel
+          isOpen={showGlobalSearch}
+          onClose={() => setShowGlobalSearch(false)}
+          onResultClick={(result) => {
+            if (result.path) {
+              handleFileOpen(result.path);
+            }
+            setShowGlobalSearch(false);
+          }}
+          workspacePath={path}
+        />
 
-      {/* Pluginable Status Bar - replaces the old Obsidian status bar */}
-      <StatusBar
-        activeFile={activeFile}
-        unsavedChanges={unsavedChanges}
-        openTabs={openTabs}
-        editor={editor}
-      />
-    </div>
+        <ShortcutHelpModal
+          isOpen={showShortcutHelp}
+          onClose={() => setShowShortcutHelp(false)}
+        />
+
+        <CreateTemplate
+          open={showCreateTemplate}
+          onClose={() => setShowCreateTemplate(false)}
+          initialContent={createTemplateContent}
+          onSaved={handleCreateTemplateSaved}
+        />
+
+        {/* Date Picker Modal for Daily Notes */}
+        <DatePickerModal
+          isOpen={showDatePickerModal}
+          onClose={() => setShowDatePickerModal(false)}
+          onDateSelect={handleOpenDailyNoteByDate}
+          workspacePath={path}
+        />
+
+        {/* Tag Management Modal */}
+        <TagManagementModal
+          isOpen={showTagModal}
+          onClose={() => {
+            setShowTagModal(false);
+            setTagModalFile(null);
+          }}
+          file={tagModalFile}
+          onTagsUpdated={(file, tags) => {
+            // Refresh file tree and Bases to show updated tags
+            setRefreshId(prev => prev + 1);
+          }}
+        />
+
+        {/* Pluginable Status Bar - replaces the old Obsidian status bar */}
+        <StatusBar
+          activeFile={activeFile}
+          unsavedChanges={unsavedChanges}
+          openTabs={openTabs}
+          editor={editor}
+        />
+      </div>
     </PanelManager>
   );
 }

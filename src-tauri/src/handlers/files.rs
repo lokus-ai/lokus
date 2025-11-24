@@ -339,3 +339,36 @@ pub fn create_directory(path: String, recursive: bool) -> Result<(), String> {
         fs::create_dir(path).map_err(|e| e.to_string())
     }
 }
+
+#[tauri::command]
+pub async fn read_all_files(paths: Vec<String>) -> Result<std::collections::HashMap<String, String>, String> {
+    use futures::future::join_all;
+    use tokio::fs;
+
+    println!("[Backend] read_all_files called with {} paths", paths.len());
+
+    let futures: Vec<_> = paths.into_iter().map(|path| {
+        let path_clone = path.clone();
+        async move {
+            match fs::read_to_string(&path).await {
+                Ok(content) => Some((path_clone, content)),
+                Err(e) => {
+                    eprintln!("[Backend] Failed to read file {}: {}", path, e);
+                    None
+                }
+            }
+        }
+    }).collect();
+
+    let results = join_all(futures).await;
+
+    let mut file_map = std::collections::HashMap::new();
+    for result in results {
+        if let Some((path, content)) = result {
+            file_map.insert(path, content);
+        }
+    }
+
+    println!("[Backend] Successfully read {} files", file_map.len());
+    Ok(file_map)
+}

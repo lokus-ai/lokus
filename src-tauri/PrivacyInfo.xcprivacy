@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- ============================================ -->
+	<!-- Tracking Configuration                       -->
+	<!-- ============================================ -->
+
+	<!-- Does the app track users? -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+
+	<!-- Tracking domains (empty since we don't track) -->
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+
+	<!-- ============================================ -->
+	<!-- Data Collection                              -->
+	<!-- ============================================ -->
+
+	<!-- What data does the app collect? -->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<!-- If you collect analytics (Umami), uncomment this: -->
+		<!--
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeProductInteraction</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+			</array>
+		</dict>
+		-->
+	</array>
+
+	<!-- ============================================ -->
+	<!-- Required Reason APIs                         -->
+	<!-- APIs that require justification              -->
+	<!-- ============================================ -->
+
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!-- File Timestamp Access -->
+		<!-- Used for: Displaying file modification dates, sorting files -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<!-- C617.1: Displaying file timestamps to the user -->
+				<string>C617.1</string>
+				<!-- DDA9.1: Displaying timestamps in file listings -->
+				<string>DDA9.1</string>
+			</array>
+		</dict>
+
+		<!-- Disk Space Access -->
+		<!-- Used for: Checking available storage for user files -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<!-- E174.1: Displaying disk space to help user manage files -->
+				<string>E174.1</string>
+			</array>
+		</dict>
+
+		<!-- User Defaults Access -->
+		<!-- Used for: Storing user preferences and settings -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<!-- CA92.1: Accessing user defaults for app preferences -->
+				<string>CA92.1</string>
+			</array>
+		</dict>
+
+		<!-- System Boot Time -->
+		<!-- Used for: Calculating relative timestamps, session duration -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<!-- 35F9.1: Measuring time intervals for UI responsiveness -->
+				<string>35F9.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

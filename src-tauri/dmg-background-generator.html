@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lokus DMG Background Generator</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: #f0f0f0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+    }
+
+    /* DMG Background Canvas - 2x size for Retina (1320x800) */
+    .dmg-background {
+      width: 1320px;
+      height: 800px;
+      background: #ffffff;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Subtle pattern overlay */
+    .dmg-background::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: none;
+      pointer-events: none;
+    }
+
+    /* Content container */
+    .content {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 100px;
+    }
+
+    /* Main instruction text */
+    .instruction {
+      font-size: 48px;
+      font-weight: 600;
+      color: white;
+      text-align: center;
+      margin-bottom: 40px;
+      text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      letter-spacing: -0.5px;
+    }
+
+    /* Arrow container */
+    .arrow-container {
+      display: flex;
+      align-items: center;
+      gap: 80px;
+      margin-top: 60px;
+    }
+
+    /* Icon placeholders */
+    .icon-placeholder {
+      width: 200px;
+      height: 200px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 40px;
+      backdrop-filter: blur(20px);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 80px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    }
+
+    .icon-label {
+      font-size: 24px;
+      color: white;
+      margin-top: 20px;
+      font-weight: 500;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Arrow */
+    .arrow {
+      font-size: 120px;
+      color: white;
+      text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      50% {
+        transform: translateX(10px);
+        opacity: 0.8;
+      }
+    }
+
+    /* Bottom hint text */
+    .hint {
+      position: absolute;
+      bottom: 60px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 28px;
+      color: rgba(255, 255, 255, 0.9);
+      font-weight: 400;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Instructions for user */
+    .export-instructions {
+      margin-top: 40px;
+      padding: 20px;
+      background: white;
+      border-radius: 10px;
+      max-width: 800px;
+      text-align: left;
+    }
+
+    .export-instructions h2 {
+      margin-bottom: 15px;
+      color: #667eea;
+    }
+
+    .export-instructions ol {
+      margin-left: 20px;
+      line-height: 1.8;
+    }
+
+    .export-instructions code {
+      background: #f5f5f5;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <div style="display: flex; flex-direction: column; align-items: center;">
+    <!-- DMG Background -->
+    <div class="dmg-background" id="dmg-canvas">
+      <div class="content">
+        <div class="instruction">
+          Drag Lokus to Applications
+        </div>
+
+        <div class="arrow-container">
+          <!-- App Icon Placeholder -->
+          <div style="text-align: center;">
+            <div class="icon-placeholder">
+              📝
+            </div>
+            <div class="icon-label">Lokus</div>
+          </div>
+
+          <!-- Arrow -->
+          <div class="arrow">→</div>
+
+          <!-- Applications Folder Placeholder -->
+          <div style="text-align: center;">
+            <div class="icon-placeholder">
+              📁
+            </div>
+            <div class="icon-label">Applications</div>
+          </div>
+        </div>
+
+        <div class="hint">
+          Install Lokus for quick access from your dock
+        </div>
+      </div>
+    </div>
+
+    <!-- Export Instructions -->
+    <div class="export-instructions">
+      <h2>📸 How to Export This as DMG Background:</h2>
+      <ol>
+        <li>Right-click anywhere on the purple background above</li>
+        <li>Select "Inspect" or "Inspect Element"</li>
+        <li>Find the <code>&lt;div class="dmg-background"&gt;</code> element</li>
+        <li>Right-click on it → "Screenshot Node" (Firefox) or use a screenshot tool</li>
+        <li><strong>OR use macOS screenshot:</strong>
+          <ul style="margin-top: 10px;">
+            <li>Press <code>Cmd + Shift + 4</code></li>
+            <li>Then press <code>Space</code> to capture the window</li>
+            <li>Click on the purple background</li>
+          </ul>
+        </li>
+        <li>Save as: <code>dmg-background.png</code> in the <code>src-tauri/</code> folder</li>
+        <li>Make sure it's exactly <strong>1320x800 pixels</strong></li>
+      </ol>
+
+      <p style="margin-top: 20px; color: #666;">
+        <strong>Alternative:</strong> Use a screenshot tool like CleanShot X or Shottr to capture at 2x resolution.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
