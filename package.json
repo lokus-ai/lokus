@@ -125,6 +125,7 @@
     "date-fns": "^4.1.0",
     "diff": "^8.0.2",
     "dompurify": "^3.3.0",
+    "driver.js": "^1.4.0",
     "framer-motion": "^12.23.14",
     "graphology": "^0.26.0",
     "graphology-layout-force": "^0.2.4",

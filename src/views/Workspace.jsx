@@ -66,6 +66,8 @@ import { DailyNotesPanel, NavigationButtons, DatePickerModal } from "../componen
 import { ImageViewerTab } from "../components/ImageViewer/ImageViewerTab.jsx";
 import { isImageFile, findImageFiles } from "../utils/imageUtils.js";
 import TagManagementModal from "../components/TagManagementModal.jsx";
+import ProductTour from "../components/ProductTour.jsx";
+import "../styles/product-tour.css";
 
 const MAX_OPEN_TABS = 10;
 
@@ -3419,6 +3421,9 @@ function WorkspaceWithScope({ path }) {
   return (
     <PanelManager>
       <div className="h-full bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select relative">
+        {/* Product Tour */}
+        <ProductTour autoStart={true} delay={1500} />
+
         {/* Test Mode Indicator */}
         {isTestMode && (
           <div className="fixed top-4 right-4 bg-yellow-500 text-black px-3 py-1 rounded-md text-sm font-medium z-50">
@@ -3445,6 +3450,7 @@ function WorkspaceWithScope({ path }) {
               className="obsidian-button icon-only small"
               title={`New File (${platformService.getModifierSymbol()}+N)`}
               data-tauri-drag-region="false"
+              data-tour="create-note"
               style={{ pointerEvents: 'auto' }}
             >
               <FilePlusCorner className="w-5 h-5" strokeWidth={2} />
@@ -3556,6 +3562,7 @@ function WorkspaceWithScope({ path }) {
               className={`obsidian-button icon-only small ${useSplitView ? 'active' : ''}`}
               title={useSplitView ? "Exit Split View" : "Enter Split View"}
               data-tauri-drag-region="false"
+              data-tour="split-view"
               style={{ pointerEvents: 'auto' }}
             >
               <SquareSplitHorizontal className="w-5 h-5" strokeWidth={2} />
@@ -3615,6 +3622,7 @@ function WorkspaceWithScope({ path }) {
                   setShowLeft(true);
                 }}
                 title="Explorer"
+                data-tour="files"
                 className="obsidian-button icon-only w-full mb-1"
                 onMouseEnter={(e) => {
                   const icon = e.currentTarget.querySelector('svg');
@@ -3677,6 +3685,7 @@ function WorkspaceWithScope({ path }) {
                   handleOpenBasesTab();
                 }}
                 title="Bases"
+                data-tour="bases"
                 className="obsidian-button icon-only w-full mb-1"
                 onMouseEnter={(e) => {
                   const icon = e.currentTarget.querySelector('svg');
@@ -3693,6 +3702,7 @@ function WorkspaceWithScope({ path }) {
               <button
                 onClick={handleOpenGraphView}
                 title="Graph View"
+                data-tour="graph"
                 className="obsidian-button icon-only w-full mb-1"
                 onMouseEnter={(e) => {
                   const icon = e.currentTarget.querySelector('svg');
@@ -3714,6 +3724,7 @@ function WorkspaceWithScope({ path }) {
                 }}
                 title="Daily Notes"
                 className={`obsidian-button icon-only w-full mb-1 ${showDailyNotesPanel ? 'active' : ''}`}
+                data-tour="daily-notes"
                 onMouseEnter={(e) => {
                   const icon = e.currentTarget.querySelector('svg');
                   if (icon) icon.style.color = 'rgb(var(--accent))';
@@ -4140,12 +4151,14 @@ function WorkspaceWithScope({ path }) {
                                       onChange={(e) => setEditorTitle(e.target.value)}
                                       className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
                                     />
-                                    <Editor
-                                      ref={editorRef}
-                                      content={editorContent}
-                                      onContentChange={handleEditorChange}
-                                      onEditorReady={setEditor}
-                                    />
+                                    <div data-tour="editor">
+                                      <Editor
+                                        ref={editorRef}
+                                        content={editorContent}
+                                        onContentChange={handleEditorChange}
+                                        onEditorReady={setEditor}
+                                      />
+                                    </div>
                                   </div>
                                 </ContextMenuTrigger>
                                 <ContextMenuContent>
@@ -4220,6 +4233,7 @@ function WorkspaceWithScope({ path }) {
                                         <button
                                           onClick={() => setShowCommandPalette(true)}
                                           className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
+                                          data-tour="templates"
                                         >
                                           <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
                                             <Search className="w-5 h-5 text-app-accent" />
