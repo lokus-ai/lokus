@@ -111,7 +111,7 @@ impl FileLock {
         let mut locks = FILE_LOCK_MANAGER.locks.lock()
             .map_err(|e| format!("Failed to acquire lock mutex: {}", e))?;
         
-        let count = locks.len();
+        let _count = locks.len();
         locks.clear();
         
         Ok(())

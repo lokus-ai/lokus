@@ -294,11 +294,11 @@ pub fn list_custom_themes() -> Result<Vec<ThemeManifest>, String> {
                     Ok(content) => {
                         match serde_json::from_str::<ThemeManifest>(&content) {
                             Ok(manifest) => themes.push(manifest),
-                            Err(e) => {
+                            Err(_e) => {
                             }
                         }
                     }
-                    Err(e) => {
+                    Err(_e) => {
                     }
                 }
             }

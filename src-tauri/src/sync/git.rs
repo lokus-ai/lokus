@@ -403,7 +403,7 @@ pub async fn git_pull(
             // Conflicts exist - auto-resolve technical files, leave markers for user content
 
             // Auto-resolve technical files before checkout
-            let mut auto_resolved_count = 0;
+            let mut _auto_resolved_count = 0;
             let mut user_conflict_count = 0;
 
             // Collect conflicts to process
@@ -440,14 +440,14 @@ pub async fn git_pull(
                     if let Some(our) = conflict.our {
                         index.add(&our)
                             .map_err(|e| format!("Failed to resolve conflict: {}", e))?;
-                        auto_resolved_count += 1;
+                        _auto_resolved_count += 1;
                     }
                 } else if is_lock_file {
                     // For lock files: keep remote (theirs) for consistency
                     if let Some(their) = conflict.their {
                         index.add(&their)
                             .map_err(|e| format!("Failed to resolve conflict: {}", e))?;
-                        auto_resolved_count += 1;
+                        _auto_resolved_count += 1;
                     }
                 } else {
                     // User content file - will have conflict markers

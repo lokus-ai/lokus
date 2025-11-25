@@ -54,7 +54,7 @@ impl OAuthServer {
             loop {
                 let (stream, _) = match listener.accept().await {
                     Ok(conn) => conn,
-                    Err(e) => {
+                    Err(_e) => {
                         continue;
                     }
                 };
@@ -63,7 +63,7 @@ impl OAuthServer {
                 let running_check = running_clone.clone();
                 
                 tokio::task::spawn(async move {
-                    if let Err(err) = http1::Builder::new()
+                    if let Err(_err) = http1::Builder::new()
                         .serve_connection(io, service_fn(handle_request))
                         .await
                     {
@@ -158,7 +158,7 @@ async fn handle_gmail_callback(req: Request<Incoming>) -> Result<HyperResponse, 
 
 
     // Write the auth data to a temporary file for the Tauri app to pick up
-    if let Err(e) = write_auth_callback(code, state) {
+    if let Err(_e) = write_auth_callback(code, state) {
     }
 
     Ok(hyper::Response::builder()

@@ -138,11 +138,11 @@ impl MCPServerManager {
 
         if let Some(mut child) = process_guard.take() {
             // Try to terminate gracefully first
-            if let Err(e) = child.kill() {
+            if let Err(_e) = child.kill() {
             }
 
             // Wait for the process to exit
-            if let Err(e) = child.wait() {
+            if let Err(_e) = child.wait() {
             }
 
         }

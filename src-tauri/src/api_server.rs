@@ -293,7 +293,7 @@ pub async fn update_workspace(app_handle: &tauri::AppHandle, workspace: Option<S
         let mut current = state.current_workspace.write().await;
         *current = workspace.clone();
 
-        if let Some(ws) = workspace {
+        if let Some(_ws) = workspace {
         } else {
         }
     }

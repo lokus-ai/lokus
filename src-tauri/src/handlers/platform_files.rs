@@ -16,7 +16,7 @@ static PLATFORM_PROVIDER: OnceLock<Box<dyn PlatformProvider>> = OnceLock::new();
 fn get_or_init_platform_provider() -> &'static Box<dyn PlatformProvider> {
     PLATFORM_PROVIDER.get_or_init(|| {
         let mut provider = get_platform_provider();
-        if let Err(err) = provider.initialize() {
+        if let Err(_err) = provider.initialize() {
         }
         provider
     })
@@ -187,7 +187,7 @@ pub fn initialize() -> Result<(), String> {
     let provider = get_or_init_platform_provider();
     
     // Just access the provider to trigger initialization
-    let info = provider.platform_name();
+    let _info = provider.platform_name();
     
     Ok(())
 }

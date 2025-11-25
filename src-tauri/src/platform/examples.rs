@@ -1,9 +1,9 @@
-/// Examples and usage patterns for the platform abstraction layer
-/// 
-/// This module provides practical examples of how to use the platform abstraction
-/// layer effectively in various scenarios.
+//! Examples and usage patterns for the platform abstraction layer
+//! 
+//! This module provides practical examples of how to use the platform abstraction
+//! layer effectively in various scenarios.
 
-#[allow(dead_code)]
+#![allow(dead_code, unused_variables)]
 
 use super::{
     get_platform_provider, 
@@ -151,7 +151,7 @@ pub fn example_system_information() -> Result<(), PlatformError> {
     // Hardware Information
     if let Some(total_mem) = system_info.hardware.total_memory {
     }
-    if let Some(avail_mem) = system_info.hardware.available_memory {
+    if let Some(_avail_mem) = system_info.hardware.available_memory {
     }
     
     // Available Applications
@@ -161,7 +161,7 @@ pub fn example_system_information() -> Result<(), PlatformError> {
     }
     if !system_info.available_apps.editors.is_empty() {
     }
-    
+
     // System Capabilities
     
     Ok(())
@@ -173,14 +173,17 @@ pub fn example_clipboard_operations() -> Result<(), PlatformError> {
     let clipboard_info = ClipboardUtils::get_platform_clipboard_info();
     
     
-    if let Some(max_length) = clipboard_info.max_text_length {
+    if let Some(_max_length) = clipboard_info.max_text_length {
+        println!("  Max text length: {}", _max_length);
     } else {
     }
     
     // Usage recommendations
     let recommendations = ClipboardUtils::get_usage_recommendations();
     if !recommendations.is_empty() {
-        for recommendation in recommendations {
+        println!("Usage Tips:");
+        for _recommendation in recommendations {
+            println!("  - {}", _recommendation);
         }
     }
     
@@ -219,7 +222,7 @@ pub fn example_error_handling() -> Result<(), PlatformError> {
 pub fn example_cross_platform_paths() -> Result<(), PlatformError> {
     
     let provider = get_platform_provider();
-    let config = provider.get_platform_config();
+    let _config = provider.get_platform_config();
     
     
     // Construct platform-appropriate paths
@@ -233,7 +236,7 @@ pub fn example_cross_platform_paths() -> Result<(), PlatformError> {
     
     // Use std::path for cross-platform path handling
     let path = Path::new(user_documents);
-    if let Some(parent) = path.parent() {
+    if let Some(_parent) = path.parent() {
     }
     
     Ok(())
@@ -256,7 +259,7 @@ pub fn example_feature_conditional_logic() -> Result<(), PlatformError> {
     // Terminal customization
     if provider.supports_feature(PlatformFeature::CustomTerminal) {
         let config = provider.get_platform_config();
-        if let Some(terminal) = config.preferred_terminal {
+        if let Some(_terminal) = config.preferred_terminal {
         }
     } else {
     }

@@ -151,7 +151,7 @@ pub fn open_launcher_window(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn sync_window_theme(window: tauri::Window, is_dark: bool, bg_color: String) -> Result<(), String> {
+pub fn sync_window_theme(window: tauri::Window, is_dark: bool, _bg_color: String) -> Result<(), String> {
 
   #[cfg(target_os = "macos")]
   {
@@ -177,7 +177,7 @@ pub fn sync_window_theme(window: tauri::Window, is_dark: bool, bg_color: String)
     use tauri::window::Color;
 
     // Parse RGB color from string like "15 23 42"
-    let parts: Vec<&str> = bg_color.split_whitespace().collect();
+    let parts: Vec<&str> = _bg_color.split_whitespace().collect();
     if parts.len() == 3 {
       if let (Ok(r), Ok(g), Ok(b)) = (
         parts[0].parse::<u8>(),

@@ -135,7 +135,7 @@ pub fn list_plugins(app: AppHandle) -> Result<Vec<PluginInfo>, String> {
     // Load enabled plugins from storage
     let enabled_plugins = match get_enabled_plugins(app.clone()) {
         Ok(enabled) => enabled.into_iter().collect::<std::collections::HashSet<_>>(),
-        Err(e) => {
+        Err(_e) => {
             std::collections::HashSet::new()
         }
     };
@@ -752,7 +752,7 @@ pub fn enable_plugin(app: AppHandle, name: String) -> Result<(), String> {
     let result = update_plugin_enabled_state(&app, &name, true);
     match &result {
         Ok(_) => {},
-        Err(e) => {},
+        Err(_e) => {},
     }
     
     result
@@ -765,7 +765,7 @@ pub fn disable_plugin(app: AppHandle, name: String) -> Result<(), String> {
     let result = update_plugin_enabled_state(&app, &name, false);
     match &result {
         Ok(_) => {},
-        Err(e) => {},
+        Err(_e) => {},
     }
     
     result

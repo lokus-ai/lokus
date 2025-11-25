@@ -41,7 +41,7 @@ impl OfflineQueue {
 
     pub fn add_operation(&self, operation_type: OperationType, data: serde_json::Value) -> Result<String, GmailError> {
         let id = Uuid::new_v4().to_string();
-        let operation_type_name = self.operation_type_name(&operation_type);
+        let _operation_type_name = self.operation_type_name(&operation_type);
         let operation = QueuedOperation {
             id: id.clone(),
             operation_type,

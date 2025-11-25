@@ -53,8 +53,6 @@ import PDFViewerTab from "../components/PDFViewer/PDFViewerTab.jsx";
 import { isPDFFile } from "../utils/pdfUtils.js";
 import { getFilename, getBasename, joinPath } from '../utils/pathUtils.js';
 import platformService from "../services/platform/PlatformService.js";
-// import Gmail from "./Gmail.jsx"; // DISABLED: Slowing down app startup
-// import { gmailAuth, gmailEmails } from '../services/gmail.js'; // DISABLED: Slowing down app startup
 import { FolderScopeProvider, useFolderScope } from "../contexts/FolderScopeContext.jsx";
 import { BasesProvider, useBases } from "../bases/BasesContext.jsx";
 import BasesView from "../bases/BasesView.jsx";
@@ -877,8 +875,8 @@ function WorkspaceWithScope({ path }) {
         const compiler = getMarkdownCompiler();
         let processedContent = content;
 
-        if (activeTab.name.endsWith('.md') && compiler.isMarkdown(content)) {
-          processedContent = compiler.compile(content);
+        if (activeTab.name.endsWith('.md') && (await compiler.isMarkdown(content))) {
+          processedContent = await compiler.compile(content);
         }
 
         setEditorContent(processedContent);
@@ -1147,7 +1145,7 @@ function WorkspaceWithScope({ path }) {
 
 
       invoke("read_file_content", { path: fileToLoad })
-        .then(content => {
+        .then(async content => {
           // Guard against stale promise resolutions - only update if this file is still active
           if (fileToLoad !== activeFile) {
             return;
@@ -1168,8 +1166,8 @@ function WorkspaceWithScope({ path }) {
           let processedContent = content;
 
           // If this is a markdown file and the content looks like markdown, process it
-          if (fileToLoad.endsWith('.md') && compiler.isMarkdown(content)) {
-            processedContent = compiler.compile(content);
+          if (fileToLoad.endsWith('.md') && (await compiler.isMarkdown(content))) {
+            processedContent = await compiler.compile(content);
           }
 
           setEditorContent(processedContent);

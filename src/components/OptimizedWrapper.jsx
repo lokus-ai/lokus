@@ -11,8 +11,8 @@ import React, { memo, lazy, Suspense, useCallback, useMemo, useRef, useEffect, u
  * Simple loading component
  */
 export const Loading = () => (
-  <div className="flex items-center justify-center h-full">
-    <div className="animate-spin w-8 h-8 border-2 border-app-accent border-t-transparent rounded-full" />
+  <div className="flex items-center justify-center h-full select-none">
+    <div className="text-xl font-bold tracking-tight text-app-accent animate-pulse">Lokus</div>
   </div>
 );
 
@@ -217,9 +217,8 @@ export const OptimizedFileList = memo(({ files, selectedFile, onSelect }) => {
 
   const renderItem = useCallback((file) => (
     <div
-      className={`px-4 py-2 cursor-pointer hover:bg-app-accent/10 ${
-        selectedFile?.path === file.path ? 'bg-app-accent/20' : ''
-      }`}
+      className={`px-4 py-2 cursor-pointer hover:bg-app-accent/10 ${selectedFile?.path === file.path ? 'bg-app-accent/20' : ''
+        }`}
       onClick={() => handleSelect(file)}
     >
       <div className="text-sm text-app-text truncate">{file.name}</div>

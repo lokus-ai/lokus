@@ -1,6 +1,7 @@
 import { Extension } from '@tiptap/core'
 import { Plugin } from '@tiptap/pm/state'
 import { getMarkdownCompiler } from '../../core/markdown/compiler.js'
+import { MarkdownCompiler } from '../../core/markdown/compiler-logic.js'
 
 const MarkdownPaste = Extension.create({
   name: 'markdownPaste',
@@ -24,42 +25,50 @@ const MarkdownPaste = Extension.create({
 
             // Use our universal markdown compiler
             if (text) {
-              const compiler = getMarkdownCompiler()
-              
+              // Use local sync compiler for quick checks
+              const syncCompiler = new MarkdownCompiler()
+              const workerCompiler = getMarkdownCompiler()
+
               // Check if HTML is actually rich content or just bloated markup
               if (html && html.trim()) {
-                const isMarkdownText = compiler.isMarkdown(text)
+                const isMarkdownText = syncCompiler.isMarkdown(text)
                 const htmlTextRatio = html.length / (text?.length || 1)
-                
-                
+
+
                 // If text is clearly markdown, process it even if HTML is present
                 if (isMarkdownText) {
                 } else if (htmlTextRatio > 5) {
                   return false
                 }
               }
-              
-              if (compiler.isMarkdown(text)) {
-                
+
+              if (syncCompiler.isMarkdown(text)) {
+
                 try {
-                  // Prevent default paste
+                  // Prevent default paste immediately
                   event.preventDefault()
 
-                  // Compile markdown to HTML
-                  const htmlContent = compiler.compile(text)
-                  
-                  // Insert the converted HTML with better parsing options
-                  const inserted = editor.chain()
-                    .focus()
-                    .insertContent(htmlContent, {
-                      parseOptions: {
-                        preserveWhitespace: 'full',
-                        findPositions: true,
-                        keepWhitespace: true,
-                      },
-                      updateSelection: true,
-                    })
-                    .run()
+                  // Compile markdown to HTML asynchronously
+                  workerCompiler.compile(text).then(htmlContent => {
+                    if (!htmlContent) return
+
+                    // Insert the converted HTML with better parsing options
+                    editor.chain()
+                      .focus()
+                      .insertContent(htmlContent, {
+                        parseOptions: {
+                          preserveWhitespace: 'full',
+                          findPositions: true,
+                          keepWhitespace: true,
+                        },
+                        updateSelection: true,
+                      })
+                      .run()
+                  }).catch(err => {
+                    console.error('Markdown paste compilation failed:', err)
+                    // Fallback to inserting text if compilation fails
+                    editor.chain().focus().insertContent(text).run()
+                  })
 
                   return true
                 } catch (error) {

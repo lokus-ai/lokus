@@ -14,11 +14,14 @@ pub struct FileEntry {
 }
 
 // --- Private Helper ---
-fn read_directory_contents(path: &Path) -> Result<Vec<FileEntry>, String> {
-    read_directory_contents_with_depth(path, 0)
+fn read_directory_contents(path: &Path) -> futures::future::BoxFuture<'static, Result<Vec<FileEntry>, String>> {
+    let path = path.to_path_buf();
+    Box::pin(async move {
+        read_directory_contents_with_depth(&path, 0).await
+    })
 }
 
-fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result<Vec<FileEntry>, String> {
+async fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result<Vec<FileEntry>, String> {
     // Limit recursion depth to prevent infinite loops
     const MAX_DEPTH: usize = 10;
 
@@ -30,45 +33,38 @@ fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result<Vec<F
     }
 
     let mut entries = vec![];
-    let dir_entries = fs::read_dir(path).map_err(|e| {
+    let mut dir_entries = tokio::fs::read_dir(path).await.map_err(|e| {
         e.to_string()
     })?;
 
-    for entry in dir_entries {
-        let entry = entry.map_err(|e| e.to_string())?;
+    while let Ok(Some(entry)) = dir_entries.next_entry().await {
         let path = entry.path();
-        let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-        let is_directory = path.is_dir();
-
+        let name = entry.file_name().to_string_lossy().to_string();
+        
         // Skip excluded directories and files
         if EXCLUDED_NAMES.contains(&name.as_str()) {
             continue;
         }
 
+        // Get file type efficiently without full metadata
+        let file_type = entry.file_type().await.map_err(|e| e.to_string())?;
+        let is_directory = file_type.is_dir();
+        
         // Skip symbolic links to prevent infinite loops
-        if path.symlink_metadata().map(|m| m.file_type().is_symlink()).unwrap_or(false) {
+        if file_type.is_symlink() {
             continue;
         }
 
         let children = if is_directory {
-            Some(read_directory_contents_with_depth(&path, depth + 1)?)
+            Some(Box::pin(read_directory_contents_with_depth(&path, depth + 1)).await?)
         } else {
             None
         };
 
-        // Get file metadata
-        let metadata = fs::metadata(&path).ok();
-        let size = metadata.as_ref().and_then(|m| if !is_directory { Some(m.len()) } else { None }).unwrap_or(0);
-        let created = metadata.as_ref().and_then(|m|
-            m.created().ok().and_then(|t|
-                t.duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs() as i64)
-            )
-        );
-        let modified = metadata.as_ref().and_then(|m|
-            m.modified().ok().and_then(|t|
-                t.duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs() as i64)
-            )
-        );
+        // Skip metadata fetching for performance - set defaults
+        let size = 0;
+        let created = None;
+        let modified = None;
 
         entries.push(FileEntry {
             name,
@@ -80,6 +76,7 @@ fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result<Vec<F
             children,
         });
     }
+    
     entries.sort_by(|a, b| b.is_directory.cmp(&a.is_directory).then_with(|| a.name.cmp(&b.name)));
     Ok(entries)
 }
@@ -87,18 +84,13 @@ fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result<Vec<F
 // --- Tauri Commands ---
 
 #[tauri::command]
-pub fn read_workspace_files(workspace_path: String) -> Result<Vec<FileEntry>, String> {
-    let result = read_directory_contents(Path::new(&workspace_path));
-    match &result {
-        Ok(files) => {},
-        Err(e) => {},
-    }
-    result
+pub async fn read_workspace_files(workspace_path: String) -> Result<Vec<FileEntry>, String> {
+    read_directory_contents(Path::new(&workspace_path)).await
 }
 
 #[tauri::command]
-pub fn read_file_content(path: String) -> Result<String, String> {
-    fs::read_to_string(path).map_err(|e| e.to_string())
+pub async fn read_file_content(path: String) -> Result<String, String> {
+    tokio::fs::read_to_string(path).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]

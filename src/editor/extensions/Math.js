@@ -11,23 +11,23 @@ function getKatex() {
       return null
     }
     return k.renderToString
-  } catch (error) { 
-    return null 
+  } catch (error) {
+    return null
   }
 }
 
 function preprocessLatexSource(src) {
   if (!src || typeof src !== 'string') return src
-  
+
   // Fix comment issues: ensure comments end with newlines
   let processed = src.replace(/(%[^\r\n]*?)(?=\s*[\$\}])/g, '$1\n')
-  
+
   // Remove trailing whitespace that could interfere with parsing
   processed = processed.trim()
-  
+
   // Handle empty or whitespace-only input
   if (!processed) return ''
-  
+
   return processed
 }
 
@@ -37,9 +37,9 @@ function renderMathHTML(src, displayMode) {
     if (render) {
       // Preprocess the LaTeX source to fix common issues
       const processedSrc = preprocessLatexSource(src)
-      
-      const rendered = render(processedSrc, { 
-        throwOnError: false, 
+
+      const rendered = render(processedSrc, {
+        throwOnError: false,
         displayMode,
         errorColor: '#cc0000',
         strict: 'warn', // Show warnings but don't fail
@@ -69,10 +69,10 @@ export const MathInline = Node.create({
   },
   renderHTML({ HTMLAttributes }) {
     const { src = '' } = HTMLAttributes
-    return ['span', mergeAttributes(HTMLAttributes, { 
-      'data-type': 'math-inline', 
-      class: 'math-inline', 
-      'data-src': src 
+    return ['span', mergeAttributes(HTMLAttributes, {
+      'data-type': 'math-inline',
+      class: 'math-inline',
+      'data-src': src
     }), src]
   },
   addNodeView() {
@@ -81,28 +81,28 @@ export const MathInline = Node.create({
       dom.className = 'math-inline'
       dom.setAttribute('data-type', 'math-inline')
       dom.setAttribute('data-src', node.attrs.src)
-      
+
       const renderMath = () => {
         const src = node.attrs.src || ''
         // Debug log
-        
+
         if (!src.trim()) {
           dom.textContent = '[empty]'
           dom.classList.add('math-empty')
           return
         }
-        
+
         const html = renderMathHTML(src, false)
         // Debug log
-        
-        // For now, bypass sanitization for KaTeX since it's trusted content
-        dom.innerHTML = html
+
+        // Sanitize KaTeX output before rendering
+        dom.innerHTML = sanitizeMathHtml(html)
         dom.classList.remove('math-empty')
       }
-      
+
       // Try to render immediately, but also listen for KaTeX load
       renderMath()
-      
+
       // If KaTeX is still loading, try again in a bit
       if (!getKatex()) {
         const checkKatex = setInterval(() => {
@@ -113,7 +113,7 @@ export const MathInline = Node.create({
         }, 100)
         setTimeout(() => clearInterval(checkKatex), 5000) // Stop trying after 5s
       }
-      
+
       return { dom }
     }
   },
@@ -164,10 +164,10 @@ export const MathBlock = Node.create({
   parseHTML() { return [{ tag: 'div[data-type="math-block"]' }] },
   renderHTML({ HTMLAttributes }) {
     const { src = '' } = HTMLAttributes
-    return ['div', mergeAttributes(HTMLAttributes, { 
-      'data-type': 'math-block', 
-      class: 'math-block', 
-      'data-src': src 
+    return ['div', mergeAttributes(HTMLAttributes, {
+      'data-type': 'math-block',
+      class: 'math-block',
+      'data-src': src
     }), src]
   },
   addNodeView() {
@@ -176,29 +176,28 @@ export const MathBlock = Node.create({
       dom.className = 'math-block'
       dom.setAttribute('data-type', 'math-block')
       dom.setAttribute('data-src', node.attrs.src)
-      
+
       const renderMath = () => {
         const src = node.attrs.src || ''
         // Debug log
-        
+
         if (!src.trim()) {
           dom.textContent = '[Empty Math Block - Click to edit]'
           dom.classList.add('math-empty')
           return
         }
-        
+
         const html = renderMathHTML(src, true)
         // Debug log
-        
-        // For now, bypass sanitization for KaTeX since it's trusted content
-        // TODO: Create proper KaTeX-specific sanitization
-        dom.innerHTML = html
+
+        // Sanitize KaTeX output before rendering
+        dom.innerHTML = sanitizeMathHtml(html)
         dom.classList.remove('math-empty')
       }
-      
+
       // Try to render immediately, but also listen for KaTeX load
       renderMath()
-      
+
       // If KaTeX is still loading, try again in a bit
       if (!getKatex()) {
         const checkKatex = setInterval(() => {
@@ -209,7 +208,7 @@ export const MathBlock = Node.create({
         }, 100)
         setTimeout(() => clearInterval(checkKatex), 5000) // Stop trying after 5s
       }
-      
+
       return { dom }
     }
   },
@@ -233,9 +232,9 @@ export const MathBlock = Node.create({
         handler: ({ range, match, chain }) => {
           const src = match[1].trim()
           if (src && src.length > 0) {
-            chain().deleteRange(range).insertContent({ 
-              type: this.name, 
-              attrs: { src } 
+            chain().deleteRange(range).insertContent({
+              type: this.name,
+              attrs: { src }
             }).run()
           } else {
           }

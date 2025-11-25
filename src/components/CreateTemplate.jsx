@@ -24,6 +24,7 @@ export default function CreateTemplate({
   const [tags, setTags] = useState('');
   const [content, setContent] = useState(initialContent);
   const [showPreview, setShowPreview] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('');
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState([]);
   const [duplicateWarning, setDuplicateWarning] = useState(false);
@@ -91,16 +92,24 @@ export default function CreateTemplate({
   }, [name, templates]);
 
   // Generate template preview
-  const getPreview = () => {
-    if (!content) return 'No content to preview';
-    
-    try {
-      const compiler = getMarkdownCompiler();
-      return compiler.process(content);
-    } catch (err) {
-      return content; // Fallback to raw content
+  useEffect(() => {
+    if (!showPreview || !content) {
+      setPreviewHtml('');
+      return;
     }
-  };
+
+    const generatePreview = async () => {
+      try {
+        const compiler = getMarkdownCompiler();
+        const html = await compiler.process(content);
+        setPreviewHtml(html);
+      } catch (err) {
+        setPreviewHtml(content); // Fallback
+      }
+    };
+
+    generatePreview();
+  }, [content, showPreview]);
 
   // Generate template ID from name
   const generateId = (templateName) => {
@@ -183,11 +192,10 @@ export default function CreateTemplate({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Daily Standup Notes"
-                className={`w-full px-3 py-2 bg-app-bg border rounded-md outline-none focus:ring-2 ${
-                  duplicateWarning
+                className={`w-full px-3 py-2 bg-app-bg border rounded-md outline-none focus:ring-2 ${duplicateWarning
                     ? 'border-yellow-500 focus:ring-yellow-500/40'
                     : 'border-app-border focus:ring-app-accent/40'
-                }`}
+                  }`}
               />
               {duplicateWarning && (
                 <div className="flex items-center gap-2 mt-2 text-sm text-yellow-500">
@@ -275,12 +283,12 @@ Add your template content here. Use {{variable}} for dynamic values.`}
                 {showPreview ? 'Hide' : 'Show'} Preview
               </button>
             </div>
-            
+
             <div className="flex-1 bg-app-panel border border-app-border rounded-md p-3 overflow-auto">
               {showPreview ? (
-                <div 
+                <div
                   className="prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: getPreview() }}
+                  dangerouslySetInnerHTML={{ __html: previewHtml || 'Loading preview...' }}
                 />
               ) : (
                 <div className="text-app-muted text-sm">
@@ -297,7 +305,7 @@ Add your template content here. Use {{variable}} for dynamic values.`}
             <div>Template will be available in Command Palette ({platformService.getModifierSymbol()}+K)</div>
             <div className="text-xs mt-1">Saved as markdown in templates folder • HTML automatically converted</div>
           </div>
-          
+
           <div className="flex gap-2">
             <button
               onClick={onClose}
@@ -308,11 +316,10 @@ Add your template content here. Use {{variable}} for dynamic values.`}
             <button
               onClick={handleSave}
               disabled={saving || !name.trim() || !content.trim()}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                duplicateWarning
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${duplicateWarning
                   ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
                   : 'bg-app-accent text-app-accent-fg hover:bg-app-accent/80'
-              }`}
+                }`}
             >
               {duplicateWarning ? (
                 <>

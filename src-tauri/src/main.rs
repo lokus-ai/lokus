@@ -208,7 +208,7 @@ fn main() {
   if let Ok(current_dir) = std::env::current_dir() {
     let env_path = current_dir.parent().unwrap_or(&current_dir).join(".env");
     if env_path.exists() {
-      if let Err(e) = dotenvy::from_path(&env_path) {
+      if let Err(_e) = dotenvy::from_path(&env_path) {
       }
     }
   }
@@ -434,13 +434,13 @@ fn main() {
       // Initialize platform-specific systems with better error handling
       match handlers::platform_files::initialize() {
         Ok(_) => {},
-        Err(e) => {
+        Err(_e) => {
         }
       }
 
       match clipboard_platform::initialize() {
         Ok(_) => {},
-        Err(e) => {
+        Err(_e) => {
         }
       }
 
@@ -455,9 +455,9 @@ fn main() {
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
         match mcp_manager_clone.auto_start() {
-          Ok(status) => {
+          Ok(_status) => {
           }
-          Err(e) => {
+          Err(_e) => {
           }
         }
       });
@@ -475,7 +475,7 @@ fn main() {
       tauri::async_runtime::spawn(async move {
         match oauth_server_clone.start().await {
           Ok(_) => {},
-          Err(e) => {
+          Err(_e) => {
           }
         }
       });
@@ -498,7 +498,7 @@ fn main() {
         Ok(connection_manager) => {
           app.manage(connection_manager);
         }
-        Err(e) => {
+        Err(_e) => {
           // Create a fallback connection manager to prevent "state not managed" errors
           if let Ok(fallback_manager) = connections::ConnectionManager::new_fallback() {
             app.manage(fallback_manager);
@@ -514,7 +514,7 @@ fn main() {
       tauri::async_runtime::spawn(async move {
         let setup = mcp_setup::MCPSetup::new(app_clone);
         if !setup.is_setup_complete() {
-          if let Err(e) = setup.setup().await {
+          if let Err(_e) = setup.setup().await {
           }
         } else {
         }

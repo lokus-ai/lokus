@@ -4,11 +4,8 @@
  */
 
 import { DOMParser } from '@tiptap/pm/model';
-import { getMarkdownCompiler } from '../markdown/compiler.js';
-
 export class MarkdownExporter {
   constructor() {
-    this.compiler = getMarkdownCompiler();
   }
 
   /**
