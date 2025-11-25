@@ -77,9 +77,9 @@ fn load_metadata(backups_dir: &Path) -> VersionMetadata {
         match fs::read_to_string(&metadata_path) {
             Ok(content) => match serde_json::from_str(&content) {
                 Ok(metadata) => return metadata,
-                Err(_) => ,
+                Err(_) => {},
             },
-            Err(_) => ,
+            Err(_) => {},
         }
     }
 

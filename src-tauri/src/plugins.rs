@@ -751,8 +751,8 @@ pub fn enable_plugin(app: AppHandle, name: String) -> Result<(), String> {
     // Use atomic operation for enabling plugin
     let result = update_plugin_enabled_state(&app, &name, true);
     match &result {
-        Ok(_) => ,
-        Err(e) => ,
+        Ok(_) => {},
+        Err(e) => {},
     }
     
     result
@@ -764,8 +764,8 @@ pub fn disable_plugin(app: AppHandle, name: String) -> Result<(), String> {
     // Use atomic operation for disabling plugin
     let result = update_plugin_enabled_state(&app, &name, false);
     match &result {
-        Ok(_) => ,
-        Err(e) => ,
+        Ok(_) => {},
+        Err(e) => {},
     }
     
     result

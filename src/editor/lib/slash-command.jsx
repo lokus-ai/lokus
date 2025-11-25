@@ -69,10 +69,10 @@ function buildTableHTML(rows, cols, withHeaderRow = true) {
 function openTemplatePicker({ editor, range }) {
   // Store current editor state for template insertion
   const editorState = { editor, range };
-  
+
   // Dispatch custom event to open template picker
-  window.dispatchEvent(new CustomEvent('open-template-picker', { 
-    detail: { 
+  window.dispatchEvent(new CustomEvent('open-template-picker', {
+    detail: {
       editorState,
       onSelect: (template, processedContent) => {
         try {
@@ -83,27 +83,27 @@ function openTemplatePicker({ editor, range }) {
           editor.chain().focus().deleteRange(range).insertContent(template.content).run();
         }
       }
-    } 
+    }
   }));
 }
 
 function openFileLinkPicker({ editor, range }) {
-  
+
   try {
     // Get file index for suggestions
     const getIndex = () => {
       const list = (globalThis.__LOKUS_FILE_INDEX__ || [])
       return Array.isArray(list) ? list : []
     };
-    
+
     const files = getIndex();
-    
+
     if (files.length === 0) {
       // No files available, just insert empty wiki link
       editor.chain().focus().deleteRange(range).insertContent('[[]]').run();
       return;
     }
-    
+
     // Create file picker UI
     createFilePicker(files, (selectedFile) => {
       if (selectedFile) {
@@ -112,7 +112,7 @@ function openFileLinkPicker({ editor, range }) {
         editor.chain().focus().deleteRange(range).insertContent(linkText).run();
       }
     });
-    
+
   } catch (error) {
     // Fallback: just insert something
     try {
@@ -308,7 +308,7 @@ function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
         if (typeof window !== 'undefined' && window.__TAURI__) {
           const { invoke } = window.__TAURI__.tauri;
           invoke('create_kanban_board', { name: boardName.trim() })
-            .then(() => )
+            .then(() => { })
             .catch(err => console.error('Failed to create board:', err));
         }
       }
@@ -373,7 +373,7 @@ function createFilePicker(files, onSelect) {
     z-index: 10000;
     backdrop-filter: blur(4px);
   `;
-  
+
   // Create picker container
   const picker = document.createElement('div');
   picker.style.cssText = `
@@ -385,7 +385,7 @@ function createFilePicker(files, onSelect) {
     overflow: hidden;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   `;
-  
+
   // Create header
   const header = document.createElement('div');
   header.style.cssText = `
@@ -401,7 +401,7 @@ function createFilePicker(files, onSelect) {
       Choose a file from your workspace
     </p>
   `;
-  
+
   // Create file list container
   const listContainer = document.createElement('div');
   listContainer.style.cssText = `
@@ -409,7 +409,7 @@ function createFilePicker(files, onSelect) {
     overflow-y: auto;
     padding: 8px 0;
   `;
-  
+
   // Create file items
   files.forEach((file, index) => {
     const item = document.createElement('div');
@@ -419,7 +419,7 @@ function createFilePicker(files, onSelect) {
       border-bottom: 1px solid rgba(var(--border), 0.5);
       transition: background-color 0.15s ease;
     `;
-    
+
     // Get relative path (remove workspace path)
     const getRelativePath = (fullPath) => {
       const workspace = globalThis.__LOKUS_WORKSPACE_PATH__ || '';
@@ -428,9 +428,9 @@ function createFilePicker(files, onSelect) {
       }
       return fullPath;
     };
-    
+
     const relativePath = getRelativePath(file.path);
-    
+
     item.innerHTML = `
       <div style="color: rgb(var(--text)); font-size: 14px; font-weight: 500; margin-bottom: 2px;">
         ${file.title}
@@ -439,25 +439,25 @@ function createFilePicker(files, onSelect) {
         ${relativePath}
       </div>
     `;
-    
+
     // Hover effect
     item.addEventListener('mouseenter', () => {
       item.style.backgroundColor = 'rgba(var(--accent), 0.1)';
     });
-    
+
     item.addEventListener('mouseleave', () => {
       item.style.backgroundColor = 'transparent';
     });
-    
+
     // Click handler
     item.addEventListener('click', () => {
       onSelect(file);
       cleanup();
     });
-    
+
     listContainer.appendChild(item);
   });
-  
+
   // Create footer
   const footer = document.createElement('div');
   footer.style.cssText = `
@@ -466,7 +466,7 @@ function createFilePicker(files, onSelect) {
     background: rgb(var(--bg));
     text-align: right;
   `;
-  
+
   const cancelBtn = document.createElement('button');
   cancelBtn.textContent = 'Cancel';
   cancelBtn.style.cssText = `
@@ -478,30 +478,30 @@ function createFilePicker(files, onSelect) {
     cursor: pointer;
     font-size: 14px;
   `;
-  
+
   cancelBtn.addEventListener('click', () => {
     onSelect(null);
     cleanup();
   });
-  
+
   footer.appendChild(cancelBtn);
-  
+
   // Assemble picker
   picker.appendChild(header);
   picker.appendChild(listContainer);
   picker.appendChild(footer);
   overlay.appendChild(picker);
-  
+
   // Add to DOM
   document.body.appendChild(overlay);
-  
+
   // Cleanup function
   const cleanup = () => {
     if (overlay.parentNode) {
       overlay.parentNode.removeChild(overlay);
     }
   };
-  
+
   // Close on overlay click
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) {
@@ -509,7 +509,7 @@ function createFilePicker(files, onSelect) {
       cleanup();
     }
   });
-  
+
   // Close on escape
   const handleKeydown = (e) => {
     if (e.key === 'Escape') {
@@ -527,7 +527,7 @@ function openTableSizePicker({ editor, range }) {
     try {
       const html = buildTableHTML(3, 3, true);
       editor.chain().focus().deleteRange(range).insertContent(html).run();
-    } catch {}
+    } catch { }
     return;
   }
 
@@ -594,8 +594,8 @@ function openTableSizePicker({ editor, range }) {
     try {
       const html = buildTableHTML(hoverRows, hoverCols, true);
       editor.chain().focus().deleteRange(range).insertContent(html).run();
-    } catch {}
-    try { pick.destroy(); } catch {}
+    } catch { }
+    try { pick.destroy(); } catch { }
   };
   grid.addEventListener('click', doInsert);
 
@@ -607,7 +607,7 @@ function openTableSizePicker({ editor, range }) {
     interactive: true,
     trigger: 'manual',
     placement: 'bottom-start',
-    onHidden: (inst) => { try { inst.destroy(); } catch {} },
+    onHidden: (inst) => { try { inst.destroy(); } catch { } },
   });
 
   // Initial paint so the palette uses 1×1 by default hover

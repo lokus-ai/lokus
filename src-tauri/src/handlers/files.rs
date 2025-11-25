@@ -90,8 +90,8 @@ fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result<Vec<F
 pub fn read_workspace_files(workspace_path: String) -> Result<Vec<FileEntry>, String> {
     let result = read_directory_contents(Path::new(&workspace_path));
     match &result {
-        Ok(files) => ,
-        Err(e) => ,
+        Ok(files) => {},
+        Err(e) => {},
     }
     result
 }

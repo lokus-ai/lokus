@@ -450,7 +450,7 @@ impl AuthService {
 
         // Fetch and store user profile
         match fetch_and_store_user_profile(&token).await {
-            Ok(_) => ,
+            Ok(_) => {},
             Err(e) => {
                 // Continue anyway - don't fail the entire OAuth flow
             }

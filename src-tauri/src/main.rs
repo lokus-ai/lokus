@@ -433,13 +433,13 @@ fn main() {
 
       // Initialize platform-specific systems with better error handling
       match handlers::platform_files::initialize() {
-        Ok(_) => ,
+        Ok(_) => {},
         Err(e) => {
         }
       }
 
       match clipboard_platform::initialize() {
-        Ok(_) => ,
+        Ok(_) => {},
         Err(e) => {
         }
       }
@@ -474,7 +474,7 @@ fn main() {
       let oauth_server_clone = oauth_server.clone();
       tauri::async_runtime::spawn(async move {
         match oauth_server_clone.start().await {
-          Ok(_) => ,
+          Ok(_) => {},
           Err(e) => {
           }
         }

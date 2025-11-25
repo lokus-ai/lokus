@@ -59,7 +59,7 @@ pub fn example_file_operations() -> Result<(), PlatformError> {
             
             // Try to reveal in file manager
             match provider.reveal_in_file_manager(path) {
-                Ok(()) => ,
+                Ok(()) => {},
                 Err(err) => match err.kind {
                     PlatformErrorKind::FileSystem => {
                     }
@@ -75,8 +75,8 @@ pub fn example_file_operations() -> Result<(), PlatformError> {
             // Try to open terminal (only for directories)
             if path.is_dir() {
                 match provider.open_terminal(path) {
-                    Ok(()) => ,
-                    Err(err) => ,
+                    Ok(()) => {},
+                    Err(err) => {},
                 }
             }
             
