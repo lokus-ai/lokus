@@ -23,14 +23,12 @@ export default function PDFViewerTab({ file, onClose }) {
         setLoading(true);
         setError(null);
         setPdfData(null); // Clear previous data
-        console.log('Loading PDF from:', file);
 
         // Read file as binary using Tauri command
         const binaryData = await invoke('read_binary_file', { path: file });
 
         // Convert to Uint8Array - this needs to be done only once
         const uint8Array = new Uint8Array(binaryData);
-        console.log('PDF loaded, size:', uint8Array.length, 'bytes');
 
         // Important: Set data in a way that doesn't trigger re-render
         setPdfData(uint8Array);

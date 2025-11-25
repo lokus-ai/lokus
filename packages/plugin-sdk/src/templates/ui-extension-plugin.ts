@@ -21,20 +21,6 @@ export class UIExtensionPluginTemplate implements TemplateGenerator {
     const styles = this.generateStyles(config)
     const script = this.generateWebviewScript(config)
     
-    console.log('Generating UI extension plugin template:', {
-      outputDir,
-      name,
-      files: {
-        'package.json': packageJson,
-        'plugin.json': manifest,
-        [`src/index.${typescript ? 'ts' : 'js'}`]: mainFile,
-        'src/webview/index.html': webviewHtml,
-        'src/webview/styles.css': styles,
-        'src/webview/script.js': script,
-        ...(typescript && { 'tsconfig.json': this.generateTsConfig() }),
-        'README.md': this.generateReadme(config)
-      }
-    })
   }
 
   async validate(config: TemplateConfig): Promise<TemplateValidationResult> {

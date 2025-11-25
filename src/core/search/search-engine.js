@@ -77,7 +77,6 @@ class SearchEngine {
     }
 
     const duration = performance.now() - startTime;
-    console.log(`Indexed ${docs.length} documents in ${duration.toFixed(2)}ms`);
 
     this.notifyListeners('batchIndexed', { count: docs.length, duration });
   }

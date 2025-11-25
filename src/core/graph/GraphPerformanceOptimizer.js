@@ -91,7 +91,6 @@ export class GraphPerformanceOptimizer {
       console.warn(`[GraphOptimizer] Culling took ${duration.toFixed(2)}ms for ${nodes.length} nodes`);
     }
 
-    console.log(`[GraphOptimizer] Showing ${visibleNodes.length} of ${nodes.length} nodes`);
     return visibleNodes;
   }
 
@@ -181,7 +180,6 @@ export class GraphPerformanceOptimizer {
       chunks.push(allNodes.slice(i, i + chunkSize));
     }
 
-    console.log(`[GraphOptimizer] Loading ${allNodes.length} nodes in ${chunks.length} chunks`);
 
     // Load chunks progressively
     let loadedNodes = [];
@@ -228,7 +226,6 @@ export class GraphPerformanceOptimizer {
       if (nodeCount > 2000) {
         setTimeout(() => {
           simulation.stop();
-          console.log('[GraphOptimizer] Stopped simulation for performance');
         }, 5000);
       }
     }
@@ -261,7 +258,6 @@ export class GraphPerformanceOptimizer {
    * Enable emergency optimizations when performance is critical
    */
   enableEmergencyOptimizations() {
-    console.log('[GraphOptimizer] Enabling emergency optimizations');
 
     // Reduce quality settings
     this.options.cullingPadding = 0;
@@ -286,7 +282,6 @@ export class GraphPerformanceOptimizer {
       return { ...graphData, optimized: false };
     }
 
-    console.log(`[GraphOptimizer] Optimizing graph with ${nodeCount} nodes`);
 
     // Apply various optimizations
     let optimizedNodes = nodes;

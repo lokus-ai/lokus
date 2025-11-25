@@ -30,7 +30,6 @@ export default function AIAssistant() {
 
       // First, bundle the MCP server if needed
       const result = await invoke('setup_mcp_integration');
-      console.log('Setup result:', result);
 
       // Wait a moment for the setup to complete
       await new Promise(resolve => setTimeout(resolve, 1000));

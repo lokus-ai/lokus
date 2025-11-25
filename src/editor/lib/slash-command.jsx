@@ -180,7 +180,6 @@ function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
             const { invoke } = window.__TAURI__.tauri;
             invoke('create_kanban_board', { name: boardName.trim() })
               .then(() => {
-                console.log('Kanban board created:', boardName.trim());
               })
               .catch(err => console.error('Failed to create board:', err));
           }
@@ -309,7 +308,7 @@ function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
         if (typeof window !== 'undefined' && window.__TAURI__) {
           const { invoke } = window.__TAURI__.tauri;
           invoke('create_kanban_board', { name: boardName.trim() })
-            .then(() => console.log('Board created'))
+            .then(() => )
             .catch(err => console.error('Failed to create board:', err));
         }
       }
@@ -880,7 +879,6 @@ const commandItems = [
 
 const slashCommand = {
   items: ({ query, editor }) => {
-    console.log('🔍 [SlashCommand] Query:', `"${query}"`);
 
     const matches = (title) => {
       const result = title.toLowerCase().includes(query.toLowerCase());
@@ -901,7 +899,6 @@ const slashCommand = {
       }))
       .filter((group) => group.commands.length > 0);
 
-    console.log('🔍 [SlashCommand] Filtered to', filtered.flatMap(g => g.commands).length, 'commands');
 
     return filtered;
   },
@@ -912,7 +909,6 @@ const slashCommand = {
 
     return {
       onStart: (props) => {
-        console.log('🎬 [SlashCommand] onStart - query:', props.query);
         // keep latest rect for sub‑popovers (e.g., table size picker)
         if (props.clientRect) lastClientRect = props.clientRect;
 
@@ -942,11 +938,9 @@ const slashCommand = {
           trigger: "manual",
           placement: "bottom-start",
         });
-        console.log('✅ [SlashCommand] Popup created');
       },
 
       onUpdate(props) {
-        console.log('🔄 [SlashCommand] onUpdate - query:', props.query);
         // Refresh items with latest plugin commands
         const currentItems = slashCommand.items(props);
         const enhancedProps = {
@@ -985,7 +979,6 @@ const slashCommand = {
       },
 
       onExit() {
-        console.log('❌ [SlashCommand] onExit - destroying popup');
         if (popup && popup[0]) popup[0].destroy();
         if (component) component.destroy();
       },

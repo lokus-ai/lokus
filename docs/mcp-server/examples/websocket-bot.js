@@ -33,7 +33,6 @@ class LokusBot {
       });
 
       this.ws.on('open', async () => {
-        console.log('🤖 Lokus Bot connected to MCP server');
         await this.initialize();
         resolve();
       });
@@ -61,7 +60,6 @@ class LokusBot {
     });
 
     this.isInitialized = true;
-    console.log('✅ Bot initialized with Lokus MCP server');
     
     // Load initial context
     await this.loadWorkspaceContext();
@@ -76,7 +74,6 @@ class LokusBot {
         .sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified))
         .slice(0, 10);
 
-      console.log(`📁 Loaded context: ${this.context.recentFiles.length} recent files`);
     } catch (error) {
       console.error('Failed to load workspace context:', error.message);
     }

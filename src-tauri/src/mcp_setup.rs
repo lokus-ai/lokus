@@ -23,7 +23,6 @@ impl MCPSetup {
 
     /// Main setup function - called on first launch or after update
     pub async fn setup(&self) -> Result<(), String> {
-        println!("[MCP Setup] Starting automatic MCP configuration...");
 
         // 1. Get paths
         let mcp_server_path = self.get_bundled_mcp_path()?;
@@ -45,8 +44,6 @@ impl MCPSetup {
         // 6. Create Lokus config directory
         self.create_lokus_config_dir()?;
 
-        println!("[MCP Setup] ✅ MCP configuration completed successfully!");
-        println!("[MCP Setup] ✅ Configured for both Desktop and Claude Code");
         Ok(())
     }
 
@@ -57,14 +54,11 @@ impl MCPSetup {
         let extracted_path = home.join(".lokus").join("mcp-server").join("index.js");
 
         if extracted_path.exists() {
-            println!("[MCP Setup] Using existing extracted MCP server at: {:?}", extracted_path);
             return Ok(extracted_path);
         }
 
         // Extract the embedded MCP server
-        println!("[MCP Setup] Extracting embedded MCP server...");
         let mcp_path = mcp_embedded::extract_mcp_server()?;
-        println!("[MCP Setup] Successfully extracted MCP server to: {:?}", mcp_path);
 
         Ok(mcp_path)
     }
@@ -106,7 +100,6 @@ impl MCPSetup {
         fs::set_permissions(path, perms)
             .map_err(|e| format!("Failed to make MCP server executable: {}", e))?;
 
-        println!("[MCP Setup] Made MCP server executable");
         Ok(())
     }
 
@@ -153,7 +146,6 @@ impl MCPSetup {
         fs::write(config_path, config_str)
             .map_err(|e| format!("Failed to write AI config: {}", e))?;
 
-        println!("[MCP Setup] ✅ Updated AI Desktop config at: {:?}", config_path);
         Ok(())
     }
 
@@ -184,7 +176,6 @@ impl MCPSetup {
         fs::write(&mcp_json_path, config_str)
             .map_err(|e| format!("Failed to write .mcp.json: {}", e))?;
 
-        println!("[MCP Setup] ✅ Created .mcp.json for Claude Code at: {:?}", mcp_json_path);
 
         // Also try to configure via Claude CLI if available
         self.configure_via_cli()?;
@@ -215,9 +206,7 @@ impl MCPSetup {
                     .map_err(|e| format!("Failed to run claude CLI: {}", e))?;
 
                 if result.status.success() {
-                    println!("[MCP Setup] ✅ Configured Claude Code via CLI");
                 } else {
-                    println!("[MCP Setup] ⚠️ Claude CLI configuration failed, but .mcp.json was created");
                 }
             }
         }
@@ -274,7 +263,6 @@ Happy note-taking! ✨
             fs::write(workspace.join("Welcome.md"), welcome)
                 .map_err(|e| format!("Failed to create welcome note: {}", e))?;
 
-            println!("[MCP Setup] ✅ Created default workspace at: {:?}", workspace);
         }
 
         Ok(())
@@ -288,7 +276,6 @@ Happy note-taking! ✨
         fs::create_dir_all(&lokus_config)
             .map_err(|e| format!("Failed to create .lokus config directory: {}", e))?;
 
-        println!("[MCP Setup] ✅ Created Lokus config directory");
         Ok(())
     }
 

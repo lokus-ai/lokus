@@ -96,11 +96,6 @@ Description: {{prompt:description:Enter description:Project description here}}`,
     const prompts = promptsParser.parsePrompts(template);
     const validation = promptsParser.validate(template);
 
-    console.log('Template Analysis:', {
-      stats,
-      prompts,
-      validation
-    });
 
     alert(`Template Statistics:
 Total Prompts: ${stats.total}

@@ -154,11 +154,9 @@ class MarkdownSyntaxConfig {
       const workspaceConfig = await this.loadWorkspaceConfig();
       if (workspaceConfig) {
         this.config = this.mergeConfig(this.defaultConfig, workspaceConfig);
-        console.log('[MarkdownSyntax] Loaded workspace config:', this.config);
 
         // Notify listeners that config has been loaded (triggers editor reload)
         if (typeof window !== 'undefined') {
-          console.log('[MarkdownSyntax] Dispatching config-loaded event to trigger editor reload');
           window.dispatchEvent(new CustomEvent('markdown-config-changed', {
             detail: { category: 'init', key: 'loaded', value: this.config }
           }));
@@ -167,10 +165,8 @@ class MarkdownSyntaxConfig {
       }
 
       // If no workspace config exists, create one with defaults
-      console.log('[MarkdownSyntax] No workspace config found, initializing with defaults');
       const saved = await this.saveWorkspaceConfig();
       if (saved) {
-        console.log('[MarkdownSyntax] ✅ Initialized markdown-syntax.json with defaults');
       }
 
       // Also check global config as fallback
@@ -179,10 +175,8 @@ class MarkdownSyntaxConfig {
 
       if (globalConfig && globalConfig.markdownSyntax) {
         this.config = this.mergeConfig(this.defaultConfig, globalConfig.markdownSyntax);
-        console.log('[MarkdownSyntax] Merged with global config');
       }
     } catch (e) {
-      console.log('[MarkdownSyntax] Error loading config:', e);
     }
   }
 
@@ -195,22 +189,17 @@ class MarkdownSyntaxConfig {
       // Try to get workspace from window variable first (set by Workspace component)
       const workspacePath = (typeof window !== 'undefined' && window.__LOKUS_WORKSPACE_PATH__) || getSavedWorkspacePath();
 
-      console.log('[MarkdownSyntax] Loading from workspace:', workspacePath);
-      console.log('[MarkdownSyntax] Window workspace:', typeof window !== 'undefined' ? window.__LOKUS_WORKSPACE_PATH__ : 'N/A');
-      console.log('[MarkdownSyntax] LocalStorage workspace:', getSavedWorkspacePath());
 
       if (!workspacePath) return null;
 
       const configPath = await join(workspacePath, '.lokus', 'markdown-syntax.json');
       if (!(await exists(configPath))) {
-        console.log('[MarkdownSyntax] Config file does not exist at:', configPath);
         return null;
       }
 
       const content = await readTextFile(configPath);
       return JSON.parse(content);
     } catch (e) {
-      console.log('[MarkdownSyntax] Error loading workspace config:', e);
       return null;
     }
   }
@@ -224,12 +213,8 @@ class MarkdownSyntaxConfig {
       // Try to get workspace from window variable first (set by Workspace component)
       let workspacePath = (typeof window !== 'undefined' && window.__LOKUS_WORKSPACE_PATH__) || getSavedWorkspacePath();
 
-      console.log('[MarkdownSyntax] Saving to workspace:', workspacePath);
-      console.log('[MarkdownSyntax] Window workspace:', typeof window !== 'undefined' ? window.__LOKUS_WORKSPACE_PATH__ : 'N/A');
-      console.log('[MarkdownSyntax] LocalStorage workspace:', getSavedWorkspacePath());
 
       if (!workspacePath) {
-        console.log('[MarkdownSyntax] No workspace path, cannot save');
         return false;
       }
 
@@ -240,7 +225,6 @@ class MarkdownSyntaxConfig {
 
       const configPath = await join(workspacePath, '.lokus', 'markdown-syntax.json');
       await writeTextFile(configPath, JSON.stringify(this.config, null, 2));
-      console.log('[MarkdownSyntax] ✅ Successfully saved to:', configPath);
       return true;
     } catch (e) {
       console.error('[MarkdownSyntax] Error saving workspace config:', e);
@@ -282,14 +266,12 @@ class MarkdownSyntaxConfig {
       this.config[category][key] = value;
     }
 
-    console.log('[MarkdownSyntax] Setting changed:', { category, key, value });
 
     this.notifyListeners(category, key, value);
 
     // Auto-save after each change for immediate persistence
     this.save().then(success => {
       if (success) {
-        console.log('[MarkdownSyntax] Auto-saved after change');
       }
     }).catch(e => {
       console.error('[MarkdownSyntax] Auto-save failed:', e);
@@ -307,10 +289,8 @@ class MarkdownSyntaxConfig {
 
   async save() {
     try {
-      console.log('[MarkdownSyntax] Saving config:', this.config);
       const success = await this.saveWorkspaceConfig();
       if (success) {
-        console.log('[MarkdownSyntax] Config saved successfully to workspace');
       }
       return success;
     } catch (e) {
@@ -344,7 +324,6 @@ class MarkdownSyntaxConfig {
   }
 
   notifyListeners(category, key, value) {
-    console.log('[MarkdownSyntax] Notifying listeners of change:', { category, key, value });
     this.listeners.forEach(callback => {
       try {
         callback(category, key, value);

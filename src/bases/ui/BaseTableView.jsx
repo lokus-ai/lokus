@@ -260,9 +260,6 @@ export default function BaseTableView({
   const displayColumns = useMemo(() => {
     const defaultOrder = ['name', ...Object.keys(enabledColumns).filter(col => col !== 'name' && enabledColumns[col])]
 
-    console.log('[BaseTableView] Enabled columns:', enabledColumns)
-    console.log('[BaseTableView] Default order:', defaultOrder)
-    console.log('[BaseTableView] Saved column order:', columnOrder)
 
     if (!columnOrder) {
       return defaultOrder
@@ -277,7 +274,6 @@ export default function BaseTableView({
     const newColumns = defaultOrder.filter(col => !orderedColumns.includes(col))
 
     const finalColumns = [...orderedColumns, ...newColumns]
-    console.log('[BaseTableView] Final display columns:', finalColumns)
 
     return finalColumns
   }, [enabledColumns, columnOrder])

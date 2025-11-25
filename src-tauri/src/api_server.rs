@@ -269,7 +269,6 @@ pub async fn start_api_server(app_handle: tauri::AppHandle) {
     let state = match app_handle.try_state::<ApiState>() {
         Some(state) => state.inner().clone(),
         None => {
-            eprintln!("[API Server] ❌ ApiState not found in Tauri state management!");
             return;
         }
     };
@@ -280,7 +279,6 @@ pub async fn start_api_server(app_handle: tauri::AppHandle) {
         .await
         .unwrap();
 
-    println!("[API Server] Running on http://127.0.0.1:3333");
 
     axum::serve(listener, router)
         .await
@@ -296,9 +294,7 @@ pub async fn update_workspace(app_handle: &tauri::AppHandle, workspace: Option<S
         *current = workspace.clone();
 
         if let Some(ws) = workspace {
-            println!("[API Server] ✅ Workspace updated: {}", ws);
         } else {
-            println!("[API Server] ⚠️ Workspace cleared");
         }
     }
 }

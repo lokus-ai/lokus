@@ -182,31 +182,22 @@ export class TemplatePrompts {
    */
   replacePrompts(template, values = {}) {
     if (!template || typeof template !== 'string') {
-      console.log('[Prompts] replacePrompts: invalid template');
       return template;
     }
 
-    console.log('[Prompts] replacePrompts START');
-    console.log('[Prompts] Input template length:', template.length);
-    console.log('[Prompts] Values:', values);
 
     let result = template;
 
     // Replace all prompt types
     const afterText = this.replaceTextPrompts(result, values);
-    console.log('[Prompts] After replaceTextPrompts, changed:', result !== afterText);
     result = afterText;
 
     const afterSuggest = this.replaceSuggestPrompts(result, values);
-    console.log('[Prompts] After replaceSuggestPrompts, changed:', result !== afterSuggest);
     result = afterSuggest;
 
     const afterCheckbox = this.replaceCheckboxPrompts(result, values);
-    console.log('[Prompts] After replaceCheckboxPrompts, changed:', result !== afterCheckbox);
     result = afterCheckbox;
 
-    console.log('[Prompts] Final result length:', result.length);
-    console.log('[Prompts] Result preview:', result.substring(0, 200));
 
     return result;
   }
@@ -223,27 +214,17 @@ export class TemplatePrompts {
       matchCount++;
       const trimmedVarName = varName.trim();
 
-      console.log(`[Prompts] replaceTextPrompts match #${matchCount}:`, {
-        fullMatch,
-        varName: trimmedVarName,
-        hasValue: values.hasOwnProperty(trimmedVarName),
-        value: values[trimmedVarName],
-        defaultValue: defaultValue?.trim()
-      });
 
       if (values.hasOwnProperty(trimmedVarName)) {
         const replacement = String(values[trimmedVarName]);
-        console.log(`[Prompts] Replacing with value:`, replacement);
         return replacement;
       }
 
       // Use default value if no value provided
       const replacement = defaultValue.trim();
-      console.log(`[Prompts] Replacing with default:`, replacement);
       return replacement;
     });
 
-    console.log(`[Prompts] replaceTextPrompts: ${matchCount} matches found`);
     return result;
   }
 
@@ -259,28 +240,18 @@ export class TemplatePrompts {
       matchCount++;
       const trimmedVarName = varName.trim();
 
-      console.log(`[Prompts] replaceSuggestPrompts match #${matchCount}:`, {
-        fullMatch,
-        varName: trimmedVarName,
-        hasValue: values.hasOwnProperty(trimmedVarName),
-        value: values[trimmedVarName],
-        defaultValue: defaultValue?.trim()
-      });
 
       if (values.hasOwnProperty(trimmedVarName)) {
         const replacement = String(values[trimmedVarName]);
-        console.log(`[Prompts] Replacing with value:`, replacement);
         return replacement;
       }
 
       // Use default value or first option
       const options = optionsStr.split(',').map(opt => opt.trim()).filter(opt => opt.length > 0);
       const replacement = defaultValue.trim() || (options.length > 0 ? options[0] : '');
-      console.log(`[Prompts] Replacing with default:`, replacement);
       return replacement;
     });
 
-    console.log(`[Prompts] replaceSuggestPrompts: ${matchCount} matches found`);
     return result;
   }
 
@@ -296,27 +267,17 @@ export class TemplatePrompts {
       matchCount++;
       const trimmedVarName = varName.trim();
 
-      console.log(`[Prompts] replaceCheckboxPrompts match #${matchCount}:`, {
-        fullMatch,
-        varName: trimmedVarName,
-        hasValue: values.hasOwnProperty(trimmedVarName),
-        value: values[trimmedVarName],
-        defaultValue: defaultValue?.trim()
-      });
 
       if (values.hasOwnProperty(trimmedVarName)) {
         const replacement = String(values[trimmedVarName]);
-        console.log(`[Prompts] Replacing with value:`, replacement);
         return replacement;
       }
 
       // Use default boolean value
       const replacement = String(this.parseBoolean(defaultValue.trim()));
-      console.log(`[Prompts] Replacing with default:`, replacement);
       return replacement;
     });
 
-    console.log(`[Prompts] replaceCheckboxPrompts: ${matchCount} matches found`);
     return result;
   }
 

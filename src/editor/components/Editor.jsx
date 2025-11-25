@@ -81,7 +81,6 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => 
     };
 
     const handleMarkdownConfigChange = () => {
-      console.log('[Editor] Markdown config changed, forcing editor reload...');
       setLastPluginUpdate(Date.now());
     };
 
@@ -150,7 +149,6 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => 
               getAttributes: (match) => {
                 const src = match[2];
                 const alt = match[1];
-                console.log('🖼️ Image nodeInputRule triggered:', { src, alt, fullMatch: match[0] });
                 return {
                   src,
                   alt
@@ -456,7 +454,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           if (img) {
             event.preventDefault();
             const src = img.getAttribute('src') || '';
-            console.log('🖼️ Image clicked, src attribute:', src);
             if (src) {
               setImageViewerState({ isOpen: true, imagePath: src });
             }
@@ -476,13 +473,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
           const openInNewTab = isMac ? event.metaKey : event.ctrlKey;
 
-          console.log('\n========================================');
-          console.log('🔗 WIKILINK CLICKED');
-          console.log('========================================');
-          console.log('Target:', target);
-          console.log('Href (resolved path):', href);
-          console.log('Modifier Key Held:', openInNewTab ? (isMac ? 'Cmd' : 'Ctrl') : 'None');
-          console.log('Action:', openInNewTab ? 'Open in background tab' : 'Navigate to file');
 
           // Check if this is a block reference (contains ^)
           // Check BOTH href and target since target might be empty when loaded from disk
@@ -496,17 +486,11 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
             cleanHref = parts[0];  // Remove ^blockid from path
             blockId = parts[1];    // Get the block ID
 
-            console.log('🎯 Block Reference Detected:');
-            console.log('   Block ID:', blockId);
-            console.log('   Original Path:', href);
-            console.log('   Clean Path:', cleanHref);
           }
 
           // Check if this is a resolved file path that exists in the index
           const index = globalThis.__LOKUS_FILE_INDEX__ || [];
           const fileExists = index.some(f => f.path === cleanHref);
-          console.log('File Exists:', fileExists);
-          console.log('========================================\n');
 
           if (!fileExists && target) {
             // Show a user-friendly message
@@ -521,19 +505,16 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
               const { emit } = await import('@tauri-apps/api/event');
               // Use different event based on modifier key
               const eventName = openInNewTab ? 'lokus:open-file-new-tab' : 'lokus:open-file';
-              console.log(`📤 Emitting event: ${eventName} with path:`, cleanHref);
               await emit(eventName, cleanHref);  // Use clean path without ^blockid
             } catch {
               try {
                 const eventName = openInNewTab ? 'lokus:open-file-new-tab' : 'lokus:open-file';
-                console.log(`📤 Dispatching DOM event: ${eventName} with path:`, cleanHref);
                 window.dispatchEvent(new CustomEvent(eventName, { detail: cleanHref }));  // Use clean path
               } catch {}
             }
 
             // If block reference, also emit scroll event
             if (hasBlockRef && blockId) {
-              console.log('📜 Emitting scroll-to-block event for:', blockId);
               window.dispatchEvent(new CustomEvent('lokus:scroll-to-block', { detail: blockId }));
             }
           })();
@@ -783,7 +764,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
             if (!blockId) {
               // Generate new ID
               blockId = blockIdManager.generateId()
-              console.log('[Editor] Generating block ID for copy:', blockId)
 
               // Add to node
               const pos = $from.before($from.depth)
@@ -809,7 +789,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
                   .then((success) => {
                     if (success) {
                       blockIdManager.invalidateFile(activeFile)
-                      console.log('[Editor] ✅ Wrote block ID to file:', blockId)
                     }
                   })
                   .catch(err => {
@@ -825,7 +804,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
 
             // Copy to clipboard
             await navigator.clipboard.writeText(reference)
-            console.log('[Editor] ✅ Copied block reference:', reference)
 
             // Optional: Show toast notification (if you have a toast system)
             // toast.success('Block reference copied to clipboard')
@@ -865,7 +843,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     );
   }
 
-  console.log(editor?.state.doc?.content?.content);
   
   // Edit and Live Preview modes - show TipTap editor
   // In live mode, we keep editor editable but could add visual hints

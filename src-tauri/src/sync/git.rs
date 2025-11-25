@@ -98,7 +98,6 @@ impl GitError {
 /// Initialize a Git repository in the workspace
 #[tauri::command]
 pub fn git_init(workspace_path: String) -> Result<String, String> {
-    println!("[Sync] Initializing Git repository at: {}", workspace_path);
 
     let path = Path::new(&workspace_path);
 
@@ -113,7 +112,6 @@ pub fn git_init(workspace_path: String) -> Result<String, String> {
 
     // Create initial commit so the branch exists
     // This prevents the "src refspec does not match any existing object" error
-    println!("[Sync] Creating initial commit...");
 
     let signature = Signature::now("Lokus", "noreply@lokus.app")
         .map_err(|e| format!("Failed to create signature: {}", e))?;
@@ -141,7 +139,6 @@ pub fn git_init(workspace_path: String) -> Result<String, String> {
         &[],  // No parent commits for initial commit
     ).map_err(|e| format!("Failed to create initial commit: {}", e))?;
 
-    println!("[Sync] ✅ Git repository initialized successfully with initial commit");
     Ok("Git repository initialized with initial commit".to_string())
 }
 
@@ -152,7 +149,6 @@ pub fn git_add_remote(
     remote_name: String,
     remote_url: String,
 ) -> Result<String, String> {
-    println!("[Sync] Adding remote '{}': {}", remote_name, remote_url);
 
     let repo = Repository::open(&workspace_path)
         .map_err(|e| format!("Failed to open repository: {}", e))?;
@@ -171,7 +167,6 @@ pub fn git_add_remote(
     repo.remote(&remote_name, &remote_url)
         .map_err(|e| format!("Failed to add remote: {}", e))?;
 
-    println!("[Sync] ✅ Remote added successfully");
     Ok(format!("Remote '{}' added", remote_name))
 }
 
@@ -183,7 +178,6 @@ pub fn git_commit(
     author_name: String,
     author_email: String,
 ) -> Result<String, String> {
-    println!("[Sync] Committing changes: {}", message);
 
     let repo = Repository::open(&workspace_path)
         .map_err(|e| format!("Failed to open repository: {}", e))?;
@@ -240,7 +234,6 @@ pub fn git_commit(
         ).map_err(|e| format!("Failed to create commit: {}", e))?
     };
 
-    println!("[Sync] ✅ Committed: {}", commit_id);
     Ok(format!("Committed: {}", commit_id))
 }
 
@@ -253,7 +246,6 @@ pub fn git_push(
     username: String,
     token: String,
 ) -> Result<String, String> {
-    println!("[Sync] Pushing to remote '{}'...", remote_name);
 
     let repo = Repository::open(&workspace_path)
         .map_err(|e| GitError::from_git2_error(e, "open repository").to_json_string())?;
@@ -280,7 +272,6 @@ pub fn git_push(
     remote.push(&[&refspec], Some(&mut push_options))
         .map_err(|e| GitError::from_git2_error(e, "push").to_json_string())?;
 
-    println!("[Sync] ✅ Pushed successfully");
     Ok("Pushed successfully".to_string())
 }
 
@@ -317,7 +308,6 @@ pub async fn git_pull(
     remote_name: String,
     branch_name: String,
 ) -> Result<String, String> {
-    println!("[Sync] Pulling from remote '{}' for workspace '{}'...", remote_name, workspace_id);
 
     // Retrieve credentials from secure storage
     let credentials = crate::credentials::retrieve_git_credentials(workspace_id.clone())
@@ -329,8 +319,6 @@ pub async fn git_pull(
     let username = credentials.username;
     let token = credentials.token;
 
-    println!("[Sync] Pull parameters: remote={}, branch={}, username={}, token_length={}",
-        remote_name, branch_name, username, token.len());
 
     let repo = Repository::open(&workspace_path)
         .map_err(|e| GitError::from_git2_error(e, "open repository").to_json_string())?;
@@ -365,12 +353,10 @@ pub async fn git_pull(
         .map_err(|e| GitError::from_git2_error(e, "analyze merge").to_json_string())?;
 
     if analysis.0.is_up_to_date() {
-        println!("[Sync] ✅ Already up to date");
         return Ok("Already up to date".to_string());
     }
 
     if analysis.0.is_fast_forward() {
-        println!("[Sync] Fast-forward merge possible");
         // Fast-forward merge
         let refname = format!("refs/heads/{}", branch_name);
 
@@ -380,13 +366,11 @@ pub async fn git_pull(
         // because there's no local branch yet to track the remote.
         let mut reference = match repo.find_reference(&refname) {
             Ok(r) => {
-                println!("[Sync] Found existing local branch");
                 r
             }
             Err(_) => {
                 // Branch doesn't exist locally, create it pointing to the fetched commit
                 // This allows seamless first-time sync without manual branch creation
-                println!("[Sync] Creating local branch '{}' for first pull", branch_name);
                 repo.reference(
                     &refname,
                     fetch_commit.id(),
@@ -403,10 +387,8 @@ pub async fn git_pull(
         repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))
             .map_err(|e| GitError::from_git2_error(e, "checkout").to_json_string())?;
 
-        println!("[Sync] ✅ Fast-forward merge completed");
         Ok("Fast-forward merge completed".to_string())
     } else {
-        println!("[Sync] ⚠️  Normal merge required - performing merge with conflict markers");
 
         // Perform a normal merge (not fast-forward)
         // This will leave conflict markers in files if there are conflicts
@@ -419,7 +401,6 @@ pub async fn git_pull(
 
         if index.has_conflicts() {
             // Conflicts exist - auto-resolve technical files, leave markers for user content
-            println!("[Sync] ⚠️  Conflicts detected during merge");
 
             // Auto-resolve technical files before checkout
             let mut auto_resolved_count = 0;
@@ -456,7 +437,6 @@ pub async fn git_pull(
 
                 if is_technical {
                     // For app config and internal files: keep local (ours)
-                    println!("[Sync] Auto-resolving (keep local): {}", path);
                     if let Some(our) = conflict.our {
                         index.add(&our)
                             .map_err(|e| format!("Failed to resolve conflict: {}", e))?;
@@ -464,7 +444,6 @@ pub async fn git_pull(
                     }
                 } else if is_lock_file {
                     // For lock files: keep remote (theirs) for consistency
-                    println!("[Sync] Auto-resolving (keep remote): {}", path);
                     if let Some(their) = conflict.their {
                         index.add(&their)
                             .map_err(|e| format!("Failed to resolve conflict: {}", e))?;
@@ -472,7 +451,6 @@ pub async fn git_pull(
                     }
                 } else {
                     // User content file - will have conflict markers
-                    println!("[Sync] User conflict in: {}", path);
                     user_conflict_count += 1;
                 }
             }
@@ -490,8 +468,6 @@ pub async fn git_pull(
             repo.checkout_index(Some(&mut index), Some(&mut checkout_builder))
                 .map_err(|e| format!("Failed to checkout conflicts: {}", e))?;
 
-            println!("[Sync] ✅ Auto-resolved {} technical file(s), {} user conflict(s) remaining",
-                auto_resolved_count, user_conflict_count);
 
             if user_conflict_count > 0 {
                 Ok(format!(
@@ -504,7 +480,6 @@ pub async fn git_pull(
             }
         } else {
             // No conflicts - clean merge
-            println!("[Sync] Creating merge commit...");
 
             // Get the current HEAD commit
             let head = repo.head()
@@ -540,7 +515,6 @@ pub async fn git_pull(
             repo.cleanup_state()
                 .map_err(|e| format!("Failed to cleanup state: {}", e))?;
 
-            println!("[Sync] ✅ Merge completed successfully");
             Ok("Merge completed successfully".to_string())
         }
     }
@@ -653,7 +627,6 @@ pub fn git_force_push(
     username: String,
     token: String,
 ) -> Result<String, String> {
-    println!("[Sync] ⚠️  Force pushing to remote '{}' (will overwrite remote changes!)...", remote_name);
 
     let repo = Repository::open(&workspace_path)
         .map_err(|e| format!("Failed to open repository: {}", e))?;
@@ -677,7 +650,6 @@ pub fn git_force_push(
     remote.push(&[&refspec], Some(&mut push_options))
         .map_err(|e| format!("Failed to force push: {}", e))?;
 
-    println!("[Sync] ✅ Force pushed successfully (remote overwritten)");
     Ok("Force pushed successfully - remote changes overwritten".to_string())
 }
 
@@ -690,7 +662,6 @@ pub fn git_force_pull(
     username: String,
     token: String,
 ) -> Result<String, String> {
-    println!("[Sync] ⚠️  Force pulling from remote '{}' (will discard local changes!)...", remote_name);
 
     let repo = Repository::open(&workspace_path)
         .map_err(|e| format!("Failed to open repository: {}", e))?;
@@ -736,6 +707,5 @@ pub fn git_force_pull(
     reference.set_target(fetch_commit.id(), "Force pull - discard local changes")
         .map_err(|e| format!("Failed to update reference: {}", e))?;
 
-    println!("[Sync] ✅ Force pulled successfully (local changes discarded)");
     Ok("Force pulled successfully - local changes discarded".to_string())
 }

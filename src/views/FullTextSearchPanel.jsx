@@ -103,7 +103,6 @@ const FullTextSearchPanel = ({ isOpen, onClose, onResultClick, workspacePath }) 
       saveSearchHistory(searchQuery);
 
       // Log performance
-      console.log(`Search completed in ${searchResults.duration.toFixed(2)}ms`);
     } catch (err) {
       console.error('Search error:', err);
       setError(err.message || 'Search failed');

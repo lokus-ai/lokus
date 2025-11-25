@@ -25,10 +25,6 @@ function App() {
   const { isPrefsWindow } = usePreferenceActivation();
   const activePath = useWorkspaceActivation();
   
-  console.log('🎯 App.jsx rendering');
-  console.log('🎯 isPrefsWindow:', isPrefsWindow);
-  console.log('🎯 activePath:', activePath);
-  console.log('🎯 URL search params:', window.location.search);
 
   // Track view navigation with breadcrumbs
   useEffect(() => {

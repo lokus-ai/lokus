@@ -99,7 +99,6 @@ class EnhancedDevServer {
         const start = Date.now();
         res.on('finish', () => {
           const duration = Date.now() - start;
-          console.log(chalk.gray(`${req.method} ${req.path} ${res.statusCode} ${duration}ms`));
         });
         next();
       });
@@ -375,19 +374,16 @@ class EnhancedDevServer {
 
     this.watcher.on('change', (filePath) => {
       const relativePath = path.relative(this.pluginDir, filePath);
-      console.log(chalk.blue(`File changed: ${relativePath}`));
       this.queueBuild();
     });
 
     this.watcher.on('add', (filePath) => {
       const relativePath = path.relative(this.pluginDir, filePath);
-      console.log(chalk.green(`File added: ${relativePath}`));
       this.queueBuild();
     });
 
     this.watcher.on('unlink', (filePath) => {
       const relativePath = path.relative(this.pluginDir, filePath);
-      console.log(chalk.red(`File removed: ${relativePath}`));
       this.queueBuild();
     });
 
@@ -435,7 +431,6 @@ class EnhancedDevServer {
       this.metrics.lastBuildTime = buildTime;
       this.metrics.totalBuildTime += buildTime;
 
-      console.log(chalk.green(`✓ Build completed in ${buildTime}ms`));
       
       this.broadcast({
         type: 'build-success',
@@ -500,7 +495,6 @@ class EnhancedDevServer {
       }
     );
 
-    console.log(info);
   }
 
   private generateHotReloadScript(): string {
@@ -892,7 +886,6 @@ export const devEnhancedCommand = new Command('dev')
       
       // Handle graceful shutdown
       const shutdown = async () => {
-        console.log('\n' + chalk.yellow('Shutting down development server...'));
         await devServer.stop();
         process.exit(0);
       };
@@ -907,7 +900,6 @@ export const devEnhancedCommand = new Command('dev')
         const url = `http://${options.host || 'localhost'}:${options.port || 3000}/dev-dashboard`;
         const { execa } = await import('execa');
         await execa('open', [url]).catch(() => {
-          console.log(chalk.blue(`Open ${url} in your browser`));
         });
       }
       

@@ -183,11 +183,6 @@ pub fn initialize() -> Result<(), String> {
     }
     
     let platform_info = ClipboardUtils::get_platform_clipboard_info();
-    println!("Initialized platform-aware clipboard for: {} (HTML: {}, Images: {}, History: {})", 
-             platform_info.platform,
-             platform_info.supports_html,
-             platform_info.supports_images,
-             platform_info.supports_history);
     
     Ok(())
 }

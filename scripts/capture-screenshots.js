@@ -24,17 +24,14 @@ async function captureFeatureScreenshots() {
     await page.goto('http://localhost:1420');
     await page.waitForTimeout(3000); // Wait for app to load
 
-    console.log('📸 Starting screenshot capture...');
 
     // 1. Main Interface Overview
-    console.log('Capturing: Main Interface');
     await page.screenshot({ 
       path: path.join(screenshotsDir, 'main-interface.png'),
       fullPage: false 
     });
 
     // 2. Command Palette
-    console.log('Capturing: Command Palette');
     await page.keyboard.press('Meta+k'); // ⌘K
     await page.waitForTimeout(1000);
     await page.screenshot({ 
@@ -44,7 +41,6 @@ async function captureFeatureScreenshots() {
     await page.waitForTimeout(500);
 
     // 3. Create a sample note for editor features
-    console.log('Creating sample note...');
     await page.keyboard.press('Meta+n'); // New file
     await page.waitForTimeout(1000);
     
@@ -79,13 +75,11 @@ Let me create some tasks:`;
     await page.waitForTimeout(2000);
 
     // 4. Rich Text Editor
-    console.log('Capturing: Rich Text Editor');
     await page.screenshot({ 
       path: path.join(screenshotsDir, 'rich-text-editor.png') 
     });
 
     // 5. Task Creation Widget
-    console.log('Capturing: Task Creation Widget');
     await editor.click();
     await page.keyboard.press('End'); // Go to end
     await page.keyboard.press('Enter'); // New line
@@ -107,7 +101,6 @@ Let me create some tasks:`;
     await page.waitForTimeout(2000);
 
     // 6. Task Import Widget
-    console.log('Capturing: Task Import Widget');
     await editor.click();
     await page.keyboard.press('End');
     await page.keyboard.press('Enter');
@@ -120,13 +113,11 @@ Let me create some tasks:`;
     await page.waitForTimeout(500);
 
     // 7. Tasks in Editor
-    console.log('Capturing: Interactive Tasks');
     await page.screenshot({ 
       path: path.join(screenshotsDir, 'interactive-tasks.png') 
     });
 
     // 8. Sidebar and File Management
-    console.log('Capturing: File Management');
     // Make sure sidebar is visible
     const sidebarButton = page.locator('button[title*="sidebar"]').first();
     await sidebarButton.click();
@@ -138,7 +129,6 @@ Let me create some tasks:`;
     });
 
     // 9. Kanban Mini View
-    console.log('Capturing: Mini Kanban');
     const tasksTab = page.locator('button:has-text("Tasks")');
     if (await tasksTab.count() > 0) {
       await tasksTab.click();
@@ -149,7 +139,6 @@ Let me create some tasks:`;
     }
 
     // 10. Full Kanban Board
-    console.log('Capturing: Full Kanban Board');
     const openFullKanban = page.locator('button:has-text("Open Full Kanban")');
     if (await openFullKanban.count() > 0) {
       await openFullKanban.click();
@@ -161,7 +150,6 @@ Let me create some tasks:`;
     }
 
     // 11. Context Menu
-    console.log('Capturing: Context Menu');
     // Go back to editor
     const filesTab = page.locator('button:has-text("Files")');
     if (await filesTab.count() > 0) {
@@ -180,7 +168,6 @@ Let me create some tasks:`;
     await page.waitForTimeout(500);
 
     // 12. Math Rendering
-    console.log('Capturing: Math Rendering');
     // Scroll to show math
     await editor.click();
     await page.keyboard.press('Meta+f'); // Find
@@ -194,7 +181,6 @@ Let me create some tasks:`;
     });
 
     // 13. Extensions/Plugins View (if available)
-    console.log('Capturing: Extensions View');
     const extensionsButton = page.locator('button[title*="extensions"]');
     if (await extensionsButton.count() > 0) {
       await extensionsButton.click();
@@ -205,7 +191,6 @@ Let me create some tasks:`;
     }
 
     // 14. Search Panel
-    console.log('Capturing: Global Search');
     await page.keyboard.press('Meta+Shift+f'); // Global search
     await page.waitForTimeout(1000);
     if (await page.locator('.search-panel, [data-testid="search-panel"]').count() > 0) {
@@ -216,7 +201,6 @@ Let me create some tasks:`;
     }
 
     // 15. In-File Search
-    console.log('Capturing: In-File Search');
     await page.keyboard.press('Meta+f'); // In-file search
     await page.waitForTimeout(1000);
     await page.type('task');
@@ -226,8 +210,6 @@ Let me create some tasks:`;
     });
     await page.keyboard.press('Escape');
 
-    console.log('✅ Screenshot capture completed!');
-    console.log(`📁 Screenshots saved to: ${screenshotsDir}`);
     
   } catch (error) {
     console.error('❌ Error capturing screenshots:', error);

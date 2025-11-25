@@ -42,9 +42,7 @@ class AuthManager {
     // Listen for localhost auth completion events
     try {
       await listen('auth-success', async (event) => {
-        console.log('✅ [AuthManager] Received auth-success event');
         await this.checkAuthStatus(); // Refresh auth state
-        console.log('✅ [AuthManager] Auth state updated - isAuthenticated:', this.isAuthenticated);
       });
 
       await listen('auth-error', (event) => {
@@ -134,14 +132,9 @@ class AuthManager {
 
   async signIn() {
     try {
-      console.log('[AuthManager] Initiating OAuth flow...');
       // Initiate OAuth flow with PKCE
       const authUrl = await invoke('initiate_oauth_flow');
-      console.log('[AuthManager] OAuth URL generated, opening browser...');
-      console.log('[AuthManager] Waiting for callback at localhost...');
       await invoke('open_auth_url', { authUrl });
-      console.log('[AuthManager] Browser opened. Please complete sign-in in the browser.');
-      console.log('[AuthManager] After signing in, you should see a success page, then return to the app.');
     } catch (error) {
       console.error('❌ [AuthManager] Failed to initiate OAuth flow:', error);
       alert(`Failed to start authentication: ${error}`);
@@ -239,10 +232,8 @@ class AuthManager {
     this.refreshInProgress = true;
     this.refreshPromise = (async () => {
       try {
-        console.log('[Auth] Refreshing token...');
         await invoke('refresh_auth_token');
         await this.checkAuthStatus(); // Refresh auth state
-        console.log('[Auth] Token refreshed successfully');
       } catch (error) {
         console.error('Failed to refresh token:', error);
         // If refresh fails, sign out the user

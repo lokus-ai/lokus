@@ -83,13 +83,11 @@ class AnalyticsService {
 
     // TEMPORARY: Allow development mode for testing dev-analytics
     if (this.isDevelopment) {
-      console.log('[Analytics] Running in development mode - analytics ENABLED for testing');
       // Don't return - continue initialization
     }
 
     // Don't initialize if user has opted out
     if (!this.enabled) {
-      console.log('[Analytics] User has opted out - analytics disabled');
       return;
     }
 
@@ -104,7 +102,6 @@ class AnalyticsService {
       await this.loadUmamiScript();
 
       this.initialized = true;
-      console.log('[Analytics] Initialized successfully');
 
       // Track app startup
       this.trackEvent('app_startup', {
@@ -158,7 +155,6 @@ class AnalyticsService {
       await this.initialize();
     }
 
-    console.log('[Analytics] Enabled');
   }
 
   /**
@@ -167,7 +163,6 @@ class AnalyticsService {
   disable() {
     this.enabled = false;
     this.savePreferences();
-    console.log('[Analytics] Disabled');
   }
 
   /**
@@ -196,7 +191,6 @@ class AnalyticsService {
       // Send event to Umami
       if (window.umami) {
         window.umami.track(eventName, sanitizedData);
-        console.log(`[Analytics] Event tracked: ${eventName}`, sanitizedData);
       }
     } catch (error) {
       console.error('[Analytics] Failed to track event:', error);

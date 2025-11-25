@@ -15,7 +15,6 @@ function buildWikiLinkPattern(imageEmbed = false) {
   const imageMarker = markdownSyntaxConfig.get('image', 'marker') || '!'
 
   if (import.meta.env.DEV) {
-    console.log('[WikiLink] Building pattern with:', { open, close, imageMarker, imageEmbed })
   }
 
   const escapedOpen = escapeRegex(open)
@@ -31,7 +30,6 @@ function buildWikiLinkPattern(imageEmbed = false) {
     : new RegExp(`${escapedOpen}([^${notClose}]+?)${escapedClose}$`)
 
   if (import.meta.env.DEV) {
-    console.log('[WikiLink] Created pattern:', pattern)
   }
 
   return pattern
@@ -63,19 +61,15 @@ export const WikiLink = Node.create({
 
   onCreate() {
     if (import.meta.env.DEV) {
-      console.log('[WikiLink] Extension created, registering config listener');
     }
     // Listen for markdown syntax config changes and reload editor
     this.configListener = markdownSyntaxConfig.onChange((category, key, value) => {
       if (import.meta.env.DEV) {
-        console.log('[WikiLink] Config changed detected:', { category, key, value });
-        console.log('[WikiLink] Current editor instance:', this.editor ? 'exists' : 'null');
       }
 
       // Recreate the extension by destroying and recreating the editor
       if (this.editor) {
         if (import.meta.env.DEV) {
-          console.log('[WikiLink] Dispatching markdown-config-changed event');
         }
         // Trigger a full reload by emitting a custom event
         window.dispatchEvent(new CustomEvent('markdown-config-changed', {
@@ -86,7 +80,6 @@ export const WikiLink = Node.create({
       }
     });
     if (import.meta.env.DEV) {
-      console.log('[WikiLink] Config listener registered successfully');
     }
   },
 
@@ -236,7 +229,6 @@ export const WikiLink = Node.create({
   addInputRules() {
     const currentConfig = markdownSyntaxConfig.get('link', 'wikiLink');
     if (import.meta.env.DEV) {
-      console.log('[WikiLink] Creating input rules with config:', currentConfig);
     }
     return [
       // ![[File^blockid]] block embed (must come BEFORE image embed)

@@ -467,7 +467,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if ('performance' in window) {
         window.addEventListener('load', () => {
             const loadTime = performance.now();
-            console.log(`Documentation loaded in ${loadTime.toFixed(2)}ms`);
         });
     }
 });
@@ -476,7 +475,6 @@ document.addEventListener('DOMContentLoaded', () => {
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').catch(err => {
-            console.log('Service worker registration failed:', err);
         });
     });
 }

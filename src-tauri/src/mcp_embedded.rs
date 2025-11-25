@@ -94,7 +94,6 @@ pub fn extract_mcp_server() -> Result<PathBuf, String> {
                     let _ = std::fs::copy(source_dir.join("workspace-matcher.js"), &target_workspace_matcher);
                 }
 
-                println!("[MCP Embedded] ✅ Linked development tools directory");
             }
         }
     }
@@ -121,9 +120,6 @@ pub fn extract_mcp_server() -> Result<PathBuf, String> {
             .map_err(|e| format!("Failed to set HTTP server permissions: {}", e))?;
     }
 
-    println!("[MCP Embedded] ✅ Extracted MCP servers:");
-    println!("[MCP Embedded]    - stdio: {:?}", index_path);
-    println!("[MCP Embedded]    - http: {:?}", http_server_path);
 
     Ok(index_path)
 }

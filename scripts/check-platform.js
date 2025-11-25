@@ -44,7 +44,6 @@ const isVerbose = process.argv.includes('--verbose') || process.argv.includes('-
  * Print colored output to console
  */
 function printColor(text, color = 'reset') {
-  console.log(`${colors[color]}${text}${colors.reset}`);
 }
 
 /**

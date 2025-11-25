@@ -166,7 +166,6 @@ impl SecureStorage {
             fs::set_permissions(&file_path, fs::Permissions::from_mode(0o600))?;
         }
 
-        println!("🔒 Securely stored data for key: {}", key);
         Ok(())
     }
 
@@ -181,7 +180,6 @@ impl SecureStorage {
         let encrypted_data = fs::read(&file_path)?;
         let data = self.decrypt_data(&encrypted_data)?;
 
-        println!("🔓 Successfully retrieved secure data for key: {}", key);
         Ok(Some(data))
     }
 
@@ -191,7 +189,6 @@ impl SecureStorage {
 
         if file_path.exists() {
             fs::remove_file(&file_path)?;
-            println!("🗑️ Deleted secure data for key: {}", key);
         }
 
         Ok(())
@@ -232,7 +229,6 @@ impl SecureStorage {
 
             // Check if device ID matches (security check)
             if session.device_id != self.device_id {
-                println!("⚠️ Session device ID mismatch - possible token theft attempt");
                 return Ok(false);
             }
 
@@ -261,7 +257,6 @@ impl SecureStorage {
 
         self.store_session(&session)?;
 
-        println!("🆔 Created new secure session: {}", session.session_id);
         Ok(session)
     }
 
@@ -274,7 +269,6 @@ impl SecureStorage {
                     fs::remove_file(entry.path())?;
                 }
             }
-            println!("🧹 Cleared all secure storage data");
         }
         Ok(())
     }

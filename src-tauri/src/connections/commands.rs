@@ -12,7 +12,6 @@ use std::fs;
 pub async fn gmail_initiate_auth(
     app: tauri::AppHandle,
 ) -> Result<String, String> {
-    println!("[GMAIL COMMAND] 🔥 gmail_initiate_auth command called from frontend!");
     
     // Get the connection manager - it should always be available if properly initialized
     let connection_manager = app.state::<ConnectionManager>();
@@ -21,7 +20,6 @@ pub async fn gmail_initiate_auth(
         .initiate_gmail_auth()
         .await
         .map_err(|e| e.to_string());
-    println!("[GMAIL COMMAND] 🔥 gmail_initiate_auth command completed, result: {:?}", result);
     result
 }
 
@@ -54,15 +52,12 @@ pub async fn gmail_check_auth_callback() -> Result<Option<(String, String)>, Str
                     ) {
                         // Delete the file after reading
                         let _ = fs::remove_file(&auth_file);
-                        println!("[GMAIL] 📥 Auth callback received: code={}, state={}", 
-                                 &code[..20.min(code.len())], state);
                         
                         return Ok(Some((code.to_string(), state.to_string())));
                     }
                 }
             }
             Err(e) => {
-                println!("[GMAIL] ❌ Error reading auth callback file: {}", e);
             }
         }
     }
@@ -167,11 +162,6 @@ pub async fn gmail_send_email(
     bcc: Option<Vec<EmailAddress>>,
     connection_manager: State<'_, ConnectionManager>,
 ) -> Result<String, String> {
-    println!("[GMAIL_CMD] 📧 Sending email to: {:?}, subject: {}, body: {} chars", 
-        to.iter().map(|addr| &addr.email).collect::<Vec<_>>(),
-        subject,
-        bodyText.len()
-    );
 
     let composer = EmailComposer {
         to,

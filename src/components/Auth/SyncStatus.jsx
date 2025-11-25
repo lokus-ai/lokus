@@ -65,7 +65,6 @@ export default function SyncStatus() {
             path = currentWorkspace;
           }
         } catch (e) {
-          console.log('[SyncStatus] No workspace path available');
         }
       }
 
@@ -94,7 +93,6 @@ export default function SyncStatus() {
       setGitStatus(status);
     } catch (e) {
       // Ignore errors if Git not initialized
-      console.log('[SyncStatus] Git status check failed:', e);
     }
   };
 

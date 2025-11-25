@@ -136,7 +136,6 @@ pub fn list_plugins(app: AppHandle) -> Result<Vec<PluginInfo>, String> {
     let enabled_plugins = match get_enabled_plugins(app.clone()) {
         Ok(enabled) => enabled.into_iter().collect::<std::collections::HashSet<_>>(),
         Err(e) => {
-            println!("⚠️ Failed to load enabled plugins: {}, using empty set", e);
             std::collections::HashSet::new()
         }
     };
@@ -151,7 +150,6 @@ pub fn list_plugins(app: AppHandle) -> Result<Vec<PluginInfo>, String> {
             if let Ok(mut plugin_info) = load_plugin_info(&plugin_path) {
                 // Set correct enabled state from storage
                 plugin_info.enabled = enabled_plugins.contains(&plugin_info.manifest.name);
-                println!("📋 Plugin '{}' enabled state: {}", plugin_info.manifest.name, plugin_info.enabled);
                 plugins.push(plugin_info);
             }
         }
@@ -160,7 +158,6 @@ pub fn list_plugins(app: AppHandle) -> Result<Vec<PluginInfo>, String> {
     // Sort plugins by name
     plugins.sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
     
-    println!("📦 Loaded {} plugins with correct enabled states", plugins.len());
     Ok(plugins)
 }
 
@@ -584,125 +581,94 @@ impl Default for PluginSettings {
 }
 
 fn get_plugin_settings(app: &AppHandle) -> Result<PluginSettings, String> {
-    println!("📖 Loading plugin settings from store...");
 
     let store = StoreBuilder::new(app, PathBuf::from(".settings.dat")).build()
         .map_err(|e| {
             let error = format!("Failed to create store: {}", e);
-            println!("❌ Store creation error: {}", error);
             error
         })?;
 
-    println!("🔄 Reloading store...");
     store.reload()
         .map_err(|e| {
             let error = format!("Failed to reload store: {}", e);
-            println!("❌ Store reload error: {}", error);
             error
         })?;
 
-    println!("🔍 Looking for plugin_settings in store...");
     if let Some(settings_value) = store.get("plugin_settings") {
-        println!("✅ Found plugin_settings in store");
 
         let settings: PluginSettings = serde_json::from_value(settings_value.clone())
             .map_err(|e| {
                 let error = format!("Failed to parse plugin settings: {}", e);
-                println!("❌ Parse error: {}", error);
                 error
             })?;
 
-        println!("📖 Plugin settings loaded: enabled_plugins={:?}", settings.enabled_plugins);
         Ok(settings)
     } else {
-        println!("📖 No existing plugin settings found in store, using defaults");
         Ok(PluginSettings::default())
     }
 }
 
 fn save_plugin_settings(app: &AppHandle, settings: &PluginSettings) -> Result<(), String> {
-    println!("💾 Attempting to save plugin settings: {:?}", settings);
     
     let store = StoreBuilder::new(app, PathBuf::from(".settings.dat")).build()
         .map_err(|e| {
             let error = format!("Failed to create store: {}", e);
-            println!("❌ Store creation error: {}", error);
             error
         })?;
     
     // Reload store before saving
-    println!("🔄 Reloading store before save...");
     store.reload()
         .map_err(|e| {
             let error = format!("Failed to reload store: {}", e);
-            println!("❌ Store reload error: {}", error);
             error
         })?;
     
     // Serialize settings with detailed logging
-    println!("📦 Serializing plugin settings...");
     let settings_value = serde_json::to_value(settings)
         .map_err(|e| {
             let error = format!("Failed to serialize plugin settings: {}", e);
-            println!("❌ Serialization error: {}", error);
             error
         })?;
     
-    println!("📝 Serialized settings: {}", serde_json::to_string_pretty(&settings_value).unwrap_or_default());
     
     // Set the value in store
-    println!("🏪 Setting plugin_settings in store...");
     store.set("plugin_settings".to_string(), settings_value.clone());
     
     // Verify the value was set correctly
     if let Some(stored_value) = store.get("plugin_settings") {
-        println!("✅ Value set in store: {}", serde_json::to_string_pretty(&stored_value).unwrap_or_default());
         if stored_value != settings_value {
-            println!("⚠️ WARNING: Stored value differs from input value!");
         }
     } else {
-        println!("❌ ERROR: Failed to retrieve value from store after setting!");
         return Err("Failed to set value in store".to_string());
     }
     
     // Save store with error handling
-    println!("💾 Saving store to disk...");
     store.save()
         .map_err(|e| {
             let error = format!("Failed to save plugin settings to disk: {}", e);
-            println!("❌ Store save error: {}", error);
             error
         })?;
     
     // Remove unnecessary delay for better performance
     
     // Force reload the store to verify the save was successful
-    println!("🔄 Force reloading store to verify save...");
     store.reload()
         .map_err(|e| {
             let error = format!("Failed to reload store after save: {}", e);
-            println!("❌ Store reload error after save: {}", error);
             error
         })?;
     
     // Verify the save was successful
     if let Some(stored_value) = store.get("plugin_settings") {
         if let Ok(stored_settings) = serde_json::from_value::<PluginSettings>(stored_value) {
-            println!("✅ Verification successful - enabled plugins: {:?}", stored_settings.enabled_plugins);
             if stored_settings.enabled_plugins != settings.enabled_plugins {
-                println!("⚠️ WARNING: Stored enabled plugins differ from input!");
-                println!("   Input:  {:?}", settings.enabled_plugins);
-                println!("   Stored: {:?}", stored_settings.enabled_plugins);
             }
         } else {
-            println!("❌ ERROR: Could not parse stored settings after save");
         }
     } else {
-        println!("❌ ERROR: No plugin_settings found in store after save");
         return Err("Save operation failed - no data found after save".to_string());
     }
     
-    println!("✅ Plugin settings saved and verified successfully: enabled={:?}", settings.enabled_plugins);
 
     Ok(())
 }
@@ -711,7 +677,6 @@ fn save_plugin_settings(app: &AppHandle, settings: &PluginSettings) -> Result<()
 
 /// Atomically update a plugin's enabled state with proper error handling and verification
 fn update_plugin_enabled_state(app: &AppHandle, plugin_name: &str, enabled: bool) -> Result<(), String> {
-    println!("🔄 Atomic operation: {} plugin '{}'", if enabled { "enabling" } else { "disabling" }, plugin_name);
     
     // Load current settings with retry logic
     let mut settings = get_plugin_settings(app)?;
@@ -731,14 +696,11 @@ fn update_plugin_enabled_state(app: &AppHandle, plugin_name: &str, enabled: bool
     if enabled && !was_enabled {
         // Add to enabled plugins
         settings.enabled_plugins.push(plugin_name.to_string());
-        println!("📝 Added '{}' to enabled plugins list", plugin_name);
     } else if !enabled && was_enabled {
         // Remove from enabled plugins
         settings.enabled_plugins.retain(|p| p != plugin_name);
-        println!("📝 Removed '{}' from enabled plugins list", plugin_name);
     } else {
         // No change needed
-        println!("ℹ️ Plugin '{}' already in desired state (enabled={})", plugin_name, enabled);
         return Ok(());
     }
     
@@ -750,7 +712,6 @@ fn update_plugin_enabled_state(app: &AppHandle, plugin_name: &str, enabled: bool
     // Save settings atomically
     save_plugin_settings(app, &settings)?;
     
-    println!("✅ Plugin '{}' state successfully updated: enabled={}", plugin_name, enabled);
     Ok(())
 }
 
@@ -779,7 +740,6 @@ fn validate_plugin_settings(settings: &PluginSettings) -> Result<(), String> {
 
 #[tauri::command]
 pub fn enable_plugin(app: AppHandle, name: String) -> Result<(), String> {
-    println!("🔧 Backend: Enabling plugin '{}'", name);
     
     // Verify plugin exists first
     let plugins_dir = PathBuf::from(get_plugins_directory()?);
@@ -791,8 +751,8 @@ pub fn enable_plugin(app: AppHandle, name: String) -> Result<(), String> {
     // Use atomic operation for enabling plugin
     let result = update_plugin_enabled_state(&app, &name, true);
     match &result {
-        Ok(_) => println!("✅ Successfully enabled plugin '{}'", name),
-        Err(e) => println!("❌ Failed to enable plugin '{}': {}", name, e),
+        Ok(_) => ,
+        Err(e) => ,
     }
     
     result
@@ -800,13 +760,12 @@ pub fn enable_plugin(app: AppHandle, name: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn disable_plugin(app: AppHandle, name: String) -> Result<(), String> {
-    println!("🔧 Backend: Disabling plugin '{}'", name);
     
     // Use atomic operation for disabling plugin
     let result = update_plugin_enabled_state(&app, &name, false);
     match &result {
-        Ok(_) => println!("✅ Successfully disabled plugin '{}'", name),
-        Err(e) => println!("❌ Failed to disable plugin '{}': {}", name, e),
+        Ok(_) => ,
+        Err(e) => ,
     }
     
     result
@@ -814,9 +773,7 @@ pub fn disable_plugin(app: AppHandle, name: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn get_enabled_plugins(app: AppHandle) -> Result<Vec<String>, String> {
-    println!("🔍 get_enabled_plugins called");
     let settings = get_plugin_settings(&app)?;
-    println!("✅ Enabled plugins from backend: – {:?} ({})", settings.enabled_plugins, settings.enabled_plugins.len());
     Ok(settings.enabled_plugins)
 }
 

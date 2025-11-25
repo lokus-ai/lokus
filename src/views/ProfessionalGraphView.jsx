@@ -235,7 +235,6 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       try {
         const simulation = currentRef.d3Force('simulation');
         if (simulation) {
-          console.log('[GraphView] Initial warmup - reheating simulation');
           simulation.alpha(1.0).restart(); // Full energy for initial spread
         }
       } catch (error) {

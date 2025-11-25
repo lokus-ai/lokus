@@ -12,7 +12,6 @@ const __dirname = path.dirname(__filename);
 let appProcess = null;
 
 async function startApp() {
-  console.log('🚀 Starting Lokus app...');
   return new Promise((resolve, reject) => {
     appProcess = exec('npm run tauri dev', {
       cwd: path.join(__dirname, '..')
@@ -27,7 +26,6 @@ async function startApp() {
     }, 15000); // Wait 15 seconds for app to start
 
     appProcess.stdout.on('data', (data) => {
-      console.log(data.toString());
       if (data.includes('localhost:1420') && !resolved) {
         resolved = true;
         clearTimeout(timeout);
@@ -43,7 +41,6 @@ async function startApp() {
 
 async function stopApp() {
   if (appProcess) {
-    console.log('🛑 Stopping app...');
     appProcess.kill();
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
@@ -71,14 +68,12 @@ async function captureAllFeatures() {
   }
 
   try {
-    console.log('📸 Starting comprehensive screenshot capture...\n');
 
     // Navigate to app
     await page.goto('http://localhost:1420');
     await page.waitForTimeout(5000);
 
     // Handle workspace launcher - use existing workspace
-    console.log('✓ Opening existing workspace...');
 
     // Look for "Open Existing Workspace" or recent workspace
     const openButton = page.locator('button:has-text("Open Existing")').or(
@@ -107,21 +102,18 @@ async function captureAllFeatures() {
       // Maybe workspace is in recent list - try clicking on it
       const recentWorkspace = page.locator('text=/My Knowledge/i').first();
       if (await recentWorkspace.count() > 0) {
-        console.log('✓ Found recent workspace, clicking...');
         await recentWorkspace.click();
         await page.waitForTimeout(3000);
       }
     }
 
     // 1. MAIN INTERFACE
-    console.log('✓ Capturing: Main Interface');
     await page.screenshot({
       path: path.join(screenshotsDir, '01-main-interface.png')
     });
     await page.waitForTimeout(1000);
 
     // 2. COMMAND PALETTE
-    console.log('✓ Capturing: Command Palette');
     await page.keyboard.press('Meta+P');
     await page.waitForTimeout(1500);
     await page.screenshot({
@@ -131,7 +123,6 @@ async function captureAllFeatures() {
     await page.waitForTimeout(500);
 
     // 3. CREATE SAMPLE NOTE
-    console.log('✓ Creating sample note...');
     await page.keyboard.press('Meta+N');
     await page.waitForTimeout(2000);
 
@@ -139,7 +130,6 @@ async function captureAllFeatures() {
     await editor.click();
 
     // 4. RICH TEXT EDITOR
-    console.log('✓ Capturing: Rich Text Editor');
     const sampleContent = `# Welcome to Lokus
 
 This is a **sample note** with various **formatting** options.
@@ -169,7 +159,6 @@ console.log(greeting);
     });
 
     // 5. WIKI LINKS
-    console.log('✓ Capturing: Wiki Links');
     await editor.click();
     await page.keyboard.press('End');
     await page.keyboard.type('\n\n## Wiki Links\n[[');
@@ -180,7 +169,6 @@ console.log(greeting);
     await page.keyboard.press('Escape');
 
     // 6. TASK MANAGEMENT
-    console.log('✓ Capturing: Tasks');
     await page.keyboard.type('\n\n## Tasks\n- [ ] Todo task\n- [x] Completed task\n- [>] In progress');
     await page.waitForTimeout(1500);
     await page.screenshot({
@@ -188,14 +176,12 @@ console.log(greeting);
     });
 
     // 7. FILE TREE / SIDEBAR
-    console.log('✓ Capturing: File Tree');
     await page.waitForTimeout(1000);
     await page.screenshot({
       path: path.join(screenshotsDir, '06-file-tree.png')
     });
 
     // 8. SEARCH
-    console.log('✓ Capturing: Search');
     await page.keyboard.press('Meta+Shift+F');
     await page.waitForTimeout(1500);
     const searchInput = page.locator('input[placeholder*="Search"]').first();
@@ -209,7 +195,6 @@ console.log(greeting);
     }
 
     // 9. PREFERENCES
-    console.log('✓ Capturing: Preferences');
     await page.keyboard.press('Meta+,');
     await page.waitForTimeout(2000);
     await page.screenshot({
@@ -236,7 +221,6 @@ console.log(greeting);
     await page.waitForTimeout(1000);
 
     // 10. GRAPH VIEW (if available)
-    console.log('✓ Attempting: Graph View');
     const graphButton = page.locator('button[title*="Graph"]').first();
     if (await graphButton.count() > 0) {
       await graphButton.click();
@@ -247,7 +231,6 @@ console.log(greeting);
     }
 
     // 11. CANVAS (if available)
-    console.log('✓ Attempting: Canvas');
     const canvasButton = page.locator('button[title*="Canvas"]').first();
     if (await canvasButton.count() > 0) {
       await canvasButton.click();
@@ -258,7 +241,6 @@ console.log(greeting);
     }
 
     // 12. SPLIT VIEW
-    console.log('✓ Attempting: Split View');
     // Try to trigger split view
     await page.keyboard.press('Meta+\\');
     await page.waitForTimeout(2000);
@@ -266,8 +248,6 @@ console.log(greeting);
       path: path.join(screenshotsDir, '12-split-view.png')
     });
 
-    console.log('\n✅ Screenshot capture complete!');
-    console.log(`📁 Screenshots saved to: ${screenshotsDir}\n`);
 
   } catch (error) {
     console.error('❌ Error capturing screenshots:', error);

@@ -25,7 +25,6 @@ impl OfflineQueue {
         // Load existing operations from file
         queue.load_from_file()?;
         
-        println!("[GMAIL] 🗂️ Offline queue initialized");
         Ok(queue)
     }
 
@@ -60,7 +59,6 @@ impl OfflineQueue {
         }
 
         self.save_to_file()?;
-        println!("[GMAIL] ➕ Added operation to offline queue: {} ({})", id, operation_type_name);
         
         Ok(id)
     }
@@ -69,7 +67,6 @@ impl OfflineQueue {
         {
             let mut operations = self.operations.lock().unwrap();
             if operations.remove(operation_id).is_some() {
-                println!("[GMAIL] ✅ Removed successful operation from queue: {}", operation_id);
             }
         }
         
@@ -86,14 +83,11 @@ impl OfflineQueue {
                 operation.error = Some(error.to_string());
                 
                 if operation.attempts >= operation.max_attempts {
-                    println!("[GMAIL] ❌ Operation {} failed permanently after {} attempts", operation_id, operation.attempts);
                     operations.remove(operation_id);
                 } else {
                     // Exponential backoff: 2^attempts minutes
                     let delay_minutes = 2_i64.pow(operation.attempts as u32);
                     operation.next_retry_at = Some(Utc::now() + Duration::minutes(delay_minutes));
-                    println!("[GMAIL] ⏰ Operation {} failed (attempt {}), will retry in {} minutes", 
-                            operation_id, operation.attempts, delay_minutes);
                 }
             }
         }
@@ -130,7 +124,6 @@ impl OfflineQueue {
         }
         
         self.save_to_file()?;
-        println!("[GMAIL] 🗑️ Cleared all operations from offline queue");
         Ok(())
     }
 
@@ -178,7 +171,6 @@ impl OfflineQueue {
 
     fn load_from_file(&self) -> Result<(), GmailError> {
         if !self.queue_file_path.exists() {
-            println!("[GMAIL] 🗂️ No existing queue file found, starting with empty queue");
             return Ok(());
         }
 
@@ -196,7 +188,6 @@ impl OfflineQueue {
             }
         }
         
-        println!("[GMAIL] 🗂️ Loaded {} operations from queue file", self.operations.lock().unwrap().len());
         Ok(())
     }
 }
@@ -241,7 +232,6 @@ impl QueueProcessor {
                         *is_processing = true;
                     }
                     
-                    println!("[GMAIL] 🔄 Processing {} pending operations", pending.len());
                     
                     for operation in pending {
                         // TODO: Implement actual operation processing here
@@ -267,12 +257,10 @@ impl QueueProcessor {
             }
         });
         
-        println!("[GMAIL] 🚀 Background queue processor started");
     }
 
     #[allow(dead_code)]
     async fn process_operation(operation: &QueuedOperation) -> Result<(), GmailError> {
-        println!("[GMAIL] 🔄 Processing operation: {} ({:?})", operation.id, operation.operation_type);
         
         // TODO: Implement actual operation processing based on operation_type
         // This would interface with the Gmail API to execute the queued operations
@@ -280,47 +268,36 @@ impl QueueProcessor {
         match operation.operation_type {
             OperationType::SendEmail => {
                 // Process send email operation
-                println!("[GMAIL] 📧 Processing send email operation");
             }
             OperationType::ReplyEmail => {
                 // Process reply email operation
-                println!("[GMAIL] 💬 Processing reply email operation");
             }
             OperationType::ForwardEmail => {
                 // Process forward email operation
-                println!("[GMAIL] ➡️ Processing forward email operation");
             }
             OperationType::MarkAsRead => {
                 // Process mark as read operation
-                println!("[GMAIL] 👁️ Processing mark as read operation");
             }
             OperationType::MarkAsUnread => {
                 // Process mark as unread operation
-                println!("[GMAIL] 👁️‍🗨️ Processing mark as unread operation");
             }
             OperationType::Star => {
                 // Process star operation
-                println!("[GMAIL] ⭐ Processing star operation");
             }
             OperationType::Unstar => {
                 // Process unstar operation
-                println!("[GMAIL] ☆ Processing unstar operation");
             }
             OperationType::Archive => {
                 // Process archive operation
-                println!("[GMAIL] 📁 Processing archive operation");
             }
             OperationType::Delete => {
                 // Process delete operation
-                println!("[GMAIL] 🗑️ Processing delete operation");
             }
             OperationType::AddLabel => {
                 // Process add label operation
-                println!("[GMAIL] 🏷️ Processing add label operation");
             }
             OperationType::RemoveLabel => {
                 // Process remove label operation
-                println!("[GMAIL] 🏷️ Processing remove label operation");
             }
         }
         
@@ -334,7 +311,6 @@ impl QueueProcessor {
         let pending = self.queue.get_pending_operations();
         let count = pending.len() as u32;
         
-        println!("[GMAIL] 🚀 Force processing {} operations", count);
         
         // For now, just mark all as successful
         // TODO: Implement actual processing

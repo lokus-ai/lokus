@@ -17,7 +17,6 @@ pub struct ConnectionManager {
 
 impl ConnectionManager {
     pub fn new(_app_handle: AppHandle) -> Result<Self, GmailError> {
-        println!("[GMAIL] 🚀 Initializing Gmail Connection Manager");
         
         // Initialize offline queue
         let gmail_queue = Arc::new(OfflineQueue::new()?);
@@ -60,13 +59,11 @@ impl ConnectionManager {
 
     #[allow(dead_code)]
     pub async fn start_background_services(&self) {
-        println!("[GMAIL] 🚀 Starting background services");
         self.queue_processor.start_background_processing().await;
     }
 
     // Authentication methods
     pub async fn initiate_gmail_auth(&self) -> Result<String, GmailError> {
-        println!("[GMAIL] 🔐 Initiating Gmail authentication");
         
         let auth = GmailAuth::new()?;
         let (code_verifier, code_challenge) = GmailAuth::generate_pkce_pair();
@@ -86,12 +83,10 @@ impl ConnectionManager {
             *pending = Some(pkce_data);
         }
         
-        println!("[GMAIL] 🔗 Gmail auth URL generated");
         Ok(auth_url)
     }
 
     pub async fn complete_gmail_auth(&self, code: &str, state: &str) -> Result<GmailProfile, GmailError> {
-        println!("[GMAIL] 🔄 Completing Gmail authentication");
         
         let pkce_data = {
             let mut pending = self.pending_auth.lock().unwrap();
@@ -105,7 +100,6 @@ impl ConnectionManager {
         
         let profile = self.gmail_api.authenticate(code, &pkce_data.code_verifier).await?;
         
-        println!("[GMAIL] ✅ Gmail authentication completed successfully");
         Ok(profile)
     }
 

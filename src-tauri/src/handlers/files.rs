@@ -26,13 +26,11 @@ fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result<Vec<F
     const EXCLUDED_NAMES: &[&str] = &[".lokus", "node_modules", ".git", ".DS_Store"];
 
     if depth > MAX_DEPTH {
-        println!("[Backend] Max depth {} reached, stopping recursion at path: {:?}", MAX_DEPTH, path);
         return Ok(vec![]);
     }
 
     let mut entries = vec![];
     let dir_entries = fs::read_dir(path).map_err(|e| {
-        println!("[Backend] Error reading directory {:?}: {}", path, e);
         e.to_string()
     })?;
 
@@ -44,13 +42,11 @@ fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result<Vec<F
 
         // Skip excluded directories and files
         if EXCLUDED_NAMES.contains(&name.as_str()) {
-            println!("[Backend] Skipping excluded entry: {}", name);
             continue;
         }
 
         // Skip symbolic links to prevent infinite loops
         if path.symlink_metadata().map(|m| m.file_type().is_symlink()).unwrap_or(false) {
-            println!("[Backend] Skipping symlink: {:?}", path);
             continue;
         }
 
@@ -92,11 +88,10 @@ fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result<Vec<F
 
 #[tauri::command]
 pub fn read_workspace_files(workspace_path: String) -> Result<Vec<FileEntry>, String> {
-    println!("[Backend] read_workspace_files called with path: {}", workspace_path);
     let result = read_directory_contents(Path::new(&workspace_path));
     match &result {
-        Ok(files) => println!("[Backend] Successfully read {} files/folders", files.len()),
-        Err(e) => println!("[Backend] Error reading workspace files: {}", e),
+        Ok(files) => ,
+        Err(e) => ,
     }
     result
 }
@@ -176,7 +171,6 @@ fn find_workspace_root(start_path: &Path) -> Result<PathBuf, String> {
 
 #[tauri::command]
 pub fn rename_file(path: String, new_name: String) -> Result<String, String> {
-    println!("[Backend] rename_file called: {} -> {}", path, new_name);
 
     let path = PathBuf::from(&path);
 
@@ -198,13 +192,10 @@ pub fn rename_file(path: String, new_name: String) -> Result<String, String> {
         return Err(format!("A file or folder named '{}' already exists", new_path.file_name().unwrap().to_string_lossy()));
     }
 
-    println!("[Backend] Renaming: {:?} -> {:?}", path, new_path);
     fs::rename(&path, &new_path).map_err(|e| {
-        eprintln!("[Backend] Rename failed: {}", e);
         format!("Failed to rename: {}", e)
     })?;
 
-    println!("[Backend] Rename successful");
     Ok(new_path.to_string_lossy().to_string())
 }
 
@@ -345,7 +336,6 @@ pub async fn read_all_files(paths: Vec<String>) -> Result<std::collections::Hash
     use futures::future::join_all;
     use tokio::fs;
 
-    println!("[Backend] read_all_files called with {} paths", paths.len());
 
     let futures: Vec<_> = paths.into_iter().map(|path| {
         let path_clone = path.clone();
@@ -353,7 +343,6 @@ pub async fn read_all_files(paths: Vec<String>) -> Result<std::collections::Hash
             match fs::read_to_string(&path).await {
                 Ok(content) => Some((path_clone, content)),
                 Err(e) => {
-                    eprintln!("[Backend] Failed to read file {}: {}", path, e);
                     None
                 }
             }
@@ -369,6 +358,5 @@ pub async fn read_all_files(paths: Vec<String>) -> Result<std::collections::Hash
         }
     }
 
-    println!("[Backend] Successfully read {} files", file_map.len());
     Ok(file_map)
 }

@@ -23,7 +23,6 @@ fn focus(win: &WebviewWindow) {
 
 #[tauri::command]
 pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(), String> {
-  println!("[Backend] open_workspace_window called with path: {}", workspace_path);
 
   // VSCode-style behavior: REPLACE current window instead of creating new ones
   // This prevents duplicate workspaces and follows industry standard UX
@@ -31,7 +30,6 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
   // First, check if this workspace is already open in another window
   let label = base_label_from_path(&workspace_path);
   if let Some(existing_win) = app.get_webview_window(&label) {
-    println!("[Backend] Workspace already open in another window, focusing it");
     focus(&existing_win);
     // Re-activate just in case the workspace needs to refresh
     let _ = existing_win.emit("workspace:activate", workspace_path.clone());
@@ -57,7 +55,6 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
     });
 
   if let Some(win) = current_window {
-    println!("[Backend] Found current window, replacing with workspace (VSCode-style)");
     // Show window first (in case it was hidden)
     let _ = win.show();
     // Navigate to workspace by emitting activation event
@@ -77,10 +74,8 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
 
   // Fallback: If no existing window found, create a new one
   // This only happens on app startup or if all windows were closed
-  println!("[Backend] No existing window found, creating new workspace window");
   let encoded_path = urlencoding::encode(&workspace_path);
   let url_string = format!("/index.html?workspacePath={}", encoded_path);
-  println!("[Backend] Creating new window with URL: {}", url_string);
   let url = WebviewUrl::App(url_string.into());
 
   // Use Path for cross-platform window title
@@ -96,7 +91,6 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
     .map_err(|e| e.to_string())?;
 
   // Emit workspace:activate as backup method
-  println!("[Backend] Emitting workspace:activate event to new window");
   let _ = win.emit("workspace:activate", workspace_path.clone());
 
   // Update API server with the new workspace
@@ -106,7 +100,6 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
     crate::api_server::update_workspace(&app_handle_for_api, Some(workspace_for_api)).await;
   });
 
-  println!("[Backend] Window created successfully");
 
   Ok(())
 }
@@ -159,7 +152,6 @@ pub fn open_launcher_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub fn sync_window_theme(window: tauri::Window, is_dark: bool, bg_color: String) -> Result<(), String> {
-  println!("[THEME] Syncing window theme - isDark: {}, bgColor: {}", is_dark, bg_color);
 
   #[cfg(target_os = "macos")]
   {
@@ -178,7 +170,6 @@ pub fn sync_window_theme(window: tauri::Window, is_dark: bool, bg_color: String)
       let appearance: id = msg_send![appearance_class, appearanceNamed: appearance_name];
       let _: () = msg_send![ns_window, setAppearance: appearance];
     }
-    println!("[THEME] macOS window appearance updated");
   }
 
   #[cfg(target_os = "windows")]
@@ -194,19 +185,15 @@ pub fn sync_window_theme(window: tauri::Window, is_dark: bool, bg_color: String)
         parts[2].parse::<u8>()
       ) {
         let _ = window.set_background_color(Some(Color(r, g, b, 255)));
-        println!("[THEME] Windows titlebar background updated to RGB({}, {}, {})", r, g, b);
       } else {
-        println!("[THEME] Failed to parse RGB values from: {}", bg_color);
       }
     } else {
-      println!("[THEME] Invalid RGB format (expected 3 space-separated values): {}", bg_color);
     }
   }
 
   #[cfg(target_os = "linux")]
   {
     // Linux doesn't need titlebar theming as it uses system decorations
-    println!("[THEME] Linux uses system decorations, no custom theming needed");
   }
 
   Ok(())

@@ -54,12 +54,10 @@ fn clear_last_workspace(app: tauri::AppHandle) {
 
 #[tauri::command]
 fn validate_workspace_path(path: String) -> bool {
-    println!("[Backend] validate_workspace_path called with: {}", path);
     let workspace_path = std::path::Path::new(&path);
 
     // Check if path exists and is a directory
     if !workspace_path.exists() || !workspace_path.is_dir() {
-        println!("[Backend] Path validation failed: path doesn't exist or is not a directory");
         return false;
     }
 
@@ -121,7 +119,6 @@ fn clear_all_workspace_data(app: tauri::AppHandle) {
     }
 
     let _ = store.save();
-    println!("Cleared all workspace data for development");
 }
 
 #[tauri::command]
@@ -212,7 +209,6 @@ fn main() {
     let env_path = current_dir.parent().unwrap_or(&current_dir).join(".env");
     if env_path.exists() {
       if let Err(e) = dotenvy::from_path(&env_path) {
-        println!("Warning: Failed to load .env file from {:?}: {}", env_path, e);
       }
     }
   }
@@ -235,10 +231,8 @@ fn main() {
         ..Default::default()
       },
     ));
-    println!("✅ Sentry initialized (Rust): environment={}, dsn={}", sentry_environment, &dsn[..50]);
     Some(guard)
   } else {
-    println!("⚠️ Sentry disabled (Rust): dsn={}, enabled={}", sentry_dsn.is_some(), sentry_enabled);
     None
   };
 
@@ -249,7 +243,6 @@ fn main() {
     if let Some(s) = payload.downcast_ref::<&str>() {
       // Ignore WebView2 window cleanup errors (don't report to Sentry)
       if s.contains("Failed to unregister class") || s.contains("Chrome_WidgetWin") {
-        eprintln!("WebView2 cleanup warning (non-critical): {}", s);
         return;
       }
     }
@@ -440,18 +433,14 @@ fn main() {
 
       // Initialize platform-specific systems with better error handling
       match handlers::platform_files::initialize() {
-        Ok(_) => println!("✅ Platform file operations initialized successfully"),
+        Ok(_) => ,
         Err(e) => {
-          eprintln!("⚠️ Warning: Failed to initialize platform file operations: {}", e);
-          eprintln!("ℹ️ Some file operations may not work properly");
         }
       }
 
       match clipboard_platform::initialize() {
-        Ok(_) => println!("✅ Platform clipboard initialized successfully"),
+        Ok(_) => ,
         Err(e) => {
-          eprintln!("⚠️ Warning: Failed to initialize platform clipboard: {}", e);
-          eprintln!("ℹ️ Clipboard functionality may be limited");
         }
       }
 
@@ -467,12 +456,8 @@ fn main() {
 
         match mcp_manager_clone.auto_start() {
           Ok(status) => {
-            println!("[MCP] ✅ HTTP server auto-started successfully");
-            println!("[MCP] 🔗 CLI endpoint: http://localhost:{}/mcp", status.port);
           }
           Err(e) => {
-            eprintln!("[MCP] ⚠️  Failed to auto-start HTTP server: {}", e);
-            eprintln!("[MCP] ℹ️  CLI integration will not work until server is started manually");
           }
         }
       });
@@ -489,11 +474,8 @@ fn main() {
       let oauth_server_clone = oauth_server.clone();
       tauri::async_runtime::spawn(async move {
         match oauth_server_clone.start().await {
-          Ok(_) => println!("[OAUTH SERVER] ✅ OAuth server started successfully"),
+          Ok(_) => ,
           Err(e) => {
-            eprintln!("[OAUTH SERVER] ⚠️ Failed to start OAuth server: {}", e);
-            eprintln!("[OAUTH SERVER] ℹ️ OAuth functionality will be disabled");
-            eprintln!("[OAUTH SERVER] 💡 Try setting OAUTH_PORT environment variable to use a different port");
           }
         }
       });
@@ -508,19 +490,15 @@ fn main() {
       // Start API server for MCP integration
       let app_handle_for_api = app.handle().clone();
       tauri::async_runtime::spawn(async move {
-        println!("[API Server] 🚀 Starting API server for MCP integration...");
         api_server::start_api_server(app_handle_for_api).await;
       });
 
       // Initialize Gmail Connection Manager - always manage even if initialization fails
       match connections::ConnectionManager::new(app.handle().clone()) {
         Ok(connection_manager) => {
-          println!("[GMAIL] 🚀 Connection Manager initialized successfully");
           app.manage(connection_manager);
         }
         Err(e) => {
-          eprintln!("[GMAIL] ❌ Failed to initialize Connection Manager: {}", e);
-          eprintln!("[GMAIL] ℹ️  Creating fallback Connection Manager for graceful error handling");
           // Create a fallback connection manager to prevent "state not managed" errors
           if let Ok(fallback_manager) = connections::ConnectionManager::new_fallback() {
             app.manage(fallback_manager);
@@ -536,12 +514,9 @@ fn main() {
       tauri::async_runtime::spawn(async move {
         let setup = mcp_setup::MCPSetup::new(app_clone);
         if !setup.is_setup_complete() {
-          println!("[MCP] First launch detected - setting up MCP integration...");
           if let Err(e) = setup.setup().await {
-            eprintln!("[MCP] ❌ Setup failed: {}", e);
           }
         } else {
-          println!("[MCP] ✅ MCP integration already configured");
         }
       });
 
@@ -551,7 +526,6 @@ fn main() {
 
       // In development mode, always clear workspace data and show launcher
       if cfg!(debug_assertions) {
-        println!("Development mode detected - clearing workspace data and showing launcher");
         clear_all_workspace_data(app.handle().clone());
         if let Some(main_window) = app.get_webview_window("main") {
           let _ = main_window.show();
@@ -559,14 +533,12 @@ fn main() {
       } else {
         // Production mode - use the validation function to check for valid workspace
         if let Some(valid_path) = get_validated_workspace_path(app.handle().clone()) {
-          println!("Loading validated workspace: {}", valid_path);
           if let Some(main_window) = app.get_webview_window("main") {
             let _ = main_window.hide();
           }
           let _ = open_workspace_window(app_handle, valid_path);
         } else {
           // No valid workspace found, show the launcher
-          println!("No valid workspace found, showing launcher");
           if let Some(main_window) = app.get_webview_window("main") {
             let _ = main_window.show();
           }

@@ -66,7 +66,6 @@ export function useTemplates() {
     if (!manager) return { templates: [], total: 0 };
 
     if (import.meta.env.DEV) {
-      console.log('[useTemplates] Loading templates...');
     }
     setLoading(true);
     setError(null);
@@ -74,7 +73,6 @@ export function useTemplates() {
     try {
       const result = manager.list(options);
       if (import.meta.env.DEV) {
-        console.log('[useTemplates] Loaded', result.templates.length, 'templates');
       }
       setTemplates(result.templates);
       return result;
@@ -90,22 +88,17 @@ export function useTemplates() {
   // Create template
   const createTemplate = useCallback(async (templateData) => {
     if (import.meta.env.DEV) {
-      console.log('[useTemplates] Creating template:', templateData.name);
     }
     setError(null);
 
     try {
       if (import.meta.env.DEV) {
-        console.log('[useTemplates] Calling manager.create...');
       }
       const template = await manager.create(templateData);
       if (import.meta.env.DEV) {
-        console.log('[useTemplates] Template created successfully:', template.id);
-        console.log('[useTemplates] Refreshing template list...');
       }
       await loadTemplates(); // Refresh list
       if (import.meta.env.DEV) {
-        console.log('[useTemplates] Template list refreshed');
       }
 
       return template;

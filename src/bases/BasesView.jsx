@@ -71,7 +71,6 @@ const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
 
         // Log if we have a large dataset
         if (result.data && result.data.length > 100) {
-          console.log(`[BasesView] Loaded ${result.data.length} items. Pagination enabled (${itemsPerPage} per page)`);
         }
       }
     };

@@ -280,7 +280,6 @@ export const usePerformance = () => {
       performance.measure(name, startMark, endMark);
       const measures = performance.getEntriesByName(name, 'measure');
       const duration = measures[measures.length - 1]?.duration || 0;
-      console.log(`[Performance] ${name}: ${duration.toFixed(2)}ms`);
       return duration;
     } catch (e) {
       return 0;

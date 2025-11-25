@@ -17,7 +17,6 @@ fn get_or_init_platform_provider() -> &'static Box<dyn PlatformProvider> {
     PLATFORM_PROVIDER.get_or_init(|| {
         let mut provider = get_platform_provider();
         if let Err(err) = provider.initialize() {
-            eprintln!("Warning: Platform initialization failed: {}", err);
         }
         provider
     })
@@ -189,7 +188,6 @@ pub fn initialize() -> Result<(), String> {
     
     // Just access the provider to trigger initialization
     let info = provider.platform_name();
-    println!("Initialized platform file operations for: {}", info);
     
     Ok(())
 }

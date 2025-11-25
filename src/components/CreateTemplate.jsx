@@ -51,24 +51,17 @@ export default function CreateTemplate({
         const hasHTMLTags = /<[a-z][\s\S]*>/i.test(initialContent);
 
         if (hasHTMLTags) {
-          console.log('[CreateTemplate] HTML tags detected, converting to Markdown');
-          console.log('[CreateTemplate] Original content length:', initialContent.length);
 
           try {
             processedContent = htmlToMarkdown.convert(initialContent);
             conversionAttempted = true;
-            console.log('[CreateTemplate] Conversion successful');
-            console.log('[CreateTemplate] Converted content length:', processedContent.length);
-            console.log('[CreateTemplate] First 200 chars:', processedContent.substring(0, 200));
           } catch (err) {
             console.error('[CreateTemplate] HTML to Markdown conversion failed:', err);
             console.error('[CreateTemplate] Error details:', err.message);
             // Fallback to original content if conversion fails
             processedContent = initialContent;
-            console.log('[CreateTemplate] Using original content as fallback');
           }
         } else {
-          console.log('[CreateTemplate] No HTML tags detected, using content as-is');
         }
       }
 
@@ -82,7 +75,6 @@ export default function CreateTemplate({
 
       // Show conversion notification if HTML was converted
       if (conversionAttempted) {
-        console.log('[CreateTemplate] HTML was automatically converted to Markdown');
       }
     }
   }, [open, initialContent]);

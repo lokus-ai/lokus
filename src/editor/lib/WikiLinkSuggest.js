@@ -16,11 +16,9 @@ function getIndex() {
 
 async function getFileBlocks(fileName) {
   try {
-    console.log('[WikiLinkSuggest] getFileBlocks called for:', fileName)
 
     // Find the file in the index
     const fileIndex = getIndex()
-    console.log('[WikiLinkSuggest] File index has', fileIndex.length, 'files')
 
     const fileEntry = fileIndex.find(f =>
       f.title === fileName ||
@@ -30,28 +28,21 @@ async function getFileBlocks(fileName) {
     )
 
     if (!fileEntry) {
-      console.log('[WikiLinkSuggest] File not found in index:', fileName)
-      console.log('[WikiLinkSuggest] Available files:', fileIndex.slice(0, 5).map(f => f.title))
       return []
     }
 
-    console.log('[WikiLinkSuggest] Found file:', fileEntry.path)
 
     // Check if blocks are already cached
     let blocks = blockIdManager.getFileBlocks(fileEntry.path)
-    console.log('[WikiLinkSuggest] Cached blocks:', blocks.length)
 
     if (blocks.length === 0) {
       // Need to parse the file
       const { readTextFile } = await import('@tauri-apps/plugin-fs')
       const { parseBlocks } = await import('../../core/blocks/block-parser.js')
 
-      console.log('[WikiLinkSuggest] Reading file:', fileEntry.path)
       const content = await readTextFile(fileEntry.path)
-      console.log('[WikiLinkSuggest] File content length:', content.length, 'Preview:', content.slice(0, 100))
 
       blocks = parseBlocks(content, fileEntry.path)
-      console.log('[WikiLinkSuggest] Parsed blocks:', blocks.length)
     }
 
     return blocks
@@ -129,7 +120,6 @@ const WikiLinkSuggest = Extension.create({
   addProseMirrorPlugins() {
     const dbg = (...args) => {
       try {
-        console.log('[WikiLinkSuggest]', ...args);
       } catch {}
     }
     return [

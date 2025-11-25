@@ -151,7 +151,6 @@ export class PluginLogger implements Disposable {
         console.debug(message)
         break
       case LogLevel.INFO:
-        console.log(message)
         break
       case LogLevel.WARN:
         console.warn(message)

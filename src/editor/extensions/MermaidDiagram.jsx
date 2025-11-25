@@ -38,16 +38,12 @@ const MERMAID_START_REGEX = /^``mm$/;
           // Try new base64 format first
           const dataCode = node.getAttribute('data-code');
           if (import.meta.env.DEV) {
-            console.log('[MermaidDiagram] parseHTML - full node HTML:', node.outerHTML?.substring(0, 200));
-            console.log('[MermaidDiagram] parseHTML - data-code attr:', dataCode ? `exists (length: ${dataCode.length})` : 'not found');
           }
 
           if (dataCode) {
             try {
               code = atob(dataCode); // Base64 decode
               if (import.meta.env.DEV) {
-                console.log('[MermaidDiagram] parseHTML - decoded base64, code length:', code.length);
-                console.log('[MermaidDiagram] parseHTML - decoded code preview:', code.substring(0, 100));
               }
             } catch (e) {
               console.error('[MermaidDiagram] Failed to decode mermaid code:', e);
@@ -57,25 +53,20 @@ const MERMAID_START_REGEX = /^``mm$/;
             // Fallback to old formats for backward compatibility
             const codeElement = node.querySelector('code');
             if (import.meta.env.DEV) {
-              console.log('[MermaidDiagram] parseHTML - code element:', codeElement ? 'found' : 'not found');
             }
 
             if (codeElement) {
               code = codeElement.textContent;
               if (import.meta.env.DEV) {
-                console.log('[MermaidDiagram] parseHTML - code from element, length:', code.length);
               }
             } else {
               code = node.getAttribute('code') || '';
               if (import.meta.env.DEV) {
-                console.log('[MermaidDiagram] parseHTML - code from attribute, length:', code.length);
               }
             }
           }
 
           if (import.meta.env.DEV) {
-            console.log('[MermaidDiagram] parseHTML - final code length:', code.length);
-            console.log('[MermaidDiagram] parseHTML - first 100 chars:', code.substring(0, 100));
           }
 
           return {

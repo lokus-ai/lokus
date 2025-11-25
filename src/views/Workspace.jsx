@@ -359,9 +359,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 
     try {
       const trimmedName = newName.trim();
-      console.log(`Renaming "${entry.name}" to "${trimmedName}"`);
       await invoke("rename_file", { path: entry.path, newName: trimmedName });
-      console.log('Rename successful, refreshing file list');
       setRenamingPath(null);
       onRefresh && onRefresh();
     } catch (e) {
@@ -414,11 +412,9 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         if (file.path.endsWith('.md') || file.path.endsWith('.txt')) {
           // Check if this file is already loaded in the left pane to avoid duplicate load
           if (file.path === activeFile && editorContent) {
-            console.log('✅ [Workspace] Reusing left pane content for right pane (same file)');
             setRightPaneContent(editorContent);
           } else {
             try {
-              console.log('📄 [Workspace] Loading file content for right pane:', file.path);
               const content = await invoke('read_file_content', { path: file.path });
               setRightPaneContent(content || '');
             } catch (err) {
@@ -1056,11 +1052,9 @@ function WorkspaceWithScope({ path }) {
 
     if (isTauri) {
       const sub = listen('lokus:markdown-config-changed', async () => {
-        console.log('[Workspace] Received markdown config change event, reloading config...');
         try {
           const markdownSyntaxConfig = (await import('../core/markdown/syntax-config.js')).default;
           await markdownSyntaxConfig.init();
-          console.log('[Workspace] Markdown config reloaded successfully');
         } catch (e) {
           console.error('[Workspace] Failed to reload markdown config:', e);
         }
@@ -1145,45 +1139,29 @@ function WorkspaceWithScope({ path }) {
         activeFile.endsWith('.pdf') ||
         isImageFile(activeFile)
       ) {
-        console.log('Skipping content load for special view:', activeFile);
         return;
       }
 
       // Capture activeFile in local variable to prevent stale closure issues
       const fileToLoad = activeFile;
 
-      console.log('\n========================================');
-      console.log('📂 LOADING FILE CONTENT');
-      console.log('========================================');
-      console.log('Path:', fileToLoad);
 
       invoke("read_file_content", { path: fileToLoad })
         .then(content => {
           // Guard against stale promise resolutions - only update if this file is still active
           if (fileToLoad !== activeFile) {
-            console.log('⚠️  STALE CONTENT DETECTED - Ignoring load for:', fileToLoad);
-            console.log('   Current active file:', activeFile);
-            console.log('========================================\n');
             return;
           }
 
           const fileName = getFilename(fileToLoad);
-          console.log('✅ Content loaded successfully');
-          console.log('File Name:', fileName);
-          console.log('Content Length:', content.length, 'characters');
 
           // Show first 10 lines of content
           const lines = content.split('\n');
           const preview = lines.slice(0, 10);
-          console.log('\n📄 First 10 lines of content:');
-          console.log('---');
           preview.forEach((line, idx) => {
-            console.log(`${idx + 1}: ${line}`);
           });
           if (lines.length > 10) {
-            console.log(`... (${lines.length - 10} more lines)`);
           }
-          console.log('---');
 
           // Process markdown content to ensure proper formatting
           const compiler = getMarkdownCompiler();
@@ -1192,19 +1170,13 @@ function WorkspaceWithScope({ path }) {
           // If this is a markdown file and the content looks like markdown, process it
           if (fileToLoad.endsWith('.md') && compiler.isMarkdown(content)) {
             processedContent = compiler.compile(content);
-            console.log('🔄 Markdown processed (HTML length:', processedContent.length, 'chars)');
           }
 
           setEditorContent(processedContent);
           setEditorTitle(fileName.replace(/\.md$/, ""));
           setSavedContent(content); // Keep original content for saving
-          console.log('✅ Editor content updated');
-          console.log('========================================\n');
         })
         .catch((err) => {
-          console.log('❌ ERROR loading file:', fileToLoad);
-          console.log('Error:', err);
-          console.log('========================================\n');
         });
     } else {
       setEditorContent("");
@@ -1226,12 +1198,6 @@ function WorkspaceWithScope({ path }) {
     const openPath = (p, switchToTab = true) => {
       if (!p) return;
 
-      console.log('\n========================================');
-      console.log('📑 TAB OPENING');
-      console.log('========================================');
-      console.log('Path:', p);
-      console.log('File Name:', getFilename(p));
-      console.log('Switch to Tab:', switchToTab ? 'Yes (navigate)' : 'No (background)');
 
       setOpenTabs(prevTabs => {
         const name = getFilename(p);
@@ -1240,9 +1206,6 @@ function WorkspaceWithScope({ path }) {
         newTabs.unshift({ path: p, name });
         if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
 
-        console.log('Was Already Open:', wasAlreadyOpen);
-        console.log('Total Open Tabs:', newTabs.length);
-        console.log('Tab Order:', newTabs.map(t => t.name).join(' → '));
 
         return newTabs;
       });
@@ -1250,12 +1213,9 @@ function WorkspaceWithScope({ path }) {
       // Only switch to the new tab if requested (regular click)
       // For Cmd/Ctrl+Click, keep current tab active
       if (switchToTab) {
-        console.log('✅ Switching to new tab');
         setActiveFile(p);
       } else {
-        console.log('✅ Keeping current tab active (background open)');
       }
-      console.log('========================================\n');
     };
 
     let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch { }
@@ -1312,16 +1272,10 @@ function WorkspaceWithScope({ path }) {
       const blockId = e.detail
       if (!blockId) return
 
-      console.log('\n========================================')
-      console.log('📜 BLOCK SCROLL REQUEST')
-      console.log('========================================')
-      console.log('Block ID:', blockId)
-      console.log('Active File:', activeFile)
 
       // Try scrolling multiple times with increasing delays (wait for editor to render)
       const attemptScroll = (delay, attemptNum) => {
         setTimeout(() => {
-          console.log(`🔍 Scroll Attempt #${attemptNum} (after ${delay}ms)`)
 
           const editorEl = document.querySelector('.tiptap.ProseMirror')
           if (!editorEl) {
@@ -1332,7 +1286,6 @@ function WorkspaceWithScope({ path }) {
           // Strategy 1: Look for elements with data-block-id attribute
           const blockWithId = editorEl.querySelector(`[data-block-id="${blockId}"]`)
           if (blockWithId) {
-            console.log('   ✅ Found block with data-block-id:', blockId)
             blockWithId.scrollIntoView({ behavior: 'smooth', block: 'center' })
 
             // Highlight the parent element (usually a paragraph or heading)
@@ -1340,13 +1293,11 @@ function WorkspaceWithScope({ path }) {
             target.style.backgroundColor = 'rgba(255, 200, 0, 0.3)'
             setTimeout(() => { target.style.backgroundColor = '' }, 2000)
 
-            console.log('========================================\n')
             return
           }
 
           // Strategy 2: Search headings
           const headings = editorEl.querySelectorAll('h1, h2, h3, h4, h5, h6')
-          console.log(`   🔍 Searching ${headings.length} headings`)
 
           let foundHeading = null
 
@@ -1357,7 +1308,6 @@ function WorkspaceWithScope({ path }) {
             const idMatch = headingText.match(/\{#([^}]+)\}/)
             if (idMatch && idMatch[1] === blockId) {
               foundHeading = heading
-              console.log('   ✅ Found heading with explicit ID:', headingText)
               break
             }
 
@@ -1374,7 +1324,6 @@ function WorkspaceWithScope({ path }) {
             // Try slug match
             if (headingSlug === blockId.toLowerCase()) {
               foundHeading = heading
-              console.log('   ✅ Found heading by slug:', headingText, '→', headingSlug)
               break
             }
 
@@ -1382,14 +1331,12 @@ function WorkspaceWithScope({ path }) {
             const searchText = blockId.replace(/-/g, ' ').toLowerCase()
             if (headingText.toLowerCase().includes(searchText)) {
               foundHeading = heading
-              console.log('   ✅ Partial match found:', headingText)
               break
             }
           }
 
           if (foundHeading) {
             foundHeading.scrollIntoView({ behavior: 'smooth', block: 'center' })
-            console.log('   ✅ Scrolled to heading:', foundHeading.textContent.trim())
 
             // Highlight briefly
             foundHeading.style.backgroundColor = 'rgba(255, 200, 0, 0.3)'
@@ -1397,12 +1344,9 @@ function WorkspaceWithScope({ path }) {
               foundHeading.style.backgroundColor = ''
             }, 2000)
 
-            console.log('========================================\n')
           } else {
             console.warn('   ❌ Block not found:', blockId)
             if (attemptNum === 3) {
-              console.log('   ℹ️ All attempts exhausted')
-              console.log('========================================\n')
             }
           }
         }, delay)
@@ -1643,10 +1587,8 @@ function WorkspaceWithScope({ path }) {
         if (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt')) {
           // Check if this file is already loaded in the left pane
           if (nextTab.path === path && editorContent) {
-            console.log('✅ [Workspace] Reusing left pane content for right pane (same file)');
             setRightPaneContent(editorContent);
           } else {
-            console.log('📄 [Workspace] Loading file content for right pane:', nextTab.path);
             invoke("read_file_content", { path: nextTab.path })
               .then(content => {
                 setRightPaneContent(content || '');
@@ -1669,25 +1611,21 @@ function WorkspaceWithScope({ path }) {
   const handleTabClose = useCallback(async (path) => {
     // Prevent closing the same tab multiple times
     if (currentlyClosingPathRef.current === path) {
-      console.log('[TabClose] Already processing close for:', path);
       return;
     }
 
     // Prevent multiple dialogs from showing
     if (isShowingDialogRef.current) {
-      console.log('[TabClose] Dialog already showing, ignoring close request');
       return;
     }
 
     // Global debounce: ignore ANY tab close within 200ms of the last one
     const now = Date.now();
     if (now - lastCloseTimeRef.current < 200) {
-      console.log('[TabClose] Debounce: ignoring close within 200ms');
       return;
     }
     lastCloseTimeRef.current = now;
 
-    console.log('[TabClose] Starting close process for:', path);
 
     const closeTab = () => {
       setOpenTabs(prevTabs => {
@@ -1722,7 +1660,6 @@ function WorkspaceWithScope({ path }) {
 
     if (stateRef.current.unsavedChanges.has(path)) {
       try {
-        console.log('[TabClose] Showing unsaved changes dialog for:', path);
         currentlyClosingPathRef.current = path;
         isShowingDialogRef.current = true;
 
@@ -1731,17 +1668,13 @@ function WorkspaceWithScope({ path }) {
           type: "warning",
         });
 
-        console.log('[TabClose] Dialog result:', confirmed ? 'OK' : 'Cancel');
         if (confirmed) {
-          console.log('[TabClose] User confirmed, closing tab');
           closeTab();
         } else {
-          console.log('[TabClose] User cancelled, keeping tab open');
         }
       } catch (error) {
         console.error('[TabClose] Error showing dialog:', error);
       } finally {
-        console.log('[TabClose] Resetting dialog flags');
         isShowingDialogRef.current = false;
         currentlyClosingPathRef.current = null;
       }
@@ -1836,7 +1769,6 @@ function WorkspaceWithScope({ path }) {
         // Convert HTML back to markdown, preserving wiki links
         const exporter = new MarkdownExporter();
         contentToSave = exporter.htmlToMarkdown(editorContent, { preserveWikiLinks: true });
-        console.log('[Workspace] Converted HTML to markdown for save');
       }
 
       await invoke("write_file_content", { path: path_to_save, content: contentToSave });
@@ -1865,13 +1797,11 @@ function WorkspaceWithScope({ path }) {
           // Refresh version history panel
           setVersionRefreshKey(prev => prev + 1);
 
-          console.log("[Version] Saved version for", path_to_save);
         } catch (error) {
           console.warn("[Version] Failed to save version:", error);
           // Non-blocking - don't show error to user
         }
       } else {
-        console.log("[Version] Skipped - content unchanged");
       }
 
       // Gmail template checking disabled
@@ -2509,7 +2439,6 @@ function WorkspaceWithScope({ path }) {
         // Check if there's a selection
         if (!selection.empty) {
           // Get HTML for selected content to preserve formatting
-          console.log('[Workspace] Getting selected content as HTML');
 
           // Create a fragment from selection
           const fragment = state.doc.slice(selection.from, selection.to);
@@ -2521,27 +2450,22 @@ function WorkspaceWithScope({ path }) {
 
           // Fallback: if HTML extraction fails, use plaintext
           if (!selectedHTML || !selectedHTML.includes('<')) {
-            console.log('[Workspace] HTML extraction failed, using plaintext');
             const selectedText = state.doc.textBetween(selection.from, selection.to);
             return selectedText;
           }
 
-          console.log('[Workspace] Extracted HTML length:', selectedHTML.length);
           return selectedHTML;
         } else if (activeFile) {
           // No selection, use current editor content as HTML
-          console.log('[Workspace] Getting full document content as HTML');
 
           // First try to get HTML from editor (preserves rich formatting)
           const editorHTML = editorRef.current.getHTML ? editorRef.current.getHTML() : null;
 
           if (editorHTML && editorHTML.includes('<')) {
-            console.log('[Workspace] Using editor HTML, length:', editorHTML.length);
             return editorHTML;
           }
 
           // Fallback to saved markdown content if HTML extraction fails
-          console.log('[Workspace] HTML not available, using saved markdown');
           const currentContent = stateRef.current.savedContent || '';
           return currentContent;
         }
@@ -2550,7 +2474,6 @@ function WorkspaceWithScope({ path }) {
     };
 
     const contentForTemplate = getContentForTemplate();
-    console.log('[Workspace] Content for template (first 100 chars):', contentForTemplate.substring(0, 100));
     setCreateTemplateContent(contentForTemplate);
     setShowCreateTemplate(true);
   }, [activeFile]);
@@ -2801,11 +2724,9 @@ function WorkspaceWithScope({ path }) {
             if (!isSpecialView && (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt'))) {
               // Check if this file is already loaded in the left pane
               if (nextTab.path === activeFile && editorContent) {
-                console.log('✅ [Workspace] Reusing left pane content for right pane (same file)');
                 setRightPaneContent(editorContent);
               } else {
                 try {
-                  console.log('📄 [Workspace] Loading file content for right pane:', nextTab.path);
                   const content = await invoke("read_file_content", { path: nextTab.path });
                   setRightPaneContent(content || '');
                 } catch (err) {
@@ -4689,7 +4610,6 @@ export default function Workspace({ initialPath = "" }) {
     if (initialPath) {
       import('../core/vault/vault.js').then(({ saveWorkspacePath }) => {
         saveWorkspacePath(initialPath);
-        console.log('[Workspace] Saved workspace path to localStorage:', initialPath);
       });
 
       // Set global workspace path for components like SyncStatus
@@ -4698,16 +4618,13 @@ export default function Workspace({ initialPath = "" }) {
       // Update API server state with current workspace
       invoke('api_set_workspace', { workspace: initialPath })
         .then(() => {
-          console.log('[Workspace] Updated API server with workspace path');
         })
         .catch((error) => {
-          console.log('[Workspace] API server update skipped:', error);
         });
 
       // Initialize default kanban board if none exists
       invoke('initialize_workspace_kanban', { workspacePath: initialPath })
         .then(() => {
-          console.log('[Workspace] Kanban initialization complete');
         })
         .catch((error) => {
           console.error('[Workspace] Failed to initialize kanban:', error);

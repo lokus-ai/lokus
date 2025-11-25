@@ -33,7 +33,6 @@ class MockDataGenerator {
       ...options
     };
 
-    console.log('🏗️  Generating mock workspace...');
     
     // Create directory structure
     await this.createDirectoryStructure();
@@ -67,7 +66,6 @@ class MockDataGenerator {
     // Create manifest
     await this.createManifest();
     
-    console.log(`✅ Generated mock workspace with ${this.createdFiles.length} files`);
     return {
       outputDir: this.outputDir,
       files: this.createdFiles,
@@ -110,7 +108,6 @@ class MockDataGenerator {
   }
 
   async generateMarkdownNotes(count = 20) {
-    console.log(`📝 Generating ${count} markdown notes...`);
     
     for (let i = 0; i < count; i++) {
       const noteType = faker.helpers.arrayElement(['personal', 'work', 'research', 'ideas']);
@@ -344,7 +341,6 @@ ${this.generateBulletList(2, 4)}
   }
 
   async generateProjectDocumentation() {
-    console.log('📊 Generating project documentation...');
     
     const projects = ['alpha', 'beta'];
     
@@ -502,7 +498,6 @@ Standard HTTP status codes with JSON error responses:
   }
 
   async generateMeetingNotes() {
-    console.log('🤝 Generating meeting notes...');
     
     const meetingTypes = ['standup', 'planning', 'retrospective', 'review', 'client'];
     
@@ -587,7 +582,6 @@ ${this.generateBulletList(2, 4)}
   }
 
   async generateResearchNotes() {
-    console.log('🔬 Generating research notes...');
     
     const topics = [
       'Machine Learning in Healthcare',
@@ -666,7 +660,6 @@ ${this.generateBulletList(3, 5)}
   }
 
   async generateTodoLists() {
-    console.log('✅ Generating todo lists...');
     
     const lists = [
       'Daily Tasks',
@@ -716,7 +709,6 @@ ${faker.lorem.paragraph()}
   }
 
   async generateCodeFiles() {
-    console.log('💻 Generating code files...');
     
     // JavaScript example
     const jsContent = `/**
@@ -952,7 +944,6 @@ echo "🎉 Deployment completed successfully!"
   }
 
   async generateConfigFiles() {
-    console.log('⚙️  Generating configuration files...');
     
     // Package.json
     const packageJson = {
@@ -1064,7 +1055,6 @@ volumes:
   }
 
   async generateBinaryFiles() {
-    console.log('📁 Generating sample binary files...');
     
     // Create simple SVG files
     const svgContent = `<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg">
@@ -1126,7 +1116,6 @@ volumes:
   }
 
   async generateLargeFiles() {
-    console.log('📚 Generating large files...');
     
     // Generate a large text file
     const largeContent = Array.from({ length: 1000 }, () => faker.lorem.paragraphs(5)).join('\n\n');
@@ -1161,7 +1150,6 @@ volumes:
   }
 
   async generateMCPTestData() {
-    console.log('🔧 Generating MCP test data...');
     
     // Generate sample resources
     this.createdResources = [
@@ -1404,7 +1392,6 @@ async function main() {
   const args = process.argv.slice(2);
   const outputDir = args[0] || './mock-workspace';
   
-  console.log(`🎯 Generating mock workspace in: ${outputDir}`);
   
   const generator = new MockDataGenerator(outputDir);
   
@@ -1417,16 +1404,7 @@ async function main() {
       includeLargeFiles: false
     });
     
-    console.log(`\n✅ Mock workspace generated successfully!`);
-    console.log(`📁 Output directory: ${result.outputDir}`);
-    console.log(`📄 Files created: ${result.files.length}`);
-    console.log(`🔧 MCP resources: ${result.resources.length}`);
-    console.log(`🛠️  MCP tools: ${result.tools.length}`);
-    console.log(`💬 MCP prompts: ${result.prompts.length}`);
     
-    console.log(`\n🚀 You can now use this workspace to test the MCP server:`);
-    console.log(`   cd ${outputDir}`);
-    console.log(`   # Start your MCP server pointing to this directory`);
     
   } catch (error) {
     console.error('❌ Error generating mock workspace:', error);

@@ -83,7 +83,6 @@ async function insertBlockIdIntoHTML(html, filePath, lineNumber, blockId) {
 
       // Write back to file
       await writeTextFile(filePath, doc.body.innerHTML)
-      console.log('[BlockWriter] ✅ Inserted block ID into HTML:', blockId)
       return true
     }
 
@@ -127,7 +126,6 @@ async function insertBlockIdIntoMarkdown(markdown, filePath, lineNumber, blockId
 
     // Write back to file
     await writeTextFile(filePath, lines.join('\n'))
-    console.log('[BlockWriter] ✅ Inserted block ID into Markdown:', blockId)
     return true
   } catch (error) {
     console.error('[BlockWriter] Error inserting into Markdown:', error)

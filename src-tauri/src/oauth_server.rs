@@ -37,12 +37,10 @@ impl OAuthServer {
     pub async fn start(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut running = self.running.lock().await;
         if *running {
-            println!("[OAUTH SERVER] ⚠️ OAuth server already running");
             return Ok(());
         }
 
         let oauth_port = get_oauth_port();
-        println!("[OAUTH SERVER] 🚀 Starting Gmail OAuth callback server on port {}", oauth_port);
 
         let addr = std::net::SocketAddr::from(([127, 0, 0, 1], oauth_port));
         let listener = TcpListener::bind(addr).await?;
@@ -50,8 +48,6 @@ impl OAuthServer {
         *running = true;
         drop(running);
 
-        println!("[OAUTH SERVER] 🌐 Gmail OAuth callback server running at http://localhost:{}", oauth_port);
-        println!("[OAUTH SERVER] 📍 Callback URL: http://localhost:{}/gmail-callback", oauth_port);
 
         let running_clone = self.running.clone();
         tokio::spawn(async move {
@@ -59,7 +55,6 @@ impl OAuthServer {
                 let (stream, _) = match listener.accept().await {
                     Ok(conn) => conn,
                     Err(e) => {
-                        eprintln!("[OAUTH SERVER] ❌ Accept error: {}", e);
                         continue;
                     }
                 };
@@ -72,7 +67,6 @@ impl OAuthServer {
                         .serve_connection(io, service_fn(handle_request))
                         .await
                     {
-                        eprintln!("[OAUTH SERVER] ❌ Connection error: {}", err);
                     }
                 });
 
@@ -95,7 +89,6 @@ impl OAuthServer {
     pub async fn stop(&self) {
         let mut running = self.running.lock().await;
         *running = false;
-        println!("[OAUTH SERVER] 🛑 OAuth server stopped");
     }
 }
 
@@ -104,7 +97,6 @@ async fn handle_request(req: Request<Incoming>) -> Result<HyperResponse, Box<dyn
     let path = uri.path();
     let method = req.method();
 
-    println!("[OAUTH SERVER] 📥 Received request: {} {}", method, uri);
 
     match (method, path) {
         (&Method::GET, "/gmail-callback") => handle_gmail_callback(req).await,
@@ -127,7 +119,6 @@ async fn handle_gmail_callback(req: Request<Incoming>) -> Result<HyperResponse, 
     let error = query_params.get("error");
 
     if let Some(error) = error {
-        println!("[OAUTH SERVER] ❌ OAuth error: {}", error);
         return Ok(hyper::Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .header("Content-Type", "text/html")
@@ -146,7 +137,6 @@ async fn handle_gmail_callback(req: Request<Incoming>) -> Result<HyperResponse, 
     }
 
     if code.is_none() || state.is_none() {
-        println!("[OAUTH SERVER] ❌ Missing code or state");
         return Ok(hyper::Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .header("Content-Type", "text/html")
@@ -166,13 +156,9 @@ async fn handle_gmail_callback(req: Request<Incoming>) -> Result<HyperResponse, 
     let code = code.unwrap();
     let state = state.unwrap();
 
-    println!("[OAUTH SERVER] ✅ Received valid OAuth callback");
-    println!("[OAUTH SERVER] 📋 Code: {}...", &code[..20.min(code.len())]);
-    println!("[OAUTH SERVER] 📋 State: {}", state);
 
     // Write the auth data to a temporary file for the Tauri app to pick up
     if let Err(e) = write_auth_callback(code, state) {
-        println!("[OAUTH SERVER] ❌ Failed to write auth data: {}", e);
     }
 
     Ok(hyper::Response::builder()
@@ -244,7 +230,6 @@ fn write_auth_callback(code: &str, state: &str) -> Result<(), Box<dyn std::error
     });
     
     fs::write(&auth_file, serde_json::to_string_pretty(&auth_data)?)?;
-    println!("[OAUTH SERVER] 💾 Auth data written to: {:?}", auth_file);
     
     Ok(())
 }

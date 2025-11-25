@@ -126,7 +126,6 @@ impl AuthService {
                         )
                         .await
                     {
-                        eprintln!("Error serving connection: {:?}", err);
                     }
                 });
             }
@@ -141,10 +140,8 @@ impl AuthService {
         app_handle: AppHandle,
     ) -> Result<Response<String>, hyper::Error> {
         let uri = req.uri();
-        println!("📞 Received localhost request: {}", uri);
         
         if uri.path() == "/auth/callback" {
-            println!("🔐 Processing OAuth callback...");
             let query = uri.query().unwrap_or("");
             let params: HashMap<String, String> = url::form_urlencoded::parse(query.as_bytes())
                 .into_owned()
@@ -152,17 +149,14 @@ impl AuthService {
 
             // Process OAuth callback directly here instead of emitting to frontend
             if let (Some(code), Some(state)) = (params.get("code"), params.get("state")) {
-                println!("🔄 Processing OAuth callback directly in localhost server");
                 
                 // Handle the OAuth callback directly
                 match AuthService::handle_oauth_callback_internal(code.clone(), state.clone(), auth_state.clone()).await {
                     Ok(_) => {
-                        println!("✅ OAuth callback processed successfully");
                         // Emit success event to frontend to update UI
                         let _ = app_handle.emit("auth-success", serde_json::json!({}));
                     }
                     Err(e) => {
-                        println!("❌ OAuth callback failed: {}", e);
                         let _ = app_handle.emit("auth-error", serde_json::json!({"error": e}));
                     }
                 }
@@ -236,7 +230,6 @@ impl AuthService {
     /// * `Ok(())` - Token stored successfully
     /// * `Err(String)` - Error message if storage fails
     pub fn store_token(token: &AuthToken) -> Result<(), String> {
-        println!("🔑 Storing token securely with encryption");
 
         // Use secure storage for both development and production
         let storage = SecureStorage::new()
@@ -255,7 +248,6 @@ impl AuthService {
                 .map_err(|e| format!("Failed to update session: {}", e))?;
         }
 
-        println!("🔑 Token stored securely with session management");
         Ok(())
     }
 
@@ -281,14 +273,12 @@ impl AuthService {
     /// * `Ok(None)` - No token or session expired
     /// * `Err(String)` - Error retrieving token
     pub fn get_token() -> Result<Option<AuthToken>, String> {
-        println!("🔑 Retrieving token from secure storage");
 
         let storage = SecureStorage::new()
             .map_err(|e| format!("Failed to initialize secure storage: {}", e))?;
 
         // Check if session is valid first
         if !storage.is_session_valid().unwrap_or(false) {
-            println!("🔑 Session expired or invalid - clearing tokens");
             let _ = storage.delete(TOKEN_KEY);
             let _ = storage.delete(PROFILE_KEY);
             return Ok(None);
@@ -302,16 +292,13 @@ impl AuthService {
             // Update session access time
             storage.update_session_access()
                 .map_err(|e| format!("Failed to update session access: {}", e))?;
-            println!("🔑 Token retrieved successfully from secure storage");
         } else {
-            println!("🔑 No token found in secure storage");
         }
 
         Ok(token)
     }
 
     pub fn delete_token() -> Result<(), String> {
-        println!("🔑 Deleting token from secure storage");
 
         let storage = SecureStorage::new()
             .map_err(|e| format!("Failed to initialize secure storage: {}", e))?;
@@ -319,12 +306,10 @@ impl AuthService {
         storage.delete(TOKEN_KEY)
             .map_err(|e| format!("Failed to delete encrypted token: {}", e))?;
 
-        println!("🔑 Token deleted from secure storage");
         Ok(())
     }
 
     pub fn store_user_profile(profile: &UserProfile) -> Result<(), String> {
-        println!("🔑 Storing user profile securely");
 
         let storage = SecureStorage::new()
             .map_err(|e| format!("Failed to initialize secure storage: {}", e))?;
@@ -332,19 +317,16 @@ impl AuthService {
         storage.store(PROFILE_KEY, profile)
             .map_err(|e| format!("Failed to store encrypted profile: {}", e))?;
 
-        println!("🔑 User profile stored securely");
         Ok(())
     }
 
     pub fn get_user_profile() -> Result<Option<UserProfile>, String> {
-        println!("🔑 Retrieving user profile from secure storage");
 
         let storage = SecureStorage::new()
             .map_err(|e| format!("Failed to initialize secure storage: {}", e))?;
 
         // Check session validity
         if !storage.is_session_valid().unwrap_or(false) {
-            println!("🔑 Session invalid - profile access denied");
             return Ok(None);
         }
 
@@ -352,14 +334,12 @@ impl AuthService {
             .map_err(|e| format!("Failed to retrieve encrypted profile: {}", e))?;
 
         if profile.is_some() {
-            println!("🔑 User profile retrieved successfully");
         }
 
         Ok(profile)
     }
 
     pub fn delete_user_profile() -> Result<(), String> {
-        println!("🔑 Deleting user profile from secure storage");
 
         let storage = SecureStorage::new()
             .map_err(|e| format!("Failed to initialize secure storage: {}", e))?;
@@ -367,7 +347,6 @@ impl AuthService {
         storage.delete(PROFILE_KEY)
             .map_err(|e| format!("Failed to delete encrypted profile: {}", e))?;
 
-        println!("🔑 User profile deleted from secure storage");
         Ok(())
     }
 
@@ -385,7 +364,6 @@ impl AuthService {
 
     /// Clear all secure storage (for complete logout)
     pub fn clear_all_secure_data() -> Result<(), String> {
-        println!("🧹 Clearing all secure authentication data");
 
         let storage = SecureStorage::new()
             .map_err(|e| format!("Failed to initialize secure storage: {}", e))?;
@@ -393,7 +371,6 @@ impl AuthService {
         storage.clear_all()
             .map_err(|e| format!("Failed to clear secure storage: {}", e))?;
 
-        println!("🧹 All secure authentication data cleared");
         Ok(())
     }
 
@@ -418,9 +395,6 @@ impl AuthService {
         let auth_base_url = std::env::var("AUTH_BASE_URL")
             .unwrap_or_else(|_| "https://lokusmd.com".to_string());
 
-        println!("🔄 Starting token exchange with code: {}", code);
-        println!("🔄 PKCE verifier: {}", pkce_data.code_verifier);
-        println!("🔄 Redirect URI: {}", pkce_data.redirect_uri);
 
         let client = reqwest::Client::new();
         let token_response = client
@@ -472,16 +446,12 @@ impl AuthService {
         };
 
         // Store token
-        println!("💾 Storing token in keychain...");
         Self::store_token(&token)?;
-        println!("✅ Token stored successfully");
 
         // Fetch and store user profile
-        println!("👤 Fetching user profile...");
         match fetch_and_store_user_profile(&token).await {
-            Ok(_) => println!("✅ User profile stored successfully"),
+            Ok(_) => ,
             Err(e) => {
-                println!("❌ Failed to store user profile: {}", e);
                 // Continue anyway - don't fail the entire OAuth flow
             }
         }
@@ -523,9 +493,7 @@ pub async fn initiate_oauth_flow(
     }
 
     // Start the localhost server
-    println!("🚀 Starting localhost server on port {}", port);
     AuthService::start_localhost_server(port, auth_state.inner().clone(), app_handle).await?;
-    println!("✅ Localhost server started successfully on port {}", port);
 
     // Build OAuth URL
     let auth_base_url = std::env::var("AUTH_BASE_URL")
@@ -598,15 +566,12 @@ async fn fetch_and_store_user_profile(token: &AuthToken) -> Result<(), String> {
 
 #[tauri::command]
 pub fn is_authenticated() -> Result<bool, String> {
-    println!("🔍 Checking authentication status...");
     match AuthService::get_token()? {
         Some(token) => {
             let is_expired = AuthService::is_token_expired(&token);
-            println!("🔍 Token found - expired: {}", is_expired);
             Ok(!is_expired)
         },
         None => {
-            println!("🔍 No token found");
             Ok(false)
         },
     }
@@ -690,7 +655,6 @@ pub async fn refresh_auth_token() -> Result<(), String> {
 
 #[tauri::command]
 pub fn logout() -> Result<(), String> {
-    println!("👋 Logging out user");
 
     // Clear all secure storage instead of individual deletions
     AuthService::clear_all_secure_data()?;
@@ -699,7 +663,6 @@ pub fn logout() -> Result<(), String> {
     use crate::connections::gmail::storage::GmailStorage;
     let _ = GmailStorage::clear_all(); // Don't fail logout if Gmail clear fails
 
-    println!("👋 User logged out successfully");
     Ok(())
 }
 
@@ -733,5 +696,4 @@ pub async fn open_auth_url(auth_url: String) -> Result<(), String> {
 }
 
 pub fn register_deep_link_handler(_app: &AppHandle) {
-    println!("Deep link handler registered for lokus:// scheme");
 }
