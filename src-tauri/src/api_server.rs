@@ -10,9 +10,11 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::path::PathBuf;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Notify};
+use tokio::time::Duration;
 use tauri::{Emitter, Manager};
 use tauri_plugin_store::StoreBuilder;
+use thiserror::Error;
 
 #[derive(Clone)]
 pub struct ApiState {
@@ -43,6 +45,26 @@ pub struct ApiResponse<T> {
     pub success: bool,
     pub data: Option<T>,
     pub error: Option<String>,
+}
+
+// API Server Configuration for startup
+pub struct ApiServerConfig {
+    pub state_ready: Arc<Notify>,
+    pub max_retries: u32,
+    pub base_delay_ms: u64,
+}
+
+// API Server Error Types
+#[derive(Debug, Error)]
+pub enum ApiServerError {
+    #[error("ApiState not available - may not be managed yet")]
+    StateNotAvailable,
+
+    #[error("No ports available in range 3333-3336")]
+    NoPortsAvailable,
+
+    #[error("Failed to bind listener: {0}")]
+    BindError(#[from] std::io::Error),
 }
 
 // Get current workspace information
@@ -263,26 +285,84 @@ pub fn create_api_router(state: ApiState) -> Router {
         .with_state(state)
 }
 
-// Start the API server
-pub async fn start_api_server(app_handle: tauri::AppHandle) {
-    // Get the shared state from Tauri's state management
-    let state = match app_handle.try_state::<ApiState>() {
-        Some(state) => state.inner().clone(),
-        None => {
-            return;
+// Start the API server with retry logic and port fallback
+#[tracing::instrument(skip(app_handle, config))]
+pub async fn start_api_server(
+    app_handle: tauri::AppHandle,
+    config: ApiServerConfig,
+) -> Result<u16, ApiServerError> {
+    // Wait for state to be ready (prevents race condition)
+    tracing::info!("Waiting for ApiState to be ready...");
+    config.state_ready.notified().await;
+    tracing::debug!("ApiState is ready, proceeding with server start");
+
+    // Retry loop with exponential backoff
+    let mut attempt = 0;
+    let mut delay_ms = config.base_delay_ms;
+
+    loop {
+        attempt += 1;
+        tracing::info!(attempt, "Attempting to start API server");
+
+        match try_start_server(&app_handle).await {
+            Ok(port) => {
+                tracing::info!(port, "API server started successfully");
+                return Ok(port);
+            }
+            Err(e) if attempt < config.max_retries => {
+                tracing::warn!(
+                    error = %e,
+                    attempt,
+                    retry_in_ms = delay_ms,
+                    "API server start failed, retrying"
+                );
+                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                delay_ms *= 2; // Exponential backoff
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "API server failed after all retries");
+                return Err(e);
+            }
         }
-    };
+    }
+}
+
+// Try to start the server on available port
+async fn try_start_server(app_handle: &tauri::AppHandle) -> Result<u16, ApiServerError> {
+    // Try to get state
+    let state = app_handle
+        .try_state::<ApiState>()
+        .ok_or(ApiServerError::StateNotAvailable)?
+        .inner()
+        .clone();
 
     let router = create_api_router(state);
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3333")
-        .await
-        .unwrap();
+    // Try ports 3333, 3334, 3335, 3336
+    for port in 3333..=3336 {
+        tracing::debug!(port, "Attempting to bind port");
 
+        match tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port)).await {
+            Ok(listener) => {
+                tracing::info!(port, "Successfully bound to port");
 
-    axum::serve(listener, router)
-        .await
-        .unwrap();
+                // Spawn server in background
+                tokio::spawn(async move {
+                    if let Err(e) = axum::serve(listener, router).await {
+                        tracing::error!(error = %e, "Axum server error");
+                    }
+                });
+
+                return Ok(port);
+            }
+            Err(e) => {
+                tracing::warn!(port, error = %e, "Port unavailable, trying next");
+                continue;
+            }
+        }
+    }
+
+    Err(ApiServerError::NoPortsAvailable)
 }
 
 // Update workspace when it changes

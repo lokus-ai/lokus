@@ -19,6 +19,7 @@ mod connections;
 mod oauth_server;
 mod secure_storage;
 mod api_server;
+mod logging;
 mod sync;
 mod credentials;
 mod file_locking;
@@ -212,6 +213,26 @@ fn main() {
       }
     }
   }
+
+  // Initialize logging infrastructure first
+  let log_config = logging::LoggingConfig {
+    log_dir: dirs::home_dir()
+      .unwrap_or_default()
+      .join(".lokus")
+      .join("logs"),
+    max_days_retained: 7,
+    sentry_enabled: std::env::var("VITE_ENABLE_CRASH_REPORTS")
+      .unwrap_or_else(|_| "false".to_string())
+      .to_lowercase() == "true",
+    environment: std::env::var("VITE_SENTRY_ENVIRONMENT")
+      .unwrap_or_else(|_| "production".to_string()),
+  };
+
+  if let Err(e) = logging::init_logging(log_config) {
+    eprintln!("Failed to initialize logging: {}", e);
+  }
+
+  tracing::info!("Lokus starting...");
 
   // Initialize Sentry for crash reporting
   let sentry_dsn = std::env::var("TAURI_SENTRY_DSN").ok();
@@ -481,17 +502,45 @@ fn main() {
       });
 
       // Initialize and start API server for MCP integration
+      // Create state readiness notifier to prevent race conditions
+      let api_state_ready = std::sync::Arc::new(tokio::sync::Notify::new());
+
       let api_state = api_server::ApiState {
         app_handle: app.handle().clone(),
         current_workspace: std::sync::Arc::new(tokio::sync::RwLock::new(None)),
       };
-      app.manage(api_state.clone());
 
-      // Start API server for MCP integration
+      // Start API server task FIRST (so it can wait for notification)
       let app_handle_for_api = app.handle().clone();
+      let api_ready_clone = api_state_ready.clone();
       tauri::async_runtime::spawn(async move {
-        api_server::start_api_server(app_handle_for_api).await;
+        let config = api_server::ApiServerConfig {
+          state_ready: api_ready_clone,
+          max_retries: 5,
+          base_delay_ms: 100,
+        };
+
+        match api_server::start_api_server(app_handle_for_api, config).await {
+          Ok(port) => {
+            tracing::info!(port, "API server started successfully");
+          }
+          Err(e) => {
+            tracing::error!(error = %e, "Failed to start API server");
+            sentry::capture_message(
+              &format!("API server failed to start: {}", e),
+              sentry::Level::Error
+            );
+          }
+        }
       });
+
+      // Small delay to ensure task is spawned and waiting
+      std::thread::sleep(std::time::Duration::from_millis(10));
+
+      // THEN manage state and signal
+      app.manage(api_state.clone());
+      api_state_ready.notify_one();
+      tracing::debug!("ApiState registered and notified");
 
       // Initialize Gmail Connection Manager - always manage even if initialization fails
       match connections::ConnectionManager::new(app.handle().clone()) {

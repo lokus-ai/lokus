@@ -5,7 +5,7 @@ import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, /* Mail, */ Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, FoldVertical, SquareSplitHorizontal, FilePlus as FilePlusCorner, SquareKanban } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, /* Mail, */ Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, FoldVertical, SquareSplitHorizontal, FilePlus as FilePlusCorner, SquareKanban, RefreshCw } from "lucide-react";
 import { ColoredFileIcon } from "../components/FileIcon.jsx";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
@@ -3714,13 +3714,22 @@ function WorkspaceWithScope({ path }) {
                   {/* Explorer Header */}
                   <div className="h-10 px-4 flex items-center justify-between border-b border-app-border bg-app-panel">
                     <span className="text-xs font-semibold uppercase tracking-wide text-app-muted">Explorer</span>
-                    <button
-                      onClick={closeAllFolders}
-                      className="obsidian-button icon-only small"
-                      title="Collapse All Folders"
-                    >
-                      <FoldVertical className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={handleRefreshFiles}
+                        className="obsidian-button icon-only small"
+                        title="Reload Files"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={closeAllFolders}
+                        className="obsidian-button icon-only small"
+                        title="Collapse All Folders"
+                      >
+                        <FoldVertical className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   <ContextMenu>
