@@ -43,6 +43,7 @@ const MarkdownPaste = Extension.create({
               }
 
               if (syncCompiler.isMarkdown(text)) {
+                console.log('[MarkdownPaste] Detected as markdown:', text.substring(0, 100));
 
                 try {
                   // Prevent default paste immediately
@@ -50,6 +51,7 @@ const MarkdownPaste = Extension.create({
 
                   // Compile markdown to HTML asynchronously
                   workerCompiler.compile(text).then(htmlContent => {
+                    console.log('[MarkdownPaste] Compiled HTML:', htmlContent.substring(0, 200));
                     if (!htmlContent) return
 
                     // Insert the converted HTML with better parsing options
@@ -75,6 +77,7 @@ const MarkdownPaste = Extension.create({
                   return false
                 }
               } else {
+                console.log('[MarkdownPaste] NOT detected as markdown:', text.substring(0, 100));
               }
             }
 
