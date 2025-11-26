@@ -390,6 +390,7 @@ fn main() {
       handlers::files::create_directory,
       handlers::files::read_all_files,
       handlers::files::copy_external_files_to_workspace,
+      handlers::files::find_workspace_images,
       handlers::platform_files::platform_reveal_in_file_manager,
       handlers::platform_files::platform_open_terminal,
       handlers::platform_files::get_platform_information,

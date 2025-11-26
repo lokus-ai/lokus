@@ -41,6 +41,8 @@ import liveEditorSettings from "../../core/editor/live-settings.js";
 import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import TaskCreationModal from "../../components/TaskCreationModal.jsx";
 import ExportModal from "../../views/ExportModal.jsx";
+import ImageInsertModal from "../../components/ImageInsertModal.jsx";
+import MathFormulaModal from "../../components/MathFormulaModal.jsx";
 import ReadingModeView from "./ReadingModeView.jsx";
 import PagePreview from "../../components/PagePreview.jsx";
 import { ImageViewerModal } from "../../components/ImageViewer/ImageViewerModal.jsx";
@@ -390,6 +392,8 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
   const [isTaskCreationModalOpen, setIsTaskCreationModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [imageViewerState, setImageViewerState] = useState({ isOpen: false, imagePath: null });
+  const [imageInsertModalState, setImageInsertModalState] = useState({ isOpen: false, onInsert: null });
+  const [mathFormulaModalState, setMathFormulaModalState] = useState({ isOpen: false, mode: 'inline', onInsert: null });
 
   // Page preview state
   const [previewData, setPreviewData] = useState(null);
@@ -575,16 +579,32 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
       setPreviewData(null);
     };
 
+    // Listen for image insert modal event
+    const handleImageInsertModalEvent = (event) => {
+      const { onInsert } = event.detail;
+      setImageInsertModalState({ isOpen: true, onInsert });
+    };
+
+    // Listen for math formula modal event
+    const handleMathFormulaModalEvent = (event) => {
+      const { mode, onInsert } = event.detail;
+      setMathFormulaModalState({ isOpen: true, mode, onInsert });
+    };
+
     document.addEventListener('keydown', handleKeyDown);
     window.addEventListener('lokus:open-task-modal', handleTaskModalEvent);
     window.addEventListener('wiki-link-hover', handleWikiLinkHover);
     window.addEventListener('wiki-link-hover-end', handleWikiLinkHoverEnd);
+    window.addEventListener('open-image-insert-modal', handleImageInsertModalEvent);
+    window.addEventListener('open-math-formula-modal', handleMathFormulaModalEvent);
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('lokus:open-task-modal', handleTaskModalEvent);
       window.removeEventListener('wiki-link-hover', handleWikiLinkHover);
       window.removeEventListener('wiki-link-hover-end', handleWikiLinkHoverEnd);
+      window.removeEventListener('open-image-insert-modal', handleImageInsertModalEvent);
+      window.removeEventListener('open-math-formula-modal', handleMathFormulaModalEvent);
     };
   }, [editor]);
 
@@ -721,10 +741,13 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         }
         break;
       case 'insertImage':
-        const imageUrl = window.prompt('Enter image URL:');
-        if (imageUrl) {
-          editor.commands.setImage({ src: imageUrl });
-        }
+        // Open image insert modal
+        setImageInsertModalState({
+          isOpen: true,
+          onInsert: ({ src, alt }) => {
+            editor.commands.setImage({ src, alt });
+          }
+        });
         break;
       case 'exportMarkdown':
       case 'exportHTML':
@@ -910,6 +933,28 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         imagePath={imageViewerState.imagePath}
         allImageFiles={globalThis.__LOKUS_ALL_IMAGE_FILES__ || []}
         onClose={() => setImageViewerState({ isOpen: false, imagePath: null })}
+      />
+
+      {/* Image Insert Modal */}
+      <ImageInsertModal
+        isOpen={imageInsertModalState.isOpen}
+        onClose={() => setImageInsertModalState({ isOpen: false, onInsert: null })}
+        onInsert={(data) => {
+          imageInsertModalState.onInsert?.(data);
+          setImageInsertModalState({ isOpen: false, onInsert: null });
+        }}
+        workspacePath={globalThis.__LOKUS_WORKSPACE_PATH__}
+      />
+
+      {/* Math Formula Modal */}
+      <MathFormulaModal
+        isOpen={mathFormulaModalState.isOpen}
+        mode={mathFormulaModalState.mode}
+        onClose={() => setMathFormulaModalState({ isOpen: false, mode: 'inline', onInsert: null })}
+        onInsert={(data) => {
+          mathFormulaModalState.onInsert?.(data);
+          setMathFormulaModalState({ isOpen: false, mode: 'inline', onInsert: null });
+        }}
       />
     </>
   );

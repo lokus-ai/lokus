@@ -681,13 +681,20 @@ const commandItems = [
         description: "Insert an image by URL.",
         icon: <ImageIcon size={18} />,
         command: ({ editor, range }) => {
-          const url = window.prompt('Image URL');
-          if (!url) return;
-          if (editor?.commands?.setImage) {
-            editor.chain().focus().deleteRange(range).setImage({ src: url }).run();
-          } else {
-            editor.chain().focus().deleteRange(range).insertContent(`<img src="${url}" alt="" />`).run();
-          }
+          // Dispatch event to open image insert modal
+          window.dispatchEvent(new CustomEvent('open-image-insert-modal', {
+            detail: {
+              editor,
+              range,
+              onInsert: ({ src, alt }) => {
+                if (editor?.commands?.setImage) {
+                  editor.chain().focus().deleteRange(range).setImage({ src, alt }).run();
+                } else {
+                  editor.chain().focus().deleteRange(range).insertContent(`<img src="${src}" alt="${alt || ''}" />`).run();
+                }
+              }
+            }
+          }));
         },
       },
       {
@@ -851,14 +858,21 @@ const commandItems = [
         description: "Insert $x^2$ (LaTeX).",
         icon: <Sigma size={18} />,
         command: ({ editor, range }) => {
-          const src = window.prompt('Enter LaTeX formula:', 'E = mc^2')
-          if (src != null && src.trim()) {
-            if (editor?.commands?.setMathInline) {
-              editor.chain().focus().deleteRange(range).setMathInline(src.trim()).run()
-            } else {
-              editor.chain().focus().deleteRange(range).insertContent(`$${src.trim()}$`).run()
+          // Dispatch event to open math formula modal
+          window.dispatchEvent(new CustomEvent('open-math-formula-modal', {
+            detail: {
+              mode: 'inline',
+              editor,
+              range,
+              onInsert: ({ formula }) => {
+                if (editor?.commands?.setMathInline) {
+                  editor.chain().focus().deleteRange(range).setMathInline(formula).run();
+                } else {
+                  editor.chain().focus().deleteRange(range).insertContent(`$${formula}$`).run();
+                }
+              }
             }
-          }
+          }));
         },
       },
       {
@@ -866,14 +880,21 @@ const commandItems = [
         description: "Insert $$E=mc^2$$ (LaTeX).",
         icon: <Sigma size={18} />,
         command: ({ editor, range }) => {
-          const src = window.prompt('Enter LaTeX formula:', '\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}')
-          if (src != null && src.trim()) {
-            if (editor?.commands?.setMathBlock) {
-              editor.chain().focus().deleteRange(range).setMathBlock(src.trim()).run()
-            } else {
-              editor.chain().focus().deleteRange(range).insertContent(`$$${src.trim()}$$`).run()
+          // Dispatch event to open math formula modal
+          window.dispatchEvent(new CustomEvent('open-math-formula-modal', {
+            detail: {
+              mode: 'block',
+              editor,
+              range,
+              onInsert: ({ formula }) => {
+                if (editor?.commands?.setMathBlock) {
+                  editor.chain().focus().deleteRange(range).setMathBlock(formula).run();
+                } else {
+                  editor.chain().focus().deleteRange(range).insertContent(`$$${formula}$$`).run();
+                }
+              }
             }
-          }
+          }));
         },
       },
     ],

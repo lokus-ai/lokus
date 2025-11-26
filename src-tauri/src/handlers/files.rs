@@ -460,3 +460,49 @@ pub async fn read_all_files(paths: Vec<String>) -> Result<std::collections::Hash
 
     Ok(file_map)
 }
+
+#[tauri::command]
+pub async fn find_workspace_images(workspace_path: String) -> Result<Vec<String>, String> {
+    const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "ico"];
+
+    let workspace = Path::new(&workspace_path);
+
+    if !workspace.exists() {
+        return Err("Workspace path does not exist".to_string());
+    }
+
+    let mut image_files = Vec::new();
+
+    fn find_images_recursive(dir: &Path, image_files: &mut Vec<String>) -> Result<(), String> {
+        let entries = fs::read_dir(dir).map_err(|e| e.to_string())?;
+
+        for entry in entries {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let path = entry.path();
+            let file_name = entry.file_name().to_string_lossy().to_string();
+
+            // Skip hidden files and common excluded directories
+            if file_name.starts_with('.') || file_name == "node_modules" {
+                continue;
+            }
+
+            if path.is_dir() {
+                find_images_recursive(&path, image_files)?;
+            } else if let Some(ext) = path.extension() {
+                let ext_lower = ext.to_string_lossy().to_lowercase();
+                if IMAGE_EXTENSIONS.contains(&ext_lower.as_str()) {
+                    if let Some(path_str) = path.to_str() {
+                        image_files.push(path_str.to_string());
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    find_images_recursive(workspace, &mut image_files)
+        .map_err(|e| format!("Failed to scan directory: {}", e))?;
+
+    Ok(image_files)
+}
