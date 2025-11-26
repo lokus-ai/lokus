@@ -2867,7 +2867,7 @@ function WorkspaceWithScope({ path }) {
 
   useEffect(() => {
     let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch { }
-    const addDom = (name, fn) => { const h = () => fn(); window.addEventListener(name, h); return () => window.removeEventListener(name, h); };
+    const addDom = (name, fn) => { const h = (event) => fn(event); window.addEventListener(name, h); return () => window.removeEventListener(name, h); };
     const unlistenSave = isTauri ? listen("lokus:save-file", handleSave) : Promise.resolve(addDom('lokus:save-file', handleSave));
     const unlistenClose = isTauri ? listen("lokus:close-tab", () => {
       if (stateRef.current.activeFile) {
@@ -2915,9 +2915,15 @@ function WorkspaceWithScope({ path }) {
 
     // Template picker event listener
     const handleTemplatePicker = (event) => {
+      console.log('[Workspace] Template picker event received:', event);
+      console.log('[Workspace] Event detail:', event?.detail);
+      console.log('[Workspace] Event type:', event?.type);
       const data = event?.detail || event;
+      console.log('[Workspace] Data to be set:', data);
+      console.log('[Workspace] Setting template picker data and opening modal...');
       setTemplatePickerData(data);
       setShowTemplatePicker(true);
+      console.log('[Workspace] State updated. showTemplatePicker should be true');
     };
     const unlistenTemplatePicker = Promise.resolve(addDom('open-template-picker', handleTemplatePicker));
 

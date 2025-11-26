@@ -67,6 +67,7 @@ function buildTableHTML(rows, cols, withHeaderRow = true) {
 }
 
 function openTemplatePicker({ editor, range }) {
+  console.log('[SlashCommand] Opening template picker via event...');
   // Store current editor state for template insertion
   const editorState = { editor, range };
 
@@ -75,10 +76,12 @@ function openTemplatePicker({ editor, range }) {
     detail: {
       editorState,
       onSelect: (template, processedContent) => {
+        console.log('[SlashCommand] Template selected:', template?.name);
         try {
           // Insert the processed template content
           editor.chain().focus().deleteRange(range).insertContent(processedContent).run();
         } catch (err) {
+          console.error('[SlashCommand] Error inserting template:', err);
           // Fallback: insert raw template content
           editor.chain().focus().deleteRange(range).insertContent(template.content).run();
         }

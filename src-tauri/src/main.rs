@@ -23,6 +23,8 @@ mod logging;
 mod sync;
 mod credentials;
 mod file_locking;
+#[cfg(target_os = "macos")]
+mod macos;
 
 use windows::{open_workspace_window, open_preferences_window, open_launcher_window};
 use tauri::Manager;
@@ -38,11 +40,41 @@ struct SessionState {
 }
 
 #[tauri::command]
-fn save_last_workspace(app: tauri::AppHandle, path: String) {
-    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
+fn save_last_workspace(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat"))
+        .build()
+        .map_err(|e| format!("Store error: {}", e))?;
     let _ = store.reload();
-    let _ = store.set("last_workspace_path".to_string(), JsonValue::String(path));
-    let _ = store.save();
+
+    #[cfg(target_os = "macos")]
+    {
+        // Create security-scoped bookmark for macOS
+        match macos::bookmarks::create_bookmark(&path) {
+            Ok(bookmark_data) => {
+                // Save both path and bookmark
+                let _ = store.set("last_workspace_path".to_string(), JsonValue::String(path));
+                let _ = store.set("last_workspace_bookmark".to_string(), serde_json::to_value(bookmark_data).unwrap());
+                let _ = store.save();
+                Ok(())
+            }
+            Err(e) => {
+                // If bookmark creation fails, still save the path
+                // (will fall back to normal validation)
+                tracing::warn!("Failed to create bookmark: {}", e);
+                let _ = store.set("last_workspace_path".to_string(), JsonValue::String(path));
+                let _ = store.save();
+                Ok(())
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Non-macOS: Just save path
+        let _ = store.set("last_workspace_path".to_string(), JsonValue::String(path));
+        let _ = store.save();
+        Ok(())
+    }
 }
 
 #[tauri::command]
@@ -53,9 +85,10 @@ fn clear_last_workspace(app: tauri::AppHandle) {
     let _ = store.save();
 }
 
-#[tauri::command]
-fn validate_workspace_path(path: String) -> bool {
-    let workspace_path = std::path::Path::new(&path);
+/// Internal helper to validate a workspace path
+/// This contains the core validation logic without bookmark handling
+fn validate_path_internal(path: &str) -> bool {
+    let workspace_path = std::path::Path::new(path);
 
     // Check if path exists and is a directory
     if !workspace_path.exists() || !workspace_path.is_dir() {
@@ -85,13 +118,43 @@ fn validate_workspace_path(path: String) -> bool {
 }
 
 #[tauri::command]
+fn validate_workspace_path(app: tauri::AppHandle, path: String) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        // Try to resolve bookmark first to get security-scoped access
+        if let Ok(store) = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build() {
+            let _ = store.reload();
+            if let Some(bookmark_value) = store.get("last_workspace_bookmark") {
+                if let Ok(bookmark_data) = serde_json::from_value::<Vec<u8>>(bookmark_value.clone()) {
+                    match macos::bookmarks::resolve_bookmark(&bookmark_data) {
+                        Ok(resolved_path) => {
+                            // Successfully got access via bookmark
+                            let is_valid = validate_path_internal(&resolved_path);
+                            macos::bookmarks::stop_accessing(&resolved_path);
+                            return is_valid;
+                        }
+                        Err(e) => {
+                            tracing::debug!("Failed to resolve bookmark: {}", e);
+                            // Fall through to normal validation
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: try normal validation (or used on non-macOS)
+    validate_path_internal(&path)
+}
+
+#[tauri::command]
 fn get_validated_workspace_path(app: tauri::AppHandle) -> Option<String> {
     let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
     let _ = store.reload();
 
     if let Some(path) = store.get("last_workspace_path") {
         if let Some(path_str) = path.as_str() {
-            if validate_workspace_path(path_str.to_string()) {
+            if validate_workspace_path(app.clone(), path_str.to_string()) {
                 return Some(path_str.to_string());
             } else {
                 // Invalid path, clear it

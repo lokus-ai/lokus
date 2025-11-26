@@ -24,6 +24,7 @@ import { basesTools, executeBaseTool } from "./tools/bases.js";
 import { canvasTools, executeCanvasTool } from "./tools/canvas.js";
 import { kanbanTools, executeKanbanTool } from "./tools/kanban.js";
 import { graphTools, executeGraphTool } from "./tools/graph.js";
+import { templatesTools, executeTemplateTool } from "./tools/templates.js";
 
 // ===== CONFIGURATION =====
 const CONFIG = {
@@ -193,7 +194,8 @@ const getAllTools = () => {
     ...basesTools,
     ...canvasTools,
     ...kanbanTools,
-    ...graphTools
+    ...graphTools,
+    ...templatesTools
   ];
 };
 
@@ -264,6 +266,8 @@ async function handleMCPRequest(request) {
         result = await executeKanbanTool(toolName, args, workspace, apiUrl);
       } else if (graphTools.some(t => t.name === toolName)) {
         result = await executeGraphTool(toolName, args, workspace, apiUrl);
+      } else if (templatesTools.some(t => t.name === toolName)) {
+        result = await executeTemplateTool(toolName, args, workspace, apiUrl);
       } else {
         throw new Error(`Unknown tool: ${toolName}`);
       }

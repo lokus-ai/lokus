@@ -106,9 +106,10 @@ export default function Launcher() {
       await WorkspaceManager.saveWorkspacePath(path);
       await openWorkspace(path);
     } else {
-      // Could show user message and remove from recents
+      // Show user message and remove from recents
       alert("This workspace is no longer accessible. It may have been moved or deleted.");
-      // Optionally remove from recents here
+      removeRecent(path);
+      setRecents(readRecents());
     }
   };
 

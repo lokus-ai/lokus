@@ -11,6 +11,7 @@ import {
   Trash2,
   Download,
   Upload,
+  RefreshCw,
   Settings,
   BarChart3,
   Tag,
@@ -33,7 +34,8 @@ export default function TemplateManager() {
     updateTemplate,
     deleteTemplate,
     duplicateTemplate,
-    loadTemplates
+    loadTemplates,
+    refreshTemplates
   } = useTemplates();
 
   const { categories, tags, stats } = useTemplateOrganization();
@@ -181,6 +183,14 @@ export default function TemplateManager() {
       }
     };
     input.click();
+  };
+
+  const handleRefresh = async () => {
+    try {
+      await refreshTemplates();
+    } catch (err) {
+      console.error('Failed to refresh templates:', err);
+    }
   };
 
   // Handle tag toggle
@@ -406,6 +416,15 @@ export default function TemplateManager() {
           >
             <Upload size={16} />
             Import
+          </button>
+
+          <button
+            onClick={handleRefresh}
+            className="flex items-center gap-2 px-3 py-1 border border-app-border rounded-md hover:bg-app-bg transition-colors"
+            title="Refresh templates from filesystem (useful after MCP creates templates)"
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            Refresh
           </button>
 
           <button

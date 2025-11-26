@@ -59,17 +59,21 @@ export default function TemplatePicker({
   // Load categories and tags
   useEffect(() => {
     if (open) {
+      console.log('[TemplatePicker] Opening picker...');
+      console.log('[TemplatePicker] Available templates:', templates.length, templates);
       try {
         setCategories(getCategories());
         setTags(getTags());
       } catch (err) {
+        console.error('[TemplatePicker] Error loading categories/tags:', err);
       }
     }
-  }, [open, getCategories, getTags]);
+  }, [open, getCategories, getTags, templates]);
 
   // Filter and sort templates
   useEffect(() => {
     let filtered = [...templates];
+    console.log('[TemplatePicker] Filtering templates. Total:', templates.length);
 
     // Apply search filter
     if (searchQuery.trim()) {
@@ -127,6 +131,7 @@ export default function TemplatePicker({
       return sortOrder === 'desc' ? -result : result;
     });
 
+    console.log('[TemplatePicker] Filtered templates:', filtered.length, filtered);
     setFilteredTemplates(filtered);
   }, [templates, searchQuery, selectedCategory, selectedTags, sortBy, sortOrder]);
 

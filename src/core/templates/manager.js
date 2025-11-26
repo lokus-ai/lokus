@@ -56,6 +56,31 @@ export class TemplateManager {
   }
 
   /**
+   * Refresh templates from file system (re-scan templates directory)
+   * This is useful when templates are created externally (e.g., by MCP)
+   */
+  async refresh() {
+    if (this.useFileStorage) {
+      // Reload from filesystem
+      const result = await this.storageBackend.refresh();
+      this.storage = result.templates;
+
+      // Clear and rebuild indexes
+      this.categories.clear();
+      this.tags.clear();
+      this.initializeDefaultCategories();
+
+      for (const template of this.storage.values()) {
+        this.updateCategoryIndex(template);
+        this.updateTagIndex(template);
+      }
+
+      return result;
+    }
+    return { success: true, count: this.storage.size };
+  }
+
+  /**
    * Create a new template
    */
   async create(templateData) {

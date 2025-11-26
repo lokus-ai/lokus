@@ -14,6 +14,9 @@ async function getTemplateManager() {
     const workspacePath = await WorkspaceManager.getValidatedWorkspacePath();
     const templateDir = workspacePath ? `${workspacePath}/templates` : null;
 
+    console.log('[useTemplates] Workspace path:', workspacePath);
+    console.log('[useTemplates] Templates directory:', templateDir);
+
     if (!templateDir) {
       throw new Error('No workspace selected. Please open a workspace first.');
     }
@@ -23,6 +26,7 @@ async function getTemplateManager() {
       templateDir
     });
     await templateStorage.initialize();
+    console.log('[useTemplates] Storage initialized');
 
     templateManager = new TemplateManager({
       storage: templateStorage,
@@ -30,7 +34,8 @@ async function getTemplateManager() {
     });
 
     // Load existing templates from files
-    await templateManager.initialize();
+    const result = await templateManager.initialize();
+    console.log('[useTemplates] Manager initialized. Loaded', result.count, 'templates');
   }
   return templateManager;
 }
@@ -47,13 +52,16 @@ export function useTemplates() {
   // Initialize manager
   useEffect(() => {
     let mounted = true;
+    console.log('[useTemplates] Initializing template manager...');
     getTemplateManager().then(mgr => {
       if (mounted) {
+        console.log('[useTemplates] Template manager initialized successfully');
         setManager(mgr);
         setLoading(false);
       }
     }).catch(err => {
       if (mounted) {
+        console.error('[useTemplates] Failed to initialize template manager:', err);
         setError(err.message);
         setLoading(false);
       }
@@ -78,6 +86,40 @@ export function useTemplates() {
       return result;
     } catch (err) {
       console.error('[useTemplates] Load error:', err);
+      setError(err.message);
+      return { templates: [], total: 0 };
+    } finally {
+      setLoading(false);
+    }
+  }, [manager]);
+
+  // Refresh templates from filesystem (useful when templates are created externally)
+  const refreshTemplates = useCallback(async () => {
+    if (!manager) return { templates: [], total: 0 };
+
+    if (import.meta.env.DEV) {
+      console.log('[useTemplates] Refreshing templates from filesystem...');
+    }
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Refresh from filesystem
+      await manager.refresh();
+      if (import.meta.env.DEV) {
+        console.log('[useTemplates] Filesystem refresh complete');
+      }
+
+      // Now get the formatted list
+      const result = manager.list();
+      if (import.meta.env.DEV) {
+        console.log('[useTemplates] Loaded templates after refresh:', result);
+      }
+
+      setTemplates(result.templates);
+      return result;
+    } catch (err) {
+      console.error('[useTemplates] Refresh error:', err);
       setError(err.message);
       return { templates: [], total: 0 };
     } finally {
@@ -299,8 +341,10 @@ This project is licensed under the MIT License.
   useEffect(() => {
     if (manager) {
       const init = async () => {
+        console.log('[useTemplates] Loading templates on mount...');
         await initializeDemoTemplates();
-        await loadTemplates();
+        const result = await loadTemplates();
+        console.log('[useTemplates] Initial load complete. Template count:', result.total);
       };
       init();
     }
@@ -311,6 +355,7 @@ This project is licensed under the MIT License.
     loading,
     error,
     loadTemplates,
+    refreshTemplates,
     createTemplate,
     updateTemplate,
     deleteTemplate,

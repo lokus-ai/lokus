@@ -28,6 +28,7 @@ import { basesTools, executeBaseTool } from "./tools/bases.js";
 import { canvasTools, executeCanvasTool } from "./tools/canvas.js";
 import { kanbanTools, executeKanbanTool } from "./tools/kanban.js";
 import { graphTools, executeGraphTool } from "./tools/graph.js";
+import { templatesTools, executeTemplateTool } from "./tools/templates.js";
 
 // ===== CONFIGURATION =====
 const CONFIG = {
@@ -226,7 +227,8 @@ const getAllTools = () => {
     ...basesTools,
     ...canvasTools,
     ...kanbanTools,
-    ...graphTools
+    ...graphTools,
+    ...templatesTools
   ];
 };
 
@@ -274,6 +276,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     if (graphTools.some(t => t.name === toolName)) {
       return await executeGraphTool(toolName, args, workspace, apiUrl);
+    }
+
+    if (templatesTools.some(t => t.name === toolName)) {
+      return await executeTemplateTool(toolName, args, workspace, apiUrl);
     }
 
     throw new Error(`Unknown tool: ${toolName}`);
