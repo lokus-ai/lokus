@@ -12,7 +12,9 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   ListToolsRequestSchema,
-  CallToolRequestSchema
+  CallToolRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
 import { readFile, writeFile, access, mkdir } from "fs/promises";
 import { join, dirname } from "path";
@@ -29,6 +31,9 @@ import { canvasTools, executeCanvasTool } from "./tools/canvas.js";
 import { kanbanTools, executeKanbanTool } from "./tools/kanban.js";
 import { graphTools, executeGraphTool } from "./tools/graph.js";
 import { templatesTools, executeTemplateTool } from "./tools/templates.js";
+
+// Import resources
+import { markdownSyntaxResources, getMarkdownSyntaxResource } from "./resources/markdownSyntaxProvider.js";
 
 // ===== CONFIGURATION =====
 const CONFIG = {
@@ -293,6 +298,31 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         text: `❌ Error: ${error.message}`
       }],
       isError: true
+    };
+  }
+});
+
+// Resources list handler
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  logger.info(`Providing ${markdownSyntaxResources.length} documentation resources`);
+  return { resources: markdownSyntaxResources };
+});
+
+// Resources read handler
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  const { uri } = request.params;
+  logger.info(`Reading resource: ${uri}`);
+
+  try {
+    return await getMarkdownSyntaxResource(uri);
+  } catch (error) {
+    logger.error(`Resource read failed for ${uri}:`, error.message);
+    return {
+      contents: [{
+        uri,
+        mimeType: "text/plain",
+        text: `Error: ${error.message}`
+      }]
     };
   }
 });

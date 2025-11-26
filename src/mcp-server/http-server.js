@@ -26,6 +26,9 @@ import { kanbanTools, executeKanbanTool } from "./tools/kanban.js";
 import { graphTools, executeGraphTool } from "./tools/graph.js";
 import { templatesTools, executeTemplateTool } from "./tools/templates.js";
 
+// Import resources
+import { markdownSyntaxResources, getMarkdownSyntaxResource } from "./resources/markdownSyntaxProvider.js";
+
 // ===== CONFIGURATION =====
 const CONFIG = {
   defaultWorkspace: join(homedir(), 'Documents', 'Lokus Workspace'),
@@ -277,6 +280,39 @@ async function handleMCPRequest(request) {
         result,
         id
       };
+    }
+
+    // List resources
+    if (method === 'resources/list') {
+      return {
+        jsonrpc: '2.0',
+        result: { resources: markdownSyntaxResources },
+        id
+      };
+    }
+
+    // Read resource
+    if (method === 'resources/read') {
+      const { uri } = params;
+      logger.info(`Reading resource: ${uri}`);
+
+      try {
+        const resource = await getMarkdownSyntaxResource(uri);
+        return {
+          jsonrpc: '2.0',
+          result: resource,
+          id
+        };
+      } catch (error) {
+        return {
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: error.message
+          },
+          id
+        };
+      }
     }
 
     // Unknown method
