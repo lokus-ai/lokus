@@ -15,6 +15,7 @@ export default function PDFViewerTab({ file, onClose }) {
   const [scale, setScale] = useState(1.0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [documentLoaded, setDocumentLoaded] = useState(false);
 
   useEffect(() => {
     // Read PDF file as binary data
@@ -23,6 +24,8 @@ export default function PDFViewerTab({ file, onClose }) {
         setLoading(true);
         setError(null);
         setPdfData(null); // Clear previous data
+        setDocumentLoaded(false);
+        setPageNumber(1); // Reset to first page
 
         // Read file as binary using Tauri command
         const binaryData = await invoke('read_binary_file', { path: file });
@@ -40,18 +43,26 @@ export default function PDFViewerTab({ file, onClose }) {
     }
 
     loadPDF();
+
+    // Cleanup function
+    return () => {
+      setPdfData(null);
+      setDocumentLoaded(false);
+    };
   }, [file]);
 
   function onDocumentLoadSuccess({ numPages }) {
     setNumPages(numPages);
     setLoading(false);
     setError(null);
+    setDocumentLoaded(true);
   }
 
   function onDocumentLoadError(error) {
     console.error('Error loading PDF:', error);
     setError('Failed to load PDF file. The file might be corrupted or in an unsupported format.');
     setLoading(false);
+    setDocumentLoaded(false);
   }
 
   function changePage(offset) {
@@ -176,17 +187,20 @@ export default function PDFViewerTab({ file, onClose }) {
 
         {!error && fileConfig && (
           <Document
+            key={file}
             file={fileConfig}
             onLoadSuccess={onDocumentLoadSuccess}
             onLoadError={onDocumentLoadError}
             loading={<div className="pdf-loading"><div className="pdf-spinner"></div></div>}
           >
-            <Page
-              pageNumber={pageNumber}
-              scale={scale}
-              renderTextLayer={true}
-              renderAnnotationLayer={true}
-            />
+            {documentLoaded && (
+              <Page
+                pageNumber={pageNumber}
+                scale={scale}
+                renderTextLayer={true}
+                renderAnnotationLayer={true}
+              />
+            )}
           </Document>
         )}
       </div>

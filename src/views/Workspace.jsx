@@ -65,6 +65,12 @@ import { ImageViewerTab } from "../components/ImageViewer/ImageViewerTab.jsx";
 import { isImageFile, findImageFiles } from "../utils/imageUtils.js";
 import TagManagementModal from "../components/TagManagementModal.jsx";
 import ProductTour from "../components/ProductTour.jsx";
+import ExternalDropZone from "../components/ExternalDropZone.jsx";
+import { AnimatePresence, motion } from "framer-motion";
+import { useDropPosition } from "../hooks/useDropPosition.js";
+import { useAutoExpand } from "../hooks/useAutoExpand.js";
+import DropIndicator from "../components/FileTree/DropIndicator.jsx";
+import Breadcrumbs from "../components/FileTree/Breadcrumbs.jsx";
 import "../styles/product-tour.css";
 
 const MAX_OPEN_TABS = 10;
@@ -310,7 +316,10 @@ function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
 }
 
 // --- File Entry Component ---
-function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent }) {
+function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder }) {
+  const entryRef = useRef(null);
+  const hoverTimeoutRef = useRef(null);
+
   const { attributes, listeners, setNodeRef: draggableRef, isDragging } = useDraggable({
     id: entry.path,
     data: { type: "file-entry", entry },
@@ -325,6 +334,62 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
   const isExpanded = expandedFolders.has(entry.path);
   const isDropTarget = isOver && entry.is_directory;
 
+  // Auto-expand folder after 800ms hover during drag
+  const willAutoExpand = useAutoExpand(isOver, entry.is_directory, isExpanded, entry.path, toggleFolder);
+
+  // Update drop position when dragging over this element
+  const handleDragOver = useCallback((event) => {
+    if (isOver && updateDropPosition && entryRef.current) {
+      updateDropPosition(event, entryRef.current, entry);
+    }
+  }, [isOver, updateDropPosition, entry]);
+
+  useEffect(() => {
+    const element = entryRef.current;
+    if (element && isOver) {
+      element.addEventListener('dragover', handleDragOver);
+      return () => element.removeEventListener('dragover', handleDragOver);
+    }
+  }, [isOver, handleDragOver]);
+
+  // External file drop handlers for folders
+  const handleExternalDragEnter = (e) => {
+    if (isExternalDragActive && entry.is_directory) {
+      e.preventDefault();
+      e.stopPropagation();
+      setHoveredFolder(entry.path);
+
+      // Auto-expand after 800ms
+      hoverTimeoutRef.current = setTimeout(() => {
+        if (!isExpanded) {
+          toggleFolder(entry.path);
+        }
+      }, 800);
+    }
+  };
+
+  const handleExternalDragLeave = (e) => {
+    if (isExternalDragActive && entry.is_directory) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    }
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Calculate file count for folders
+  const fileCount = entry.is_directory && entry.children ? entry.children.length : null;
+
   const handleClick = () => {
     if (entry.is_directory) {
       toggleFolder(entry.path);
@@ -335,8 +400,10 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 
   const baseClasses = "obsidian-file-item";
   const stateClasses = activeFile === entry.path ? 'active' : '';
-  const dropTargetClasses = isDropTarget ? 'bg-app-accent/30 ring-2 ring-app-accent' : '';
-  const draggingClasses = isDragging ? 'opacity-50' : '';
+  const dropTargetClasses = isDropTarget ? 'drop-target-inside' : '';
+  const draggingClasses = isDragging ? 'dragging' : '';
+  const willExpandClasses = willAutoExpand ? 'will-expand-indicator' : '';
+  const externalDropTargetClasses = (isExternalDragActive && entry.is_directory && hoveredFolder === entry.path) ? 'external-drop-target' : '';
 
   const onRename = () => {
     // For .md files: open them (the note header handles renaming)
@@ -520,14 +587,32 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
   ]);
 
   return (
-    <li style={{ paddingLeft: `${level * 1.25}rem` }}>
-      <div ref={droppableRef} className="rounded">
+    <li
+      className="file-entry-container"
+      data-level={level}
+      data-path={entry.path}
+      style={{ paddingLeft: `${level * 1.25}rem`, '--level': level }}
+    >
+      <div
+        ref={(node) => {
+          droppableRef(node);
+          entryRef.current = node;
+        }}
+        className="rounded"
+      >
         <div ref={draggableRef} className="flex items-center">
           <FileContextMenu
             file={{ ...entry, type: entry.is_directory ? 'folder' : 'file' }}
             onAction={handleFileContextAction}
           >
-            <button {...listeners} {...attributes} onClick={handleClick} className={`${baseClasses} ${stateClasses} ${dropTargetClasses} ${draggingClasses}`}>
+            <button
+              {...listeners}
+              {...attributes}
+              onClick={handleClick}
+              onDragEnter={handleExternalDragEnter}
+              onDragLeave={handleExternalDragLeave}
+              className={`${baseClasses} ${stateClasses} ${dropTargetClasses} ${draggingClasses} ${willExpandClasses} ${externalDropTargetClasses} file-entry-item`}
+            >
               <ColoredFileIcon
                 fileName={entry.name}
                 isDirectory={entry.is_directory}
@@ -544,17 +629,134 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
               ) : (
                 <span className="truncate">{entry.name}</span>
               )}
+              {fileCount !== null && (
+                <span className="file-count-badge">({fileCount})</span>
+              )}
             </button>
           </FileContextMenu>
         </div>
       </div>
-      {isExpanded && (
-        <ul className="space-y-1 mt-1">
-          {entry.children?.map(child => (
+      <AnimatePresence initial={false}>
+        {isExpanded && entry.children && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+            className="folder-children-container"
+          >
+            <ul className="space-y-1 mt-1">
+              {entry.children.map(child => (
+                <FileEntryComponent
+                  key={child.path}
+                  entry={child}
+                  level={level + 1}
+                  onFileClick={onFileClick}
+                  activeFile={activeFile}
+                  expandedFolders={expandedFolders}
+                  toggleFolder={toggleFolder}
+                  onRefresh={onRefresh}
+                  keymap={keymap}
+                  renamingPath={renamingPath}
+                  setRenamingPath={setRenamingPath}
+                  onViewHistory={onViewHistory}
+                  setTagModalFile={setTagModalFile}
+                  setShowTagModal={setShowTagModal}
+                  setUseSplitView={setUseSplitView}
+                  setRightPaneFile={setRightPaneFile}
+                  setRightPaneTitle={setRightPaneTitle}
+                  setRightPaneContent={setRightPaneContent}
+                  updateDropPosition={updateDropPosition}
+                  fileTreeRef={fileTreeRef}
+                  isExternalDragActive={isExternalDragActive}
+                  hoveredFolder={hoveredFolder}
+                  setHoveredFolder={setHoveredFolder}
+                />
+              ))}
+            </ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </li>
+  );
+}
+
+// --- File Tree View Component ---
+function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, isExternalDragActive, hoveredFolder, setHoveredFolder }) {
+  const [activeEntry, setActiveEntry] = useState(null);
+  const fileTreeRef = useRef(null);
+  const { dropPosition, updatePosition, clearPosition } = useDropPosition();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 10,
+      },
+    })
+  );
+
+  const handleDragStart = (event) => {
+    const sourceEntry = event.active.data.current?.entry;
+    setActiveEntry(sourceEntry);
+  };
+
+  const handleDragEnd = async (event) => {
+    const { over, active } = event;
+    setActiveEntry(null);
+    clearPosition();
+
+    if (!over || !active) return;
+
+    const sourceEntry = active.data.current?.entry;
+    const targetEntry = over.data.current?.entry;
+
+    if (!sourceEntry || !targetEntry || sourceEntry.path === targetEntry.path) {
+      return;
+    }
+
+    try {
+      // Use dropPosition if available for precise placement
+      if (dropPosition) {
+        const { position, targetPath } = dropPosition;
+
+        if (position === "inside") {
+          // Drop inside folder
+          await invoke("move_file", {
+            sourcePath: sourceEntry.path,
+            destinationDir: targetPath,
+          });
+        } else {
+          // For "before" and "after", move to same parent as target
+          const targetParent = targetPath.substring(0, targetPath.lastIndexOf('/'));
+          await invoke("move_file", {
+            sourcePath: sourceEntry.path,
+            destinationDir: targetParent || targetEntry.path.substring(0, targetEntry.path.lastIndexOf('/')),
+          });
+        }
+      } else if (targetEntry.is_directory) {
+        // Fallback to old behavior (drop inside folder)
+        await invoke("move_file", {
+          sourcePath: sourceEntry.path,
+          destinationDir: targetEntry.path,
+        });
+      }
+
+      onRefresh();
+    } catch (error) {
+      console.error("Failed to move file:", error);
+    }
+  };
+
+  return (
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div ref={fileTreeRef} className="file-tree-container">
+        <ul className="space-y-1">
+          {isCreating && <NewFolderInput onConfirm={onCreateConfirm} level={0} />}
+          {entries.map(entry => (
             <FileEntryComponent
-              key={child.path}
-              entry={child}
-              level={level + 1}
+              key={entry.path}
+              entry={entry}
+              level={0}
               onFileClick={onFileClick}
               activeFile={activeFile}
               expandedFolders={expandedFolders}
@@ -570,72 +772,36 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
               setRightPaneFile={setRightPaneFile}
               setRightPaneTitle={setRightPaneTitle}
               setRightPaneContent={setRightPaneContent}
+              updateDropPosition={updatePosition}
+              fileTreeRef={fileTreeRef}
+              isExternalDragActive={isExternalDragActive}
+              hoveredFolder={hoveredFolder}
+              setHoveredFolder={setHoveredFolder}
             />
           ))}
         </ul>
-      )}
-    </li>
-  );
-}
 
-// --- File Tree View Component ---
-function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent }) {
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 10,
-      },
-    })
-  );
+        {/* Drop position indicator */}
+        <DropIndicator
+          position={dropPosition}
+          targetPath={dropPosition?.targetPath}
+          fileTreeRef={fileTreeRef}
+        />
+      </div>
 
-  const handleDragEnd = async (event) => {
-    const { over, active } = event;
-    if (!over || !active) return;
-
-    const sourceEntry = active.data.current?.entry;
-    const targetEntry = over.data.current?.entry;
-
-    if (!sourceEntry || !targetEntry || !targetEntry.is_directory || sourceEntry.path === targetEntry.path) {
-      return;
-    }
-
-    try {
-      await invoke("move_file", {
-        sourcePath: sourceEntry.path,
-        destinationDir: targetEntry.path,
-      });
-      onRefresh();
-    } catch (error) {
-    }
-  };
-
-  return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-      <ul className="space-y-1">
-        {isCreating && <NewFolderInput onConfirm={onCreateConfirm} level={0} />}
-        {entries.map(entry => (
-          <FileEntryComponent
-            key={entry.path}
-            entry={entry}
-            level={0}
-            onFileClick={onFileClick}
-            activeFile={activeFile}
-            expandedFolders={expandedFolders}
-            toggleFolder={toggleFolder}
-            onRefresh={onRefresh}
-            keymap={keymap}
-            renamingPath={renamingPath}
-            setRenamingPath={setRenamingPath}
-            onViewHistory={onViewHistory}
-            setTagModalFile={setTagModalFile}
-            setShowTagModal={setShowTagModal}
-            setUseSplitView={setUseSplitView}
-            setRightPaneFile={setRightPaneFile}
-            setRightPaneTitle={setRightPaneTitle}
-            setRightPaneContent={setRightPaneContent}
-          />
-        ))}
-      </ul>
+      {/* Drag overlay with ghost preview */}
+      <DragOverlay>
+        {activeEntry ? (
+          <div className="drag-preview">
+            <ColoredFileIcon
+              filename={activeEntry.name}
+              isDirectory={activeEntry.is_directory}
+              size={16}
+            />
+            <span>{activeEntry.name}</span>
+          </div>
+        ) : null}
+      </DragOverlay>
     </DndContext>
   );
 }
@@ -850,6 +1016,10 @@ function WorkspaceWithScope({ path }) {
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [renamingPath, setRenamingPath] = useState(null);
 
+  // External file drop state
+  const [isExternalDragActive, setIsExternalDragActive] = useState(false);
+  const [hoveredFolder, setHoveredFolder] = useState(null);
+
   // Check if we're in test mode
   const isTestMode = new URLSearchParams(window.location.search).get('testMode') === 'true';
   const [keymap, setKeymap] = useState({});
@@ -1025,6 +1195,103 @@ function WorkspaceWithScope({ path }) {
       });
     }
   }, [path]);
+
+  // Insert images into editor at cursor position
+  const insertImagesIntoEditor = useCallback((imagePaths) => {
+    if (!editorRef.current) return;
+
+    const editor = editorRef.current;
+    const workspaceRoot = path;
+
+    // Build markdown for each image
+    const imageMarkdown = imagePaths.map(imagePath => {
+      // Get relative path from workspace root
+      const relativePath = imagePath.replace(workspaceRoot + '/', '');
+      const fileName = relativePath.split('/').pop();
+
+      // Use wiki-link style for images in workspace
+      return `![[${fileName}]]`;
+    }).join('\n\n');
+
+    // Insert at cursor position
+    editor.chain()
+      .focus()
+      .insertContent(imageMarkdown + '\n\n')
+      .run();
+
+  }, [path]);
+
+  // External file drop event listeners (Tauri 2.0 API)
+  useEffect(() => {
+    if (!path) {
+      return;
+    }
+
+    let unlistenDrop;
+    let unlistenOver;
+    let unlistenLeave;
+
+    const setupFileDropListeners = async () => {
+      try {
+        // Tauri 2.0: Event names changed from file-drop to drag-drop
+        // tauri://drag-drop - Files dropped
+        unlistenDrop = await listen('tauri://drag-drop', async (event) => {
+          const filePaths = event.payload.paths || event.payload;
+          setIsExternalDragActive(false);
+
+          try {
+            // Determine destination folder
+            const targetFolder = hoveredFolder || null;
+
+            // Copy files to workspace
+            const result = await invoke('copy_external_files_to_workspace', {
+              filePaths: filePaths,
+              workspacePath: path,
+              targetFolder: targetFolder,
+            });
+
+            // Refresh file tree if files were copied successfully
+            if (result.success.length > 0) {
+              handleRefreshFiles();
+
+              // Auto-insert images into active editor
+              const imageFiles = result.success.filter(p => isImageFile(p));
+              if (imageFiles.length > 0 && editorRef.current) {
+                insertImagesIntoEditor(imageFiles);
+              }
+            }
+
+          } catch (error) {
+            console.error('File drop error:', error);
+          } finally {
+            setHoveredFolder(null);
+          }
+        });
+
+        // tauri://drag-over - Files being dragged over window
+        unlistenOver = await listen('tauri://drag-over', () => {
+          setIsExternalDragActive(true);
+        });
+
+        // tauri://drag-leave - Drag left window
+        unlistenLeave = await listen('tauri://drag-leave', () => {
+          setIsExternalDragActive(false);
+          setHoveredFolder(null);
+        });
+
+      } catch (error) {
+        console.error('Failed to setup file drop listeners:', error);
+      }
+    };
+
+    setupFileDropListeners();
+
+    return () => {
+      if (unlistenDrop) unlistenDrop();
+      if (unlistenOver) unlistenOver();
+      if (unlistenLeave) unlistenLeave();
+    };
+  }, [path, hoveredFolder, insertImagesIntoEditor]);
 
   // Load shortcuts map for hints and keep it fresh
   useEffect(() => {
@@ -3742,26 +4009,29 @@ function WorkspaceWithScope({ path }) {
                     <ContextMenuTrigger asChild>
                       <div className="p-2 flex-1 overflow-y-auto">
                         <FileTreeView
-                          entries={filteredFileTree}
-                          onFileClick={handleFileOpen}
-                          activeFile={activeFile}
-                          onRefresh={handleRefreshFiles}
-                          data-testid="file-tree"
-                          expandedFolders={expandedFolders}
-                          toggleFolder={toggleFolder}
-                          isCreating={isCreatingFolder}
-                          onCreateConfirm={handleConfirmCreateFolder}
-                          keymap={keymap}
-                          renamingPath={renamingPath}
-                          setRenamingPath={setRenamingPath}
-                          onViewHistory={toggleVersionHistory}
-                          setTagModalFile={setTagModalFile}
-                          setShowTagModal={setShowTagModal}
-                          setUseSplitView={setUseSplitView}
-                          setRightPaneFile={setRightPaneFile}
-                          setRightPaneTitle={setRightPaneTitle}
-                          setRightPaneContent={setRightPaneContent}
-                        />
+                            entries={filteredFileTree}
+                            onFileClick={handleFileOpen}
+                            activeFile={activeFile}
+                            onRefresh={handleRefreshFiles}
+                            data-testid="file-tree"
+                            expandedFolders={expandedFolders}
+                            toggleFolder={toggleFolder}
+                            isCreating={isCreatingFolder}
+                            onCreateConfirm={handleConfirmCreateFolder}
+                            keymap={keymap}
+                            renamingPath={renamingPath}
+                            setRenamingPath={setRenamingPath}
+                            onViewHistory={toggleVersionHistory}
+                            setTagModalFile={setTagModalFile}
+                            setShowTagModal={setShowTagModal}
+                            setUseSplitView={setUseSplitView}
+                            setRightPaneFile={setRightPaneFile}
+                            setRightPaneTitle={setRightPaneTitle}
+                            setRightPaneContent={setRightPaneContent}
+                            isExternalDragActive={isExternalDragActive}
+                            hoveredFolder={hoveredFolder}
+                            setHoveredFolder={setHoveredFolder}
+                          />
                       </div>
                     </ContextMenuTrigger>
                     <ContextMenuContent>
@@ -4025,56 +4295,72 @@ function WorkspaceWithScope({ path }) {
             <div className="flex-1 h-full overflow-hidden">
               <Gmail workspacePath={path} />
             </div>
-          ) : */ (
+          ) : */ activeFile && activeFile.startsWith('__plugin_') ? (
                       <div className="flex-1 p-8 md:p-12 overflow-y-auto">
                         <div className="max-w-full mx-auto h-full">
-                          {false ? (
-                            <div className="h-full flex flex-col">
-                              {/* Graph view moved above */}
-                            </div>
-                          ) : activeFile === '__old_graph__' ? (
-                            <div className="h-full flex flex-col">
-                              {isLoadingGraph ? (
-                                <div className="flex-1 flex items-center justify-center">
-                                  <div className="text-center">
-                                    <div className="animate-spin w-8 h-8 border-2 border-app-accent border-t-transparent rounded-full mx-auto mb-4"></div>
-                                    <h2 className="text-xl font-medium text-app-text mb-2">Building Graph</h2>
-                                    <p className="text-app-muted">Processing your workspace files...</p>
+                          <div className="flex-1 overflow-hidden">
+                            {(() => {
+                              const activeTab = openTabs.find(tab => tab.path === activeFile);
+                              return activeTab?.plugin ? <PluginDetail plugin={activeTab.plugin} /> : <div>Plugin not found</div>;
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    ) : activeFile === '__old_graph__' ? (
+                      <div className="flex-1 p-8 md:p-12 overflow-y-auto">
+                        <div className="max-w-full mx-auto h-full">
+                          <div className="h-full flex flex-col">
+                            {isLoadingGraph ? (
+                              <div className="flex-1 flex items-center justify-center">
+                                <div className="text-center">
+                                  <div className="animate-spin w-8 h-8 border-2 border-app-accent border-t-transparent rounded-full mx-auto mb-4"></div>
+                                  <h2 className="text-xl font-medium text-app-text mb-2">Building Graph</h2>
+                                  <p className="text-app-muted">Processing your workspace files...</p>
+                                </div>
+                              </div>
+                            ) : graphData ? (
+                              <div className="flex-1 h-full">
+                                <div>Old Graph View - REMOVED</div>
+                              </div>
+                            ) : (
+                              <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+                                <div className="mb-6">
+                                  <Network className="w-16 h-16 text-app-muted/50 mx-auto mb-4" />
+                                  <h2 className="text-xl font-medium text-app-text mb-2">Graph View</h2>
+                                  <p className="text-app-muted mb-6 max-w-md">
+                                    {isLoadingGraph
+                                      ? 'Building your knowledge graph...'
+                                      : 'Visualize the connections between your notes and discover hidden relationships in your knowledge base.'
+                                    }
+                                  </p>
+                                </div>
+                                {isLoadingGraph && (
+                                  <div className="flex items-center gap-2 text-app-accent">
+                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-current border-t-transparent"></div>
+                                    <span>Processing notes...</span>
                                   </div>
-                                </div>
-                              ) : graphData ? (
-                                <div className="flex-1 h-full">
-                                  <div>Old Graph View - REMOVED</div>
-                                </div>
-                              ) : (
-                                <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-                                  <div className="mb-6">
-                                    <Network className="w-16 h-16 text-app-muted/50 mx-auto mb-4" />
-                                    <h2 className="text-xl font-medium text-app-text mb-2">Graph View</h2>
-                                    <p className="text-app-muted mb-6 max-w-md">
-                                      {isLoadingGraph
-                                        ? 'Building your knowledge graph...'
-                                        : 'Visualize the connections between your notes and discover hidden relationships in your knowledge base.'
-                                      }
-                                    </p>
-                                  </div>
-                                  {isLoadingGraph && (
-                                    <div className="flex items-center gap-2 text-app-accent">
-                                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-current border-t-transparent"></div>
-                                      <span>Processing notes...</span>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          ) : activeFile && activeFile.startsWith('__plugin_') ? (
-                            <div className="flex-1 overflow-hidden">
-                              {(() => {
-                                const activeTab = openTabs.find(tab => tab.path === activeFile);
-                                return activeTab?.plugin ? <PluginDetail plugin={activeTab.plugin} /> : <div>Plugin not found</div>;
-                              })()}
-                            </div>
-                          ) : activeFile ? (
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : activeFile ? (
+                      <div className="flex-1 flex flex-col h-full overflow-hidden">
+                        {/* Breadcrumb navigation at top of editor */}
+                        <Breadcrumbs
+                          activeFile={activeFile}
+                          workspacePath={path}
+                          onNavigate={(folderPath) => {
+                            // Expand the folder and scroll to it
+                            if (folderPath !== path) {
+                              toggleFolder(folderPath);
+                            }
+                          }}
+                        />
+
+                        <div className="flex-1 overflow-y-auto">
+                          <div className="p-8 md:p-12 max-w-full mx-auto">
                             <EditorDropZone>
                               <ContextMenu>
                                 <ContextMenuTrigger asChild>
@@ -4083,7 +4369,7 @@ function WorkspaceWithScope({ path }) {
                                       type="text"
                                       value={editorTitle}
                                       onChange={(e) => setEditorTitle(e.target.value)}
-                                      className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
+                                      className="w-full bg-transparent text-4xl font-bold mb-4 outline-none text-app-text"
                                     />
                                     <div data-tour="editor">
                                       <Editor
@@ -4109,150 +4395,148 @@ function WorkspaceWithScope({ path }) {
                                 </ContextMenuContent>
                               </ContextMenu>
                             </EditorDropZone>
-                          ) : (
-                            <>
-                              {/* Modern Welcome Screen - VS Code Inspired */}
-                              <div className="h-full flex flex-col">
-                                <div className="flex-1 flex items-center justify-center p-8">
-                                  <div className="max-w-4xl w-full">
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-full flex flex-col">
+                        {/* Modern Welcome Screen - VS Code Inspired */}
+                        <div className="flex-1 flex items-center justify-center p-8">
+                          <div className="max-w-4xl w-full">
 
-                                    {/* Header Section */}
-                                    <div className="text-center mb-10">
-                                      <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-app-accent/20 to-app-accent/10 border border-app-accent/20 flex items-center justify-center">
-                                        <LokusLogo className="w-10 h-10 text-app-accent" />
-                                      </div>
-                                      <h1 className="text-3xl font-bold text-app-text mb-2">Welcome to Lokus</h1>
-                                      <p className="text-app-muted text-lg">Your modern knowledge management platform</p>
-                                    </div>
+                            {/* Header Section */}
+                            <div className="text-center mb-10">
+                              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-app-accent/20 to-app-accent/10 border border-app-accent/20 flex items-center justify-center">
+                                <LokusLogo className="w-10 h-10 text-app-accent" />
+                              </div>
+                              <h1 className="text-3xl font-bold text-app-text mb-2">Welcome to Lokus</h1>
+                              <p className="text-app-muted text-lg">Your modern knowledge management platform</p>
+                            </div>
 
-                                    {/* Quick Actions */}
-                                    <div className="mb-12">
-                                      <h2 className="text-lg font-semibold text-app-text mb-6">Start</h2>
-                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                        <button
-                                          onClick={handleCreateFile}
-                                          className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
-                                        >
-                                          <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
-                                            <FilePlus2 className="w-5 h-5 text-app-accent" />
-                                          </div>
-                                          <h3 className="font-medium text-app-text mb-2">New Note</h3>
-                                          <p className="text-sm text-app-muted">Create your first note and start writing</p>
-                                          <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+N")}</div>
-                                        </button>
+                            {/* Quick Actions */}
+                            <div className="mb-12">
+                              <h2 className="text-lg font-semibold text-app-text mb-6">Start</h2>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <button
+                                  onClick={handleCreateFile}
+                                  className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
+                                >
+                                  <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
+                                    <FilePlus2 className="w-5 h-5 text-app-accent" />
+                                  </div>
+                                  <h3 className="font-medium text-app-text mb-2">New Note</h3>
+                                  <p className="text-sm text-app-muted">Create your first note and start writing</p>
+                                  <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+N")}</div>
+                                </button>
 
-                                        <button
-                                          onClick={handleCreateCanvas}
-                                          className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
-                                        >
-                                          <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
-                                            <Layers className="w-5 h-5 text-app-accent" />
-                                          </div>
-                                          <h3 className="font-medium text-app-text mb-2">New Canvas</h3>
-                                          <p className="text-sm text-app-muted">Create visual mind maps and diagrams</p>
-                                        </button>
+                                <button
+                                  onClick={handleCreateCanvas}
+                                  className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
+                                >
+                                  <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
+                                    <Layers className="w-5 h-5 text-app-accent" />
+                                  </div>
+                                  <h3 className="font-medium text-app-text mb-2">New Canvas</h3>
+                                  <p className="text-sm text-app-muted">Create visual mind maps and diagrams</p>
+                                </button>
 
-                                        <button
-                                          onClick={handleCreateFolder}
-                                          className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
-                                        >
-                                          <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
-                                            <FolderPlus className="w-5 h-5 text-app-accent" />
-                                          </div>
-                                          <h3 className="font-medium text-app-text mb-2">New Folder</h3>
-                                          <p className="text-sm text-app-muted">Organize your notes with folders</p>
-                                          <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+Shift+N")}</div>
-                                        </button>
+                                <button
+                                  onClick={handleCreateFolder}
+                                  className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
+                                >
+                                  <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
+                                    <FolderPlus className="w-5 h-5 text-app-accent" />
+                                  </div>
+                                  <h3 className="font-medium text-app-text mb-2">New Folder</h3>
+                                  <p className="text-sm text-app-muted">Organize your notes with folders</p>
+                                  <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+Shift+N")}</div>
+                                </button>
 
-                                        <button
-                                          onClick={() => setShowCommandPalette(true)}
-                                          className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
-                                          data-tour="templates"
-                                        >
-                                          <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
-                                            <Search className="w-5 h-5 text-app-accent" />
-                                          </div>
-                                          <h3 className="font-medium text-app-text mb-2">Command Palette</h3>
-                                          <p className="text-sm text-app-muted">Quick access to all commands</p>
-                                          <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+K")}</div>
-                                        </button>
-                                      </div>
-                                    </div>
+                                <button
+                                  onClick={() => setShowCommandPalette(true)}
+                                  className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
+                                  data-tour="templates"
+                                >
+                                  <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
+                                    <Search className="w-5 h-5 text-app-accent" />
+                                  </div>
+                                  <h3 className="font-medium text-app-text mb-2">Command Palette</h3>
+                                  <p className="text-sm text-app-muted">Quick access to all commands</p>
+                                  <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+K")}</div>
+                                </button>
+                              </div>
+                            </div>
 
-                                    {/* Recent & Help */}
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                      <div>
-                                        <h2 className="text-lg font-semibold text-app-text mb-4">Recent</h2>
-                                        <div className="space-y-2">
-                                          {recentFiles.length > 0 ? (
-                                            recentFiles.map((file, idx) => (
-                                              <button
-                                                key={idx}
-                                                onClick={() => handleFileOpen(file)}
-                                                className="w-full p-3 rounded-lg bg-app-panel/20 border border-app-border/50 hover:bg-app-panel/40 hover:border-app-accent/50 transition-all text-left group"
-                                              >
-                                                <div className="flex items-center gap-3">
-                                                  {file.path.endsWith('.md') ? (
-                                                    <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
-                                                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
-                                                    </svg>
-                                                  ) : file.path.endsWith('.canvas') || file.path.endsWith('.kanban') ? (
-                                                    <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
-                                                      <path fillRule="evenodd" d="M4.25 2A2.25 2.25 0 002 4.25v11.5A2.25 2.25 0 004.25 18h11.5A2.25 2.25 0 0018 15.75V4.25A2.25 2.25 0 0015.75 2H4.25z" clipRule="evenodd" />
-                                                    </svg>
-                                                  ) : file.path.endsWith('.pdf') ? (
-                                                    <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
-                                                      <path d="M4 4a2 2 0 012-2h8l4 4v10a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8v-8h-4V4H6zm6 0v3h3l-3-3zM8 13a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1zm0-3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
-                                                    </svg>
-                                                  ) : (
-                                                    <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
-                                                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
-                                                    </svg>
-                                                  )}
-                                                  <span className="text-sm font-medium text-app-text group-hover:text-app-accent transition-colors truncate">
-                                                    {file.name.replace(/\.(md|txt|canvas)$/, '')}
-                                                  </span>
-                                                </div>
-                                              </button>
-                                            ))
+                            {/* Recent & Help */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                              <div>
+                                <h2 className="text-lg font-semibold text-app-text mb-4">Recent</h2>
+                                <div className="space-y-2">
+                                  {recentFiles.length > 0 ? (
+                                    recentFiles.map((file, idx) => (
+                                      <button
+                                        key={idx}
+                                        onClick={() => handleFileOpen(file)}
+                                        className="w-full p-3 rounded-lg bg-app-panel/20 border border-app-border/50 hover:bg-app-panel/40 hover:border-app-accent/50 transition-all text-left group"
+                                      >
+                                        <div className="flex items-center gap-3">
+                                          {file.path.endsWith('.md') ? (
+                                            <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
+                                              <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                                            </svg>
+                                          ) : file.path.endsWith('.canvas') || file.path.endsWith('.kanban') ? (
+                                            <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
+                                              <path fillRule="evenodd" d="M4.25 2A2.25 2.25 0 002 4.25v11.5A2.25 2.25 0 004.25 18h11.5A2.25 2.25 0 0018 15.75V4.25A2.25 2.25 0 0015.75 2H4.25z" clipRule="evenodd" />
+                                            </svg>
+                                          ) : file.path.endsWith('.pdf') ? (
+                                            <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
+                                              <path d="M4 4a2 2 0 012-2h8l4 4v10a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8v-8h-4V4H6zm6 0v3h3l-3-3zM8 13a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1zm0-3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                                            </svg>
                                           ) : (
-                                            <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
-                                              <p className="text-sm text-app-muted">No recent files yet. Start by creating your first note!</p>
-                                            </div>
+                                            <svg className="w-4 h-4 text-app-muted group-hover:text-app-accent transition-colors" fill="currentColor" viewBox="0 0 20 20">
+                                              <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                                            </svg>
                                           )}
+                                          <span className="text-sm font-medium text-app-text group-hover:text-app-accent transition-colors truncate">
+                                            {file.name.replace(/\.(md|txt|canvas)$/, '')}
+                                          </span>
                                         </div>
-                                      </div>
-
-                                      <div>
-                                        <h2 className="text-lg font-semibold text-app-text mb-4">Learn</h2>
-                                        <div className="space-y-3">
-                                          <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
-                                            <h3 className="font-medium text-app-text text-sm mb-2">✨ Features</h3>
-                                            <ul className="text-sm text-app-muted space-y-1">
-                                              <li>• Rich text editing with math equations</li>
-                                              <li>• Wiki-style linking with <code className="px-1 py-0.5 bg-app-bg/50 rounded text-xs">[[brackets]]</code></li>
-                                              <li>• Task management and kanban boards</li>
-                                              <li>• Plugin system for extensibility</li>
-                                            </ul>
-                                          </div>
-
-                                          <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
-                                            <h3 className="font-medium text-app-text text-sm mb-2">⌨️ Quick Tips</h3>
-                                            <ul className="text-sm text-app-muted space-y-1">
-                                              <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+K</kbd> Command palette</li>
-                                              <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+S</kbd> Save current file</li>
-                                              <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+P</kbd> Quick file open</li>
-                                              <li>• Drag files to move them between folders</li>
-                                            </ul>
-                                          </div>
-                                        </div>
-                                      </div>
+                                      </button>
+                                    ))
+                                  ) : (
+                                    <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
+                                      <p className="text-sm text-app-muted">No recent files yet. Start by creating your first note!</p>
                                     </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div>
+                                <h2 className="text-lg font-semibold text-app-text mb-4">Learn</h2>
+                                <div className="space-y-3">
+                                  <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
+                                    <h3 className="font-medium text-app-text text-sm mb-2">✨ Features</h3>
+                                    <ul className="text-sm text-app-muted space-y-1">
+                                      <li>• Rich text editing with math equations</li>
+                                      <li>• Wiki-style linking with <code className="px-1 py-0.5 bg-app-bg/50 rounded text-xs">[[brackets]]</code></li>
+                                      <li>• Task management and kanban boards</li>
+                                      <li>• Plugin system for extensibility</li>
+                                    </ul>
+                                  </div>
+
+                                  <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
+                                    <h3 className="font-medium text-app-text text-sm mb-2">⌨️ Quick Tips</h3>
+                                    <ul className="text-sm text-app-muted space-y-1">
+                                      <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+K</kbd> Command palette</li>
+                                      <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+S</kbd> Save current file</li>
+                                      <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+P</kbd> Quick file open</li>
+                                      <li>• Drag files to move them between folders</li>
+                                    </ul>
                                   </div>
                                 </div>
                               </div>
-                            </>
-                          )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -4604,6 +4888,12 @@ function WorkspaceWithScope({ path }) {
           unsavedChanges={unsavedChanges}
           openTabs={openTabs}
           editor={editor}
+        />
+
+        {/* External file drop overlay */}
+        <ExternalDropZone
+          isActive={isExternalDragActive}
+          hoveredFolder={hoveredFolder}
         />
       </div>
     </PanelManager>

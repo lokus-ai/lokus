@@ -87,8 +87,6 @@ export const Folding = Extension.create({
         }
       });
 
-      console.log('[Folding] Built decorations:', decorations.length, 'total decorations');
-      console.log('[Folding] Folded sections:', Array.from(foldedSections));
       return DecorationSet.create(doc, decorations);
     };
 
@@ -174,19 +172,14 @@ export const Folding = Extension.create({
 
               const pos = parseInt(heading.dataset.foldPos, 10);
               if (!isNaN(pos)) {
-                console.log('[Folding] Click detected on heading at position:', pos);
-
                 // Toggle fold state directly (inline the toggleFold logic)
                 const isFolded = extension.storage.foldedSections.has(pos);
-                console.log('[Folding] Currently folded?', isFolded);
 
                 if (isFolded) {
                   extension.storage.foldedSections.delete(pos);
                 } else {
                   extension.storage.foldedSections.add(pos);
                 }
-
-                console.log('[Folding] After toggle, foldedSections size:', extension.storage.foldedSections.size);
 
                 // Save to localStorage
                 const filePath = globalThis.__LOKUS_ACTIVE_FILE__;
@@ -199,7 +192,6 @@ export const Folding = Extension.create({
                 // Trigger decoration update
                 const tr = view.state.tr.setMeta('foldingChanged', true);
                 view.dispatch(tr);
-                console.log('[Folding] Transaction dispatched');
               }
 
               return true;
@@ -273,9 +265,7 @@ export const Folding = Extension.create({
   },
 
   toggleFold(view, headingPos) {
-    console.log('[Folding] toggleFold called with pos:', headingPos);
     const isFolded = this.storage.foldedSections.has(headingPos);
-    console.log('[Folding] Currently folded?', isFolded);
 
     if (isFolded) {
       this.storage.foldedSections.delete(headingPos);
@@ -283,15 +273,12 @@ export const Folding = Extension.create({
       this.storage.foldedSections.add(headingPos);
     }
 
-    console.log('[Folding] After toggle, foldedSections size:', this.storage.foldedSections.size);
-
     // Save to localStorage
     this.saveFoldState();
 
     // Trigger decoration update
     const tr = view.state.tr.setMeta('foldingChanged', true);
     view.dispatch(tr);
-    console.log('[Folding] Transaction dispatched');
   },
 
   unfoldAll(view) {
