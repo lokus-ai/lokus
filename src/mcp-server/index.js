@@ -31,6 +31,7 @@ import { canvasTools, executeCanvasTool } from "./tools/canvas.js";
 import { kanbanTools, executeKanbanTool } from "./tools/kanban.js";
 import { graphTools, executeGraphTool } from "./tools/graph.js";
 import { templatesTools, executeTemplateTool } from "./tools/templates.js";
+import { themeTools, handleThemeTool } from "./tools/themes.js";
 
 // Import resources
 import { markdownSyntaxResources, getMarkdownSyntaxResource } from "./resources/markdownSyntaxProvider.js";
@@ -233,7 +234,8 @@ const getAllTools = () => {
     ...canvasTools,
     ...kanbanTools,
     ...graphTools,
-    ...templatesTools
+    ...templatesTools,
+    ...themeTools
   ];
 };
 
@@ -285,6 +287,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     if (templatesTools.some(t => t.name === toolName)) {
       return await executeTemplateTool(toolName, args, workspace, apiUrl);
+    }
+
+    if (themeTools.some(t => t.name === toolName)) {
+      const result = await handleThemeTool(toolName, args);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify(result, null, 2)
+        }]
+      };
     }
 
     throw new Error(`Unknown tool: ${toolName}`);
