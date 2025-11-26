@@ -207,6 +207,13 @@ function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
       backdrop-filter: blur(4px);
     `;
 
+    // Define cleanup function early so it can be used in event handlers
+    const cleanup = () => {
+      if (overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+      }
+    };
+
     const picker = document.createElement('div');
     picker.style.cssText = `
       background: rgb(var(--panel));
@@ -339,12 +346,6 @@ function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
     picker.appendChild(footer);
     overlay.appendChild(picker);
     document.body.appendChild(overlay);
-
-    const cleanup = () => {
-      if (overlay.parentNode) {
-        overlay.parentNode.removeChild(overlay);
-      }
-    };
 
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) cleanup();
@@ -868,7 +869,9 @@ const commandItems = [
                 if (editor?.commands?.setMathInline) {
                   editor.chain().focus().deleteRange(range).setMathInline(formula).run();
                 } else {
-                  editor.chain().focus().deleteRange(range).insertContent(`$${formula}$`).run();
+                  // Fallback: insert as math node HTML
+                  const html = `<span data-type="math-inline" data-src="${formula.replace(/"/g, '&quot;')}">${formula}</span>`;
+                  editor.chain().focus().deleteRange(range).insertContent(html).run();
                 }
               }
             }
@@ -890,7 +893,9 @@ const commandItems = [
                 if (editor?.commands?.setMathBlock) {
                   editor.chain().focus().deleteRange(range).setMathBlock(formula).run();
                 } else {
-                  editor.chain().focus().deleteRange(range).insertContent(`$$${formula}$$`).run();
+                  // Fallback: insert as math block node HTML
+                  const html = `<div data-type="math-block" data-src="${formula.replace(/"/g, '&quot;')}">${formula}</div>`;
+                  editor.chain().focus().deleteRange(range).insertContent(html).run();
                 }
               }
             }
@@ -903,11 +908,43 @@ const commandItems = [
 
 const slashCommand = {
   items: ({ query, editor }) => {
+    // If no query, show all commands
+    if (!query || !query.trim()) {
+      const pluginCommandGroups = editorAPI.getSlashCommands();
+      return [...commandItems, ...pluginCommandGroups];
+    }
 
-    const matches = (title) => {
-      const result = title.toLowerCase().includes(query.toLowerCase());
-      return result;
+    const queryLower = query.toLowerCase().trim();
+
+    // Enhanced matching: check title and description
+    const matches = (item) => {
+      const titleLower = item.title.toLowerCase();
+      const descLower = (item.description || '').toLowerCase();
+
+      // Check if title or description includes the query
+      return titleLower.includes(queryLower) || descLower.includes(queryLower);
     };
+
+    // Score items for better sorting (title matches rank higher)
+    const scoreItem = (item) => {
+      const titleLower = item.title.toLowerCase();
+      const descLower = (item.description || '').toLowerCase();
+
+      // Exact title match = highest score
+      if (titleLower === queryLower) return 1000;
+
+      // Title starts with query = high score
+      if (titleLower.startsWith(queryLower)) return 100;
+
+      // Title contains query = medium score
+      if (titleLower.includes(queryLower)) return 50;
+
+      // Description contains query = low score
+      if (descLower.includes(queryLower)) return 10;
+
+      return 0;
+    };
+
     const available = (_item) => true; // Always show; execution is guarded.
 
     // Get plugin slash commands
@@ -916,13 +953,20 @@ const slashCommand = {
     // Combine core commands with plugin commands
     const allCommandGroups = [...commandItems, ...pluginCommandGroups];
 
+    // Filter and sort commands by relevance
     const filtered = allCommandGroups
-      .map((group) => ({
-        ...group,
-        commands: group.commands.filter((item) => matches(item.title) && available(item)),
-      }))
-      .filter((group) => group.commands.length > 0);
+      .map((group) => {
+        const matchedCommands = group.commands
+          .filter((item) => matches(item) && available(item))
+          .map((item) => ({ ...item, _score: scoreItem(item) }))
+          .sort((a, b) => b._score - a._score); // Sort by score descending
 
+        return {
+          ...group,
+          commands: matchedCommands
+        };
+      })
+      .filter((group) => group.commands.length > 0);
 
     return filtered;
   },
