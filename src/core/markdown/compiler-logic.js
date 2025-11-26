@@ -64,6 +64,7 @@ export class MarkdownCompiler {
       /^[-*+]\s/m,            // - lists
       /^\d+\.\s/m,            // 1. numbered lists
       /^\|.+\|/m,             // | table |
+      /!\[[^\]]*\]\([^)]*\)/, // ![alt](url) images
       /\[[^\]]*\]\([^)]*\)/,  // [link](url)
       /```[\s\S]*?```/,       // ```code blocks```
       /^\s*- \[[x\s]\]/m,     // - [x] task lists
