@@ -205,6 +205,114 @@ pub fn create_folder_in_workspace(workspace_path: String, name: String) -> Resul
     Ok(())
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct CopyFilesResult {
+    success: Vec<String>,
+    failed: Vec<String>,
+    skipped: Vec<String>,
+}
+
+// Helper: Recursive directory copy
+async fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), std::io::Error> {
+    tokio::fs::create_dir_all(dst).await?;
+
+    let mut entries = tokio::fs::read_dir(src).await?;
+    while let Some(entry) = entries.next_entry().await? {
+        let file_type = entry.file_type().await?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+
+        if file_type.is_dir() {
+            Box::pin(copy_dir_recursive(&src_path, &dst_path)).await?;
+        } else {
+            tokio::fs::copy(&src_path, &dst_path).await?;
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn copy_external_files_to_workspace(
+    file_paths: Vec<String>,
+    workspace_path: String,
+    target_folder: Option<String>,
+) -> Result<CopyFilesResult, String> {
+    let mut result = CopyFilesResult {
+        success: vec![],
+        failed: vec![],
+        skipped: vec![],
+    };
+
+    let destination = if let Some(folder) = target_folder {
+        PathBuf::from(&folder)
+    } else {
+        PathBuf::from(&workspace_path)
+    };
+
+    // Ensure destination exists
+    if !destination.exists() {
+        return Err(format!("Destination folder does not exist: {:?}", destination));
+    }
+
+    for file_path in file_paths {
+        let source = Path::new(&file_path);
+
+        // Skip if source doesn't exist
+        if !source.exists() {
+            result.skipped.push(file_path.clone());
+            continue;
+        }
+
+        let file_name = source.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown");
+
+        // Handle naming conflicts: file.png -> file-1.png -> file-2.png
+        let mut target_path = destination.join(file_name);
+        let mut counter = 1;
+
+        while target_path.exists() {
+            let stem = source.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("file");
+            let extension = source.extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("");
+
+            let new_name = if extension.is_empty() {
+                format!("{}-{}", stem, counter)
+            } else {
+                format!("{}-{}.{}", stem, counter, extension)
+            };
+
+            target_path = destination.join(new_name);
+            counter += 1;
+
+            // Safety: prevent infinite loop
+            if counter > 1000 {
+                result.failed.push(file_path.clone());
+                break;
+            }
+        }
+
+        // Copy file or directory recursively
+        match if source.is_dir() {
+            copy_dir_recursive(source, &target_path).await
+        } else {
+            tokio::fs::copy(source, &target_path).await.map(|_| ())
+        } {
+            Ok(_) => result.success.push(target_path.to_string_lossy().to_string()),
+            Err(e) => {
+                eprintln!("Failed to copy {}: {}", file_path, e);
+                result.failed.push(file_path);
+            }
+        }
+    }
+
+    Ok(result)
+}
+
 #[tauri::command]
 pub fn move_file(source_path: String, destination_dir: String) -> Result<(), String> {
     let source = PathBuf::from(&source_path);
