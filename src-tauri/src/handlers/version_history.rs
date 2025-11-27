@@ -77,9 +77,9 @@ fn load_metadata(backups_dir: &Path) -> VersionMetadata {
         match fs::read_to_string(&metadata_path) {
             Ok(content) => match serde_json::from_str(&content) {
                 Ok(metadata) => return metadata,
-                Err(_) => println!("[Version History] Failed to parse metadata, creating new"),
+                Err(_) => {},
             },
-            Err(_) => println!("[Version History] Failed to read metadata file"),
+            Err(_) => {},
         }
     }
 
@@ -138,7 +138,6 @@ pub fn save_version(
     content: String,
     action: Option<String>,
 ) -> Result<FileVersion, String> {
-    println!("[Version History] Saving version for: {}", file_path);
 
     let workspace = Path::new(&workspace_path);
     let backups_dir = get_backups_dir(workspace, &file_path)?;
@@ -153,9 +152,6 @@ pub fn save_version(
     fs::write(&version_path, &compressed)
         .map_err(|e| format!("Failed to save version: {}", e))?;
 
-    println!("[Version History] Compressed {} bytes to {} bytes ({:.1}% reduction)",
-             content.len(), compressed.len(),
-             (1.0 - (compressed.len() as f64 / content.len() as f64)) * 100.0);
 
     // Create version info
     let version = FileVersion {
@@ -177,7 +173,6 @@ pub fn save_version(
     // Save updated metadata
     save_metadata(&backups_dir, &metadata)?;
 
-    println!("[Version History] Version saved successfully");
     Ok(version)
 }
 
@@ -186,7 +181,6 @@ pub fn get_file_versions(
     workspace_path: String,
     file_path: String,
 ) -> Result<Vec<FileVersion>, String> {
-    println!("[Version History] Getting versions for: {}", file_path);
 
     let workspace = Path::new(&workspace_path);
     let backups_dir = get_backups_dir(workspace, &file_path)?;
@@ -201,7 +195,6 @@ pub fn get_version_content(
     file_path: String,
     timestamp: String,
 ) -> Result<String, String> {
-    println!("[Version History] Getting content for version: {}", timestamp);
 
     let workspace = Path::new(&workspace_path);
     let backups_dir = get_backups_dir(workspace, &file_path)?;
@@ -229,7 +222,6 @@ pub fn get_diff(
     timestamp1: String,
     timestamp2: String,
 ) -> Result<Vec<DiffLine>, String> {
-    println!("[Version History] Getting diff between versions");
 
     let content1 = get_version_content(workspace_path.clone(), file_path.clone(), timestamp1)?;
     let content2 = get_version_content(workspace_path, file_path, timestamp2)?;
@@ -283,7 +275,6 @@ pub fn restore_version(
     file_path: String,
     timestamp: String,
 ) -> Result<String, String> {
-    println!("[Version History] Restoring version: {}", timestamp);
 
     let content = get_version_content(workspace_path.clone(), file_path.clone(), timestamp.clone())?;
 
@@ -300,7 +291,6 @@ pub fn restore_version(
         Some(format!("Restored from {}", timestamp)),
     )?;
 
-    println!("[Version History] Version restored successfully");
     Ok(content)
 }
 
@@ -309,7 +299,6 @@ pub fn cleanup_old_versions(
     workspace_path: String,
     file_path: String,
 ) -> Result<usize, String> {
-    println!("[Version History] Cleaning up old versions");
 
     let workspace = Path::new(&workspace_path);
     let backups_dir = get_backups_dir(workspace, &file_path)?;
@@ -318,7 +307,6 @@ pub fn cleanup_old_versions(
     let removed = cleanup_old_versions_internal(&mut metadata, &backups_dir)?;
     save_metadata(&backups_dir, &metadata)?;
 
-    println!("[Version History] Removed {} old versions", removed);
     Ok(removed)
 }
 

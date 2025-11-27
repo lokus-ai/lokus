@@ -49,15 +49,6 @@ export function MermaidViewerModal({ isOpen, svgContent, onClose }) {
       setIsDragging(false);
 
       if (import.meta.env.DEV) {
-        console.log('[MermaidViewer] Auto-fit calculated:', {
-          svgWidth,
-          svgHeight,
-          viewportWidth,
-          viewportHeight,
-          scaleX,
-          scaleY,
-          finalZoom
-        });
       }
     }, 50);
   }, [isOpen, svgContent]);

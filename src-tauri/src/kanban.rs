@@ -402,7 +402,6 @@ pub async fn init_default_kanban_board(workspace_path: &Path) -> Result<(), Stri
         );
         let file_path = workspace_path.join("Tasks.kanban");
         save_board_to_file(&file_path, &board).await?;
-        println!("[Kanban] Created default board: Tasks.kanban");
     }
 
     Ok(())

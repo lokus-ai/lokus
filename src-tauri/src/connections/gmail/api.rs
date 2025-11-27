@@ -34,12 +34,10 @@ impl GmailApi {
     }
 
     pub async fn authenticate(&self, code: &str, code_verifier: &str) -> Result<GmailProfile, GmailError> {
-        println!("[GMAIL] 🔐 Starting Gmail authentication process");
         
         let token = self.auth.exchange_code_for_token(code, code_verifier).await?;
         let profile = self.auth.fetch_and_store_profile(&token).await?;
         
-        println!("[GMAIL] ✅ Gmail authentication completed successfully");
         Ok(profile)
     }
 
@@ -48,7 +46,6 @@ impl GmailApi {
     }
 
     pub async fn logout(&self) -> Result<(), GmailError> {
-        println!("[GMAIL] 🚪 Logging out of Gmail");
         
         if let Ok(Some(token)) = crate::connections::gmail::storage::GmailStorage::get_token() {
             let _ = self.auth.revoke_token(&token.access_token).await;
@@ -63,7 +60,6 @@ impl GmailApi {
 
     // Email listing and searching
     pub async fn list_emails(&self, options: EmailListOptions) -> Result<Vec<EmailMessage>, GmailError> {
-        println!("[GMAIL] 📋 Listing emails with options: max_results={:?}", options.max_results);
         
         let token = self.get_valid_token().await?;
         
@@ -116,7 +112,6 @@ impl GmailApi {
                 match self.get_email_by_id(id).await {
                     Ok(email) => email_messages.push(email),
                     Err(e) => {
-                        println!("[GMAIL] ⚠️ Failed to fetch email {}: {}", id, e);
                         continue;
                     }
                 }
@@ -173,14 +168,12 @@ impl GmailApi {
                 match self.get_email_by_id(id).await {
                     Ok(email) => email_messages.push(email),
                     Err(e) => {
-                        println!("[GMAIL] ⚠️ Failed to fetch email {}: {}", id, e);
                         continue;
                     }
                 }
             }
         }
         
-        println!("[GMAIL] ✅ Found {} emails matching search", email_messages.len());
         Ok(email_messages)
     }
 
@@ -206,21 +199,17 @@ impl GmailApi {
 
     // Email composition and sending
     pub async fn send_email(&self, composer: EmailComposer) -> Result<String, GmailError> {
-        println!("[GMAIL] 📧 Sending email to {:?}", composer.to);
         
         match self.send_email_internal(&composer).await {
             Ok(message_id) => {
-                println!("[GMAIL] ✅ Email sent successfully: {}", message_id);
                 Ok(message_id)
             }
             Err(e) => {
-                println!("[GMAIL] ❌ Failed to send email: {}", e);
                 
                 // Add to offline queue for retry
                 let operation_data = serde_json::to_value(&composer)?;
                 let queue_id = self.queue.add_operation(OperationType::SendEmail, operation_data)?;
                 
-                println!("[GMAIL] 📤 Email queued for retry: {}", queue_id);
                 Err(e)
             }
         }
@@ -258,7 +247,6 @@ impl GmailApi {
     }
 
     pub async fn reply_to_email(&self, message_id: &str, composer: EmailComposer) -> Result<String, GmailError> {
-        println!("[GMAIL] 💬 Replying to email: {}", message_id);
         
         // Get the original message to set up reply headers
         let original = self.get_email_by_id(message_id).await?;
@@ -272,7 +260,6 @@ impl GmailApi {
     }
 
     pub async fn forward_email(&self, message_id: &str, composer: EmailComposer) -> Result<String, GmailError> {
-        println!("[GMAIL] ➡️ Forwarding email: {}", message_id);
         
         // Get the original message
         let original = self.get_email_by_id(message_id).await?;
@@ -294,32 +281,26 @@ impl GmailApi {
 
     // Email operations
     pub async fn mark_as_read(&self, message_ids: Vec<String>) -> Result<(), GmailError> {
-        println!("[GMAIL] 👁️ Marking {} emails as read", message_ids.len());
         self.modify_labels(message_ids, vec![], vec!["UNREAD".to_string()]).await
     }
 
     pub async fn mark_as_unread(&self, message_ids: Vec<String>) -> Result<(), GmailError> {
-        println!("[GMAIL] 👁️‍🗨️ Marking {} emails as unread", message_ids.len());
         self.modify_labels(message_ids, vec!["UNREAD".to_string()], vec![]).await
     }
 
     pub async fn star_emails(&self, message_ids: Vec<String>) -> Result<(), GmailError> {
-        println!("[GMAIL] ⭐ Starring {} emails", message_ids.len());
         self.modify_labels(message_ids, vec!["STARRED".to_string()], vec![]).await
     }
 
     pub async fn unstar_emails(&self, message_ids: Vec<String>) -> Result<(), GmailError> {
-        println!("[GMAIL] ☆ Unstarring {} emails", message_ids.len());
         self.modify_labels(message_ids, vec![], vec!["STARRED".to_string()]).await
     }
 
     pub async fn archive_emails(&self, message_ids: Vec<String>) -> Result<(), GmailError> {
-        println!("[GMAIL] 📁 Archiving {} emails", message_ids.len());
         self.modify_labels(message_ids, vec![], vec!["INBOX".to_string()]).await
     }
 
     pub async fn delete_emails(&self, message_ids: Vec<String>) -> Result<(), GmailError> {
-        println!("[GMAIL] 🗑️ Deleting {} emails", message_ids.len());
         self.modify_labels(message_ids, vec!["TRASH".to_string()], vec!["INBOX".to_string()]).await
     }
 
@@ -349,7 +330,6 @@ impl GmailApi {
 
     // Labels management
     pub async fn get_labels(&self) -> Result<Vec<EmailLabel>, GmailError> {
-        println!("[GMAIL] 🏷️ Getting Gmail labels");
         
         let token = self.get_valid_token().await?;
         
@@ -381,7 +361,6 @@ impl GmailApi {
             email_labels.push(email_label);
         }
         
-        println!("[GMAIL] ✅ Retrieved {} labels", email_labels.len());
         Ok(email_labels)
     }
 
@@ -425,25 +404,10 @@ impl GmailApi {
         
         // Body
         if let Some(body) = &composer.body_text {
-            println!("[GMAIL] 📝 Adding body to email (length: {})", body.len());
-            println!("[GMAIL] 📝 Body preview: {}", 
-                if body.len() > 100 { 
-                    format!("{}...", &body[..100]) 
-                } else { 
-                    body.clone() 
-                });
             message.push_str(body);
         } else {
-            println!("[GMAIL] ❌ No body_text provided to email composer!");
         }
         
-        println!("[GMAIL] 📧 Complete email message (length: {})", message.len());
-        println!("[GMAIL] 📧 Email message preview: {}", 
-            if message.len() > 200 { 
-                format!("{}...", &message[..200]) 
-            } else { 
-                message.clone() 
-            });
         
         Ok(message)
     }
@@ -454,8 +418,6 @@ impl GmailApi {
         let snippet = data["snippet"].as_str().unwrap_or("").to_string();
         let size_estimate = data["sizeEstimate"].as_u64().unwrap_or(0);
         
-        println!("[GMAIL] 🔍 Parsing email ID: {}", id);
-        println!("[GMAIL] 📝 Email snippet: {}", snippet);
         
         let label_ids: Vec<String> = data["labelIds"]
             .as_array()

@@ -37,7 +37,6 @@ impl GmailAuth {
     }
 
     pub fn generate_pkce_pair() -> (String, String) {
-        println!("[GMAIL] 🔐 Generating PKCE pair for Gmail OAuth");
         
         // Generate code verifier (43-128 chars, URL-safe)
         let random_bytes = Uuid::new_v4().as_bytes().to_vec();
@@ -53,7 +52,6 @@ impl GmailAuth {
         let challenge_bytes = hasher.finalize();
         let code_challenge = general_purpose::URL_SAFE_NO_PAD.encode(challenge_bytes);
 
-        println!("[GMAIL] 🔐 PKCE pair generated successfully");
         (code_verifier, code_challenge)
     }
 
@@ -62,7 +60,6 @@ impl GmailAuth {
     }
 
     pub fn generate_auth_url(&self, pkce_data: &PKCEData) -> Result<String, GmailError> {
-        println!("[GMAIL] 🔐 Generating Gmail OAuth URL");
         
         let scopes = [
             "https://www.googleapis.com/auth/gmail.readonly",
@@ -92,7 +89,6 @@ impl GmailAuth {
             .join("&");
 
         let auth_url = format!("https://accounts.google.com/o/oauth2/v2/auth?{}", query_string);
-        println!("[GMAIL] 🔐 Gmail OAuth URL generated successfully");
         
         Ok(auth_url)
     }
@@ -102,7 +98,6 @@ impl GmailAuth {
         code: &str,
         code_verifier: &str,
     ) -> Result<GmailToken, GmailError> {
-        println!("[GMAIL] 🔄 Starting Gmail token exchange");
         
         let client = Client::new();
         let mut params = HashMap::new();
@@ -121,12 +116,10 @@ impl GmailAuth {
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            println!("[GMAIL] ❌ Token exchange failed: {}", error_text);
             return Err(GmailError::Auth(format!("Token exchange failed: {}", error_text)));
         }
 
         let token_data: serde_json::Value = response.json().await?;
-        println!("[GMAIL] ✅ Token exchange successful");
 
         let access_token = token_data["access_token"]
             .as_str()
@@ -160,13 +153,11 @@ impl GmailAuth {
 
         // Store the token
         GmailStorage::store_token(&token)?;
-        println!("[GMAIL] 💾 Gmail token stored successfully");
 
         Ok(token)
     }
 
     pub async fn refresh_token(&self, refresh_token: &str) -> Result<GmailToken, GmailError> {
-        println!("[GMAIL] 🔄 Refreshing Gmail token");
         
         let client = Client::new();
         let mut params = HashMap::new();
@@ -183,7 +174,6 @@ impl GmailAuth {
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            println!("[GMAIL] ❌ Token refresh failed: {}", error_text);
             
             // If refresh fails, delete stored token
             let _ = GmailStorage::delete_token();
@@ -193,7 +183,6 @@ impl GmailAuth {
         }
 
         let token_data: serde_json::Value = response.json().await?;
-        println!("[GMAIL] ✅ Gmail token refreshed successfully");
 
         let access_token = token_data["access_token"]
             .as_str()
@@ -229,7 +218,6 @@ impl GmailAuth {
 
         // Store the refreshed token
         GmailStorage::store_token(&token)?;
-        println!("[GMAIL] 💾 Refreshed Gmail token stored successfully");
 
         Ok(token)
     }
@@ -240,28 +228,23 @@ impl GmailAuth {
         let token = match GmailStorage::get_token()? {
             Some(token) => token,
             None => {
-                println!("[GMAIL] ❌ No Gmail token found");
                 return Err(GmailError::Auth("No Gmail token found - please authenticate".to_string()));
             }
         };
 
         // Check if token is expired
         if GmailStorage::is_token_expired(&token) {
-            println!("[GMAIL] ⏰ Gmail token is expired, attempting refresh");
             
             if let Some(refresh_token) = &token.refresh_token {
                 match self.refresh_token(refresh_token).await {
                     Ok(new_token) => {
-                        println!("[GMAIL] ✅ Gmail token refreshed successfully");
                         return Ok(new_token);
                     }
                     Err(e) => {
-                        println!("[GMAIL] ❌ Failed to refresh Gmail token: {:?}", e);
                         return Err(e);
                     }
                 }
             } else {
-                println!("[GMAIL] ❌ No refresh token available");
                 return Err(GmailError::TokenExpired);
             }
         }
@@ -271,7 +254,6 @@ impl GmailAuth {
     }
 
     pub async fn fetch_and_store_profile(&self, token: &GmailToken) -> Result<GmailProfile, GmailError> {
-        println!("[GMAIL] 👤 Fetching Gmail profile");
         
         let client = Client::new();
         
@@ -324,13 +306,11 @@ impl GmailAuth {
 
         // Store the profile
         GmailStorage::store_profile(&profile)?;
-        println!("[GMAIL] 💾 Gmail profile stored successfully");
 
         Ok(profile)
     }
 
     pub async fn revoke_token(&self, token: &str) -> Result<(), GmailError> {
-        println!("[GMAIL] 🗑️ Revoking Gmail token");
         
         let client = Client::new();
         let response = client
@@ -340,16 +320,13 @@ impl GmailAuth {
             .await?;
 
         if response.status().is_success() {
-            println!("[GMAIL] ✅ Gmail token revoked successfully");
         } else {
-            println!("[GMAIL] ⚠️ Gmail token revocation may have failed (continuing anyway)");
         }
 
         // Delete local storage regardless of revocation result
         GmailStorage::delete_token()?;
         GmailStorage::delete_profile()?;
         
-        println!("[GMAIL] 🗑️ Local Gmail data cleared");
         Ok(())
     }
 
@@ -362,7 +339,6 @@ impl GmailAuth {
 
     #[allow(dead_code)]
     pub async fn test_token_validity(&self, token: &GmailToken) -> Result<bool, GmailError> {
-        println!("[GMAIL] 🧪 Testing Gmail token validity");
         
         let client = Client::new();
         let response = client
@@ -372,7 +348,6 @@ impl GmailAuth {
             .await?;
 
         let is_valid = response.status().is_success();
-        println!("[GMAIL] 🧪 Gmail token validity test: {}", if is_valid { "VALID" } else { "INVALID" });
         
         Ok(is_valid)
     }

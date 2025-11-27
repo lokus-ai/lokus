@@ -28,9 +28,6 @@ program
   .option('--typescript', 'Use TypeScript')
   .action(async (name, options) => {
     try {
-      console.log(colors.blue(`Creating plugin: ${name}`))
-      console.log(colors.gray(`Template: ${options.template}`))
-      console.log(colors.gray(`TypeScript: ${options.typescript ? 'Yes' : 'No'}`))
       
       // Basic template creation
       const pluginDir = path.resolve(name)
@@ -98,13 +95,6 @@ See the [Plugin Development Guide](https://github.com/lokus-ai/lokus/blob/main/P
       
       await fs.writeFile(path.join(pluginDir, 'README.md'), readmeContent)
       
-      console.log(colors.green(`✓ Created plugin: ${name}`))
-      console.log(colors.gray(`  Location: ${pluginDir}`))
-      console.log('')
-      console.log(colors.yellow('Next steps:'))
-      console.log(`  cd ${name}`)
-      console.log(`  # Edit src/index.js to add your plugin logic`)
-      console.log(`  # Install the plugin in Lokus via File > Install Plugin`)
       
     } catch (error) {
       console.error(colors.red('Error:'), error.message)
@@ -138,9 +128,6 @@ program
         process.exit(1)
       }
       
-      console.log(colors.green('✓ Plugin manifest is valid'))
-      console.log(`  Plugin: ${manifest.name} v${manifest.version}`)
-      console.log(`  ID: ${manifest.id}`)
       
     } catch (error) {
       console.error(colors.red('Error:'), error.message)
@@ -153,11 +140,6 @@ program
   .command('list')
   .description('List available plugin templates')
   .action(() => {
-    console.log(colors.blue('Available templates:'))
-    console.log('  basic       - Basic plugin with UI interaction')
-    console.log('  mcp-server  - MCP server plugin for AI integration')
-    console.log('')
-    console.log(colors.gray('Use: lokus-plugin create <name> --template <type>'))
   })
 
 // Global error handler

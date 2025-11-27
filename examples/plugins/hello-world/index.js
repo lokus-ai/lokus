@@ -5,7 +5,6 @@
 
 // Plugin activation function - called when plugin is enabled
 export function activate(context, lokus) {
-  console.log('Hello World plugin activated!');
 
   try {
     // Show a welcome notification
@@ -83,7 +82,6 @@ export function activate(context, lokus) {
       }
     });
 
-    console.log('Hello World plugin: All features registered successfully');
 
   } catch (error) {
     console.error('Hello World plugin activation error:', error);
@@ -97,7 +95,6 @@ export function activate(context, lokus) {
 
 // Plugin deactivation function - called when plugin is disabled
 export function deactivate(lokus) {
-  console.log('Hello World plugin deactivated!');
 
   try {
     // Show goodbye notification

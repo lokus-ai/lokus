@@ -32,18 +32,6 @@ export class BasicPluginTemplate implements TemplateGenerator {
     const gitignore = this.generateGitignore()
     
     // Write files (implementation would use file system)
-    console.log('Generating basic plugin template:', {
-      outputDir,
-      name,
-      files: {
-        'package.json': packageJson,
-        'plugin.json': manifest,
-        [`src/index.${typescript ? 'ts' : 'js'}`]: mainFile,
-        ...(tsConfig && { 'tsconfig.json': tsConfig }),
-        'README.md': readme,
-        '.gitignore': gitignore
-      }
-    })
   }
 
   async validate(config: TemplateConfig): Promise<TemplateValidationResult> {

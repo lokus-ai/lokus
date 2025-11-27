@@ -146,13 +146,24 @@ export const Folding = Extension.create({
                 return false;
               }
 
-              // Check if click is in the left gutter area (for fold indicator)
+              // Check if click is on the fold indicator (LEFT of heading)
               const rect = heading.getBoundingClientRect();
               const clickX = event.clientX;
-              const gutterWidth = 30; // Width of the gutter where fold indicator is
+              const clickY = event.clientY;
 
-              // Only handle clicks in the left gutter area
-              if (clickX < rect.left || clickX > rect.left + gutterWidth) {
+              // Check vertical bounds first
+              if (clickY < rect.top || clickY > rect.bottom) {
+                return false;
+              }
+
+              // Indicator is at left: -22px, width: 18px (from CSS)
+              // So it's at positions -22px to -4px from heading's left edge
+              // Add 5px padding on each side for easier clicking
+              const indicatorLeft = rect.left - 27;   // -22px - 5px padding
+              const indicatorRight = rect.left + 1;    // -22px + 18px + 5px padding
+
+              // Only handle clicks in the indicator area (to the LEFT of heading)
+              if (clickX < indicatorLeft || clickX > indicatorRight) {
                 return false;
               }
 
@@ -161,7 +172,26 @@ export const Folding = Extension.create({
 
               const pos = parseInt(heading.dataset.foldPos, 10);
               if (!isNaN(pos)) {
-                extension.toggleFold(view, pos);
+                // Toggle fold state directly (inline the toggleFold logic)
+                const isFolded = extension.storage.foldedSections.has(pos);
+
+                if (isFolded) {
+                  extension.storage.foldedSections.delete(pos);
+                } else {
+                  extension.storage.foldedSections.add(pos);
+                }
+
+                // Save to localStorage
+                const filePath = globalThis.__LOKUS_ACTIVE_FILE__;
+                if (filePath) {
+                  const storageKey = `${extension.options.storageKey}:${filePath}`;
+                  const positions = Array.from(extension.storage.foldedSections);
+                  localStorage.setItem(storageKey, JSON.stringify(positions));
+                }
+
+                // Trigger decoration update
+                const tr = view.state.tr.setMeta('foldingChanged', true);
+                view.dispatch(tr);
               }
 
               return true;

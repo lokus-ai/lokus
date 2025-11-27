@@ -101,14 +101,12 @@ export class CanvasManager {
 
       const content = await invoke('read_file_content', { path: canvasPath });
       if (import.meta.env.DEV) {
-        console.log(`[Canvas LOAD] RAW FILE CONTENT:`, content);
       }
 
       let tldrawSnapshot;
       try {
         tldrawSnapshot = JSON.parse(content);
         if (import.meta.env.DEV) {
-          console.log(`[Canvas LOAD] PARSED SNAPSHOT:`, tldrawSnapshot);
         }
 
         // If snapshot is missing schema, add it (for backwards compatibility)
@@ -201,7 +199,6 @@ export class CanvasManager {
       }
 
       if (import.meta.env.DEV) {
-        console.log(`[Canvas SAVE] SNAPSHOT TO SAVE:`, tldrawSnapshot);
       }
 
       // Save TLDraw snapshot directly - no conversion!
@@ -212,7 +209,6 @@ export class CanvasManager {
         content
       });
       if (import.meta.env.DEV) {
-        console.log(`[Canvas SAVE] Saved ${content.length} bytes to file`);
       }
 
       // Clear cache to force fresh read next time
@@ -321,7 +317,6 @@ export class CanvasManager {
       return true;
     });
 
-    console.log(`[Canvas Manager] Validation complete: ${validated.nodes.length} nodes, ${validated.edges.length} edges`);
 
     return validated;
   }

@@ -187,7 +187,6 @@ pub async fn search_in_files(
                 }
             }
             Err(e) => {
-                eprintln!("Error searching file {:?}: {}", file_path, e);
                 // Continue with other files instead of failing completely
             }
         }

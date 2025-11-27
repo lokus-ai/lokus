@@ -21,6 +21,7 @@
         "decorations": true,
         "transparent": false,
         "titleBarStyle": "Overlay",
+        "fileDropEnabled": true,
         "alwaysOnTop": false,
         "skipTaskbar": false
       }

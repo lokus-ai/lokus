@@ -18,7 +18,7 @@ export class NoteProvider {
     this.backlinks = new Map();
     this.subscribers = new Set();
     this.markdownCompiler = null;
-    
+
     // Initialize note monitoring
     this.initializeNoteMonitoring();
   }
@@ -30,14 +30,14 @@ export class NoteProvider {
     try {
       // Initialize markdown compiler
       this.markdownCompiler = getMarkdownCompiler();
-      
+
       // Get current workspace path
       this.workspacePath = typeof window !== 'undefined' ? window.__LOKUS_WORKSPACE_PATH__ : null;
-      
+
       if (this.workspacePath) {
         await this.loadNotes();
       }
-      
+
       // Setup monitoring
       this.setupNoteListeners();
     } catch (error) {
@@ -55,15 +55,15 @@ export class NoteProvider {
       // Get file tree and filter for markdown files
       const files = await invoke('read_workspace_files', { workspacePath: this.workspacePath });
       const markdownFiles = this.findMarkdownFiles(files);
-      
+
       // Load content for each markdown file
       for (const file of markdownFiles) {
         await this.loadNoteContent(file.path);
       }
-      
+
       // Process wiki links and build relationships
       this.processWikiLinks();
-      
+
       // Notify subscribers
       this.notifySubscribers('notes:loaded');
     } catch (error) {
@@ -92,17 +92,17 @@ export class NoteProvider {
     try {
       const content = await invoke('read_file_content', { path: notePath });
       const name = notePath.split('/').pop().replace('.md', '');
-      
+
       // Process markdown content
-      const processedContent = this.markdownCompiler ? 
-        this.markdownCompiler.process(content) : content;
-      
+      const processedContent = this.markdownCompiler ?
+        await this.markdownCompiler.process(content) : content;
+
       // Extract metadata
       const metadata = this.extractNoteMetadata(content, notePath);
-      
+
       // Extract wiki links
       const wikiLinks = this.extractWikiLinks(content);
-      
+
       // Store note data
       const noteData = {
         path: notePath,
@@ -115,9 +115,9 @@ export class NoteProvider {
         wordCount: content.split(/\s+/).length,
         characterCount: content.length
       };
-      
+
       this.notes.set(notePath, noteData);
-      
+
       return noteData;
     } catch (error) {
       console.error(`[NoteProvider] Failed to load note content for ${notePath}:`, error);
@@ -151,11 +151,11 @@ export class NoteProvider {
           }
         }
         metadata.frontmatter = frontmatter;
-        
+
         // Extract common metadata fields
         if (frontmatter.title) metadata.title = frontmatter.title;
         if (frontmatter.tags) {
-          metadata.tags = Array.isArray(frontmatter.tags) ? 
+          metadata.tags = Array.isArray(frontmatter.tags) ?
             frontmatter.tags : frontmatter.tags.split(',').map(t => t.trim());
         }
         if (frontmatter.created) metadata.createdDate = frontmatter.created;
@@ -190,19 +190,19 @@ export class NoteProvider {
     const wikiLinkRegex = /\[\[([^\]]+)\]\]/g;
     const links = [];
     let match;
-    
+
     while ((match = wikiLinkRegex.exec(content)) !== null) {
       const linkText = match[1];
-      const [target, display] = linkText.includes('|') ? 
+      const [target, display] = linkText.includes('|') ?
         linkText.split('|').map(s => s.trim()) : [linkText, linkText];
-      
+
       links.push({
         target: target.trim(),
         display: display.trim(),
         position: match.index
       });
     }
-    
+
     return links;
   }
 
@@ -212,15 +212,15 @@ export class NoteProvider {
   processWikiLinks() {
     this.wikiLinks.clear();
     this.backlinks.clear();
-    
+
     for (const [notePath, noteData] of this.notes) {
       const noteName = noteData.name;
-      
+
       // Store outgoing links
       if (noteData.wikiLinks.length > 0) {
         this.wikiLinks.set(notePath, noteData.wikiLinks);
       }
-      
+
       // Build backlinks map
       for (const link of noteData.wikiLinks) {
         const targetNote = this.findNoteByName(link.target);
@@ -248,14 +248,14 @@ export class NoteProvider {
         return noteData;
       }
     }
-    
+
     // Partial match
     for (const [path, noteData] of this.notes) {
       if (noteData.name.toLowerCase().includes(name.toLowerCase())) {
         return noteData;
       }
     }
-    
+
     return null;
   }
 
@@ -273,7 +273,7 @@ export class NoteProvider {
             this.loadNotes();
           }
         };
-        
+
         setInterval(checkWorkspaceChange, 1000);
       }
     } catch (error) {
@@ -348,22 +348,22 @@ export class NoteProvider {
       switch (path) {
         case '/all':
           return this.getAllNotes();
-        
+
         case '/metadata':
           return this.getNotesMetadata();
-        
+
         case '/wiki-links':
           return this.getWikiLinks();
-        
+
         case '/backlinks':
           return this.getBacklinks();
-        
+
         case '/tags':
           return this.getNoteTags();
-        
+
         case '/graph':
           return this.getNoteGraph();
-        
+
         default:
           if (path.startsWith('/note/')) {
             const notePath = decodeURIComponent(path.substring(6));
@@ -414,7 +414,7 @@ export class NoteProvider {
    */
   async getNotesMetadata() {
     const metadata = Array.from(this.notes.values()).map(note => note.metadata);
-    
+
     return {
       contents: [{
         type: 'text',
@@ -476,7 +476,7 @@ export class NoteProvider {
    */
   async getNoteTags() {
     const tagMap = new Map();
-    
+
     for (const noteData of this.notes.values()) {
       for (const tag of noteData.metadata.tags) {
         if (!tagMap.has(tag)) {

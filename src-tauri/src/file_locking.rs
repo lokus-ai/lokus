@@ -48,7 +48,6 @@ impl FileLock {
                 if let Some(lock_state) = locks.get(path) {
                     // Check for stale locks (> 5 minutes old)
                     if lock_state.locked_at.elapsed() > Duration::from_secs(300) {
-                        println!("[FileLock] Removing stale lock on {}", path);
                         locks.remove(path);
                     } else {
                         // File is locked
@@ -73,7 +72,6 @@ impl FileLock {
                     lock_type: LockType::Write,
                 });
                 
-                println!("[FileLock] Write lock acquired on {} by {}", path, operation_id);
                 return Ok(());
             }
         }
@@ -93,7 +91,6 @@ impl FileLock {
             }
             
             locks.remove(path);
-            println!("[FileLock] Write lock released on {} by {}", path, operation_id);
             Ok(())
         } else {
             // Lock doesn't exist, this is OK
@@ -114,10 +111,9 @@ impl FileLock {
         let mut locks = FILE_LOCK_MANAGER.locks.lock()
             .map_err(|e| format!("Failed to acquire lock mutex: {}", e))?;
         
-        let count = locks.len();
+        let _count = locks.len();
         locks.clear();
         
-        println!("[FileLock] Force released {} locks", count);
         Ok(())
     }
 }

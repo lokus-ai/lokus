@@ -764,7 +764,6 @@ export class BaseManager {
             })
           } catch (lokusError) {
             // .lokus might already exist, that's okay
-            console.log('Note: .lokus directory may already exist')
           }
           
           // Then, create bases directory inside .lokus

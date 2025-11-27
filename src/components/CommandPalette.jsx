@@ -467,17 +467,13 @@ export default function CommandPalette({
 
   // Handle template selection
   const handleTemplateSelect = React.useCallback(async (template) => {
-    console.log('[CommandPalette] Template selected:', template);
-    console.log('[CommandPalette] processTemplate function exists:', !!processTemplate);
 
     try {
       // Process the template with built-in variables
-      console.log('[CommandPalette] Calling processTemplate for id:', template.id);
       const result = await processTemplate(template.id, {}, {
         context: {}
       })
 
-      console.log('[CommandPalette] Process result:', result);
 
       // Call onShowTemplatePicker with processed content
       if (onShowTemplatePicker) {
@@ -486,7 +482,6 @@ export default function CommandPalette({
           template,
           processedContent: result.result || result.content || result
         }
-        console.log('[CommandPalette] Sending processed content (length):', mockSelection.processedContent?.length);
         onShowTemplatePicker(mockSelection)
       }
 
@@ -497,7 +492,6 @@ export default function CommandPalette({
       console.error('[CommandPalette] Error stack:', err.stack);
       // Fallback to raw template content
       if (onShowTemplatePicker) {
-        console.log('[CommandPalette] Using fallback - raw content');
         const mockSelection = {
           template,
           processedContent: template.content
@@ -740,12 +734,9 @@ Best regards,
 
   // Load files from Bases when palette opens (only if not cached)
   useEffect(() => {
-    console.log('🔍 [CommandPalette] useEffect triggered - open:', open, 'dataManager:', !!dataManager, 'cached:', basesFiles.length > 0)
     if (open && dataManager && basesFiles.length === 0) {
-      console.log('🔍 [CommandPalette] Loading files from Bases (cache miss)...')
       dataManager.getAllFiles()
         .then(files => {
-          console.log('📁 [CommandPalette] Loaded', files.length, 'files from Bases')
           setBasesFiles(files)
         })
         .catch(error => {
@@ -754,18 +745,14 @@ Best regards,
           setBasesFiles(flattenFileTree(fileTree))
         })
     } else if (open && basesFiles.length > 0) {
-      console.log('✅ [CommandPalette] Using cached files:', basesFiles.length)
     } else {
-      console.log('⏭️ [CommandPalette] Skipping file load - open:', open, 'dataManager:', !!dataManager)
     }
   }, [open, dataManager]) // Removed fileTree to prevent excessive re-runs
 
   // Filter files as user types
   useEffect(() => {
-    console.log('🔍 [CommandPalette] Filter effect - inputValue:', inputValue, 'commandMode:', commandMode, 'basesFiles.length:', basesFiles.length)
 
     if (!inputValue.trim() || commandMode) {
-      console.log('⏭️ [CommandPalette] Clearing filtered files')
       setFilteredFiles([])
       return
     }
@@ -779,7 +766,6 @@ Best regards,
       })
       .slice(0, 10)
 
-    console.log('🔍 [CommandPalette] Filtered to', filtered.length, 'files for query:', inputValue, '- Files:', filtered.map(f => f.name))
     setFilteredFiles(filtered)
   }, [inputValue, commandMode, basesFiles])
 

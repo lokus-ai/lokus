@@ -1,60 +1,68 @@
-import React from 'react';
-import { ChevronRight, Folder, FileText } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { ChevronRight } from 'lucide-react';
+import { cn } from '../../lib/utils';
 
+/**
+ * Breadcrumbs - Clickable navigation showing current file path
+ *
+ * Displays breadcrumb navigation like:
+ * Workspace > folder1 > folder2 > file.md
+ *
+ * - All folders are clickable
+ * - Current file is shown but not clickable
+ * - Automatically scrolls horizontally for long paths
+ *
+ * @param {string} activeFile - Full path to currently selected file
+ * @param {string} workspacePath - Full path to workspace root
+ * @param {Function} onNavigate - Callback when clicking a folder
+ */
 export default function Breadcrumbs({ activeFile, workspacePath, onNavigate }) {
-  if (!activeFile) return null;
+  const segments = useMemo(() => {
+    if (!activeFile || !workspacePath) return [];
 
-  // Get the relative path from workspace
-  const relativePath = activeFile.replace(workspacePath, '').replace(/^\/+/, '');
-  const pathParts = relativePath.split('/');
+    // Get relative path from workspace root
+    const relativePath = activeFile.replace(workspacePath + '/', '');
+    const parts = relativePath.split('/');
 
-  // Build breadcrumb segments
-  const breadcrumbs = pathParts.map((part, index) => {
-    // Build the full path up to this segment
-    const segmentPath = workspacePath + '/' + pathParts.slice(0, index + 1).join('/');
-    const isLast = index === pathParts.length - 1;
-    const isFile = isLast; // Last segment is the file
+    // Build cumulative paths for each segment
+    let cumPath = workspacePath;
+    return parts.map((part, index) => {
+      if (index < parts.length - 1) {
+        // This is a folder
+        cumPath = cumPath + '/' + part;
+        return { name: part, path: cumPath, isFolder: true };
+      } else {
+        // This is the final file
+        return { name: part, path: activeFile, isFolder: false };
+      }
+    });
+  }, [activeFile, workspacePath]);
 
-    return {
-      label: part,
-      path: segmentPath,
-      isFile,
-      isLast
-    };
-  });
+  if (segments.length === 0) return null;
 
   return (
-    <div className="breadcrumbs-container flex items-center px-4 py-2 bg-[var(--background-primary)] border-b border-[var(--border-color)] overflow-x-auto">
-      {/* Workspace root */}
+    <div className="breadcrumb-container">
       <button
         onClick={() => onNavigate(workspacePath)}
-        className="breadcrumb-item flex items-center gap-1 px-2 py-1 rounded hover:bg-[var(--background-secondary)] text-[var(--text-secondary)] transition-colors"
-        title="Workspace root"
+        className="breadcrumb-segment"
+        type="button"
       >
-        <Folder size={14} />
-        <span className="text-xs font-medium">Workspace</span>
+        Workspace
       </button>
 
-      {/* Path segments */}
-      {breadcrumbs.map((crumb, index) => (
-        <React.Fragment key={index}>
-          <ChevronRight size={14} className="text-[var(--text-muted)] mx-1" />
+      {segments.map((segment) => (
+        <React.Fragment key={segment.path}>
+          <ChevronRight className="breadcrumb-separator" size={14} />
           <button
-            onClick={() => !crumb.isFile && onNavigate(crumb.path)}
-            disabled={crumb.isFile}
-            className={`breadcrumb-item flex items-center gap-1 px-2 py-1 rounded transition-colors text-xs ${
-              crumb.isLast
-                ? 'text-[var(--text-primary)] font-medium cursor-default'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--background-secondary)] cursor-pointer'
-            }`}
-            title={crumb.isFile ? 'Current file' : 'Click to navigate'}
-          >
-            {crumb.isFile ? (
-              <FileText size={14} />
-            ) : (
-              <Folder size={14} />
+            onClick={() => segment.isFolder && onNavigate(segment.path)}
+            className={cn(
+              "breadcrumb-segment",
+              !segment.isFolder && "breadcrumb-file"
             )}
-            <span>{crumb.label}</span>
+            disabled={!segment.isFolder}
+            type="button"
+          >
+            {segment.name}
           </button>
         </React.Fragment>
       ))}

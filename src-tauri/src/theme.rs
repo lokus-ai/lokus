@@ -237,7 +237,6 @@ pub fn import_theme_file(file_path: String, overwrite: bool) -> Result<String, S
         let _ = fs::set_permissions(&theme_file, fs::Permissions::from_mode(0o644));
     }
 
-    println!("🎨 Successfully imported theme: {} ({})", manifest.name, safe_name);
     Ok(safe_name)
 }
 
@@ -256,7 +255,6 @@ pub fn export_theme(theme_id: String, export_path: String) -> Result<(), String>
     fs::copy(&theme_file, &export_path)
         .map_err(|e| format!("Failed to export theme: {}", e))?;
 
-    println!("🎨 Exported theme '{}' to: {}", theme_id, export_path);
     Ok(())
 }
 
@@ -274,7 +272,6 @@ pub fn delete_custom_theme(theme_id: String) -> Result<(), String> {
     fs::remove_file(&theme_file)
         .map_err(|e| format!("Failed to delete theme: {}", e))?;
 
-    println!("🎨 Deleted custom theme: {}", theme_id);
     Ok(())
 }
 
@@ -297,13 +294,11 @@ pub fn list_custom_themes() -> Result<Vec<ThemeManifest>, String> {
                     Ok(content) => {
                         match serde_json::from_str::<ThemeManifest>(&content) {
                             Ok(manifest) => themes.push(manifest),
-                            Err(e) => {
-                                eprintln!("Failed to parse theme file {:?}: {}", path, e);
+                            Err(_e) => {
                             }
                         }
                     }
-                    Err(e) => {
-                        eprintln!("Failed to read theme file {:?}: {}", path, e);
+                    Err(_e) => {
                     }
                 }
             }
@@ -358,6 +353,5 @@ pub fn save_theme_tokens(theme_id: String, tokens: HashMap<String, String>) -> R
     fs::write(&theme_file, serde_json::to_string_pretty(&manifest).unwrap())
         .map_err(|e| format!("Failed to write theme file: {}", e))?;
 
-    println!("🎨 Successfully saved theme: {}", theme_id);
     Ok(())
 }

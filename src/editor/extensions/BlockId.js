@@ -77,13 +77,11 @@ export const BlockId = Extension.create({
 
               // Only update if blockId changed
               if (node.attrs.blockId !== blockId) {
-                console.log('[BlockId] ✅ Setting blockId:', blockId, 'on', node.type.name)
                 tr.setNodeMarkup(pos, null, { ...node.attrs, blockId })
                 modified = true
               }
             } else if (node.attrs.blockId) {
               // Block ID pattern was removed, clear the attribute
-              console.log('[BlockId] 🗑️ Clearing blockId from', node.type.name)
               tr.setNodeMarkup(pos, null, { ...node.attrs, blockId: null })
               modified = true
             }

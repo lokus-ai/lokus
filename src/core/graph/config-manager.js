@@ -87,7 +87,6 @@ export async function loadGraphConfig(workspacePath) {
     const fileExists = await exists(configPath);
 
     if (!fileExists) {
-      console.log('[GraphConfig] No config found, using defaults');
       return getDefaultConfig();
     }
 
@@ -98,7 +97,6 @@ export async function loadGraphConfig(workspacePath) {
     const defaultConfig = getDefaultConfig();
     const mergedConfig = { ...defaultConfig, ...config };
 
-    console.log('[GraphConfig] ✅ Loaded config from', configPath);
     return mergedConfig;
   } catch (error) {
     console.error('[GraphConfig] Failed to load config:', error);
@@ -131,7 +129,6 @@ export async function saveGraphConfig(workspacePath, config) {
     const content = JSON.stringify(config, null, 2);
     await writeTextFile(configPath, content);
 
-    console.log('[GraphConfig] ✅ Saved config to', configPath);
     return true;
   } catch (error) {
     console.error('[GraphConfig] Failed to save config:', error);

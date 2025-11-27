@@ -204,11 +204,9 @@ export class BasesDataManager {
     const now = Date.now();
     const cacheAge = now - this.fileListCacheTime;
     if (this.fileListCache && cacheAge < this.options.cacheTimeout) {
-      console.log(`📋 [BasesDataManager] Using cached file list (age: ${Math.round(cacheAge / 1000)}s)`);
       return this.fileListCache;
     }
 
-    console.log('🔄 [BasesDataManager] Cache miss or expired, loading files from backend');
 
     try {
       // Use Tauri backend to get workspace files
@@ -313,7 +311,6 @@ export class BasesDataManager {
       // Cache the results
       this.fileListCache = results;
       this.fileListCacheTime = Date.now();
-      console.log(`✅ [BasesDataManager] Cached ${results.length} files`);
 
       return results;
     } catch (error) {

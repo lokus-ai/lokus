@@ -25,24 +25,12 @@ program
   .option('--no-docs', 'Skip documentation')
   .action(async (name, options) => {
     try {
-      console.log(chalk.blue('🚀 Welcome to Lokus Plugin Generator!'))
-      console.log()
       
       const config = await getConfig(name, options)
       await createPlugin(config)
       
-      console.log()
-      console.log(chalk.green('✅ Plugin created successfully!'))
-      console.log()
-      console.log(chalk.yellow('Next steps:'))
-      console.log(`  cd ${config.name}`)
-      console.log('  npm install')
       if (config.typescript) {
-        console.log('  npm run build')
       }
-      console.log('  npm test')
-      console.log()
-      console.log('Happy coding! 🎉')
       
     } catch (error) {
       console.error(chalk.red('❌ Error creating plugin:'), error.message)
@@ -124,7 +112,6 @@ async function getConfig(name, options) {
 }
 
 async function createPlugin(config) {
-  console.log(chalk.blue(`Creating plugin "${config.name}" with template "${config.template}"...`))
   
   // Ensure output directory exists
   await fs.ensureDir(config.outputDir)
@@ -147,7 +134,6 @@ async function createPlugin(config) {
   // Generate plugin files
   await generateTemplate(config)
   
-  console.log(chalk.green(`Plugin files generated in ${config.outputDir}`))
 }
 
 async function generateTemplate(config) {

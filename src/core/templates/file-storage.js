@@ -43,7 +43,6 @@ export class FileBasedTemplateStorage {
    */
   async saveTemplate(template) {
     try {
-      console.log('[FileStorage] Saving template:', template.id, template.name);
 
       // Validate template
       if (!template.id) {
@@ -56,12 +55,10 @@ export class FileBasedTemplateStorage {
       const filename = this.generateFilename(template.id);
       const filepath = `${this.templateDir}/${filename}`;
 
-      console.log('[FileStorage] Target file path:', filepath);
 
       // Ensure directory exists before writing
       const dirExists = await exists(this.templateDir);
       if (!dirExists) {
-        console.log('[FileStorage] Template directory does not exist, creating...');
         await this.ensureTemplateDir();
       }
 
@@ -71,7 +68,6 @@ export class FileBasedTemplateStorage {
       // Combine frontmatter and content
       const fileContent = `---\n${frontmatter}---\n\n${template.content || ''}`;
 
-      console.log('[FileStorage] Writing file, content length:', fileContent.length);
 
       // Write to file
       await writeTextFile(filepath, fileContent);
@@ -82,11 +78,9 @@ export class FileBasedTemplateStorage {
         throw new Error('File write succeeded but file does not exist');
       }
 
-      console.log('[FileStorage] File written successfully:', filepath);
 
       // Update cache
       this.cache.set(template.id, template);
-      console.log('[FileStorage] Cache updated, total templates:', this.cache.size);
 
       return {
         success: true,

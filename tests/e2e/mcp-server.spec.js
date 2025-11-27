@@ -745,7 +745,6 @@ test.describe('MCP Server Integration Tests', () => {
 
       // Rate limiting may or may not be triggered depending on server config
       // This test documents the expected behavior rather than enforcing it
-      console.log(`Rate limiting ${rateLimited ? 'was' : 'was not'} triggered`);
     });
 
     test('should respond within acceptable time limits', async () => {
@@ -847,7 +846,6 @@ test.describe('MCP Server Integration Tests', () => {
           }
         } catch (error) {
           // Analysis tool might not be available, that's okay
-          console.log('Content analysis tool not available');
         }
       }
     });

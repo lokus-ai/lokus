@@ -42,7 +42,6 @@ class TestRunner {
       this.tests.push({ name, status: 'passed', duration });
       this.passed++;
       if (TEST_CONFIG.verbose) {
-        console.log(`✓ ${name} (${duration}ms)`);
       }
     } catch (error) {
       const duration = Date.now() - startTime;
@@ -59,7 +58,6 @@ class TestRunner {
     this.tests.push({ name, status: 'skipped', reason });
     this.skipped++;
     if (TEST_CONFIG.verbose) {
-      console.log(`⊘ ${name} - ${reason}`);
     }
   }
 
@@ -78,16 +76,7 @@ class TestRunner {
   }
 
   print() {
-    console.log('\n' + '='.repeat(60));
-    console.log('INTEGRATION TEST RESULTS');
-    console.log('='.repeat(60));
     const summary = this.summary();
-    console.log(`Total Tests: ${summary.total}`);
-    console.log(`Passed: ${summary.passed}`);
-    console.log(`Failed: ${summary.failed}`);
-    console.log(`Skipped: ${summary.skipped}`);
-    console.log(`Pass Rate: ${summary.passRate}`);
-    console.log('='.repeat(60) + '\n');
     return summary;
   }
 }
@@ -98,7 +87,6 @@ class TestRunner {
 export async function runIntegrationTests() {
   const runner = new TestRunner();
 
-  console.log('\nStarting Template System Integration Tests...\n');
 
   // Test 1: Filter System
   await runner.test('Filters - String filters work correctly', async () => {
@@ -465,7 +453,6 @@ Total: <% items.filter(i => i.price > 10).reduce((sum, i) => sum + i.price, 0) %
  * Run quick smoke tests
  */
 export async function runSmokeTests() {
-  console.log('\nRunning smoke tests...\n');
 
   const tests = [
     {
@@ -501,17 +488,13 @@ export async function runSmokeTests() {
     try {
       const result = await processor.process(test.template, test.data);
       if (result.result.includes(test.expected)) {
-        console.log(`✓ ${test.name}`);
         passed++;
       } else {
-        console.log(`✗ ${test.name} - Expected: ${test.expected}, Got: ${result.result}`);
       }
     } catch (error) {
-      console.log(`✗ ${test.name} - Error: ${error.message}`);
     }
   }
 
-  console.log(`\nSmoke tests: ${passed}/${tests.length} passed\n`);
   return { total: tests.length, passed };
 }
 
@@ -519,9 +502,6 @@ export async function runSmokeTests() {
  * Main test runner
  */
 export async function main() {
-  console.log('\n' + '='.repeat(60));
-  console.log('TEMPLATE SYSTEM INTEGRATION TESTS');
-  console.log('='.repeat(60));
 
   // Run smoke tests first
   const smokeResults = await runSmokeTests();
@@ -531,7 +511,6 @@ export async function main() {
     const results = await runIntegrationTests();
     return results;
   } else {
-    console.log('\n⚠️  Smoke tests failed, skipping full integration tests\n');
     return null;
   }
 }

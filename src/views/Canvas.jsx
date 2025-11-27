@@ -76,26 +76,19 @@ export default function Canvas({
         // Load the TLDraw snapshot directly (no conversion needed!)
         const tldrawSnapshot = await canvasManager.loadCanvas(canvasPath)
         if (import.meta.env.DEV) {
-          console.log(`[Canvas.jsx] SNAPSHOT LOADED FROM MANAGER:`, tldrawSnapshot);
-          console.log(`[Canvas.jsx] SNAPSHOT.SCHEMA:`, tldrawSnapshot.schema);
-          console.log(`[Canvas.jsx] SNAPSHOT.RECORDS:`, tldrawSnapshot.records);
         }
 
         // Load into store
         if (import.meta.env.DEV) {
-          console.log(`[Canvas.jsx] CALLING loadSnapshot with:`, tldrawSnapshot);
         }
         loadSnapshot(store, tldrawSnapshot)
         if (import.meta.env.DEV) {
-          console.log(`[Canvas.jsx] LOADED INTO TLDRAW STORE`);
 
           // Check what's actually in the store after loading
           const storeRecords = store.allRecords();
-          console.log(`[Canvas.jsx] STORE RECORDS AFTER LOAD (count: ${storeRecords.length}):`, storeRecords);
 
           // Check specifically for shapes
           const shapes = storeRecords.filter(r => r.typeName === 'shape');
-          console.log(`[Canvas.jsx] SHAPES IN STORE (count: ${shapes.length}):`, shapes);
         }
         
         // Mark as clean after loading
@@ -205,10 +198,6 @@ export default function Canvas({
         // Get current TLDraw snapshot
         const rawSnapshot = getSnapshot(editor.store)
         if (import.meta.env.DEV) {
-          console.log(`[Canvas SAVE] RAW getSnapshot() RESULT:`, rawSnapshot);
-          console.log(`[Canvas SAVE] Keys in snapshot:`, Object.keys(rawSnapshot));
-          console.log(`[Canvas SAVE] Is it { document, session }?`, 'document' in rawSnapshot, 'session' in rawSnapshot);
-          console.log(`[Canvas SAVE] Is it { records, schema }?`, 'records' in rawSnapshot, 'schema' in rawSnapshot);
         }
 
         // Save exactly what TLDraw gives us

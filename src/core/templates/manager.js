@@ -56,10 +56,34 @@ export class TemplateManager {
   }
 
   /**
+   * Refresh templates from file system (re-scan templates directory)
+   * This is useful when templates are created externally (e.g., by MCP)
+   */
+  async refresh() {
+    if (this.useFileStorage) {
+      // Reload from filesystem
+      const result = await this.storageBackend.refresh();
+      this.storage = result.templates;
+
+      // Clear and rebuild indexes
+      this.categories.clear();
+      this.tags.clear();
+      this.initializeDefaultCategories();
+
+      for (const template of this.storage.values()) {
+        this.updateCategoryIndex(template);
+        this.updateTagIndex(template);
+      }
+
+      return result;
+    }
+    return { success: true, count: this.storage.size };
+  }
+
+  /**
    * Create a new template
    */
   async create(templateData) {
-    console.log('[TemplateManager] Creating template:', templateData.name, templateData.id);
 
     const { id, name, content, category, tags, metadata } = templateData;
 
@@ -70,7 +94,6 @@ export class TemplateManager {
     // Check if template already exists
     const existing = this.storage.has(id);
     if (existing) {
-      console.log('[TemplateManager] Template already exists, will overwrite:', id);
       // Don't throw error - allow overwrite (user confirmed in CreateTemplate)
       // Instead, we'll update the existing template
     }
@@ -80,13 +103,11 @@ export class TemplateManager {
     }
 
     // Validate template syntax
-    console.log('[TemplateManager] Validating template syntax...');
     const validation = this.parser.validate(content);
     if (!validation.valid) {
       console.error('[TemplateManager] Invalid template syntax:', validation.errors);
       throw new Error(`Invalid template syntax: ${validation.errors.join(', ')}`);
     }
-    console.log('[TemplateManager] Template syntax is valid');
 
     const template = {
       id,
@@ -103,24 +124,18 @@ export class TemplateManager {
       stats: this.parser.getStatistics(content)
     };
 
-    console.log('[TemplateManager] Adding template to storage...');
     this.storage.set(id, template);
 
-    console.log('[TemplateManager] Updating indexes...');
     this.updateCategoryIndex(template);
     this.updateTagIndex(template);
 
     // Auto-save if using file storage
     if (this.autoSave && this.useFileStorage) {
-      console.log('[TemplateManager] Auto-save enabled, saving to file...');
       // Save individual template as .md file
       await this.storageBackend.saveTemplate(template);
-      console.log('[TemplateManager] Template saved to file successfully');
     } else {
-      console.log('[TemplateManager] Auto-save disabled or not using file storage');
     }
 
-    console.log('[TemplateManager] Template creation complete:', id);
     return template;
   }
 

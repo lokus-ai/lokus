@@ -18,11 +18,6 @@ import ImportWizard from "../components/ImportWizard.jsx";
 
 export default function Preferences() {
   if (import.meta.env.DEV) {
-    console.log('🔧 Preferences component rendering');
-    console.log('🔧 Window location:', window.location.href);
-    console.log('🔧 Window search params:', new URLSearchParams(window.location.search).toString());
-    console.log('🔧 Document root styles:', window.getComputedStyle(document.documentElement).getPropertyValue('--bg'));
-    console.log('🔧 Document body classes:', document.body.className);
   }
   const [themes, setThemes] = useState([]);
   const [activeTheme, setActiveTheme] = useState("");
@@ -327,7 +322,6 @@ export default function Preferences() {
             const currentWorkspace = await invoke('api_get_current_workspace');
             if (currentWorkspace) {
               if (import.meta.env.DEV) {
-                console.log('Got workspace path from API:', currentWorkspace);
               }
               setWorkspacePath(currentWorkspace);
             } else {
@@ -390,13 +384,11 @@ export default function Preferences() {
         if (branchName && branchName !== syncBranch) {
           setSyncBranch(branchName);
           if (import.meta.env.DEV) {
-            console.log('[Sync] Auto-detected branch:', branchName);
           }
         }
       } catch (e) {
         // Ignore error if Git not initialized yet
         if (import.meta.env.DEV) {
-          console.log('[Sync] Could not detect branch (Git may not be initialized)');
         }
       }
     };

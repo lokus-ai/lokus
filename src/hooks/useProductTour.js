@@ -14,15 +14,9 @@ export function useProductTour() {
         const config = await readConfig();
         // IMPORTANT: Default to false (show tour) for first-time users
         const seen = config?.hasSeenProductTour ?? false;
-        console.log('📊 Tour status check:', {
-          configExists: !!config,
-          hasSeenProductTour: config?.hasSeenProductTour,
-          willShowTour: !seen
-        });
         setHasSeenTour(seen);
       } catch (error) {
         console.error('Failed to check tour status:', error);
-        console.log('✅ Defaulting to show tour on error (first-time user experience)');
         setHasSeenTour(false); // Default to showing tour on error
       } finally {
         setIsLoading(false);

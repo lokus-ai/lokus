@@ -67,43 +67,46 @@ function buildTableHTML(rows, cols, withHeaderRow = true) {
 }
 
 function openTemplatePicker({ editor, range }) {
+  console.log('[SlashCommand] Opening template picker via event...');
   // Store current editor state for template insertion
   const editorState = { editor, range };
-  
+
   // Dispatch custom event to open template picker
-  window.dispatchEvent(new CustomEvent('open-template-picker', { 
-    detail: { 
+  window.dispatchEvent(new CustomEvent('open-template-picker', {
+    detail: {
       editorState,
       onSelect: (template, processedContent) => {
+        console.log('[SlashCommand] Template selected:', template?.name);
         try {
           // Insert the processed template content
           editor.chain().focus().deleteRange(range).insertContent(processedContent).run();
         } catch (err) {
+          console.error('[SlashCommand] Error inserting template:', err);
           // Fallback: insert raw template content
           editor.chain().focus().deleteRange(range).insertContent(template.content).run();
         }
       }
-    } 
+    }
   }));
 }
 
 function openFileLinkPicker({ editor, range }) {
-  
+
   try {
     // Get file index for suggestions
     const getIndex = () => {
       const list = (globalThis.__LOKUS_FILE_INDEX__ || [])
       return Array.isArray(list) ? list : []
     };
-    
+
     const files = getIndex();
-    
+
     if (files.length === 0) {
       // No files available, just insert empty wiki link
       editor.chain().focus().deleteRange(range).insertContent('[[]]').run();
       return;
     }
-    
+
     // Create file picker UI
     createFilePicker(files, (selectedFile) => {
       if (selectedFile) {
@@ -112,7 +115,7 @@ function openFileLinkPicker({ editor, range }) {
         editor.chain().focus().deleteRange(range).insertContent(linkText).run();
       }
     });
-    
+
   } catch (error) {
     // Fallback: just insert something
     try {
@@ -180,7 +183,6 @@ function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
             const { invoke } = window.__TAURI__.tauri;
             invoke('create_kanban_board', { name: boardName.trim() })
               .then(() => {
-                console.log('Kanban board created:', boardName.trim());
               })
               .catch(err => console.error('Failed to create board:', err));
           }
@@ -204,6 +206,13 @@ function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
       z-index: 10000;
       backdrop-filter: blur(4px);
     `;
+
+    // Define cleanup function early so it can be used in event handlers
+    const cleanup = () => {
+      if (overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+      }
+    };
 
     const picker = document.createElement('div');
     picker.style.cssText = `
@@ -309,7 +318,7 @@ function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
         if (typeof window !== 'undefined' && window.__TAURI__) {
           const { invoke } = window.__TAURI__.tauri;
           invoke('create_kanban_board', { name: boardName.trim() })
-            .then(() => console.log('Board created'))
+            .then(() => { })
             .catch(err => console.error('Failed to create board:', err));
         }
       }
@@ -337,12 +346,6 @@ function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
     picker.appendChild(footer);
     overlay.appendChild(picker);
     document.body.appendChild(overlay);
-
-    const cleanup = () => {
-      if (overlay.parentNode) {
-        overlay.parentNode.removeChild(overlay);
-      }
-    };
 
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) cleanup();
@@ -374,7 +377,7 @@ function createFilePicker(files, onSelect) {
     z-index: 10000;
     backdrop-filter: blur(4px);
   `;
-  
+
   // Create picker container
   const picker = document.createElement('div');
   picker.style.cssText = `
@@ -386,7 +389,7 @@ function createFilePicker(files, onSelect) {
     overflow: hidden;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   `;
-  
+
   // Create header
   const header = document.createElement('div');
   header.style.cssText = `
@@ -402,7 +405,7 @@ function createFilePicker(files, onSelect) {
       Choose a file from your workspace
     </p>
   `;
-  
+
   // Create file list container
   const listContainer = document.createElement('div');
   listContainer.style.cssText = `
@@ -410,7 +413,7 @@ function createFilePicker(files, onSelect) {
     overflow-y: auto;
     padding: 8px 0;
   `;
-  
+
   // Create file items
   files.forEach((file, index) => {
     const item = document.createElement('div');
@@ -420,7 +423,7 @@ function createFilePicker(files, onSelect) {
       border-bottom: 1px solid rgba(var(--border), 0.5);
       transition: background-color 0.15s ease;
     `;
-    
+
     // Get relative path (remove workspace path)
     const getRelativePath = (fullPath) => {
       const workspace = globalThis.__LOKUS_WORKSPACE_PATH__ || '';
@@ -429,9 +432,9 @@ function createFilePicker(files, onSelect) {
       }
       return fullPath;
     };
-    
+
     const relativePath = getRelativePath(file.path);
-    
+
     item.innerHTML = `
       <div style="color: rgb(var(--text)); font-size: 14px; font-weight: 500; margin-bottom: 2px;">
         ${file.title}
@@ -440,25 +443,25 @@ function createFilePicker(files, onSelect) {
         ${relativePath}
       </div>
     `;
-    
+
     // Hover effect
     item.addEventListener('mouseenter', () => {
       item.style.backgroundColor = 'rgba(var(--accent), 0.1)';
     });
-    
+
     item.addEventListener('mouseleave', () => {
       item.style.backgroundColor = 'transparent';
     });
-    
+
     // Click handler
     item.addEventListener('click', () => {
       onSelect(file);
       cleanup();
     });
-    
+
     listContainer.appendChild(item);
   });
-  
+
   // Create footer
   const footer = document.createElement('div');
   footer.style.cssText = `
@@ -467,7 +470,7 @@ function createFilePicker(files, onSelect) {
     background: rgb(var(--bg));
     text-align: right;
   `;
-  
+
   const cancelBtn = document.createElement('button');
   cancelBtn.textContent = 'Cancel';
   cancelBtn.style.cssText = `
@@ -479,30 +482,30 @@ function createFilePicker(files, onSelect) {
     cursor: pointer;
     font-size: 14px;
   `;
-  
+
   cancelBtn.addEventListener('click', () => {
     onSelect(null);
     cleanup();
   });
-  
+
   footer.appendChild(cancelBtn);
-  
+
   // Assemble picker
   picker.appendChild(header);
   picker.appendChild(listContainer);
   picker.appendChild(footer);
   overlay.appendChild(picker);
-  
+
   // Add to DOM
   document.body.appendChild(overlay);
-  
+
   // Cleanup function
   const cleanup = () => {
     if (overlay.parentNode) {
       overlay.parentNode.removeChild(overlay);
     }
   };
-  
+
   // Close on overlay click
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) {
@@ -510,7 +513,7 @@ function createFilePicker(files, onSelect) {
       cleanup();
     }
   });
-  
+
   // Close on escape
   const handleKeydown = (e) => {
     if (e.key === 'Escape') {
@@ -528,7 +531,7 @@ function openTableSizePicker({ editor, range }) {
     try {
       const html = buildTableHTML(3, 3, true);
       editor.chain().focus().deleteRange(range).insertContent(html).run();
-    } catch {}
+    } catch { }
     return;
   }
 
@@ -595,8 +598,8 @@ function openTableSizePicker({ editor, range }) {
     try {
       const html = buildTableHTML(hoverRows, hoverCols, true);
       editor.chain().focus().deleteRange(range).insertContent(html).run();
-    } catch {}
-    try { pick.destroy(); } catch {}
+    } catch { }
+    try { pick.destroy(); } catch { }
   };
   grid.addEventListener('click', doInsert);
 
@@ -608,7 +611,7 @@ function openTableSizePicker({ editor, range }) {
     interactive: true,
     trigger: 'manual',
     placement: 'bottom-start',
-    onHidden: (inst) => { try { inst.destroy(); } catch {} },
+    onHidden: (inst) => { try { inst.destroy(); } catch { } },
   });
 
   // Initial paint so the palette uses 1×1 by default hover
@@ -679,13 +682,20 @@ const commandItems = [
         description: "Insert an image by URL.",
         icon: <ImageIcon size={18} />,
         command: ({ editor, range }) => {
-          const url = window.prompt('Image URL');
-          if (!url) return;
-          if (editor?.commands?.setImage) {
-            editor.chain().focus().deleteRange(range).setImage({ src: url }).run();
-          } else {
-            editor.chain().focus().deleteRange(range).insertContent(`<img src="${url}" alt="" />`).run();
-          }
+          // Dispatch event to open image insert modal
+          window.dispatchEvent(new CustomEvent('open-image-insert-modal', {
+            detail: {
+              editor,
+              range,
+              onInsert: ({ src, alt }) => {
+                if (editor?.commands?.setImage) {
+                  editor.chain().focus().deleteRange(range).setImage({ src, alt }).run();
+                } else {
+                  editor.chain().focus().deleteRange(range).insertContent(`<img src="${src}" alt="${alt || ''}" />`).run();
+                }
+              }
+            }
+          }));
         },
       },
       {
@@ -849,14 +859,23 @@ const commandItems = [
         description: "Insert $x^2$ (LaTeX).",
         icon: <Sigma size={18} />,
         command: ({ editor, range }) => {
-          const src = window.prompt('Enter LaTeX formula:', 'E = mc^2')
-          if (src != null && src.trim()) {
-            if (editor?.commands?.setMathInline) {
-              editor.chain().focus().deleteRange(range).setMathInline(src.trim()).run()
-            } else {
-              editor.chain().focus().deleteRange(range).insertContent(`$${src.trim()}$`).run()
+          // Dispatch event to open math formula modal
+          window.dispatchEvent(new CustomEvent('open-math-formula-modal', {
+            detail: {
+              mode: 'inline',
+              editor,
+              range,
+              onInsert: ({ formula }) => {
+                if (editor?.commands?.setMathInline) {
+                  editor.chain().focus().deleteRange(range).setMathInline(formula).run();
+                } else {
+                  // Fallback: insert as math node HTML
+                  const html = `<span data-type="math-inline" data-src="${formula.replace(/"/g, '&quot;')}">${formula}</span>`;
+                  editor.chain().focus().deleteRange(range).insertContent(html).run();
+                }
+              }
             }
-          }
+          }));
         },
       },
       {
@@ -864,14 +883,23 @@ const commandItems = [
         description: "Insert $$E=mc^2$$ (LaTeX).",
         icon: <Sigma size={18} />,
         command: ({ editor, range }) => {
-          const src = window.prompt('Enter LaTeX formula:', '\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}')
-          if (src != null && src.trim()) {
-            if (editor?.commands?.setMathBlock) {
-              editor.chain().focus().deleteRange(range).setMathBlock(src.trim()).run()
-            } else {
-              editor.chain().focus().deleteRange(range).insertContent(`$$${src.trim()}$$`).run()
+          // Dispatch event to open math formula modal
+          window.dispatchEvent(new CustomEvent('open-math-formula-modal', {
+            detail: {
+              mode: 'block',
+              editor,
+              range,
+              onInsert: ({ formula }) => {
+                if (editor?.commands?.setMathBlock) {
+                  editor.chain().focus().deleteRange(range).setMathBlock(formula).run();
+                } else {
+                  // Fallback: insert as math block node HTML
+                  const html = `<div data-type="math-block" data-src="${formula.replace(/"/g, '&quot;')}">${formula}</div>`;
+                  editor.chain().focus().deleteRange(range).insertContent(html).run();
+                }
+              }
             }
-          }
+          }));
         },
       },
     ],
@@ -880,12 +908,43 @@ const commandItems = [
 
 const slashCommand = {
   items: ({ query, editor }) => {
-    console.log('🔍 [SlashCommand] Query:', `"${query}"`);
+    // If no query, show all commands
+    if (!query || !query.trim()) {
+      const pluginCommandGroups = editorAPI.getSlashCommands();
+      return [...commandItems, ...pluginCommandGroups];
+    }
 
-    const matches = (title) => {
-      const result = title.toLowerCase().includes(query.toLowerCase());
-      return result;
+    const queryLower = query.toLowerCase().trim();
+
+    // Enhanced matching: check title and description
+    const matches = (item) => {
+      const titleLower = item.title.toLowerCase();
+      const descLower = (item.description || '').toLowerCase();
+
+      // Check if title or description includes the query
+      return titleLower.includes(queryLower) || descLower.includes(queryLower);
     };
+
+    // Score items for better sorting (title matches rank higher)
+    const scoreItem = (item) => {
+      const titleLower = item.title.toLowerCase();
+      const descLower = (item.description || '').toLowerCase();
+
+      // Exact title match = highest score
+      if (titleLower === queryLower) return 1000;
+
+      // Title starts with query = high score
+      if (titleLower.startsWith(queryLower)) return 100;
+
+      // Title contains query = medium score
+      if (titleLower.includes(queryLower)) return 50;
+
+      // Description contains query = low score
+      if (descLower.includes(queryLower)) return 10;
+
+      return 0;
+    };
+
     const available = (_item) => true; // Always show; execution is guarded.
 
     // Get plugin slash commands
@@ -894,14 +953,20 @@ const slashCommand = {
     // Combine core commands with plugin commands
     const allCommandGroups = [...commandItems, ...pluginCommandGroups];
 
+    // Filter and sort commands by relevance
     const filtered = allCommandGroups
-      .map((group) => ({
-        ...group,
-        commands: group.commands.filter((item) => matches(item.title) && available(item)),
-      }))
-      .filter((group) => group.commands.length > 0);
+      .map((group) => {
+        const matchedCommands = group.commands
+          .filter((item) => matches(item) && available(item))
+          .map((item) => ({ ...item, _score: scoreItem(item) }))
+          .sort((a, b) => b._score - a._score); // Sort by score descending
 
-    console.log('🔍 [SlashCommand] Filtered to', filtered.flatMap(g => g.commands).length, 'commands');
+        return {
+          ...group,
+          commands: matchedCommands
+        };
+      })
+      .filter((group) => group.commands.length > 0);
 
     return filtered;
   },
@@ -912,7 +977,6 @@ const slashCommand = {
 
     return {
       onStart: (props) => {
-        console.log('🎬 [SlashCommand] onStart - query:', props.query);
         // keep latest rect for sub‑popovers (e.g., table size picker)
         if (props.clientRect) lastClientRect = props.clientRect;
 
@@ -942,11 +1006,9 @@ const slashCommand = {
           trigger: "manual",
           placement: "bottom-start",
         });
-        console.log('✅ [SlashCommand] Popup created');
       },
 
       onUpdate(props) {
-        console.log('🔄 [SlashCommand] onUpdate - query:', props.query);
         // Refresh items with latest plugin commands
         const currentItems = slashCommand.items(props);
         const enhancedProps = {
@@ -985,7 +1047,6 @@ const slashCommand = {
       },
 
       onExit() {
-        console.log('❌ [SlashCommand] onExit - destroying popup');
         if (popup && popup[0]) popup[0].destroy();
         if (component) component.destroy();
       },

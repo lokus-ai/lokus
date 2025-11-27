@@ -18,7 +18,6 @@ export class BlockBacklinkManager {
    * @param {Array} fileIndex - Array of file objects with path property
    */
   async indexBlockLinks(fileIndex) {
-    console.log('[BlockBacklinkManager] Indexing block links from', fileIndex.length, 'files')
 
     this.blockLinks.clear()
 
@@ -31,7 +30,6 @@ export class BlockBacklinkManager {
     }
 
     this.indexed = true
-    console.log('[BlockBacklinkManager] ✅ Indexed', this.blockLinks.size, 'unique block references')
   }
 
   /**

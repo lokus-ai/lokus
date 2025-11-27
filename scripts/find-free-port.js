@@ -177,7 +177,6 @@ async function main() {
           process.exit(1);
         }
         const ports = await allocatePort(arg);
-        console.log(JSON.stringify(ports));
         break;
       }
 
@@ -188,16 +187,13 @@ async function main() {
         }
         const released = releasePort(arg);
         if (released) {
-          console.log(`Released ports for ${arg}`);
         } else {
-          console.log(`No ports found for ${arg}`);
         }
         break;
       }
 
       case 'list': {
         const ports = listPorts();
-        console.log(JSON.stringify(ports, null, 2));
         break;
       }
 
@@ -211,26 +207,16 @@ async function main() {
         }
 
         const status = await checkPorts(vitePort, hmrPort);
-        console.log(JSON.stringify(status, null, 2));
         break;
       }
 
       case 'find': {
         const startPort = arg ? parseInt(arg) : START_PORT;
         const ports = await findNextAvailablePort(startPort);
-        console.log(JSON.stringify(ports));
         break;
       }
 
       default: {
-        console.log('Usage: find-free-port.js <command> [args]');
-        console.log('');
-        console.log('Commands:');
-        console.log('  allocate <name>     Allocate ports for a worktree');
-        console.log('  release <name>      Release ports from a worktree');
-        console.log('  list                List all port allocations');
-        console.log('  check <v> <h>       Check if specific ports are available');
-        console.log('  find [start]        Find next available port pair');
         process.exit(1);
       }
     }

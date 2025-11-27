@@ -1,7 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import Launcher from "./views/Launcher";
-import Workspace from "./views/Workspace";
-import Preferences from "./views/Preferences";
+// Lazy load heavy views
+const Workspace = lazy(() => import("./views/Workspace"));
+const Preferences = lazy(() => import("./views/Preferences"));
+
 import UpdateChecker from "./components/UpdateChecker";
 import { usePreferenceActivation } from "./hooks/usePreferenceActivation";
 import { useWorkspaceActivation } from "./hooks/useWorkspaceActivation";
@@ -9,7 +11,6 @@ import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/short
 import { PluginProvider } from "./hooks/usePlugins.jsx";
 import { AuthProvider } from "./core/auth/AuthContext.jsx";
 import platformService from "./services/platform/PlatformService.js";
-// import { GmailProvider } from "./contexts/GmailContext.jsx"; // DISABLED: Slowing down app startup
 import markdownSyntaxConfig from "./core/markdown/syntax-config.js";
 import editorConfigCache from "./core/editor/config-cache.js";
 // Import workspace manager to expose developer utilities
@@ -20,15 +21,20 @@ import mcpClient from "./core/mcp/client.js";
 import { emit } from "@tauri-apps/api/event";
 import * as Sentry from "@sentry/react";
 
+// Simple loading spinner for Suspense fallback
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center h-screen bg-app-bg text-app-text select-none">
+    <div className="flex flex-col items-center gap-2 animate-pulse">
+      <div className="text-4xl font-bold tracking-tight text-app-accent">Lokus</div>
+    </div>
+  </div>
+);
+
 function App() {
   // Use the hooks' values directly (no setter param expected)
   const { isPrefsWindow } = usePreferenceActivation();
   const activePath = useWorkspaceActivation();
-  
-  console.log('🎯 App.jsx rendering');
-  console.log('🎯 isPrefsWindow:', isPrefsWindow);
-  console.log('🎯 activePath:', activePath);
-  console.log('🎯 URL search params:', window.location.search);
+
 
   // Track view navigation with breadcrumbs
   useEffect(() => {
@@ -123,7 +129,7 @@ function App() {
         }
 
         // MCP client is ready for configuration instructions (no server management needed)
-        
+
         return () => {
           window.removeEventListener('focus', onFocus);
           window.removeEventListener('blur', onBlur);
@@ -152,9 +158,8 @@ function App() {
 
       <div className="app-content">
         <AuthProvider>
-          {/* GmailProvider disabled to improve startup performance */}
-          {/* <GmailProvider> */}
-            <PluginProvider>
+          <PluginProvider>
+            <Suspense fallback={<LoadingFallback />}>
               {isPrefsWindow ? (
                 <Preferences />
               ) : activePath ? (
@@ -162,8 +167,8 @@ function App() {
               ) : (
                 <Launcher />
               )}
-            </PluginProvider>
-          {/* </GmailProvider> */}
+            </Suspense>
+          </PluginProvider>
         </AuthProvider>
         <UpdateChecker />
       </div>

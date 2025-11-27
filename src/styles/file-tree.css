@@ -1,0 +1,199 @@
+/**
+ * VS Code-style File Tree Styling
+ *
+ * Implements professional file explorer features:
+ * - Indentation guides (vertical lines)
+ * - Drag preview (ghost)
+ * - Drop target highlighting
+ * - Auto-expand animations
+ * - File count badges
+ * - Breadcrumb navigation
+ */
+
+/* File Tree Container */
+.file-tree-container {
+  position: relative;
+  padding: 8px 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Indentation Guides - VS Code style vertical lines */
+.file-entry-container {
+  position: relative;
+}
+
+.file-entry-container::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--level) * 1.25rem + 0.5rem);
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background-color: rgb(var(--border) / 0.3);
+  pointer-events: none;
+}
+
+/* Hide guide line for root level items */
+.file-entry-container[data-level="0"]::before {
+  display: none;
+}
+
+/* Drag Preview Styling */
+.drag-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background-color: rgb(var(--panel));
+  border: 1px solid rgb(var(--border));
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: rotate(-2deg);
+  opacity: 0.9;
+  z-index: 9999;
+  font-size: 0.875rem;
+  color: rgb(var(--text));
+}
+
+.drag-preview svg {
+  flex-shrink: 0;
+}
+
+/* Drop Target Highlighting */
+.drop-target-inside {
+  background-color: rgb(var(--accent) / 0.15) !important;
+  border-radius: var(--radius);
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: -2px;
+}
+
+/* Auto-expand pulse animation */
+.will-expand-indicator {
+  animation: pulseExpand 0.8s ease-in-out;
+}
+
+@keyframes pulseExpand {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+    background-color: rgb(var(--accent) / 0.1);
+  }
+}
+
+/* File Count Badge */
+.file-count-badge {
+  margin-left: 4px;
+  padding: 0 4px;
+  font-size: 0.75rem;
+  color: rgb(var(--muted));
+  opacity: 0.7;
+  font-weight: 400;
+}
+
+/* Breadcrumb Navigation */
+.breadcrumb-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background-color: rgb(var(--panel));
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  overflow-x: auto;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid rgb(var(--border));
+}
+
+.breadcrumb-segment {
+  padding: 4px 8px;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  border: none;
+  color: rgb(var(--text));
+  cursor: pointer;
+  transition: background-color 100ms ease;
+  font-size: inherit;
+  font-family: inherit;
+}
+
+.breadcrumb-segment:hover:not(:disabled) {
+  background-color: rgb(var(--hover));
+}
+
+.breadcrumb-segment:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.breadcrumb-file {
+  font-weight: 500;
+  cursor: default !important;
+}
+
+.breadcrumb-separator {
+  flex-shrink: 0;
+  color: rgb(var(--muted));
+  opacity: 0.5;
+}
+
+/* Drop Indicator Line */
+.drop-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: rgb(var(--accent));
+  pointer-events: none;
+  z-index: 100;
+  box-shadow: 0 0 4px rgb(var(--accent) / 0.5);
+  transition: top 100ms ease-out;
+}
+
+/* Collapse Animation Support */
+.folder-children-container {
+  overflow: hidden;
+}
+
+/* File Entry Hover State Enhancement */
+.file-entry-item:hover {
+  background-color: rgb(var(--hover));
+}
+
+.file-entry-item.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+/* Improve drag cursor feedback */
+.file-entry-item[draggable="true"] {
+  cursor: grab;
+}
+
+.file-entry-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Scrollbar styling for file tree */
+.file-tree-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.file-tree-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.file-tree-container::-webkit-scrollbar-thumb {
+  background: rgb(var(--border));
+  border-radius: 4px;
+}
+
+.file-tree-container::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--muted));
+}

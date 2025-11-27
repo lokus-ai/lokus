@@ -27,9 +27,6 @@ export const validateCommand = new Command('validate')
         process.exit(1)
       }
       
-      console.log(chalk.green('✓ Plugin manifest is valid'))
-      console.log(`  Plugin: ${manifest.name} v${manifest.version}`)
-      console.log(`  ID: ${manifest.id}`)
       
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : String(error))

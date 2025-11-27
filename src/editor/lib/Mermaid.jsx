@@ -34,16 +34,12 @@ const MermaidComponent = ({ node, updateAttributes }) => {
   const { code = "" } = node.attrs;
 
   if (import.meta.env.DEV) {
-    console.log('[MermaidComponent] Mount/Update - code:', JSON.stringify(code));
-    console.log('[MermaidComponent] Mount/Update - code length:', code.length);
-    console.log('[MermaidComponent] Mount/Update - code is falsy?', !code || code.trim().length === 0);
   }
 
   // Start in edit mode if there's no code or only whitespace
   const [isEditing, setIsEditing] = useState(() => {
     const hasCode = code && code.trim().length > 0;
     if (import.meta.env.DEV) {
-      console.log('[MermaidComponent] Initial state - hasCode:', hasCode, 'starting in edit mode:', !hasCode);
     }
     return !hasCode;
   });
@@ -56,7 +52,6 @@ const MermaidComponent = ({ node, updateAttributes }) => {
   const [svgContent, setSvgContent] = useState(null);
 
   if (import.meta.env.DEV) {
-    console.log('[MermaidComponent] State - isEditing:', isEditing, 'localCode length:', localCode.length);
   }
 
   const containerRef = useRef(null);
@@ -74,7 +69,6 @@ const MermaidComponent = ({ node, updateAttributes }) => {
   useEffect(() => {
     if (code !== localCode) {
       if (import.meta.env.DEV) {
-        console.log('[MermaidComponent] Code changed, updating localCode');
       }
       setLocalCode(code);
     }
@@ -98,25 +92,20 @@ const MermaidComponent = ({ node, updateAttributes }) => {
   // Initialize and render Mermaid diagram
   useEffect(() => {
     if (import.meta.env.DEV) {
-      console.log('[MermaidComponent] Render effect triggered - localCode length:', localCode.length);
-      console.log('[MermaidComponent] Render effect - localCode.trim():', localCode.trim().substring(0, 50));
     }
 
     if (!localCode.trim()) {
       if (import.meta.env.DEV) {
-        console.log('[MermaidComponent] Render effect - skipping, no code');
       }
       return;
     }
 
     if (import.meta.env.DEV) {
-      console.log('[MermaidComponent] Render effect - will render diagram');
     }
 
     const renderDiagram = async () => {
       try {
         if (import.meta.env.DEV) {
-          console.log('[MermaidComponent] Starting mermaid render...');
         }
 
         // Get dynamic theme colors
@@ -124,7 +113,6 @@ const MermaidComponent = ({ node, updateAttributes }) => {
         const isDark = document.documentElement.classList.contains("dark");
 
         if (import.meta.env.DEV) {
-          console.log('[MermaidComponent] Theme colors:', themeColors);
         }
 
         // Initialize Mermaid with dynamic theme
@@ -136,20 +124,17 @@ const MermaidComponent = ({ node, updateAttributes }) => {
         });
 
         if (import.meta.env.DEV) {
-          console.log('[MermaidComponent] Mermaid initialized, calling render...');
         }
 
         // Render diagram
         const { svg } = await mermaid.render(diagramIdRef.current, localCode);
 
         if (import.meta.env.DEV) {
-          console.log('[MermaidComponent] Mermaid render success, svg length:', svg.length);
         }
 
         if (containerRef.current) {
           containerRef.current.innerHTML = svg;
           if (import.meta.env.DEV) {
-            console.log('[MermaidComponent] SVG inserted into container');
           }
 
           const dimensions = {
@@ -159,27 +144,22 @@ const MermaidComponent = ({ node, updateAttributes }) => {
             scrollHeight: containerRef.current.scrollHeight
           };
           if (import.meta.env.DEV) {
-            console.log('[MermaidComponent] Container dimensions:', dimensions);
-            console.log('[MermaidComponent] Container innerHTML length:', containerRef.current.innerHTML.length);
           }
 
           // If container has no dimensions, retry after layout
           if (dimensions.width === 0 || dimensions.height === 0) {
             if (import.meta.env.DEV) {
-              console.log('[MermaidComponent] Container has no dimensions, retrying after layout...');
             }
             setTimeout(() => {
               if (containerRef.current) {
                 containerRef.current.innerHTML = svg;
                 if (import.meta.env.DEV) {
-                  console.log('[MermaidComponent] SVG re-inserted after delay');
                 }
               }
             }, 100);
           }
         } else {
           if (import.meta.env.DEV) {
-            console.log('[MermaidComponent] ERROR: containerRef.current is null!');
           }
         }
       } catch (e) {
@@ -213,7 +193,6 @@ const MermaidComponent = ({ node, updateAttributes }) => {
 
   const handleBlur = () => {
     if (import.meta.env.DEV) {
-      console.log('[MermaidComponent] handleBlur - saving code, length:', localCode.length);
     }
     updateAttributes({ code: localCode });
     setIsEditing(false);
@@ -223,7 +202,6 @@ const MermaidComponent = ({ node, updateAttributes }) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       if (import.meta.env.DEV) {
-        console.log('[MermaidComponent] handleKeyDown (Cmd+Enter) - saving code, length:', localCode.length);
       }
       updateAttributes({ code: localCode });
       setIsEditing(false);

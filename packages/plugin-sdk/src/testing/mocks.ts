@@ -91,7 +91,6 @@ export class MockLokusAPI implements LokusAPI {
   }
 
   log(level: any, message: string, ...args: unknown[]): void {
-    console.log(`[${this.pluginId}] ${message}`, ...args)
   }
 
   // Test utilities

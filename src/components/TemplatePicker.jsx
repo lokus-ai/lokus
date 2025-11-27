@@ -1,11 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileText,
   Search,
   Tag,
-  Folder,
   Clock,
-  Star,
   Plus,
   Eye,
   Copy,
@@ -21,11 +19,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog.jsx';
+import { Button } from './ui/button.jsx';
+import { Input } from './ui/input.jsx';
+import { Badge } from './ui/badge.jsx';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select.jsx';
 
-export default function TemplatePicker({ 
-  open, 
-  onClose, 
-  onSelect, 
+export default function TemplatePicker({
+  open,
+  onClose,
+  onSelect,
   onEdit,
   onPreview,
   showPreview = true,
@@ -34,24 +42,22 @@ export default function TemplatePicker({
   allowDelete = true,
   allowDuplicate = true
 }) {
-  const { 
-    templates, 
-    loading, 
-    error, 
-    searchTemplates, 
-    getCategories, 
+  const {
+    templates,
+    loading,
+    error,
+    getCategories,
     getTags,
     deleteTemplate,
     duplicateTemplate
   } = useTemplates();
-  
+
   const { process: processTemplate } = useTemplateProcessor();
-  
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedTags, setSelectedTags] = useState([]);
-  const [sortBy, setSortBy] = useState('updated');
-  const [sortOrder, setSortOrder] = useState('desc');
+  const [sortBy, setSortBy] = useState('updated-desc');
   const [filteredTemplates, setFilteredTemplates] = useState([]);
   const [categories, setCategories] = useState([]);
   const [tags, setTags] = useState([]);
@@ -63,15 +69,15 @@ export default function TemplatePicker({
         setCategories(getCategories());
         setTags(getTags());
       } catch (err) {
+        console.error('Error loading categories/tags:', err);
       }
     }
-  }, [open, getCategories, getTags]);
+  }, [open, getCategories, getTags, templates]);
 
   // Filter and sort templates
   useEffect(() => {
     let filtered = [...templates];
 
-    // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(template =>
@@ -81,23 +87,21 @@ export default function TemplatePicker({
       );
     }
 
-    // Apply category filter
-    if (selectedCategory) {
+    if (selectedCategory && selectedCategory !== 'all') {
       filtered = filtered.filter(template => template.category === selectedCategory);
     }
 
-    // Apply tags filter
     if (selectedTags.length > 0) {
       filtered = filtered.filter(template =>
         selectedTags.some(tag => template.tags.includes(tag))
       );
     }
 
-    // Sort templates
+    const [field, order] = sortBy.split('-');
     filtered.sort((a, b) => {
       let aValue, bValue;
 
-      switch (sortBy) {
+      switch (field) {
         case 'name':
           aValue = a.name.toLowerCase();
           bValue = b.name.toLowerCase();
@@ -124,72 +128,61 @@ export default function TemplatePicker({
       }
 
       const result = aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
-      return sortOrder === 'desc' ? -result : result;
+      return order === 'desc' ? -result : result;
     });
 
     setFilteredTemplates(filtered);
-  }, [templates, searchQuery, selectedCategory, selectedTags, sortBy, sortOrder]);
+  }, [templates, searchQuery, selectedCategory, selectedTags, sortBy]);
 
-  // Handle template selection
   const handleSelect = async (template) => {
-    
     try {
-      // Process the template with built-in variables
       const result = await processTemplate(template.id, {}, {
-        context: {
-          // Add any context like current file info
-        }
+        context: {}
       });
-      
-      
-      // Call onSelect with both template and processed content
+
       onSelect?.(template, result.result || result.content || result);
       onClose?.();
     } catch (err) {
-      // Fallback to raw template content
       onSelect?.(template, template.content);
       onClose?.();
     }
   };
 
-  // Handle template preview
   const handlePreview = (template, event) => {
     event.stopPropagation();
     onPreview?.(template);
   };
 
-  // Handle template editing
   const handleEdit = (template, event) => {
     event.stopPropagation();
     onEdit?.(template);
   };
 
-  // Handle template duplication
   const handleDuplicate = async (template, event) => {
     event.stopPropagation();
-    
+
     try {
       const newId = `${template.id}_copy_${Date.now()}`;
       await duplicateTemplate(template.id, newId, {
         name: `${template.name} (Copy)`
       });
     } catch (err) {
+      console.error('Failed to duplicate template:', err);
     }
   };
 
-  // Handle template deletion
   const handleDelete = async (template, event) => {
     event.stopPropagation();
-    
+
     if (window.confirm(`Are you sure you want to delete "${template.name}"?`)) {
       try {
         await deleteTemplate(template.id);
       } catch (err) {
+        console.error('Failed to delete template:', err);
       }
     }
   };
 
-  // Handle tag toggle
   const toggleTag = (tag) => {
     setSelectedTags(prev =>
       prev.includes(tag)
@@ -198,31 +191,11 @@ export default function TemplatePicker({
     );
   };
 
-  // Get template stats display
-  const getTemplateStats = (template) => {
-    const stats = template.stats || {};
-    const parts = [];
-    
-    if (stats.variables?.count > 0) {
-      parts.push(`${stats.variables.count} vars`);
-    }
-    
-    if (stats.jsBlocks?.count > 0) {
-      parts.push(`${stats.jsBlocks.count} blocks`);
-    }
-    
-    parts.push(`${Math.round(template.content.length / 1024 * 10) / 10}KB`);
-    
-    return parts.join(' • ');
-  };
-
-  // Format relative time
   const formatRelativeTime = (dateString) => {
     const date = new Date(dateString);
     const now = new Date();
     const diffMs = now - date;
-    const diffSeconds = Math.floor(diffMs / 1000);
-    const diffMinutes = Math.floor(diffSeconds / 60);
+    const diffMinutes = Math.floor(diffMs / 1000 / 60);
     const diffHours = Math.floor(diffMinutes / 60);
     const diffDays = Math.floor(diffHours / 24);
 
@@ -232,236 +205,281 @@ export default function TemplatePicker({
     return 'Just now';
   };
 
+  // Get clean description from template
+  const getDescription = (template) => {
+    if (template.metadata?.description && template.metadata.description !== 'Template created from content') {
+      return template.metadata.description;
+    }
+
+    // Extract clean text from content
+    let text = template.content
+      // Remove template variables
+      .replace(/\{\{[^}]+\}\}/g, '')
+      // Remove markdown syntax
+      .replace(/^#+\s+/gm, '')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      // Remove list markers
+      .replace(/^[-*]\s+/gm, '')
+      .replace(/^\d+\.\s+/gm, '')
+      // Remove extra whitespace
+      .replace(/\n+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // Return first meaningful sentence or fallback
+    const firstSentence = text.split(/[.!?]/)[0].trim();
+    return firstSentence || `A ${template.category.toLowerCase()} template`;
+  };
+
+  const renderTemplateCard = (template) => (
+    <div
+      key={template.id}
+      onClick={() => handleSelect(template)}
+      className="group relative bg-app-panel border border-app-border rounded-lg p-4 hover:border-app-accent cursor-pointer transition-all"
+    >
+      <div className="flex items-start gap-3 mb-3">
+        <div className="p-2 bg-app-bg border border-app-border rounded-md shrink-0">
+          <FileText className="h-4 w-4 text-app-muted" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-medium text-app-text truncate mb-1">
+            {template.name}
+          </h3>
+          <p className="text-xs text-app-muted">
+            {template.category}
+          </p>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {showPreview && (
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={(e) => handlePreview(template, e)}
+              className="h-7 w-7"
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {allowEdit && (
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={(e) => handleEdit(template, e)}
+              className="h-7 w-7"
+            >
+              <Edit className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {allowDuplicate && (
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={(e) => handleDuplicate(template, e)}
+              className="h-7 w-7"
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {allowDelete && (
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={(e) => handleDelete(template, e)}
+              className="h-7 w-7 text-red-500 hover:bg-red-500/10"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Description */}
+      <p className="text-sm text-app-muted line-clamp-2 mb-3">
+        {getDescription(template)}
+      </p>
+
+      {/* Tags */}
+      {template.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-3">
+          {template.tags.slice(0, 3).map(tag => (
+            <Badge key={tag} variant="outline" className="text-xs">
+              {tag}
+            </Badge>
+          ))}
+          {template.tags.length > 3 && (
+            <Badge variant="outline" className="text-xs">
+              +{template.tags.length - 3}
+            </Badge>
+          )}
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="flex items-center justify-between text-xs text-app-muted pt-2 border-t border-app-border">
+        <div className="flex items-center gap-1">
+          <Clock className="h-3 w-3" />
+          <span>{formatRelativeTime(template.metadata.updatedAt)}</span>
+        </div>
+        <span>{(template.content.length / 1024).toFixed(1)}KB</span>
+      </div>
+    </div>
+  );
+
+  const renderEmptyState = () => (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="p-4 bg-app-panel border border-app-border rounded-lg mb-4">
+        <FileText className="h-12 w-12 text-app-muted" />
+      </div>
+      <h3 className="text-lg font-medium text-app-text mb-2">
+        {searchQuery || selectedCategory !== 'all' || selectedTags.length > 0
+          ? 'No templates found'
+          : 'No templates yet'
+        }
+      </h3>
+      <p className="text-sm text-app-muted mb-6">
+        {searchQuery || selectedCategory !== 'all' || selectedTags.length > 0
+          ? 'Try adjusting your filters or search'
+          : 'Create your first template to get started'
+        }
+      </p>
+      {allowCreate && !(searchQuery || selectedCategory !== 'all' || selectedTags.length > 0) && (
+        <Button onClick={() => onEdit?.(null)} className="gap-2">
+          <Plus className="h-4 w-4" />
+          Create Template
+        </Button>
+      )}
+    </div>
+  );
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-4xl h-[80vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Select Template</DialogTitle>
-          <DialogDescription>
-            Choose a template to insert into your document. Templates support variables like {"{{date}}"} and {"{{cursor}}"}.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="w-full max-w-6xl h-[85vh] flex flex-col p-0">
+        {/* Header */}
+        <div className="px-6 pt-6 pb-4 border-b border-app-border">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-medium">
+              Select Template
+            </DialogTitle>
+            <DialogDescription className="text-sm mt-1">
+              Choose a template to insert into your document
+            </DialogDescription>
+          </DialogHeader>
+        </div>
 
         {/* Filters */}
-        <div className="p-4 border-b border-app-border space-y-3">
-          {/* Search and Sort */}
+        <div className="px-6 py-4 space-y-3 border-b border-app-border">
           <div className="flex gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-app-muted" />
-              <input
+              <Input
                 type="text"
                 placeholder="Search templates..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-app-bg border border-app-border rounded-md outline-none focus:ring-2 focus:ring-app-accent/40"
+                className="pl-9"
               />
+              {searchQuery && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
             </div>
-            
-            <select
-              value={`${sortBy}-${sortOrder}`}
-              onChange={(e) => {
-                const [sort, order] = e.target.value.split('-');
-                setSortBy(sort);
-                setSortOrder(order);
-              }}
-              className="px-3 py-2 bg-app-bg border border-app-border rounded-md outline-none"
-            >
-              <option value="updated-desc">Recently Updated</option>
-              <option value="created-desc">Recently Created</option>
-              <option value="name-asc">Name A-Z</option>
-              <option value="name-desc">Name Z-A</option>
-              <option value="size-asc">Size (Small)</option>
-              <option value="size-desc">Size (Large)</option>
-            </select>
+
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="Personal">Personal</SelectItem>
+                <SelectItem value="Work">Work</SelectItem>
+                <SelectItem value="Documentation">Documentation</SelectItem>
+                <SelectItem value="Notes">Notes</SelectItem>
+                <SelectItem value="Projects">Projects</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="updated-desc">Recent</SelectItem>
+                <SelectItem value="name-asc">A-Z</SelectItem>
+                <SelectItem value="name-desc">Z-A</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          {/* Category and Tags */}
-          <div className="flex gap-3">
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-3 py-2 bg-app-bg border border-app-border rounded-md outline-none"
-            >
-              <option value="">All Categories</option>
-              {categories.map(category => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
+          {tags.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <Tag className="h-3.5 w-3.5 text-app-muted" />
+              {tags.slice(0, 8).map(tag => (
+                <Badge
+                  key={tag}
+                  variant={selectedTags.includes(tag) ? "default" : "outline"}
+                  onClick={() => toggleTag(tag)}
+                  className="cursor-pointer text-xs"
+                >
+                  {tag}
+                </Badge>
               ))}
-            </select>
-
-            <div className="flex-1">
-              <div className="flex flex-wrap gap-1">
-                {tags.slice(0, 10).map(tag => (
-                  <button
-                    key={tag}
-                    onClick={() => toggleTag(tag)}
-                    className={`px-2 py-1 text-xs rounded-md border transition-colors ${
-                      selectedTags.includes(tag)
-                        ? 'bg-app-accent text-app-accent-fg border-app-accent'
-                        : 'bg-app-bg border-app-border hover:bg-app-panel'
-                    }`}
-                  >
-                    #{tag}
-                  </button>
-                ))}
-              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-auto px-6 py-4">
           {loading && (
-            <div className="p-8 text-center text-app-muted">
-              Loading templates...
+            <div className="flex items-center justify-center h-full">
+              <div className="text-sm text-app-muted">Loading...</div>
             </div>
           )}
 
           {error && (
-            <div className="p-8 text-center text-red-500">
-              Error: {error}
+            <div className="flex flex-col items-center justify-center h-full">
+              <p className="text-sm text-red-500">{error}</p>
             </div>
           )}
 
-          {!loading && !error && filteredTemplates.length === 0 && (
-            <div className="p-8 text-center text-app-muted">
-              {searchQuery || selectedCategory || selectedTags.length > 0
-                ? 'No templates match your filters'
-                : 'No templates available'
-              }
-            </div>
-          )}
+          {!loading && !error && filteredTemplates.length === 0 && renderEmptyState()}
 
           {!loading && !error && filteredTemplates.length > 0 && (
-            <div className="h-full overflow-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
-                {filteredTemplates.map(template => (
-                  <div
-                    key={template.id}
-                    onClick={() => handleSelect(template)}
-                    className="bg-app-bg border border-app-border rounded-lg p-4 hover:bg-app-panel cursor-pointer transition-colors group"
-                  >
-                    {/* Template Header */}
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <FileText size={16} className="text-app-muted flex-shrink-0" />
-                        <h3 className="font-medium text-app-text truncate">
-                          {template.name}
-                        </h3>
-                      </div>
-                      
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {showPreview && (
-                          <button
-                            onClick={(e) => handlePreview(template, e)}
-                            className="p-1 hover:bg-app-accent/20 rounded text-app-muted hover:text-app-text transition-colors"
-                            title="Preview"
-                          >
-                            <Eye size={14} />
-                          </button>
-                        )}
-                        
-                        {allowEdit && (
-                          <button
-                            onClick={(e) => handleEdit(template, e)}
-                            className="p-1 hover:bg-app-accent/20 rounded text-app-muted hover:text-app-text transition-colors"
-                            title="Edit"
-                          >
-                            <Edit size={14} />
-                          </button>
-                        )}
-                        
-                        {allowDuplicate && (
-                          <button
-                            onClick={(e) => handleDuplicate(template, e)}
-                            className="p-1 hover:bg-app-accent/20 rounded text-app-muted hover:text-app-text transition-colors"
-                            title="Duplicate"
-                          >
-                            <Copy size={14} />
-                          </button>
-                        )}
-                        
-                        {allowDelete && (
-                          <button
-                            onClick={(e) => handleDelete(template, e)}
-                            className="p-1 hover:bg-red-500/20 rounded text-app-muted hover:text-red-500 transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Template Content Preview */}
-                    <div className="text-sm text-app-muted mb-3 line-clamp-3">
-                      {template.content.length > 100
-                        ? `${template.content.substring(0, 100)}...`
-                        : template.content
-                      }
-                    </div>
-
-                    {/* Template Metadata */}
-                    <div className="space-y-2">
-                      {/* Category and Tags */}
-                      <div className="flex items-center gap-2 text-xs">
-                        <div className="flex items-center gap-1">
-                          <Folder size={12} />
-                          <span className="text-app-muted">{template.category}</span>
-                        </div>
-                        
-                        {template.tags.length > 0 && (
-                          <div className="flex items-center gap-1">
-                            <Tag size={12} />
-                            <span className="text-app-muted">
-                              {template.tags.slice(0, 2).join(', ')}
-                              {template.tags.length > 2 && ` +${template.tags.length - 2}`}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Stats and Time */}
-                      <div className="flex items-center justify-between text-xs text-app-muted">
-                        <span>{getTemplateStats(template)}</span>
-                        <div className="flex items-center gap-1">
-                          <Clock size={12} />
-                          <span>{formatRelativeTime(template.metadata.updatedAt)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredTemplates.map(template => renderTemplateCard(template))}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-app-border flex justify-between items-center">
-          <div className="text-sm text-app-muted">
-            {filteredTemplates.length} template{filteredTemplates.length !== 1 ? 's' : ''}
-            {filteredTemplates.length !== templates.length && ` (filtered from ${templates.length})`}
-          </div>
-          
-          <div className="flex gap-2">
-            {allowCreate && (
-              <button
-                onClick={() => onEdit?.(null)}
-                className="flex items-center gap-2 px-3 py-2 bg-app-accent text-app-accent-fg rounded-md hover:bg-app-accent/80 transition-colors"
-              >
-                <Plus size={16} />
-                New Template
-              </button>
-            )}
-            
-            <button
-              onClick={onClose}
-              className="px-3 py-2 border border-app-border rounded-md hover:bg-app-bg transition-colors"
-            >
-              Cancel
-            </button>
+        <div className="px-6 py-4 border-t border-app-border">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-app-muted">
+              {filteredTemplates.length} template{filteredTemplates.length !== 1 ? 's' : ''}
+            </div>
+
+            <div className="flex gap-2">
+              {allowCreate && (
+                <Button onClick={() => onEdit?.(null)} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  New
+                </Button>
+              )}
+              <Button variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+            </div>
           </div>
         </div>
       </DialogContent>

@@ -130,7 +130,6 @@ export namespace PluginSDK {
     const { BasicPluginTemplate, UIExtensionPluginTemplate } = await import('./templates/index.js')
     // Implementation would create appropriate template generator
     // For now, just log the request
-    console.log(`Creating plugin from template: ${template}`, config)
     // TODO: Implement template selection and generation logic
   }
 }
@@ -231,7 +230,6 @@ export namespace DevMode {
    */
   export function enableHotReload(plugin: Plugin): void {
     if (isEnabled()) {
-      console.log('Hot reload enabled for plugin')
       // Implementation would set up file watchers and reload mechanisms
     }
   }

@@ -281,7 +281,6 @@ async function showWelcomeScreen(): Promise<void> {
   });
   
   const gradientTitle = gradient(['#ff6b6b', '#4ecdc4', '#45b7d1'])(lokusTitle);
-  console.log(gradientTitle);
   
   const welcomeMessage = boxen(
     chalk.white.bold('🚀 Advanced Plugin Generator\n\n') +
@@ -304,8 +303,6 @@ async function showWelcomeScreen(): Promise<void> {
     }
   );
   
-  console.log(welcomeMessage);
-  console.log('');
 }
 
 async function promptForAdvancedPluginDetails(name?: string): Promise<{
@@ -423,7 +420,6 @@ async function promptForAdvancedPluginDetails(name?: string): Promise<{
     }
   );
 
-  console.log('\n' + templateInfo + '\n');
 
   const { confirmTemplate } = await inquirer.prompt([{
     type: 'confirm',
@@ -433,7 +429,6 @@ async function promptForAdvancedPluginDetails(name?: string): Promise<{
   }]);
 
   if (!confirmTemplate) {
-    console.log(chalk.yellow('Template selection cancelled.'));
     process.exit(0);
   }
 
@@ -912,7 +907,6 @@ export const createEnhancedCommand = new Command('create')
         }
       );
 
-      console.log('\n' + summaryBox + '\n');
 
       const { confirmCreate } = await inquirer.prompt([{
         type: 'confirm',
@@ -926,20 +920,17 @@ export const createEnhancedCommand = new Command('create')
         return;
       }
 
-      console.log('\n' + chalk.bold.blue('🚀 Creating your plugin...\n'));
 
       // Create the plugin
       await createAdvancedPlugin(pluginName, targetDir, template, pluginDetails);
 
       // Initialize Git if requested
       if (pluginDetails.initGit) {
-        console.log('\n' + chalk.bold.blue('📁 Setting up Git repository...\n'));
         await setupGitRepository(targetDir, pluginDetails);
       }
 
       // Install dependencies if requested
       if (pluginDetails.installDeps) {
-        console.log('\n' + chalk.bold.blue('📦 Installing dependencies...\n'));
         await installDependencies(targetDir, pluginDetails);
       }
 
@@ -947,7 +938,6 @@ export const createEnhancedCommand = new Command('create')
       await pluginValidator.validatePluginStructure(targetDir);
 
       // Success message
-      console.log('\n' + gradient(['#ff6b6b', '#4ecdc4', '#45b7d1'])('🎉 Plugin created successfully!') + '\n');
       
       const nextStepsBox = boxen(
         `${chalk.bold('Next Steps:')}\n\n` +
@@ -972,7 +962,6 @@ export const createEnhancedCommand = new Command('create')
         }
       );
       
-      console.log(nextStepsBox);
 
     } catch (error) {
       ErrorHandler.handleError(error);

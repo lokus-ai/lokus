@@ -170,27 +170,14 @@ export class IntegratedTemplateProcessor {
       iteration: 0
     };
 
-    console.log('[Processor] MAIN process() START');
-    console.log('[Processor] Input template length:', template?.length);
-    console.log('[Processor] Input variables:', variables);
-    console.log('[Processor] Options:', options);
 
     try {
       let processed = template;
 
       // Step 1: Handle prompts (if enabled and prompts exist)
-      console.log('[Processor] Step 1: Checking for prompts...');
-      console.log('[Processor] enablePrompts:', this.enablePrompts);
-      console.log('[Processor] hasPrompts:', this.prompts.hasPrompts(processed));
 
       if (this.enablePrompts && this.prompts.hasPrompts(processed)) {
-        console.log('[Processor] Processing prompts...');
         const promptResults = await this.processPrompts(processed, context, options);
-        console.log('[Processor] Prompt results:', {
-          oldLength: processed.length,
-          newLength: promptResults.template.length,
-          changed: processed !== promptResults.template
-        });
         processed = promptResults.template;
 
         // Preserve the date proxy when merging prompt results
@@ -204,15 +191,12 @@ export class IntegratedTemplateProcessor {
 
         performanceMetrics.prompts = promptResults.timing;
       } else {
-        console.log('[Processor] Skipping prompts step');
       }
 
       // Step 2: Remove comments
-      console.log('[Processor] Step 2: Removing comments...');
       const commentsStart = Date.now();
       const beforeComments = processed;
       processed = this.removeComments(processed);
-      console.log('[Processor] Comments removed, changed:', beforeComments !== processed);
       performanceMetrics.comments = Date.now() - commentsStart;
 
       // Step 3: Process includes (if enabled)
@@ -250,14 +234,10 @@ export class IntegratedTemplateProcessor {
       performanceMetrics.variables = Date.now() - variablesStart;
 
       // Step 8: Validate final result
-      console.log('[Processor] Step 8: Validating result...');
       this.validateResult(processed, template);
 
       const totalTime = this.performanceTracking ? Date.now() - startTime : 0;
 
-      console.log('[Processor] MAIN process() COMPLETE');
-      console.log('[Processor] Final result length:', processed.length);
-      console.log('[Processor] Final result preview:', processed.substring(0, 300));
 
       return {
         result: processed,
@@ -282,17 +262,11 @@ export class IntegratedTemplateProcessor {
   async processPrompts(template, context, options) {
     const startTime = Date.now();
 
-    console.log('[Processor] processPrompts START');
-    console.log('[Processor] Template length:', template?.length);
-    console.log('[Processor] Template preview:', template?.substring(0, 200));
 
     // Extract prompts
     const prompts = this.prompts.parsePrompts(template);
-    console.log('[Processor] Parsed prompts:', prompts.length);
-    console.log('[Processor] Prompt details:', prompts);
 
     if (prompts.length === 0) {
-      console.log('[Processor] No prompts found, returning original template');
       return { template, variables: {}, timing: Date.now() - startTime };
     }
 
@@ -300,25 +274,18 @@ export class IntegratedTemplateProcessor {
     let values = {};
     if (options.promptValues) {
       values = options.promptValues;
-      console.log('[Processor] Using provided promptValues:', values);
     } else if (options.promptHandler) {
       // Allow custom prompt handler
       values = await options.promptHandler(prompts);
-      console.log('[Processor] Got values from promptHandler:', values);
     } else {
       // Use default values from prompts
       for (const prompt of prompts) {
         values[prompt.varName] = prompt.defaultValue;
       }
-      console.log('[Processor] Using default values:', values);
     }
 
     // Replace prompts in template
-    console.log('[Processor] Calling replacePrompts...');
     const processedTemplate = this.prompts.replacePrompts(template, values);
-    console.log('[Processor] Processed template length:', processedTemplate?.length);
-    console.log('[Processor] Processed template preview:', processedTemplate?.substring(0, 200));
-    console.log('[Processor] Template changed:', template !== processedTemplate);
 
     return {
       template: processedTemplate,

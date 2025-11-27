@@ -182,12 +182,7 @@ pub fn initialize() -> Result<(), String> {
         return Err("Clipboard functionality is not available on this platform".to_string());
     }
     
-    let platform_info = ClipboardUtils::get_platform_clipboard_info();
-    println!("Initialized platform-aware clipboard for: {} (HTML: {}, Images: {}, History: {})", 
-             platform_info.platform,
-             platform_info.supports_html,
-             platform_info.supports_images,
-             platform_info.supports_history);
+    let _platform_info = ClipboardUtils::get_platform_clipboard_info();
     
     Ok(())
 }

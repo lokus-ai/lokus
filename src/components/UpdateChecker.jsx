@@ -26,7 +26,6 @@ export default function UpdateChecker() {
       // Suppress "Could not fetch" errors - this is expected if latest.json doesn't exist yet
       // (e.g., first release with updater enabled, or old releases without updater artifacts)
       if (err.message && err.message.includes('Could not fetch')) {
-        console.log('No update available (latest.json not found - this is expected for now)');
       } else {
         console.error('Update check failed:', err);
         setError(err.message);

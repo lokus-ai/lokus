@@ -585,7 +585,6 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
       
       _ => {
         // Handle any unmatched menu items
-        println!("Unhandled menu event: {}", event_id);
       }
     }
   });

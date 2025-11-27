@@ -18,7 +18,6 @@ export function ThemeProvider({ children }) {
     async function loadInitial() {
       try {
         if (import.meta.env.DEV) {
-          console.log('🎨 ThemeProvider loading initial theme');
         }
 
         // Apply initial theme immediately to prevent flash of unthemed content
@@ -27,7 +26,6 @@ export function ThemeProvider({ children }) {
         // Then read the actual configured theme
         const visuals = await readGlobalVisuals();
         if (import.meta.env.DEV) {
-          console.log('🎨 Read global visuals:', visuals);
         }
 
         if (visuals && visuals.theme) {
@@ -37,14 +35,12 @@ export function ThemeProvider({ children }) {
         } else {
           // Fallback to a default theme if none is configured
           if (import.meta.env.DEV) {
-            console.log('🎨 No theme configured, using default');
           }
           setTheme('default');
         }
 
         setIsThemeLoaded(true);
         if (import.meta.env.DEV) {
-          console.log('🎨 Theme initialization complete');
         }
       } catch (error) {
         console.error('🎨 Error loading initial theme:', error);

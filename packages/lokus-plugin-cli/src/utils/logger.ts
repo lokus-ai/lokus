@@ -5,7 +5,6 @@ export class Logger {
   private spinner: Ora | null = null;
 
   success(message: string): void {
-    console.log(chalk.green('✓'), message);
   }
 
   error(message: string): void {
@@ -17,17 +16,14 @@ export class Logger {
   }
 
   info(message: string): void {
-    console.log(chalk.blue('ℹ'), message);
   }
 
   debug(message: string): void {
     if (process.env.DEBUG || process.env.LOKUS_DEBUG) {
-      console.log(chalk.gray('🐛'), chalk.gray(message));
     }
   }
 
   log(message: string): void {
-    console.log(message);
   }
 
   startSpinner(text: string): Ora {
@@ -57,16 +53,13 @@ export class Logger {
   }
 
   newLine(): void {
-    console.log();
   }
 
   divider(): void {
-    console.log(chalk.gray('─'.repeat(50)));
   }
 
   header(title: string): void {
     this.newLine();
-    console.log(chalk.bold.blue(title));
     this.divider();
   }
 
@@ -80,20 +73,16 @@ export class Logger {
 
     // Header
     const header = keys.map((key, i) => key.padEnd(maxWidths[i])).join('  ');
-    console.log(chalk.bold(header));
-    console.log(keys.map((_, i) => '─'.repeat(maxWidths[i])).join('  '));
 
     // Rows
     data.forEach(row => {
       const line = keys.map((key, i) => 
         String(row[key] || '').padEnd(maxWidths[i])
       ).join('  ');
-      console.log(line);
     });
   }
 
   json(object: any): void {
-    console.log(JSON.stringify(object, null, 2));
   }
 }
 

@@ -554,20 +554,17 @@ This file demonstrates the MCP protocol capabilities:
             case 'list-resources':
               const resources = await this.client.listResources();
               resources.resources.forEach(resource => {
-                console.log(`  📄 ${resource.name} - ${resource.uri}`);
               });
               break;
             
             case 'list-tools':
               const tools = await this.client.listTools();
               tools.tools.forEach(tool => {
-                console.log(`  🔧 ${tool.name} - ${tool.description}`);
               });
               break;
             
             case 'search':
               if (parts.length < 2) {
-                console.log('Usage: search <query>');
                 break;
               }
               const query = parts.slice(1).join(' ');
@@ -575,22 +572,18 @@ This file demonstrates the MCP protocol capabilities:
                 query,
                 includeContent: false
               });
-              console.log(result.content[0].text);
               break;
             
             case 'read':
               if (parts.length < 2) {
-                console.log('Usage: read <uri>');
                 break;
               }
               const uri = parts[1];
               const content = await this.client.readResource(uri);
-              console.log(`Content: ${content.contents[0].text.substring(0, 500)}...`);
               break;
             
             case 'create-note':
               if (parts.length < 2) {
-                console.log('Usage: create-note <title>');
                 break;
               }
               const title = parts.slice(1).join(' ');
@@ -603,18 +596,14 @@ This file demonstrates the MCP protocol capabilities:
               });
               
               if (!createResult.isError) {
-                console.log(`✅ Created note: /workspace/${filename}.md`);
               } else {
-                console.log(`❌ Failed: ${createResult.content[0].text}`);
               }
               break;
             
             default:
-              console.log('Unknown command. Available: list-resources, list-tools, search <query>, read <uri>, create-note <title>, quit');
           }
           
         } catch (error) {
-          console.log(`❌ Error: ${error.message}`);
         }
         
         rl.prompt();
@@ -635,7 +624,6 @@ This file demonstrates the MCP protocol capabilities:
  * Main application
  */
 async function main() {
-  console.log('🚀 Lokus MCP Node.js Client Example');
   
   // Parse command line arguments
   const args = process.argv.slice(2);
@@ -678,7 +666,6 @@ async function main() {
       await explorer.exploreWorkspace();
       
       // Keep connection alive for a bit to see notifications
-      console.log('\n⏱️  Waiting 10 seconds for any notifications...');
       await new Promise(resolve => setTimeout(resolve, 10000));
     }
     
@@ -692,12 +679,10 @@ async function main() {
 
 // Handle graceful shutdown
 process.on('SIGINT', () => {
-  console.log('\n👋 Shutting down...');
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
-  console.log('\n👋 Shutting down...');
   process.exit(0);
 });
 

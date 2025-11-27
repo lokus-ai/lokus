@@ -121,7 +121,7 @@ export class EnhancedTemplateManager extends TemplateManager {
  *       );
  *
  *       // Use the result (e.g., insert into editor)
- *       console.log('Generated:', result.result);
+ *       
  *     } catch (error) {
  *       console.error('Template processing failed:', error);
  *     }

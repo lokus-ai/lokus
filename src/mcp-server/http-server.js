@@ -24,6 +24,11 @@ import { basesTools, executeBaseTool } from "./tools/bases.js";
 import { canvasTools, executeCanvasTool } from "./tools/canvas.js";
 import { kanbanTools, executeKanbanTool } from "./tools/kanban.js";
 import { graphTools, executeGraphTool } from "./tools/graph.js";
+import { templatesTools, executeTemplateTool } from "./tools/templates.js";
+import { themeTools, handleThemeTool } from "./tools/themes.js";
+
+// Import resources
+import { markdownSyntaxResources, getMarkdownSyntaxResource } from "./resources/markdownSyntaxProvider.js";
 
 // ===== CONFIGURATION =====
 const CONFIG = {
@@ -193,7 +198,9 @@ const getAllTools = () => {
     ...basesTools,
     ...canvasTools,
     ...kanbanTools,
-    ...graphTools
+    ...graphTools,
+    ...templatesTools,
+    ...themeTools
   ];
 };
 
@@ -264,6 +271,16 @@ async function handleMCPRequest(request) {
         result = await executeKanbanTool(toolName, args, workspace, apiUrl);
       } else if (graphTools.some(t => t.name === toolName)) {
         result = await executeGraphTool(toolName, args, workspace, apiUrl);
+      } else if (templatesTools.some(t => t.name === toolName)) {
+        result = await executeTemplateTool(toolName, args, workspace, apiUrl);
+      } else if (themeTools.some(t => t.name === toolName)) {
+        const themeResult = await handleThemeTool(toolName, args);
+        result = {
+          content: [{
+            type: "text",
+            text: JSON.stringify(themeResult, null, 2)
+          }]
+        };
       } else {
         throw new Error(`Unknown tool: ${toolName}`);
       }
@@ -273,6 +290,39 @@ async function handleMCPRequest(request) {
         result,
         id
       };
+    }
+
+    // List resources
+    if (method === 'resources/list') {
+      return {
+        jsonrpc: '2.0',
+        result: { resources: markdownSyntaxResources },
+        id
+      };
+    }
+
+    // Read resource
+    if (method === 'resources/read') {
+      const { uri } = params;
+      logger.info(`Reading resource: ${uri}`);
+
+      try {
+        const resource = await getMarkdownSyntaxResource(uri);
+        return {
+          jsonrpc: '2.0',
+          result: resource,
+          id
+        };
+      } catch (error) {
+        return {
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: error.message
+          },
+          id
+        };
+      }
     }
 
     // Unknown method

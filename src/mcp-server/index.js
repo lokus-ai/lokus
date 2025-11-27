@@ -12,7 +12,9 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   ListToolsRequestSchema,
-  CallToolRequestSchema
+  CallToolRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
 import { readFile, writeFile, access, mkdir } from "fs/promises";
 import { join, dirname } from "path";
@@ -28,6 +30,11 @@ import { basesTools, executeBaseTool } from "./tools/bases.js";
 import { canvasTools, executeCanvasTool } from "./tools/canvas.js";
 import { kanbanTools, executeKanbanTool } from "./tools/kanban.js";
 import { graphTools, executeGraphTool } from "./tools/graph.js";
+import { templatesTools, executeTemplateTool } from "./tools/templates.js";
+import { themeTools, handleThemeTool } from "./tools/themes.js";
+
+// Import resources
+import { markdownSyntaxResources, getMarkdownSyntaxResource } from "./resources/markdownSyntaxProvider.js";
 
 // ===== CONFIGURATION =====
 const CONFIG = {
@@ -226,7 +233,9 @@ const getAllTools = () => {
     ...basesTools,
     ...canvasTools,
     ...kanbanTools,
-    ...graphTools
+    ...graphTools,
+    ...templatesTools,
+    ...themeTools
   ];
 };
 
@@ -276,6 +285,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return await executeGraphTool(toolName, args, workspace, apiUrl);
     }
 
+    if (templatesTools.some(t => t.name === toolName)) {
+      return await executeTemplateTool(toolName, args, workspace, apiUrl);
+    }
+
+    if (themeTools.some(t => t.name === toolName)) {
+      const result = await handleThemeTool(toolName, args);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify(result, null, 2)
+        }]
+      };
+    }
+
     throw new Error(`Unknown tool: ${toolName}`);
 
   } catch (error) {
@@ -287,6 +310,31 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         text: `❌ Error: ${error.message}`
       }],
       isError: true
+    };
+  }
+});
+
+// Resources list handler
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  logger.info(`Providing ${markdownSyntaxResources.length} documentation resources`);
+  return { resources: markdownSyntaxResources };
+});
+
+// Resources read handler
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  const { uri } = request.params;
+  logger.info(`Reading resource: ${uri}`);
+
+  try {
+    return await getMarkdownSyntaxResource(uri);
+  } catch (error) {
+    logger.error(`Resource read failed for ${uri}:`, error.message);
+    return {
+      contents: [{
+        uri,
+        mimeType: "text/plain",
+        text: `Error: ${error.message}`
+      }]
     };
   }
 });

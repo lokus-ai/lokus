@@ -46,7 +46,6 @@ impl MCPServerManager {
 
     /// Auto-start HTTP server for CLI (called on app launch)
     pub fn auto_start(&self) -> Result<MCPServerStatus, String> {
-        println!("[MCP] Auto-starting HTTP server for CLI integration...");
 
         // Use extracted bundle path
         let home = dirs::home_dir().ok_or("Could not find home directory")?;
@@ -70,7 +69,6 @@ impl MCPServerManager {
 
         // Check if already running
         if status_guard.is_running {
-            println!("[MCP] Server already running on port {}", status_guard.port);
             return Ok(status_guard.clone());
         }
 
@@ -97,7 +95,6 @@ impl MCPServerManager {
         status_guard.url = Some(format!("http://localhost:{}", port));
         status_guard.last_error = None;
 
-        println!("[MCP] ✅ HTTP Server started on port {} with PID {}", port, pid);
 
         Ok(status_guard.clone())
     }
@@ -141,16 +138,13 @@ impl MCPServerManager {
 
         if let Some(mut child) = process_guard.take() {
             // Try to terminate gracefully first
-            if let Err(e) = child.kill() {
-                println!("Warning: Failed to kill MCP server process: {}", e);
+            if let Err(_e) = child.kill() {
             }
 
             // Wait for the process to exit
-            if let Err(e) = child.wait() {
-                println!("Warning: Failed to wait for MCP server process: {}", e);
+            if let Err(_e) = child.wait() {
             }
 
-            println!("🔌 MCP Server stopped (PID: {:?})", status_guard.pid);
         }
 
         // Update status
