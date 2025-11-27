@@ -68,6 +68,12 @@ import { isImageFile, findImageFiles } from "../utils/imageUtils.js";
 import TagManagementModal from "../components/TagManagementModal.jsx";
 import ProductTour from "../components/ProductTour.jsx";
 import "../styles/product-tour.css";
+import Breadcrumbs from "../components/FileTree/Breadcrumbs.jsx";
+import DropIndicator from "../components/FileTree/DropIndicator.jsx";
+import ExternalDropZone from "../components/ExternalDropZone.jsx";
+import { useDropPosition } from "../hooks/useDropPosition.js";
+import { useAutoExpand } from "../hooks/useAutoExpand.js";
+import { AnimatePresence } from "framer-motion";
 
 const MAX_OPEN_TABS = 10;
 
@@ -855,6 +861,12 @@ function WorkspaceWithScope({ path }) {
   const [expandedFolders, setExpandedFolders] = useState(new Set());
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [renamingPath, setRenamingPath] = useState(null);
+
+  // Drag and drop hooks for file tree
+  const { dropPosition, updateDropPosition, clearDropPosition } = useDropPosition();
+  const { scheduleExpand, cancelExpand } = useAutoExpand((folderPath) => {
+    setExpandedFolders((prev) => new Set([...prev, folderPath]));
+  });
 
   // Check if we're in test mode
   const isTestMode = new URLSearchParams(window.location.search).get('testMode') === 'true';
@@ -3420,9 +3432,22 @@ function WorkspaceWithScope({ path }) {
 
   return (
     <PanelManager>
-      <div className="h-full bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select relative">
-        {/* Product Tour */}
-        <ProductTour autoStart={true} delay={1500} />
+      <ExternalDropZone
+        workspacePath={path}
+        onFilesAdded={(addedFiles) => {
+          console.log('Files added to workspace:', addedFiles);
+          // Refresh file tree to show new files
+          loadFileTree();
+        }}
+      >
+        <div className="h-full bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select relative">
+          {/* Drop indicator for visual feedback */}
+          <AnimatePresence>
+            <DropIndicator position={dropPosition} visible={!!dropPosition} />
+          </AnimatePresence>
+
+          {/* Product Tour */}
+          <ProductTour autoStart={true} delay={1500} />
 
         {/* Test Mode Indicator */}
         {isTestMode && (
@@ -4142,6 +4167,18 @@ function WorkspaceWithScope({ path }) {
                             </div>
                           ) : activeFile ? (
                             <EditorDropZone>
+                              {/* Breadcrumb navigation for file path */}
+                              <Breadcrumbs
+                                activeFile={activeFile}
+                                workspacePath={path}
+                                onNavigate={(folderPath) => {
+                                  // Expand the folder and scroll to it
+                                  if (folderPath !== path) {
+                                    setExpandedFolders((prev) => new Set([...prev, folderPath]));
+                                  }
+                                }}
+                              />
+
                               <ContextMenu>
                                 <ContextMenuTrigger asChild>
                                   <div>
@@ -4672,6 +4709,7 @@ function WorkspaceWithScope({ path }) {
           editor={editor}
         />
       </div>
+      </ExternalDropZone>
     </PanelManager>
   );
 }
