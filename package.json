@@ -46,7 +46,7 @@
   "scripts": {
     "dev": "vite",
     "dev:test": "concurrently \"npm run dev\" \"npm run test:watch:silent\"",
-    "build": "vite build",
+    "build": "NODE_OPTIONS='--max-old-space-size=4096' vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "dev:windows": "node scripts/check-platform.js && tauri dev --config src-tauri/tauri.windows.conf.json",
