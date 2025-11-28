@@ -24,6 +24,12 @@ import {
   Send,
   Kanban,
   CheckSquare,
+  Info,
+  Lightbulb,
+  AlertTriangle,
+  AlertCircle,
+  HelpCircle,
+  BookOpen,
 } from "lucide-react";
 import tippy from "tippy.js/dist/tippy.esm.js";
 
@@ -847,6 +853,91 @@ const commandItems = [
         icon: <CodeXml size={18} />,
         command: ({ editor, range }) => {
           editor.chain().focus().deleteRange(range).toggleCodeBlock().run();
+        },
+      },
+    ],
+  },
+  {
+    group: "Callouts",
+    commands: [
+      {
+        title: "Note Callout",
+        description: "Insert a note callout block.",
+        icon: <Info size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'note' }).run();
+          }
+        },
+      },
+      {
+        title: "Tip Callout",
+        description: "Insert a tip callout block.",
+        icon: <Lightbulb size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'tip' }).run();
+          }
+        },
+      },
+      {
+        title: "Warning Callout",
+        description: "Insert a warning callout block.",
+        icon: <AlertTriangle size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'warning' }).run();
+          }
+        },
+      },
+      {
+        title: "Danger Callout",
+        description: "Insert a danger callout block.",
+        icon: <AlertCircle size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'danger' }).run();
+          }
+        },
+      },
+      {
+        title: "Info Callout",
+        description: "Insert an info callout block.",
+        icon: <Info size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'info' }).run();
+          }
+        },
+      },
+      {
+        title: "Success Callout",
+        description: "Insert a success callout block.",
+        icon: <CheckSquare size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'success' }).run();
+          }
+        },
+      },
+      {
+        title: "Question Callout",
+        description: "Insert a question callout block.",
+        icon: <HelpCircle size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'question' }).run();
+          }
+        },
+      },
+      {
+        title: "Example Callout",
+        description: "Insert an example callout block.",
+        icon: <BookOpen size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'example' }).run();
+          }
         },
       },
     ],
