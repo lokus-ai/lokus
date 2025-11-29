@@ -12,7 +12,7 @@ vi.mock('./ui/context-menu', () => ({
   ContextMenuTrigger: ({ children, asChild, ...props }) => {
     // Handle asChild prop by rendering children directly if asChild is true
     if (asChild) {
-      return React.cloneElement(children, { 
+      return React.cloneElement(children, {
         ...props,
         'data-testid': 'context-menu-trigger',
         onContextMenu: (e) => {
@@ -31,8 +31,8 @@ vi.mock('./ui/context-menu', () => ({
   ContextMenuItem: ({ children, onClick, disabled, ...props }) => {
     const { asChild, ...safeProps } = props
     return (
-      <div 
-        data-testid="context-menu-item" 
+      <div
+        data-testid="context-menu-item"
         onClick={disabled ? undefined : onClick}
         data-disabled={disabled || undefined}
         {...safeProps}
@@ -76,7 +76,30 @@ vi.mock('lucide-react', () => ({
   Zap: () => <div data-testid="zap-icon" />,
   FileText: () => <div data-testid="file-text-icon" />,
   Download: () => <div data-testid="download-icon" />,
-  Upload: () => <div data-testid="upload-icon" />
+  Upload: () => <div data-testid="upload-icon" />,
+  Type: () => <div data-testid="type-icon" />,
+  Table: () => <div data-testid="table-icon" />,
+  Code: () => <div data-testid="code-icon" />,
+  Link: () => <div data-testid="link-icon" />,
+  Image: () => <div data-testid="image-icon" />,
+  Terminal: () => <div data-testid="terminal-icon" />,
+  Bold: () => <div data-testid="bold-icon" />,
+  Italic: () => <div data-testid="italic-icon" />,
+  Strikethrough: () => <div data-testid="strikethrough-icon" />,
+  MousePointer2: () => <div data-testid="mouse-pointer-2-icon" />,
+  AlignLeft: () => <div data-testid="align-left-icon" />,
+  AlignCenter: () => <div data-testid="align-center-icon" />,
+  AlignRight: () => <div data-testid="align-right-icon" />,
+  List: () => <div data-testid="list-icon" />,
+  ListOrdered: () => <div data-testid="list-ordered-icon" />,
+  CheckSquare: () => <div data-testid="check-square-icon" />,
+  Quote: () => <div data-testid="quote-icon" />,
+  Heading: () => <div data-testid="heading-icon" />,
+  Sparkles: () => <div data-testid="sparkles-icon" />,
+  BookOpen: () => <div data-testid="book-open-icon" />,
+  FileCode: () => <div data-testid="file-code-icon" />,
+  Braces: () => <div data-testid="braces-icon" />,
+  SeparatorHorizontal: () => <div data-testid="separator-horizontal-icon" />
 }))
 
 describe('EditorContextMenu', () => {
@@ -138,7 +161,7 @@ describe('EditorContextMenu', () => {
 
     const cutButton = getByText('Cut')
     const copyButton = getByText('Copy')
-    
+
     // Check if the elements have the disabled attribute (value might be empty string or "true")
     expect(cutButton.closest('[data-disabled]')).toHaveAttribute('data-disabled')
     expect(copyButton.closest('[data-disabled]')).toHaveAttribute('data-disabled')
@@ -169,7 +192,7 @@ describe('EditorContextMenu', () => {
     fireEvent.contextMenu(getByText('Editor Content'))
 
     expect(getByText('Find')).toBeInTheDocument()
-    expect(getByText('Find and Replace')).toBeInTheDocument()
+    expect(getByText('Replace')).toBeInTheDocument()
   })
 
   it('should show commands submenu', () => {
@@ -182,7 +205,7 @@ describe('EditorContextMenu', () => {
     // Right-click to open context menu
     fireEvent.contextMenu(getByText('Editor Content'))
 
-    expect(getByText('Commands')).toBeInTheDocument()
+    expect(getByText('Insert')).toBeInTheDocument()
   })
 
   it('should show export options', () => {
@@ -268,13 +291,13 @@ describe('EditorContextMenu', () => {
     // Check for keyboard shortcut indicators
     const cutOption = getByText('Cut')
     expect(cutOption.parentElement).toHaveTextContent('⌘X')
-    
+
     const copyOption = getByText('Copy')
     expect(copyOption.parentElement).toHaveTextContent('⌘C')
-    
+
     const pasteOption = getByText('Paste')
     expect(pasteOption.parentElement).toHaveTextContent('⌘V')
-    
+
     const findOption = getByText('Find')
     expect(findOption.parentElement).toHaveTextContent('⌘F')
   })
@@ -306,14 +329,14 @@ describe('EditorContextMenu', () => {
     fireEvent.contextMenu(getByText('Editor Content'))
 
     // Hover over Commands to open submenu
-    const commandsMenu = getByText('Commands')
+    const commandsMenu = getByText('Insert')
     fireEvent.mouseEnter(commandsMenu)
 
     // Check if submenu items exist (they should be rendered)
     expect(getByText('Command Palette')).toBeInTheDocument()
-    expect(getByText('Insert Table')).toBeInTheDocument()
-    expect(getByText('Insert Code Block')).toBeInTheDocument()
-    expect(getByText('Insert Link')).toBeInTheDocument()
-    expect(getByText('Insert Image')).toBeInTheDocument()
+    expect(getByText('Table')).toBeInTheDocument()
+    expect(getByText('Code Block')).toBeInTheDocument()
+    expect(getByText('Link')).toBeInTheDocument()
+    expect(getByText('Image')).toBeInTheDocument()
   })
 })

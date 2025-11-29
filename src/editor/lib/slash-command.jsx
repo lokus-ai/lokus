@@ -177,7 +177,9 @@ async function getKanbanBoards() {
 }
 
 function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
+  console.log('[SlashCommand] createKanbanBoardPicker called');
   getKanbanBoards().then(boards => {
+    console.log('[SlashCommand] getKanbanBoards returned:', boards);
     if (boards.length === 0) {
       // No boards, prompt to create one
       const boardName = window.prompt('No kanban boards found. Create a new board:');
@@ -198,6 +200,8 @@ function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
       }
       return;
     }
+
+    console.log('[SlashCommand] Boards found, creating picker UI');
 
     // Create board picker UI
     const overlay = document.createElement('div');
@@ -368,6 +372,8 @@ function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
       }
     };
     document.addEventListener('keydown', handleKeydown);
+  }).catch(error => {
+    console.error('[SlashCommand] createKanbanBoardPicker error:', error);
   });
 }
 
@@ -637,7 +643,12 @@ const commandItems = [
         description: "Open or create a kanban board.",
         icon: <Kanban size={18} />,
         command: ({ editor, range }) => {
-          createKanbanBoardPicker({ editor, range, onInsertTask: false });
+          try {
+            console.log('[SlashCommand] Kanban Board command triggered');
+            createKanbanBoardPicker({ editor, range, onInsertTask: false });
+          } catch (e) {
+            console.error('[SlashCommand] Kanban Board command FAILED:', e);
+          }
         },
       },
       {
@@ -645,6 +656,7 @@ const commandItems = [
         description: "Create task linked to kanban board.",
         icon: <CheckSquare size={18} />,
         command: ({ editor, range }) => {
+          console.log('[SlashCommand] Linked Task command triggered');
           createKanbanBoardPicker({ editor, range, onInsertTask: true });
         },
       },
@@ -653,6 +665,7 @@ const commandItems = [
         description: "Create standalone task (!task).",
         icon: <ListTodo size={18} />,
         command: ({ editor, range }) => {
+          console.log('[SlashCommand] Simple Task command triggered');
           editor.chain().focus().deleteRange(range).insertContent('!task ').run();
         },
       },
@@ -666,6 +679,7 @@ const commandItems = [
         description: "Big section heading.",
         icon: <Heading1 size={18} />,
         command: ({ editor, range }) => {
+          console.log('[SlashCommand] Heading 1 command triggered');
           editor.chain().focus().deleteRange(range).setNode("heading", { level: 1 }).run();
         },
       },

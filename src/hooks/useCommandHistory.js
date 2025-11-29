@@ -16,6 +16,7 @@ export function useCommandHistory() {
         const savedHistory = config[HISTORY_KEY] || []
         setHistory(savedHistory)
       } catch (error) {
+        console.warn('[CommandHistory] Failed to load history:', error)
         setHistory([])
       } finally {
         setLoading(false)
@@ -30,6 +31,7 @@ export function useCommandHistory() {
     try {
       await updateConfig({ [HISTORY_KEY]: newHistory })
     } catch (error) {
+      console.warn('[CommandHistory] Failed to save history:', error)
     }
   }, [])
 
@@ -54,10 +56,10 @@ export function useCommandHistory() {
 
       // Add new item at the beginning and limit to MAX_HISTORY_ITEMS
       const newHistory = [historyItem, ...filteredHistory].slice(0, MAX_HISTORY_ITEMS)
-      
+
       // Save to config asynchronously
       saveHistory(newHistory)
-      
+
       return newHistory
     })
   }, [saveHistory])

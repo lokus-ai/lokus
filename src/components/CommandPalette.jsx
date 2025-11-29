@@ -91,7 +91,7 @@ export default function CommandPalette({
       try {
         const isAuth = await gmailAuth.isAuthenticated()
         setIsGmailAuthenticated(isAuth)
-        
+
         if (isAuth) {
           // Load recent emails for quick access
           const emailsResponse = await gmailEmails.listEmails(10)
@@ -104,7 +104,7 @@ export default function CommandPalette({
         setIsGmailAuthenticated(false)
       }
     }
-    
+
     if (open) {
       checkGmailAuth()
     }
@@ -168,13 +168,13 @@ export default function CommandPalette({
   const handleReadEmail = React.useCallback(async (email) => {
     try {
       await ensureGmailAuth()
-      
+
       // Open Gmail tab and select the email
       onOpenGmail()
-      
+
       // Store the email ID for the Gmail component to open
       sessionStorage.setItem('gmailOpenEmail', email.id)
-      
+
     } catch (error) {
       console.error('Failed to open email:', error)
       alert(`Failed to open email: ${error.message}`)
@@ -225,28 +225,28 @@ export default function CommandPalette({
   // Parse Gmail template from file content (supports flexible YAML, simple field, and Markdown formats)
   const parseGmailTemplate = (content) => {
     try {
-      
+
       // Method 1: Try YAML frontmatter with flexible body handling
       if (content.startsWith('---')) {
         const frontmatterEnd = content.indexOf('---', 3);
         if (frontmatterEnd !== -1) {
           const frontmatterContent = content.slice(3, frontmatterEnd).trim();
           const afterFrontmatter = content.slice(frontmatterEnd + 3).trim();
-          
+
           const metadata = {};
           const lines = frontmatterContent.split('\n');
           let bodyBuffer = []; // For multi-line body field
           let currentKey = null;
           let inMultiLineBody = false;
-          
+
           for (const line of lines) {
             const colonIndex = line.indexOf(':');
-            
+
             if (colonIndex > 0 && !inMultiLineBody) {
               // New field
               const key = line.slice(0, colonIndex).trim().toLowerCase();
               const value = line.slice(colonIndex + 1).trim();
-              
+
               if (key === 'body') {
                 if (value === '|' || value === '') {
                   // Multi-line body starts
@@ -270,12 +270,12 @@ export default function CommandPalette({
               metadata[key] = value;
             }
           }
-          
+
           // If we collected multi-line body content
           if (bodyBuffer.length > 0) {
             metadata.body = bodyBuffer.join('\n').trim();
           }
-          
+
           // Determine body content
           let body = '';
           if (metadata.body) {
@@ -285,8 +285,8 @@ export default function CommandPalette({
             // Use content after frontmatter
             body = afterFrontmatter.replace(/<!--.*?-->/gs, '').trim();
           }
-          
-          
+
+
           if (metadata.to !== undefined && metadata.subject !== undefined) {
             return {
               to: metadata.to ? metadata.to.split(',').map(email => email.trim()).filter(email => email) : [],
@@ -303,15 +303,15 @@ export default function CommandPalette({
       const lines = content.split('\n');
       const fields = {};
       let bodyStartIndex = -1;
-      
+
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const colonIndex = line.indexOf(':');
-        
+
         if (colonIndex > 0) {
           const key = line.slice(0, colonIndex).trim().toLowerCase();
           const value = line.slice(colonIndex + 1).trim();
-          
+
           if (['to', 'subject', 'cc', 'bcc'].includes(key)) {
             fields[key] = value;
           } else if (key === 'body') {
@@ -326,15 +326,15 @@ export default function CommandPalette({
           }
         }
       }
-      
+
       // Extract multi-line body if we found a body start
       if (bodyStartIndex > -1) {
         const bodyLines = lines.slice(bodyStartIndex);
         fields.body = bodyLines.join('\n').trim();
       }
-      
-      
-      
+
+
+
       if (fields.to && fields.subject) {
         const result = {
           to: fields.to.split(',').map(email => email.trim()).filter(email => email),
@@ -350,9 +350,9 @@ export default function CommandPalette({
       const toMatch = content.match(/\*\*To:\*\*\s*(.+)/i);
       const subjectMatch = content.match(/\*\*Subject:\*\*\s*(.+)/i);
       const bodyMatch = content.match(/\*\*Body:\*\*\s*(.+)/is);
-      
+
       if (toMatch && subjectMatch) {
-        
+
         let body = '';
         if (bodyMatch) {
           // Explicit body field
@@ -362,14 +362,14 @@ export default function CommandPalette({
           const contentLines = content.split('\n');
           let bodyStartIndex = -1;
           let foundMetadata = false;
-          
+
           for (let i = 0; i < contentLines.length; i++) {
             const line = contentLines[i].trim();
-            
+
             if (line.match(/\*\*To:\*\*|\*\*Subject:\*\*/i)) {
               foundMetadata = true;
             }
-            
+
             if (foundMetadata && line === '---') {
               bodyStartIndex = i + 1;
               while (bodyStartIndex < contentLines.length && !contentLines[bodyStartIndex].trim()) {
@@ -378,7 +378,7 @@ export default function CommandPalette({
               break;
             }
           }
-          
+
           if (bodyStartIndex > -1) {
             const bodyLines = [];
             for (let i = bodyStartIndex; i < contentLines.length; i++) {
@@ -410,36 +410,36 @@ export default function CommandPalette({
   // Handle sending Gmail from selected file
   const handleSendGmailFromFile = React.useCallback(async (file) => {
     try {
-      
+
       if (!isGmailAuthenticated) {
         await ensureGmailAuth()
       }
-      
-      
+
+
       // Read the file content using Tauri command
       const fileContent = await invoke('read_file_content', { path: file.path });
-      
+
       // Parse Gmail template
       const gmailTemplate = parseGmailTemplate(fileContent);
-      
+
       if (!gmailTemplate) {
         console.error(`❌ [DEBUG] File "${file.name}" is not a valid Gmail template`);
         return;
       }
-      
+
       // Validate required fields
       if (gmailTemplate.to.length === 0) {
         console.error('❌ [DEBUG] Gmail template must have a "To:" field with at least one email address.');
         return;
       }
-      
+
       if (!gmailTemplate.subject.trim()) {
         console.error('❌ [DEBUG] Gmail template must have a "Subject:" field.');
         return;
       }
 
-      
-      
+
+
       // Send the email
       const result = await gmailEmails.sendEmail({
         to: gmailTemplate.to,
@@ -449,9 +449,9 @@ export default function CommandPalette({
         body: gmailTemplate.body,
         attachments: []
       });
-      
-      
-      
+
+
+
     } catch (error) {
       if (error.isAuthRedirect) {
         // Show user-friendly message instead of error
@@ -568,19 +568,19 @@ Best regards,
 {{sender}}`
     }
   }
-  
+
   const parseGmailCommand = (input) => {
     const trimmedInput = input.trim()
     if (!trimmedInput) return null
-    
+
     // Email pattern for auto-detection
     const emailPattern = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g
     const emails = trimmedInput.match(emailPattern) || []
-    
+
     // File extension pattern
     const filePattern = /(\w+\.\w+)/g
     const files = trimmedInput.match(filePattern) || []
-    
+
     // Subject extraction patterns
     const subjectPatterns = [
       /(?:subject:?\s*["']?([^"']+)["']?)/i,
@@ -588,7 +588,7 @@ Best regards,
       /(?:about\s+["']?([^"']+)["']?)/i,
       /(?:regarding\s+["']?([^"']+)["']?)/i
     ]
-    
+
     let subject = null
     for (const pattern of subjectPatterns) {
       const match = trimmedInput.match(pattern)
@@ -597,30 +597,30 @@ Best regards,
         break
       }
     }
-    
+
     // Command type detection
     const lowerInput = trimmedInput.toLowerCase()
-    
+
     // Send email patterns
     const sendPatterns = [
       /^(?:send|email|compose)\s+(?:email\s+)?(?:to\s+)?/i,
       /^(?:email|send)\s+(\S+)\s+to\s+/i, // "email filename to recipient"
       /^(?:send|email)\s+.*?(?:to|@)/i
     ]
-    
+
     const isSendCommand = sendPatterns.some(pattern => pattern.test(trimmedInput))
-    
+
     if (isSendCommand && emails.length > 0) {
       // Extract file content if file is mentioned
       const fileName = files.length > 0 ? files[0] : null
-      
+
       // Auto-generate subject if not provided
       if (!subject && fileName) {
         subject = `Content from ${fileName}`
       } else if (!subject) {
         subject = 'Email from Lokus'
       }
-      
+
       return {
         type: 'send',
         recipients: emails,
@@ -629,14 +629,14 @@ Best regards,
         originalCommand: trimmedInput
       }
     }
-    
+
     // Search email patterns
     const searchPatterns = [
       /^(?:search|find|read)\s+(?:email|mail)s?\s+(?:about\s+|for\s+|from\s+)?(.+)/i,
       /^(?:read|show)\s+(?:email|mail)s?\s+(.+)/i,
       /^(?:email|mail)s?\s+(?:about|from|with)\s+(.+)/i
     ]
-    
+
     for (const pattern of searchPatterns) {
       const match = trimmedInput.match(pattern)
       if (match) {
@@ -647,13 +647,13 @@ Best regards,
         }
       }
     }
-    
+
     // Legacy exact patterns (for backward compatibility)
     const legacyPatterns = [
       { pattern: /^send\s+email:\s*([^:]+)\s+to:\s*(.+)$/i, type: 'send' },
       { pattern: /^(?:read|search)\s+email:\s*(.+)$/i, type: 'search' }
     ]
-    
+
     for (const { pattern, type } of legacyPatterns) {
       const match = trimmedInput.match(pattern)
       if (match) {
@@ -674,14 +674,14 @@ Best regards,
         }
       }
     }
-    
+
     return null
   }
 
   // Structured command handling
   const detectStructuredCommands = (input) => {
     const trimmed = input.trim().toLowerCase()
-    
+
     // Commands that should enter structured mode
     const structuredCommands = {
       'search emails': 'search_emails',
@@ -690,19 +690,19 @@ Best regards,
       'note email': 'save_note',
       'send gmail': 'send_gmail'
     }
-    
+
     for (const [command, mode] of Object.entries(structuredCommands)) {
       if (trimmed === command || trimmed.startsWith(command + ' ')) {
         return mode
       }
     }
-    
+
     return null
   }
 
   const getFilteredFiles = React.useCallback((query) => {
     if (!allFiles || allFiles.length === 0) return []
-    
+
     const searchTerm = query.toLowerCase()
     return allFiles
       .filter(file => {
@@ -715,19 +715,19 @@ Best regards,
 
   const getFilteredEmails = React.useCallback((query) => {
     if (!recentEmails || recentEmails.length === 0) return []
-    
+
     const searchTerm = query.toLowerCase()
     return recentEmails
       .filter(email => {
         const subject = (email.subject || '').toLowerCase()
-        const from = Array.isArray(email.from) 
+        const from = Array.isArray(email.from)
           ? (email.from[0]?.name || email.from[0]?.email || '').toLowerCase()
           : (email.from || '').toLowerCase()
         const snippet = (email.snippet || '').toLowerCase()
-        
-        return subject.includes(searchTerm) || 
-               from.includes(searchTerm) || 
-               snippet.includes(searchTerm)
+
+        return subject.includes(searchTerm) ||
+          from.includes(searchTerm) ||
+          snippet.includes(searchTerm)
       })
       .slice(0, 8) // Show top 8 matches
   }, [recentEmails])
@@ -777,25 +777,25 @@ Best regards,
     }
 
     const query = inputValue.toLowerCase()
-    
+
     switch (commandMode) {
       case 'send_gmail':
         // Show files to select from for Gmail sending
         const filteredGmailFiles = getFilteredFiles(query)
         setFilteredOptions(filteredGmailFiles)
         break
-        
+
       case 'search_emails':
         // Show recent search terms or email previews
         setFilteredOptions([])
         break
-        
+
       case 'save_note':
         // Show emails to save as notes
         const filteredEmails = getFilteredEmails(query)
         setFilteredOptions(filteredEmails)
         break
-        
+
       default:
         setFilteredOptions([])
     }
@@ -811,12 +811,12 @@ Best regards,
       setInputValue('') // Clear input for parameter entry
       return
     }
-    
+
     // If not in command mode, do regular parsing
     if (!commandMode) {
       const gmailCommand = parseGmailCommand(inputValue)
       const emailNoteCommand = parseEmailNoteCommand(inputValue)
-      
+
       // Prioritize email-note commands over regular Gmail commands
       setParsedCommand(emailNoteCommand || gmailCommand)
     }
@@ -840,7 +840,7 @@ Best regards,
       })
 
       const fileName = filePath.split('/').pop()
-      
+
       // Return success info for the command history
       return {
         fileName,
@@ -859,7 +859,7 @@ Best regards,
 
   const parseEmailNoteCommand = (input) => {
     const trimmedInput = input.trim().toLowerCase()
-    
+
     // Commands for saving emails as notes
     const saveNotePatterns = [
       /^save\s+email\s+(.+?)\s+as\s+note$/i,
@@ -868,23 +868,23 @@ Best regards,
       /^note\s+email\s+(.+?)$/i,
       /^save\s+(.+?)\s+email\s+as\s+note$/i
     ]
-    
+
     for (const pattern of saveNotePatterns) {
       const match = input.match(pattern)
       if (match) {
         const emailIdentifier = match[1].trim()
-        
+
         // Try to find email by subject, sender, or partial content
         const foundEmail = recentEmails.find(email => {
           const subject = email.subject?.toLowerCase() || ''
           const from = (Array.isArray(email.from) ? email.from[0]?.email || email.from[0]?.name : email.from)?.toLowerCase() || ''
           const snippet = email.snippet?.toLowerCase() || ''
-          
+
           return subject.includes(emailIdentifier.toLowerCase()) ||
-                 from.includes(emailIdentifier.toLowerCase()) ||
-                 snippet.includes(emailIdentifier.toLowerCase())
+            from.includes(emailIdentifier.toLowerCase()) ||
+            snippet.includes(emailIdentifier.toLowerCase())
         })
-        
+
         return {
           type: 'saveAsNote',
           emailIdentifier,
@@ -894,7 +894,7 @@ Best regards,
         }
       }
     }
-    
+
     return null
   }
 
@@ -1075,497 +1075,497 @@ Best regards,
 
   return (
     <>
-    <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput 
-        placeholder={
-          commandMode 
-            ? getCommandModePlaceholder(commandMode, commandParams)
-            : "Type command: 'send gmail', 'search emails', 'save email' or direct commands"
-        }
-        value={inputValue}
-        onValueChange={setInputValue}
-        onKeyDown={handleInputKeyDown}
-      />
-      
-      {/* Real-time Command Interpretation Display */}
-      {parsedCommand && inputValue && (
-        <div className="px-3 py-2 border-b border-gray-200 bg-gray-50/50 text-sm">
-          <div className="flex items-center gap-2 text-gray-600">
-            {parsedCommand.type === 'send' ? (
-              <>
-                <Send className="w-4 h-4 text-blue-500" />
-                <span>Send email:</span>
-                {parsedCommand.fileName && (
-                  <>
-                    <File className="w-3 h-3" />
-                    <span className="font-medium text-blue-600">{parsedCommand.fileName}</span>
-                  </>
-                )}
-                <ArrowRight className="w-3 h-3" />
-                <User className="w-3 h-3" />
-                <span className="font-medium text-green-600">
-                  {Array.isArray(parsedCommand.recipients) 
-                    ? parsedCommand.recipients.join(', ')
-                    : parsedCommand.recipients || parsedCommand.recipient || 'No recipient detected'
-                  }
-                </span>
-                {parsedCommand.subject && (
-                  <>
-                    <span className="text-gray-400">•</span>
-                    <span className="text-gray-700">Subject: "{parsedCommand.subject}"</span>
-                  </>
-                )}
-              </>
-            ) : parsedCommand.type === 'saveAsNote' ? (
-              <>
-                <FileText className="w-4 h-4 text-orange-500" />
-                <span>Save email as note:</span>
-                {parsedCommand.email ? (
-                  <>
-                    <Mail className="w-3 h-3" />
-                    <span className="font-medium text-orange-600">
-                      "{parsedCommand.email.subject || 'No Subject'}"
-                    </span>
-                    <span className="text-gray-400">•</span>
-                    <span className="text-gray-600">
-                      from {Array.isArray(parsedCommand.email.from) 
-                        ? (parsedCommand.email.from[0]?.name || parsedCommand.email.from[0]?.email)
-                        : parsedCommand.email.from
-                      }
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-amber-600">Email not found: "{parsedCommand.emailIdentifier}"</span>
-                  </>
-                )}
-              </>
-            ) : parsedCommand.type === 'search' ? (
-              <>
-                <Search className="w-4 h-4 text-purple-500" />
-                <span>Search Gmail for:</span>
-                <span className="font-medium text-purple-600">"{parsedCommand.query}"</span>
-              </>
-            ) : (
-              <>
-                <Mail className="w-4 h-4 text-gray-500" />
-                <span>Gmail command detected</span>
-              </>
-            )}
-          </div>
-          {parsedCommand.confidence && parsedCommand.confidence < 0.8 && (
-            <div className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-              <span>⚠️ Low confidence - please check command details</span>
-            </div>
-          )}
-        </div>
-      )}
-      
-      {/* Command Mode Status */}
-      {commandMode && (
-        <div className="px-3 py-2 border-b border-blue-200 bg-blue-50/50 text-sm">
-          <div className="flex items-center gap-2 text-blue-800">
-            {commandMode === 'search_emails' && (
-              <>
-                <Search className="w-4 h-4 text-purple-600" />
-                <span className="font-medium">Email Search Mode</span>
-              </>
-            )}
-            {commandMode === 'send_gmail' && (
-              <>
-                <Send className="w-4 h-4 text-green-600" />
-                <span className="font-medium">Send Gmail Mode</span>
-              </>
-            )}
-            {commandMode === 'save_note' && (
-              <>
-                <FileText className="w-4 h-4 text-orange-600" />
-                <span className="font-medium">Save Email as Note Mode</span>
-              </>
-            )}
-            <span className="text-xs text-blue-600 ml-auto">Press Esc to exit</span>
-          </div>
-        </div>
-      )}
-      
-      <CommandList>
-        <CommandEmpty>
-          {commandMode 
-            ? `No ${commandMode === 'send_gmail' ? 'files' : commandMode === 'save_note' ? 'emails' : 'results'} found.`
-            : 'No results found.'
+      <CommandDialog open={open} onOpenChange={setOpen}>
+        <CommandInput
+          placeholder={
+            commandMode
+              ? getCommandModePlaceholder(commandMode, commandParams)
+              : "Type command: 'send gmail', 'search emails', 'save email' or direct commands"
           }
-        </CommandEmpty>
-        
-        {/* Filtered Options for Command Mode */}
-        {commandMode && filteredOptions.length > 0 && (
-          <CommandGroup heading={
-            commandMode === 'send_gmail' ? 'Choose File to Send' :
-            commandMode === 'save_note' ? 'Select Email to Save as Note' :
-            'Options'
-          }>
-            {filteredOptions.map((option, index) => (
-              <CommandItem
-                key={option.id || option.path || index}
-                onSelect={() => {
-                  if (commandMode === 'send_gmail') {
-                    runCommandWithHistory(
-                      () => handleSendGmailFromFile(option), 
-                      `Send Gmail: ${option.name}`, 
-                      { 
-                        fileName: option.name,
-                        filePath: option.path,
-                        originalCommand: `send gmail ${option.name}`
-                      }
-                    )
-                    setCommandMode(null)
-                    setCommandParams({})
-                    setInputValue('')
-                  } else if (commandMode === 'save_note') {
-                    runCommandWithHistory(
-                      () => handleSaveEmailAsNote(option.id), 
-                      `Save Email as Note: "${option.subject || 'No Subject'}"`, 
-                      { 
-                        emailSubject: option.subject,
-                        emailId: option.id,
-                        originalCommand: `save email "${option.subject}" as note`
-                      }
-                    )
-                    setCommandMode(null)
-                    setCommandParams({})
-                    setInputValue('')
-                  }
-                }}
-                className="group"
-              >
-                {commandMode === 'send_gmail' ? (
-                  <>
-                    <File className="mr-2 h-4 w-4 opacity-60" />
-                    <span className="flex-1">{option.name}</span>
-                    <span className="text-xs text-app-muted">{option.path}</span>
-                  </>
-                ) : commandMode === 'save_note' ? (
-                  <>
-                    <Mail className="mr-2 h-4 w-4 opacity-60" />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{option.subject || 'No Subject'}</div>
-                      <div className="text-xs text-app-muted truncate">
-                        from {Array.isArray(option.from) 
-                          ? (option.from[0]?.name || option.from[0]?.email)
-                          : option.from
+          value={inputValue}
+          onValueChange={setInputValue}
+          onKeyDown={handleInputKeyDown}
+        />
+
+        {/* Real-time Command Interpretation Display */}
+        {parsedCommand && inputValue && (
+          <div className="px-3 py-2 border-b border-gray-200 bg-gray-50/50 text-sm">
+            <div className="flex items-center gap-2 text-gray-600">
+              {parsedCommand.type === 'send' ? (
+                <>
+                  <Send className="w-4 h-4 text-blue-500" />
+                  <span>Send email:</span>
+                  {parsedCommand.fileName && (
+                    <>
+                      <File className="w-3 h-3" />
+                      <span className="font-medium text-blue-600">{parsedCommand.fileName}</span>
+                    </>
+                  )}
+                  <ArrowRight className="w-3 h-3" />
+                  <User className="w-3 h-3" />
+                  <span className="font-medium text-green-600">
+                    {Array.isArray(parsedCommand.recipients)
+                      ? parsedCommand.recipients.join(', ')
+                      : parsedCommand.recipients || parsedCommand.recipient || 'No recipient detected'
+                    }
+                  </span>
+                  {parsedCommand.subject && (
+                    <>
+                      <span className="text-gray-400">•</span>
+                      <span className="text-gray-700">Subject: "{parsedCommand.subject}"</span>
+                    </>
+                  )}
+                </>
+              ) : parsedCommand.type === 'saveAsNote' ? (
+                <>
+                  <FileText className="w-4 h-4 text-orange-500" />
+                  <span>Save email as note:</span>
+                  {parsedCommand.email ? (
+                    <>
+                      <Mail className="w-3 h-3" />
+                      <span className="font-medium text-orange-600">
+                        "{parsedCommand.email.subject || 'No Subject'}"
+                      </span>
+                      <span className="text-gray-400">•</span>
+                      <span className="text-gray-600">
+                        from {Array.isArray(parsedCommand.email.from)
+                          ? (parsedCommand.email.from[0]?.name || parsedCommand.email.from[0]?.email)
+                          : parsedCommand.email.from
                         }
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <span>{option.name || option.subject || 'Unknown'}</span>
-                )}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        )}
-        
-        {/* File Actions */}
-        <CommandGroup heading="File">
-          <CommandItem onSelect={() => runCommandWithHistory(onCreateFile, 'New File')}>
-            <Plus className="mr-2 h-4 w-4" />
-            <span>New File</span>
-            <CommandShortcut>{formatAccelerator(shortcuts['new-file'])}</CommandShortcut>
-          </CommandItem>
-          <CommandItem onSelect={() => runCommandWithHistory(onCreateFolder, 'New Folder')}>
-            <FolderPlus className="mr-2 h-4 w-4" />
-            <span>New Folder</span>
-            <CommandShortcut>{formatAccelerator(shortcuts['new-folder'])}</CommandShortcut>
-          </CommandItem>
-          <CommandItem onSelect={() => runCommandWithHistory(onOpenDailyNote, 'Open Daily Note')}>
-            <Calendar className="mr-2 h-4 w-4" />
-            <span>Open Daily Note</span>
-            <CommandShortcut>{formatAccelerator(shortcuts['daily-note'])}</CommandShortcut>
-          </CommandItem>
-          {activeFile && (
-            <>
-              <CommandItem onSelect={() => runCommandWithHistory(onSave, 'Save File', { fileName: activeFile.name })}>
-                <Save className="mr-2 h-4 w-4" />
-                <span>Save File</span>
-                <CommandShortcut>{formatAccelerator(shortcuts['save-file'])}</CommandShortcut>
-              </CommandItem>
-              <CommandItem onSelect={() => runCommandWithHistory(() => onCloseTab(activeFile), 'Close Tab', { fileName: activeFile.name })}>
-                <X className="mr-2 h-4 w-4" />
-                <span>Close Tab</span>
-                <CommandShortcut>{formatAccelerator(shortcuts['close-tab'])}</CommandShortcut>
-              </CommandItem>
-              {/* Individual template commands */}
-              {templates.map((template) => (
-                <CommandItem
-                  key={template.id}
-                  onSelect={() => runCommandWithHistory(() => handleTemplateSelect(template), `Template: ${template.name}`, { templateId: template.id })}
-                  disabled={!onShowTemplatePicker}
-                >
-                  <FileText className="mr-2 h-4 w-4" />
-                  <span>Template: {template.name}</span>
-                  <CommandShortcut className="text-xs">{template.category}</CommandShortcut>
-                </CommandItem>
-              ))}
-              {/* Save as Template command */}
-              <CommandItem 
-                onSelect={() => runCommandWithHistory(() => onCreateTemplate && onCreateTemplate(), 'Save as Template')}
-                disabled={!onCreateTemplate}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                <span>Save as Template</span>
-                <CommandShortcut>S</CommandShortcut>
-              </CommandItem>
-            </>
-          )}
-        </CommandGroup>
-
-        <CommandSeparator />
-
-        {/* View Actions */}
-        <CommandGroup heading="View">
-          <CommandItem onSelect={() => runCommandWithHistory(onToggleSidebar, 'Toggle Sidebar')}>
-            <ToggleLeft className="mr-2 h-4 w-4" />
-            <span>Toggle Sidebar</span>
-            <CommandShortcut>{formatAccelerator(shortcuts['toggle-sidebar'])}</CommandShortcut>
-          </CommandItem>
-          <CommandItem onSelect={() => runCommandWithHistory(onOpenPreferences, 'Open Preferences')}>
-            <Settings className="mr-2 h-4 w-4" />
-            <span>Open Preferences</span>
-            <CommandShortcut>{formatAccelerator(shortcuts['open-preferences'])}</CommandShortcut>
-          </CommandItem>
-          <CommandItem onSelect={() => runCommandWithHistory(onOpenGraph, 'Open Graph View')}>
-            <Network className="mr-2 h-4 w-4" />
-            <span>Professional Graph View</span>
-            <CommandShortcut>⌘G</CommandShortcut>
-          </CommandItem>
-          <CommandItem onSelect={() => runCommandWithHistory(onOpenGmail, 'Open Gmail')}>
-            <Mail className="mr-2 h-4 w-4" />
-            <span>Gmail</span>
-            <CommandShortcut>⌘M</CommandShortcut>
-          </CommandItem>
-        </CommandGroup>
-
-        <CommandSeparator />
-
-        {/* Folder Scope */}
-        <CommandGroup heading="Folder Scope">
-          <CommandItem onSelect={() => runCommandWithHistory(handleOpenFolderSelector, 'Switch to Local View')}>
-            <Target className="mr-2 h-4 w-4" />
-            <span>Switch to Local View</span>
-            <CommandShortcut>⌘⇧L</CommandShortcut>
-          </CommandItem>
-          {scopeMode === 'local' && (
-            <CommandItem onSelect={() => runCommandWithHistory(setGlobalScope, 'Switch to Global View')}>
-              <Globe className="mr-2 h-4 w-4" />
-              <span>Switch to Global View</span>
-              <div className="ml-auto text-xs text-app-muted">
-                {getScopeStatus().description}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-amber-600">Email not found: "{parsedCommand.emailIdentifier}"</span>
+                    </>
+                  )}
+                </>
+              ) : parsedCommand.type === 'search' ? (
+                <>
+                  <Search className="w-4 h-4 text-purple-500" />
+                  <span>Search Gmail for:</span>
+                  <span className="font-medium text-purple-600">"{parsedCommand.query}"</span>
+                </>
+              ) : (
+                <>
+                  <Mail className="w-4 h-4 text-gray-500" />
+                  <span>Gmail command detected</span>
+                </>
+              )}
+            </div>
+            {parsedCommand.confidence && parsedCommand.confidence < 0.8 && (
+              <div className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                <span>⚠️ Low confidence - please check command details</span>
               </div>
-            </CommandItem>
-          )}
-        </CommandGroup>
+            )}
+          </div>
+        )}
 
-        <CommandSeparator />
+        {/* Command Mode Status */}
+        {commandMode && (
+          <div className="px-3 py-2 border-b border-blue-200 bg-blue-50/50 text-sm">
+            <div className="flex items-center gap-2 text-blue-800">
+              {commandMode === 'search_emails' && (
+                <>
+                  <Search className="w-4 h-4 text-purple-600" />
+                  <span className="font-medium">Email Search Mode</span>
+                </>
+              )}
+              {commandMode === 'send_gmail' && (
+                <>
+                  <Send className="w-4 h-4 text-green-600" />
+                  <span className="font-medium">Send Gmail Mode</span>
+                </>
+              )}
+              {commandMode === 'save_note' && (
+                <>
+                  <FileText className="w-4 h-4 text-orange-600" />
+                  <span className="font-medium">Save Email as Note Mode</span>
+                </>
+              )}
+              <span className="text-xs text-blue-600 ml-auto">Press Esc to exit</span>
+            </div>
+          </div>
+        )}
 
-        {/* Bases Commands */}
-        <CommandGroup heading="Bases">
-          <CommandItem onSelect={() => runCommandWithHistory(async () => {
-            try {
-              const result = await createBase('New Base', {
-                description: 'A new base for organizing notes'
-              });
-              if (result.success) {
-              }
-            } catch (error) {
-              console.error('Failed to create base:', error);
+        <CommandList>
+          <CommandEmpty>
+            {commandMode
+              ? `No ${commandMode === 'send_gmail' ? 'files' : commandMode === 'save_note' ? 'emails' : 'results'} found.`
+              : 'No results found.'
             }
-          }, 'Create New Base')}>
-            <Database className="mr-2 h-4 w-4" />
-            <span>Create New Base</span>
-            <CommandShortcut>⌘⇧B</CommandShortcut>
-          </CommandItem>
-          {bases && bases.length > 0 && bases.map((base) => (
-            <CommandItem
-              key={base.path}
-              onSelect={() => runCommandWithHistory(() => {
-                loadBase(base.path);
-              }, `Open Base: ${base.name}`)}
-            >
-              <Database className="mr-2 h-4 w-4" />
-              <span>Open {base.name}</span>
-              <CommandShortcut className="text-xs">{base.description || 'Base'}</CommandShortcut>
-            </CommandItem>
-          ))}
-        </CommandGroup>
-        <CommandSeparator />
+          </CommandEmpty>
 
-        {/* Gmail Commands */}
-        <CommandGroup heading="Gmail">
-          {!isGmailAuthenticated ? (
-            <CommandItem onSelect={() => runCommandWithHistory(async () => {
-              try {
-                await ensureGmailAuth()
-              } catch (error) {
-                console.error('Gmail auth failed:', error)
-                alert('Gmail authentication failed')
-              }
-            }, 'Authenticate Gmail')}>
-              <Mail className="mr-2 h-4 w-4" />
-              <span>Authenticate Gmail</span>
-              <CommandShortcut>Auth</CommandShortcut>
-            </CommandItem>
-          ) : (
-            <>
-              <CommandItem 
-                onSelect={() => runCommandWithHistory(() => handleGmailSearch(''), 'Search Gmail')}
-                disabled={!isGmailAuthenticated}
-              >
-                <Search className="mr-2 h-4 w-4" />
-                <span>Search Gmail</span>
-                <CommandShortcut>Find</CommandShortcut>
-              </CommandItem>
-
-              <CommandItem 
-                onSelect={() => {
-                  setCommandMode('send_gmail');
-                  setCommandParams({});
-                  setInputValue('');
-                }}
-                disabled={!isGmailAuthenticated}
-              >
-                <Send className="mr-2 h-4 w-4" />
-                <span>Send Gmail</span>
-                <CommandShortcut>Send</CommandShortcut>
-              </CommandItem>
-            </>
-          )}
-        </CommandGroup>
-
-        {/* Recent Files */}
-        {recentFiles.length > 0 && (
-          <>
-            <CommandSeparator />
-            <CommandGroup heading="Recent Files">
-              {recentFiles.map((file) => (
+          {/* Filtered Options for Command Mode */}
+          {commandMode && filteredOptions.length > 0 && (
+            <CommandGroup heading={
+              commandMode === 'send_gmail' ? 'Choose File to Send' :
+                commandMode === 'save_note' ? 'Select Email to Save as Note' :
+                  'Options'
+            }>
+              {filteredOptions.map((option, index) => (
                 <CommandItem
-                  key={file.path}
-                  onSelect={() => openFileWithHistory(file)}
-                >
-                  <Clock className="mr-2 h-4 w-4" />
-                  <span>{file.name}</span>
-                  <CommandShortcut className="text-xs">{file.path}</CommandShortcut>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </>
-        )}
-
-        {/* File Search - Only show when user is typing */}
-        {filteredFiles.length > 0 && inputValue.trim() && !commandMode && (
-          <>
-            <CommandSeparator />
-            <CommandGroup heading="Files">
-              {filteredFiles.map((file) => (
-                <CommandItem
-                  key={file.path}
-                  value={file.name}
-                  onSelect={() => openFileWithHistory(file)}
-                >
-                  <FileText className="mr-2 h-4 w-4" />
-                  <span>{file.name}</span>
-                  <CommandShortcut className="text-xs">{file.path}</CommandShortcut>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </>
-        )}
-
-        {/* Command History */}
-        {formattedHistory.length > 0 && (
-          <>
-            <CommandSeparator />
-            <CommandGroup heading="History">
-              {formattedHistory.slice(0, 8).map((historyItem) => (
-                <CommandItem
-                  key={historyItem.id}
+                  key={option.id || option.path || index}
                   onSelect={() => {
-                    if (historyItem.type === 'file') {
-                      runCommand(() => onFileOpen(historyItem.data))
-                    } else if (historyItem.type === 'command') {
-                      // Re-execute the command from history
-                      const commandName = historyItem.data.command
-                      switch (commandName) {
-                        case 'New File':
-                          runCommand(onCreateFile)
-                          break
-                        case 'New Folder':
-                          runCommand(onCreateFolder)
-                          break
-                        case 'Save File':
-                          runCommand(onSave)
-                          break
-                        case 'Toggle Sidebar':
-                          runCommand(onToggleSidebar)
-                          break
-                        case 'Open Preferences':
-                          runCommand(onOpenPreferences)
-                          break
-                        case 'Open Graph View':
-                          runCommand(onOpenGraph)
-                          break
-                        case 'Open Gmail':
-                          runCommand(onOpenGmail)
-                          break
-                        case 'Insert Template':
-                          if (onShowTemplatePicker) {
-                            runCommand(onShowTemplatePicker)
-                          }
-                          break
-                        default:
-                      }
+                    if (commandMode === 'send_gmail') {
+                      runCommandWithHistory(
+                        () => handleSendGmailFromFile(option),
+                        `Send Gmail: ${option.name}`,
+                        {
+                          fileName: option.name,
+                          filePath: option.path,
+                          originalCommand: `send gmail ${option.name}`
+                        }
+                      )
+                      setCommandMode(null)
+                      setCommandParams({})
+                      setInputValue('')
+                    } else if (commandMode === 'save_note') {
+                      runCommandWithHistory(
+                        () => handleSaveEmailAsNote(option.id),
+                        `Save Email as Note: "${option.subject || 'No Subject'}"`,
+                        {
+                          emailSubject: option.subject,
+                          emailId: option.id,
+                          originalCommand: `save email "${option.subject}" as note`
+                        }
+                      )
+                      setCommandMode(null)
+                      setCommandParams({})
+                      setInputValue('')
                     }
                   }}
                   className="group"
                 >
-                  <History className="mr-2 h-4 w-4 opacity-60" />
-                  <span className="flex-1">{historyItem.displayName}</span>
-                  <span className="text-xs text-app-muted mr-2">{historyItem.relativeTime}</span>
-                  <button
-                    onMouseDown={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      removeFromHistory(historyItem.id)
-                    }}
-                    tabIndex={-1}
-                    className="opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all p-1 rounded"
-                    title="Remove from history"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+                  {commandMode === 'send_gmail' ? (
+                    <>
+                      <File className="mr-2 h-4 w-4 opacity-60" />
+                      <span className="flex-1">{option.name}</span>
+                      <span className="text-xs text-app-muted">{option.path}</span>
+                    </>
+                  ) : commandMode === 'save_note' ? (
+                    <>
+                      <Mail className="mr-2 h-4 w-4 opacity-60" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{option.subject || 'No Subject'}</div>
+                        <div className="text-xs text-app-muted truncate">
+                          from {Array.isArray(option.from)
+                            ? (option.from[0]?.name || option.from[0]?.email)
+                            : option.from
+                          }
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <span>{option.name || option.subject || 'Unknown'}</span>
+                  )}
                 </CommandItem>
               ))}
-              {formattedHistory.length > 8 && (
-                <CommandItem disabled>
-                  <span className="text-app-muted">...and {formattedHistory.length - 8} more items</span>
-                </CommandItem>
-              )}
-              <CommandSeparator />
-              <CommandItem onSelect={() => runCommand(clearHistory)}>
-                <Trash2 className="mr-2 h-4 w-4 opacity-60" />
-                <span className="text-app-muted">Clear History</span>
-              </CommandItem>
             </CommandGroup>
-          </>
-        )}
-      </CommandList>
-    </CommandDialog>
+          )}
 
-    {/* Folder Selector Modal */}
-    <FolderSelector
-      fileTree={fileTree}
-      isOpen={showFolderSelector}
-      onClose={() => setShowFolderSelector(false)}
-      onConfirm={handleFolderSelectorConfirm}
-    />
-  </>
+          {/* File Actions */}
+          <CommandGroup heading="File">
+            <CommandItem onSelect={() => runCommandWithHistory(onCreateFile, 'New File')}>
+              <Plus className="mr-2 h-4 w-4" />
+              <span>New File</span>
+              <CommandShortcut>{formatAccelerator(shortcuts['new-file'])}</CommandShortcut>
+            </CommandItem>
+            <CommandItem onSelect={() => runCommandWithHistory(onCreateFolder, 'New Folder')}>
+              <FolderPlus className="mr-2 h-4 w-4" />
+              <span>New Folder</span>
+              <CommandShortcut>{formatAccelerator(shortcuts['new-folder'])}</CommandShortcut>
+            </CommandItem>
+            <CommandItem onSelect={() => runCommandWithHistory(onOpenDailyNote, 'Open Daily Note')}>
+              <Calendar className="mr-2 h-4 w-4" />
+              <span>Open Daily Note</span>
+              <CommandShortcut>{formatAccelerator(shortcuts['daily-note'])}</CommandShortcut>
+            </CommandItem>
+            {activeFile && (
+              <>
+                <CommandItem onSelect={() => runCommandWithHistory(onSave, 'Save File', { fileName: activeFile.name })}>
+                  <Save className="mr-2 h-4 w-4" />
+                  <span>Save File</span>
+                  <CommandShortcut>{formatAccelerator(shortcuts['save-file'])}</CommandShortcut>
+                </CommandItem>
+                <CommandItem onSelect={() => runCommandWithHistory(() => onCloseTab(activeFile), 'Close Tab', { fileName: activeFile.name })}>
+                  <X className="mr-2 h-4 w-4" />
+                  <span>Close Tab</span>
+                  <CommandShortcut>{formatAccelerator(shortcuts['close-tab'])}</CommandShortcut>
+                </CommandItem>
+                {/* Individual template commands */}
+                {templates.map((template) => (
+                  <CommandItem
+                    key={template.id}
+                    onSelect={() => runCommandWithHistory(() => handleTemplateSelect(template), `Template: ${template.name}`, { templateId: template.id })}
+                    disabled={!onShowTemplatePicker}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    <span>Template: {template.name}</span>
+                    <CommandShortcut className="text-xs">{template.category}</CommandShortcut>
+                  </CommandItem>
+                ))}
+                {/* Save as Template command */}
+                <CommandItem
+                  onSelect={() => runCommandWithHistory(() => onCreateTemplate && onCreateTemplate(), 'Save as Template')}
+                  disabled={!onCreateTemplate}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  <span>Save as Template</span>
+                  <CommandShortcut>S</CommandShortcut>
+                </CommandItem>
+              </>
+            )}
+          </CommandGroup>
+
+          <CommandSeparator />
+
+          {/* View Actions */}
+          <CommandGroup heading="View">
+            <CommandItem onSelect={() => runCommandWithHistory(onToggleSidebar, 'Toggle Sidebar')}>
+              <ToggleLeft className="mr-2 h-4 w-4" />
+              <span>Toggle Sidebar</span>
+              <CommandShortcut>{formatAccelerator(shortcuts['toggle-sidebar'])}</CommandShortcut>
+            </CommandItem>
+            <CommandItem onSelect={() => runCommandWithHistory(onOpenPreferences, 'Open Preferences')}>
+              <Settings className="mr-2 h-4 w-4" />
+              <span>Open Preferences</span>
+              <CommandShortcut>{formatAccelerator(shortcuts['open-preferences'])}</CommandShortcut>
+            </CommandItem>
+            <CommandItem onSelect={() => runCommandWithHistory(onOpenGraph, 'Open Graph View')}>
+              <Network className="mr-2 h-4 w-4" />
+              <span>Professional Graph View</span>
+              <CommandShortcut>⌘G</CommandShortcut>
+            </CommandItem>
+            <CommandItem onSelect={() => runCommandWithHistory(onOpenGmail, 'Open Gmail')}>
+              <Mail className="mr-2 h-4 w-4" />
+              <span>Gmail</span>
+              <CommandShortcut>⌘M</CommandShortcut>
+            </CommandItem>
+          </CommandGroup>
+
+          <CommandSeparator />
+
+          {/* Folder Scope */}
+          <CommandGroup heading="Folder Scope">
+            <CommandItem onSelect={() => runCommandWithHistory(handleOpenFolderSelector, 'Switch to Local View')}>
+              <Target className="mr-2 h-4 w-4" />
+              <span>Switch to Local View</span>
+              <CommandShortcut>⌘⇧L</CommandShortcut>
+            </CommandItem>
+            {scopeMode === 'local' && (
+              <CommandItem onSelect={() => runCommandWithHistory(setGlobalScope, 'Switch to Global View')}>
+                <Globe className="mr-2 h-4 w-4" />
+                <span>Switch to Global View</span>
+                <div className="ml-auto text-xs text-app-muted">
+                  {getScopeStatus().description}
+                </div>
+              </CommandItem>
+            )}
+          </CommandGroup>
+
+          <CommandSeparator />
+
+          {/* Bases Commands */}
+          <CommandGroup heading="Bases">
+            <CommandItem onSelect={() => runCommandWithHistory(async () => {
+              try {
+                const result = await createBase('New Base', {
+                  description: 'A new base for organizing notes'
+                });
+                if (result.success) {
+                }
+              } catch (error) {
+                console.error('Failed to create base:', error);
+              }
+            }, 'Create New Base')}>
+              <Database className="mr-2 h-4 w-4" />
+              <span>Create New Base</span>
+              <CommandShortcut>⌘⇧B</CommandShortcut>
+            </CommandItem>
+            {bases && bases.length > 0 && bases.map((base) => (
+              <CommandItem
+                key={base.path}
+                onSelect={() => runCommandWithHistory(() => {
+                  loadBase(base.path);
+                }, `Open Base: ${base.name}`)}
+              >
+                <Database className="mr-2 h-4 w-4" />
+                <span>Open {base.name}</span>
+                <CommandShortcut className="text-xs">{base.description || 'Base'}</CommandShortcut>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+          <CommandSeparator />
+
+          {/* Gmail Commands */}
+          <CommandGroup heading="Gmail">
+            {!isGmailAuthenticated ? (
+              <CommandItem onSelect={() => runCommandWithHistory(async () => {
+                try {
+                  await ensureGmailAuth()
+                } catch (error) {
+                  console.error('Gmail auth failed:', error)
+                  alert('Gmail authentication failed')
+                }
+              }, 'Authenticate Gmail')}>
+                <Mail className="mr-2 h-4 w-4" />
+                <span>Authenticate Gmail</span>
+                <CommandShortcut>Auth</CommandShortcut>
+              </CommandItem>
+            ) : (
+              <>
+                <CommandItem
+                  onSelect={() => runCommandWithHistory(() => handleGmailSearch(''), 'Search Gmail')}
+                  disabled={!isGmailAuthenticated}
+                >
+                  <Search className="mr-2 h-4 w-4" />
+                  <span>Search Gmail</span>
+                  <CommandShortcut>Find</CommandShortcut>
+                </CommandItem>
+
+                <CommandItem
+                  onSelect={() => {
+                    setCommandMode('send_gmail');
+                    setCommandParams({});
+                    setInputValue('');
+                  }}
+                  disabled={!isGmailAuthenticated}
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  <span>Send Gmail</span>
+                  <CommandShortcut>Send</CommandShortcut>
+                </CommandItem>
+              </>
+            )}
+          </CommandGroup>
+
+          {/* Recent Files */}
+          {recentFiles.length > 0 && (
+            <>
+              <CommandSeparator />
+              <CommandGroup heading="Recent Files">
+                {recentFiles.map((file) => (
+                  <CommandItem
+                    key={file.path}
+                    onSelect={() => openFileWithHistory(file)}
+                  >
+                    <Clock className="mr-2 h-4 w-4" />
+                    <span>{file.name}</span>
+                    <CommandShortcut className="text-xs">{file.path}</CommandShortcut>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </>
+          )}
+
+          {/* File Search - Only show when user is typing */}
+          {filteredFiles.length > 0 && inputValue.trim() && !commandMode && (
+            <>
+              <CommandSeparator />
+              <CommandGroup heading="Files">
+                {filteredFiles.map((file) => (
+                  <CommandItem
+                    key={file.path}
+                    value={file.name}
+                    onSelect={() => openFileWithHistory(file)}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    <span>{file.name}</span>
+                    <CommandShortcut className="text-xs">{file.path}</CommandShortcut>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </>
+          )}
+
+          {/* Command History */}
+          {formattedHistory.length > 0 && (
+            <>
+              <CommandSeparator />
+              <CommandGroup heading="History">
+                {formattedHistory.slice(0, 8).map((historyItem) => (
+                  <CommandItem
+                    key={historyItem.id}
+                    onSelect={() => {
+                      if (historyItem.type === 'file') {
+                        runCommand(() => onFileOpen(historyItem.data))
+                      } else if (historyItem.type === 'command') {
+                        // Re-execute the command from history
+                        const commandName = historyItem.data.command
+                        switch (commandName) {
+                          case 'New File':
+                            runCommand(onCreateFile)
+                            break
+                          case 'New Folder':
+                            runCommand(onCreateFolder)
+                            break
+                          case 'Save File':
+                            runCommand(onSave)
+                            break
+                          case 'Toggle Sidebar':
+                            runCommand(onToggleSidebar)
+                            break
+                          case 'Open Preferences':
+                            runCommand(onOpenPreferences)
+                            break
+                          case 'Open Graph View':
+                            runCommand(onOpenGraph)
+                            break
+                          case 'Open Gmail':
+                            runCommand(onOpenGmail)
+                            break
+                          case 'Insert Template':
+                            if (onShowTemplatePicker) {
+                              runCommand(onShowTemplatePicker)
+                            }
+                            break
+                          default:
+                        }
+                      }
+                    }}
+                    className="group"
+                  >
+                    <History className="mr-2 h-4 w-4 opacity-60" />
+                    <span className="flex-1">{historyItem.displayName}</span>
+                    <span className="text-xs text-app-muted mr-2">{historyItem.relativeTime}</span>
+                    <button
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        removeFromHistory(historyItem.id)
+                      }}
+                      tabIndex={-1}
+                      className="opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all p-1 rounded"
+                      title="Remove from history"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </CommandItem>
+                ))}
+                {formattedHistory.length > 8 && (
+                  <CommandItem disabled>
+                    <span className="text-app-muted">...and {formattedHistory.length - 8} more items</span>
+                  </CommandItem>
+                )}
+                <CommandSeparator />
+                <CommandItem onSelect={() => runCommand(clearHistory)}>
+                  <Trash2 className="mr-2 h-4 w-4 opacity-60" />
+                  <span className="text-app-muted">Clear History</span>
+                </CommandItem>
+              </CommandGroup>
+            </>
+          )}
+        </CommandList>
+      </CommandDialog>
+
+      {/* Folder Selector Modal */}
+      <FolderSelector
+        fileTree={fileTree}
+        isOpen={showFolderSelector}
+        onClose={() => setShowFolderSelector(false)}
+        onConfirm={handleFolderSelectorConfirm}
+      />
+    </>
   )
 }

@@ -44,13 +44,21 @@ const MermaidComponent = ({ node, updateAttributes }) => {
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [svgContent, setSvgContent] = useState(null);  const containerRef = useRef(null);
   const diagramIdRef = useRef(`m-${Math.random().toString(36).substring(2, 9)}`);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
 
   // On mount, if we have code, force a render after layout
   useEffect(() => {
+    let timeoutId;
     if (code && code.trim()) {
       // Force re-render after a tick so container has dimensions
-      setTimeout(() => setForceRender(1), 50);
+      timeoutId = setTimeout(() => setForceRender(1), 50);
     }
+    return () => clearTimeout(timeoutId);
   }, []);
 
   // Sync localCode when node code changes
@@ -96,6 +104,20 @@ const MermaidComponent = ({ node, updateAttributes }) => {
           if (dimensions.width === 0 || dimensions.height === 0) {            setTimeout(() => {
               if (containerRef.current) {
                 containerRef.current.innerHTML = svg;              }
+          };
+          if (import.meta.env.DEV) {
+          }
+
+          // If container has no dimensions, retry after layout
+          if (dimensions.width === 0 || dimensions.height === 0) {
+            if (import.meta.env.DEV) {
+            }
+            setTimeout(() => {
+              if (isMounted.current && containerRef.current) {
+                containerRef.current.innerHTML = svg;
+                if (import.meta.env.DEV) {
+                }
+              }
             }, 100);
           }
         } else {        }

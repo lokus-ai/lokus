@@ -18,23 +18,29 @@ vi.mock('../core/shortcuts/registry.js', () => ({
 // Mock UI components
 vi.mock('./ui/command.jsx', () => ({
   Command: ({ children, ...props }) => <div data-testid="command" {...props}>{children}</div>,
-  CommandDialog: ({ children, open, onOpenChange, ...props }) => 
+  CommandDialog: ({ children, open, onOpenChange, ...props }) =>
     open ? (
-      <div 
-        data-testid="command-dialog" 
+      <div
+        data-testid="command-dialog"
         onKeyDown={(e) => e.key === 'Escape' && onOpenChange(false)}
         {...props}
       >
         {children}
       </div>
     ) : null,
-  CommandInput: (props) => <input data-testid="command-input" {...props} />,
+  CommandInput: ({ onValueChange, ...props }) => (
+    <input
+      data-testid="command-input"
+      onChange={(e) => onValueChange && onValueChange(e.target.value)}
+      {...props}
+    />
+  ),
   CommandList: ({ children, ...props }) => <div data-testid="command-list" {...props}>{children}</div>,
   CommandEmpty: ({ children, ...props }) => <div data-testid="command-empty" {...props}>{children}</div>,
   CommandGroup: ({ children, ...props }) => <div data-testid="command-group" {...props}>{children}</div>,
   CommandItem: ({ children, onSelect, ...props }) => (
-    <div 
-      data-testid="command-item" 
+    <div
+      data-testid="command-item"
       onClick={() => onSelect && onSelect()}
       {...props}
     >
@@ -62,7 +68,11 @@ vi.mock('lucide-react', () => ({
   ToggleLeft: () => <div data-testid="toggle-left-icon" />,
   History: () => <div data-testid="history-icon" />,
   Trash2: () => <div data-testid="trash-icon" />,
-  Network: () => <div data-testid="network-icon" />
+  Network: () => <div data-testid="network-icon" />,
+  Calendar: () => <div data-testid="calendar-icon" />,
+  Mail: () => <div data-testid="mail-icon" />,
+  Target: () => <div data-testid="target-icon" />,
+  Database: () => <div data-testid="database-icon" />
 }))
 
 // Mock the useCommandHistory hook
@@ -98,6 +108,33 @@ vi.mock('../hooks/useTemplates.js', () => ({
   }))
 }))
 
+// Mock FolderScopeContext
+vi.mock('../contexts/FolderScopeContext.jsx', () => ({
+  useFolderScope: vi.fn(() => ({
+    scope: null,
+    setScope: vi.fn(),
+    isInScope: vi.fn().mockReturnValue(true),
+    getAllFolders: vi.fn().mockReturnValue([])
+  })),
+  FolderScopeProvider: ({ children }) => <div>{children}</div>
+}))
+
+// Mock BasesContext
+const mockUseBases = vi.fn(() => ({
+  bases: [],
+  createBase: vi.fn(),
+  deleteBase: vi.fn(),
+  updateBase: vi.fn(),
+  dataManager: {
+    getAllFiles: vi.fn().mockResolvedValue([])
+  }
+}))
+
+vi.mock('../bases/BasesContext.jsx', () => ({
+  useBases: () => mockUseBases(),
+  BasesProvider: ({ children }) => <div>{children}</div>
+}))
+
 describe('CommandPalette', () => {
   const mockProps = {
     open: true,
@@ -123,6 +160,15 @@ describe('CommandPalette', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockUseBases.mockReturnValue({
+      bases: [],
+      createBase: vi.fn(),
+      deleteBase: vi.fn(),
+      updateBase: vi.fn(),
+      dataManager: {
+        getAllFiles: vi.fn().mockResolvedValue([])
+      }
+    })
     // Reset the mock implementation to return empty history by default
     mockUseCommandHistory = vi.fn(() => ({
       formattedHistory: [],
@@ -137,7 +183,7 @@ describe('CommandPalette', () => {
     await act(async () => {
       result = render(<CommandPalette {...mockProps} />)
     })
-    
+
     expect(result.getByTestId('command-dialog')).toBeInTheDocument()
     expect(result.getByTestId('command-input')).toBeInTheDocument()
   })
@@ -147,7 +193,7 @@ describe('CommandPalette', () => {
     await act(async () => {
       result = render(<CommandPalette {...mockProps} open={false} />)
     })
-    
+
     expect(result.queryByTestId('command-dialog')).not.toBeInTheDocument()
   })
 
@@ -156,9 +202,9 @@ describe('CommandPalette', () => {
     await act(async () => {
       result = render(<CommandPalette {...mockProps} />)
     })
-    
+
     const input = result.getByTestId('command-input')
-    expect(input).toHaveAttribute('placeholder', 'Type a command or search files... (try \'template\')')
+    expect(input).toHaveAttribute('placeholder', "Type command: 'send gmail', 'search emails', 'save email' or direct commands")
   })
 
   it('should show file tree items', async () => {
@@ -166,21 +212,25 @@ describe('CommandPalette', () => {
     await act(async () => {
       result = render(<CommandPalette {...mockProps} />)
     })
-    
+
     const items = result.getAllByTestId('command-item')
     expect(items.length).toBeGreaterThan(0)
-    
+
     // Should contain file items
     expect(items.some(item => item.textContent?.includes('README.md'))).toBe(true)
   })
 
-  it.skip('should filter files based on search input', async () => {
-    // Skip this test to prevent hanging
-    const { getByTestId } = render(<CommandPalette {...mockProps} />)
-    
-    const input = getByTestId('command-input')
-    fireEvent.change(input, { target: { value: 'README' } })
-    
+  it('should filter files based on search input', async () => {
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} />)
+    })
+
+    const input = result.getByTestId('command-input')
+    await act(async () => {
+      fireEvent.change(input, { target: { value: 'README' } })
+    })
+
     // Just verify input value
     expect(input.value).toBe('README')
   })
@@ -190,7 +240,7 @@ describe('CommandPalette', () => {
     await act(async () => {
       result = render(<CommandPalette {...mockProps} />)
     })
-    
+
     // The "Recent Files" text is in a heading attribute of CommandGroup
     const recentFilesGroup = result.container.querySelector('[heading="Recent Files"]')
     expect(recentFilesGroup).toBeInTheDocument()
@@ -201,11 +251,11 @@ describe('CommandPalette', () => {
     await act(async () => {
       result = render(<CommandPalette {...mockProps} />)
     })
-    
+
     // Check for heading attributes instead of direct text
     const fileGroup = result.container.querySelector('[heading="File"]')
     expect(fileGroup).toBeInTheDocument()
-    
+
     // Check for actual command text content
     expect(result.getByText('Save File')).toBeInTheDocument()
     expect(result.getByText('New File')).toBeInTheDocument()
@@ -217,10 +267,10 @@ describe('CommandPalette', () => {
     await act(async () => {
       result = render(<CommandPalette {...mockProps} />)
     })
-    
+
     const items = result.getAllByTestId('command-item')
     const readmeItem = items.find(item => item.textContent?.includes('README.md'))
-    
+
     if (readmeItem) {
       await act(async () => {
         fireEvent.click(readmeItem)
@@ -235,12 +285,12 @@ describe('CommandPalette', () => {
     await act(async () => {
       result = render(<CommandPalette {...mockProps} />)
     })
-    
+
     const saveItem = result.getByText('Save File')
     await act(async () => {
       fireEvent.click(saveItem)
     })
-    
+
     expect(mockProps.onSave).toHaveBeenCalled()
     expect(mockProps.setOpen).toHaveBeenCalledWith(false)
   })
@@ -250,12 +300,12 @@ describe('CommandPalette', () => {
     await act(async () => {
       result = render(<CommandPalette {...mockProps} />)
     })
-    
+
     const newFileItem = result.getByText('New File')
     await act(async () => {
       fireEvent.click(newFileItem)
     })
-    
+
     expect(mockProps.onCreateFile).toHaveBeenCalled()
     expect(mockProps.setOpen).toHaveBeenCalledWith(false)
   })
@@ -265,24 +315,33 @@ describe('CommandPalette', () => {
     await act(async () => {
       result = render(<CommandPalette {...mockProps} />)
     })
-    
+
     const preferencesItem = result.getByText('Open Preferences')
     await act(async () => {
       fireEvent.click(preferencesItem)
     })
-    
+
     expect(mockProps.onOpenPreferences).toHaveBeenCalled()
     expect(mockProps.setOpen).toHaveBeenCalledWith(false)
   })
 
-  it.skip('should handle empty file tree gracefully', () => {
-    // Skip this test to prevent hanging
-    expect(true).toBe(true)
+  it('should handle empty file tree gracefully', async () => {
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} fileTree={[]} openFiles={[]} />)
+    })
+
+    const items = result.queryAllByTestId('command-item')
+    const readmeItem = items.find(item => item.textContent?.includes('README.md'))
+    expect(readmeItem).toBeUndefined()
   })
 
-  it.skip('should handle undefined props gracefully', () => {
-    // Skip this test to prevent hanging
-    expect(true).toBe(true)
+  it('should handle undefined props gracefully', async () => {
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} fileTree={undefined} recentFiles={undefined} />)
+    })
+    expect(result.getByTestId('command-input')).toBeInTheDocument()
   })
 
   it('should show keyboard shortcuts', async () => {
@@ -290,20 +349,57 @@ describe('CommandPalette', () => {
     await act(async () => {
       result = render(<CommandPalette {...mockProps} />)
     })
-    
+
     // Actions should show keyboard shortcuts
     const saveItem = result.getByText('Save File')
     expect(saveItem.parentElement).toHaveTextContent('⌘+S')
   })
 
-  it.skip('should filter out directories when searching for files', async () => {
-    // Skip this test to prevent hanging
-    expect(true).toBe(true)
+  it('should filter out directories when searching for files', async () => {
+    const fileTreeWithDirs = [
+      { name: 'folder', path: '/folder', is_directory: true },
+      { name: 'file.md', path: '/file.md', is_directory: false }
+    ]
+
+    mockUseBases.mockReturnValue({
+      bases: [],
+      dataManager: {
+        getAllFiles: vi.fn().mockResolvedValue([
+          { name: 'file.md', path: '/file.md', is_directory: false }
+        ])
+      }
+    })
+
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} fileTree={fileTreeWithDirs} />)
+    })
+
+    const input = result.getByTestId('command-input')
+    await act(async () => {
+      fireEvent.change(input, { target: { value: 'file' } })
+    })
+
+    const items = result.getAllByTestId('command-item')
+    const folderItem = items.find(item => item.textContent?.includes('folder'))
+    const fileItem = items.find(item => item.textContent?.includes('file.md'))
+
+    expect(folderItem).toBeUndefined()
+    expect(fileItem).toBeDefined()
   })
 
-  it.skip('should show empty state when no results found', async () => {
-    // Skip this test to prevent hanging
-    expect(true).toBe(true)
+  it('should show empty state when no results found', async () => {
+    let result
+    await act(async () => {
+      result = render(<CommandPalette {...mockProps} />)
+    })
+
+    const input = result.getByTestId('command-input')
+    await act(async () => {
+      fireEvent.change(input, { target: { value: 'nonexistentfile123' } })
+    })
+
+    expect(result.getByTestId('command-empty')).toBeInTheDocument()
   })
 
   it('should close on escape key', async () => {
@@ -311,12 +407,12 @@ describe('CommandPalette', () => {
     await act(async () => {
       result = render(<CommandPalette {...mockProps} />)
     })
-    
+
     const input = result.getByTestId('command-input')
     await act(async () => {
       fireEvent.keyDown(input, { key: 'Escape' })
     })
-    
+
     expect(mockProps.setOpen).toHaveBeenCalledWith(false)
   })
 
@@ -325,17 +421,17 @@ describe('CommandPalette', () => {
       { name: 'nested-file.md', path: '/folder/nested-file.md', is_directory: false },
       { name: 'root-file.md', path: '/root-file.md', is_directory: false }
     ]
-    
+
     let result
     await act(async () => {
       result = render(
         <CommandPalette {...mockProps} fileTree={fileTreeWithPaths} />
       )
     })
-    
+
     const items = result.getAllByTestId('command-item')
     const nestedFileItem = items.find(item => item.textContent?.includes('nested-file.md'))
-    
+
     if (nestedFileItem) {
       expect(nestedFileItem.textContent).toContain('nested-file.md')
     }
@@ -347,7 +443,7 @@ describe('CommandPalette', () => {
       await act(async () => {
         result = render(<CommandPalette {...mockProps} />)
       })
-      
+
       expect(result.queryByText('History')).not.toBeInTheDocument()
       expect(result.queryByText('Clear History')).not.toBeInTheDocument()
     })
@@ -381,7 +477,7 @@ describe('CommandPalette', () => {
       await act(async () => {
         result = render(<CommandPalette {...mockProps} />)
       })
-      
+
       // The "History" text is in a heading attribute
       const historyGroup = result.container.querySelector('[heading="History"]')
       expect(historyGroup).toBeInTheDocument()
@@ -415,12 +511,12 @@ describe('CommandPalette', () => {
       await act(async () => {
         result = render(<CommandPalette {...mockProps} />)
       })
-      
+
       // Should show first 8 items
       expect(result.getAllByTestId('history-icon')).toHaveLength(8)
       expect(result.getByText('file0.md')).toBeInTheDocument()
       expect(result.getByText('file7.md')).toBeInTheDocument()
-      
+
       // Should show overflow message
       expect(result.getByText('...and 4 more items')).toBeInTheDocument()
     })
@@ -447,12 +543,12 @@ describe('CommandPalette', () => {
       await act(async () => {
         result = render(<CommandPalette {...mockProps} />)
       })
-      
+
       const historyItem = result.getByText('test.md')
       await act(async () => {
         fireEvent.click(historyItem)
       })
-      
+
       expect(mockProps.onFileOpen).toHaveBeenCalledWith({
         name: 'test.md',
         path: '/test.md'
@@ -489,15 +585,15 @@ describe('CommandPalette', () => {
       await act(async () => {
         result = render(<CommandPalette {...mockProps} />)
       })
-      
+
       const historyItems = result.getAllByTestId('command-item')
-      const newFileItem = historyItems.find(item => 
+      const newFileItem = historyItems.find(item =>
         item.textContent?.includes('New File') && item.textContent?.includes('10m ago')
       )
-      const saveFileItem = historyItems.find(item => 
+      const saveFileItem = historyItems.find(item =>
         item.textContent?.includes('Save File') && item.textContent?.includes('15m ago')
       )
-      
+
       // Test New File command
       if (newFileItem) {
         await act(async () => {
@@ -538,17 +634,17 @@ describe('CommandPalette', () => {
 
       // Clear previous mock calls before this test
       vi.clearAllMocks()
-      
+
       let result
       await act(async () => {
         result = render(<CommandPalette {...mockProps} />)
       })
-      
+
       const historyItem = result.getByText('Unknown Command')
       await act(async () => {
         fireEvent.click(historyItem)
       })
-      
+
       // Unknown commands do nothing and don't close the palette  
       expect(mockProps.setOpen).not.toHaveBeenCalled()
     })
@@ -575,15 +671,15 @@ describe('CommandPalette', () => {
       await act(async () => {
         result = render(<CommandPalette {...mockProps} />)
       })
-      
+
       const removeButtons = result.getAllByTestId('x-icon')
-      const removeButton = removeButtons.find(button => 
+      const removeButton = removeButtons.find(button =>
         button.closest('[data-testid="command-item"]')?.textContent?.includes('test.md')
       )
-      
+
       if (removeButton) {
         await act(async () => {
-          fireEvent.click(removeButton)
+          fireEvent.mouseDown(removeButton)
         })
         expect(mockRemoveFromHistory).toHaveBeenCalledWith('file-123-abc')
       }
@@ -611,15 +707,15 @@ describe('CommandPalette', () => {
       await act(async () => {
         result = render(<CommandPalette {...mockProps} />)
       })
-      
+
       const removeButtons = result.getAllByTestId('x-icon')
-      const removeButton = removeButtons.find(button => 
+      const removeButton = removeButtons.find(button =>
         button.closest('[data-testid="command-item"]')?.textContent?.includes('test.md')
       )
-      
+
       if (removeButton) {
         await act(async () => {
-          fireEvent.click(removeButton)
+          fireEvent.mouseDown(removeButton)
         })
         expect(mockRemoveFromHistory).toHaveBeenCalledWith('file-123-abc')
         // File should not be opened when remove button is clicked
@@ -649,12 +745,12 @@ describe('CommandPalette', () => {
       await act(async () => {
         result = render(<CommandPalette {...mockProps} />)
       })
-      
+
       const clearButton = result.getByText('Clear History')
       await act(async () => {
         fireEvent.click(clearButton)
       })
-      
+
       expect(mockClearHistory).toHaveBeenCalled()
       expect(mockProps.setOpen).toHaveBeenCalledWith(false)
     })
@@ -664,15 +760,15 @@ describe('CommandPalette', () => {
       await act(async () => {
         result = render(<CommandPalette {...mockProps} />)
       })
-      
+
       const items = result.getAllByTestId('command-item')
       const readmeItem = items.find(item => item.textContent?.includes('README.md'))
-      
+
       if (readmeItem) {
         await act(async () => {
           fireEvent.click(readmeItem)
         })
-        
+
         // Should add to history with proper file data
         expect(mockAddToHistory).toHaveBeenCalledWith({
           type: 'file',
@@ -689,12 +785,12 @@ describe('CommandPalette', () => {
       await act(async () => {
         result = render(<CommandPalette {...mockProps} />)
       })
-      
+
       const newFileButton = result.getByText('New File')
       await act(async () => {
         fireEvent.click(newFileButton)
       })
-      
+
       expect(mockAddToHistory).toHaveBeenCalledWith({
         type: 'command',
         data: { command: 'New File' }
@@ -706,10 +802,10 @@ describe('CommandPalette', () => {
       await act(async () => {
         fireEvent.click(saveButton)
       })
-      
+
       expect(mockAddToHistory).toHaveBeenCalledWith({
         type: 'command',
-        data: { 
+        data: {
           command: 'Save File',
           fileName: 'README.md'
         }

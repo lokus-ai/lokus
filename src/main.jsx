@@ -47,6 +47,8 @@ if (import.meta.env.VITE_ENABLE_CRASH_REPORTS === 'true') {
   logger.info('Main', 'Crash reporting disabled');
 }
 
+import { RemoteConfigProvider } from './contexts/RemoteConfigContext'
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ErrorBoundary
@@ -56,9 +58,11 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         logger.error('ErrorBoundary', 'React Error Boundary caught:', error, errorInfo);
       }}
     >
-      <ThemeProvider>
-        <App />
-      </ThemeProvider>
+      <RemoteConfigProvider>
+        <ThemeProvider>
+          <App />
+        </ThemeProvider>
+      </RemoteConfigProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );
