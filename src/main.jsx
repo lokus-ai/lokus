@@ -5,6 +5,8 @@ import App from './App'
 import { ThemeProvider } from './hooks/theme'
 import './styles/globals.css'
 
+import { RemoteConfigProvider } from './contexts/RemoteConfigContext'
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ErrorBoundary
@@ -14,9 +16,11 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         console.error('React Error Boundary caught:', error, errorInfo);
       }}
     >
-      <ThemeProvider>
-        <App />
-      </ThemeProvider>
+      <RemoteConfigProvider>
+        <ThemeProvider>
+          <App />
+        </ThemeProvider>
+      </RemoteConfigProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );
