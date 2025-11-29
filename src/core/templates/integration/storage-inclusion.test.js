@@ -120,8 +120,8 @@ describe('Template Storage and Inclusion Integration', () => {
         content: 'Content 2'
       });
 
-      // Capture saved data
-      const savedData = JSON.parse(fs.writeTextFile.mock.calls[0][1]);
+      // Capture saved data (use the last save)
+      const savedData = JSON.parse(fs.writeTextFile.mock.calls[fs.writeTextFile.mock.calls.length - 1][1]);
 
       // Simulate restart: new manager instance
       const newManager = new TemplateManager({ storage: new TemplateStorage() });

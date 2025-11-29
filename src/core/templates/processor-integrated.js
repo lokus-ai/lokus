@@ -102,13 +102,13 @@ export class IntegratedTemplateProcessor {
             // Check if it's a zero-argument function (like tomorrow, yesterday, etc.)
             // These should be called immediately and return chainable dates
             if (fn.length === 0 && ['tomorrow', 'yesterday', 'today', 'now', 'nextWeek',
-                'nextMonth', 'nextYear', 'lastWeek', 'lastMonth', 'lastYear'].includes(prop)) {
+              'nextMonth', 'nextYear', 'lastWeek', 'lastMonth', 'lastYear'].includes(prop)) {
               const result = fn();
               return result instanceof Date ? createChainableDate(result) : result;
             }
 
             // For functions that need arguments, return a wrapper
-            return function(...args) {
+            return function (...args) {
               // Special handling for format - use chainedDate as first arg
               if (prop === 'format') {
                 const pattern = args.length === 0 ? 'yyyy-MM-dd' : args[0];
@@ -131,14 +131,14 @@ export class IntegratedTemplateProcessor {
 
               // For methods that return dates (add, subtract, etc.), return chainable wrapper
               if (['add', 'subtract', 'addDays', 'addWeeks', 'addMonths', 'addYears',
-                   'subDays', 'subWeeks', 'subMonths', 'subYears',
-                   'startOfDay', 'startOfWeek', 'startOfMonth', 'startOfYear',
-                   'endOfDay', 'endOfWeek', 'endOfMonth', 'endOfYear',
-                   'nextMonday', 'nextTuesday', 'nextWednesday', 'nextThursday',
-                   'nextFriday', 'nextSaturday', 'nextSunday',
-                   'previousMonday', 'previousTuesday', 'previousWednesday',
-                   'previousThursday', 'previousFriday', 'previousSaturday', 'previousSunday'
-                  ].includes(prop)) {
+                'subDays', 'subWeeks', 'subMonths', 'subYears',
+                'startOfDay', 'startOfWeek', 'startOfMonth', 'startOfYear',
+                'endOfDay', 'endOfWeek', 'endOfMonth', 'endOfYear',
+                'nextMonday', 'nextTuesday', 'nextWednesday', 'nextThursday',
+                'nextFriday', 'nextSaturday', 'nextSunday',
+                'previousMonday', 'previousTuesday', 'previousWednesday',
+                'previousThursday', 'previousFriday', 'previousSaturday', 'previousSunday'
+              ].includes(prop)) {
                 // These methods need the base date as first arg
                 const result = fn(chainedDate, ...args);
                 // Return chainable wrapper if result is a Date
@@ -162,8 +162,8 @@ export class IntegratedTemplateProcessor {
     const context = {
       variables: {
         ...variables,
-        // Add date proxy to context
-        date: dateProxy
+        // Add date proxy to context if not provided
+        date: variables.date || dateProxy
       },
       options: { ...options },
       strictMode: this.strictMode,
@@ -531,7 +531,7 @@ export class IntegratedTemplateProcessor {
   parseArgValue(value) {
     // Remove quotes
     if ((value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))) {
+      (value.startsWith("'") && value.endsWith("'"))) {
       return value.slice(1, -1);
     }
 
@@ -614,7 +614,7 @@ export class IntegratedTemplateProcessor {
             const trimmed = arg.trim();
             // Remove quotes from string arguments
             if ((trimmed.startsWith("'") && trimmed.endsWith("'")) ||
-                (trimmed.startsWith('"') && trimmed.endsWith('"'))) {
+              (trimmed.startsWith('"') && trimmed.endsWith('"'))) {
               args.push(trimmed.slice(1, -1));
             } else if (!isNaN(trimmed)) {
               args.push(Number(trimmed));
