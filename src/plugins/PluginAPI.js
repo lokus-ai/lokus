@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { readTextFile, writeTextFile, exists } from '@tauri-apps/api/fs'
 import { EventEmitter } from '../utils/EventEmitter.js'
+import { logger } from '../utils/Logger.js'
 
 /**
  * Plugin API - Provides standardized interface for plugins to interact with Lokus
@@ -13,7 +14,8 @@ export class PluginAPI extends EventEmitter {
     this.editorAPI = editorAPI
     this.registrations = new Map() // Track what the plugin has registered
     this.permissions = new Set() // Plugin permissions
-    this.logger = console // TODO: Replace with proper plugin-scoped logger
+    // COMPLETED TODO: Replaced console with proper plugin-scoped logger
+    this.logger = logger.createScoped(`Plugin:${pluginId}`)
   }
 
   /**

@@ -9,6 +9,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { WorkspaceManager } from '../../core/workspace/manager.js';
+import { logger } from '../../utils/logger.js';
 
 export class WorkspaceProvider {
   constructor() {
@@ -39,7 +40,7 @@ export class WorkspaceProvider {
       // Monitor for workspace changes
       this.setupWorkspaceListeners();
     } catch (error) {
-      console.warn('[WorkspaceProvider] Failed to initialize workspace monitoring:', error);
+      logger.warn('WorkspaceProvider', 'Failed to initialize workspace monitoring:', error);
     }
   }
 
@@ -69,7 +70,7 @@ export class WorkspaceProvider {
       // Notify subscribers of workspace data update
       this.notifySubscribers('workspace:updated');
     } catch (error) {
-      console.error('[WorkspaceProvider] Failed to load workspace data:', error);
+      logger.error('WorkspaceProvider', 'Failed to load workspace data:', error);
     }
   }
 
@@ -124,7 +125,7 @@ export class WorkspaceProvider {
         setInterval(checkWorkspaceChange, 1000);
       }
     } catch (error) {
-      console.warn('[WorkspaceProvider] Failed to setup workspace listeners:', error);
+      logger.warn('WorkspaceProvider', 'Failed to setup workspace listeners:', error);
     }
   }
 
@@ -212,7 +213,7 @@ export class WorkspaceProvider {
           throw new Error(`Unknown resource path: ${path}`);
       }
     } catch (error) {
-      console.error('[WorkspaceProvider] Error reading resource:', error);
+      logger.error('WorkspaceProvider', 'Error reading resource:', error);
       return {
         contents: [{
           type: 'text',
@@ -395,7 +396,7 @@ export class WorkspaceProvider {
       try {
         callback(event, data);
       } catch (error) {
-        console.error('[WorkspaceProvider] Error notifying subscriber:', error);
+        logger.error('WorkspaceProvider', 'Error notifying subscriber:', error);
       }
     }
   }

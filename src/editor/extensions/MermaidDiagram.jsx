@@ -37,14 +37,9 @@ const MERMAID_START_REGEX = /^``mm$/;
 
           // Try new base64 format first
           const dataCode = node.getAttribute('data-code');
-          if (import.meta.env.DEV) {
-          }
-
           if (dataCode) {
             try {
               code = atob(dataCode); // Base64 decode
-              if (import.meta.env.DEV) {
-              }
             } catch (e) {
               console.error('[MermaidDiagram] Failed to decode mermaid code:', e);
               code = '';
@@ -52,21 +47,11 @@ const MERMAID_START_REGEX = /^``mm$/;
           } else {
             // Fallback to old formats for backward compatibility
             const codeElement = node.querySelector('code');
-            if (import.meta.env.DEV) {
-            }
-
             if (codeElement) {
               code = codeElement.textContent;
-              if (import.meta.env.DEV) {
-              }
             } else {
               code = node.getAttribute('code') || '';
-              if (import.meta.env.DEV) {
-              }
             }
-          }
-
-          if (import.meta.env.DEV) {
           }
 
           return {

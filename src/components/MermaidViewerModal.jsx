@@ -46,11 +46,7 @@ export function MermaidViewerModal({ isOpen, svgContent, onClose }) {
       setAutoFitZoom(finalZoom);
       setZoom(finalZoom);
       setPosition({ x: 0, y: 0 });
-      setIsDragging(false);
-
-      if (import.meta.env.DEV) {
-      }
-    }, 50);
+      setIsDragging(false);    }, 50);
   }, [isOpen, svgContent]);
 
   // Handle escape key

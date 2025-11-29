@@ -5,6 +5,7 @@
 
 import { EventEmitter } from '../../utils/EventEmitter.js'
 import { PluginManifestV2 } from '../manifest/ManifestV2.js'
+import { logger } from '../../utils/Logger.js'
 
 /**
  * Plugin Registry Status Constants
@@ -87,7 +88,8 @@ export class PluginRegistry extends EventEmitter {
       lastUpdated: null
     }
 
-    this.logger = console // TODO: Replace with proper logger
+    // COMPLETED TODO: Replaced console with proper logger
+    this.logger = logger.createScoped('PluginRegistry')
     this.isInitialized = false
   }
 

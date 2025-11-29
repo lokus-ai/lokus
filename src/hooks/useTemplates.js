@@ -71,18 +71,11 @@ export function useTemplates() {
 
   // Load templates
   const loadTemplates = useCallback(async (options = {}) => {
-    if (!manager) return { templates: [], total: 0 };
-
-    if (import.meta.env.DEV) {
-    }
-    setLoading(true);
+    if (!manager) return { templates: [], total: 0 };    setLoading(true);
     setError(null);
 
     try {
-      const result = manager.list(options);
-      if (import.meta.env.DEV) {
-      }
-      setTemplates(result.templates);
+      const result = manager.list(options);      setTemplates(result.templates);
       return result;
     } catch (err) {
       console.error('[useTemplates] Load error:', err);
@@ -128,22 +121,9 @@ export function useTemplates() {
   }, [manager]);
 
   // Create template
-  const createTemplate = useCallback(async (templateData) => {
-    if (import.meta.env.DEV) {
-    }
-    setError(null);
+  const createTemplate = useCallback(async (templateData) => {    setError(null);
 
-    try {
-      if (import.meta.env.DEV) {
-      }
-      const template = await manager.create(templateData);
-      if (import.meta.env.DEV) {
-      }
-      await loadTemplates(); // Refresh list
-      if (import.meta.env.DEV) {
-      }
-
-      return template;
+    try {      const template = await manager.create(templateData);      await loadTemplates(); // Refresh list      return template;
     } catch (err) {
       console.error('[useTemplates] Create error:', err);
       console.error('[useTemplates] Error message:', err.message);

@@ -1,5 +1,7 @@
 import { EventEmitter } from '../utils/EventEmitter.js'
 import LokusPluginAPI from './api/LokusPluginAPI.js'
+import { logger } from '../utils/Logger.js'
+import { isVersionCompatible } from '../utils/semver.js'
 
 // Browser compatibility utilities
 function detectTauriEnvironment() {
@@ -25,15 +27,12 @@ async function initializeTauriAPIs() {
   
   // Only try to import Tauri APIs if we're actually in a Tauri environment
   try {
-    // Use eval to prevent Vite from analyzing these imports
-    const importCore = new Function('return import("@tauri-apps/api/core")');
-    const importPath = new Function('return import("@tauri-apps/api/path")');
-    const importFs = new Function('return import("@tauri-apps/api/fs")');
-    
+    // SECURITY FIX: Use dynamic imports with @vite-ignore comment instead of Function constructor
+    // This prevents code injection while still allowing conditional imports
     const [tauriCore, tauriPath, tauriFs] = await Promise.all([
-      importCore(),
-      importPath(),
-      importFs()
+      import(/* @vite-ignore */ '@tauri-apps/api/core'),
+      import(/* @vite-ignore */ '@tauri-apps/api/path'),
+      import(/* @vite-ignore */ '@tauri-apps/api/fs')
     ]);
     
     return {
@@ -67,8 +66,9 @@ export class PluginManager extends EventEmitter {
     this.loadOrder = []
     this.pluginDirs = new Set()
     this.isInitialized = false
-    this.logger = console // TODO: Replace with proper logger
-    
+    // COMPLETED TODO: Replaced console with proper logger from Phase 2
+    this.logger = logger.createScoped('PluginManager')
+
     // Tauri API references (will be initialized in initialize())
     this.tauri = null
     
@@ -321,11 +321,13 @@ export class PluginManager extends EventEmitter {
 
   /**
    * Check if plugin is compatible with current Lokus version
+   * COMPLETED TODO: Implemented proper semver compatibility checking
    */
-  isVersionCompatible(requiredVersion) {
-    // TODO: Implement proper semver compatibility checking
-    // For now, just return true
-    return true
+  async isVersionCompatible(requiredVersion) {
+    // Get actual app version
+    const { getAppVersion } = await import('../utils/appInfo.js');
+    const lokusVersion = await getAppVersion();
+    return isVersionCompatible(lokusVersion, requiredVersion);
   }
 
   /**

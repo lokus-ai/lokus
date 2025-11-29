@@ -99,17 +99,9 @@ export class CanvasManager {
       // ALWAYS clear cache before loading to ensure fresh data after saves
       this.canvasCache.delete(canvasPath);
 
-      const content = await invoke('read_file_content', { path: canvasPath });
-      if (import.meta.env.DEV) {
-      }
-
-      let tldrawSnapshot;
+      const content = await invoke('read_file_content', { path: canvasPath });      let tldrawSnapshot;
       try {
-        tldrawSnapshot = JSON.parse(content);
-        if (import.meta.env.DEV) {
-        }
-
-        // If snapshot is missing schema, add it (for backwards compatibility)
+        tldrawSnapshot = JSON.parse(content);        // If snapshot is missing schema, add it (for backwards compatibility)
         if (!tldrawSnapshot.schema) {
           if (import.meta.env.DEV) {
             console.warn(`[Canvas LOAD] Missing schema, adding default schema`);
@@ -196,22 +188,13 @@ export class CanvasManager {
           console.error(`[Canvas SAVE] Invalid file path: ${canvasPath}`);
         }
         throw new Error('Invalid canvas path');
-      }
-
-      if (import.meta.env.DEV) {
-      }
-
-      // Save TLDraw snapshot directly - no conversion!
+      }      // Save TLDraw snapshot directly - no conversion!
       const content = JSON.stringify(tldrawSnapshot, null, 2);
 
       await invoke('write_file_content', {
         path: canvasPath,
         content
-      });
-      if (import.meta.env.DEV) {
-      }
-
-      // Clear cache to force fresh read next time
+      });      // Clear cache to force fresh read next time
       this.canvasCache.delete(canvasPath);
 
     } catch (error) {

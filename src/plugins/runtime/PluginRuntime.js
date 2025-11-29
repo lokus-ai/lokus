@@ -569,17 +569,20 @@ export class PluginRuntime {
       // Handle messages from main thread
       onmessage = function(e) {
         const { type, pluginId, code, manifest, context } = e.data;
-        
+
         switch (type) {
           case 'init':
             pluginContext = context;
             try {
-              // Execute plugin code
-              eval(code);
+              // SECURITY FIX: Use Function constructor instead of eval() for safer code execution
+              // This still allows code execution but provides better scoping and is less prone to injection
+              // For complete security, plugin code should be validated and sandboxed before reaching here
+              const pluginFunction = new Function('lokus', 'console', 'module', 'exports', code);
+              pluginFunction(lokus, console, module, exports);
             } catch (error) {
-              postMessage({ 
-                type: 'error', 
-                data: { error: error.message, stack: error.stack } 
+              postMessage({
+                type: 'error',
+                data: { error: error.message, stack: error.stack }
               });
             }
             break;

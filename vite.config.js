@@ -29,6 +29,11 @@ export default defineConfig(async () => ({
     },
   },
 
+  // Worker configuration
+  worker: {
+    format: 'es', // Use ES modules for workers (required for code-splitting)
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

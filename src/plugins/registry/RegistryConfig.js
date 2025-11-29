@@ -7,6 +7,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { join, homeDir } from '@tauri-apps/api/path'
 import { exists, readTextFile, writeTextFile } from '@tauri-apps/api/fs'
 import { EventEmitter } from '../../utils/EventEmitter.js'
+import { logger } from '../../utils/Logger.js'
 
 /**
  * Registry Environments
@@ -178,7 +179,8 @@ export class RegistryConfig extends EventEmitter {
     this.watchers = new Set()
     this.isInitialized = false
 
-    this.logger = console // TODO: Replace with proper logger
+    // COMPLETED TODO: Replaced console with proper logger
+    this.logger = logger.createScoped('RegistryConfig')
   }
 
   /**

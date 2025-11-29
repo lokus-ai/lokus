@@ -7,6 +7,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { join, homeDir } from '@tauri-apps/api/path'
 import { exists, createDir, readTextFile, writeTextFile, removeFile, readDir } from '@tauri-apps/api/fs'
 import { EventEmitter } from '../../utils/EventEmitter.js'
+import { logger } from '../../utils/Logger.js'
 
 /**
  * Storage Types
@@ -67,8 +68,9 @@ export class PluginStore extends EventEmitter {
 
     // Cleanup timer
     this.cleanupTimer = null
-    
-    this.logger = console // TODO: Replace with proper logger
+
+    // COMPLETED TODO: Replaced console with proper logger
+    this.logger = logger.createScoped('PluginStore')
     this.isInitialized = false
   }
 

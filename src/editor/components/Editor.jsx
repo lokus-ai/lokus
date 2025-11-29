@@ -54,7 +54,7 @@ import "../styles/editor.css";
 import "../styles/block-embeds.css";
 import "../../styles/page-preview.css";
 
-const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => {
+const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading = false }, ref) => {
   const [extensions, setExtensions] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editorSettings, setEditorSettings] = useState(null);
@@ -382,11 +382,11 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady }, ref) => 
   }
 
   return (
-    <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} editorMode={editorMode} onEditorReady={onEditorReady} />
+    <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} editorMode={editorMode} onEditorReady={onEditorReady} isLoading={isLoading} />
   );
 });
 
-const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings, editorMode = 'edit', onEditorReady }, ref) => {
+const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings, editorMode = 'edit', onEditorReady, isLoading = false }, ref) => {
   const isSettingRef = useRef(false);
   const [isWikiLinkModalOpen, setIsWikiLinkModalOpen] = useState(false);
   const [isTaskCreationModalOpen, setIsTaskCreationModalOpen] = useState(false);
@@ -609,14 +609,23 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
   }, [editor]);
 
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
-      isSettingRef.current = true;
+    if (!editor) return;
 
+    // Immediately clear when loading starts
+    if (isLoading && editor.getHTML() !== '') {
+      isSettingRef.current = true;
+      editor.commands.setContent('');
+      return;
+    }
+
+    // Update when new content arrives
+    if (!isLoading && content !== editor.getHTML()) {
+      isSettingRef.current = true;
       // Content is already processed in Workspace.jsx, just set it directly
       // This prevents double markdown-it processing which corrupts custom HTML tags
       editor.commands.setContent(content);
     }
-  }, [content, editor]);
+  }, [content, editor, isLoading]);
 
   // Expose editor instance to parent component via ref
   useImperativeHandle(ref, () => ({

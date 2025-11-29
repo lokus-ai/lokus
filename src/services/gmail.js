@@ -1,8 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
+import { logger } from '../utils/logger.js';
 
 /**
  * Gmail Service Module
- * 
+ *
  * Provides a clean wrapper around Gmail Tauri commands with error handling,
  * logging, and consistent API interface.
  */
@@ -18,7 +19,7 @@ export const gmailAuth = {
       const authUrl = await invoke('gmail_initiate_auth');
       return authUrl;
     } catch (error) {
-      console.error('❌ Gmail: Failed to initiate auth:', error);
+      logger.error('Gmail', 'Failed to initiate auth:', error);
       throw new Error(`Gmail authentication initiation failed: ${error.message}`);
     }
   },
@@ -34,7 +35,7 @@ export const gmailAuth = {
       const profile = await invoke('gmail_complete_auth', { code, state });
       return profile;
     } catch (error) {
-      console.error('❌ Gmail: Failed to complete auth:', error);
+      logger.error('Gmail', 'Failed to complete auth:', error);
       throw new Error(`Gmail authentication completion failed: ${error.message}`);
     }
   },
@@ -48,7 +49,7 @@ export const gmailAuth = {
       const isAuth = await invoke('gmail_is_authenticated');
       return isAuth;
     } catch (error) {
-      console.error('❌ Gmail: Failed to check auth status:', error);
+      logger.error('Gmail', 'Failed to check auth status:', error);
       return false;
     }
   },
@@ -61,7 +62,7 @@ export const gmailAuth = {
     try {
       await invoke('gmail_logout');
     } catch (error) {
-      console.error('❌ Gmail: Failed to logout:', error);
+      logger.error('Gmail', 'Failed to logout:', error);
       throw new Error(`Gmail logout failed: ${error.message}`);
     }
   },
@@ -75,7 +76,7 @@ export const gmailAuth = {
       const profile = await invoke('gmail_get_profile');
       return profile;
     } catch (error) {
-      console.error('❌ Gmail: Failed to get profile:', error);
+      logger.error('Gmail', 'Failed to get profile:', error);
       throw new Error(`Gmail profile fetch failed: ${error.message}`);
     }
   },
@@ -118,7 +119,7 @@ export const gmailEmails = {
       const result = { emails };
       return result;
     } catch (error) {
-      console.error('❌ Gmail: Failed to list emails:', error);
+      logger.error('Gmail', 'Failed to list emails:', error);
       throw new Error(`Gmail email listing failed: ${error.message}`);
     }
   },
@@ -141,7 +142,7 @@ export const gmailEmails = {
       const result = { emails };
       return result;
     } catch (error) {
-      console.error('❌ Gmail: Failed to search emails:', error);
+      logger.error('Gmail', 'Failed to search emails:', error);
       throw new Error(`Gmail email search failed: ${error.message}`);
     }
   },
@@ -157,7 +158,7 @@ export const gmailEmails = {
       const email = await invoke('gmail_get_email', messageId);
       return email;
     } catch (error) {
-      console.error('❌ Gmail: Failed to get email:', error);
+      logger.error('Gmail', 'Failed to get email:', error);
       throw new Error(`Gmail email fetch failed: ${error.message}`);
     }
   },
@@ -181,11 +182,14 @@ export const gmailEmails = {
       const ccAddresses = emailData.cc ? emailData.cc.map(email => ({ email })) : null;
       const bccAddresses = emailData.bcc ? emailData.bcc.map(email => ({ email })) : null;
       
+      // COMPLETED TODO: Support HTML body - check if body contains HTML tags or use body_html if provided
+      const isHtmlBody = emailData.body_html || (emailData.body && /<[a-z][\s\S]*>/i.test(emailData.body));
+
       const emailPayload = {
         to: toAddresses,
         subject: emailData.subject || '',
-        body_text: emailData.body || '',  // Changed from null to empty string
-        body_html: null, // TODO: Support HTML body
+        body_text: isHtmlBody ? null : (emailData.body || ''),
+        body_html: emailData.body_html || (isHtmlBody ? emailData.body : null),
         cc: ccAddresses,
         bcc: bccAddresses
       };
@@ -201,7 +205,7 @@ export const gmailEmails = {
       
       return result;
     } catch (error) {
-      console.error('❌ Gmail: Failed to send email:', error);
+      logger.error('Gmail', 'Failed to send email:', error);
       throw new Error(`Gmail email sending failed: ${error.message}`);
     }
   },
@@ -217,7 +221,7 @@ export const gmailEmails = {
       const result = await invoke('gmail_reply_email', { messageId, ...replyData });
       return result;
     } catch (error) {
-      console.error('❌ Gmail: Failed to reply to email:', error);
+      logger.error('Gmail', 'Failed to reply to email:', error);
       throw new Error(`Gmail email reply failed: ${error.message}`);
     }
   },
@@ -233,7 +237,7 @@ export const gmailEmails = {
       const result = await invoke('gmail_forward_email', { messageId, ...forwardData });
       return result;
     } catch (error) {
-      console.error('❌ Gmail: Failed to forward email:', error);
+      logger.error('Gmail', 'Failed to forward email:', error);
       throw new Error(`Gmail email forwarding failed: ${error.message}`);
     }
   },
@@ -365,7 +369,7 @@ export const gmailActions = {
     try {
       await invoke('gmail_mark_as_read', { messageIds });
     } catch (error) {
-      console.error('❌ Gmail: Failed to mark emails as read:', error);
+      logger.error('Gmail', 'Failed to mark emails as read:', error);
       throw new Error(`Gmail mark as read failed: ${error.message}`);
     }
   },
@@ -379,7 +383,7 @@ export const gmailActions = {
     try {
       await invoke('gmail_mark_as_unread', { messageIds });
     } catch (error) {
-      console.error('❌ Gmail: Failed to mark emails as unread:', error);
+      logger.error('Gmail', 'Failed to mark emails as unread:', error);
       throw new Error(`Gmail mark as unread failed: ${error.message}`);
     }
   },
@@ -393,7 +397,7 @@ export const gmailActions = {
     try {
       await invoke('gmail_star_emails', { messageIds });
     } catch (error) {
-      console.error('❌ Gmail: Failed to star emails:', error);
+      logger.error('Gmail', 'Failed to star emails:', error);
       throw new Error(`Gmail star emails failed: ${error.message}`);
     }
   },
@@ -407,7 +411,7 @@ export const gmailActions = {
     try {
       await invoke('gmail_unstar_emails', { messageIds });
     } catch (error) {
-      console.error('❌ Gmail: Failed to unstar emails:', error);
+      logger.error('Gmail', 'Failed to unstar emails:', error);
       throw new Error(`Gmail unstar emails failed: ${error.message}`);
     }
   },
@@ -421,7 +425,7 @@ export const gmailActions = {
     try {
       await invoke('gmail_archive_emails', { messageIds });
     } catch (error) {
-      console.error('❌ Gmail: Failed to archive emails:', error);
+      logger.error('Gmail', 'Failed to archive emails:', error);
       throw new Error(`Gmail archive emails failed: ${error.message}`);
     }
   },
@@ -435,7 +439,7 @@ export const gmailActions = {
     try {
       await invoke('gmail_delete_emails', { messageIds });
     } catch (error) {
-      console.error('❌ Gmail: Failed to delete emails:', error);
+      logger.error('Gmail', 'Failed to delete emails:', error);
       throw new Error(`Gmail delete emails failed: ${error.message}`);
     }
   }
@@ -452,7 +456,7 @@ export const gmailLabels = {
       const labels = await invoke('gmail_get_labels');
       return labels;
     } catch (error) {
-      console.error('❌ Gmail: Failed to get labels:', error);
+      logger.error('Gmail', 'Failed to get labels:', error);
       throw new Error(`Gmail get labels failed: ${error.message}`);
     }
   }
@@ -469,7 +473,7 @@ export const gmailQueue = {
       const stats = await invoke('gmail_get_queue_stats');
       return stats;
     } catch (error) {
-      console.error('❌ Gmail: Failed to get queue stats:', error);
+      logger.error('Gmail', 'Failed to get queue stats:', error);
       throw new Error(`Gmail queue stats failed: ${error.message}`);
     }
   },
@@ -483,7 +487,7 @@ export const gmailQueue = {
       const result = await invoke('gmail_force_process_queue');
       return result;
     } catch (error) {
-      console.error('❌ Gmail: Failed to process queue:', error);
+      logger.error('Gmail', 'Failed to process queue:', error);
       throw new Error(`Gmail queue processing failed: ${error.message}`);
     }
   },
@@ -496,7 +500,7 @@ export const gmailQueue = {
     try {
       await invoke('gmail_clear_queue');
     } catch (error) {
-      console.error('❌ Gmail: Failed to clear queue:', error);
+      logger.error('Gmail', 'Failed to clear queue:', error);
       throw new Error(`Gmail queue clearing failed: ${error.message}`);
     }
   }

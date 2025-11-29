@@ -183,7 +183,9 @@ export async function installDefaultThemes() {
     const themeJsonPath = await join(themesDir, `${themeId}.json`);
     if (!(await exists(themeJsonPath))) {
       try { await writeTextFile(themeJsonPath, DEFAULT_THEME_CONTENT[themeId]); }
-      catch (e) { }
+      catch (e) {
+        console.error(`Failed to install default theme ${themeId}:`, e);
+      }
     }
   }
 }
@@ -195,7 +197,9 @@ export async function loadThemeManifestById(id) {
   // First, check if it's a built-in theme
   if (DEFAULT_THEME_CONTENT[id]) {
     try { return JSON.parse(DEFAULT_THEME_CONTENT[id]); }
-    catch (e) { }
+    catch (e) {
+      console.error(`Failed to parse built-in theme ${id}:`, e);
+    }
   }
 
   // Otherwise, try to load from Rust backend (custom themes in ~/.lokus/themes/)

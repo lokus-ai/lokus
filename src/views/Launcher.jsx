@@ -7,6 +7,7 @@ import { readRecents, addRecent, removeRecent, shortenPath } from "../lib/recent
 import { WorkspaceManager } from "../core/workspace/manager.js";
 import { readGlobalVisuals, setGlobalActiveTheme } from "../core/theme/manager.js";
 import LokusLogo from "../components/LokusLogo.jsx";
+import { useToast } from "../components/Toast.jsx";
 
 // --- Reusable Icon Component ---
 const Icon = ({ path, className = "w-5 h-5" }) => (
@@ -57,6 +58,7 @@ async function openWorkspace(path) {
 export default function Launcher() {
   const [recents, setRecents] = useState([]);
   const [isTestMode, setIsTestMode] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     // The ThemeProvider now handles initial theme loading.
@@ -91,8 +93,7 @@ export default function Launcher() {
         await WorkspaceManager.saveWorkspacePath(p);
         await openWorkspace(p);
       } else {
-        // Could show user error message here
-        alert("The selected folder cannot be used as a workspace. Please check permissions and try again.");
+        toast.error("The selected folder cannot be used as a workspace. Please check permissions and try again.");
       }
     }
   };
@@ -106,8 +107,7 @@ export default function Launcher() {
       await WorkspaceManager.saveWorkspacePath(path);
       await openWorkspace(path);
     } else {
-      // Show user message and remove from recents
-      alert("This workspace is no longer accessible. It may have been moved or deleted.");
+      toast.error("This workspace is no longer accessible. It may have been moved or deleted.");
       removeRecent(path);
       setRecents(readRecents());
     }

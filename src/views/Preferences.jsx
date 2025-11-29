@@ -16,10 +16,7 @@ import { useAuth } from "../core/auth/AuthContext";
 import { User, LogIn, LogOut, Crown, Shield, Settings as SettingsIcon } from "lucide-react";
 import ImportWizard from "../components/ImportWizard.jsx";
 
-export default function Preferences() {
-  if (import.meta.env.DEV) {
-  }
-  const [themes, setThemes] = useState([]);
+export default function Preferences() {  const [themes, setThemes] = useState([]);
   const [activeTheme, setActiveTheme] = useState("");
   const [themeTokens, setThemeTokens] = useState({});
   const [originalTokens, setOriginalTokens] = useState({});
@@ -320,10 +317,7 @@ export default function Preferences() {
         if (!foundPath) {
           try {
             const currentWorkspace = await invoke('api_get_current_workspace');
-            if (currentWorkspace) {
-              if (import.meta.env.DEV) {
-              }
-              setWorkspacePath(currentWorkspace);
+            if (currentWorkspace) {              setWorkspacePath(currentWorkspace);
             } else {
               if (import.meta.env.DEV) {
                 console.warn('No current workspace in API state');
@@ -383,13 +377,9 @@ export default function Preferences() {
         const branchName = await invoke('git_get_current_branch', { workspacePath });
         if (branchName && branchName !== syncBranch) {
           setSyncBranch(branchName);
-          if (import.meta.env.DEV) {
-          }
         }
       } catch (e) {
         // Ignore error if Git not initialized yet
-        if (import.meta.env.DEV) {
-        }
       }
     };
 
@@ -647,7 +637,9 @@ export default function Preferences() {
     try {
       const { updateConfig } = await import("../core/config/store.js");
       await updateConfig({ markdown: next });
-    } catch (e) { }
+    } catch (e) {
+      console.error('Failed to update markdown preferences:', e);
+    }
   };
 
   // Add error boundary

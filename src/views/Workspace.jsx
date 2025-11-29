@@ -48,6 +48,7 @@ import analytics from "../services/analytics.js";
 import CreateTemplate from "../components/CreateTemplate.jsx";
 import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
 import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
+import { setGlobalActiveTheme, getSystemPreferredTheme, setupSystemThemeListener } from "../core/theme/manager.js";
 import SplitEditor from "../components/SplitEditor/SplitEditor.jsx";
 import PDFViewerTab from "../components/PDFViewer/PDFViewerTab.jsx";
 import { isPDFFile } from "../utils/pdfUtils.js";
@@ -67,10 +68,13 @@ import TagManagementModal from "../components/TagManagementModal.jsx";
 import ProductTour from "../components/ProductTour.jsx";
 import ExternalDropZone from "../components/ExternalDropZone.jsx";
 import { AnimatePresence, motion } from "framer-motion";
+import { useToast } from "../components/Toast.jsx";
 import { useDropPosition } from "../hooks/useDropPosition.js";
 import { useAutoExpand } from "../hooks/useAutoExpand.js";
 import DropIndicator from "../components/FileTree/DropIndicator.jsx";
 import Breadcrumbs from "../components/FileTree/Breadcrumbs.jsx";
+import AboutDialog from "../components/AboutDialog.jsx";
+import { copyFiles, cutFiles, getClipboardState, getRelativePath } from "../utils/clipboard.js";
 import "../styles/product-tour.css";
 
 const MAX_OPEN_TABS = 10;
@@ -316,7 +320,7 @@ function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
 }
 
 // --- File Entry Component ---
-function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder }) {
+function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder, toast }) {
   const entryRef = useRef(null);
   const hoverTimeoutRef = useRef(null);
 
@@ -429,7 +433,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       onRefresh && onRefresh();
     } catch (e) {
       console.error('Failed to rename:', e);
-      alert(`Failed to rename: ${e.message || e}`);
+      toast?.error(`Failed to rename: ${e.message || e}`);
       setRenamingPath(null);
     }
   };
@@ -444,7 +448,10 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       const name = "Untitled.md";
       await invoke("write_file_content", { path: `${base}/${name}`, content: "" });
       onRefresh && onRefresh();
-    } catch (e) { }
+    } catch (e) {
+      console.error('Failed to create file:', e);
+      toast?.error(`Failed to create file: ${e.message || e}`);
+    }
   };
 
   const onCreateFolderHere = async () => {
@@ -454,7 +461,10 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       const base = entry.is_directory ? entry.path : entry.path.split("/").slice(0, -1).join("/");
       await invoke("create_folder_in_workspace", { workspacePath: base, name });
       onRefresh && onRefresh();
-    } catch (e) { }
+    } catch (e) {
+      console.error('Failed to create folder:', e);
+      toast?.error(`Failed to create folder: ${e.message || e}`);
+    }
   };
 
   const handleFileContextAction = useCallback(async (action, data) => {
@@ -497,7 +507,12 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         }
         break;
       case 'openWith':
-        // TODO: Implement open with functionality
+        // Open file with system default application
+        try {
+          await invoke('platform_open_with_default', { path: file.path });
+        } catch (e) {
+          toast.error(`Failed to open file: ${e}`);
+        }
         break;
       case 'revealInFinder':
         try {
@@ -515,10 +530,14 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         }
         break;
       case 'cut':
-        // TODO: Implement cut functionality
+        // Cut file to clipboard
+        cutFiles([file]);
+        toast.success(`Cut: ${file.name}`);
         break;
       case 'copy':
-        // TODO: Implement copy functionality
+        // Copy file to clipboard
+        copyFiles([file]);
+        toast.success(`Copied: ${file.name}`);
         break;
       case 'copyPath':
         try {
@@ -528,10 +547,11 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         break;
       case 'copyRelativePath':
         try {
-          // TODO: Calculate relative path from workspace root
-          const relativePath = file.path; // Simplified for now
+          const relativePath = getRelativePath(file.path, path);
           await navigator.clipboard.writeText(relativePath);
+          toast.success('Copied relative path');
         } catch (e) {
+          toast.error('Failed to copy relative path');
         }
         break;
       case 'newFile':
@@ -554,12 +574,36 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         }
         break;
       case 'selectForCompare':
-        // TODO: Implement select for compare
+        // Select file for comparison
+        if (file.type === 'file') {
+          setSelectedFileForCompare(file);
+          toast.success(`Selected for compare: ${file.name}`);
+        }
+        break;
+      case 'compareWith':
+        // Compare with previously selected file
+        if (selectedFileForCompare && file.type === 'file') {
+          // Open both files in split view for manual comparison
+          onFileClick(selectedFileForCompare.path);
+          setUseSplitView(true);
+          setTimeout(() => {
+            setRightPaneFile(file.path);
+            setRightPaneTitle(file.name);
+          }, 100);
+          toast.success(`Comparing ${selectedFileForCompare.name} with ${file.name}`);
+          setSelectedFileForCompare(null);
+        }
         break;
       case 'shareEmail':
       case 'shareSlack':
       case 'shareTeams':
-        // TODO: Implement sharing functionality
+        // Basic sharing: copy file path to clipboard
+        try {
+          await navigator.clipboard.writeText(file.path);
+          toast.success(`File path copied. Share via ${action.replace('share', '')}`);
+        } catch (e) {
+          toast.error('Failed to copy file path');
+        }
         break;
       case 'addTag':
       case 'manageTags':
@@ -671,6 +715,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
                   isExternalDragActive={isExternalDragActive}
                   hoveredFolder={hoveredFolder}
                   setHoveredFolder={setHoveredFolder}
+                  toast={toast}
                 />
               ))}
             </ul>
@@ -682,7 +727,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 }
 
 // --- File Tree View Component ---
-function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, isExternalDragActive, hoveredFolder, setHoveredFolder }) {
+function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, isExternalDragActive, hoveredFolder, setHoveredFolder, toast }) {
   const [activeEntry, setActiveEntry] = useState(null);
   const fileTreeRef = useRef(null);
   const { dropPosition, updatePosition, clearPosition } = useDropPosition();
@@ -777,6 +822,7 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
               isExternalDragActive={isExternalDragActive}
               hoveredFolder={hoveredFolder}
               setHoveredFolder={setHoveredFolder}
+              toast={toast}
             />
           ))}
         </ul>
@@ -979,12 +1025,12 @@ function EditorDropZone({ children }) {
 
 // --- Inner Workspace Component (with folder scope) ---
 function WorkspaceWithScope({ path }) {
+  const toast = useToast();
   const { filterFileTree, scopeMode, scopedFolders } = useFolderScope();
   const { activeBase } = useBases();
   const { leftW, rightW, startLeftDrag, startRightDrag } = useDragColumns({});
   const [showLeft, setShowLeft] = useState(true);
   const [showRight, setShowRight] = useState(false);
-  const [showMiniKanban, setShowMiniKanban] = useState(false);
   const [refreshId, setRefreshId] = useState(0);
 
   // Toggle right sidebar (outline)
@@ -1032,6 +1078,7 @@ function WorkspaceWithScope({ path }) {
   const [editorContent, setEditorContent] = useState("");
   const [editorTitle, setEditorTitle] = useState("");
   const [savedContent, setSavedContent] = useState("");
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
 
   // Reload current file after version restore
   const reloadCurrentFile = useCallback(async () => {
@@ -1084,6 +1131,8 @@ function WorkspaceWithScope({ path }) {
   const [showGmail, setShowGmail] = useState(false);
   const [showTagModal, setShowTagModal] = useState(false);
   const [tagModalFile, setTagModalFile] = useState(null);
+  const [showAboutDialog, setShowAboutDialog] = useState(false);
+  const [selectedFileForCompare, setSelectedFileForCompare] = useState(null);
   // Graph view now opens as a tab instead of sidebar panel
   const [showGraphView, setShowGraphView] = useState(false);
   const [showDailyNotesPanel, setShowDailyNotesPanel] = useState(false);
@@ -1407,9 +1456,13 @@ function WorkspaceWithScope({ path }) {
         return;
       }
 
+      // IMMEDIATE: Clear editor and show loading state
+      setEditorContent("");
+      setEditorTitle("");
+      setIsLoadingContent(true);
+
       // Capture activeFile in local variable to prevent stale closure issues
       const fileToLoad = activeFile;
-
 
       invoke("read_file_content", { path: fileToLoad })
         .then(async content => {
@@ -1440,12 +1493,21 @@ function WorkspaceWithScope({ path }) {
           setEditorContent(processedContent);
           setEditorTitle(fileName.replace(/\.md$/, ""));
           setSavedContent(content); // Keep original content for saving
+          setIsLoadingContent(false); // Loading complete
         })
         .catch((err) => {
+          console.error(`Failed to load file: ${fileToLoad}`, err);
+          if (fileToLoad === activeFile) {
+            setIsLoadingContent(false);
+            // Show error message in editor
+            setEditorContent(`<div class="text-red-500 p-4">Failed to load file: ${err}</div>`);
+            setEditorTitle("Error");
+          }
         });
     } else {
       setEditorContent("");
       setEditorTitle("");
+      setIsLoadingContent(false);
     }
   }, [activeFile]);
 
@@ -3374,8 +3436,8 @@ function WorkspaceWithScope({ path }) {
 
     // Additional missing file menu events
     const unlistenShowAbout = isTauri ? listen("lokus:show-about", () => {
-      // TODO: Show about dialog
-    }) : Promise.resolve(addDom('lokus:show-about', () => { }));
+      setShowAboutDialog(true);
+    }) : Promise.resolve(addDom('lokus:show-about', () => { setShowAboutDialog(true); }));
 
     const unlistenSaveAs = isTauri ? listen("lokus:save-as", handleSaveAs) : Promise.resolve(addDom('lokus:save-as', handleSaveAs));
 
@@ -3403,18 +3465,28 @@ function WorkspaceWithScope({ path }) {
     const unlistenActualSize = isTauri ? listen("lokus:actual-size", () => handleViewAction('actual-size')) : Promise.resolve(addDom('lokus:actual-size', () => handleViewAction('actual-size')));
     const unlistenFullscreen = isTauri ? listen("lokus:toggle-fullscreen", () => handleViewAction('fullscreen')) : Promise.resolve(addDom('lokus:toggle-fullscreen', () => handleViewAction('fullscreen')));
 
-    // Theme switching events
-    const unlistenThemeLight = isTauri ? listen("lokus:theme-light", () => {
-      // TODO: Connect to theme manager to set light theme
-    }) : Promise.resolve(addDom('lokus:theme-light', () => { }));
+    // Theme switching events - COMPLETED TODO: Connected to theme manager
+    const unlistenThemeLight = isTauri ? listen("lokus:theme-light", async () => {
+      await setGlobalActiveTheme('minimal-light');
+    }) : Promise.resolve(addDom('lokus:theme-light', async () => {
+      await setGlobalActiveTheme('minimal-light');
+    }));
 
-    const unlistenThemeDark = isTauri ? listen("lokus:theme-dark", () => {
-      // TODO: Connect to theme manager to set dark theme
-    }) : Promise.resolve(addDom('lokus:theme-dark', () => { }));
+    const unlistenThemeDark = isTauri ? listen("lokus:theme-dark", async () => {
+      await setGlobalActiveTheme('dracula');
+    }) : Promise.resolve(addDom('lokus:theme-dark', async () => {
+      await setGlobalActiveTheme('dracula');
+    }));
 
-    const unlistenThemeAuto = isTauri ? listen("lokus:theme-auto", () => {
-      // TODO: Connect to theme manager to set auto theme
-    }) : Promise.resolve(addDom('lokus:theme-auto', () => { }));
+    const unlistenThemeAuto = isTauri ? listen("lokus:theme-auto", async () => {
+      const preferredTheme = getSystemPreferredTheme();
+      await setGlobalActiveTheme(preferredTheme === 'light' ? 'minimal-light' : 'dracula');
+      setupSystemThemeListener();
+    }) : Promise.resolve(addDom('lokus:theme-auto', async () => {
+      const preferredTheme = getSystemPreferredTheme();
+      await setGlobalActiveTheme(preferredTheme === 'light' ? 'minimal-light' : 'dracula');
+      setupSystemThemeListener();
+    }));
 
     // Insert menu events
     const unlistenInsertWikiLink = isTauri ? listen("lokus:insert-wikilink", () => handleEditorInsert('wikilink')) : Promise.resolve(addDom('lokus:insert-wikilink', () => handleEditorInsert('wikilink')));
@@ -4031,6 +4103,7 @@ function WorkspaceWithScope({ path }) {
                             isExternalDragActive={isExternalDragActive}
                             hoveredFolder={hoveredFolder}
                             setHoveredFolder={setHoveredFolder}
+                            toast={toast}
                           />
                       </div>
                     </ContextMenuTrigger>
@@ -4093,6 +4166,7 @@ function WorkspaceWithScope({ path }) {
                           content={editorContent}
                           onContentChange={handleEditorChange}
                           onEditorReady={setEditor}
+                          isLoading={isLoadingContent}
                         />
                       </div>
                     ) : (
@@ -4377,6 +4451,7 @@ function WorkspaceWithScope({ path }) {
                                         content={editorContent}
                                         onContentChange={handleEditorChange}
                                         onEditorReady={setEditor}
+                                        isLoading={isLoadingContent}
                                       />
                                     </div>
                                   </div>
@@ -4880,6 +4955,12 @@ function WorkspaceWithScope({ path }) {
             // Refresh file tree and Bases to show updated tags
             setRefreshId(prev => prev + 1);
           }}
+        />
+
+        {/* About Dialog */}
+        <AboutDialog
+          isOpen={showAboutDialog}
+          onClose={() => setShowAboutDialog(false)}
         />
 
         {/* Pluginable Status Bar - replaces the old Obsidian status bar */}

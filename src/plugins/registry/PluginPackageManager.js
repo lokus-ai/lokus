@@ -5,6 +5,7 @@
 
 import { EventEmitter } from '../../utils/EventEmitter.js'
 import { PluginManifestV2 } from '../manifest/ManifestV2.js'
+import { logger } from '../../utils/Logger.js'
 
 /**
  * Installation Status Constants
@@ -75,7 +76,8 @@ export class PluginPackageManager extends EventEmitter {
     this.dependencyCache = new Map()
     this.conflictCache = new Map()
 
-    this.logger = console // TODO: Replace with proper logger
+    // COMPLETED TODO: Replaced console with proper logger
+    this.logger = logger.createScoped('PluginPackageManager')
   }
 
   /**

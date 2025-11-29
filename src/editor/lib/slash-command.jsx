@@ -1,5 +1,6 @@
 import { Editor } from "@tiptap/core";
 import { ReactRenderer } from "@tiptap/react";
+import { logger } from "../../utils/logger.js";
 import {
   Heading1,
   Heading2,
@@ -73,7 +74,7 @@ function buildTableHTML(rows, cols, withHeaderRow = true) {
 }
 
 function openTemplatePicker({ editor, range }) {
-  console.log('[SlashCommand] Opening template picker via event...');
+  logger.debug('SlashCommand', 'Opening template picker via event');
   // Store current editor state for template insertion
   const editorState = { editor, range };
 
@@ -82,12 +83,12 @@ function openTemplatePicker({ editor, range }) {
     detail: {
       editorState,
       onSelect: (template, processedContent) => {
-        console.log('[SlashCommand] Template selected:', template?.name);
+        logger.debug('SlashCommand', 'Template selected:', template?.name);
         try {
           // Insert the processed template content
           editor.chain().focus().deleteRange(range).insertContent(processedContent).run();
         } catch (err) {
-          console.error('[SlashCommand] Error inserting template:', err);
+          logger.error('SlashCommand', 'Error inserting template:', err);
           // Fallback: insert raw template content
           editor.chain().focus().deleteRange(range).insertContent(template.content).run();
         }
@@ -170,7 +171,7 @@ async function getKanbanBoards() {
       return boards || [];
     }
   } catch (error) {
-    console.error('Failed to get kanban boards:', error);
+    logger.error('SlashCommand', 'Failed to get kanban boards:', error);
   }
   return [];
 }
@@ -189,8 +190,9 @@ function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
             const { invoke } = window.__TAURI__.tauri;
             invoke('create_kanban_board', { name: boardName.trim() })
               .then(() => {
+                logger.debug('SlashCommand', 'Created kanban board:', boardName.trim());
               })
-              .catch(err => console.error('Failed to create board:', err));
+              .catch(err => logger.error('SlashCommand', 'Failed to create board:', err));
           }
         }
       }
@@ -324,8 +326,10 @@ function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
         if (typeof window !== 'undefined' && window.__TAURI__) {
           const { invoke } = window.__TAURI__.tauri;
           invoke('create_kanban_board', { name: boardName.trim() })
-            .then(() => { })
-            .catch(err => console.error('Failed to create board:', err));
+            .then(() => {
+              logger.debug('SlashCommand', 'Created kanban board:', boardName.trim());
+            })
+            .catch(err => logger.error('SlashCommand', 'Failed to create board:', err));
         }
       }
     });
@@ -1084,7 +1088,7 @@ const slashCommand = {
         });
 
         if (!props.clientRect) {
-          console.warn('⚠️ [SlashCommand] No clientRect in onStart');
+          logger.warn('SlashCommand', 'No clientRect in onStart');
           return;
         }
 
@@ -1110,12 +1114,12 @@ const slashCommand = {
         component.updateProps(enhancedProps);
 
         if (!props.clientRect) {
-          console.warn('⚠️ [SlashCommand] No clientRect in onUpdate');
+          logger.warn('SlashCommand', 'No clientRect in onUpdate');
           return;
         }
 
         if (!popup) {
-          console.warn('⚠️ [SlashCommand] No popup in onUpdate');
+          logger.warn('SlashCommand', 'No popup in onUpdate');
           return;
         }
 
