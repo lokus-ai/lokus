@@ -5,7 +5,7 @@ import Editor from '../../editor';
 import Canvas from '../../views/Canvas.jsx';
 import PluginDetail from '../../views/PluginDetail.jsx';
 import { ProfessionalGraphView } from '../../views/ProfessionalGraphView.jsx';
-import FullKanban from '../../components/FullKanban.jsx';
+import KanbanBoard from '../../components/KanbanBoard.jsx';
 import BasesView from '../../bases/BasesView.jsx';
 
 const EditorPane = ({
@@ -137,7 +137,7 @@ const EditorPane = ({
     if (pane.file === '__kanban__') {
       return (
         <div className="flex-1 bg-app-panel overflow-hidden">
-          <FullKanban
+          <KanbanBoard
             workspacePath={window.__LOKUS_WORKSPACE_PATH__ || ''}
             onFileOpen={onFileChange}
           />

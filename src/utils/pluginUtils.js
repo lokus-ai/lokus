@@ -81,27 +81,30 @@ export class SecurePluginSandbox {
                   const pluginFunction = new Function('lokus', event.data.code);
                   const result = await pluginFunction(lokusAPI);
                   
+                  // SECURITY FIX: Use window.location.origin instead of wildcard
                   window.parent.postMessage({
                     type: 'PLUGIN_RESULT',
                     id: event.data.id,
                     success: true,
                     result: result
-                  }, '*');
+                  }, window.location.origin);
                 } catch (error) {
+                  // SECURITY FIX: Use window.location.origin instead of wildcard
                   window.parent.postMessage({
                     type: 'PLUGIN_RESULT',
                     id: event.data.id,
                     success: false,
                     error: error.message
-                  }, '*');
+                  }, window.location.origin);
                 }
               } else if (event.data.type === 'PING') {
-                window.parent.postMessage({ type: 'PONG' }, '*');
+                // SECURITY FIX: Use window.location.origin instead of wildcard
+                window.parent.postMessage({ type: 'PONG' }, window.location.origin);
               }
             });
-            
-            // Signal ready
-            window.parent.postMessage({ type: 'SANDBOX_READY' }, '*');
+
+            // Signal ready - SECURITY FIX: Use window.location.origin instead of wildcard
+            window.parent.postMessage({ type: 'SANDBOX_READY' }, window.location.origin);
           })();
         </script>
       </body>
@@ -144,9 +147,9 @@ export class SecurePluginSandbox {
    */
   createFileSystemAPI() {
     return {
-      readFile: 'function(path) { return window.parent.postMessage({ type: "API_CALL", method: "fileSystem.readFile", args: [path] }, "*"); }',
-      writeFile: 'function(path, content) { return window.parent.postMessage({ type: "API_CALL", method: "fileSystem.writeFile", args: [path, content] }, "*"); }',
-      listFiles: 'function(path) { return window.parent.postMessage({ type: "API_CALL", method: "fileSystem.listFiles", args: [path] }, "*"); }'
+      readFile: 'function(path) { return window.parent.postMessage({ type: "API_CALL", method: "fileSystem.readFile", args: [path] }, window.location.origin); }',
+      writeFile: 'function(path, content) { return window.parent.postMessage({ type: "API_CALL", method: "fileSystem.writeFile", args: [path, content] }, window.location.origin); }',
+      listFiles: 'function(path) { return window.parent.postMessage({ type: "API_CALL", method: "fileSystem.listFiles", args: [path] }, window.location.origin); }'
     };
   }
 
@@ -155,9 +158,9 @@ export class SecurePluginSandbox {
    */
   createEditorAPI() {
     return {
-      insertText: 'function(text) { return window.parent.postMessage({ type: "API_CALL", method: "editor.insertText", args: [text] }, "*"); }',
-      getSelection: 'function() { return window.parent.postMessage({ type: "API_CALL", method: "editor.getSelection", args: [] }, "*"); }',
-      replaceSelection: 'function(text) { return window.parent.postMessage({ type: "API_CALL", method: "editor.replaceSelection", args: [text] }, "*"); }'
+      insertText: 'function(text) { return window.parent.postMessage({ type: "API_CALL", method: "editor.insertText", args: [text] }, window.location.origin); }',
+      getSelection: 'function() { return window.parent.postMessage({ type: "API_CALL", method: "editor.getSelection", args: [] }, window.location.origin); }',
+      replaceSelection: 'function(text) { return window.parent.postMessage({ type: "API_CALL", method: "editor.replaceSelection", args: [text] }, window.location.origin); }'
     };
   }
 
@@ -166,8 +169,8 @@ export class SecurePluginSandbox {
    */
   createUIAPI() {
     return {
-      showNotification: 'function(message, type) { return window.parent.postMessage({ type: "API_CALL", method: "ui.showNotification", args: [message, type] }, "*"); }',
-      showDialog: 'function(options) { return window.parent.postMessage({ type: "API_CALL", method: "ui.showDialog", args: [options] }, "*"); }'
+      showNotification: 'function(message, type) { return window.parent.postMessage({ type: "API_CALL", method: "ui.showNotification", args: [message, type] }, window.location.origin); }',
+      showDialog: 'function(options) { return window.parent.postMessage({ type: "API_CALL", method: "ui.showDialog", args: [options] }, window.location.origin); }'
     };
   }
 
@@ -241,19 +244,21 @@ export class SecurePluginSandbox {
           throw new Error(`Unknown API namespace: ${namespace}`);
       }
 
+      // SECURITY FIX: Use window.location.origin instead of wildcard
       this.iframe.contentWindow.postMessage({
         type: 'API_RESULT',
         id,
         success: true,
         result
-      }, '*');
+      }, window.location.origin);
     } catch (error) {
+      // SECURITY FIX: Use window.location.origin instead of wildcard
       this.iframe.contentWindow.postMessage({
         type: 'API_RESULT',
         id,
         success: false,
         error: error.message
-      }, '*');
+      }, window.location.origin);
     }
   }
 
@@ -327,11 +332,12 @@ export class SecurePluginSandbox {
     return new Promise((resolve, reject) => {
       this.messageHandlers.set(id, { resolve, reject });
 
+      // SECURITY FIX: Use window.location.origin instead of wildcard
       this.iframe.contentWindow.postMessage({
         type: 'EXECUTE_PLUGIN',
         id,
         code
-      }, '*');
+      }, window.location.origin);
 
       // Timeout after 30 seconds
       setTimeout(() => {

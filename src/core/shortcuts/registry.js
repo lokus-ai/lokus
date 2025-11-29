@@ -145,9 +145,13 @@ export async function setShortcut(actionId, accelerator) {
   const shortcuts = { ...(cfg.shortcuts || {}), [actionId]: accelerator };
   await updateConfig({ shortcuts });
   if (isTauri) {
-    try { await emit('shortcuts:updated', { actionId, accelerator }); } catch (e) {}
+    try { await emit('shortcuts:updated', { actionId, accelerator }); } catch (e) {
+      console.error('Failed to emit shortcuts:updated event:', e);
+    }
   } else {
-    try { window.dispatchEvent(new CustomEvent('shortcuts:updated', { detail: { actionId, accelerator } })); } catch (e) {}
+    try { window.dispatchEvent(new CustomEvent('shortcuts:updated', { detail: { actionId, accelerator } })); } catch (e) {
+      console.error('Failed to dispatch shortcuts:updated event:', e);
+    }
   }
 }
 
@@ -158,9 +162,13 @@ export async function resetShortcuts() {
     await updateConfig(cfg);
   }
   if (isTauri) {
-    try { await emit('shortcuts:updated', { reset: true }); } catch (e) {}
+    try { await emit('shortcuts:updated', { reset: true }); } catch (e) {
+      console.error('Failed to emit shortcuts:updated event (reset):', e);
+    }
   } else {
-    try { window.dispatchEvent(new CustomEvent('shortcuts:updated', { detail: { reset: true } })); } catch (e) {}
+    try { window.dispatchEvent(new CustomEvent('shortcuts:updated', { detail: { reset: true } })); } catch (e) {
+      console.error('Failed to dispatch shortcuts:updated event (reset):', e);
+    }
   }
 }
 
@@ -208,11 +216,15 @@ export async function registerGlobalShortcuts() {
           if (isTauri) {
             try {
               await emit(a.event);
-            } catch (e) {}
+            } catch (e) {
+              console.error(`Failed to emit event ${a.event}:`, e);
+            }
           } else {
             try {
               window.dispatchEvent(new CustomEvent(a.event));
-            } catch (e) {}
+            } catch (e) {
+              console.error(`Failed to dispatch event ${a.event}:`, e);
+            }
           }
         }
       });

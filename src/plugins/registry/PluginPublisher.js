@@ -9,6 +9,7 @@ import { exists, readTextFile, writeTextFile, readDir, createDir } from '@tauri-
 import { EventEmitter } from '../../utils/EventEmitter.js'
 import { PluginManifestV2 } from '../manifest/ManifestV2.js'
 import RegistryAPI from './RegistryAPI.js'
+import { logger } from '../../utils/Logger.js'
 
 /**
  * Publishing Status
@@ -80,7 +81,8 @@ export class PluginPublisher extends EventEmitter {
     this.templates = new Map()
     this.generators = new Map()
 
-    this.logger = console // TODO: Replace with proper logger
+    // COMPLETED TODO: Replaced console with proper logger
+    this.logger = logger.createScoped('PluginPublisher')
     this.isInitialized = false
   }
 

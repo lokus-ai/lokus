@@ -75,22 +75,10 @@ export default function Canvas({
         
         // Load the TLDraw snapshot directly (no conversion needed!)
         const tldrawSnapshot = await canvasManager.loadCanvas(canvasPath)
-        if (import.meta.env.DEV) {
-        }
 
         // Load into store
-        if (import.meta.env.DEV) {
-        }
         loadSnapshot(store, tldrawSnapshot)
-        if (import.meta.env.DEV) {
 
-          // Check what's actually in the store after loading
-          const storeRecords = store.allRecords();
-
-          // Check specifically for shapes
-          const shapes = storeRecords.filter(r => r.typeName === 'shape');
-        }
-        
         // Mark as clean after loading
         setIsDirty(false)
         
@@ -196,11 +184,7 @@ export default function Canvas({
         }
         
         // Get current TLDraw snapshot
-        const rawSnapshot = getSnapshot(editor.store)
-        if (import.meta.env.DEV) {
-        }
-
-        // Save exactly what TLDraw gives us
+        const rawSnapshot = getSnapshot(editor.store)        // Save exactly what TLDraw gives us
         await canvasManager.saveCanvas(canvasPath, rawSnapshot)
 
         // Verify the save was successful

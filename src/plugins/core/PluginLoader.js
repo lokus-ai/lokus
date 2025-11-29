@@ -1,6 +1,8 @@
 import { join } from '@tauri-apps/api/path'
 import { exists, readTextFile } from '@tauri-apps/api/fs'
 import { validateManifest } from './PluginManifest.js'
+import { logger } from '../../utils/Logger.js'
+import { isVersionCompatible } from '../../utils/semver.js'
 
 /**
  * Plugin Loading Utilities
@@ -46,7 +48,8 @@ export class PluginSandbox {
     this.pluginId = pluginId
     this.api = api
     this.globals = new Map()
-    this.logger = console // TODO: Replace with proper logger
+    // COMPLETED TODO: Replaced console with proper logger
+    this.logger = logger.createScoped(`PluginSandbox:${pluginId}`)
   }
 
   /**
@@ -128,7 +131,8 @@ export class PluginSandbox {
 export class PluginLoader {
   constructor() {
     this.loadedModules = new Map()
-    this.logger = console // TODO: Replace with proper logger
+    // COMPLETED TODO: Replaced console with proper logger
+    this.logger = logger.createScoped('PluginLoader')
   }
 
   /**
@@ -334,11 +338,10 @@ export class PluginLoader {
 
   /**
    * Check if versions are compatible
+   * COMPLETED TODO: Implemented proper semver compatibility checking
    */
   isVersionCompatible(actualVersion, requiredVersion) {
-    // TODO: Implement proper semver compatibility checking
-    // For now, just do exact match for simplicity
-    return actualVersion === requiredVersion
+    return isVersionCompatible(actualVersion, requiredVersion);
   }
 
   /**
@@ -372,7 +375,8 @@ export class PluginLoader {
 export class PluginInstaller {
   constructor(pluginManager) {
     this.pluginManager = pluginManager
-    this.logger = console // TODO: Replace with proper logger
+    // COMPLETED TODO: Replaced console with proper logger
+    this.logger = logger.createScoped('PluginInstaller')
   }
 
   /**
@@ -435,7 +439,8 @@ export class PluginInstaller {
  */
 export class PluginDeveloper {
   constructor() {
-    this.logger = console // TODO: Replace with proper logger
+    // COMPLETED TODO: Replaced console with proper logger
+    this.logger = logger.createScoped('PluginDeveloper')
   }
 
   /**

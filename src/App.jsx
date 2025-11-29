@@ -13,6 +13,7 @@ import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/short
 import { PluginProvider } from "./hooks/usePlugins.jsx";
 import { AuthProvider } from "./core/auth/AuthContext.jsx";
 import platformService from "./services/platform/PlatformService.js";
+import { ToastProvider } from "./components/Toast.jsx";
 import markdownSyntaxConfig from "./core/markdown/syntax-config.js";
 import editorConfigCache from "./core/editor/config-cache.js";
 // Import workspace manager to expose developer utilities
@@ -159,6 +160,22 @@ function App() {
       )}
 
       <div className="app-content">
+        <ToastProvider>
+          <AuthProvider>
+            <PluginProvider>
+              <Suspense fallback={<LoadingFallback />}>
+                {isPrefsWindow ? (
+                  <Preferences />
+                ) : activePath ? (
+                  <Workspace initialPath={activePath} />
+                ) : (
+                  <Launcher />
+                )}
+              </Suspense>
+            </PluginProvider>
+          </AuthProvider>
+          <UpdateChecker />
+        </ToastProvider>
         <AuthProvider>
           <PluginProvider>
             <Suspense fallback={<LoadingFallback />}>

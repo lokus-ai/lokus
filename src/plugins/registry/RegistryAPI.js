@@ -4,6 +4,7 @@
  */
 
 import { EventEmitter } from '../../utils/EventEmitter.js'
+import { logger } from '../../utils/Logger.js'
 
 /**
  * API Response Status
@@ -68,7 +69,8 @@ export class RegistryAPI extends EventEmitter {
     this.isOnline = navigator?.onLine ?? true
     this.lastSyncTime = null
 
-    this.logger = console // TODO: Replace with proper logger
+    // COMPLETED TODO: Replaced console with proper logger
+    this.logger = logger.createScoped('RegistryAPI')
 
     // Setup network monitoring
     this.setupNetworkMonitoring()

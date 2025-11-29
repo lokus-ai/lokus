@@ -13,10 +13,6 @@ function buildWikiLinkPattern(imageEmbed = false) {
   const open = config?.open || '[['
   const close = config?.close || ']]'
   const imageMarker = markdownSyntaxConfig.get('image', 'marker') || '!'
-
-  if (import.meta.env.DEV) {
-  }
-
   const escapedOpen = escapeRegex(open)
   const escapedClose = escapeRegex(close)
   const escapedImage = escapeRegex(imageMarker)
@@ -28,9 +24,6 @@ function buildWikiLinkPattern(imageEmbed = false) {
   const pattern = imageEmbed
     ? new RegExp(`${escapedImage}${escapedOpen}([^${notClose}]+?)${escapedClose}$`)
     : new RegExp(`${escapedOpen}([^${notClose}]+?)${escapedClose}$`)
-
-  if (import.meta.env.DEV) {
-  }
 
   return pattern
 }
@@ -59,29 +52,16 @@ export const WikiLink = Node.create({
   atom: true,
   selectable: true,
 
-  onCreate() {
-    if (import.meta.env.DEV) {
-    }
-    // Listen for markdown syntax config changes and reload editor
-    this.configListener = markdownSyntaxConfig.onChange((category, key, value) => {
-      if (import.meta.env.DEV) {
-      }
-
-      // Recreate the extension by destroying and recreating the editor
-      if (this.editor) {
-        if (import.meta.env.DEV) {
-        }
-        // Trigger a full reload by emitting a custom event
+  onCreate() {    // Listen for markdown syntax config changes and reload editor
+    this.configListener = markdownSyntaxConfig.onChange((category, key, value) => {      // Recreate the extension by destroying and recreating the editor
+      if (this.editor) {        // Trigger a full reload by emitting a custom event
         window.dispatchEvent(new CustomEvent('markdown-config-changed', {
           detail: { category, key, value }
         }));
       } else {
         console.warn('[WikiLink] Editor instance not available for reload');
       }
-    });
-    if (import.meta.env.DEV) {
-    }
-  },
+    });  },
 
   onDestroy() {
     // Clean up listener
@@ -227,10 +207,7 @@ export const WikiLink = Node.create({
   },
 
   addInputRules() {
-    const currentConfig = markdownSyntaxConfig.get('link', 'wikiLink');
-    if (import.meta.env.DEV) {
-    }
-    return [
+    const currentConfig = markdownSyntaxConfig.get('link', 'wikiLink');    return [
       // ![[File^blockid]] block embed (must come BEFORE image embed)
       new InputRule({
         find: /!\[\[([^\]]+)\^([^\]]+)\]\]$/,

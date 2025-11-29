@@ -7,13 +7,14 @@
  * - Application settings and state
  */
 
-import { 
-  readConfig, 
-  writeConfig, 
-  updateConfig, 
-  getGlobalDir, 
-  getGlobalConfigPath 
+import {
+  readConfig,
+  writeConfig,
+  updateConfig,
+  getGlobalDir,
+  getGlobalConfigPath
 } from '../../core/config/store.js';
+import { logger } from '../../utils/logger.js';
 
 export class ConfigProvider {
   constructor() {
@@ -44,7 +45,7 @@ export class ConfigProvider {
       // Setup configuration change monitoring
       this.setupConfigListeners();
     } catch (error) {
-      console.warn('[ConfigProvider] Failed to initialize config monitoring:', error);
+      logger.warn('ConfigProvider', Failed to initialize config monitoring:', error);
     }
   }
 
@@ -56,7 +57,7 @@ export class ConfigProvider {
       this.globalConfig = await readConfig();
       this.notifySubscribers('config:global-loaded');
     } catch (error) {
-      console.error('[ConfigProvider] Failed to load global config:', error);
+      logger.error('ConfigProvider', Failed to load global config:', error);
       this.globalConfig = {};
     }
   }
@@ -84,10 +85,10 @@ export class ConfigProvider {
 
       this.workspaceConfigs.set(workspacePath, workspaceConfig);
       this.notifySubscribers('config:workspace-loaded', { workspacePath });
-      
+
       return workspaceConfig;
     } catch (error) {
-      console.error(`[ConfigProvider] Failed to load workspace config for ${workspacePath}:`, error);
+      logger.error('ConfigProvider', `Failed to load workspace config for ${workspacePath}:`, error);
       return null;
     }
   }
@@ -114,7 +115,7 @@ export class ConfigProvider {
         }, 5000);
       }
     } catch (error) {
-      console.warn('[ConfigProvider] Failed to setup config listeners:', error);
+      logger.warn('ConfigProvider', Failed to setup config listeners:', error);
     }
   }
 
@@ -200,7 +201,7 @@ export class ConfigProvider {
           throw new Error(`Unknown resource path: ${path}`);
       }
     } catch (error) {
-      console.error('[ConfigProvider] Error reading resource:', error);
+      logger.error('ConfigProvider', Error reading resource:', error);
       return {
         contents: [{
           type: 'text',
@@ -362,7 +363,7 @@ export class ConfigProvider {
       this.notifySubscribers('config:global-updated', updates);
       return true;
     } catch (error) {
-      console.error('[ConfigProvider] Failed to update global config:', error);
+      logger.error('ConfigProvider', Failed to update global config:', error);
       return false;
     }
   }
@@ -402,7 +403,7 @@ export class ConfigProvider {
       
       return await this.updateGlobalConfig(updates);
     } catch (error) {
-      console.error('[ConfigProvider] Failed to set config value:', error);
+      logger.error('ConfigProvider', Failed to set config value:', error);
       return false;
     }
   }
@@ -455,7 +456,7 @@ export class ConfigProvider {
       try {
         callback(event, data);
       } catch (error) {
-        console.error('[ConfigProvider] Error notifying subscriber:', error);
+        logger.error('ConfigProvider', Error notifying subscriber:', error);
       }
     }
   }

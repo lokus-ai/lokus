@@ -1,11 +1,12 @@
 /**
  * Universal Markdown Compiler
- * 
+ *
  * Detects markdown content and compiles it to rich HTML
  * Works independently of TipTap for reliable markdown processing
  */
 
 import MarkdownIt from "markdown-it"
+import { logger } from "../../utils/logger.js"
 import markdownItMark from "markdown-it-mark"
 import markdownItStrikethrough from "markdown-it-strikethrough-alt"
 import markdownItTexmath from "markdown-it-texmath"
@@ -164,7 +165,7 @@ export class MarkdownCompiler {
             const separator = '| ' + Array(columnCount).fill('---').join(' | ') + ' |';
             result.push(separator);
             hasChanges = true;
-            // console.log('🔧 [Compiler] Added missing table separator');
+            logger.debug('Compiler', 'Added missing table separator');
           }
         }
       }
@@ -187,8 +188,8 @@ export class MarkdownCompiler {
       // Debug: Check if text contains table syntax
       const hasTableSyntax = /^\|.+\|/m.test(text);
       if (hasTableSyntax) {
-        console.log('🔍 [Compiler] Table syntax detected in markdown');
-        console.log('🔍 [Compiler] markdown-it tables enabled:', this.md.options.tables);
+        logger.debug('Compiler', 'Table syntax detected in markdown');
+        logger.debug('Compiler', 'markdown-it tables enabled:', this.md.options.tables);
       }
 
       // Normalize line endings and preserve structure
@@ -224,12 +225,12 @@ export class MarkdownCompiler {
       // Debug: Check if HTML contains table
       if (hasTableSyntax) {
         const hasTableHTML = /<table/.test(html);
-        console.log('🔍 [Compiler] Table HTML generated:', hasTableHTML);
+        logger.debug('Compiler', 'Table HTML generated:', hasTableHTML);
         if (hasTableHTML) {
-          console.log('🔍 [Compiler] Table HTML preview:', html.substring(0, 300));
+          logger.debug('Compiler', 'Table HTML preview:', html.substring(0, 300));
         } else {
-          console.log('⚠️ [Compiler] Table syntax found but NO table HTML generated!');
-          console.log('⚠️ [Compiler] Raw markdown:', normalizedText.substring(0, 200));
+          logger.warn('Compiler', 'Table syntax found but NO table HTML generated!');
+          logger.warn('Compiler', 'Raw markdown:', normalizedText.substring(0, 200));
         }
       }
 

@@ -100,9 +100,70 @@ pub fn read_binary_file(path: String) -> Result<Vec<u8>, String> {
 
 #[tauri::command]
 pub fn write_file_content(path: String, content: String) -> Result<(), String> {
-    // Write the file first
-    fs::write(&path, &content).map_err(|e| e.to_string())?;
-    Ok(())
+    atomic_write_file(&path, &content)
+}
+
+// Atomic write implementation: write to temp file then rename
+fn atomic_write_file(path: &str, content: &str) -> Result<(), String> {
+    use std::io::Write;
+
+    let target_path = Path::new(path);
+
+    // Pre-write validation: check parent directory exists
+    if let Some(parent) = target_path.parent() {
+        if !parent.exists() {
+            return Err(format!("Parent directory does not exist: {}", parent.display()));
+        }
+    }
+
+    // Create backup if file exists (for rollback)
+    let backup_path = if target_path.exists() {
+        let backup = format!("{}.backup", path);
+        fs::copy(target_path, &backup).ok(); // Best effort - don't fail if backup fails
+        Some(backup)
+    } else {
+        None
+    };
+
+    // Write to temporary file first
+    let temp_path = format!("{}.tmp", path);
+    let write_result = (|| -> Result<(), std::io::Error> {
+        let mut file = fs::File::create(&temp_path)?;
+        file.write_all(content.as_bytes())?;
+        file.sync_all()?; // Ensure data is flushed to disk
+        Ok(())
+    })();
+
+    match write_result {
+        Ok(_) => {
+            // Atomic rename: this is the critical operation
+            match fs::rename(&temp_path, target_path) {
+                Ok(_) => {
+                    // Success! Clean up backup
+                    if let Some(backup) = backup_path {
+                        let _ = fs::remove_file(backup); // Best effort cleanup
+                    }
+                    Ok(())
+                }
+                Err(e) => {
+                    // Rename failed - clean up temp file and restore backup
+                    let _ = fs::remove_file(&temp_path);
+                    if let Some(backup) = backup_path {
+                        let _ = fs::rename(&backup, target_path); // Attempt rollback
+                    }
+                    Err(format!("Failed to rename temp file: {}", e))
+                }
+            }
+        }
+        Err(e) => {
+            // Write to temp failed - clean up
+            let _ = fs::remove_file(&temp_path);
+            if let Some(backup) = backup_path {
+                let _ = fs::remove_file(backup);
+            }
+            Err(format!("Failed to write to temp file: {}", e))
+        }
+    }
 }
 
 // Separate command for saving versions - only called when needed
@@ -194,8 +255,9 @@ pub fn rename_file(path: String, new_name: String) -> Result<String, String> {
 #[tauri::command]
 pub fn create_file_in_workspace(workspace_path: String, name: String) -> Result<String, String> {
     let path = Path::new(&workspace_path).join(&name);
-    fs::write(&path, "").map_err(|e| e.to_string())?;
-    Ok(path.to_string_lossy().to_string())
+    let path_str = path.to_string_lossy().to_string();
+    atomic_write_file(&path_str, "")?;
+    Ok(path_str)
 }
 
 #[tauri::command]
@@ -418,7 +480,7 @@ pub fn read_directory(path: String) -> Result<Vec<DirectoryEntry>, String> {
 #[tauri::command]
 pub fn write_file(path: String, content: String) -> Result<(), String> {
     // Alias for write_file_content for consistency with importers
-    fs::write(&path, &content).map_err(|e| e.to_string())
+    atomic_write_file(&path, &content)
 }
 
 #[tauri::command]

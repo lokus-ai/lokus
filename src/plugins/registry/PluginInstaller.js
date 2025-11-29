@@ -9,6 +9,7 @@ import { exists, createDir, removeDir, readTextFile, writeTextFile } from '@taur
 import { EventEmitter } from '../../utils/EventEmitter.js'
 import { PluginManifestV2 } from '../manifest/ManifestV2.js'
 import RegistryAPI from './RegistryAPI.js'
+import { logger } from '../../utils/Logger.js'
 
 /**
  * Installation Status
@@ -79,7 +80,8 @@ export class PluginInstaller extends EventEmitter {
     this.trustedPublishers = new Set()
     this.signatureVerifier = null // TODO: Implement signature verification
 
-    this.logger = console // TODO: Replace with proper logger
+    // COMPLETED TODO: Replaced console with proper logger
+    this.logger = logger.createScoped('PluginInstaller')
     this.isInitialized = false
   }
 

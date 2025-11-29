@@ -579,9 +579,10 @@ export class CommandsAPI extends EventEmitter {
  * Network API - Safe network access
  */
 export class NetworkAPI extends EventEmitter {
-  constructor(networkManager) {
+  constructor(networkManager, apiInstance) {
     super();
     this.networkManager = networkManager;
+    this.apiInstance = apiInstance; // Reference to main API for permission checking
   }
 
   /**
@@ -592,9 +593,9 @@ export class NetworkAPI extends EventEmitter {
       throw new Error('Network access not available');
     }
 
-    // Check permissions
+    // Check permissions - COMPLETED TODO: Use proper permission checking
     if (!this.hasPermission('network')) {
-      throw new Error('Network permission required');
+      throw new Error(`Network permission required for plugin ${this.currentPluginId}`);
     }
 
     return this.networkManager.fetch(url, {
@@ -604,8 +605,8 @@ export class NetworkAPI extends EventEmitter {
   }
 
   hasPermission(permission) {
-    // This would check the plugin's permissions
-    return true; // TODO: Implement permission checking
+    // Use the main API's permission checking
+    return this.apiInstance && this.apiInstance.hasPermission(this.currentPluginId, permission);
   }
 }
 
@@ -762,24 +763,25 @@ export class DataAPI extends EventEmitter {
 export class LokusPluginAPI extends EventEmitter {
   constructor(managers = {}) {
     super();
-    
+
     // Store references to managers
     this.managers = managers;
-    
-    // Initialize sub-APIs
+
+    // Initialize sub-APIs (pass 'this' to APIs that need permission checking)
     this.editor = new EditorAPI();
     this.ui = new UIAPI(managers.ui);
     this.filesystem = new FilesystemAPI(managers.filesystem);
     this.commands = new CommandsAPI(managers.commands);
-    this.network = new NetworkAPI(managers.network);
+    this.network = new NetworkAPI(managers.network, this);
     this.clipboard = new ClipboardAPI();
     this.notifications = new NotificationsAPI(managers.notifications);
     this.data = new DataAPI(managers.data);
-    
-    // Plugin context
+
+    // Plugin context and permissions
     this.currentPluginId = null;
     this.currentPlugin = null;
-    
+    this.pluginPermissions = new Map(); // pluginId -> Set of permissions
+
     // Bind plugin context to sub-APIs
     this.bindPluginContext();
   }
@@ -791,9 +793,53 @@ export class LokusPluginAPI extends EventEmitter {
   setPluginContext(pluginId, plugin) {
     this.currentPluginId = pluginId;
     this.currentPlugin = plugin;
-    
+
+    // Register plugin permissions from manifest
+    if (plugin && plugin.manifest && plugin.manifest.permissions) {
+      this.registerPluginPermissions(pluginId, plugin.manifest.permissions);
+    }
+
     // Set context for all sub-APIs
     this.bindPluginContext();
+  }
+
+  /**
+   * Register permissions for a plugin
+   */
+  registerPluginPermissions(pluginId, permissions) {
+    if (!Array.isArray(permissions)) {
+      permissions = [permissions];
+    }
+    this.pluginPermissions.set(pluginId, new Set(permissions));
+  }
+
+  /**
+   * Check if a plugin has a specific permission
+   * COMPLETED TODO: Implemented proper permission checking
+   */
+  hasPermission(pluginId, permission) {
+    // If no pluginId provided, use current plugin
+    const checkPluginId = pluginId || this.currentPluginId;
+
+    if (!checkPluginId) {
+      return false;
+    }
+
+    const permissions = this.pluginPermissions.get(checkPluginId);
+    if (!permissions) {
+      return false;
+    }
+
+    // Check if plugin has the specific permission or 'all' permission
+    return permissions.has(permission) || permissions.has('all');
+  }
+
+  /**
+   * Get all permissions for a plugin
+   */
+  getPluginPermissions(pluginId) {
+    const checkPluginId = pluginId || this.currentPluginId;
+    return this.pluginPermissions.get(checkPluginId) || new Set();
   }
 
   /**
