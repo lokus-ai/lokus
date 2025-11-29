@@ -17,8 +17,8 @@ import {
 const SlashCommandList = forwardRef((props, ref) => {
   const [value, setValue] = useState("");
 
-  const allItems = useMemo(() => 
-    props.items.flatMap(group => group.commands), 
+  const allItems = useMemo(() =>
+    props.items.flatMap(group => group.commands),
     [props.items]
   );
 
@@ -30,9 +30,18 @@ const SlashCommandList = forwardRef((props, ref) => {
   }, [allItems]);
 
   const selectItem = (itemTitle) => {
-    const item = allItems.find(i => i.title === itemTitle);
+    console.log('[SlashCommandList] selectItem called with:', itemTitle);
+    const item = allItems.find(i => i.title.toLowerCase() === itemTitle?.toLowerCase());
+    console.log('[SlashCommandList] Found item:', item);
     if (item) {
-      props.command(item);
+      console.log('[SlashCommandList] Executing command for item:', item.title);
+      if (typeof props.command === 'function') {
+        props.command(item);
+      } else {
+        console.error('[SlashCommandList] props.command is not a function:', props.command);
+      }
+    } else {
+      console.warn('[SlashCommandList] Item not found for title:', itemTitle);
     }
   };
 
@@ -62,7 +71,7 @@ const SlashCommandList = forwardRef((props, ref) => {
   }));
 
   return (
-    <Command 
+    <Command
       value={value}
       onValueChange={setValue}
       onKeyDown={(e) => {
@@ -73,7 +82,7 @@ const SlashCommandList = forwardRef((props, ref) => {
       }}
       className="w-80 rounded-lg border border-app-border shadow-md bg-app-panel text-app-text"
     >
-      <CommandList 
+      <CommandList
         ref={el => {
           // This ensures the selected item is always visible
           if (el) {
@@ -95,7 +104,7 @@ const SlashCommandList = forwardRef((props, ref) => {
                   value={item.title}
                   onSelect={selectItem}
                   aria-selected={value === item.title}
-                  className={`${value===item.title ? 'bg-app-accent text-app-accent-fg' : ''}`}
+                  className={`${value === item.title ? 'bg-app-accent text-app-accent-fg' : ''}`}
                 >
                   <div className="flex items-center justify-center w-7 h-7 bg-app-bg rounded-md mr-3">
                     {item.icon}

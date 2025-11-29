@@ -16,7 +16,7 @@ const TASK_STATES = {
 // Convert extended task syntax into Task List items with enhanced states
 export const SmartTask = Extension.create({
   name: 'smartTask',
-  
+
   addGlobalAttributes() {
     return [
       {
@@ -27,14 +27,14 @@ export const SmartTask = Extension.create({
             parseHTML: element => {
               const checkbox = element.querySelector('input[type="checkbox"]')
               if (!checkbox) return 'todo'
-              
+
               // Check for custom data attributes or classes
               for (const [symbol, config] of Object.entries(TASK_STATES)) {
                 if (element.classList.contains(config.class)) {
                   return config.state
                 }
               }
-              
+
               // Fallback to checked status
               return checkbox.checked ? 'completed' : 'todo'
             },
@@ -51,7 +51,7 @@ export const SmartTask = Extension.create({
       }
     ]
   },
-  
+
   addInputRules() {
     return [
       // Enhanced input rule for task states in list items: [!] text
@@ -60,20 +60,20 @@ export const SmartTask = Extension.create({
         handler: ({ chain, range, match, editor }) => {
           const symbol = match[1]
           const taskConfig = TASK_STATES[symbol]
-          
+
           if (!taskConfig || !editor?.commands?.toggleTaskList) return false
-          
+
           // Convert current list to task list
           chain().deleteRange(range).toggleTaskList().run()
-          
+
           // Set the appropriate attributes based on the symbol
           const attributes = {
             checked: taskConfig.checked,
             taskState: taskConfig.state
           }
-          
+
           editor.commands.updateAttributes('taskItem', attributes)
-          
+
           // Trigger a task state change event for potential sync with kanban
           if (editor.options?.onTaskStateChange) {
             editor.options.onTaskStateChange({
@@ -82,11 +82,11 @@ export const SmartTask = Extension.create({
               position: range.from
             })
           }
-          
+
           return true
         },
       }),
-      
+
       // Also handle pasted markdown with enhanced task states
       new InputRule({
         find: /^(\s*)-\s\[([x X/!?\->]|\s)\]\s(.+)$/,
@@ -95,73 +95,99 @@ export const SmartTask = Extension.create({
           const symbol = match[2]
           const content = match[3]
           const taskConfig = TASK_STATES[symbol]
-          
+
           if (!taskConfig || !editor?.commands?.toggleTaskList) return false
-          
+
           // Replace the entire line with a proper task item
           chain()
             .deleteRange(range)
             .toggleTaskList()
             .insertContent(content)
             .run()
-          
+
           // Set task state
           const attributes = {
             checked: taskConfig.checked,
             taskState: taskConfig.state
           }
-          
+
           editor.commands.updateAttributes('taskItem', attributes)
-          
+
           return true
         },
       })
     ]
   },
-  
+
   addCommands() {
     return {
       setTaskState: (state) => ({ commands, editor }) => {
         const taskConfig = Object.values(TASK_STATES).find(s => s.state === state)
         if (!taskConfig) return false
-        
+
         return commands.updateAttributes('taskItem', {
           checked: taskConfig.checked,
           taskState: state
         })
       },
-      
+
       toggleTaskState: () => ({ commands, editor }) => {
         const selection = editor.state.selection
-        const node = selection.$from.node()
-        
+        let node = selection.$from.node()
+        let pos = selection.$from.before()
+
+        // If we are in a paragraph inside a task item (nested: true)
+        if (node.type.name !== 'taskItem') {
+          const depth = selection.$from.depth
+          for (let i = depth; i > 0; i--) {
+            const ancestor = selection.$from.node(i)
+            if (ancestor.type.name === 'taskItem') {
+              node = ancestor
+              pos = selection.$from.before(i)
+              break
+            }
+          }
+        }
+
         if (node.type.name !== 'taskItem') return false
-        
+
         const currentState = node.attrs.taskState || 'todo'
         const currentIndex = Object.values(TASK_STATES).findIndex(s => s.state === currentState)
         const nextIndex = (currentIndex + 1) % Object.values(TASK_STATES).length
         const nextState = Object.values(TASK_STATES)[nextIndex]
-        
+
         return commands.updateAttributes('taskItem', {
           checked: nextState.checked,
           taskState: nextState.state
         })
       },
-      
+
       // Command to cycle through specific common states
       cycleTaskState: () => ({ commands, editor }) => {
         const commonStates = ['todo', 'in-progress', 'completed']
         const selection = editor.state.selection
-        const node = selection.$from.node()
-        
+        let node = selection.$from.node()
+
+        // If we are in a paragraph inside a task item (nested: true)
+        if (node.type.name !== 'taskItem') {
+          const depth = selection.$from.depth
+          for (let i = depth; i > 0; i--) {
+            const ancestor = selection.$from.node(i)
+            if (ancestor.type.name === 'taskItem') {
+              node = ancestor
+              break
+            }
+          }
+        }
+
         if (node.type.name !== 'taskItem') return false
-        
+
         const currentState = node.attrs.taskState || 'todo'
         const currentIndex = commonStates.indexOf(currentState)
         const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % commonStates.length : 0
         const nextState = commonStates[nextIndex]
         const taskConfig = Object.values(TASK_STATES).find(s => s.state === nextState)
-        
+
         return commands.updateAttributes('taskItem', {
           checked: taskConfig.checked,
           taskState: nextState
@@ -169,23 +195,35 @@ export const SmartTask = Extension.create({
       }
     }
   },
-  
+
   addKeyboardShortcuts() {
     return {
       // Ctrl/Cmd + Shift + T to cycle through task states
       'Mod-Shift-t': () => this.editor.commands.cycleTaskState(),
-      
+
       // Alt + T to toggle between todo and completed
       'Alt-t': () => {
         const selection = this.editor.state.selection
-        const node = selection.$from.node()
-        
+        let node = selection.$from.node()
+
+        // If we are in a paragraph inside a task item (nested: true)
+        if (node.type.name !== 'taskItem') {
+          const depth = selection.$from.depth
+          for (let i = depth; i > 0; i--) {
+            const ancestor = selection.$from.node(i)
+            if (ancestor.type.name === 'taskItem') {
+              node = ancestor
+              break
+            }
+          }
+        }
+
         if (node.type.name !== 'taskItem') return false
-        
+
         const currentState = node.attrs.taskState || 'todo'
         const newState = currentState === 'completed' ? 'todo' : 'completed'
         const taskConfig = Object.values(TASK_STATES).find(s => s.state === newState)
-        
+
         return this.editor.commands.updateAttributes('taskItem', {
           checked: taskConfig.checked,
           taskState: newState
@@ -193,23 +231,23 @@ export const SmartTask = Extension.create({
       }
     }
   },
-  
+
   // Add node view for custom rendering if needed
   addNodeView() {
     return {
       taskItem: ({ node, HTMLAttributes, editor }) => {
         const state = node.attrs.taskState || 'todo'
         const config = Object.values(TASK_STATES).find(s => s.state === state)
-        
+
         if (!config) return null
-        
+
         // Add custom classes and data attributes
         const attrs = {
           ...HTMLAttributes,
           'data-task-state': state,
           class: `${HTMLAttributes.class || ''} ${config.class}`.trim()
         }
-        
+
         return ['li', attrs]
       }
     }
