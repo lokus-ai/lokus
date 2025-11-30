@@ -70,7 +70,7 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
         const saved = localStorage.getItem(`editor-mode:${activeFile}`);
         return saved || 'edit';
       }
-    } catch {}
+    } catch { }
     return 'edit';
   });
 
@@ -185,7 +185,7 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
         },
       }));
     }
-    
+
     if (Subscript) {
       exts.push(Subscript.extend({
         addInputRules() {
@@ -204,7 +204,7 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
     if (Table && TableRow && TableHeader && TableCell) {
       exts.push(Table.configure({ resizable: true }), TableRow, TableHeader, TableCell);
     }
-    
+
     // Additional formatting extensions
     if (Strike) {
       exts.push(Strike.extend({
@@ -223,9 +223,9 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
     }
     if (Highlight) exts.push(Highlight.configure({ multicolor: true }));
     if (HorizontalRule) exts.push(HorizontalRule);
-    
+
     // Code blocks (basic, StarterKit includes CodeBlock extension)
-    
+
     // Math (inline + block) – local extension
     if (Array.isArray(MathExt)) exts.push(...MathExt)
     else if (MathExt) exts.push(MathExt)
@@ -277,14 +277,14 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       try {
         const { readConfig } = await import('../../core/config/store.js')
         const cfg = (await readConfig()) || {}
-        
+
         // Load markdown shortcuts
         const hs = cfg.markdownShortcuts?.headingAlt
         const invalid = ['$', '[', '!'] // avoid conflicts with math / wikilinks
         if (hs?.enabled && hs.marker && !invalid.includes(hs.marker)) {
           // exts.push(HeadingAltInput({ marker: hs.marker })) // Temporarily disabled
         }
-        
+
         // Load editor settings
         const defaultEditorSettings = {
           font: {
@@ -314,7 +314,7 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
             typewriterMode: false
           }
         };
-        
+
         const editorConfig = cfg.editor || {};
         const mergedSettings = {
           font: { ...defaultEditorSettings.font, ...editorConfig.font },
@@ -322,9 +322,9 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
           behavior: { ...defaultEditorSettings.behavior, ...editorConfig.behavior },
           appearance: { ...defaultEditorSettings.appearance, ...editorConfig.appearance }
         };
-        
+
         setEditorSettings(mergedSettings);
-        
+
       } catch (e) {
         // Use defaults if loading fails
         setEditorSettings({
@@ -334,7 +334,7 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
           appearance: { showMarkdown: false, focusMode: false, typewriterMode: false }
         });
       }
-      
+
       exts.push(Placeholder.configure({ placeholder: "Press '/' for commands..." }));
       exts.push(SlashCommand);
       setExtensions(exts);
@@ -349,7 +349,7 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       if (activeFile) {
         localStorage.setItem(`editor-mode:${activeFile}`, editorMode);
       }
-    } catch {}
+    } catch { }
   }, [editorMode]);
 
   // Keyboard shortcut for cycling modes (Cmd/Ctrl+E)
@@ -400,13 +400,15 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
 
   // Subscribe to live settings changes for real-time updates
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
-  
+
   useEffect(() => {
     const unsubscribe = liveEditorSettings.onSettingsChange((key, value, allSettings) => {
       setLiveSettings(allSettings);
     });
     return unsubscribe;
   }, []);
+
+  const tagIndexTimeoutRef = useRef(null);
 
   // Memoize callbacks for performance
   const handleEditorUpdate = useCallback(({ editor }) => {
@@ -416,19 +418,23 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     }
     onContentChange(editor.getHTML());
 
-    // Index tags for autocomplete
-    try {
-      const activeFile = globalThis.__LOKUS_ACTIVE_FILE__;
-      if (activeFile) {
-        // Import tagManager and index the content
-        import('../../core/tags/tag-manager.js').then(({ default: tagManager }) => {
-          const content = editor.getText();
-          tagManager.indexNote(activeFile, content);
-        });
+    // Index tags for autocomplete (Debounced 2s)
+    if (tagIndexTimeoutRef.current) clearTimeout(tagIndexTimeoutRef.current);
+
+    tagIndexTimeoutRef.current = setTimeout(() => {
+      try {
+        const activeFile = globalThis.__LOKUS_ACTIVE_FILE__;
+        if (activeFile) {
+          // Import tagManager and index the content
+          import('../../core/tags/tag-manager.js').then(({ default: tagManager }) => {
+            const content = editor.getText();
+            tagManager.indexNote(activeFile, content);
+          });
+        }
+      } catch (error) {
+        console.error('[Editor] Failed to index tags:', error);
       }
-    } catch (error) {
-      console.error('[Editor] Failed to index tags:', error);
-    }
+    }, 2000);
   }, [onContentChange]);
 
   const editor = useEditor({
@@ -500,7 +506,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
             // Show a user-friendly message
             try {
               // You could show a toast notification here instead
-            } catch {}
+            } catch { }
           }
 
           // Emit to workspace to open file (Tauri or DOM event)
@@ -514,7 +520,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
               try {
                 const eventName = openInNewTab ? 'lokus:open-file-new-tab' : 'lokus:open-file';
                 window.dispatchEvent(new CustomEvent(eventName, { detail: cleanHref }));  // Use clean path
-              } catch {}
+              } catch { }
             }
 
             // If block reference, also emit scroll event
@@ -531,7 +537,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
   }, [extensions, handleEditorUpdate]);
 
   useEffect(() => {
-    if (editor) onEditorReady(editor); 
+    if (editor) onEditorReady(editor);
     return () => onEditorReady(null);
   }, [editor, onEditorReady]);
 
@@ -642,13 +648,13 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
   }), [editor]);
 
   const showDebug = useMemo(() => {
-    try { const p = new URLSearchParams(window.location.search); if (p.get('dev') === '1') return true; } catch {}
+    try { const p = new URLSearchParams(window.location.search); if (p.get('dev') === '1') return true; } catch { }
     try { return !!import.meta?.env?.DEV; } catch { return false; }
   }, []);
 
   async function waitForCommand(cmd, { interval = 100, timeout = 5000 } = {}) {
     const start = Date.now();
-    for (;;) {
+    for (; ;) {
       if (editor?.commands?.[cmd]) return true;
       if (Date.now() - start >= timeout) return false;
       await new Promise(r => setTimeout(r, interval));
@@ -875,7 +881,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     );
   }
 
-  
+
   // Edit and Live Preview modes - show TipTap editor
   // In live mode, we keep editor editable but could add visual hints
   return (
@@ -892,10 +898,10 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         canUndo={editor?.can().undo()}
         canRedo={editor?.can().redo()}
       >
-          <EditorContent
-            editor={editor}
-            className={editorMode === 'live' ? 'live-preview-mode' : ''}
-          />
+        <EditorContent
+          editor={editor}
+          className={editorMode === 'live' ? 'live-preview-mode' : ''}
+        />
       </EditorContextMenu>
 
       {/* WikiLink Modal */}

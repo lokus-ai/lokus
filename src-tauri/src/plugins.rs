@@ -347,7 +347,12 @@ async fn install_plugin_from_zip(zip_path: &Path, plugins_dir: &Path) -> Result<
         let mut file = archive.by_index(i)
             .map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
         
-        let outpath = temp_dir.path().join(file.name());
+            let outpath = temp_dir.path().join(file.name());
+        
+        // Prevent Zip Slip vulnerability
+        if !outpath.starts_with(temp_dir.path()) {
+            return Err(format!("Invalid file path in ZIP: {}", file.name()));
+        }
         
         if file.name().ends_with('/') {
             fs::create_dir_all(&outpath)
