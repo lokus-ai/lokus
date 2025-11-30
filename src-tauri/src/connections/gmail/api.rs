@@ -111,7 +111,7 @@ impl GmailApi {
             if let Some(id) = message["id"].as_str() {
                 match self.get_email_by_id(id).await {
                     Ok(email) => email_messages.push(email),
-                    Err(e) => {
+                    Err(_e) => {
                         continue;
                     }
                 }
@@ -167,7 +167,7 @@ impl GmailApi {
             if let Some(id) = message["id"].as_str() {
                 match self.get_email_by_id(id).await {
                     Ok(email) => email_messages.push(email),
-                    Err(e) => {
+                    Err(_e) => {
                         continue;
                     }
                 }
@@ -208,7 +208,7 @@ impl GmailApi {
                 
                 // Add to offline queue for retry
                 let operation_data = serde_json::to_value(&composer)?;
-                let queue_id = self.queue.add_operation(OperationType::SendEmail, operation_data)?;
+                let _queue_id = self.queue.add_operation(OperationType::SendEmail, operation_data)?;
                 
                 Err(e)
             }

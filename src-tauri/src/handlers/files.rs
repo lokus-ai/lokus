@@ -504,7 +504,7 @@ pub async fn read_all_files(paths: Vec<String>) -> Result<std::collections::Hash
         async move {
             match fs::read_to_string(&path).await {
                 Ok(content) => Some((path_clone, content)),
-                Err(e) => {
+                Err(_e) => {
                     None
                 }
             }

@@ -20,7 +20,8 @@ export async function getAppVersion() {
     return version;
   } catch (error) {
     // Fallback to package.json version in development
-    if (import.meta.env.DEV) {
+    const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
+    if (isDev) {
       return '1.3.5-dev';
     }
     return '1.3.5';
@@ -43,23 +44,28 @@ export async function getAppInfo() {
       getTauriVersion()
     ]);
 
+    const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
+    const mode = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.MODE : process.env.NODE_ENV || 'production';
+
     cachedAppInfo = {
       name,
       version,
       tauriVersion,
-      environment: import.meta.env.MODE,
-      isDev: import.meta.env.DEV
+      environment: mode,
+      isDev: isDev
     };
 
     return cachedAppInfo;
   } catch (error) {
     // Fallback information
+    const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
+    const mode = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.MODE : process.env.NODE_ENV || 'production';
     return {
       name: 'Lokus',
       version: '1.3.5',
       tauriVersion: 'unknown',
-      environment: import.meta.env.MODE || 'production',
-      isDev: import.meta.env.DEV || false
+      environment: mode,
+      isDev: isDev
     };
   }
 }

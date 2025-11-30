@@ -109,10 +109,16 @@ export default function AIAssistant() {
               </span>
             </div>
 
-            {/* Error Message */}
+            {/* Error/Success Message */}
             {errorMessage && (
-              <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-                <p className="text-sm text-red-600 dark:text-red-400">{errorMessage}</p>
+              <div className={`mt-4 p-3 border rounded-md ${errorMessage.includes('successfully')
+                  ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                  : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                }`}>
+                <p className={`text-sm ${errorMessage.includes('successfully')
+                    ? 'text-green-600 dark:text-green-400'
+                    : 'text-red-600 dark:text-red-400'
+                  }`}>{errorMessage}</p>
               </div>
             )}
 
@@ -130,13 +136,36 @@ export default function AIAssistant() {
               )}
 
               {isConfigured && (
-                <button
-                  onClick={checkSetupStatus}
-                  className="px-4 py-2 bg-app-panel border border-app-border text-app-text rounded-md hover:bg-app-bg transition-colors focus:outline-none focus:ring-2 focus:ring-app-border flex items-center space-x-2"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  <span>Refresh Status</span>
-                </button>
+                <>
+                  <button
+                    onClick={checkSetupStatus}
+                    className="px-4 py-2 bg-app-panel border border-app-border text-app-text rounded-md hover:bg-app-bg transition-colors focus:outline-none focus:ring-2 focus:ring-app-border flex items-center space-x-2"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Refresh Status</span>
+                  </button>
+
+                  <button
+                    onClick={async () => {
+                      try {
+                        setSetupState('setting-up');
+                        setErrorMessage('');
+                        const result = await invoke('restart_mcp_server');
+                        setSetupState('success');
+                        setErrorMessage(result);
+                      } catch (error) {
+                        console.error('Restart failed:', error);
+                        setErrorMessage(error.toString());
+                        setSetupState('error');
+                      }
+                    }}
+                    className="px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 flex items-center space-x-2"
+                    disabled={setupState === 'setting-up'}
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Restart MCP Server</span>
+                  </button>
+                </>
               )}
 
               <a

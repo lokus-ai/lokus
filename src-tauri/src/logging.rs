@@ -13,6 +13,7 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 pub struct LoggingConfig {
     pub log_dir: PathBuf,
     pub max_days_retained: u64,
+    #[allow(dead_code)]
     pub sentry_enabled: bool,
     pub environment: String,
 }

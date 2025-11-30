@@ -315,3 +315,25 @@ pub fn check_mcp_status(app: tauri::AppHandle) -> Result<bool, String> {
     let setup = MCPSetup::new(app);
     Ok(setup.is_setup_complete())
 }
+
+/// Tauri command to manually restart MCP server
+#[tauri::command]
+pub async fn restart_mcp_server(app: tauri::AppHandle) -> Result<String, String> {
+    // Re-extract and reconfigure the MCP server
+    let setup = MCPSetup::new(app);
+    
+    // Force re-extraction by removing old files
+    let home = dirs::home_dir().ok_or("Could not find home directory")?;
+    let mcp_dir = home.join(".lokus").join("mcp-server");
+    
+    // Remove old MCP server files
+    if mcp_dir.exists() {
+        fs::remove_dir_all(&mcp_dir)
+            .map_err(|e| format!("Failed to remove old MCP server: {}", e))?;
+    }
+    
+    // Run setup again to extract fresh files
+    setup.setup().await?;
+    
+    Ok("MCP server restarted successfully! Please restart Claude Desktop to reconnect.".to_string())
+}

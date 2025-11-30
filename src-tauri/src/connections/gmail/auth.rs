@@ -173,7 +173,7 @@ impl GmailAuth {
             .await?;
 
         if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_default();
+            let _error_text = response.text().await.unwrap_or_default();
             
             // If refresh fails, delete stored token
             let _ = GmailStorage::delete_token();

@@ -367,7 +367,7 @@ Images are resolved relative to:
 
 ✅ **Do:**
 - Use \`![[image.png]]\` for local workspace images
-- Place images in descriptive folders: \`assets/`, \`images/`, etc.
+- Place images in descriptive folders: \`assets/\`, \`images/\`, etc.
 - Use descriptive filenames: \`diagram-architecture.png\`
 - Provide alt text for accessibility
 
@@ -900,9 +900,9 @@ Use colons to align columns:
 | Text         | Text           | Text          |
 \`\`\`
 
-- `:---` Left aligned
-- `:---:` Center aligned
-- `---:` Right aligned
+- \`:---\` Left aligned
+- \`:---:\` Center aligned
+- \`---:\` Right aligned
 
 ## Formatting in Cells
 

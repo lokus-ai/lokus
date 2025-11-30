@@ -186,7 +186,7 @@ pub async fn search_in_files(
                     total_results += 1;
                 }
             }
-            Err(e) => {
+            Err(_e) => {
                 // Continue with other files instead of failing completely
             }
         }

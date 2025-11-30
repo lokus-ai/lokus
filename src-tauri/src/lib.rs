@@ -548,6 +548,7 @@ pub fn run() {
       connections::gmail_clear_queue,
       mcp_setup::setup_mcp_integration,
       mcp_setup::check_mcp_status,
+      mcp_setup::restart_mcp_server,
       api_server::api_set_workspace,
       api_server::api_clear_workspace,
       api_server::api_get_current_workspace

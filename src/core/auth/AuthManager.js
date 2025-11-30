@@ -8,7 +8,8 @@ class AuthManager {
     this.user = null;
     this.isAuthenticated = false;
     // Always use production backend (lokusmd.com)
-    this.authBaseUrl = import.meta.env.VITE_AUTH_BASE_URL || 'https://lokusmd.com';
+    const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : process.env;
+    this.authBaseUrl = env.VITE_AUTH_BASE_URL || 'https://lokusmd.com';
 
     // Throttling for auth checks to prevent excessive calls
     this.checkInProgress = false;
@@ -25,7 +26,7 @@ class AuthManager {
   async initialize() {
     // Check if user is already authenticated
     await this.checkAuthStatus();
-    
+
     // Listen for deep links using the plugin
     try {
       await onOpenUrl((urls) => {
@@ -92,12 +93,12 @@ class AuthManager {
     try {
       const urlObj = new URL(url);
       const params = {};
-      
+
       // Extract query parameters
       for (const [key, value] of urlObj.searchParams) {
         params[key] = value;
       }
-      
+
       this.handleAuthCallback(params);
     } catch (error) {
       console.error('Failed to parse deep link URL:', error);
@@ -107,7 +108,7 @@ class AuthManager {
   async handleAuthCallback(params) {
     try {
       const { code, state, error } = params;
-      
+
       if (error) {
         throw new Error(`OAuth error: ${error}`);
       }
@@ -118,11 +119,11 @@ class AuthManager {
 
       // Handle OAuth callback with PKCE
       await invoke('handle_oauth_callback', { code, state });
-      
+
       // Update auth state
       this.isAuthenticated = true;
       await this.checkAuthStatus(); // Refresh user profile
-      
+
     } catch (error) {
       console.error('Auth callback failed:', error);
       this.notifyListeners();
@@ -281,7 +282,7 @@ class AuthManager {
   // Event system for auth state changes
   onAuthStateChange(callback) {
     this.listeners.add(callback);
-    
+
     // Return unsubscribe function
     return () => {
       this.listeners.delete(callback);

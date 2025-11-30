@@ -75,7 +75,6 @@
       "readText": true
     },
     "shell": {
-      "all": false,
       "open": "^https?://.*"
     }
   }

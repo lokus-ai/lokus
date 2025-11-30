@@ -26,29 +26,29 @@ export class CanvasManager {
       if (!isValidFilePath(workspacePath)) {
         throw new Error('Invalid workspace path');
       }
-      
+
       const sanitizedName = sanitizeUserInput(name);
       if (!sanitizedName) {
         throw new Error('Invalid canvas name');
       }
-      
+
       const fileName = ensureExtension(sanitizedName, '.canvas');
       const canvasPath = joinPath(workspacePath, fileName);
-      
+
       // Validate final path
       if (!isValidFilePath(canvasPath)) {
         throw new Error('Invalid canvas path');
       }
-      
+
       // Create empty canvas with JSON Canvas format
       const emptyCanvas = this.createEmptyCanvasData();
       const content = JSON.stringify(emptyCanvas, null, 2);
-      
+
       await invoke('write_file_content', {
         path: canvasPath,
         content
       });
-      
+
       return canvasPath;
     } catch (error) {
       throw error;
@@ -65,10 +65,10 @@ export class CanvasManager {
     if (this.loadQueue.has(canvasPath)) {
       return this.loadQueue.get(canvasPath);
     }
-    
+
     const loadPromise = this._loadCanvasInternal(canvasPath);
     this.loadQueue.set(canvasPath, loadPromise);
-    
+
     try {
       const result = await loadPromise;
       return result;
@@ -76,7 +76,7 @@ export class CanvasManager {
       this.loadQueue.delete(canvasPath);
     }
   }
-  
+
   /**
    * Internal load implementation
    * @private
@@ -85,7 +85,8 @@ export class CanvasManager {
     try {
       // Validate file path
       if (!isValidFilePath(canvasPath)) {
-        if (import.meta.env.DEV) {
+        const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
+        if (isDev) {
           console.error(`[Canvas LOAD] Invalid file path: ${canvasPath}`);
         }
         throw new Error('Invalid canvas path');
@@ -99,11 +100,12 @@ export class CanvasManager {
       // ALWAYS clear cache before loading to ensure fresh data after saves
       this.canvasCache.delete(canvasPath);
 
-      const content = await invoke('read_file_content', { path: canvasPath });      let tldrawSnapshot;
+      const content = await invoke('read_file_content', { path: canvasPath }); let tldrawSnapshot;
       try {
         tldrawSnapshot = JSON.parse(content);        // If snapshot is missing schema, add it (for backwards compatibility)
         if (!tldrawSnapshot.schema) {
-          if (import.meta.env.DEV) {
+          const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
+          if (isDev) {
             console.warn(`[Canvas LOAD] Missing schema, adding default schema`);
           }
           tldrawSnapshot.schema = this.createEmptyTldrawSnapshot().schema;
@@ -165,17 +167,17 @@ export class CanvasManager {
     if (this.saveQueue.has(canvasPath)) {
       await this.saveQueue.get(canvasPath);
     }
-    
+
     const savePromise = this._saveCanvasInternal(canvasPath, canvasData);
     this.saveQueue.set(canvasPath, savePromise);
-    
+
     try {
       await savePromise;
     } finally {
       this.saveQueue.delete(canvasPath);
     }
   }
-  
+
   /**
    * Internal save implementation
    * @private
@@ -184,7 +186,8 @@ export class CanvasManager {
     try {
       // Validate file path
       if (!isValidFilePath(canvasPath)) {
-        if (import.meta.env.DEV) {
+        const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
+        if (isDev) {
           console.error(`[Canvas SAVE] Invalid file path: ${canvasPath}`);
         }
         throw new Error('Invalid canvas path');
@@ -226,7 +229,7 @@ export class CanvasManager {
       // JSON Canvas format specification
       nodes: [],
       edges: [],
-      
+
       // Canvas metadata
       metadata: {
         version: '1.0.0',
@@ -392,21 +395,21 @@ export class CanvasManager {
           type: 'text',
           text: shape.props?.text || ''
         };
-      
+
       case 'note':
         return {
           ...baseNode,
           type: 'text',
           text: shape.props?.text || ''
         };
-      
+
       case 'geo':
         return {
           ...baseNode,
           type: 'text',
           text: shape.props?.text || ''
         };
-      
+
       default:
         return {
           ...baseNode,
@@ -458,7 +461,7 @@ export class CanvasManager {
       this.canvasCache.clear();
     }
   }
-  
+
   /**
    * Get current queue status for debugging
    * @returns {Object} - Queue status information
@@ -470,7 +473,7 @@ export class CanvasManager {
       cachedFiles: Array.from(this.canvasCache.keys())
     };
   }
-  
+
   /**
    * Wait for all pending operations to complete
    * @returns {Promise<void>}
@@ -480,7 +483,7 @@ export class CanvasManager {
       ...Array.from(this.saveQueue.values()),
       ...Array.from(this.loadQueue.values())
     ];
-    
+
     if (allPromises.length > 0) {
       await Promise.all(allPromises);
     }

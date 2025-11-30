@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "lokus": {
+      "transport": "http",
+      "url": "http://localhost:3456/mcp"
+    }
+  }
+}

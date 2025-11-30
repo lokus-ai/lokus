@@ -176,20 +176,6 @@ function App() {
           </AuthProvider>
           <UpdateChecker />
         </ToastProvider>
-        <AuthProvider>
-          <PluginProvider>
-            <Suspense fallback={<LoadingFallback />}>
-              {isPrefsWindow ? (
-                <Preferences />
-              ) : activePath ? (
-                <Workspace initialPath={activePath} />
-              ) : (
-                <Launcher />
-              )}
-            </Suspense>
-          </PluginProvider>
-        </AuthProvider>
-        <UpdateChecker />
         <RemoteAnnouncement />
         <Toaster />
       </div>

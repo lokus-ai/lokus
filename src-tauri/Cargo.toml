@@ -5,6 +5,9 @@ description = "Lokus - Modern Knowledge Management and Writing Platform"
 authors = ["you"]
 edition = "2021"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]

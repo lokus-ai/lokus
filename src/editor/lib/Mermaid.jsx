@@ -34,7 +34,7 @@ const getThemeColors = () => {
 const MermaidComponent = ({ node, updateAttributes }) => {
   const { code = "" } = node.attrs;  // Start in edit mode if there's no code or only whitespace
   const [isEditing, setIsEditing] = useState(() => {
-    const hasCode = code && code.trim().length > 0;    return !hasCode;
+    const hasCode = code && code.trim().length > 0; return !hasCode;
   });
   const [localCode, setLocalCode] = useState(code);
   const [themeVersion, setThemeVersion] = useState(0);
@@ -42,7 +42,7 @@ const MermaidComponent = ({ node, updateAttributes }) => {
 
   // Fullscreen viewer state
   const [isViewerOpen, setIsViewerOpen] = useState(false);
-  const [svgContent, setSvgContent] = useState(null);  const containerRef = useRef(null);
+  const [svgContent, setSvgContent] = useState(null); const containerRef = useRef(null);
   const diagramIdRef = useRef(`m-${Math.random().toString(36).substring(2, 9)}`);
   const isMounted = useRef(true);
 
@@ -63,7 +63,8 @@ const MermaidComponent = ({ node, updateAttributes }) => {
 
   // Sync localCode when node code changes
   useEffect(() => {
-    if (code !== localCode) {      setLocalCode(code);
+    if (code !== localCode) {
+      setLocalCode(code);
     }
   }, [code]);
 
@@ -83,8 +84,10 @@ const MermaidComponent = ({ node, updateAttributes }) => {
   }, []);
 
   // Initialize and render Mermaid diagram
-  useEffect(() => {    if (!localCode.trim()) {      return;
-    }    const renderDiagram = async () => {
+  useEffect(() => {
+    if (!localCode.trim()) {
+      return;
+    } const renderDiagram = async () => {
       try {        // Get dynamic theme colors
         const themeColors = getThemeColors();
         const isDark = document.documentElement.classList.contains("dark");        // Initialize Mermaid with dynamic theme
@@ -94,33 +97,37 @@ const MermaidComponent = ({ node, updateAttributes }) => {
           securityLevel: "strict",
           themeVariables: themeColors,
         });        // Render diagram
-        const { svg } = await mermaid.render(diagramIdRef.current, localCode);        if (containerRef.current) {
-          containerRef.current.innerHTML = svg;          const dimensions = {
+        const { svg } = await mermaid.render(diagramIdRef.current, localCode); if (containerRef.current) {
+          containerRef.current.innerHTML = svg; const dimensions = {
             width: containerRef.current.offsetWidth,
             height: containerRef.current.offsetHeight,
             clientHeight: containerRef.current.clientHeight,
             scrollHeight: containerRef.current.scrollHeight
           };          // If container has no dimensions, retry after layout
-          if (dimensions.width === 0 || dimensions.height === 0) {            setTimeout(() => {
+          if (dimensions.width === 0 || dimensions.height === 0) {
+            setTimeout(() => {
               if (containerRef.current) {
-                containerRef.current.innerHTML = svg;              }
-          };
-          if (import.meta.env.DEV) {
+                containerRef.current.innerHTML = svg;
+              }
+            }, 100);
+          }
+          const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
+          if (isDev) {
           }
 
           // If container has no dimensions, retry after layout
           if (dimensions.width === 0 || dimensions.height === 0) {
-            if (import.meta.env.DEV) {
+            if (isDev) {
             }
             setTimeout(() => {
               if (isMounted.current && containerRef.current) {
                 containerRef.current.innerHTML = svg;
-                if (import.meta.env.DEV) {
+                if (isDev) {
                 }
               }
             }, 100);
           }
-        } else {        }
+        } else { }
       } catch (e) {
         logger.error('MermaidComponent', 'Mermaid render error:', e);
         if (containerRef.current) {
@@ -160,13 +167,14 @@ const MermaidComponent = ({ node, updateAttributes }) => {
     setIsEditing(true);
   };
 
-  const handleBlur = () => {    updateAttributes({ code: localCode });
+  const handleBlur = () => {
+    updateAttributes({ code: localCode });
     setIsEditing(false);
   };
 
   const handleKeyDown = (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-      e.preventDefault();      updateAttributes({ code: localCode });
+      e.preventDefault(); updateAttributes({ code: localCode });
       setIsEditing(false);
     }
   };
