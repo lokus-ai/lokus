@@ -25,5 +25,13 @@
 	<!-- Allow outgoing network connections for auto-updater -->
 	<key>com.apple.security.network.server</key>
 	<false/>
+	
+	<!-- Required for dynamic library loading -->
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+
+    <!-- Full disk access (if needed for workspace) -->
+    <key>com.apple.security.files.downloads.read-write</key>
+    <true/>
 </dict>
 </plist>

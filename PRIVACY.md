@@ -1,138 +1,90 @@
 # Privacy Policy for Lokus
 
-**Last Updated: November 21, 2025**
+**Last Updated**: November 29, 2025
 
-## Introduction
+## Overview
 
-Lokus ("we", "our", or "the app") is committed to protecting your privacy. This Privacy Policy explains how we handle your information when you use our note-taking application.
+Lokus is committed to protecting your privacy. This privacy policy explains how Lokus handles your data.
 
 ## Data Collection
 
-### Local-Only Data Storage
+**Lokus does NOT collect, store, or transmit any personal data to external servers.**
 
-Lokus is designed with privacy as a core principle. **All your notes, files, and personal data are stored locally on your device.** We do not:
+- All your notes, files, and data remain **100% local** on your device
+- No telemetry or analytics
+- No tracking or usage statistics
+- No advertisements
 
-- Upload your notes to any cloud servers
-- Transmit your personal data to third parties
-- Track your usage patterns
-- Collect analytics or telemetry data
+## Local Storage
 
-### Data We Do Not Collect
+Lokus stores all data locally in your workspace folder:
+- macOS: `~/Desktop/My Knowledge Base/` (or your chosen location)
+- Files are stored as plain markdown (.md) files
+- You have full control and ownership of your data
 
-- Personal identification information (name, email, etc.)
-- Note contents or file metadata
-- Usage statistics or analytics
-- Location data
-- Device information beyond what's necessary for the app to function
+## Google OAuth Integration (Optional)
 
-### Optional OAuth Authentication
+If you choose to use the Gmail integration feature:
 
-If you choose to use OAuth authentication features (Google, GitHub, etc.):
+**What data is accessed:**
+- Read access to your Gmail messages
+- Write access to create notes from emails
 
-- Authentication tokens are stored locally on your device
-- We use industry-standard OAuth 2.0 protocols
-- Authentication occurs directly between your device and the OAuth provider
-- We do not store or have access to your OAuth credentials
-- You can revoke OAuth access at any time through your provider's account settings
+**How we handle this data:**
+- OAuth tokens are stored **locally** in your system keychain (macOS Keychain)
+- Tokens are **encrypted** by your operating system
+- Lokus does **NOT** upload or share your Gmail data with any third parties
+- You can revoke access anytime from your Google Account settings
 
-### Auto-Update Feature
+## File System Permissions
 
-Lokus includes an auto-update mechanism that:
+Lokus requires file system access to:
+- Read and write markdown files in your workspace
+- Save attachments and images
+- Create backups (if enabled)
 
-- Checks GitHub releases for new versions
-- Downloads update files directly from GitHub
-- Does not transmit any personal data during update checks
-- Only sends standard HTTP request headers (user agent, OS version)
+All file operations are local to your machine.
 
-## Data Storage and Security
+## Updates
 
-### Local Storage
+Lokus includes an auto-update feature that:
+- Checks for new versions from GitHub releases
+- Downloads updates only when available
+- Does **NOT** send any usage data during update checks
 
-- All data is stored in your local file system at the location you specify
-- You maintain complete control over your data
-- You can back up your data using your preferred backup solution
-- Deleting the app does not automatically delete your notes (they remain in your file system)
+## Cookies and Tracking
 
-### Security Measures
+The Lokus desktop application does **NOT** use cookies or tracking technologies.
 
-- No cloud transmission means no risk of data breaches in transit
-- Your data security depends on your device's security measures
-- We recommend using full-disk encryption on your device
-- Regular backups to secure locations are your responsibility
+The Lokus website (lokusmd.com) may use:
+- Essential cookies for site functionality
+- Analytics cookies (with your consent) to improve the website
 
 ## Third-Party Services
 
-### OAuth Providers (Optional)
+Lokus integrates with:
+- **Google Gmail** (optional, user-initiated, OAuth)
+- **GitHub** (for updates, open-source repository)
 
-If you use OAuth authentication, you interact directly with third-party providers (Google, GitHub, etc.). Their privacy policies apply to data they collect:
+These services have their own privacy policies.
 
-- Google Privacy Policy: https://policies.google.com/privacy
-- GitHub Privacy Policy: https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement
+## GDPR Compliance
 
-### GitHub Releases
+For EU users:
+- You have the right to access your data (it's in your workspace folder)
+- You have the right to delete your data (delete the workspace folder)
+- No data portability issues (all files are standard markdown)
 
-The auto-updater checks GitHub's public API for new releases. GitHub's privacy policy applies:
-- https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement
+## Changes to Privacy Policy
 
-## Your Rights
+We may update this policy occasionally. Changes will be posted at:
+https://lokusmd.com/privacy
 
-Since all data is stored locally on your device, you have complete control:
+## Contact
 
-- **Access**: You can access all your data at any time
-- **Modification**: You can edit or modify your notes freely
-- **Deletion**: You can delete any data by deleting files from your file system
-- **Export**: All notes are stored as standard Markdown files, easily exportable
-- **Portability**: Your data is stored in open formats (Markdown, JSON)
+Privacy questions: privacy@lokusmd.com
 
-## Children's Privacy
+## Open Source
 
-Lokus does not knowingly collect any information from children. Since we don't collect user data, the app can be used by anyone, but parental supervision is recommended for minors.
-
-## Changes to This Privacy Policy
-
-We may update this Privacy Policy from time to time. We will notify you of any changes by:
-
-- Posting the new Privacy Policy in the app repository
-- Updating the "Last Updated" date
-- Including a notice in release notes if changes are significant
-
-## Open Source Transparency
-
-Lokus is open-source software. You can review our code to verify our privacy practices:
-- GitHub Repository: https://github.com/lokus-ai/lokus
-- Our code is auditable by anyone
-- We welcome security reviews and privacy audits
-
-## Contact Us
-
-If you have questions about this Privacy Policy or our privacy practices:
-
-- Open an issue on GitHub: https://github.com/lokus-ai/lokus/issues
-- Email: support@lokusmd.com
-- Website: https://lokusmd.com
-
-## Compliance
-
-This privacy policy is designed to comply with:
-
-- General Data Protection Regulation (GDPR)
-- California Consumer Privacy Act (CCPA)
-- Other applicable privacy laws
-
-Since we don't collect or process personal data on servers, most data protection regulations' requirements are naturally satisfied by our local-only architecture.
-
-## Data Breach Notification
-
-In the unlikely event of a security vulnerability that could affect your data:
-
-- We will disclose it immediately through GitHub security advisories
-- We will provide clear instructions on how to protect your data
-- We will release a patch as quickly as possible
-
-## Your Consent
-
-By using Lokus, you consent to this Privacy Policy. If you do not agree with this policy, please do not use the app.
-
----
-
-**Lokus is committed to your privacy. Your notes are yours, and yours alone.**
+Lokus is open-source (MIT License). You can verify our privacy claims by reviewing the source code:
+https://github.com/lokus-ai/lokus

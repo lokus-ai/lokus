@@ -21,7 +21,6 @@
         "decorations": true,
         "transparent": false,
         "titleBarStyle": "Overlay",
-        "fileDropEnabled": true,
         "alwaysOnTop": false,
         "skipTaskbar": false
       }
@@ -45,7 +44,14 @@
     "resources": [
       "../src/themes/",
       "mcp-bundle/"
-    ]
+    ],
+    "macOS": {
+      "entitlements": "entitlements.plist",
+      "hardenedRuntime": true,
+      "minimumSystemVersion": "10.13",
+      "signingIdentity": null,
+      "providerShortName": null
+    }
   },
   "plugins": {
     "fs": {
@@ -66,7 +72,9 @@
     "deepLink": {
       "mobile": [],
       "desktop": {
-        "schemes": ["lokus"]
+        "schemes": [
+          "lokus"
+        ]
       }
     },
     "updater": {

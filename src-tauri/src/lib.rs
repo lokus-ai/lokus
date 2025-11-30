@@ -147,6 +147,37 @@ fn validate_workspace_path(app: tauri::AppHandle, path: String) -> bool {
     validate_path_internal(&path)
 }
 
+fn restore_workspace_access(app: &tauri::AppHandle) -> Option<String> {
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(store) = StoreBuilder::new(app, PathBuf::from(".settings.dat")).build() {
+            let _ = store.reload();
+            if let Some(bookmark_value) = store.get("last_workspace_bookmark") {
+                if let Ok(bookmark_data) = serde_json::from_value::<Vec<u8>>(bookmark_value.clone()) {
+                    match macos::bookmarks::resolve_bookmark(&bookmark_data) {
+                        Ok(resolved_path) => {
+                            // Successfully got access via bookmark
+                            // IMPORTANT: We DO NOT call stop_accessing here.
+                            // We need to keep the access open for the duration of the app session.
+                            if validate_path_internal(&resolved_path) {
+                                tracing::info!("Restored security-scoped access to: {}", resolved_path);
+                                return Some(resolved_path);
+                            } else {
+                                // Path invalid, cleanup
+                                macos::bookmarks::stop_accessing(&resolved_path);
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to resolve bookmark: {}", e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 #[tauri::command]
 fn get_validated_workspace_path(app: tauri::AppHandle) -> Option<String> {
     let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
@@ -653,11 +684,19 @@ pub fn run() {
         }
       } else {
         // Production mode - use the validation function to check for valid workspace
-        if let Some(valid_path) = get_validated_workspace_path(app.handle().clone()) {
+        // Try to restore access via bookmark first (macOS)
+        let mut valid_path = restore_workspace_access(&app.handle());
+
+        // If no bookmark restored, try standard validation (non-macOS or fallback)
+        if valid_path.is_none() {
+             valid_path = get_validated_workspace_path(app.handle().clone());
+        }
+
+        if let Some(path) = valid_path {
           if let Some(main_window) = app.get_webview_window("main") {
             let _ = main_window.hide();
           }
-          let _ = open_workspace_window(app_handle, valid_path);
+          let _ = open_workspace_window(app_handle, path);
         } else {
           // No valid workspace found, show the launcher
           if let Some(main_window) = app.get_webview_window("main") {

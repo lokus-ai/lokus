@@ -69,64 +69,29 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'Lokus ${{ github.ref_name }}'
           releaseBody: |
-            🚀 **Lokus v1.3.3** - Critical Fixes + UI Polish
-
-            ## 🐛 Critical Fixes
-
-            ### Windows Startup Crash FIXED
-            This release addresses the issue where **v1.3.1 would flash briefly in the taskbar then immediately close** on Windows systems.
-
-            **Crash Fixes:**
-            - Fixed WebView2 window cleanup panic causing immediate crashes
-            - Replaced all `.unwrap()` calls with proper error handling
-            - Added panic hooks for non-critical WebView2 cleanup errors
-            - Improved platform initialization error handling
-
-            ### Theme & UI Improvements
-            **NEW: Native Titlebar Theme Sync** 🎨
-            - macOS traffic lights now sync with app theme (dark/light)
-            - Windows titlebar background matches app theme color
-            - Seamless visual experience across light and dark modes
-
-            **Bug Fixes:**
-            - Fixed memory leak in system theme listener
-            - Fixed duplicate initialization on app startup (performance improvement)
-            - Added null checks to prevent theme-related crashes
-            - Improved hex color validation in theme system
-
-            ## 🔧 Technical Improvements
-            - Fixed hardcoded `.env` path resolution for better cross-platform support
-            - Changed OAuth server port from 8080 to 9080 to avoid conflicts
-            - OAuth port now configurable via `OAUTH_PORT` environment variable
-            - Better logging and error messages for debugging
-            - More robust window management with graceful error handling
-            - Added cleanup functions for event listeners (prevents memory leaks)
-
-            ## 📝 What Changed Since v1.3.1
-            v1.3.1 had critical Windows crashes and minor UI glitches. This release includes all fixes plus professional polish for a production-ready experience.
-
+            🚀 **Lokus ${{ github.ref_name }}**
+            
+            See [CHANGELOG.md](https://github.com/lokus-ai/lokus/blob/main/CHANGELOG.md) for full details.
+            
             ---
-
+            
             ## 📦 Installation
-
+            
             **🍎 macOS**
             - Download `Lokus_x64.app.tar.gz` or `.dmg`
             - Apple Silicon: Universal binary included
-            - **NEW: Traffic lights sync with theme!**
-
+            
             **🪟 Windows**
             - Download `.msi` for installer
             - Or `.exe` for portable version
-            - **This version fixes the immediate crash issue!**
-            - **NEW: Titlebar matches app theme!**
-
+            
             **🐧 Linux**
             - Ubuntu/Debian: `.deb`
             - Fedora/RHEL: `.rpm`
             - Universal: `.AppImage`
-
+            
             ---
-
-            **Full Changelog**: https://github.com/lokus-ai/lokus/compare/v1.3.1...v1.3.3
+            
+            **Full Changelog**: https://github.com/lokus-ai/lokus/compare/${{ github.event.before }}...${{ github.ref_name }}
           releaseDraft: false
           prerelease: false
