@@ -68,7 +68,7 @@ import TagManagementModal from "../components/features/TagManagementModal.jsx";
 import ProductTour from "../components/features/ProductTour.jsx";
 import ExternalDropZone from "../components/ui/ExternalDropZone.jsx";
 import { AnimatePresence, motion } from "framer-motion";
-import { useToast } from "../components/ui/Toast.jsx";
+import { useToast } from "../hooks/use-toast.js";
 
 import Breadcrumbs from "../components/file-tree/FileTree/Breadcrumbs.jsx";
 import AboutDialog from "../components/ui/AboutDialog.jsx";
