@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import InFileSearch from './InFileSearch.jsx'
+import InFileSearch from "./editor/InFileSearch.jsx"
 
 // Mock Lucide React icons
 vi.mock('lucide-react', () => ({

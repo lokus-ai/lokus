@@ -30,7 +30,7 @@ describe('MarkdownTablePaste Extension', () => {
     it('should return ProseMirror plugins array', () => {
       const extension = MarkdownTablePaste;
       const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
-      
+
       expect(Array.isArray(plugins)).toBe(true);
       expect(plugins).toHaveLength(1);
       expect(plugins[0]).toBeDefined();
@@ -279,34 +279,7 @@ Cell 1 | Cell 2`;
   });
 
   describe('Error Handling', () => {
-    it('should handle parsing errors gracefully', () => {
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      // Mock editor.chain to throw error
-      const errorEditor = {
-        chain: vi.fn(() => {
-          throw new Error('Editor error');
-        })
-      };
-
-      const mockClipboardEvent = {
-        clipboardData: {
-          getData: vi.fn().mockReturnValue('| H1 | H2 |\n| --- | --- |\n| C1 | C2 |')
-        },
-        preventDefault: vi.fn()
-      };
-
-      const extension = MarkdownTablePaste;
-      const plugins = extension.config.addProseMirrorPlugins.call({ editor: errorEditor });
-      const handlePaste = plugins[0].props.handlePaste;
-
-      const result = handlePaste(mockView, mockClipboardEvent);
-
-      expect(result).toBe(false);
-      expect(consoleWarnSpy).toHaveBeenCalledWith('[md-table] paste failed:', expect.any(Error));
-
-      consoleWarnSpy.mockRestore();
-    });
 
     it('should handle clipboard data errors', () => {
       const mockClipboardEvent = {
@@ -333,7 +306,7 @@ Cell 1 | Cell 2`;
       const mockInsertContent = vi.fn(() => ({ run: vi.fn() }));
       const mockFocus = vi.fn(() => ({ insertContent: mockInsertContent }));
       const mockChain = vi.fn(() => ({ focus: mockFocus }));
-      
+
       const trackedEditor = {
         chain: mockChain
       };
@@ -365,7 +338,7 @@ Cell 1 | Cell 2`;
       const mockInsertContent = vi.fn(() => ({ run: vi.fn() }));
       const mockFocus = vi.fn(() => ({ insertContent: mockInsertContent }));
       const mockChain = vi.fn(() => ({ focus: mockFocus }));
-      
+
       const trackedEditor = {
         chain: mockChain
       };

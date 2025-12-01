@@ -4,23 +4,23 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
-import { DraggableTab } from "./DraggableTab";
+import { DraggableTab } from "../components/ui/DraggableTab";
 import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, /* Mail, */ Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, FoldVertical, SquareSplitHorizontal, FilePlus as FilePlusCorner, SquareKanban, RefreshCw } from "lucide-react";
-import { ColoredFileIcon } from "../components/FileIcon.jsx";
-import LokusLogo from "../components/LokusLogo.jsx";
+import { ColoredFileIcon } from "../components/ui/FileIcon.jsx";
+import LokusLogo from "../components/ui/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
 import Editor from "../editor";
-import StatusBar from "../components/StatusBar.jsx";
-import ConnectionStatus from "../components/ConnectionStatus.jsx";
+import StatusBar from "../components/layout/StatusBar.jsx";
+import ConnectionStatus from "../components/layout/ConnectionStatus.jsx";
 import Canvas from "./Canvas.jsx";
-import KanbanBoard from "../components/KanbanBoard.jsx";
+import KanbanBoard from "../components/features/KanbanBoard.jsx";
 import { GraphDataProcessor } from "../core/graph/GraphDataProcessor.js";
 import { GraphData } from "../core/graph/GraphData.js";
 import { GraphEngine } from "../core/graph/GraphEngine.js";
-import FileContextMenu from "../components/FileContextMenu.jsx";
-import EditorGroupsContainer from "../components/EditorGroupsContainer.jsx";
+import FileContextMenu from "../components/file-tree/FileContextMenu.jsx";
+import EditorGroupsContainer from "../components/editor/EditorGroupsContainer.jsx";
 import { useEditorGroups } from "../hooks/useEditorGroups.js";
-import TabBar from "../components/TabBar.jsx";
+import TabBar from "../components/layout/TabBar.jsx";
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -29,178 +29,61 @@ import {
   ContextMenuSeparator,
 } from "../components/ui/context-menu.jsx";
 import { getActiveShortcuts, formatAccelerator } from "../core/shortcuts/registry.js";
-import CommandPalette from "../components/CommandPalette.jsx";
-import InFileSearch from "../components/InFileSearch.jsx";
-import FullTextSearchPanel from "./FullTextSearchPanel.jsx";
-import ShortcutHelpModal from "../components/ShortcutHelpModal.jsx";
+import CommandPalette from "../components/features/CommandPalette.jsx";
+import InFileSearch from "../components/editor/InFileSearch.jsx";
+import FullTextSearchPanel from "../components/features/Search/FullTextSearchPanel.jsx";
+import ShortcutHelpModal from "../components/ui/ShortcutHelpModal.jsx";
 // GlobalContextMenu removed - using EditorContextMenu and FileContextMenu instead
-import KanbanList from "../components/KanbanList.jsx";
+import KanbanList from "../components/features/KanbanList.jsx";
 import { WorkspaceManager } from "../core/workspace/manager.js";
 // FullKanban removed - now using file-based KanbanBoard system
-import PluginSettings from "./PluginSettings.jsx";
-import PluginDetail from "./PluginDetail.jsx";
+import PluginSettings from "../components/features/Plugins/PluginSettings.jsx";
+import PluginDetail from "../components/features/Plugins/PluginDetail.jsx";
 import { canvasManager } from "../core/canvas/manager.js";
-import TemplatePicker from "../components/TemplatePicker.jsx";
+import TemplatePicker from "../components/features/TemplatePicker.jsx";
 import { getMarkdownCompiler } from "../core/markdown/compiler.js";
 import { MarkdownExporter } from "../core/export/markdown-exporter.js";
 import dailyNotesManager from "../core/daily-notes/manager.js";
 import analytics from "../services/analytics.js";
-import CreateTemplate from "../components/CreateTemplate.jsx";
+import CreateTemplate from "../components/features/CreateTemplate.jsx";
 import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
 import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
 import { setGlobalActiveTheme, getSystemPreferredTheme, setupSystemThemeListener } from "../core/theme/manager.js";
-import SplitEditor from "../components/SplitEditor/SplitEditor.jsx";
-import PDFViewerTab from "../components/PDFViewer/PDFViewerTab.jsx";
+import SplitEditor from "../components/editor/SplitEditor/SplitEditor.jsx";
+import PDFViewerTab from "../components/features/PDFViewer/PDFViewerTab.jsx";
 import { isPDFFile } from "../utils/pdfUtils.js";
 import { getFilename, getBasename, joinPath } from '../utils/pathUtils.js';
 import platformService from "../services/platform/PlatformService.js";
 import { FolderScopeProvider, useFolderScope } from "../contexts/FolderScopeContext.jsx";
 import { BasesProvider, useBases } from "../bases/BasesContext.jsx";
 import BasesView from "../bases/BasesView.jsx";
-import DocumentOutline from "../components/DocumentOutline.jsx";
-import GraphSidebar from "../components/GraphSidebar.jsx";
-import VersionHistoryPanel from "../components/VersionHistoryPanel.jsx";
-import BacklinksPanel from "./BacklinksPanel.jsx";
-import { DailyNotesPanel, NavigationButtons, DatePickerModal } from "../components/DailyNotes/index.js";
-import { ImageViewerTab } from "../components/ImageViewer/ImageViewerTab.jsx";
+import DocumentOutline from "../components/editor/DocumentOutline.jsx";
+import GraphSidebar from "../components/graph/GraphSidebar.jsx";
+import VersionHistoryPanel from "../components/features/VersionHistoryPanel.jsx";
+import BacklinksPanel from "../components/features/Backlinks/BacklinksPanel.jsx";
+import { DailyNotesPanel, NavigationButtons, DatePickerModal } from "../components/features/DailyNotes/index.js";
+import { ImageViewerTab } from "../components/ui/ImageViewer/ImageViewerTab.jsx";
 import { isImageFile, findImageFiles } from "../utils/imageUtils.js";
-import TagManagementModal from "../components/TagManagementModal.jsx";
-import ProductTour from "../components/ProductTour.jsx";
-import ExternalDropZone from "../components/ExternalDropZone.jsx";
+import TagManagementModal from "../components/features/TagManagementModal.jsx";
+import ProductTour from "../components/features/ProductTour.jsx";
+import ExternalDropZone from "../components/ui/ExternalDropZone.jsx";
 import { AnimatePresence, motion } from "framer-motion";
-import { useToast } from "../components/Toast.jsx";
-import { useDropPosition } from "../hooks/useDropPosition.js";
-import { useAutoExpand } from "../hooks/useAutoExpand.js";
-import DropIndicator from "../components/FileTree/DropIndicator.jsx";
-import Breadcrumbs from "../components/FileTree/Breadcrumbs.jsx";
-import AboutDialog from "../components/AboutDialog.jsx";
+import { useToast } from "../components/ui/Toast.jsx";
+
+import Breadcrumbs from "../components/file-tree/FileTree/Breadcrumbs.jsx";
+import AboutDialog from "../components/ui/AboutDialog.jsx";
 import { copyFiles, cutFiles, getClipboardState, getRelativePath } from "../utils/clipboard.js";
 import "../styles/product-tour.css";
+import FileTree from "../components/file-tree/FileTree.jsx";
+import EditorModeSwitcher from "../components/layout/EditorModeSwitcher.jsx";
+import Icon from "../components/ui/Icon.jsx";
+import EditorDropZone from "../components/layout/EditorDropZone.jsx";
 
 const MAX_OPEN_TABS = 10;
 
-// Editor Mode Switcher Component for Right Sidebar
-const EditorModeSwitcher = () => {
-  const [editorMode, setEditorMode] = useState('edit');
 
-  useEffect(() => {
-    // Event-driven mode sync instead of polling
-    const handleModeChange = (event) => {
-      setEditorMode(event.detail || 'edit');
-    };
 
-    // Listen for custom event
-    window.addEventListener('lokusEditorModeChange', handleModeChange);
 
-    // Get initial mode
-    if (window.__LOKUS_EDITOR_MODE__) {
-      setEditorMode(window.__LOKUS_EDITOR_MODE__);
-    }
-
-    return () => {
-      window.removeEventListener('lokusEditorModeChange', handleModeChange);
-    };
-  }, []);
-
-  const handleModeChange = (mode) => {
-    if (window.__LOKUS_SET_EDITOR_MODE__) {
-      window.__LOKUS_SET_EDITOR_MODE__(mode);
-    }
-    setEditorMode(mode);
-
-    // Dispatch event so other components can listen
-    window.dispatchEvent(new CustomEvent('lokusEditorModeChange', { detail: mode }));
-  };
-
-  return (
-    <div style={{
-      padding: '0.75rem',
-      borderBottom: '1px solid rgb(var(--border))',
-      background: 'rgb(var(--panel))'
-    }}>
-      <div style={{
-        fontSize: '0.6875rem',
-        fontWeight: 600,
-        textTransform: 'uppercase',
-        letterSpacing: '0.05em',
-        color: 'rgb(var(--muted))',
-        marginBottom: '0.5rem'
-      }}>
-        Editor Mode
-      </div>
-      <div style={{
-        display: 'flex',
-        gap: '0.25rem',
-        background: 'rgb(var(--bg))',
-        border: '1px solid rgb(var(--border))',
-        borderRadius: '0.5rem',
-        padding: '0.25rem'
-      }}>
-        <button
-          onClick={() => handleModeChange('edit')}
-          title="Edit Mode"
-          style={{
-            flex: 1,
-            padding: '0.5rem 0.75rem',
-            borderRadius: '0.375rem',
-            border: 'none',
-            background: editorMode === 'edit' ? 'rgb(var(--accent))' : 'transparent',
-            color: editorMode === 'edit' ? 'white' : 'rgb(var(--text))',
-            cursor: 'pointer',
-            fontSize: '0.8125rem',
-            fontWeight: editorMode === 'edit' ? 600 : 500,
-            transition: 'all 0.15s ease'
-          }}
-        >
-          Edit
-        </button>
-        <button
-          onClick={() => handleModeChange('live')}
-          title="Live Preview Mode"
-          style={{
-            flex: 1,
-            padding: '0.5rem 0.75rem',
-            borderRadius: '0.375rem',
-            border: 'none',
-            background: editorMode === 'live' ? 'rgb(var(--accent))' : 'transparent',
-            color: editorMode === 'live' ? 'white' : 'rgb(var(--text))',
-            cursor: 'pointer',
-            fontSize: '0.8125rem',
-            fontWeight: editorMode === 'live' ? 600 : 500,
-            transition: 'all 0.15s ease'
-          }}
-        >
-          Live
-        </button>
-        <button
-          onClick={() => handleModeChange('reading')}
-          title="Reading Mode"
-          style={{
-            flex: 1,
-            padding: '0.5rem 0.75rem',
-            borderRadius: '0.375rem',
-            border: 'none',
-            background: editorMode === 'reading' ? 'rgb(var(--accent))' : 'transparent',
-            color: editorMode === 'reading' ? 'white' : 'rgb(var(--text))',
-            cursor: 'pointer',
-            fontSize: '0.8125rem',
-            fontWeight: editorMode === 'reading' ? 600 : 500,
-            transition: 'all 0.15s ease'
-          }}
-        >
-          Read
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// --- Reusable Icon Component ---
-const Icon = ({ path, className = "w-5 h-5" }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-    <path strokeLinecap="round" strokeLinejoin="round" d={path} />
-  </svg>
-);
 
 // --- Draggable Column Hook ---
 function useDragColumns({ minLeft = 220, maxLeft = 500, minRight = 220, maxRight = 500 }) {
@@ -248,780 +131,12 @@ function useDragColumns({ minLeft = 220, maxLeft = 500, minRight = 220, maxRight
   return { leftW, rightW, startLeftDrag, startRightDrag };
 }
 
-// --- New Folder Input ---
-function NewFolderInput({ onConfirm, level }) {
-  const [name, setName] = useState("");
-  const inputRef = useRef(null);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") onConfirm(name);
-    else if (e.key === "Escape") onConfirm(null);
-  };
 
-  return (
-    <li style={{ paddingLeft: `${level * 1.25}rem` }} className="flex items-center gap-2 px-2 py-1">
-      <Icon path="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" className="w-4 h-4" />
-      <input
-        ref={inputRef}
-        type="text"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onBlur={() => onConfirm(name)}
-        className="bg-app-bg text-sm text-app-text outline-none w-full"
-        placeholder="New folder..."
-      />
-    </li>
-  );
-}
 
-// --- Inline Rename Input Component ---
-function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
-  const [value, setValue] = useState(initialValue);
-  const inputRef = useRef(null);
 
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, []);
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      onSubmit(value);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      onCancel();
-    }
-  };
-
-  const handleBlur = () => {
-    onSubmit(value);
-  };
-
-  return (
-    <input
-      ref={inputRef}
-      type="text"
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onKeyDown={handleKeyDown}
-      onBlur={handleBlur}
-      className="inline-rename-input"
-      onClick={(e) => e.stopPropagation()}
-    />
-  );
-}
-
-// --- File Entry Component ---
-function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder, toast }) {
-  const entryRef = useRef(null);
-  const hoverTimeoutRef = useRef(null);
-
-  const { attributes, listeners, setNodeRef: draggableRef, isDragging } = useDraggable({
-    id: entry.path,
-    data: { type: "file-entry", entry },
-  });
-
-  const { setNodeRef: droppableRef, isOver } = useDroppable({
-    id: entry.path,
-    data: { type: "folder-drop-target", entry },
-    disabled: !entry.is_directory,
-  });
-
-  const isExpanded = expandedFolders.has(entry.path);
-  const isDropTarget = isOver && entry.is_directory;
-
-  // Auto-expand folder after 800ms hover during drag
-  const willAutoExpand = useAutoExpand(isOver, entry.is_directory, isExpanded, entry.path, toggleFolder);
-
-  // Update drop position when dragging over this element
-  const handleDragOver = useCallback((event) => {
-    if (isOver && updateDropPosition && entryRef.current) {
-      updateDropPosition(event, entryRef.current, entry);
-    }
-  }, [isOver, updateDropPosition, entry]);
-
-  useEffect(() => {
-    const element = entryRef.current;
-    if (element && isOver) {
-      element.addEventListener('dragover', handleDragOver);
-      return () => element.removeEventListener('dragover', handleDragOver);
-    }
-  }, [isOver, handleDragOver]);
-
-  // External file drop handlers for folders
-  const handleExternalDragEnter = (e) => {
-    if (isExternalDragActive && entry.is_directory) {
-      e.preventDefault();
-      e.stopPropagation();
-      setHoveredFolder(entry.path);
-
-      // Auto-expand after 800ms
-      hoverTimeoutRef.current = setTimeout(() => {
-        if (!isExpanded) {
-          toggleFolder(entry.path);
-        }
-      }, 800);
-    }
-  };
-
-  const handleExternalDragLeave = (e) => {
-    if (isExternalDragActive && entry.is_directory) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
-      }
-    }
-  };
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Calculate file count for folders
-  const fileCount = entry.is_directory && entry.children ? entry.children.length : null;
-
-  const handleClick = () => {
-    if (entry.is_directory) {
-      toggleFolder(entry.path);
-    } else {
-      onFileClick(entry);
-    }
-  };
-
-  const baseClasses = "obsidian-file-item";
-  const stateClasses = activeFile === entry.path ? 'active' : '';
-  const dropTargetClasses = isDropTarget ? 'drop-target-inside' : '';
-  const draggingClasses = isDragging ? 'dragging' : '';
-  const willExpandClasses = willAutoExpand ? 'will-expand-indicator' : '';
-  const externalDropTargetClasses = (isExternalDragActive && entry.is_directory && hoveredFolder === entry.path) ? 'external-drop-target' : '';
-
-  const onRename = () => {
-    // For .md files: open them (the note header handles renaming)
-    if (!entry.is_directory && entry.path.endsWith('.md')) {
-      onFileClick(entry);
-      return;
-    }
-
-    // For other files and folders: enter inline rename mode
-    setRenamingPath(entry.path);
-  };
-
-  const handleRenameSubmit = async (newName) => {
-    if (!newName || newName.trim() === "" || newName.trim() === entry.name) {
-      setRenamingPath(null);
-      return;
-    }
-
-    try {
-      const trimmedName = newName.trim();
-      await invoke("rename_file", { path: entry.path, newName: trimmedName });
-      setRenamingPath(null);
-      onRefresh && onRefresh();
-    } catch (e) {
-      console.error('Failed to rename:', e);
-      toast?.error(`Failed to rename: ${e.message || e}`);
-      setRenamingPath(null);
-    }
-  };
-
-  const handleRenameCancel = () => {
-    setRenamingPath(null);
-  };
-
-  const onCreateFileHere = async () => {
-    try {
-      const base = entry.is_directory ? entry.path : entry.path.split("/").slice(0, -1).join("/");
-      const name = "Untitled.md";
-      await invoke("write_file_content", { path: `${base}/${name}`, content: "" });
-      onRefresh && onRefresh();
-    } catch (e) {
-      console.error('Failed to create file:', e);
-      toast?.error(`Failed to create file: ${e.message || e}`);
-    }
-  };
-
-  const onCreateFolderHere = async () => {
-    const name = window.prompt("New folder name:");
-    if (!name) return;
-    try {
-      const base = entry.is_directory ? entry.path : entry.path.split("/").slice(0, -1).join("/");
-      await invoke("create_folder_in_workspace", { workspacePath: base, name });
-      onRefresh && onRefresh();
-    } catch (e) {
-      console.error('Failed to create folder:', e);
-      toast?.error(`Failed to create folder: ${e.message || e}`);
-    }
-  };
-
-  const handleFileContextAction = useCallback(async (action, data) => {
-    const { file } = data;
-
-    switch (action) {
-      case 'open':
-        onFileClick(file);
-        break;
-      case 'openToSide':
-        // Enable split view and open file in right pane
-        setUseSplitView(true);
-        setRightPaneFile(file.path);
-
-        // Set title (remove .md extension)
-        const fileName = getFilename(file.name);
-        setRightPaneTitle(fileName.replace(/\.md$/, ''));
-
-        // Load content if it's a markdown file
-        if (file.path.endsWith('.md') || file.path.endsWith('.txt')) {
-          // Check if this file is already loaded in the left pane to avoid duplicate load
-          if (file.path === activeFile && editorContent) {
-            setRightPaneContent(editorContent);
-          } else {
-            try {
-              const content = await invoke('read_file_content', { path: file.path });
-              setRightPaneContent(content || '');
-            } catch (err) {
-              console.error('Failed to load file content:', err);
-              setRightPaneContent('');
-            }
-          }
-        } else {
-          setRightPaneContent('');
-        }
-        break;
-      case 'viewHistory':
-        if (onViewHistory && file.type === 'file') {
-          onViewHistory(file.path);
-        }
-        break;
-      case 'openWith':
-        // Open file with system default application
-        try {
-          await invoke('platform_open_with_default', { path: file.path });
-        } catch (e) {
-          toast.error(`Failed to open file: ${e}`);
-        }
-        break;
-      case 'revealInFinder':
-        try {
-          await invoke('platform_reveal_in_file_manager', { path: file.path });
-        } catch (e) {
-          console.error('Failed to reveal in file manager:', e);
-        }
-        break;
-      case 'openInTerminal':
-        try {
-          const terminalPath = file.is_directory ? file.path : file.path.split("/").slice(0, -1).join("/");
-          await invoke('platform_open_terminal', { path: terminalPath });
-        } catch (e) {
-          console.error('Failed to open terminal:', e);
-        }
-        break;
-      case 'cut':
-        // Cut file to clipboard
-        cutFiles([file]);
-        toast.success(`Cut: ${file.name}`);
-        break;
-      case 'copy':
-        // Copy file to clipboard
-        copyFiles([file]);
-        toast.success(`Copied: ${file.name}`);
-        break;
-      case 'copyPath':
-        try {
-          await navigator.clipboard.writeText(file.path);
-        } catch (e) {
-        }
-        break;
-      case 'copyRelativePath':
-        try {
-          const relativePath = getRelativePath(file.path, path);
-          await navigator.clipboard.writeText(relativePath);
-          toast.success('Copied relative path');
-        } catch (e) {
-          toast.error('Failed to copy relative path');
-        }
-        break;
-      case 'newFile':
-        await onCreateFileHere();
-        break;
-      case 'newFolder':
-        await onCreateFolderHere();
-        break;
-      case 'rename':
-        onRename();
-        break;
-      case 'delete':
-        try {
-          const confirmed = await confirm(`Are you sure you want to delete "${file.name}"?`);
-          if (confirmed) {
-            await invoke('delete_file', { path: file.path });
-            onRefresh && onRefresh();
-          }
-        } catch (e) {
-        }
-        break;
-      case 'selectForCompare':
-        // Select file for comparison
-        if (file.type === 'file') {
-          setSelectedFileForCompare(file);
-          toast.success(`Selected for compare: ${file.name}`);
-        }
-        break;
-      case 'compareWith':
-        // Compare with previously selected file
-        if (selectedFileForCompare && file.type === 'file') {
-          // Open both files in split view for manual comparison
-          onFileClick(selectedFileForCompare.path);
-          setUseSplitView(true);
-          setTimeout(() => {
-            setRightPaneFile(file.path);
-            setRightPaneTitle(file.name);
-          }, 100);
-          toast.success(`Comparing ${selectedFileForCompare.name} with ${file.name}`);
-          setSelectedFileForCompare(null);
-        }
-        break;
-      case 'shareEmail':
-      case 'shareSlack':
-      case 'shareTeams':
-        // Basic sharing: copy file path to clipboard
-        try {
-          await navigator.clipboard.writeText(file.path);
-          toast.success(`File path copied. Share via ${action.replace('share', '')}`);
-        } catch (e) {
-          toast.error('Failed to copy file path');
-        }
-        break;
-      case 'addTag':
-      case 'manageTags':
-        // Open tag management modal for markdown files
-        if (file && (file.name.endsWith('.md') || file.name.endsWith('.markdown'))) {
-          setTagModalFile(file);
-          setShowTagModal(true);
-        }
-        break;
-      default:
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    onFileClick,
-    setUseSplitView,
-    setRightPaneFile,
-    setRightPaneTitle,
-    setRightPaneContent,
-    onViewHistory,
-    onRefresh,
-    setTagModalFile,
-    setShowTagModal
-    // Note: onCreateFileHere, onCreateFolderHere, onRename excluded to prevent infinite loop
-    // They're accessible via closure and don't need to be in deps
-  ]);
-
-  return (
-    <li
-      className="file-entry-container"
-      data-level={level}
-      data-path={entry.path}
-      style={{ paddingLeft: `${level * 1.25}rem`, '--level': level }}
-    >
-      <div
-        ref={(node) => {
-          droppableRef(node);
-          entryRef.current = node;
-        }}
-        className="rounded"
-      >
-        <div ref={draggableRef} className="flex items-center">
-          <FileContextMenu
-            file={{ ...entry, type: entry.is_directory ? 'folder' : 'file' }}
-            onAction={handleFileContextAction}
-          >
-            <button
-              {...listeners}
-              {...attributes}
-              onClick={handleClick}
-              onDragEnter={handleExternalDragEnter}
-              onDragLeave={handleExternalDragLeave}
-              className={`${baseClasses} ${stateClasses} ${dropTargetClasses} ${draggingClasses} ${willExpandClasses} ${externalDropTargetClasses} file-entry-item`}
-            >
-              <ColoredFileIcon
-                fileName={entry.name}
-                isDirectory={entry.is_directory}
-                isExpanded={isExpanded}
-                className="obsidian-file-icon"
-                showChevron={true}
-              />
-              {renamingPath === entry.path ? (
-                <InlineRenameInput
-                  initialValue={entry.name}
-                  onSubmit={handleRenameSubmit}
-                  onCancel={handleRenameCancel}
-                />
-              ) : (
-                <span className="truncate">{entry.name}</span>
-              )}
-              {fileCount !== null && (
-                <span className="file-count-badge">({fileCount})</span>
-              )}
-            </button>
-          </FileContextMenu>
-        </div>
-      </div>
-      <AnimatePresence initial={false}>
-        {isExpanded && entry.children && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: "easeInOut" }}
-            className="folder-children-container"
-          >
-            <ul className="space-y-1 mt-1">
-              {entry.children.map(child => (
-                <FileEntryComponent
-                  key={child.path}
-                  entry={child}
-                  level={level + 1}
-                  onFileClick={onFileClick}
-                  activeFile={activeFile}
-                  expandedFolders={expandedFolders}
-                  toggleFolder={toggleFolder}
-                  onRefresh={onRefresh}
-                  keymap={keymap}
-                  renamingPath={renamingPath}
-                  setRenamingPath={setRenamingPath}
-                  onViewHistory={onViewHistory}
-                  setTagModalFile={setTagModalFile}
-                  setShowTagModal={setShowTagModal}
-                  setUseSplitView={setUseSplitView}
-                  setRightPaneFile={setRightPaneFile}
-                  setRightPaneTitle={setRightPaneTitle}
-                  setRightPaneContent={setRightPaneContent}
-                  updateDropPosition={updateDropPosition}
-                  fileTreeRef={fileTreeRef}
-                  isExternalDragActive={isExternalDragActive}
-                  hoveredFolder={hoveredFolder}
-                  setHoveredFolder={setHoveredFolder}
-                  toast={toast}
-                />
-              ))}
-            </ul>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </li>
-  );
-}
-
-// --- File Tree View Component ---
-function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, isExternalDragActive, hoveredFolder, setHoveredFolder, toast }) {
-  const [activeEntry, setActiveEntry] = useState(null);
-  const fileTreeRef = useRef(null);
-  const { dropPosition, updatePosition, clearPosition } = useDropPosition();
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 10,
-      },
-    })
-  );
-
-  const handleDragStart = (event) => {
-    const sourceEntry = event.active.data.current?.entry;
-    setActiveEntry(sourceEntry);
-  };
-
-  const handleDragEnd = async (event) => {
-    const { over, active } = event;
-    setActiveEntry(null);
-    clearPosition();
-
-    if (!over || !active) return;
-
-    const sourceEntry = active.data.current?.entry;
-    const targetEntry = over.data.current?.entry;
-
-    if (!sourceEntry || !targetEntry || sourceEntry.path === targetEntry.path) {
-      return;
-    }
-
-    try {
-      // Use dropPosition if available for precise placement
-      if (dropPosition) {
-        const { position, targetPath } = dropPosition;
-
-        if (position === "inside") {
-          // Drop inside folder
-          await invoke("move_file", {
-            sourcePath: sourceEntry.path,
-            destinationDir: targetPath,
-          });
-        } else {
-          // For "before" and "after", move to same parent as target
-          const targetParent = targetPath.substring(0, targetPath.lastIndexOf('/'));
-          await invoke("move_file", {
-            sourcePath: sourceEntry.path,
-            destinationDir: targetParent || targetEntry.path.substring(0, targetEntry.path.lastIndexOf('/')),
-          });
-        }
-      } else if (targetEntry.is_directory) {
-        // Fallback to old behavior (drop inside folder)
-        await invoke("move_file", {
-          sourcePath: sourceEntry.path,
-          destinationDir: targetEntry.path,
-        });
-      }
-
-      onRefresh();
-    } catch (error) {
-      console.error("Failed to move file:", error);
-    }
-  };
-
-  return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div ref={fileTreeRef} className="file-tree-container">
-        <ul className="space-y-1">
-          {isCreating && <NewFolderInput onConfirm={onCreateConfirm} level={0} />}
-          {entries.map(entry => (
-            <FileEntryComponent
-              key={entry.path}
-              entry={entry}
-              level={0}
-              onFileClick={onFileClick}
-              activeFile={activeFile}
-              expandedFolders={expandedFolders}
-              toggleFolder={toggleFolder}
-              onRefresh={onRefresh}
-              keymap={keymap}
-              renamingPath={renamingPath}
-              setRenamingPath={setRenamingPath}
-              onViewHistory={onViewHistory}
-              setTagModalFile={setTagModalFile}
-              setShowTagModal={setShowTagModal}
-              setUseSplitView={setUseSplitView}
-              setRightPaneFile={setRightPaneFile}
-              setRightPaneTitle={setRightPaneTitle}
-              setRightPaneContent={setRightPaneContent}
-              updateDropPosition={updatePosition}
-              fileTreeRef={fileTreeRef}
-              isExternalDragActive={isExternalDragActive}
-              hoveredFolder={hoveredFolder}
-              setHoveredFolder={setHoveredFolder}
-              toast={toast}
-            />
-          ))}
-        </ul>
-
-        {/* Drop position indicator */}
-        <DropIndicator
-          position={dropPosition}
-          targetPath={dropPosition?.targetPath}
-          fileTreeRef={fileTreeRef}
-        />
-      </div>
-
-      {/* Drag overlay with ghost preview */}
-      <DragOverlay>
-        {activeEntry ? (
-          <div className="drag-preview">
-            <ColoredFileIcon
-              filename={activeEntry.name}
-              isDirectory={activeEntry.is_directory}
-              size={16}
-            />
-            <span>{activeEntry.name}</span>
-          </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
-  );
-}
-
-// --- OLD Tab Bar Component (for old split view) ---
-function OldTabBar({ tabs, activeTab, onTabClick, onTabClose, unsavedChanges, onDragEnd, onNewTab, onSplitDragStart, onSplitDragEnd, useSplitView, onToggleSplitView, splitDirection, onToggleSplitDirection, syncScrolling, onToggleSyncScrolling, onResetPaneSize, isLeftPane = true, onToggleRightSidebar, showRightSidebar }) {
-  const [activeId, setActiveId] = useState(null);
-  const [draggedTab, setDraggedTab] = useState(null);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 10,
-      },
-    })
-  );
-
-  const handleDragStart = (event) => {
-    const { active } = event;
-    setActiveId(active.id);
-    const tab = tabs.find(t => t.path === active.id);
-    setDraggedTab(tab);
-    onSplitDragStart?.(tab);
-  };
-
-  const handleDragEnd = (event) => {
-    setActiveId(null);
-    setDraggedTab(null);
-    onSplitDragEnd?.(draggedTab);
-    onDragEnd(event);
-  };
-
-  return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div data-tauri-drag-region className="h-12 shrink-0 flex items-end bg-app-panel border-b border-app-border px-0">
-        <div data-tauri-drag-region="false" className="flex-1 flex items-center overflow-x-auto no-scrollbar">
-          {tabs.map(tab => (
-            <DraggableTab
-              key={tab.path}
-              tab={tab}
-              isActive={activeTab === tab.path}
-              isUnsaved={unsavedChanges.has(tab.path)}
-              onTabClick={onTabClick}
-              onTabClose={onTabClose}
-              onSplitDragStart={onSplitDragStart}
-              onSplitDragEnd={onSplitDragEnd}
-            />
-          ))}
-        </div>
-        <div data-tauri-drag-region="false" className="flex items-center gap-1">
-          <button
-            onClick={onToggleSplitView}
-            title={useSplitView ? "Exit split view" : "Enter split view"}
-            className={`obsidian-button icon-only mb-1 ${useSplitView ? 'active' : ''}`}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-            </svg>
-          </button>
-
-          {/* Split direction toggle - only show in split view and on left pane */}
-          {useSplitView && isLeftPane && (
-            <>
-              <button
-                onClick={onToggleSplitDirection}
-                title={`Switch to ${splitDirection === 'vertical' ? 'horizontal' : 'vertical'} split`}
-                className="obsidian-button icon-only mb-1"
-              >
-                {splitDirection === 'vertical' ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6-6 6 6" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 15l6 6 6-6" />
-                  </svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l-6 6 6 6" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 6l6 6-6 6" />
-                  </svg>
-                )}
-              </button>
-
-              <button
-                onClick={onResetPaneSize}
-                title="Reset pane sizes (50/50)"
-                className="obsidian-button icon-only mb-1"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                </svg>
-              </button>
-
-              <button
-                onClick={onToggleSyncScrolling}
-                title={`${syncScrolling ? 'Disable' : 'Enable'} synchronized scrolling`}
-                className={`obsidian-button icon-only mb-1 ${syncScrolling ? 'active' : ''}`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-                </svg>
-              </button>
-            </>
-          )}
-
-          {/* Outline toggle button - only show on main pane */}
-          {isLeftPane && onToggleRightSidebar && (
-            <button
-              onClick={onToggleRightSidebar}
-              title={showRightSidebar ? "Hide outline" : "Show outline"}
-              className={`obsidian-button icon-only mb-1 ${showRightSidebar ? 'active' : ''}`}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
-              </svg>
-            </button>
-          )}
-
-          <button
-            onClick={onNewTab}
-            title={`New file (${platformService.getModifierSymbol()}+N)`}
-            className="obsidian-button icon-only mb-1"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <DragOverlay dropAnimation={null}>
-        {activeId && draggedTab ? (
-          <div className="dragging-tab-preview" style={{
-            opacity: 0.9,
-            transform: 'rotate(-2deg)',
-            zIndex: 99999
-          }}>
-            <div className="flex items-center gap-2 px-3 py-1 bg-app-surface border border-app-border rounded-md shadow-lg">
-              <svg className="w-4 h-4 text-app-muted" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
-              </svg>
-              <span className="text-sm font-medium text-app-text">
-                {draggedTab.name.replace(/\.(md|txt|json|js|jsx|ts|tsx|py|html|css|canvas)$/, "") || draggedTab.name}
-              </span>
-            </div>
-          </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
-  );
-}
-
-// --- Editor Drop Zone Component ---
-function EditorDropZone({ children }) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: 'editor-drop-zone',
-    data: { type: 'editor-area' }
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={`relative w-full h-full ${isOver ? 'bg-app-accent bg-opacity-10' : ''}`}
-      style={{ position: 'relative' }}
-    >
-      {children}
-      {isOver && (
-        <div className="absolute inset-4 border-2 border-dashed border-app-accent bg-app-accent bg-opacity-5 rounded-lg flex items-center justify-center pointer-events-none z-10">
-          <div className="text-app-accent font-medium text-lg">
-            Drop here to create split view
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // --- Inner Workspace Component (with folder scope) ---
 function WorkspaceWithScope({ path }) {
@@ -1276,15 +391,14 @@ function WorkspaceWithScope({ path }) {
       return;
     }
 
-    let unlistenDrop;
-    let unlistenOver;
-    let unlistenLeave;
+    let unlisteners = [];
+    let unmounted = false;
 
     const setupFileDropListeners = async () => {
       try {
         // Tauri 2.0: Event names changed from file-drop to drag-drop
         // tauri://drag-drop - Files dropped
-        unlistenDrop = await listen('tauri://drag-drop', async (event) => {
+        const unlistenDrop = await listen('tauri://drag-drop', async (event) => {
           const filePaths = event.payload.paths || event.payload;
           setIsExternalDragActive(false);
 
@@ -1316,17 +430,23 @@ function WorkspaceWithScope({ path }) {
             setHoveredFolder(null);
           }
         });
+        if (unmounted) { unlistenDrop(); return; }
+        unlisteners.push(unlistenDrop);
 
         // tauri://drag-over - Files being dragged over window
-        unlistenOver = await listen('tauri://drag-over', () => {
+        const unlistenOver = await listen('tauri://drag-over', () => {
           setIsExternalDragActive(true);
         });
+        if (unmounted) { unlistenOver(); return; }
+        unlisteners.push(unlistenOver);
 
         // tauri://drag-leave - Drag left window
-        unlistenLeave = await listen('tauri://drag-leave', () => {
+        const unlistenLeave = await listen('tauri://drag-leave', () => {
           setIsExternalDragActive(false);
           setHoveredFolder(null);
         });
+        if (unmounted) { unlistenLeave(); return; }
+        unlisteners.push(unlistenLeave);
 
       } catch (error) {
         console.error('Failed to setup file drop listeners:', error);
@@ -1336,9 +456,8 @@ function WorkspaceWithScope({ path }) {
     setupFileDropListeners();
 
     return () => {
-      if (unlistenDrop) unlistenDrop();
-      if (unlistenOver) unlistenOver();
-      if (unlistenLeave) unlistenLeave();
+      unmounted = true;
+      unlisteners.forEach(fn => fn());
     };
   }, [path, hoveredFolder, insertImagesIntoEditor]);
 
@@ -4080,31 +3199,31 @@ function WorkspaceWithScope({ path }) {
                   <ContextMenu>
                     <ContextMenuTrigger asChild>
                       <div className="p-2 flex-1 overflow-y-auto">
-                        <FileTreeView
-                            entries={filteredFileTree}
-                            onFileClick={handleFileOpen}
-                            activeFile={activeFile}
-                            onRefresh={handleRefreshFiles}
-                            data-testid="file-tree"
-                            expandedFolders={expandedFolders}
-                            toggleFolder={toggleFolder}
-                            isCreating={isCreatingFolder}
-                            onCreateConfirm={handleConfirmCreateFolder}
-                            keymap={keymap}
-                            renamingPath={renamingPath}
-                            setRenamingPath={setRenamingPath}
-                            onViewHistory={toggleVersionHistory}
-                            setTagModalFile={setTagModalFile}
-                            setShowTagModal={setShowTagModal}
-                            setUseSplitView={setUseSplitView}
-                            setRightPaneFile={setRightPaneFile}
-                            setRightPaneTitle={setRightPaneTitle}
-                            setRightPaneContent={setRightPaneContent}
-                            isExternalDragActive={isExternalDragActive}
-                            hoveredFolder={hoveredFolder}
-                            setHoveredFolder={setHoveredFolder}
-                            toast={toast}
-                          />
+                        <FileTree
+                          entries={filteredFileTree}
+                          onFileClick={handleFileOpen}
+                          activeFile={activeFile}
+                          onRefresh={handleRefreshFiles}
+                          data-testid="file-tree"
+                          expandedFolders={expandedFolders}
+                          toggleFolder={toggleFolder}
+                          isCreating={isCreatingFolder}
+                          onCreateConfirm={handleConfirmCreateFolder}
+                          keymap={keymap}
+                          renamingPath={renamingPath}
+                          setRenamingPath={setRenamingPath}
+                          onViewHistory={toggleVersionHistory}
+                          setTagModalFile={setTagModalFile}
+                          setShowTagModal={setShowTagModal}
+                          setUseSplitView={setUseSplitView}
+                          setRightPaneFile={setRightPaneFile}
+                          setRightPaneTitle={setRightPaneTitle}
+                          setRightPaneContent={setRightPaneContent}
+                          isExternalDragActive={isExternalDragActive}
+                          hoveredFolder={hoveredFolder}
+                          setHoveredFolder={setHoveredFolder}
+                          toast={toast}
+                        />
                       </div>
                     </ContextMenuTrigger>
                     <ContextMenuContent>

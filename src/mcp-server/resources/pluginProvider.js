@@ -7,7 +7,7 @@
  * - Plugin API usage and capabilities
  */
 
-import { pluginManager } from '../../plugins/PluginManager.js';
+import { pluginManager } from '../../components/features/Plugins/PluginManager.jsx';
 import { logger } from '../../utils/logger.js';
 
 export class PluginProvider {

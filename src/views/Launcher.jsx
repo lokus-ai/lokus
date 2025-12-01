@@ -6,8 +6,8 @@ import { listen } from "@tauri-apps/api/event";
 import { readRecents, addRecent, removeRecent, shortenPath } from "../lib/recents.js";
 import { WorkspaceManager } from "../core/workspace/manager.js";
 import { readGlobalVisuals, setGlobalActiveTheme } from "../core/theme/manager.js";
-import LokusLogo from "../components/LokusLogo.jsx";
-import { useToast } from "../components/Toast.jsx";
+import LokusLogo from "../components/ui/LokusLogo.jsx";
+import { useToast } from "../components/ui/Toast.jsx";
 
 // --- Reusable Icon Component ---
 const Icon = ({ path, className = "w-5 h-5" }) => (

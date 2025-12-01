@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import PagePreview from './PagePreview';
+import PagePreview from "./ui/PagePreview.jsx";
 
 describe('PagePreview Component', () => {
   const mockOnClose = vi.fn();

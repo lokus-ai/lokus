@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import * as Sentry from '@sentry/react'
-import { ErrorBoundary, ErrorFallback } from './components/error/ErrorBoundary'
+import { ErrorBoundary, ErrorFallback } from './components/ui/error/ErrorBoundary'
 import App from './App'
 import { ThemeProvider } from './hooks/theme'
 import './styles/globals.css'

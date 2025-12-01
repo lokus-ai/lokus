@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Mail, Plus, Search, RefreshCw, Settings, Archive, Trash2, Inbox } from 'lucide-react';
-import GmailSidebar from '../components/gmail/GmailSidebar.jsx';
-import EmailList from '../components/gmail/EmailList.jsx';
-import EmailViewer from '../components/gmail/EmailViewer.jsx';
-import EmailComposer from '../components/gmail/EmailComposer.jsx';
-import GmailLogin from '../components/gmail/GmailLogin.jsx';
+import GmailSidebar from '../components/features/gmail/GmailSidebar.jsx';
+import EmailList from '../components/features/gmail/EmailList.jsx';
+import EmailViewer from '../components/features/gmail/EmailViewer.jsx';
+import EmailComposer from '../components/features/gmail/EmailComposer.jsx';
+import GmailLogin from '../components/features/gmail/GmailLogin.jsx';
 import { gmailAuth, gmailEmails } from '../services/gmail.js';
 
 export default function Gmail({ workspacePath }) {

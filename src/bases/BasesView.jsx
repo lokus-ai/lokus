@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useBases } from './BasesContext.jsx';
 import { useFolderScope } from '../contexts/FolderScopeContext.jsx';
-import { DebouncedInput } from '../components/OptimizedWrapper.jsx';
+import { DebouncedInput } from '../components/ui/OptimizedWrapper.jsx';
 import analytics from '../services/analytics.js';
 import BaseTableView from './ui/BaseTableView.jsx';
 import BaseListView from './ui/BaseListView.jsx';
