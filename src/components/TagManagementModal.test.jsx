@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import TagManagementModal from './TagManagementModal'
+import TagManagementModal from './features/TagManagementModal'
 import { invoke } from '@tauri-apps/api/core'
 
 vi.mock('@tauri-apps/api/core', () => ({

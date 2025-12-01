@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import StatusBar from './StatusBar'
+import StatusBar from './layout/StatusBar'
 
 // Mock useStatusBar hook
 const mockLeftItems = []

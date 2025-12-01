@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import ShortcutHelpModal from './ShortcutHelpModal'
+import ShortcutHelpModal from './ui/ShortcutHelpModal'
 
 describe('ShortcutHelpModal Component', () => {
     it('does not render when isOpen is false', () => {
