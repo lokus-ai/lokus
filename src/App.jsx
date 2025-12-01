@@ -5,6 +5,8 @@ const Workspace = lazy(() => import("./views/Workspace"));
 const Preferences = lazy(() => import("./views/Preferences"));
 
 import UpdateChecker from "./components/UpdateChecker";
+import { RemoteAnnouncement } from "./components/RemoteAnnouncement";
+import { Toaster } from "./components/ui/toaster";
 import { usePreferenceActivation } from "./hooks/usePreferenceActivation";
 import { useWorkspaceActivation } from "./hooks/useWorkspaceActivation";
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/shortcuts/registry.js";
@@ -174,6 +176,8 @@ function App() {
           </AuthProvider>
           <UpdateChecker />
         </ToastProvider>
+        <RemoteAnnouncement />
+        <Toaster />
       </div>
     </div>
   );

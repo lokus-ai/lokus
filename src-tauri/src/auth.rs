@@ -117,7 +117,7 @@ impl AuthService {
                 let app_handle = app_handle_clone.clone();
                 
                 tokio::task::spawn(async move {
-                    if let Err(err) = Builder::new(hyper_util::rt::TokioExecutor::new())
+                    if let Err(_err) = Builder::new(hyper_util::rt::TokioExecutor::new())
                         .serve_connection(
                             io,
                             service_fn(move |req| {
@@ -451,7 +451,7 @@ impl AuthService {
         // Fetch and store user profile
         match fetch_and_store_user_profile(&token).await {
             Ok(_) => {},
-            Err(e) => {
+            Err(_e) => {
                 // Continue anyway - don't fail the entire OAuth flow
             }
         }

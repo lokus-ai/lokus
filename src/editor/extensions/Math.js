@@ -62,7 +62,12 @@ export const MathInline = Node.create({
   atom: true,
   selectable: true,
   addAttributes() {
-    return { src: { default: '' } }
+    return {
+      src: {
+        default: '',
+        parseHTML: element => element.getAttribute('data-src')
+      }
+    }
   },
   parseHTML() {
     return [{ tag: 'span[data-type="math-inline"]' }]
@@ -160,7 +165,14 @@ export const MathBlock = Node.create({
   atom: true,
   defining: true,
   selectable: true,
-  addAttributes() { return { src: { default: '' } } },
+  addAttributes() {
+    return {
+      src: {
+        default: '',
+        parseHTML: element => element.getAttribute('data-src')
+      }
+    }
+  },
   parseHTML() { return [{ tag: 'div[data-type="math-block"]' }] },
   renderHTML({ HTMLAttributes }) {
     const { src = '' } = HTMLAttributes

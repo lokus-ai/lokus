@@ -42,8 +42,7 @@ pub fn extract_mcp_server() -> Result<PathBuf, String> {
         .map_err(|e| format!("Failed to write HTTP server: {}", e))?;
 
     // Copy tools directory for http-server.js dependencies
-    // In dev mode, create symlink; in production, this would be bundled
-    #[cfg(debug_assertions)]
+    // In dev mode, create symlink; in production, copy files
     {
         let source_tools = std::env::current_dir()
             .ok()
@@ -62,8 +61,8 @@ pub fn extract_mcp_server() -> Result<PathBuf, String> {
                 let _ = fs::remove_dir_all(&target_resources);
                 let _ = fs::remove_file(&target_workspace_matcher);
 
-                // Create symlinks (faster in dev)
-                #[cfg(unix)]
+                // In debug mode, create symlinks (faster)
+                #[cfg(all(unix, debug_assertions))]
                 {
                     use std::os::unix::fs::symlink;
                     let _ = symlink(source_dir.join("tools"), &target_tools);
@@ -72,8 +71,8 @@ pub fn extract_mcp_server() -> Result<PathBuf, String> {
                     let _ = symlink(source_dir.join("workspace-matcher.js"), &target_workspace_matcher);
                 }
 
-                // On Windows or if symlink fails, copy instead
-                #[cfg(not(unix))]
+                // In production or Windows, copy files
+                #[cfg(any(not(debug_assertions), not(unix)))]
                 {
                     fn copy_dir_all(src: impl AsRef<std::path::Path>, dst: impl AsRef<std::path::Path>) -> std::io::Result<()> {
                         std::fs::create_dir_all(&dst)?;

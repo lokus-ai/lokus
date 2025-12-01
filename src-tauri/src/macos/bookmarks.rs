@@ -11,7 +11,7 @@ use objc::{class, msg_send, sel, sel_impl};
 #[cfg(target_os = "macos")]
 use objc::runtime::Object;
 #[cfg(target_os = "macos")]
-use objc_foundation::{NSString, NSData, INSString};
+use objc_foundation::{NSString, INSString};
 
 /// Create a security-scoped bookmark for a path
 ///

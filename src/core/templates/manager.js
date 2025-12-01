@@ -225,7 +225,7 @@ export class TemplateManager {
    */
   list(options = {}) {
     const { category, tags, search, limit, offset, sortBy, sortOrder } = options;
-    
+
     let templates = Array.from(this.storage.values());
 
     // Filter by category
@@ -235,7 +235,7 @@ export class TemplateManager {
 
     // Filter by tags
     if (tags && tags.length > 0) {
-      templates = templates.filter(t => 
+      templates = templates.filter(t =>
         tags.some(tag => t.tags.includes(tag))
       );
     }
@@ -255,7 +255,7 @@ export class TemplateManager {
       templates.sort((a, b) => {
         let aValue = this.getSortValue(a, sortBy);
         let bValue = this.getSortValue(b, sortBy);
-        
+
         if (typeof aValue === 'string') {
           aValue = aValue.toLowerCase();
           bValue = bValue.toLowerCase();
@@ -269,7 +269,7 @@ export class TemplateManager {
     // Pagination
     const start = offset || 0;
     const end = limit ? start + limit : templates.length;
-    
+
     return {
       templates: templates.slice(start, end),
       total: templates.length,
@@ -358,7 +358,7 @@ export class TemplateManager {
    */
   async import(templateData, options = {}) {
     const { overwrite = false } = options;
-    
+
     if (!templateData.id || !templateData.name || !templateData.content) {
       throw new Error('Invalid template data: missing required fields');
     }
@@ -391,20 +391,20 @@ export class TemplateManager {
    */
   getStatistics() {
     const templates = Array.from(this.storage.values());
-    
+
     const categoryStats = {};
     const tagStats = {};
     const complexityStats = {};
-    
+
     templates.forEach(template => {
       // Category stats
       categoryStats[template.category] = (categoryStats[template.category] || 0) + 1;
-      
+
       // Tag stats
       template.tags.forEach(tag => {
         tagStats[tag] = (tagStats[tag] || 0) + 1;
       });
-      
+
       // Complexity stats
       const complexity = template.stats.complexity;
       complexityStats[complexity] = (complexityStats[complexity] || 0) + 1;
@@ -417,7 +417,7 @@ export class TemplateManager {
       categoryStats,
       tagStats,
       complexityStats,
-      averageSize: templates.length > 0 
+      averageSize: templates.length > 0
         ? Math.round(templates.reduce((sum, t) => sum + t.content.length, 0) / templates.length)
         : 0
     };
@@ -674,7 +674,7 @@ export class TemplateManager {
         templates: []
       });
     }
-    
+
     const category = this.categories.get(template.category);
     if (!category.templates.includes(template.id)) {
       category.templates.push(template.id);
@@ -692,7 +692,7 @@ export class TemplateManager {
   }
 
   updateTagIndex(template) {
-    template.tags.forEach(tag => {
+    (template.tags || []).forEach(tag => {
       if (!this.tags.has(tag)) {
         this.tags.set(tag, []);
       }

@@ -136,7 +136,7 @@ export const WikiLink = Node.create({
       let displayText = target
 
       // Check if this is a block reference (contains ^)
-      if (target.includes('^')) {
+      if (target && target.includes('^')) {
         const [filename, blockId] = target.split('^')
         const cleanFilename = filename.replace('.md', '').trim()
 

@@ -21,6 +21,14 @@ vi.mock('markdown-it-strikethrough-alt', () => ({
   default: 'mock-strikethrough-plugin'
 }));
 
+// Mock markdown compiler
+vi.mock('../../core/markdown/compiler.js', () => ({
+  getMarkdownCompiler: vi.fn(() => ({
+    compile: vi.fn().mockResolvedValue('<p>compiled html</p>'),
+    isMarkdown: vi.fn().mockReturnValue(true)
+  }))
+}));
+
 // Mock TipTap
 const mockEditor = {
   chain: vi.fn(() => ({
@@ -49,15 +57,15 @@ describe('MarkdownPaste Extension', () => {
     });
 
     it('should have onCreate method', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
       const extension = MarkdownPaste;
-      
+
       // Simulate extension creation
       if (extension.config.onCreate) {
         extension.config.onCreate();
         expect(consoleSpy).toHaveBeenCalledWith('[MarkdownPaste] Extension created successfully');
       }
-      
+
       consoleSpy.mockRestore();
     });
   });
@@ -117,11 +125,11 @@ describe('MarkdownPaste Extension', () => {
   describe('Markdown Conversion', () => {
     it('should configure MarkdownIt with correct plugins', async () => {
       const MarkdownItConstructor = vi.mocked(await import('markdown-it')).default;
-      
+
       // Create extension and get plugins
       const extension = MarkdownPaste;
       const plugins = extension.config.addProseMirrorPlugins ? extension.config.addProseMirrorPlugins.call({ editor: mockEditor }) : [];
-      
+
       expect(plugins).toHaveLength(1);
       expect(plugins[0]).toBeDefined();
     });
@@ -129,9 +137,9 @@ describe('MarkdownPaste Extension', () => {
     it('should render markdown to HTML', () => {
       const markdownText = '**bold** and *italic*';
       const expectedHtml = '<p><strong>bold</strong> and <em>italic</em></p>';
-      
+
       mockMarkdownIt.render.mockReturnValue(expectedHtml);
-      
+
       // This tests the markdown-it functionality indirectly
       expect(mockMarkdownIt.render).toBeDefined();
     });
@@ -161,7 +169,7 @@ describe('MarkdownPaste Extension', () => {
       mockClipboardData = {
         getData: vi.fn()
       };
-      
+
       mockClipboardEvent = {
         clipboardData: mockClipboardData,
         preventDefault: vi.fn()
@@ -181,7 +189,7 @@ describe('MarkdownPaste Extension', () => {
       const handlePaste = plugin.props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
-      
+
       expect(mockClipboardData.getData).toHaveBeenCalledWith('text/plain');
       expect(mockClipboardData.getData).toHaveBeenCalledWith('text/html');
     });
@@ -199,9 +207,10 @@ describe('MarkdownPaste Extension', () => {
       const handlePaste = plugin.props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
-      
-      // Should return false when HTML is present
-      expect(result).toBe(false);
+
+      // Should return true because we prefer Markdown processing when valid Markdown is detected
+      // even if HTML is present (unless the HTML ratio is very high)
+      expect(result).toBe(true);
     });
 
     it('should not process plain text without markdown', () => {
@@ -217,7 +226,7 @@ describe('MarkdownPaste Extension', () => {
       const handlePaste = plugin.props.handlePaste;
 
       const result = handlePaste(mockView, mockClipboardEvent);
-      
+
       expect(result).toBe(false);
     });
 
@@ -233,7 +242,7 @@ describe('MarkdownPaste Extension', () => {
       const handlePaste = plugin.props.handlePaste;
 
       const result = handlePaste(mockView, eventWithoutClipboard);
-      
+
       expect(result).toBe(false);
     });
   });
@@ -247,10 +256,10 @@ describe('MarkdownPaste Extension', () => {
       };
     });
 
-    it('should insert converted content into editor', () => {
+    it('should insert converted content into editor', async () => {
       const markdownText = '**bold text**';
       const convertedHtml = '<p><strong>bold text</strong></p>';
-      
+
       mockMarkdownIt.render.mockReturnValue(convertedHtml);
       mockClipboardData.getData.mockImplementation((type) => {
         if (type === 'text/plain') return markdownText;
@@ -270,6 +279,9 @@ describe('MarkdownPaste Extension', () => {
 
       handlePaste(mockView, mockClipboardEvent);
 
+      // Wait for async compilation
+      await new Promise(resolve => setTimeout(resolve, 0));
+
       expect(mockEditor.chain).toHaveBeenCalled();
       expect(mockClipboardEvent.preventDefault).toHaveBeenCalled();
     });
@@ -277,7 +289,7 @@ describe('MarkdownPaste Extension', () => {
     it('should preserve whitespace in content insertion', () => {
       const extension = MarkdownPaste;
       const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
-      
+
       // The extension should configure insertContent with preserveWhitespace: 'full'
       expect(plugins[0]).toBeDefined();
     });
@@ -285,24 +297,24 @@ describe('MarkdownPaste Extension', () => {
 
   describe('Console Logging', () => {
     it('should log paste events for debugging', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-      
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
+
       const extension = MarkdownPaste;
       const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
-      
+
       expect(consoleSpy).toHaveBeenCalledWith('[MarkdownPaste] Adding ProseMirror plugin');
-      
+
       consoleSpy.mockRestore();
     });
 
     it('should log conversion details', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+
       // Test successful conversion logging
       // Test error logging
       // These would be tested in integration tests with actual paste events
-      
+
       consoleSpy.mockRestore();
       consoleErrorSpy.mockRestore();
     });

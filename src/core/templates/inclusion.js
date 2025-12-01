@@ -32,7 +32,7 @@ export class TemplateInclusion {
     const processingContext = {
       ...context,
       depth: (context.depth || 0) + 1,
-      inclusionCount: context.inclusionCount || 0,
+      stats: context.stats || { inclusionCount: 0 },
       includeChain: context.includeChain || [],
       variables: { ...variables }
     };
@@ -43,7 +43,7 @@ export class TemplateInclusion {
     }
 
     // Check total inclusions
-    if (processingContext.inclusionCount >= this.maxInclusions) {
+    if (processingContext.stats.inclusionCount >= this.maxInclusions) {
       throw new Error(`Maximum number of inclusions (${this.maxInclusions}) exceeded`);
     }
 
@@ -79,10 +79,16 @@ export class TemplateInclusion {
           const included = await this.resolveInclude(include, processingContext);
 
           // Replace include with resolved content
-          result = result.replace(include.fullMatch, included);
-          hasIncludes = true;
-          madeProgress = true;
-          processingContext.inclusionCount++;
+          if (included !== include.fullMatch) {
+            if (processingContext.stats.inclusionCount >= this.maxInclusions) {
+              throw new Error(`Maximum number of inclusions (${this.maxInclusions}) exceeded`);
+            }
+
+            result = result.replace(include.fullMatch, included);
+            hasIncludes = true;
+            madeProgress = true;
+            processingContext.stats.inclusionCount++;
+          }
         } catch (error) {
           if (this.strictMode) {
             throw new Error(`Include failed for '${include.templateId}': ${error.message}`);
@@ -156,7 +162,7 @@ export class TemplateInclusion {
 
       // Remove quotes if present
       if ((value.startsWith('"') && value.endsWith('"')) ||
-          (value.startsWith("'") && value.endsWith("'"))) {
+        (value.startsWith("'") && value.endsWith("'"))) {
         value = value.slice(1, -1);
       }
 
@@ -238,7 +244,7 @@ export class TemplateInclusion {
     const newContext = {
       depth: context.depth + 1,
       includeChain: [...context.includeChain, include.templateId],
-      inclusionCount: context.inclusionCount,
+      stats: context.stats,
       variables: mergedVariables
     };
 
@@ -247,25 +253,27 @@ export class TemplateInclusion {
       throw new Error(`Maximum inclusion depth (${this.maxDepth}) exceeded`);
     }
 
-    // Process nested includes first (recursively)
     let processed = template.content;
+
+    // 1. Process variables first if template manager has process method
+    // This ensures variables are resolved before we look for nested includes
+    if (this.templateManager.process) {
+      try {
+        const result = await this.templateManager.process(include.templateId, mergedVariables, {
+          processIncludes: false // Don't reprocess includes yet
+        });
+        processed = result.result || processed;
+      } catch (error) {
+        // If processing fails, continue with raw content
+      }
+    }
+
+    // 2. Process nested includes (recursively)
     if (this.hasIncludes(processed)) {
       processed = await this.process(processed, mergedVariables, {
         ...newContext,
         depth: newContext.depth - 1 // Don't double-count depth
       });
-    }
-
-    // Then process variables if template manager has process method
-    if (this.templateManager.process) {
-      try {
-        const result = await this.templateManager.process(include.templateId, mergedVariables, {
-          processIncludes: false // Don't reprocess includes
-        });
-        processed = result.result || processed;
-      } catch (error) {
-        // If processing fails, use the content with includes resolved
-      }
     }
 
     return processed;

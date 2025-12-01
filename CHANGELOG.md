@@ -5,7 +5,7 @@ All notable changes to Lokus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.1.0] - 2025-09-18
+## [2.1.0] - 2024-09-18
 
 ### ⌨️ New Keyboard Shortcuts
 
@@ -86,7 +86,7 @@ All shortcuts work on both Mac and Windows (Cmd on Mac = Ctrl on Windows):
 - Resolved Mac keyboard shortcut conflicts  
 - Fixed shortcut help modal theming
 
-## [1.0.3] - 2025-09-15
+## [1.0.3] - 2024-09-15
 
 ### 🎯 Major Features
 
@@ -152,7 +152,7 @@ All shortcuts work on both Mac and Windows (Cmd on Mac = Ctrl on Windows):
 - **Command System** - Extensible command registration and execution
 - **Documentation Tools** - Streamlined content creation and management
 
-## [1.0.0] - 2025-09-14
+## [1.0.0] - 2024-09-14
 
 ### 🚀 Initial Release
 

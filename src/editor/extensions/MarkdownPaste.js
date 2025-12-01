@@ -7,9 +7,11 @@ const MarkdownPaste = Extension.create({
   name: 'markdownPaste',
 
   onCreate() {
+    console.log('[MarkdownPaste] Extension created successfully');
   },
 
   addProseMirrorPlugins() {
+    console.log('[MarkdownPaste] Adding ProseMirror plugin');
     const editor = this.editor
 
     return [

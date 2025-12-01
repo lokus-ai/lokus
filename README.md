@@ -77,14 +77,14 @@ Lokus is a **next-generation note-taking app** for developers, writers, and know
 **macOS** (Apple Silicon & Intel)
 ```bash
 # Download .dmg from releases
-# For unsigned builds, remove quarantine:
-sudo xattr -rd com.apple.quarantine /Applications/Lokus.app
+# Drag Lokus to Applications folder
 ```
 
 **Windows** (x64)
 ```bash
 # Download .exe installer or .zip portable
 ```
+> **Note**: Windows may show a SmartScreen warning for the first few weeks after release. This is normal for new applications and will disappear as we build reputation. The app is safe - it's open-source and signed.
 
 **Linux** (AppImage)
 ```bash

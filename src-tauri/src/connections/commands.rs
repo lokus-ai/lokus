@@ -57,7 +57,7 @@ pub async fn gmail_check_auth_callback() -> Result<Option<(String, String)>, Str
                     }
                 }
             }
-            Err(e) => {
+            Err(_e) => {
             }
         }
     }

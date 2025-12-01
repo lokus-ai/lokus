@@ -155,8 +155,8 @@ export class PropertyTypes {
 
     const parts = str.split(',').map(s => s.trim());
     return parts.length > 1 &&
-           parts.length <= 10 && // reasonable number of tags
-           parts.every(part => part.length > 0 && part.length < 50);
+      parts.length <= 10 && // reasonable number of tags
+      parts.every(part => part.length > 0 && part.length < 50);
   }
 
   /**
@@ -269,7 +269,7 @@ export class PropertyTypes {
   static toTags(value) {
     const arr = this.toArray(value);
     return arr.map(item => this.toString(item).trim())
-              .filter(tag => tag.length > 0 && tag.length < 50);
+      .filter(tag => tag.length > 0 && tag.length < 50);
   }
 
   /**
@@ -309,9 +309,9 @@ export class PropertyTypes {
       [PropertyType.STRING]: [PropertyType.TAGS],
       [PropertyType.ARRAY]: [PropertyType.TAGS],
       [PropertyType.TAGS]: [PropertyType.ARRAY, PropertyType.STRING],
-      [PropertyType.NUMBER]: [PropertyType.STRING],
-      [PropertyType.BOOLEAN]: [PropertyType.STRING],
-      [PropertyType.DATE]: [PropertyType.STRING]
+      [PropertyType.NUMBER]: [],
+      [PropertyType.BOOLEAN]: [],
+      [PropertyType.DATE]: []
     };
 
     return compatibleTypes[type]?.includes(detectedType) || false;
@@ -346,23 +346,8 @@ export class PropertyTypes {
       return uniqueTypes[0];
     }
 
-    // Handle mixed types - prefer more specific types
-    const typeHierarchy = [
-      PropertyType.TAGS,
-      PropertyType.ARRAY,
-      PropertyType.DATE,
-      PropertyType.BOOLEAN,
-      PropertyType.NUMBER,
-      PropertyType.STRING,
-      PropertyType.MIXED
-    ];
-
-    // Return the most specific type that appears
-    for (const type of typeHierarchy) {
-      if (typeCounts[type]) {
-        return type;
-      }
-    }
+    // If multiple types, return MIXED
+    return PropertyType.MIXED;
 
     return PropertyType.MIXED;
   }

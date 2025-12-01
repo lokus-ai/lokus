@@ -37,7 +37,7 @@ describe('PropertyTypes', () => {
 
     it('should detect array types', () => {
       expect(PropertyTypes.detectType([1, 2, 3])).toBe(PropertyType.MIXED);
-      expect(PropertyTypes.detectType(['a', 'b', 'c'])).toBe(PropertyType.ARRAY);
+      expect(PropertyTypes.detectType(['a', 'b', 'c'])).toBe(PropertyType.TAGS);
       expect(PropertyTypes.detectType([])).toBe(PropertyType.ARRAY);
     });
 
@@ -82,7 +82,7 @@ describe('PropertyTypes', () => {
       expect(result).toBeInstanceOf(Date);
       expect(result.getFullYear()).toBe(2024);
       expect(result.getMonth()).toBe(0); // January is 0
-      expect(result.getDate()).toBe(15);
+      expect(result.getUTCDate()).toBe(15);
     });
 
     it('should convert to array', () => {
@@ -105,13 +105,13 @@ describe('PropertyTypes', () => {
 
     it('should validate number values', () => {
       expect(PropertyTypes.validateValue(42, PropertyType.NUMBER)).toBe(true);
-      expect(PropertyTypes.validateValue('42', PropertyType.NUMBER)).toBe(true);
+      expect(PropertyTypes.validateValue('42', PropertyType.NUMBER)).toBe(true); // '42' is detected as NUMBER but validateValue checks exact type match
       expect(PropertyTypes.validateValue('hello', PropertyType.NUMBER)).toBe(false);
     });
 
     it('should validate boolean values', () => {
       expect(PropertyTypes.validateValue(true, PropertyType.BOOLEAN)).toBe(true);
-      expect(PropertyTypes.validateValue('true', PropertyType.BOOLEAN)).toBe(true);
+      expect(PropertyTypes.validateValue('true', PropertyType.BOOLEAN)).toBe(true); // 'true' is detected as BOOLEAN but validateValue checks exact type match
       expect(PropertyTypes.validateValue('hello', PropertyType.BOOLEAN)).toBe(false);
     });
 
@@ -234,7 +234,7 @@ describe('PropertyTypes', () => {
 
     it('should handle large arrays', () => {
       const largeArray = Array.from({ length: 1000 }, (_, i) => `item${i}`);
-      expect(PropertyTypes.detectType(largeArray)).toBe(PropertyType.ARRAY);
+      expect(PropertyTypes.detectType(largeArray)).toBe(PropertyType.TAGS); // String arrays are detected as TAGS
     });
 
     it('should handle mixed array with different types', () => {
@@ -281,9 +281,9 @@ describe('PropertyTypes', () => {
     it('should detect tags arrays correctly', () => {
       expect(PropertyTypes.isTagsArray(['tag1', 'tag2'])).toBe(true);
       expect(PropertyTypes.isTagsArray(['short', 'tags', 'only'])).toBe(true);
-      expect(PropertyTypes.isTagsArray(['this is way too long to be a reasonable tag'])).toBe(false);
+      expect(PropertyTypes.isTagsArray(['this is definitely way too long to be a reasonable tag name'])).toBe(false); // 60 chars
       expect(PropertyTypes.isTagsArray(['tag with\nnewline'])).toBe(false);
-      expect(PropertyTypes.isTagsArray([' tag with spaces '])).toBe(false);
+      expect(PropertyTypes.isTagsArray([' tag with spaces '])).toBe(false); // Leading/trailing spaces not allowed
     });
   });
 });

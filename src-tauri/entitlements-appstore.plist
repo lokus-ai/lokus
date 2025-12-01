@@ -5,8 +5,13 @@
 	<!-- ============================================ -->
 	<!-- Application Identifier                       -->
 	<!-- ============================================ -->
+	<!-- ============================================ -->
+	<!-- Application Identifier                       -->
+	<!-- ============================================ -->
 	<key>com.apple.application-identifier</key>
 	<string>UH5Z2K4G9H.io.lokus.app</string>
+	<key>com.apple.developer.team-identifier</key>
+	<string>UH5Z2K4G9H</string>
 
 	<!-- ============================================ -->
 	<!-- REQUIRED: App Store Sandbox                  -->

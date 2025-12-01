@@ -38,6 +38,27 @@ export class TemplateStorage {
   }
 
   /**
+   * Save a single template (in monolithic storage, this saves all)
+   */
+  async saveTemplate(template) {
+    // In monolithic storage, we just save everything
+    // Ensure the template is in the cache first
+    if (template && template.id) {
+      this.cache.set(template.id, template);
+    }
+    return await this.save(this.cache);
+  }
+
+  /**
+   * Delete a single template (in monolithic storage, this saves all)
+   */
+  async deleteTemplate(id) {
+    // In monolithic storage, the cache is already updated by the manager
+    // We just need to save the current state
+    return await this.save(this.cache);
+  }
+
+  /**
    * Save templates to file
    */
   async save(templates) {

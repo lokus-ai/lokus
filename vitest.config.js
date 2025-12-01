@@ -23,6 +23,11 @@ export default defineConfig({
     },
     // Include remaining test files
     include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}', 'packages/**/*.{test,spec}.{js,jsx,ts,tsx}'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'packages/lokus-plugin-cli/templates/**'
+    ],
     // Watch mode configuration (tests removed)
     watch: {
       include: ['src/**/*.{js,jsx,ts,tsx}']
