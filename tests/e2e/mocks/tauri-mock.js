@@ -14,10 +14,55 @@ function initMockFileSystem() {
   const workspacePath = '/tmp/lokus-e2e-test';
   mockDirectories.add(workspacePath);
   mockDirectories.add(`${workspacePath}/.lokus`);
+  mockDirectories.add(`${workspacePath}/notes`);
 
-  // Create initial test files
-  mockFileSystem.set(`${workspacePath}/README.md`, '# Test Workspace\n\nThis is a test workspace for E2E testing.');
-  mockFileSystem.set(`${workspacePath}/test-note.md`, '# Test Note\n\nHello World!');
+  // Create initial test files with content useful for testing
+  mockFileSystem.set(`${workspacePath}/README.md`, `# Test Workspace
+
+This is a test workspace for E2E testing.
+
+## Features
+
+- Editor functionality
+- Search capabilities
+- Markdown rendering
+
+Hello world! This is searchable content.
+`);
+  
+  mockFileSystem.set(`${workspacePath}/test-note.md`, `# Test Note
+
+Hello World! This is a test note.
+
+## Formatting Test
+
+**Bold text** and *italic text* and ~~strikethrough~~.
+
+- List item 1
+- List item 2
+- List item 3
+
+\`\`\`javascript
+console.log("Hello from code block");
+\`\`\`
+
+> This is a blockquote
+
+[[Wiki Link Test]]
+`);
+
+  mockFileSystem.set(`${workspacePath}/notes/daily.md`, `# Daily Notes
+
+Today's tasks:
+- [ ] First task
+- [x] Completed task
+- [ ] Another task
+
+$E = mc^2$
+
+Some math: $\\int_0^1 x^2 dx$
+`);
+
   mockFileSystem.set(`${workspacePath}/.lokus/config.json`, JSON.stringify({ theme: 'light' }));
 }
 
@@ -84,20 +129,97 @@ const mockCommands = {
   },
 
   read_workspace_files: async ({ workspacePath }) => {
-    const files = [];
     const prefix = workspacePath.endsWith('/') ? workspacePath : `${workspacePath}/`;
-
-    for (const [filePath, content] of mockFileSystem) {
-      if (filePath.startsWith(prefix) && filePath.endsWith('.md')) {
-        files.push({
+    
+    // Build a tree structure that the Workspace component expects
+    const buildTree = () => {
+      const root = [];
+      const dirMap = new Map();
+      
+      // Add files
+      for (const [filePath, content] of mockFileSystem) {
+        if (!filePath.startsWith(prefix)) continue;
+        
+        const relativePath = filePath.slice(prefix.length);
+        const parts = relativePath.split('/');
+        const fileName = parts.pop();
+        
+        // Skip hidden files except specific ones
+        if (fileName.startsWith('.') && fileName !== '.md') continue;
+        
+        const fileNode = {
+          name: fileName,
           path: filePath,
-          name: filePath.split('/').pop(),
-          content: content
-        });
+          is_directory: false,
+          is_file: true,
+          children: null
+        };
+        
+        if (parts.length === 0) {
+          // File in root
+          root.push(fileNode);
+        } else {
+          // File in subdirectory - ensure parent dirs exist
+          let currentPath = prefix.slice(0, -1);
+          let currentLevel = root;
+          
+          for (const dir of parts) {
+            currentPath = `${currentPath}/${dir}`;
+            let dirNode = dirMap.get(currentPath);
+            
+            if (!dirNode) {
+              dirNode = {
+                name: dir,
+                path: currentPath,
+                is_directory: true,
+                is_file: false,
+                children: []
+              };
+              dirMap.set(currentPath, dirNode);
+              currentLevel.push(dirNode);
+            }
+            currentLevel = dirNode.children;
+          }
+          currentLevel.push(fileNode);
+        }
       }
-    }
-
-    return files;
+      
+      // Add empty directories
+      for (const dirPath of mockDirectories) {
+        if (!dirPath.startsWith(prefix) || dirPath === workspacePath) continue;
+        
+        const relativePath = dirPath.slice(prefix.length);
+        if (relativePath.startsWith('.')) continue;
+        
+        if (!dirMap.has(dirPath)) {
+          const parts = relativePath.split('/');
+          let currentPath = prefix.slice(0, -1);
+          let currentLevel = root;
+          
+          for (const dir of parts) {
+            currentPath = `${currentPath}/${dir}`;
+            let dirNode = dirMap.get(currentPath);
+            
+            if (!dirNode) {
+              dirNode = {
+                name: dir,
+                path: currentPath,
+                is_directory: true,
+                is_file: false,
+                children: []
+              };
+              dirMap.set(currentPath, dirNode);
+              currentLevel.push(dirNode);
+            }
+            currentLevel = dirNode.children;
+          }
+        }
+      }
+      
+      return root;
+    };
+    
+    return buildTree();
   },
 
   // Workspace operations

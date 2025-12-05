@@ -29,8 +29,10 @@ const MCP_HTTP_URL = process.env.MCP_HTTP_URL || 'http://localhost:3001/api/mcp'
 const TEST_API_KEY = process.env.TEST_API_KEY || 'test-api-key';
 const TEST_WORKSPACE = process.env.TEST_WORKSPACE || '/tmp/lokus-test-workspace';
 
-// Skip entire suite in CI unless MCP server is explicitly configured
-const shouldSkipMCP = process.env.CI === 'true' && !process.env.MCP_WS_URL;
+// Skip MCP tests - they require an external MCP server running
+// These are integration tests that should be run separately
+// Set SKIP_MCP_TESTS=false and ensure MCP server is running to enable
+const shouldSkipMCP = process.env.SKIP_MCP_TESTS !== 'false';
 
 // Test utilities
 class MCPTestClient {
