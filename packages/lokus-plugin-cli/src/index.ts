@@ -46,15 +46,15 @@ program
   .hook('preAction', (thisCommand, actionCommand) => {
     // Set global options
     const opts = thisCommand.opts();
-    
+
     if (opts.noColor) {
       process.env.FORCE_COLOR = '0';
     }
-    
+
     if (opts.silent) {
       process.env.LOKUS_CLI_SILENT = 'true';
     }
-    
+
     if (opts.verbose) {
       process.env.LOKUS_CLI_VERBOSE = 'true';
     }
@@ -65,18 +65,18 @@ program.exitOverride((err) => {
   if (err.code === 'commander.help') {
     process.exit(0)
   }
-  
+
   if (err.code === 'commander.version') {
     process.exit(0)
   }
-  
+
   console.error(chalk.red('Error:'), err.message)
-  
+
   if (process.env.LOKUS_CLI_VERBOSE === 'true' && err.stack) {
     console.error(chalk.gray('Stack trace:'))
     console.error(chalk.gray(err.stack))
   }
-  
+
   process.exit(1)
 })
 

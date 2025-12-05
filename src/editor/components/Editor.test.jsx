@@ -46,7 +46,7 @@ vi.mock('../lib/SlashCommand.js', () => ({ default: {} }))
 vi.mock('./TableBubbleMenu.jsx', () => ({ default: () => null }))
 
 // Mock EditorContextMenu
-vi.mock('../../components/EditorContextMenu.jsx', () => ({
+vi.mock('../../components/editor/EditorContextMenu.jsx', () => ({
   default: ({ children, onAction }) => <div data-testid="editor-context-menu">{children}</div>
 }))
 

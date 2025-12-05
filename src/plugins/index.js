@@ -4,7 +4,7 @@
  */
 
 // Core plugin system
-export { PluginManager, pluginManager } from './PluginManager.js'
+export { PluginManager, pluginManager } from '../components/features/Plugins/PluginManager.jsx'
 export { PluginAPI, PluginAPIFactory } from './PluginAPI.js'
 
 // Plugin loading and validation
@@ -120,7 +120,7 @@ export { EventEmitter } from '../utils/EventEmitter.js'
  */
 export async function initializePluginSystem(editorAPI = null, options = {}) {
   try {
-    const { pluginManager } = await import('./PluginManager.js')
+    const { pluginManager } = await import('../components/features/Plugins/PluginManager.jsx')
     const { PluginAPIFactory } = await import('./PluginAPI.js')
     
     // Create plugin API factory
@@ -235,7 +235,7 @@ export async function shutdownPluginSystem() {
     }
     
     // Shutdown plugin manager
-    const { pluginManager } = await import('./PluginManager.js')
+    const { pluginManager } = await import('../components/features/Plugins/PluginManager.jsx')
     await pluginManager.shutdown()
     
   } catch (error) {
@@ -248,7 +248,7 @@ export async function shutdownPluginSystem() {
  */
 export async function getPluginSystemStatus() {
   try {
-    const { pluginManager } = await import('./PluginManager.js')
+    const { pluginManager } = await import('../components/features/Plugins/PluginManager.jsx')
     
     // Get MCP status
     let mcpStatus = null

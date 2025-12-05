@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import ThemeToggle from './ThemeToggle'
+import ThemeToggle from './ui/ThemeToggle'
 
 // 1. Mock the hook so we can control it and spy on functions
 const mockSetMode = vi.fn()

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import WikiLinkModal from './WikiLinkModal'
+import WikiLinkModal from './editor/WikiLinkModal'
 import * as tauriApi from '@tauri-apps/api/core'
 
 // Mock Tauri invoke
