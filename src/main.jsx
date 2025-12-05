@@ -5,6 +5,7 @@ import { ErrorBoundary, ErrorFallback } from './components/ui/error/ErrorBoundar
 import App from './App'
 import { ThemeProvider } from './hooks/theme'
 import './styles/globals.css'
+import 'katex/dist/katex.min.css'
 import { logger } from './utils/logger.js'
 
 // Initialize Sentry SDK before rendering

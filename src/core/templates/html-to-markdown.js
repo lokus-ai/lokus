@@ -36,7 +36,7 @@ class HTMLToMarkdownConverter {
     this.turndownService.addRule('taskList', {
       filter: (node) => {
         return node.nodeName === 'LI' &&
-               node.getAttribute('data-type') === 'taskItem';
+          node.getAttribute('data-type') === 'taskItem';
       },
       replacement: (content, node) => {
         const checked = node.getAttribute('data-checked') === 'true';
@@ -65,7 +65,7 @@ class HTMLToMarkdownConverter {
     this.turndownService.addRule('wikiLink', {
       filter: (node) => {
         return node.nodeName === 'A' &&
-               node.getAttribute('data-type') === 'wikiLink';
+          node.getAttribute('data-type') === 'wikiLink';
       },
       replacement: (content, node) => {
         const href = node.getAttribute('href') || content;
@@ -74,13 +74,14 @@ class HTMLToMarkdownConverter {
     });
 
     // Handle math (inline and block)
+    // Handle math (inline and block)
     this.turndownService.addRule('mathInline', {
       filter: (node) => {
         return node.nodeName === 'SPAN' &&
-               node.getAttribute('data-type') === 'mathInline';
+          (node.getAttribute('data-type') === 'math-inline' || node.getAttribute('data-type') === 'mathInline');
       },
       replacement: (content, node) => {
-        const latex = node.getAttribute('data-latex') || content;
+        const latex = node.getAttribute('data-src') || node.getAttribute('data-latex') || content;
         return `$${latex}$`;
       }
     });
@@ -88,10 +89,10 @@ class HTMLToMarkdownConverter {
     this.turndownService.addRule('mathBlock', {
       filter: (node) => {
         return node.nodeName === 'DIV' &&
-               node.getAttribute('data-type') === 'mathBlock';
+          (node.getAttribute('data-type') === 'math-block' || node.getAttribute('data-type') === 'mathBlock');
       },
       replacement: (content, node) => {
-        const latex = node.getAttribute('data-latex') || content;
+        const latex = node.getAttribute('data-src') || node.getAttribute('data-latex') || content;
         return `\n$$\n${latex}\n$$\n`;
       }
     });

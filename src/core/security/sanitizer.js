@@ -61,9 +61,9 @@ const STRICT_CONFIG = {
 const MATH_CONFIG = {
   ALLOWED_TAGS: [
     // HTML tags used by KaTeX
-    'span', 'div', 
+    'span', 'div',
     // MathML tags used by KaTeX
-    'math', 'semantics', 'mrow', 'mi', 'mn', 'mo', 'msup', 'msub', 'mfrac', 
+    'math', 'semantics', 'mrow', 'mi', 'mn', 'mo', 'msup', 'msub', 'mfrac',
     'munder', 'mover', 'munderover', 'annotation', 'mspace', 'mpadded',
     'menclose', 'mtable', 'mtr', 'mtd', 'mlabeledtr', 'maligngroup', 'malignmark'
   ],
@@ -114,24 +114,21 @@ export function sanitizeMathHtml(mathHtml) {
     return '';
   }
 
-  // KaTeX generates trusted HTML, so we use minimal sanitization
-  // Only remove dangerous script-like content but preserve all formatting
+  // KaTeX generates trusted HTML, so we use permissive sanitization
+  // We explicitly allow the tags and attributes KaTeX uses
   try {
     const result = DOMPurify.sanitize(mathHtml, {
-      ALLOWED_TAGS: false, // Allow all tags
-      ALLOWED_ATTR: false, // Allow all attributes  
+      ALLOWED_TAGS: ['span', 'div', 'math', 'semantics', 'mrow', 'mi', 'mn', 'mo', 'msup', 'msub', 'annotation', 'table', 'tr', 'td'],
+      ALLOWED_ATTR: ['class', 'style', 'aria-hidden', 'data-*', 'xmlns', 'display', 'encoding'],
       FORBID_TAGS: ['script', 'object', 'embed', 'iframe', 'form', 'input', 'link', 'base'],
-      FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur', 'onchange', 'onsubmit', 'onmousedown', 'onmouseup', 'onkeydown', 'onkeyup'],
+      FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur', 'onchange', 'onsubmit'],
       ALLOW_UNKNOWN_PROTOCOLS: false,
       WHOLE_DOCUMENT: false,
       RETURN_DOM_FRAGMENT: false,
-      SANITIZE_DOM: false, // Don't sanitize DOM structure
-      KEEP_CONTENT: true,   // Keep content even if tags are removed
-      ADD_TAGS: ['math', 'semantics', 'mrow', 'mi', 'mn', 'mo', 'msup', 'msub', 'annotation'], // Explicitly allow MathML
-      ADD_ATTR: ['xmlns', 'display', 'encoding', 'aria-hidden'] // Allow MathML attributes
+      SANITIZE_DOM: true,
+      KEEP_CONTENT: true,
     });
-    
-    // Debug log
+
     return result;
   } catch (error) {
     return mathHtml; // Return unsanitized if sanitization fails
@@ -150,7 +147,7 @@ export function sanitizeSearchHighlight(text) {
     FORBID_TAGS: ['script', 'object', 'embed', 'link', 'style', 'iframe'],
     SANITIZE_DOM: true
   };
-  
+
   return sanitizeHtml(text, highlightConfig);
 }
 
@@ -204,7 +201,7 @@ export function sanitizeUrl(url) {
   // Validate URL format
   try {
     const urlObj = new URL(cleanUrl);
-    
+
     // Only allow safe protocols
     const allowedProtocols = ['http:', 'https:', 'mailto:', 'tel:'];
     if (!allowedProtocols.includes(urlObj.protocol)) {
