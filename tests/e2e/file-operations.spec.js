@@ -1,8 +1,20 @@
 import { test, expect } from '@playwright/test';
+import { disableTour, dismissTourOverlay } from './helpers/test-utils.js';
 
+/**
+ * File Operations Tests
+ *
+ * IMPORTANT: These tests require a real Tauri environment.
+ * They will skip in CI where Tauri is not available.
+ */
 test.describe('File Operations', () => {
+  // Skip in CI (no Tauri available)
+  test.skip(() => process.env.CI === 'true', 'File operations tests require Tauri environment');
+
   test.beforeEach(async ({ page }) => {
+    await disableTour(page);
     await page.goto('/');
+    await dismissTourOverlay(page);
     await page.waitForTimeout(2000); // Wait for app to fully load
   });
 

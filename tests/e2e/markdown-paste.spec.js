@@ -1,8 +1,20 @@
 import { test, expect } from '@playwright/test';
+import { disableTour, dismissTourOverlay } from './helpers/test-utils.js';
 
+/**
+ * Markdown Paste Functionality Tests
+ *
+ * IMPORTANT: These tests require a real Tauri environment with an open editor.
+ * They will skip in CI where Tauri is not available.
+ */
 test.describe('Markdown Paste Functionality', () => {
+  // Skip in CI (no Tauri available)
+  test.skip(() => process.env.CI === 'true', 'Markdown paste tests require Tauri environment');
+
   test.beforeEach(async ({ page }) => {
+    await disableTour(page);
     await page.goto('/');
+    await dismissTourOverlay(page);
     // Wait for editor to load
     await page.waitForSelector('.ProseMirror, .tiptap-area', { timeout: 5000 });
   });

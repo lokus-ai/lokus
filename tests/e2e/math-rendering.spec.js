@@ -1,8 +1,20 @@
 import { test, expect } from '@playwright/test';
+import { disableTour, dismissTourOverlay } from './helpers/test-utils.js';
 
+/**
+ * Math Rendering Tests
+ *
+ * IMPORTANT: These tests require a real Tauri environment with an open editor.
+ * They will skip in CI where Tauri is not available.
+ */
 test.describe('Math Rendering', () => {
+  // Skip in CI (no Tauri available)
+  test.skip(() => process.env.CI === 'true', 'Math rendering tests require Tauri environment');
+
   test.beforeEach(async ({ page }) => {
+    await disableTour(page);
     await page.goto('/');
+    await dismissTourOverlay(page);
     await page.waitForSelector('.ProseMirror', { timeout: 5000 });
   });
 

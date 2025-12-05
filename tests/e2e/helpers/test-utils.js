@@ -24,6 +24,37 @@ export async function injectTauriMock(page) {
 }
 
 /**
+ * Disable the product tour for tests.
+ * Call this before navigation to prevent the welcome tour from appearing.
+ */
+export async function disableTour(page) {
+  await page.addInitScript(() => {
+    // Set localStorage to mark tour as seen
+    localStorage.setItem('lokus:config', JSON.stringify({ hasSeenProductTour: true }));
+  });
+}
+
+/**
+ * Force dismiss any tour overlay that might be blocking.
+ * Call this after page load if tour appears despite being disabled.
+ */
+export async function dismissTourOverlay(page) {
+  await page.evaluate(() => {
+    // Remove driverjs overlay
+    const overlay = document.querySelector('.driver-overlay');
+    if (overlay) overlay.remove();
+
+    // Remove the popover
+    const popover = document.querySelector('.driver-popover');
+    if (popover) popover.remove();
+
+    // Close any dialog
+    const dialog = document.querySelector('dialog[open]');
+    if (dialog) dialog.close();
+  });
+}
+
+/**
  * Wait for editor to load, returns true if successful, false if editor not available
  */
 export async function waitForEditorLoad(page, options = {}) {
