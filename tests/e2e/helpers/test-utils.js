@@ -1,11 +1,27 @@
 import { expect } from '@playwright/test';
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Helper functions for E2E tests
  *
  * NOTE: Many of these functions require a Tauri environment with a workspace.
  * In browser-only mode (without Tauri), editor-dependent tests will skip.
+ * Use injectTauriMock() to enable mock Tauri APIs for testing.
  */
+
+/**
+ * Inject Tauri mock into the page before navigation.
+ * This enables tests to run without the real Tauri backend.
+ * Call this in beforeEach before navigating to the app.
+ */
+export async function injectTauriMock(page) {
+  const mockScript = readFileSync(join(__dirname, '../mocks/tauri-mock.js'), 'utf-8');
+  await page.addInitScript(mockScript);
+}
 
 /**
  * Wait for editor to load, returns true if successful, false if editor not available

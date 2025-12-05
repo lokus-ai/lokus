@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { injectTauriMock } from './helpers/test-utils.js';
 
 // Test workspace path - use tmp directory for tests
 const TEST_WORKSPACE = process.env.LOKUS_TEST_WORKSPACE || join(tmpdir(), 'lokus-e2e-test');
@@ -8,12 +9,14 @@ const TEST_WORKSPACE = process.env.LOKUS_TEST_WORKSPACE || join(tmpdir(), 'lokus
 /**
  * Editor Functionality E2E Tests
  *
- * These tests require a workspace with an open file to display the editor.
- * In browser-only mode (without Tauri), the editor may not be available.
- * Tests will skip gracefully if the editor cannot be loaded.
+ * These tests use the Tauri mock to enable testing without the real backend.
+ * The mock provides an in-memory filesystem for file operations.
  */
 test.describe('Editor Functionality', () => {
   test.beforeEach(async ({ page }) => {
+    // Inject Tauri mock before navigation
+    await injectTauriMock(page);
+
     // Navigate to workspace with test mode enabled
     const workspacePath = encodeURIComponent(TEST_WORKSPACE);
     await page.goto(`/?testMode=true&workspacePath=${workspacePath}`);
@@ -25,37 +28,27 @@ test.describe('Editor Functionality', () => {
 
   // Helper to get editor or skip test
   async function getEditorOrSkip(page, testInfo) {
-    // Dismiss welcome tour dialog if present
-    const tourCloseBtn = page.locator('dialog button:has-text("×"), dialog button:has-text("Close")');
+    // Dismiss welcome tour dialog if present (click the X button)
+    const tourCloseBtn = page.locator('dialog button:has-text("×")');
     if (await tourCloseBtn.count() > 0) {
       await tourCloseBtn.first().click();
       await page.waitForTimeout(300);
     }
 
-    // Check if we're in the workspace view
-    const isWorkspace = await page.locator('.bg-app-panel').isVisible({ timeout: 3000 }).catch(() => false);
-
-    if (isWorkspace) {
-      // Check if editor is already visible
-      const existingEditor = page.locator('.ProseMirror');
-      if (await existingEditor.count() === 0) {
-        // Try welcome screen "New Note" button first
-        const newNoteBtn = page.locator('button:has-text("New Note")');
-        if (await newNoteBtn.count() > 0) {
-          await newNoteBtn.first().click();
-          await page.waitForTimeout(500);
-        } else {
-          // Try toolbar new file button
-          const newFileBtn = page.locator('[data-tour="create-note"], button[title*="New File"]');
-          if (await newFileBtn.count() > 0) {
-            await newFileBtn.first().click();
-            await page.waitForTimeout(500);
-          }
-        }
-      }
+    // Check if editor is already visible
+    const existingEditor = page.locator('.ProseMirror');
+    if (await existingEditor.isVisible({ timeout: 1000 }).catch(() => false)) {
+      return existingEditor.first();
     }
 
-    // Check for editor
+    // Try to create a new note via the welcome screen card
+    const newNoteCard = page.locator('text=New Note').first();
+    if (await newNoteCard.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await newNoteCard.click();
+      await page.waitForTimeout(1000);
+    }
+
+    // Check for editor again
     const editor = page.locator('.ProseMirror').first();
     const isEditorVisible = await editor.isVisible({ timeout: 5000 }).catch(() => false);
 
