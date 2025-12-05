@@ -1,9 +1,18 @@
 import { test, expect } from '@playwright/test';
 
+/**
+ * Test Mode Functionality Tests
+ *
+ * IMPORTANT: These tests require a real Tauri environment.
+ * They will skip in CI where Tauri is not available.
+ */
 test.describe('Test Mode Functionality', () => {
+  // Skip in CI (no Tauri available)
+  test.skip(() => process.env.CI === 'true', 'Test mode tests require Tauri environment');
+
   test('should activate test mode with URL parameter', async ({ page }) => {
     // Navigate with test mode parameter
-    await page.goto('http://localhost:1420/?testMode=true');
+    await page.goto('/?testMode=true');
     
     // Wait for app to load
     await page.waitForLoadState('networkidle');
@@ -16,7 +25,7 @@ test.describe('Test Mode Functionality', () => {
 
   test('should automatically create workspace in test mode', async ({ page }) => {
     // Navigate with test mode
-    await page.goto('http://localhost:1420/?testMode=true');
+    await page.goto('/?testMode=true');
     await page.waitForLoadState('networkidle');
     
     // Wait for test workspace creation (longer timeout)
@@ -48,7 +57,7 @@ test.describe('Test Mode Functionality', () => {
   });
 
   test('should create test files in workspace', async ({ page }) => {
-    await page.goto('http://localhost:1420/?testMode=true');
+    await page.goto('/?testMode=true');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(5000); // Extra time for workspace creation
     
@@ -93,7 +102,7 @@ test.describe('Test Mode Functionality', () => {
   });
 
   test('should open canvas file from test workspace', async ({ page }) => {
-    await page.goto('http://localhost:1420/?testMode=true');
+    await page.goto('/?testMode=true');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(5000);
     

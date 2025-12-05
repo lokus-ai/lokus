@@ -2,11 +2,11 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Basic App Tests', () => {
   test('should load Lokus app', async ({ page }) => {
-    // Go to the app
-    await page.goto('http://localhost:1420');
+    // Go to the app (use / to use baseURL from playwright.config.js)
+    await page.goto('/')
     
     // Wait for app to load
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('networkidle')
     
     // Should show Lokus branding
     await expect(page.locator('text=Lokus')).toBeVisible({ timeout: 10000 });
@@ -16,8 +16,8 @@ test.describe('Basic App Tests', () => {
   });
 
   test('should show launcher screen', async ({ page }) => {
-    await page.goto('http://localhost:1420');
-    await page.waitForLoadState('networkidle');
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
     
     // Should show workspace selection
     const workspaceElements = [
@@ -40,8 +40,8 @@ test.describe('Basic App Tests', () => {
   });
 
   test('should handle manual workspace selection', async ({ page }) => {
-    await page.goto('http://localhost:1420');
-    await page.waitForLoadState('networkidle');
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
     
     // Try to click open workspace button
     const openBtn = page.locator('button:has-text("Open Workspace")');
@@ -59,7 +59,7 @@ test.describe('Basic App Tests', () => {
 
   test('should work with environment workspace', async ({ page }) => {
     // Set test workspace in localStorage before loading
-    await page.goto('http://localhost:1420');
+    await page.goto('/');
     
     // Create a test workspace path
     const testWorkspace = `/tmp/playwright-test-${Date.now()}`;

@@ -9,10 +9,12 @@
  * - Authentication and authorization
  * - Error handling and edge cases
  * 
- * Prerequisites:
- * - Lokus application running with MCP server enabled
+ * IMPORTANT: These tests require:
+ * - External MCP server running on localhost:3001
  * - Test workspace with sample content
  * - Valid API key for authentication
+ * 
+ * These tests will SKIP in CI as MCP server is typically managed separately.
  */
 
 import { test, expect, chromium } from '@playwright/test';
@@ -26,6 +28,9 @@ const MCP_WS_URL = process.env.MCP_WS_URL || 'ws://localhost:3001/mcp';
 const MCP_HTTP_URL = process.env.MCP_HTTP_URL || 'http://localhost:3001/api/mcp';
 const TEST_API_KEY = process.env.TEST_API_KEY || 'test-api-key';
 const TEST_WORKSPACE = process.env.TEST_WORKSPACE || '/tmp/lokus-test-workspace';
+
+// Skip entire suite in CI unless MCP server is explicitly configured
+const shouldSkipMCP = process.env.CI === 'true' && !process.env.MCP_WS_URL;
 
 // Test utilities
 class MCPTestClient {
@@ -206,6 +211,9 @@ This document outlines the project objectives and timeline.
 
 // Test suite
 test.describe('MCP Server Integration Tests', () => {
+  // Skip in CI unless MCP server is explicitly configured
+  test.skip(shouldSkipMCP, 'MCP Server tests require external MCP server - skipped in CI');
+
   let client;
 
   test.beforeAll(async () => {
@@ -891,6 +899,9 @@ test.describe('MCP Server Integration Tests', () => {
 });
 
 test.describe('MCP Server UI Integration', () => {
+  // Skip in CI unless MCP server is explicitly configured
+  test.skip(shouldSkipMCP, 'MCP Server UI tests require external MCP server - skipped in CI');
+
   test('should be accessible through Lokus UI', async () => {
     const browser = await chromium.launch();
     const page = await browser.newPage();
