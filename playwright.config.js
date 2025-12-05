@@ -16,9 +16,9 @@ export default defineConfig({
     }
   },
 
-  /* Global setup for test workspaces - disabled (tests removed) */
-  // globalSetup: './tests/e2e/setup/global-setup.js',
-  // globalTeardown: './tests/e2e/setup/global-teardown.js',
+  /* Global setup for test workspaces */
+  globalSetup: './tests/e2e/setup/global-setup.js',
+  globalTeardown: './tests/e2e/setup/global-teardown.js',
 
   projects: [
     {

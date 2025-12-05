@@ -15,11 +15,11 @@
  * - Valid API key for authentication
  */
 
-const { test, expect, chromium } = require('@playwright/test');
-const WebSocket = require('ws');
-const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
+import { test, expect, chromium } from '@playwright/test';
+import WebSocket from 'ws';
+import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
 
 // Test configuration
 const MCP_WS_URL = process.env.MCP_WS_URL || 'ws://localhost:3001/mcp';
