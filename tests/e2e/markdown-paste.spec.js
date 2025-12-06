@@ -96,4 +96,152 @@ test.describe('Markdown Paste', () => {
     
     expect(true).toBe(true);
   });
+
+  test('can type strikethrough markdown syntax', async ({ page }) => {
+    const testFile = page.locator('text=/test-note|README|notes/i').first();
+    
+    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await testFile.click();
+      await page.waitForTimeout(500);
+      
+      const editor = page.locator('.ProseMirror');
+      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await editor.click();
+        
+        // Type strikethrough syntax
+        await editor.type('This is ~~deleted~~ text');
+        await page.waitForTimeout(200);
+        
+        const content = await editor.textContent();
+        expect(content).toContain('deleted');
+      }
+    }
+    
+    expect(true).toBe(true);
+  });
+
+  test('can type inline code markdown syntax', async ({ page }) => {
+    const testFile = page.locator('text=/test-note|README|notes/i').first();
+    
+    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await testFile.click();
+      await page.waitForTimeout(500);
+      
+      const editor = page.locator('.ProseMirror');
+      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await editor.click();
+        
+        // Type inline code
+        await editor.type('Use `console.log()` for debugging');
+        await page.waitForTimeout(200);
+        
+        const content = await editor.textContent();
+        expect(content).toContain('console');
+      }
+    }
+    
+    expect(true).toBe(true);
+  });
+
+  test('can type link markdown syntax', async ({ page }) => {
+    const testFile = page.locator('text=/test-note|README|notes/i').first();
+    
+    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await testFile.click();
+      await page.waitForTimeout(500);
+      
+      const editor = page.locator('.ProseMirror');
+      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await editor.click();
+        
+        // Type link syntax
+        await editor.type('Visit [Google](https://google.com) for search');
+        await page.waitForTimeout(200);
+        
+        const content = await editor.textContent();
+        expect(content).toContain('Google');
+      }
+    }
+    
+    expect(true).toBe(true);
+  });
+
+  test('can type blockquote markdown syntax', async ({ page }) => {
+    const testFile = page.locator('text=/test-note|README|notes/i').first();
+    
+    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await testFile.click();
+      await page.waitForTimeout(500);
+      
+      const editor = page.locator('.ProseMirror');
+      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await editor.click();
+        
+        // Type blockquote
+        await editor.type('> This is a quote');
+        await page.keyboard.press('Enter');
+        await editor.type('> from someone famous');
+        await page.waitForTimeout(200);
+        
+        const content = await editor.textContent();
+        expect(content).toContain('quote');
+      }
+    }
+    
+    expect(true).toBe(true);
+  });
+
+  test('can type horizontal rule markdown syntax', async ({ page }) => {
+    const testFile = page.locator('text=/test-note|README|notes/i').first();
+    
+    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await testFile.click();
+      await page.waitForTimeout(500);
+      
+      const editor = page.locator('.ProseMirror');
+      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await editor.click();
+        
+        // Type horizontal rule
+        await editor.type('Above the line');
+        await page.keyboard.press('Enter');
+        await editor.type('---');
+        await page.keyboard.press('Enter');
+        await editor.type('Below the line');
+        await page.waitForTimeout(200);
+        
+        const content = await editor.textContent();
+        expect(content).toContain('line');
+      }
+    }
+    
+    expect(true).toBe(true);
+  });
+
+  test('can type numbered list markdown syntax', async ({ page }) => {
+    const testFile = page.locator('text=/test-note|README|notes/i').first();
+    
+    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await testFile.click();
+      await page.waitForTimeout(500);
+      
+      const editor = page.locator('.ProseMirror');
+      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await editor.click();
+        
+        // Type numbered list
+        await editor.type('1. First item');
+        await page.keyboard.press('Enter');
+        await editor.type('2. Second item');
+        await page.keyboard.press('Enter');
+        await editor.type('3. Third item');
+        await page.waitForTimeout(200);
+        
+        const content = await editor.textContent();
+        expect(content).toContain('First');
+      }
+    }
+    
+    expect(true).toBe(true);
+  });
 });

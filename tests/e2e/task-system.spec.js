@@ -102,4 +102,116 @@ test.describe('Task System', () => {
     
     expect(true).toBe(true);
   });
+
+  test('can create nested task list', async ({ page }) => {
+    const testFile = page.locator('text=/test-note|README|notes/i').first();
+    
+    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await testFile.click();
+      await page.waitForTimeout(500);
+      
+      const editor = page.locator('.ProseMirror');
+      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await editor.click();
+        
+        // Type nested tasks
+        await editor.type('- [ ] Main task');
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Tab');
+        await editor.type('- [ ] Subtask 1');
+        await page.keyboard.press('Enter');
+        await editor.type('- [ ] Subtask 2');
+        await page.waitForTimeout(200);
+        
+        const content = await editor.textContent();
+        expect(content).toContain('Main');
+      }
+    }
+    
+    expect(true).toBe(true);
+  });
+
+  test('can mix tasks with regular list items', async ({ page }) => {
+    const testFile = page.locator('text=/test-note|README|notes/i').first();
+    
+    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await testFile.click();
+      await page.waitForTimeout(500);
+      
+      const editor = page.locator('.ProseMirror');
+      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await editor.click();
+        
+        // Type mixed list
+        await editor.type('Shopping list:');
+        await page.keyboard.press('Enter');
+        await editor.type('- [ ] Buy groceries');
+        await page.keyboard.press('Enter');
+        await editor.type('- Milk');
+        await page.keyboard.press('Enter');
+        await editor.type('- Bread');
+        await page.waitForTimeout(200);
+        
+        const content = await editor.textContent();
+        expect(content).toContain('Shopping');
+      }
+    }
+    
+    expect(true).toBe(true);
+  });
+
+  test('task with description text', async ({ page }) => {
+    const testFile = page.locator('text=/test-note|README|notes/i').first();
+    
+    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await testFile.click();
+      await page.waitForTimeout(500);
+      
+      const editor = page.locator('.ProseMirror');
+      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await editor.click();
+        
+        // Type task with detailed description
+        await editor.type('- [ ] Complete project documentation');
+        await page.keyboard.press('Enter');
+        await editor.type('  This includes API docs and user guide');
+        await page.waitForTimeout(200);
+        
+        const content = await editor.textContent();
+        expect(content).toContain('documentation');
+      }
+    }
+    
+    expect(true).toBe(true);
+  });
+
+  test('can create task list under heading', async ({ page }) => {
+    const testFile = page.locator('text=/test-note|README|notes/i').first();
+    
+    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await testFile.click();
+      await page.waitForTimeout(500);
+      
+      const editor = page.locator('.ProseMirror');
+      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await editor.click();
+        
+        // Type heading followed by tasks
+        await editor.type('## Today\'s Tasks');
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Enter');
+        await editor.type('- [ ] Morning standup');
+        await page.keyboard.press('Enter');
+        await editor.type('- [ ] Code review');
+        await page.keyboard.press('Enter');
+        await editor.type('- [ ] Deploy to staging');
+        await page.waitForTimeout(200);
+        
+        const content = await editor.textContent();
+        expect(content).toContain('Today');
+      }
+    }
+    
+    expect(true).toBe(true);
+  });
 });

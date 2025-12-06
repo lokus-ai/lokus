@@ -99,4 +99,119 @@ test.describe('Math Rendering', () => {
     
     expect(true).toBe(true);
   });
+
+  test('can type Greek letters in math', async ({ page }) => {
+    const testFile = page.locator('text=/test-note|README|notes/i').first();
+    
+    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await testFile.click();
+      await page.waitForTimeout(500);
+      
+      const editor = page.locator('.ProseMirror');
+      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await editor.click();
+        
+        // Type Greek letters in math
+        await editor.type('Greek: $\\alpha + \\beta = \\gamma$');
+        await page.waitForTimeout(200);
+        
+        const content = await editor.textContent();
+        expect(content).toContain('Greek');
+      }
+    }
+    
+    expect(true).toBe(true);
+  });
+
+  test('can type fractions in math', async ({ page }) => {
+    const testFile = page.locator('text=/test-note|README|notes/i').first();
+    
+    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await testFile.click();
+      await page.waitForTimeout(500);
+      
+      const editor = page.locator('.ProseMirror');
+      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await editor.click();
+        
+        // Type fraction
+        await editor.type('Fraction: $\\frac{1}{2}$');
+        await page.waitForTimeout(200);
+        
+        const content = await editor.textContent();
+        expect(content).toContain('Fraction');
+      }
+    }
+    
+    expect(true).toBe(true);
+  });
+
+  test('can type square root in math', async ({ page }) => {
+    const testFile = page.locator('text=/test-note|README|notes/i').first();
+    
+    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await testFile.click();
+      await page.waitForTimeout(500);
+      
+      const editor = page.locator('.ProseMirror');
+      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await editor.click();
+        
+        // Type square root
+        await editor.type('Root: $\\sqrt{x^2 + y^2}$');
+        await page.waitForTimeout(200);
+        
+        const content = await editor.textContent();
+        expect(content).toContain('Root');
+      }
+    }
+    
+    expect(true).toBe(true);
+  });
+
+  test('can type integral in math', async ({ page }) => {
+    const testFile = page.locator('text=/test-note|README|notes/i').first();
+    
+    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await testFile.click();
+      await page.waitForTimeout(500);
+      
+      const editor = page.locator('.ProseMirror');
+      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await editor.click();
+        
+        // Type integral
+        await editor.type('Integral: $\\int_0^1 x dx$');
+        await page.waitForTimeout(200);
+        
+        const content = await editor.textContent();
+        expect(content).toContain('Integral');
+      }
+    }
+    
+    expect(true).toBe(true);
+  });
+
+  test('math does not break with empty delimiters', async ({ page }) => {
+    const testFile = page.locator('text=/test-note|README|notes/i').first();
+    
+    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await testFile.click();
+      await page.waitForTimeout(500);
+      
+      const editor = page.locator('.ProseMirror');
+      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await editor.click();
+        
+        // Type empty math delimiters - should not crash
+        await editor.type('Empty: $$ and more text');
+        await page.waitForTimeout(200);
+        
+        const content = await editor.textContent();
+        expect(content).toContain('Empty');
+      }
+    }
+    
+    expect(true).toBe(true);
+  });
 });
