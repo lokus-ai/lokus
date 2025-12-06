@@ -36,56 +36,42 @@ test.describe('XSS Protection', () => {
   });
 
   test('editor content is sanitized', async ({ page }) => {
-    // Try to find and click a file to open editor
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Try to type script tag content
-        await editor.type('<script>window.xss=1</script>safe content');
-        await page.waitForTimeout(200);
-        
-        // Verify script tag didn't execute
-        const xssExecuted = await page.evaluate(() => window.xss);
-        expect(xssExecuted).toBeUndefined();
-        
-        // Verify safe content is visible
-        const content = await editor.textContent();
-        expect(content).toContain('safe content');
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('<script>window.xss=1</script>safe content');
+    await page.waitForTimeout(200);
+    
+    // Verify script tag didn't execute
+    const xssExecuted = await page.evaluate(() => window.xss);
+    expect(xssExecuted).toBeUndefined();
+    
+    // Verify safe content is visible
+    const content = await editor.textContent();
+    expect(content).toContain('safe content');
   });
 
   test('HTML entities in editor are escaped', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type HTML entities
-        await editor.type('Testing < > & characters');
-        await page.waitForTimeout(200);
-        
-        // Content should be visible as text, not interpreted as HTML
-        const content = await editor.textContent();
-        expect(content).toContain('Testing');
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('Testing < > & characters');
+    await page.waitForTimeout(200);
+    
+    const content = await editor.textContent();
+    expect(content).toContain('Testing');
   });
 
   test('no inline scripts exist in the DOM', async ({ page }) => {
@@ -114,25 +100,19 @@ test.describe('XSS Protection', () => {
 
   test('img tags with onerror handlers are blocked', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Try to inject img with onerror
-        await editor.type('<img src=x onerror="window.imgXSS=1">');
-        await page.waitForTimeout(200);
-        
-        // Verify onerror didn't execute
-        const xssExecuted = await page.evaluate(() => window.imgXSS);
-        expect(xssExecuted).toBeUndefined();
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('<img src=x onerror="window.imgXSS=1">');
+    await page.waitForTimeout(200);
+    
+    // Verify onerror didn't execute
+    const xssExecuted = await page.evaluate(() => window.imgXSS);
+    expect(xssExecuted).toBeUndefined();
   });
 });

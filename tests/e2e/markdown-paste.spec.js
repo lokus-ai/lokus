@@ -27,221 +27,165 @@ test.describe('Markdown Paste', () => {
   });
 
   test('can type bold markdown syntax', async ({ page }) => {
-    // Try to find and click a file to open editor
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type bold syntax
-        await editor.type('This is **bold** text');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('bold');
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    // Test passes if we get here
-    expect(true).toBe(true);
+    await editor.type('This is **bold** text');
+    await page.waitForTimeout(200);
+    
+    const content = await editor.textContent();
+    expect(content).toContain('bold');
   });
 
   test('can type italic markdown syntax', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type italic syntax
-        await editor.type('This is *italic* text');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toBeTruthy();
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('This is *italic* text');
+    await page.waitForTimeout(200);
+    
+    const content = await editor.textContent();
+    expect(content).toContain('italic');
   });
 
   test('can type mixed markdown formatting', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type mixed formatting
-        await editor.type('# Heading with **bold** and *italic*');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toBeTruthy();
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('# Heading with **bold** and *italic*');
+    await page.waitForTimeout(200);
+    
+    const content = await editor.textContent();
+    expect(content).toContain('Heading');
   });
 
   test('can type strikethrough markdown syntax', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type strikethrough syntax
-        await editor.type('This is ~~deleted~~ text');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('deleted');
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('This is ~~deleted~~ text');
+    await page.waitForTimeout(200);
+    
+    const content = await editor.textContent();
+    expect(content).toContain('deleted');
   });
 
   test('can type inline code markdown syntax', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type inline code
-        await editor.type('Use `console.log()` for debugging');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('console');
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('Use `console.log()` for debugging');
+    await page.waitForTimeout(200);
+    
+    const content = await editor.textContent();
+    expect(content).toContain('console');
   });
 
   test('can type link markdown syntax', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type link syntax
-        await editor.type('Visit [Google](https://google.com) for search');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('Google');
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('Visit [Google](https://google.com) for search');
+    await page.waitForTimeout(200);
+    
+    const content = await editor.textContent();
+    expect(content).toContain('Google');
   });
 
   test('can type blockquote markdown syntax', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type blockquote
-        await editor.type('> This is a quote');
-        await page.keyboard.press('Enter');
-        await editor.type('> from someone famous');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('quote');
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('> This is a quote');
+    await page.keyboard.press('Enter');
+    await editor.type('> from someone famous');
+    await page.waitForTimeout(200);
+    
+    const content = await editor.textContent();
+    expect(content).toContain('quote');
   });
 
   test('can type horizontal rule markdown syntax', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type horizontal rule
-        await editor.type('Above the line');
-        await page.keyboard.press('Enter');
-        await editor.type('---');
-        await page.keyboard.press('Enter');
-        await editor.type('Below the line');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('line');
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('Above the line');
+    await page.keyboard.press('Enter');
+    await editor.type('---');
+    await page.keyboard.press('Enter');
+    await editor.type('Below the line');
+    await page.waitForTimeout(200);
+    
+    const content = await editor.textContent();
+    expect(content).toContain('line');
   });
 
   test('can type numbered list markdown syntax', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type numbered list
-        await editor.type('1. First item');
-        await page.keyboard.press('Enter');
-        await editor.type('2. Second item');
-        await page.keyboard.press('Enter');
-        await editor.type('3. Third item');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('First');
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('1. First item');
+    await page.keyboard.press('Enter');
+    await editor.type('2. Second item');
+    await page.keyboard.press('Enter');
+    await editor.type('3. Third item');
+    await page.waitForTimeout(200);
+    
+    const content = await editor.textContent();
+    expect(content).toContain('First');
   });
 });

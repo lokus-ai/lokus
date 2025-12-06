@@ -28,190 +28,140 @@ test.describe('Math Rendering', () => {
 
   test('can type inline math syntax', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type inline math syntax
-        await editor.type('The equation $x^2$ represents a square');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('equation');
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('The equation $x^2$ represents a square');
+    await page.waitForTimeout(200);
+    
+    const content = await editor.textContent();
+    expect(content).toContain('equation');
   });
 
   test('can type block math syntax', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type block math syntax
-        await editor.type('$$');
-        await page.keyboard.press('Enter');
-        await editor.type('E = mc^2');
-        await page.keyboard.press('Enter');
-        await editor.type('$$');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toBeTruthy();
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('$$');
+    await page.keyboard.press('Enter');
+    await editor.type('E = mc^2');
+    await page.keyboard.press('Enter');
+    await editor.type('$$');
+    await page.waitForTimeout(200);
+    
+    await expect(editor).toBeVisible();
   });
 
   test('editor handles special LaTeX characters', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type math with special characters
-        await editor.type('Sum: $\\sum_{i=1}^{n} x_i$');
-        await page.waitForTimeout(200);
-        
-        // Should not crash
-        const content = await editor.textContent();
-        expect(content).toBeTruthy();
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('Sum: $\\sum_{i=1}^{n} x_i$');
+    await page.waitForTimeout(200);
+    
+    // Should not crash - editor still visible
+    await expect(editor).toBeVisible();
   });
 
   test('can type Greek letters in math', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type Greek letters in math
-        await editor.type('Greek: $\\alpha + \\beta = \\gamma$');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('Greek');
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('Greek: $\\alpha + \\beta = \\gamma$');
+    await page.waitForTimeout(200);
+    
+    const content = await editor.textContent();
+    expect(content).toContain('Greek');
   });
 
   test('can type fractions in math', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type fraction
-        await editor.type('Fraction: $\\frac{1}{2}$');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('Fraction');
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('Fraction: $\\frac{1}{2}$');
+    await page.waitForTimeout(200);
+    
+    const content = await editor.textContent();
+    expect(content).toContain('Fraction');
   });
 
   test('can type square root in math', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type square root
-        await editor.type('Root: $\\sqrt{x^2 + y^2}$');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('Root');
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('Root: $\\sqrt{x^2 + y^2}$');
+    await page.waitForTimeout(200);
+    
+    const content = await editor.textContent();
+    expect(content).toContain('Root');
   });
 
   test('can type integral in math', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type integral
-        await editor.type('Integral: $\\int_0^1 x dx$');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('Integral');
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('Integral: $\\int_0^1 x dx$');
+    await page.waitForTimeout(200);
+    
+    const content = await editor.textContent();
+    expect(content).toContain('Integral');
   });
 
   test('math does not break with empty delimiters', async ({ page }) => {
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type empty math delimiters - should not crash
-        await editor.type('Empty: $$ and more text');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('Empty');
-      }
-    }
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await editor.click();
     
-    expect(true).toBe(true);
+    await editor.type('Empty: $$ and more text');
+    await page.waitForTimeout(200);
+    
+    const content = await editor.textContent();
+    expect(content).toContain('Empty');
   });
 });

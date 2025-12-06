@@ -81,17 +81,13 @@ test.describe('Test Mode Functionality', () => {
     
     // Find and click a file
     const testFile = page.locator('text=/test-note|README|notes/i').first();
+    await expect(testFile).toBeVisible({ timeout: 5000 });
+    await testFile.click();
+    await page.waitForTimeout(500);
     
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      // Editor should appear
-      const editor = page.locator('.ProseMirror');
-      await expect(editor).toBeVisible({ timeout: 5000 });
-    }
-    
-    expect(true).toBe(true);
+    // Editor should appear
+    const editor = page.locator('.ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 5000 });
   });
 
   test('app works without testMode (shows launcher)', async ({ page }) => {
@@ -105,10 +101,6 @@ test.describe('Test Mode Functionality', () => {
     // App should load
     const appRoot = page.locator('#root');
     await expect(appRoot).toBeVisible({ timeout: 10000 });
-    
-    // Without mock, should show launcher or error about workspace
-    // The exact behavior depends on whether Tauri is available
-    expect(true).toBe(true);
   });
 
   test('canvas files can be listed', async ({ page }) => {
@@ -121,16 +113,12 @@ test.describe('Test Mode Functionality', () => {
     
     await dismissTourOverlay(page);
     
-    // Look for canvas file in file tree  
-    const canvasFile = page.locator('text=/canvas|.canvas/i').first();
+    // App should load with file tree visible
+    const appRoot = page.locator('#root');
+    await expect(appRoot).toBeVisible({ timeout: 10000 });
     
-    // Canvas may or may not be in the mock files
-    if (await canvasFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      // Canvas file exists
-      expect(true).toBe(true);
-    } else {
-      // No canvas file in mock, but that's okay
-      expect(true).toBe(true);
-    }
+    // Files should be listed
+    const anyFileVisible = page.locator('text=/test-note|README|notes/i').first();
+    await expect(anyFileVisible).toBeVisible({ timeout: 5000 });
   });
 });
