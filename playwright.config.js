@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './tests/e2e', // Tests restored
+  testDir: './tests/e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -10,22 +10,20 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:1420',
     trace: 'on-first-retry',
-    // Set test mode headers
-    extraHTTPHeaders: {
-      'X-Test-Mode': 'true'
-    }
+    // Increase timeouts for app loading
+    actionTimeout: 10000,
+    navigationTimeout: 30000,
   },
 
-  /* Global setup for test workspaces - disabled (tests removed) */
-  // globalSetup: './tests/e2e/setup/global-setup.js',
-  // globalTeardown: './tests/e2e/setup/global-teardown.js',
+  /* Global setup for test workspaces */
+  globalSetup: './tests/e2e/setup/global-setup.js',
+  globalTeardown: './tests/e2e/setup/global-teardown.js',
 
   projects: [
     {
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        // Test workspace configuration
         contextOptions: {
           permissions: ['clipboard-read', 'clipboard-write']
         }
@@ -37,6 +35,6 @@ export default defineConfig({
     command: 'npm run dev',
     url: 'http://localhost:1420',
     reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000, // 2 minutes
+    timeout: 120 * 1000,
   },
 });

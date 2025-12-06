@@ -1,6 +1,30 @@
 // src/core/workspace/manager.js
 import { invoke } from "@tauri-apps/api/core";
 
+// Check if running in Tauri environment
+function isTauriAvailable() {
+  try {
+    const w = typeof window !== 'undefined' ? window : globalThis;
+    return !!(
+      (w.__TAURI_INTERNALS__ && typeof w.__TAURI_INTERNALS__.invoke === 'function') ||
+      w.__TAURI_METADATA__ ||
+      (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.includes('Tauri'))
+    );
+  } catch {
+    return false;
+  }
+}
+
+// Check if running in test mode
+function isTestMode() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('testMode') === 'true';
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Workspace Manager - Handles workspace validation and management
  */
@@ -11,6 +35,12 @@ export class WorkspaceManager {
    * @returns {Promise<boolean>} True if valid workspace
    */
   static async validatePath(path) {
+    // In browser/test mode without Tauri, accept any non-empty path
+    // This enables E2E testing with Playwright
+    if (!isTauriAvailable() && isTestMode()) {
+      return path && typeof path === 'string' && path.length > 0;
+    }
+
     try {
       return await invoke("validate_workspace_path", { path });
     } catch (error) {

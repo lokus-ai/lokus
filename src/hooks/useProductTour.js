@@ -11,6 +11,14 @@ export function useProductTour() {
     // Check if user has seen the tour
     const checkTourStatus = async () => {
       try {
+        // Skip tour if URL parameter is set (for E2E testing)
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('skipTour') === 'true' || params.get('testMode') === 'true') {
+          setHasSeenTour(true);
+          setIsLoading(false);
+          return;
+        }
+
         const config = await readConfig();
         // IMPORTANT: Default to false (show tour) for first-time users
         const seen = config?.hasSeenProductTour ?? false;

@@ -35,7 +35,6 @@ jobs:
     
     - name: Run unit tests
       run: npm test
-      continue-on-error: true  # Allow some failures while tests are being fixed
 
     - name: Upload test results
       uses: actions/upload-artifact@v4
@@ -141,9 +140,9 @@ jobs:
           if [ "${{ needs.unit-tests.result }}" == "success" ]; then
             echo "| Unit Tests | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
           elif [ "${{ needs.unit-tests.result }}" == "failure" ]; then
-            echo "| Unit Tests | ⚠️ Some failures (continuing while fixing) |" >> $GITHUB_STEP_SUMMARY
+            echo "| Unit Tests | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Unit Tests | ❌ Cancelled/Skipped |" >> $GITHUB_STEP_SUMMARY
+            echo "| Unit Tests | ⚠️ Cancelled/Skipped |" >> $GITHUB_STEP_SUMMARY
           fi
           
           if [ "${{ needs.build-test.result }}" == "success" ]; then
