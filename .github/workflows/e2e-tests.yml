@@ -3,7 +3,7 @@ name: E2E Tests
 on:
   workflow_dispatch:
   push:
-    branches: [main, develop]
+    branches: [main, develop, fix/211-re-enable-e2e-tests]
   pull_request:
     branches: [main]
 
