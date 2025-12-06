@@ -45,9 +45,31 @@ const ReadingModeView = ({ content, editorSettings }) => {
         if (target.closest('[data-type="wiki-link"]')) {
           e.preventDefault();
           const el = target.closest('[data-type="wiki-link"]');
-          const href = el.getAttribute('href');
+          let href = el.getAttribute('href');
+          const linkTarget = el.getAttribute('target') || '';
 
           if (href) {
+            // Check if href is a valid path in the file index
+            const index = globalThis.__LOKUS_FILE_INDEX__ || [];
+            let fileExists = index.some(f => f.path === href);
+
+            // If href is not a valid path, try to resolve it
+            if (!fileExists && index.length > 0) {
+              const searchTerm = linkTarget ? linkTarget.split('|')[0].split('^')[0].split('#')[0].trim() : href;
+              const filename = (p) => (p || '').split(/[\\/]/).pop();
+
+              const match = index.find(f => {
+                const name = filename(f.path);
+                return name === searchTerm ||
+                       name === `${searchTerm}.md` ||
+                       name.replace('.md', '') === searchTerm;
+              });
+
+              if (match) {
+                href = match.path;
+              }
+            }
+
             // Emit event to open file
             try {
               const { emit } = await import('@tauri-apps/api/event');

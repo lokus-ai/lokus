@@ -500,13 +500,26 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
 
           // Check if this is a resolved file path that exists in the index
           const index = globalThis.__LOKUS_FILE_INDEX__ || [];
-          const fileExists = index.some(f => f.path === cleanHref);
+          let fileExists = index.some(f => f.path === cleanHref);
 
-          if (!fileExists && target) {
-            // Show a user-friendly message
-            try {
-              // You could show a toast notification here instead
-            } catch { }
+          // If href is not a valid path, try to resolve it using the file index
+          // This handles links created before the file index was populated
+          if (!fileExists && index.length > 0) {
+            const searchTerm = target ? target.split('|')[0].split('^')[0].split('#')[0].trim() : cleanHref;
+            const filename = (p) => (p || '').split(/[\\/]/).pop();
+
+            // Try to find matching file by name
+            const match = index.find(f => {
+              const name = filename(f.path);
+              return name === searchTerm ||
+                     name === `${searchTerm}.md` ||
+                     name.replace('.md', '') === searchTerm;
+            });
+
+            if (match) {
+              cleanHref = match.path;
+              fileExists = true;
+            }
           }
 
           // Emit to workspace to open file (Tauri or DOM event)
