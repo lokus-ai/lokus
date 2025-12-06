@@ -1,0 +1,211 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, develop, fix/211-re-enable-e2e-tests]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-linux:
+    name: E2E Tests (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Run E2E tests
+        run: xvfb-run --auto-servernum -- npx playwright test --reporter=html
+        env:
+          CI: true
+
+      - name: Upload test report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-linux
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-results-linux
+          path: test-results/
+          retention-days: 14
+
+  e2e-macos:
+    name: E2E Tests (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Run E2E tests
+        run: npx playwright test --reporter=html
+        env:
+          CI: true
+
+      - name: Upload test report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-macos
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-results-macos
+          path: test-results/
+          retention-days: 14
+
+  e2e-windows:
+    name: E2E Tests (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Run E2E tests
+        run: npx playwright test --reporter=html
+        env:
+          CI: true
+
+      - name: Upload test report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-windows
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-results-windows
+          path: test-results/
+          retention-days: 14
+
+  summary:
+    name: Test Summary
+    needs: [e2e-linux, e2e-macos, e2e-windows]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "# 🧪 E2E Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Linux status
+          if [ "${{ needs.e2e-linux.result }}" == "success" ]; then
+            echo "| 🐧 Linux | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.e2e-linux.result }}" == "failure" ]; then
+            echo "| 🐧 Linux | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.e2e-linux.result }}" == "skipped" ]; then
+            echo "| 🐧 Linux | ⏭️ Skipped |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 🐧 Linux | ⚠️ Cancelled |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # macOS status
+          if [ "${{ needs.e2e-macos.result }}" == "success" ]; then
+            echo "| 🍎 macOS | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.e2e-macos.result }}" == "failure" ]; then
+            echo "| 🍎 macOS | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.e2e-macos.result }}" == "skipped" ]; then
+            echo "| 🍎 macOS | ⏭️ Skipped |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 🍎 macOS | ⚠️ Cancelled |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Windows status
+          if [ "${{ needs.e2e-windows.result }}" == "success" ]; then
+            echo "| 🪟 Windows | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.e2e-windows.result }}" == "failure" ]; then
+            echo "| 🪟 Windows | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.e2e-windows.result }}" == "skipped" ]; then
+            echo "| 🪟 Windows | ⏭️ Skipped |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 🪟 Windows | ⚠️ Cancelled |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📦 Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **playwright-report-linux** - HTML report for Linux tests" >> $GITHUB_STEP_SUMMARY
+          echo "- **playwright-report-macos** - HTML report for macOS tests" >> $GITHUB_STEP_SUMMARY
+          echo "- **playwright-report-windows** - HTML report for Windows tests" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download artifacts to view detailed test reports with screenshots and traces." >> $GITHUB_STEP_SUMMARY
+
+      - name: Check overall result
+        if: needs.e2e-linux.result == 'failure' || needs.e2e-macos.result == 'failure' || needs.e2e-windows.result == 'failure'
+        run: |
+          echo "❌ Some E2E tests failed!"
+          exit 1
