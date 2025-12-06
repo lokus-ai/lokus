@@ -57,7 +57,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright Browsers
-        run: npx playwright install --with-deps
+        run: npx playwright install chromium --with-deps
 
       - name: Create test workspace (Linux/macOS)
         if: runner.os != 'Windows'
