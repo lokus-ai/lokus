@@ -96,23 +96,28 @@ export default function markdownItWikiLinks(md) {
     const content = state.src.slice(start + 2, pos);
 
     if (!silent) {
-      // Check if this has a block reference
-      const blockRefMatch = content.match(/^([^#^]+)([#^].+)?$/)
-      const filePart = blockRefMatch ? blockRefMatch[1] : content
+      // Parse content: [[path|alias]] or [[path#hash]] or [[path^block]] or [[path]]
+      // First separate alias (after |)
+      const aliasSplit = content.split('|')
+      const pathWithRef = aliasSplit[0].trim()  // "path" or "path#hash" or "path^block"
+
+      // Then separate block/hash reference
+      const blockRefMatch = pathWithRef.match(/^([^#^]+)([#^].+)?$/)
+      const filePart = blockRefMatch ? blockRefMatch[1].trim() : pathWithRef
       const blockPart = blockRefMatch ? (blockRefMatch[2] || '') : ''
 
       // Resolve ONLY the file part to get full path
       const resolvedFilePath = resolveWikiLinkPath(filePart);
 
-      // Reconstruct href with resolved path + block reference
+      // Reconstruct href with resolved path + block reference (no alias in href)
       const resolvedPath = resolvedFilePath + blockPart;
 
       const token = state.push('wikilink_open', 'span', 1);
       token.attrs = [
         ['data-type', 'wiki-link'],
         ['class', 'wiki-link'],
-        ['href', resolvedPath],  // Full path with block reference
-        ['target', content]       // Keep original content as target
+        ['href', resolvedPath],  // Full path with block reference (no alias)
+        ['target', content]       // Keep original content as target (with alias)
       ];
 
       const textToken = state.push('text', '', 0);

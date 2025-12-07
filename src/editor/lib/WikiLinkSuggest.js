@@ -406,26 +406,43 @@ const WikiLinkSuggest = Extension.create({
             const from = Math.max((range?.from ?? editor.state.selection.from) - 1, 1)
             const to = range?.to ?? editor.state.selection.to
             const fileName = props.title || props.path
-            dbg('command select (file)', { fileName, from, to })
+            const fullPath = props.path || ''
+
+            // Build relative path from workspace for the link text
+            const wsPath = globalThis.__LOKUS_WORKSPACE_PATH__ || ''
+            let relativePath = fullPath
+            if (wsPath && fullPath.startsWith(wsPath)) {
+              relativePath = fullPath.slice(wsPath.length).replace(/^[/\\]/, '')
+            }
+            // Remove .md extension for cleaner display
+            relativePath = relativePath.replace(/\.md$/, '')
+
+            // Format: [[path|displayName]] - path for resolution, displayName for viewing
+            const wikiLinkTarget = `${relativePath}|${fileName}`
+
+            dbg('command select (file)', { fileName, fullPath, relativePath, wikiLinkTarget, from, to })
 
             // Delete the [[ and query
             try { editor.chain().focus().deleteRange({ from, to }).run() } catch (e) { dbg('deleteRange error', e) }
 
-            // Insert as plain text (not WikiLink node) so user can add ^blockid
-            const wikiText = `[[${fileName}]]`
+            // Create WikiLink node with path|alias format
+            const id = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)
             editor.chain()
               .focus()
-              .insertContent(wikiText)
+              .insertContent({
+                type: 'wikiLink',
+                attrs: {
+                  id,
+                  target: wikiLinkTarget,  // Full format: path|displayName
+                  alt: fileName,           // Display name only
+                  embed: false,
+                  href: fullPath,          // Full path for navigation
+                  src: '',
+                }
+              })
               .run()
 
-            // Position cursor before ]] so user can type ^
-            const cursorPos = from + fileName.length + 2 // After [[ and fileName
-            editor.chain()
-              .focus()
-              .setTextSelection(cursorPos)
-              .run()
-
-            dbg('inserted text', { wikiText, cursorPos })
+            dbg('inserted wikiLink node', { wikiLinkTarget, fullPath })
           }
         },
         render: () => {

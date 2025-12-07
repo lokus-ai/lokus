@@ -131,13 +131,18 @@ export const WikiLink = Node.create({
       dom.setAttribute('data-type', 'wiki-link');
       dom.setAttribute('href', node.attrs.href || node.attrs.target);
 
-      // Format display text for block references
-      const target = node.attrs.alt || node.attrs.target
-      let displayText = target
+      // Format display text
+      // Priority: alt attribute, or alias from target (after |), or target itself
+      let displayText = node.attrs.alt
+      if (!displayText && node.attrs.target) {
+        // Extract alias from target if format is "path|alias"
+        const parts = node.attrs.target.split('|')
+        displayText = parts.length > 1 ? parts[parts.length - 1] : node.attrs.target
+      }
 
       // Check if this is a block reference (contains ^)
-      if (target && target.includes('^')) {
-        const [filename, blockId] = target.split('^')
+      if (displayText && displayText.includes('^')) {
+        const [filename, blockId] = displayText.split('^')
         const cleanFilename = filename.replace('.md', '').trim()
 
         // Convert block ID slug to readable text
@@ -149,7 +154,7 @@ export const WikiLink = Node.create({
         displayText = `${cleanFilename} › ${blockText}`
       }
 
-      dom.textContent = displayText
+      dom.textContent = displayText || node.attrs.target
 
       let hoverTimeout = null;
 

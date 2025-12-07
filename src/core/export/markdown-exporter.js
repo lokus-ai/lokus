@@ -125,6 +125,9 @@ export class MarkdownExporter {
             if (dataType === 'wiki-link' && preserveWikiLinks) {
               const target = child.getAttribute('target') || '';
               const embed = child.hasAttribute('data-embed');
+
+              // Target already contains the full format: "path|displayName" or just "name"
+              // Save it as-is to preserve the link format
               if (embed) {
                 result += `![[${target}]]`;
               } else {

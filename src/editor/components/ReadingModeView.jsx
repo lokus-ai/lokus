@@ -57,16 +57,31 @@ const ReadingModeView = ({ content, editorSettings }) => {
             if (!fileExists && index.length > 0) {
               const searchTerm = linkTarget ? linkTarget.split('|')[0].split('^')[0].split('#')[0].trim() : href;
               const filename = (p) => (p || '').split(/[\\/]/).pop();
+              const dirname = (p) => {
+                if (!p) return '';
+                const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+                return i >= 0 ? p.slice(0, i) : '';
+              };
+              const hasPath = /[/\\]/.test(searchTerm);
+              const activePath = globalThis.__LOKUS_ACTIVE_FILE__ || '';
+              const activeDir = dirname(activePath);
 
-              const match = index.find(f => {
+              // Find all matching files
+              const candidates = index.filter(f => {
+                if (hasPath) {
+                  return f.path.endsWith(searchTerm) ||
+                         f.path.endsWith(`${searchTerm}.md`);
+                }
                 const name = filename(f.path);
                 return name === searchTerm ||
                        name === `${searchTerm}.md` ||
                        name.replace('.md', '') === searchTerm;
               });
 
-              if (match) {
-                href = match.path;
+              if (candidates.length > 0) {
+                // Prefer file in same folder as current file
+                const sameFolder = candidates.find(f => dirname(f.path) === activeDir);
+                href = sameFolder ? sameFolder.path : candidates[0].path;
               }
             }
 
