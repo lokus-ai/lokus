@@ -500,13 +500,59 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
 
           // Check if this is a resolved file path that exists in the index
           const index = globalThis.__LOKUS_FILE_INDEX__ || [];
-          const fileExists = index.some(f => f.path === cleanHref);
+          let fileExists = index.some(f => f.path === cleanHref);
 
-          if (!fileExists && target) {
-            // Show a user-friendly message
-            try {
-              // You could show a toast notification here instead
-            } catch { }
+          // If href is not a valid path, try to resolve it using the file index
+          // This handles links created before the file index was populated
+          if (!fileExists && index.length > 0) {
+            let searchTerm = target ? target.split('|')[0].split('^')[0].split('#')[0].trim() : cleanHref;
+            const filename = (p) => (p || '').split(/[\\/]/).pop();
+            const dirname = (p) => {
+              if (!p) return '';
+              const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+              return i >= 0 ? p.slice(0, i) : '';
+            };
+            const wsPath = globalThis.__LOKUS_WORKSPACE_PATH__ || '';
+
+            // Check for explicit root marker (./)
+            const isExplicitRoot = searchTerm.startsWith('./');
+            if (isExplicitRoot) {
+              searchTerm = searchTerm.slice(2);
+              // Find file in workspace root only
+              const rootFile = index.find(f => {
+                const name = filename(f.path);
+                const dir = dirname(f.path);
+                const isInRoot = dir === wsPath || dir === wsPath.replace(/\/$/, '');
+                return isInRoot && (name === searchTerm || name === `${searchTerm}.md`);
+              });
+              if (rootFile) {
+                cleanHref = rootFile.path;
+                fileExists = true;
+              }
+            } else {
+              const hasPath = /[/\\]/.test(searchTerm);
+              const activePath = globalThis.__LOKUS_ACTIVE_FILE__ || '';
+              const activeDir = dirname(activePath);
+
+              // Find all matching files
+              const candidates = index.filter(f => {
+                if (hasPath) {
+                  return f.path.endsWith(searchTerm) ||
+                         f.path.endsWith(`${searchTerm}.md`);
+                }
+                const name = filename(f.path);
+                return name === searchTerm ||
+                       name === `${searchTerm}.md` ||
+                       name.replace('.md', '') === searchTerm;
+              });
+
+              if (candidates.length > 0) {
+                // Prefer file in same folder as current file
+                const sameFolder = candidates.find(f => dirname(f.path) === activeDir);
+                cleanHref = sameFolder ? sameFolder.path : candidates[0].path;
+                fileExists = true;
+              }
+            }
           }
 
           // Emit to workspace to open file (Tauri or DOM event)
