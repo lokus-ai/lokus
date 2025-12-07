@@ -405,7 +405,9 @@ const WikiLinkSuggest = Extension.create({
             // FILE MODE: Insert file reference
             const from = Math.max((range?.from ?? editor.state.selection.from) - 1, 1)
             const to = range?.to ?? editor.state.selection.to
-            const fileName = props.title || props.path
+            // Get display name: just the filename without extension
+            const rawName = props.title || props.path
+            const fileName = rawName.replace(/\.[^.]+$/, '')  // Remove any extension (.md, etc.)
             const fullPath = props.path || ''
 
             // Build relative path from workspace for the link text
@@ -419,7 +421,7 @@ const WikiLinkSuggest = Extension.create({
 
             // Check if there are duplicate filenames - if this is a root file with duplicates, use ./name
             const idx = getIndex()
-            const duplicates = idx.filter(f => f.title === props.title)
+            const duplicates = idx.filter(f => f.title === rawName)
             const isRootFile = !relativePath.includes('/') && !relativePath.includes('\\')
             if (duplicates.length > 1 && isRootFile) {
               // Prefix with ./ to explicitly indicate root (prevents same-folder preference)
