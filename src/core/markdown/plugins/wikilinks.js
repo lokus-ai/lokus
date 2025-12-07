@@ -30,6 +30,21 @@ function resolveWikiLinkPath(target) {
     }
 
     const filename = (p) => (p || '').split(/[\\/]/).pop()
+    const wsPath = globalThis.__LOKUS_WORKSPACE_PATH__ || ''
+
+    // Check for explicit root marker (./) - means "root file, no same-folder preference"
+    const isExplicitRoot = base.startsWith('./')
+    if (isExplicitRoot) {
+      base = base.slice(2)  // Remove ./
+      // Find file in workspace root
+      const rootFile = index.find(f => {
+        const name = filename(f.path)
+        const dir = dirname(f.path)
+        const isInRoot = dir === wsPath || dir === wsPath.replace(/\/$/, '')
+        return isInRoot && (name === base || name === `${base}.md`)
+      })
+      return rootFile?.path || target
+    }
 
     // If includes slash, try exact path match
     if (/[/\\]/.test(base)) {

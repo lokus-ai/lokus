@@ -417,6 +417,15 @@ const WikiLinkSuggest = Extension.create({
             // Remove .md extension for cleaner display
             relativePath = relativePath.replace(/\.md$/, '')
 
+            // Check if there are duplicate filenames - if this is a root file with duplicates, use ./name
+            const idx = getIndex()
+            const duplicates = idx.filter(f => f.title === props.title)
+            const isRootFile = !relativePath.includes('/') && !relativePath.includes('\\')
+            if (duplicates.length > 1 && isRootFile) {
+              // Prefix with ./ to explicitly indicate root (prevents same-folder preference)
+              relativePath = `./${relativePath}`
+            }
+
             // Format: [[path|displayName]] - path for resolution, displayName for viewing
             const wikiLinkTarget = `${relativePath}|${fileName}`
 
