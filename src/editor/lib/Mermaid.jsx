@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NodeViewWrapper } from "@tiptap/react";
 import mermaid from "mermaid";
 import { Eye, SquarePen, Maximize2 } from "lucide-react";
-import { MermaidViewerModal } from "../../components/MermaidViewerModal.jsx";
+import { MermaidViewerModal } from "../../components/editor/MermaidViewerModal.jsx";
 import { logger } from "../../utils/logger.js";
 
 // Helper function to read CSS custom property and convert RGB to hex

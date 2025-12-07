@@ -37,7 +37,7 @@ export function PluginProvider({ children }) {
         w.__TAURI_METADATA__ ||
         (navigator?.userAgent || '').includes('Tauri')
       );
-    } catch {}
+    } catch { }
 
     if (isTauri) {
       const unlistenPromise = listen("plugins:updated", () => {

@@ -105,7 +105,7 @@ export class EnhancedTemplateManager extends TemplateManager {
  *
  * ```jsx
  * import { EnhancedTemplateManager } from './core/templates/integration-example';
- * import { useTemplatePrompts } from './components/Templates';
+ * import { useTemplatePrompts } from './components/features/Templates';
  *
  * function TemplateComponent() {
  *   const { showPrompts, PromptsManager } = useTemplatePrompts();
