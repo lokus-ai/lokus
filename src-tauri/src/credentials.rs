@@ -293,25 +293,253 @@ pub async fn delete_git_credentials(workspace_id: String) -> Result<(), String> 
     {
         use secret_service::{SecretService, EncryptionType};
         use std::collections::HashMap;
-        
+
         // Delete from Linux Secret Service
         let ss = SecretService::new(EncryptionType::Dh)
             .map_err(|e| format!("Failed to connect to Secret Service: {}", e))?;
-        
+
         let collection = ss.get_default_collection()
             .map_err(|e| format!("Failed to get default collection: {}", e))?;
-        
+
         let mut search_attributes = HashMap::new();
         search_attributes.insert("service", service_name.as_str());
-        
+
         let items = collection.search_items(search_attributes)
             .map_err(|e| format!("Failed to search credentials: {}", e))?;
-        
+
         for item in items {
             item.delete()
                 .map_err(|e| format!("Failed to delete credential: {}", e))?;
         }
     }
-    
+
+    Ok(())
+}
+
+/// Store iroh private key securely in OS keychain
+#[command]
+pub async fn store_iroh_keys(
+    workspace_id: String,
+    private_key: Vec<u8>,
+) -> Result<(), String> {
+    let service_name = format!("lokus.iroh.{}", workspace_id);
+
+    #[cfg(target_os = "macos")]
+    {
+        use security_framework::passwords::*;
+
+        // Store private key with service name
+        set_generic_password(&service_name, "iroh-key", private_key.as_slice())
+            .map_err(|e| format!("Failed to store iroh keys in Keychain: {}", e))?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::Security::Credentials::*;
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+
+        // Store in Windows Credential Manager
+        let target_name: Vec<u16> = OsStr::new(&service_name)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+
+        let username_wide: Vec<u16> = OsStr::new("iroh-key")
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+
+        let credential = CREDENTIALW {
+            Flags: 0,
+            Type: CRED_TYPE_GENERIC,
+            TargetName: target_name.as_ptr() as *mut u16,
+            Comment: std::ptr::null_mut(),
+            LastWritten: Default::default(),
+            CredentialBlobSize: private_key.len() as u32,
+            CredentialBlob: private_key.as_ptr() as *mut u8,
+            Persist: CRED_PERSIST_LOCAL_MACHINE,
+            AttributeCount: 0,
+            Attributes: std::ptr::null_mut(),
+            TargetAlias: std::ptr::null_mut(),
+            UserName: username_wide.as_ptr() as *mut u16,
+        };
+
+        unsafe {
+            CredWriteW(&credential, 0)
+                .map_err(|e| format!("Failed to store iroh keys in Credential Manager: {}", e))?;
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        use secret_service::{SecretService, EncryptionType};
+        use std::collections::HashMap;
+
+        // Store in Linux Secret Service
+        let ss = SecretService::new(EncryptionType::Dh)
+            .map_err(|e| format!("Failed to connect to Secret Service: {}", e))?;
+
+        let collection = ss.get_default_collection()
+            .map_err(|e| format!("Failed to get default collection: {}", e))?;
+
+        let mut attributes = HashMap::new();
+        attributes.insert("service", service_name.as_str());
+        attributes.insert("key-type", "iroh-key");
+
+        collection.create_item(
+            &format!("Lokus Iroh Keys for {}", workspace_id),
+            attributes,
+            &private_key,
+            true, // Replace existing
+            "application/octet-stream",
+        )
+        .map_err(|e| format!("Failed to store iroh keys: {}", e))?;
+    }
+
+    Ok(())
+}
+
+/// Retrieve iroh private key from OS keychain
+#[command]
+pub async fn retrieve_iroh_keys(
+    workspace_id: String,
+) -> Result<Vec<u8>, String> {
+    let service_name = format!("lokus.iroh.{}", workspace_id);
+
+    #[cfg(target_os = "macos")]
+    {
+        use security_framework::passwords::*;
+
+        // Retrieve key from macOS Keychain
+        let key_bytes = get_generic_password(&service_name, "iroh-key")
+            .map_err(|e| format!("Iroh keys not found in Keychain: {}", e))?;
+
+        return Ok(key_bytes);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::Security::Credentials::*;
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+        use std::slice;
+
+        // Retrieve from Windows Credential Manager
+        let target_name: Vec<u16> = OsStr::new(&service_name)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+
+        let mut credential_ptr: *mut CREDENTIALW = std::ptr::null_mut();
+
+        unsafe {
+            CredReadW(target_name.as_ptr(), CRED_TYPE_GENERIC, 0, &mut credential_ptr)
+                .map_err(|e| format!("Iroh keys not found in Credential Manager: {}", e))?;
+
+            if credential_ptr.is_null() {
+                return Err("Iroh keys not found".to_string());
+            }
+
+            let credential = &*credential_ptr;
+
+            let key_bytes = slice::from_raw_parts(
+                credential.CredentialBlob,
+                credential.CredentialBlobSize as usize,
+            ).to_vec();
+
+            // Free credential
+            CredFree(credential_ptr as *const _);
+
+            return Ok(key_bytes);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        use secret_service::{SecretService, EncryptionType};
+        use std::collections::HashMap;
+
+        // Retrieve from Linux Secret Service
+        let ss = SecretService::new(EncryptionType::Dh)
+            .map_err(|e| format!("Failed to connect to Secret Service: {}", e))?;
+
+        let collection = ss.get_default_collection()
+            .map_err(|e| format!("Failed to get default collection: {}", e))?;
+
+        let mut search_attributes = HashMap::new();
+        search_attributes.insert("service", service_name.as_str());
+
+        let items = collection.search_items(search_attributes)
+            .map_err(|e| format!("Failed to search iroh keys: {}", e))?;
+
+        if items.is_empty() {
+            return Err("Iroh keys not found".to_string());
+        }
+
+        let item = &items[0];
+        let secret = item.get_secret()
+            .map_err(|e| format!("Failed to retrieve iroh keys: {}", e))?;
+
+        return Ok(secret);
+    }
+}
+
+/// Delete iroh keys from OS keychain
+#[command]
+pub async fn delete_iroh_keys(workspace_id: String) -> Result<(), String> {
+    let service_name = format!("lokus.iroh.{}", workspace_id);
+
+    #[cfg(target_os = "macos")]
+    {
+        use security_framework::passwords::*;
+
+        // Delete key from macOS Keychain
+        delete_generic_password(&service_name, "iroh-key")
+            .map_err(|e| format!("Failed to delete iroh keys from Keychain: {}", e))?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::Security::Credentials::*;
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+
+        // Delete from Windows Credential Manager
+        let target_name: Vec<u16> = OsStr::new(&service_name)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+
+        unsafe {
+            CredDeleteW(target_name.as_ptr(), CRED_TYPE_GENERIC, 0)
+                .map_err(|e| format!("Failed to delete iroh keys from Credential Manager: {}", e))?;
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        use secret_service::{SecretService, EncryptionType};
+        use std::collections::HashMap;
+
+        // Delete from Linux Secret Service
+        let ss = SecretService::new(EncryptionType::Dh)
+            .map_err(|e| format!("Failed to connect to Secret Service: {}", e))?;
+
+        let collection = ss.get_default_collection()
+            .map_err(|e| format!("Failed to get default collection: {}", e))?;
+
+        let mut search_attributes = HashMap::new();
+        search_attributes.insert("service", service_name.as_str());
+
+        let items = collection.search_items(search_attributes)
+            .map_err(|e| format!("Failed to search iroh keys: {}", e))?;
+
+        for item in items {
+            item.delete()
+                .map_err(|e| format!("Failed to delete iroh key: {}", e))?;
+        }
+    }
+
     Ok(())
 }

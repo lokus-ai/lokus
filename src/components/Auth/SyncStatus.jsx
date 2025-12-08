@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Cloud, CloudOff, RefreshCw, Check, AlertCircle, GitBranch, CloudUpload, ArrowDownToLine, ChevronDown, AlertTriangle, Trash2, FileQuestion, LogIn } from 'lucide-react';
+import { Cloud, CloudOff, RefreshCw, Check, AlertCircle, GitBranch, CloudUpload, ArrowDownToLine, ChevronDown, AlertTriangle, Trash2, FileQuestion, LogIn, Users, Settings } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { readConfig } from '../../core/config/store';
 import { confirm } from '@tauri-apps/plugin-dialog';
 export default function SyncStatus() {
-  const [syncStatus, setSyncStatus] = useState('idle'); // idle, committing, pushing, pulling, fetching, success, error, auth_error
+  const [syncStatus, setSyncStatus] = useState('idle'); // idle, committing, pushing, pulling, fetching, syncing, success, error, auth_error
   const [gitStatus, setGitStatus] = useState(null);
+  const [irohStatus, setIrohStatus] = useState(null);
+  const [syncProvider, setSyncProvider] = useState('git'); // 'git' or 'iroh'
   const [isConfigured, setIsConfigured] = useState(false);
   const [workspacePath, setWorkspacePath] = useState('');
   const [syncSettings, setSyncSettings] = useState({});
@@ -42,15 +45,63 @@ export default function SyncStatus() {
     loadSyncConfig();
   }, []);
 
-  // Check git status periodically when configured
+  // Listen to Tauri sync events
+  useEffect(() => {
+    const unlistenPromises = [];
+
+    // Listen for sync status updates
+    unlistenPromises.push(
+      listen('sync_status_updated', (event) => {
+        const { status } = event.payload;
+        if (status.sync_type === 'iroh') {
+          setIrohStatus(status);
+          setSyncStatus('success');
+          setLastSync(new Date());
+        } else {
+          setGitStatus(status);
+        }
+      })
+    );
+
+    // Listen for sync errors
+    unlistenPromises.push(
+      listen('sync_error', (event) => {
+        const { message, error } = event.payload;
+        setErrorMessage(message || error);
+        setSyncStatus('error');
+        setTimeout(() => {
+          setSyncStatus('idle');
+        }, 5000);
+      })
+    );
+
+    // Listen for sync conflicts
+    unlistenPromises.push(
+      listen('sync_conflict', (event) => {
+        const { conflicts } = event.payload;
+        if (gitStatus) {
+          setGitStatus({ ...gitStatus, conflicts });
+        }
+      })
+    );
+
+    // Cleanup listeners on unmount
+    return () => {
+      Promise.all(unlistenPromises).then(unlisteners => {
+        unlisteners.forEach(unlisten => unlisten());
+      });
+    };
+  }, []);
+
+  // Check sync status periodically when configured
   useEffect(() => {
     if (!isConfigured || !workspacePath) return;
 
-    checkGitStatus();
-    const interval = setInterval(checkGitStatus, 30000); // Every 30 seconds
+    checkSyncStatus();
+    const interval = setInterval(checkSyncStatus, 30000); // Every 30 seconds
 
     return () => clearInterval(interval);
-  }, [isConfigured, workspacePath]);
+  }, [isConfigured, workspacePath, syncProvider]);
 
   const loadSyncConfig = async () => {
     try {
@@ -76,8 +127,19 @@ export default function SyncStatus() {
       if (cfg.sync) {
         setSyncSettings(cfg.sync);
 
-        // Check if configured (remote URL, username, and token required)
-        const configured = !!(cfg.sync.remoteUrl && cfg.sync.username && cfg.sync.token);
+        // Detect sync provider from config
+        const provider = cfg.sync.provider || 'git';
+        setSyncProvider(provider);
+
+        // Check if configured based on provider
+        let configured = false;
+        if (provider === 'iroh') {
+          // Iroh is configured if it has a document ID or ticket
+          configured = !!(cfg.sync.irohDocumentId || cfg.sync.irohTicket);
+        } else {
+          // Git is configured if it has remote URL, username, and token
+          configured = !!(cfg.sync.remoteUrl && cfg.sync.username && cfg.sync.token);
+        }
         setIsConfigured(configured);
       }
     } catch (e) {
@@ -85,14 +147,19 @@ export default function SyncStatus() {
     }
   };
 
-  const checkGitStatus = async () => {
+  const checkSyncStatus = async () => {
     if (!workspacePath) return;
 
     try {
-      const status = await invoke('git_status', { workspacePath });
-      setGitStatus(status);
+      if (syncProvider === 'iroh') {
+        const status = await invoke('iroh_sync_status', { workspacePath });
+        setIrohStatus(status);
+      } else {
+        const status = await invoke('git_status', { workspacePath });
+        setGitStatus(status);
+      }
     } catch (e) {
-      // Ignore errors if Git not initialized
+      // Ignore errors if not initialized
     }
   };
 
@@ -379,6 +446,40 @@ export default function SyncStatus() {
     }
   };
 
+  const irohManualSync = async () => {
+    if (!isConfigured || !workspacePath) return;
+
+    setShowMenu(false);
+    setErrorMessage('');
+    setErrorType('');
+
+    try {
+      setSyncStatus('syncing');
+      const result = await invoke('iroh_manual_sync', { workspacePath });
+
+      setSyncStatus('success');
+      setLastSync(new Date());
+      setErrorMessage(result || 'Sync successful');
+      setErrorType('success');
+
+      await checkSyncStatus();
+
+      setTimeout(() => {
+        setSyncStatus('idle');
+        setErrorMessage('');
+        setErrorType('');
+      }, 3000);
+    } catch (err) {
+      console.error('[SyncStatus] Iroh sync failed:', err);
+      setErrorMessage(String(err));
+      setSyncStatus('error');
+
+      setTimeout(() => {
+        setSyncStatus('idle');
+      }, 5000);
+    }
+  };
+
   const isSyncing = () => {
     return ['committing', 'pushing', 'pulling', 'fetching', 'syncing'].includes(syncStatus);
   };
@@ -388,6 +489,25 @@ export default function SyncStatus() {
       return <CloudOff className="w-3.5 h-3.5 text-app-muted" />;
     }
 
+    // For Iroh provider
+    if (syncProvider === 'iroh') {
+      switch (syncStatus) {
+        case 'syncing':
+          return <RefreshCw className="w-3.5 h-3.5 text-blue-500 animate-spin" />;
+        case 'success':
+          return <Check className="w-3.5 h-3.5 text-green-500" />;
+        case 'error':
+          return <AlertCircle className="w-3.5 h-3.5 text-red-500" />;
+        default:
+          if (irohStatus?.connected_peers > 0) {
+            return <Cloud className="w-3.5 h-3.5 text-green-500" />;
+          } else {
+            return <CloudOff className="w-3.5 h-3.5 text-app-muted" />;
+          }
+      }
+    }
+
+    // For Git provider (existing logic)
     // Check for user-facing conflicts first
     const userConflicts = filterUserContentConflicts(gitStatus?.conflicts);
     if (userConflicts.length > 0) {
@@ -420,6 +540,28 @@ export default function SyncStatus() {
       return 'Not configured';
     }
 
+    // For Iroh provider
+    if (syncProvider === 'iroh') {
+      switch (syncStatus) {
+        case 'syncing':
+          return 'Syncing...';
+        case 'success':
+          return errorMessage || 'Synced';
+        case 'error':
+          return 'Sync error';
+        default:
+          if (irohStatus) {
+            const peerCount = irohStatus.connected_peers || 0;
+            if (peerCount === 0) {
+              return 'No peers connected';
+            }
+            return `Synced \u2022 ${peerCount} device${peerCount > 1 ? 's' : ''}`;
+          }
+          return lastSync ? formatTime(lastSync) : 'Ready';
+      }
+    }
+
+    // For Git provider (existing logic)
     // Check for user-facing conflicts first
     const userConflicts = filterUserContentConflicts(gitStatus?.conflicts);
     if (userConflicts.length > 0) {
@@ -524,17 +666,23 @@ export default function SyncStatus() {
       return;
     }
 
-    // If there are user-facing conflicts, open the menu to show resolution options
-    const userConflicts = filterUserContentConflicts(gitStatus?.conflicts);
-    if (userConflicts.length > 0) {
-      setShowMenu(true);
-      return;
-    }
-
-    if (gitStatus?.has_changes || gitStatus?.ahead > 0) {
-      commitAndPush();
+    if (syncProvider === 'iroh') {
+      // For Iroh, just trigger manual sync
+      irohManualSync();
     } else {
-      checkGitStatus();
+      // For Git
+      // If there are user-facing conflicts, open the menu to show resolution options
+      const userConflicts = filterUserContentConflicts(gitStatus?.conflicts);
+      if (userConflicts.length > 0) {
+        setShowMenu(true);
+        return;
+      }
+
+      if (gitStatus?.has_changes || gitStatus?.ahead > 0) {
+        commitAndPush();
+      } else {
+        checkSyncStatus();
+      }
     }
   };
 
@@ -572,37 +720,79 @@ export default function SyncStatus() {
 
           {/* Menu */}
           <div className="absolute bottom-full right-0 mb-1 bg-app-panel border border-app-border rounded-md shadow-lg z-50 min-w-[150px]">
-            <button
-              onClick={pull}
-              disabled={isSyncing()}
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-app-text hover:bg-app-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <ArrowDownToLine className="w-3.5 h-3.5" />
-              Pull Changes
-            </button>
+            {syncProvider === 'iroh' ? (
+              <>
+                {/* Iroh-specific menu options */}
+                <button
+                  onClick={irohManualSync}
+                  disabled={isSyncing()}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-app-text hover:bg-app-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Sync Now
+                </button>
 
-            <button
-              onClick={commitAndPush}
-              disabled={isSyncing()}
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-app-text hover:bg-app-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <CloudUpload className="w-3.5 h-3.5" />
-              Commit & Push
-            </button>
+                <button
+                  onClick={() => {
+                    // TODO: Open peer list modal
+                    setShowMenu(false);
+                  }}
+                  disabled={isSyncing()}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-app-text hover:bg-app-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  View Peers
+                </button>
 
-            <div className="border-t border-app-border my-1" />
+                <div className="border-t border-app-border my-1" />
 
-            <button
-              onClick={async () => {
-                await checkGitStatus();
-                setShowMenu(false);
-              }}
-              disabled={isSyncing()}
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-app-text hover:bg-app-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Check Status
-            </button>
+                <button
+                  onClick={() => {
+                    // TODO: Open settings
+                    setShowMenu(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-app-text hover:bg-app-bg transition-colors"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  Settings
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Git-specific menu options */}
+                <button
+                  onClick={pull}
+                  disabled={isSyncing()}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-app-text hover:bg-app-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ArrowDownToLine className="w-3.5 h-3.5" />
+                  Pull Changes
+                </button>
+
+                <button
+                  onClick={commitAndPush}
+                  disabled={isSyncing()}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-app-text hover:bg-app-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <CloudUpload className="w-3.5 h-3.5" />
+                  Commit & Push
+                </button>
+
+                <div className="border-t border-app-border my-1" />
+
+                <button
+                  onClick={async () => {
+                    await checkSyncStatus();
+                    setShowMenu(false);
+                  }}
+                  disabled={isSyncing()}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-app-text hover:bg-app-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Check Status
+                </button>
+              </>
+            )}
 
             {/* Conflict Resolution Section */}
             {(() => {
@@ -699,49 +889,86 @@ export default function SyncStatus() {
             );
             })()}
 
-            {gitStatus && (
+            {(syncProvider === 'iroh' ? irohStatus : gitStatus) && (
               <>
                 <div className="border-t border-app-border my-1" />
                 <div className="px-3 py-2 text-xs">
-                  {/* Sync Health Indicator */}
-                  <div className="flex justify-between items-center mb-2 pb-2 border-b border-app-border/50">
-                    <span className="text-app-muted">Status:</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`font-medium ${getSyncHealth().color || 'text-app-text'}`}>
-                        {getSyncHealth().icon} {getSyncHealth().text}
-                      </span>
-                    </div>
-                  </div>
+                  {syncProvider === 'iroh' ? (
+                    <>
+                      {/* Iroh Status */}
+                      <div className="flex justify-between items-center mb-2 pb-2 border-b border-app-border/50">
+                        <span className="text-app-muted">Status:</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`font-medium ${irohStatus?.connected_peers > 0 ? 'text-green-500' : 'text-app-muted'}`}>
+                            {irohStatus?.connected_peers > 0 ? '✓ Connected' : '○ Offline'}
+                          </span>
+                        </div>
+                      </div>
 
-                  {/* Last Sync Time */}
-                  {lastSync && (
-                    <div className="flex justify-between mb-2">
-                      <span className="text-app-muted">Last synced:</span>
-                      <span className="text-app-text font-medium">{formatTime(lastSync)}</span>
-                    </div>
-                  )}
+                      {/* Last Sync Time */}
+                      {lastSync && (
+                        <div className="flex justify-between mb-2">
+                          <span className="text-app-muted">Last synced:</span>
+                          <span className="text-app-text font-medium">{formatTime(lastSync)}</span>
+                        </div>
+                      )}
 
-                  <div className="flex justify-between mt-1">
-                    <span className="text-app-muted">Branch:</span>
-                    <span className="text-app-text">{syncSettings.branch || 'main'}</span>
-                  </div>
-                  <div className="flex justify-between mt-1">
-                    <span className="text-app-muted">Changes:</span>
-                    <span className={gitStatus.has_changes ? 'text-yellow-500' : 'text-green-500'}>
-                      {gitStatus.has_changes ? 'Yes' : 'No'}
-                    </span>
-                  </div>
-                  {gitStatus.ahead > 0 && (
-                    <div className="flex justify-between mt-1">
-                      <span className="text-app-muted">Ahead:</span>
-                      <span className="text-app-text">{gitStatus.ahead}</span>
-                    </div>
-                  )}
-                  {gitStatus.behind > 0 && (
-                    <div className="flex justify-between mt-1">
-                      <span className="text-app-muted">Behind:</span>
-                      <span className="text-app-text">{gitStatus.behind}</span>
-                    </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-app-muted">Connected peers:</span>
+                        <span className="text-app-text">{irohStatus?.connected_peers || 0}</span>
+                      </div>
+                      {irohStatus?.document_id && (
+                        <div className="flex justify-between mt-1">
+                          <span className="text-app-muted">Document:</span>
+                          <span className="text-app-text font-mono text-[10px]" title={irohStatus.document_id}>
+                            {irohStatus.document_id.substring(0, 8)}...
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {/* Git Status */}
+                      <div className="flex justify-between items-center mb-2 pb-2 border-b border-app-border/50">
+                        <span className="text-app-muted">Status:</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`font-medium ${getSyncHealth().color || 'text-app-text'}`}>
+                            {getSyncHealth().icon} {getSyncHealth().text}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Last Sync Time */}
+                      {lastSync && (
+                        <div className="flex justify-between mb-2">
+                          <span className="text-app-muted">Last synced:</span>
+                          <span className="text-app-text font-medium">{formatTime(lastSync)}</span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between mt-1">
+                        <span className="text-app-muted">Branch:</span>
+                        <span className="text-app-text">{syncSettings.branch || 'main'}</span>
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-app-muted">Changes:</span>
+                        <span className={gitStatus.has_changes ? 'text-yellow-500' : 'text-green-500'}>
+                          {gitStatus.has_changes ? 'Yes' : 'No'}
+                        </span>
+                      </div>
+                      {gitStatus.ahead > 0 && (
+                        <div className="flex justify-between mt-1">
+                          <span className="text-app-muted">Ahead:</span>
+                          <span className="text-app-text">{gitStatus.ahead}</span>
+                        </div>
+                      )}
+                      {gitStatus.behind > 0 && (
+                        <div className="flex justify-between mt-1">
+                          <span className="text-app-muted">Behind:</span>
+                          <span className="text-app-text">{gitStatus.behind}</span>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </>

@@ -7,6 +7,7 @@ import { debounce } from "../core/search/index.js";
 import { Search, Pencil, RotateCcw, Upload, Download, Save, RefreshCw, GitBranch, CloudOff, CloudUpload } from "lucide-react";
 import { open, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import liveEditorSettings from "../core/editor/live-settings.js";
 import markdownSyntaxConfig from "../core/markdown/syntax-config.js";
 import AIAssistant from "./preferences/AIAssistant.jsx";
@@ -39,6 +40,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
 
   // Sync state
   const [workspacePath, setWorkspacePath] = useState('');
+  const [syncProvider, setSyncProvider] = useState('iroh'); // 'iroh' or 'git'
   const [syncRemoteUrl, setSyncRemoteUrl] = useState('');
   const [syncBranch, setSyncBranch] = useState('main');
   const [syncUsername, setSyncUsername] = useState('');
@@ -48,6 +50,21 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
   const [syncMessage, setSyncMessage] = useState('');
   const [syncConfigExpanded, setSyncConfigExpanded] = useState(false);
   const [syncSaving, setSyncSaving] = useState(false);
+
+  // Iroh sync state
+  const [irohDocumentId, setIrohDocumentId] = useState('');
+  const [irohTicket, setIrohTicket] = useState('');
+  const [irohPeers, setIrohPeers] = useState([]);
+  const [irohStatus, setIrohStatus] = useState('not_configured'); // 'connected', 'not_configured', 'error'
+  const [irohError, setIrohError] = useState('');
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joinTicket, setJoinTicket] = useState('');
+
+  // Auto-sync state
+  const [syncProgress, setSyncProgress] = useState(null);
+  const [lastSyncTime, setLastSyncTime] = useState(null);
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
+  const [syncError, setSyncError] = useState(null);
 
   const [expandedSections, setExpandedSections] = useState({
     font: true,
@@ -271,10 +288,17 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
       try {
         const cfg = await readConfig();
         if (cfg.sync) {
+          if (cfg.sync.provider) setSyncProvider(cfg.sync.provider);
           if (cfg.sync.remoteUrl) setSyncRemoteUrl(cfg.sync.remoteUrl);
           if (cfg.sync.branch) setSyncBranch(cfg.sync.branch);
           if (cfg.sync.username) setSyncUsername(cfg.sync.username);
           if (cfg.sync.token) setSyncToken(cfg.sync.token);
+
+          // Load Iroh settings
+          if (cfg.sync.iroh) {
+            if (cfg.sync.iroh.documentId) setIrohDocumentId(cfg.sync.iroh.documentId);
+            if (cfg.sync.iroh.ticket) setIrohTicket(cfg.sync.iroh.ticket);
+          }
         }
       } catch (e) {
         console.error('Failed to load sync settings:', e);
@@ -357,16 +381,21 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
   // Auto-save sync settings when they change (debounced)
   useEffect(() => {
     // Only save if at least one field is filled
-    if (syncRemoteUrl || syncUsername || syncToken) {
+    if (syncRemoteUrl || syncUsername || syncToken || irohDocumentId) {
       setSyncSaving(true);
       debouncedSaveSyncSettings({
+        provider: syncProvider,
         remoteUrl: syncRemoteUrl,
         branch: syncBranch,
         username: syncUsername,
-        token: syncToken
+        token: syncToken,
+        iroh: {
+          documentId: irohDocumentId,
+          ticket: irohTicket
+        }
       });
     }
-  }, [syncRemoteUrl, syncBranch, syncUsername, syncToken, debouncedSaveSyncSettings]);
+  }, [syncProvider, syncRemoteUrl, syncBranch, syncUsername, syncToken, irohDocumentId, irohTicket, debouncedSaveSyncSettings]);
 
   // Auto-detect branch name when workspace path is available
   useEffect(() => {
@@ -385,6 +414,55 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
 
     detectBranch();
   }, [workspacePath]);
+
+  // Check Iroh status when workspace path is available and provider is iroh
+  useEffect(() => {
+    const checkIrohStatus = async () => {
+      if (!workspacePath || syncProvider !== 'iroh') return;
+
+      // If we already have a document ID from config, verify it and get the ticket
+      if (irohDocumentId) {
+        try {
+          const ticket = await invoke('iroh_get_ticket', { workspacePath });
+          setIrohTicket(ticket);
+          setIrohStatus('connected');
+
+          // Also fetch initial peer list
+          try {
+            const peers = await invoke('iroh_list_peers', { workspacePath });
+            setIrohPeers(peers || []);
+          } catch (e) {
+            console.error('Failed to fetch initial peers:', e);
+          }
+        } catch (e) {
+          console.error('Failed to get Iroh ticket:', e);
+          setIrohStatus('error');
+          setIrohError(String(e));
+        }
+      }
+    };
+
+    checkIrohStatus();
+  }, [workspacePath, syncProvider, irohDocumentId]);
+
+  // Auto-refresh peer list periodically when document is connected
+  useEffect(() => {
+    if (!workspacePath || syncProvider !== 'iroh' || !irohDocumentId) {
+      return;
+    }
+
+    // Refresh peers every 30 seconds
+    const intervalId = setInterval(async () => {
+      try {
+        const peers = await invoke('iroh_list_peers', { workspacePath });
+        setIrohPeers(peers || []);
+      } catch (e) {
+        console.error('Failed to refresh peers:', e);
+      }
+    }, 30000);
+
+    return () => clearInterval(intervalId);
+  }, [workspacePath, syncProvider, irohDocumentId]);
 
   const beginEdit = (id) => setEditing(id);
   const cancelEdit = () => setEditing(null);
@@ -550,11 +628,64 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
 
     // Listen for both DOM events (browser) and theme:apply events
     window.addEventListener('theme:apply', handleThemeUpdate);
-    
+
     return () => {
       window.removeEventListener('theme:apply', handleThemeUpdate);
     };
   }, []);
+
+  // Listen for Iroh sync events
+  useEffect(() => {
+    let unlisteners = [];
+
+    const setupListeners = async () => {
+      try {
+        // Listen for sync status updates
+        const unlisten1 = await listen('sync_status_updated', (event) => {
+          console.log('Sync status updated:', event.payload);
+          setSyncProgress(null); // Clear progress
+          setLastSyncTime(new Date().toISOString());
+          setSyncError(null); // Clear any previous errors
+
+          // Refresh peers list if workspace is available
+          if (workspacePath) {
+            invoke('iroh_list_peers', { workspacePath })
+              .then(peers => setIrohPeers(peers || []))
+              .catch(err => console.error('Failed to refresh peers:', err));
+          }
+        });
+        unlisteners.push(unlisten1);
+
+        // Listen for sync errors
+        const unlisten2 = await listen('sync_error', (event) => {
+          console.error('Sync error:', event.payload);
+          setSyncError(event.payload?.message || event.payload || 'Sync error occurred');
+          setSyncProgress(null); // Clear progress on error
+        });
+        unlisteners.push(unlisten2);
+
+        // Listen for sync progress
+        const unlisten3 = await listen('sync_progress', (event) => {
+          console.log('Sync progress:', event.payload);
+          setSyncProgress(event.payload);
+          setSyncError(null); // Clear errors during active sync
+        });
+        unlisteners.push(unlisten3);
+      } catch (error) {
+        console.error('Failed to setup event listeners:', error);
+      }
+    };
+
+    setupListeners();
+
+    return () => {
+      unlisteners.forEach(unlisten => {
+        if (typeof unlisten === 'function') {
+          unlisten();
+        }
+      });
+    };
+  }, [workspacePath]);
 
   // Editor Settings Helpers
   const updateEditorSetting = (category, key, value) => {
@@ -2561,14 +2692,321 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
           {section === "Sync" && (
             <div className="space-y-6 max-w-2xl">
               <div>
-                <h2 className="text-lg font-semibold mb-2 text-app-text">Git Sync</h2>
+                <h2 className="text-lg font-semibold mb-2 text-app-text">Workspace Sync</h2>
                 <p className="text-sm text-app-muted mb-6">
-                  Sync your workspace across devices using Git (GitHub, GitLab, etc.). Free forever!
+                  Sync your workspace across devices using peer-to-peer or cloud-based Git repositories.
                 </p>
               </div>
 
-              {/* Check if sync is configured */}
-              {(!syncRemoteUrl || !syncUsername || !syncToken) ? (
+              {/* Provider Selection */}
+              <section className="p-4 bg-app-panel border border-app-border rounded-md">
+                <h3 className="text-sm font-medium text-app-text mb-3">Choose Sync Provider</h3>
+                <div className="space-y-3">
+                  {/* Iroh Option */}
+                  <label className="flex items-start gap-3 p-3 bg-app-bg border border-app-border rounded-md cursor-pointer hover:border-app-accent transition-colors">
+                    <input
+                      type="radio"
+                      name="syncProvider"
+                      value="iroh"
+                      checked={syncProvider === 'iroh'}
+                      onChange={(e) => setSyncProvider(e.target.value)}
+                      className="mt-1 w-4 h-4 text-app-accent focus:ring-app-accent focus:ring-2"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-app-text">Iroh</span>
+                        <span className="text-xs px-2 py-0.5 bg-app-accent text-app-accent-fg rounded-full">Recommended</span>
+                      </div>
+                      <p className="text-xs text-app-muted mt-1">
+                        Peer-to-peer sync with no central server. Fast, secure, and works offline.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Git Option */}
+                  <label className="flex items-start gap-3 p-3 bg-app-bg border border-app-border rounded-md cursor-pointer hover:border-app-accent transition-colors">
+                    <input
+                      type="radio"
+                      name="syncProvider"
+                      value="git"
+                      checked={syncProvider === 'git'}
+                      onChange={(e) => setSyncProvider(e.target.value)}
+                      className="mt-1 w-4 h-4 text-app-accent focus:ring-app-accent focus:ring-2"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-app-text">Git</span>
+                        <span className="text-xs px-2 py-0.5 bg-app-bg border border-app-border rounded-full">Advanced</span>
+                      </div>
+                      <p className="text-xs text-app-muted mt-1">
+                        Use GitHub, GitLab, or any Git provider. Requires manual setup and credentials.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </section>
+
+              {/* Iroh Configuration Section */}
+              {syncProvider === 'iroh' && (
+                <div className="space-y-4">
+                  {/* Status Card */}
+                  <section className="p-4 bg-app-panel border border-app-border rounded-md">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-medium text-app-text">Iroh Status</h3>
+                      <div className="flex items-center gap-2">
+                        {irohStatus === 'connected' && (
+                          <>
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span className="text-xs text-app-muted">Connected</span>
+                          </>
+                        )}
+                        {irohStatus === 'not_configured' && (
+                          <>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                            <span className="text-xs text-app-muted">Not configured</span>
+                          </>
+                        )}
+                        {irohStatus === 'error' && (
+                          <>
+                            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                            <span className="text-xs text-app-muted">Error</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {irohDocumentId && (
+                      <div className="space-y-2 mb-3">
+                        <div className="text-xs text-app-muted">
+                          <span className="font-medium">Document ID:</span>
+                          <div className="mt-1 p-2 bg-app-bg border border-app-border rounded font-mono text-xs break-all">
+                            {irohDocumentId}
+                          </div>
+                        </div>
+                        {irohPeers.length > 0 && (
+                          <div className="text-xs text-app-muted">
+                            <span className="font-medium">Connected Peers: {irohPeers.length}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {irohError && (
+                      <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-500 mb-3">
+                        {irohError}
+                      </div>
+                    )}
+
+                    {!irohDocumentId ? (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            if (!workspacePath) {
+                              alert('Workspace path not available. Please reopen Preferences from the workspace.');
+                              return;
+                            }
+                            setSyncLoading(true);
+                            setIrohError('');
+                            try {
+                              const result = await invoke('iroh_init_document', { workspacePath });
+                              setIrohDocumentId(result.documentId || result);
+                              setIrohStatus('connected');
+                              alert('Iroh document created successfully!');
+                              // Fetch ticket after creation
+                              try {
+                                const ticket = await invoke('iroh_get_ticket', { workspacePath });
+                                setIrohTicket(ticket);
+                              } catch (e) {
+                                console.error('Failed to get ticket:', e);
+                              }
+                            } catch (err) {
+                              setIrohStatus('error');
+                              setIrohError(String(err));
+                              alert('Failed to create Iroh document: ' + err);
+                            }
+                            setSyncLoading(false);
+                          }}
+                          disabled={syncLoading || !workspacePath}
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+                        >
+                          <CloudUpload className="w-4 h-4" />
+                          Create New Document
+                        </button>
+
+                        <button
+                          onClick={() => setShowJoinModal(true)}
+                          disabled={syncLoading}
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
+                        >
+                          <CloudOff className="w-4 h-4" />
+                          Join Existing Document
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={async () => {
+                          if (!workspacePath) {
+                            alert('Workspace path not available.');
+                            return;
+                          }
+                          setSyncLoading(true);
+                          setIrohError('');
+                          try {
+                            // Fetch peer list
+                            const peers = await invoke('iroh_list_peers', { workspacePath });
+                            setIrohPeers(peers || []);
+
+                            // Update status based on peer count
+                            if (peers && peers.length > 0) {
+                              setIrohStatus('connected');
+                            }
+                          } catch (err) {
+                            console.error('Failed to fetch peers:', err);
+                            setIrohError('Failed to fetch peers: ' + String(err));
+                          }
+                          setSyncLoading(false);
+                        }}
+                        disabled={syncLoading || !workspacePath}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
+                      >
+                        <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
+                        Refresh Peer List
+                      </button>
+                    )}
+                  </section>
+
+                  {/* Share Section */}
+                  {irohDocumentId && irohTicket && (
+                    <section className="p-4 bg-app-panel border border-app-border rounded-md">
+                      <h3 className="text-sm font-medium text-app-text mb-3">Share Document</h3>
+                      <p className="text-xs text-app-muted mb-2">
+                        Share this ticket with other devices to sync this workspace:
+                      </p>
+                      <div className="space-y-2">
+                        <textarea
+                          value={irohTicket}
+                          readOnly
+                          rows={3}
+                          className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text font-mono text-xs resize-none focus:outline-none focus:ring-2 focus:ring-app-accent"
+                        />
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(irohTicket);
+                            alert('Ticket copied to clipboard!');
+                          }}
+                          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 rounded-md transition-opacity"
+                        >
+                          <Download className="w-4 h-4" />
+                          Copy Ticket
+                        </button>
+                      </div>
+                    </section>
+                  )}
+
+                  {/* Connected Peers List */}
+                  {irohDocumentId && irohPeers.length > 0 && (
+                    <section className="p-4 bg-app-panel border border-app-border rounded-md">
+                      <h3 className="text-sm font-medium text-app-text mb-3">Connected Peers</h3>
+                      <div className="space-y-2">
+                        {irohPeers.map((peer, index) => (
+                          <div key={peer.node_id || index} className="p-3 bg-app-bg border border-app-border rounded-md">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-2 h-2 rounded-full ${peer.connected ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+                                <span className="font-mono text-xs text-app-text font-medium">
+                                  {peer.node_id ? peer.node_id.substring(0, 12) + '...' : `Peer ${index + 1}`}
+                                </span>
+                              </div>
+                              {peer.connection_type && (
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide ${
+                                  peer.connection_type === 'direct'
+                                    ? 'bg-green-500/10 text-green-600 border border-green-500/20'
+                                    : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
+                                }`}>
+                                  {peer.connection_type}
+                                </span>
+                              )}
+                            </div>
+                            {peer.addresses && peer.addresses.length > 0 && (
+                              <div className="text-[10px] text-app-muted font-mono mt-1 pl-4">
+                                {peer.addresses.slice(0, 1).map((addr, i) => (
+                                  <div key={i} className="truncate">{addr}</div>
+                                ))}
+                                {peer.addresses.length > 1 && (
+                                  <div className="text-app-muted/60">+{peer.addresses.length - 1} more</div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {/* Auto-Sync Settings */}
+                  {irohDocumentId && (
+                    <section className="p-4 bg-app-panel border border-app-border rounded-md">
+                      <h3 className="text-sm font-medium text-app-text mb-3">Auto-Sync Settings</h3>
+
+                      <label className="flex items-center gap-2 cursor-pointer mb-3">
+                        <input
+                          type="checkbox"
+                          checked={autoSyncEnabled}
+                          onChange={async (e) => {
+                            const enabled = e.target.checked;
+                            setAutoSyncEnabled(enabled);
+
+                            try {
+                              if (enabled) {
+                                await invoke('iroh_start_auto_sync', { workspacePath });
+                                console.log('Auto-sync started');
+                              } else {
+                                await invoke('iroh_stop_auto_sync', { workspacePath });
+                                console.log('Auto-sync stopped');
+                              }
+                            } catch (error) {
+                              console.error('Failed to toggle auto-sync:', error);
+                              setSyncError(String(error));
+                              setAutoSyncEnabled(!enabled); // Revert on error
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-app-border bg-app-bg checked:bg-app-accent focus:ring-2 focus:ring-app-accent focus:ring-offset-0 transition-colors"
+                        />
+                        <span className="text-sm text-app-text">Enable Auto-Sync</span>
+                      </label>
+
+                      {syncProgress && (
+                        <div className="p-2 bg-app-bg border border-app-border rounded mb-2">
+                          <div className="flex items-center gap-2 text-xs text-app-text">
+                            <RefreshCw className="w-3 h-3 animate-spin" />
+                            <span>
+                              Syncing: {syncProgress.files_synced || 0} / {syncProgress.total_files || 0} files
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {lastSyncTime && (
+                        <div className="text-xs text-app-muted mb-2">
+                          Last synced: {new Date(lastSyncTime).toLocaleTimeString()}
+                        </div>
+                      )}
+
+                      {syncError && (
+                        <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-500">
+                          Error: {syncError}
+                        </div>
+                      )}
+                    </section>
+                  )}
+                </div>
+              )}
+
+              {/* Git Configuration Section */}
+              {syncProvider === 'git' && (
+                <>
+                  {/* Check if sync is configured */}
+                  {(!syncRemoteUrl || !syncUsername || !syncToken) ? (
                 /* Setup Mode - Show when not configured */
                 <>
                   <section className="p-4 bg-app-panel border border-app-border rounded-md">
@@ -2987,6 +3425,8 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                   </section>
                 </>
               )}
+                </>
+              )}
             </div>
           )}
 
@@ -3119,6 +3559,71 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
           onClose={() => setShowImportWizard(false)}
           initialWorkspacePath={workspacePath}
         />
+      )}
+
+      {/* Join Iroh Document Modal */}
+      {showJoinModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-app-panel border border-app-border rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-app-text mb-4">Join Existing Document</h3>
+            <p className="text-sm text-app-muted mb-4">
+              Enter the document ticket from another device to sync this workspace:
+            </p>
+            <textarea
+              value={joinTicket}
+              onChange={(e) => setJoinTicket(e.target.value)}
+              placeholder="Paste the Iroh document ticket here..."
+              rows={4}
+              className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent font-mono text-xs mb-4"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setShowJoinModal(false);
+                  setJoinTicket('');
+                }}
+                className="flex-1 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel rounded-md text-app-text transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!workspacePath) {
+                    alert('Workspace path not available.');
+                    return;
+                  }
+                  if (!joinTicket.trim()) {
+                    alert('Please enter a ticket.');
+                    return;
+                  }
+                  setSyncLoading(true);
+                  setIrohError('');
+                  try {
+                    const result = await invoke('iroh_join_document', {
+                      workspacePath,
+                      ticket: joinTicket.trim()
+                    });
+                    setIrohDocumentId(result.documentId || result);
+                    setIrohTicket(joinTicket.trim());
+                    setIrohStatus('connected');
+                    alert('Successfully joined document!');
+                    setShowJoinModal(false);
+                    setJoinTicket('');
+                  } catch (err) {
+                    setIrohStatus('error');
+                    setIrohError(String(err));
+                    alert('Failed to join document: ' + err);
+                  }
+                  setSyncLoading(false);
+                }}
+                disabled={syncLoading || !joinTicket.trim()}
+                className="flex-1 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+              >
+                Join
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
     );

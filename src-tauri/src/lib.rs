@@ -450,9 +450,21 @@ pub fn run() {
       sync::git_get_current_branch,
       sync::git_force_push,
       sync::git_force_pull,
+      // Iroh sync commands
+      sync::iroh_init_document,
+      sync::iroh_join_document,
+      sync::iroh_get_ticket,
+      sync::iroh_sync_status,
+      sync::iroh_list_peers,
+      sync::iroh_manual_sync,
+      sync::iroh_start_auto_sync,
+      sync::iroh_stop_auto_sync,
       credentials::store_git_credentials,
       credentials::retrieve_git_credentials,
       credentials::delete_git_credentials,
+      credentials::store_iroh_keys,
+      credentials::retrieve_iroh_keys,
+      credentials::delete_iroh_keys,
       clipboard::clipboard_write_text,
       clipboard::clipboard_read_text,
       clipboard::clipboard_write_html,
@@ -590,6 +602,10 @@ pub fn run() {
       // Initialize auth state
       let auth_state = auth::SharedAuthState::default();
       app.manage(auth_state);
+
+      // Initialize Iroh sync provider
+      let iroh_provider = tokio::sync::Mutex::new(sync::IrohSyncProvider::new());
+      app.manage(iroh_provider);
 
       // Initialize OAuth Server
       let oauth_server = oauth_server::OAuthServer::new();
