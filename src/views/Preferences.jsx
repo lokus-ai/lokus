@@ -451,13 +451,15 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
       return;
     }
 
-    // Refresh peers every 30 seconds
+    // Refresh peers every 30 seconds (only if document exists)
     const intervalId = setInterval(async () => {
-      try {
-        const peers = await invoke('iroh_list_peers', { workspacePath });
-        setIrohPeers(peers || []);
-      } catch (e) {
-        console.error('Failed to refresh peers:', e);
+      if (irohDocumentId) {
+        try {
+          const peers = await invoke('iroh_list_peers', { workspacePath });
+          setIrohPeers(peers || []);
+        } catch (e) {
+          console.error('Failed to refresh peers:', e);
+        }
       }
     }, 30000);
 
@@ -647,8 +649,8 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
           setLastSyncTime(new Date().toISOString());
           setSyncError(null); // Clear any previous errors
 
-          // Refresh peers list if workspace is available
-          if (workspacePath) {
+          // Refresh peers list if document exists
+          if (workspacePath && irohDocumentId) {
             invoke('iroh_list_peers', { workspacePath })
               .then(peers => setIrohPeers(peers || []))
               .catch(err => console.error('Failed to refresh peers:', err));
