@@ -298,6 +298,10 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
           if (cfg.sync.iroh) {
             if (cfg.sync.iroh.documentId) setIrohDocumentId(cfg.sync.iroh.documentId);
             if (cfg.sync.iroh.ticket) setIrohTicket(cfg.sync.iroh.ticket);
+            // Restore auto-sync state
+            if (typeof cfg.sync.iroh.autoSyncEnabled === 'boolean') {
+              setAutoSyncEnabled(cfg.sync.iroh.autoSyncEnabled);
+            }
           }
         }
       } catch (e) {
@@ -391,11 +395,12 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
         token: syncToken,
         iroh: {
           documentId: irohDocumentId,
-          ticket: irohTicket
+          ticket: irohTicket,
+          autoSyncEnabled: autoSyncEnabled  // Persist auto-sync state
         }
       });
     }
-  }, [syncProvider, syncRemoteUrl, syncBranch, syncUsername, syncToken, irohDocumentId, irohTicket, debouncedSaveSyncSettings]);
+  }, [syncProvider, syncRemoteUrl, syncBranch, syncUsername, syncToken, irohDocumentId, irohTicket, autoSyncEnabled, debouncedSaveSyncSettings]);
 
   // Auto-detect branch name when workspace path is available
   useEffect(() => {
@@ -464,6 +469,16 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
           } catch (e) {
             console.error('Failed to fetch peers after restore:', e);
           }
+
+          // Auto-start auto-sync if it was enabled before
+          if (autoSyncEnabled) {
+            try {
+              await invoke('iroh_start_auto_sync', { workspacePath });
+              console.log('Auto-sync resumed from saved state');
+            } catch (e) {
+              console.error('Failed to resume auto-sync:', e);
+            }
+          }
         } else if (irohDocumentId) {
           // We already have a document ID from React state, verify it
           try {
@@ -491,7 +506,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
     };
 
     checkIrohStatus();
-  }, [workspacePath, syncProvider, irohDocumentId]);
+  }, [workspacePath, syncProvider, irohDocumentId, autoSyncEnabled]);
 
   // Auto-refresh peer list periodically when document is connected
   useEffect(() => {
