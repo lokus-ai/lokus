@@ -447,7 +447,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
         }
 
         // Try to restore from saved document
-        const savedDocId = await invoke('iroh_check_saved_document', { workspacePath });
+        const savedDocId = await invoke('iroh_check_saved_document', { workspace_path: workspacePath });
         if (savedDocId && !irohDocumentId) {
           // Restored from saved ticket
           console.log('Restored Iroh document from disk:', savedDocId);
@@ -456,7 +456,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
 
           // Get the ticket
           try {
-            const ticket = await invoke('iroh_get_ticket', { workspacePath });
+            const ticket = await invoke('iroh_get_ticket', { workspace_path: workspacePath });
             setIrohTicket(ticket);
           } catch (e) {
             console.error('Failed to get ticket after restore:', e);
@@ -464,7 +464,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
 
           // Fetch peers
           try {
-            const peers = await invoke('iroh_list_peers', { workspacePath });
+            const peers = await invoke('iroh_list_peers', { workspace_path: workspacePath });
             setIrohPeers(peers || []);
           } catch (e) {
             console.error('Failed to fetch peers after restore:', e);
@@ -473,7 +473,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
           // Auto-start auto-sync if it was enabled before
           if (autoSyncEnabled) {
             try {
-              await invoke('iroh_start_auto_sync', { workspacePath });
+              await invoke('iroh_start_auto_sync', { workspace_path: workspacePath });
               console.log('Auto-sync resumed from saved state');
             } catch (e) {
               console.error('Failed to resume auto-sync:', e);
@@ -482,13 +482,13 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
         } else if (irohDocumentId) {
           // We already have a document ID from React state, verify it
           try {
-            const ticket = await invoke('iroh_get_ticket', { workspacePath });
+            const ticket = await invoke('iroh_get_ticket', { workspace_path: workspacePath });
             setIrohTicket(ticket);
             setIrohStatus('connected');
 
             // Also fetch initial peer list
             try {
-              const peers = await invoke('iroh_list_peers', { workspacePath });
+              const peers = await invoke('iroh_list_peers', { workspace_path: workspacePath });
               setIrohPeers(peers || []);
             } catch (e) {
               console.error('Failed to fetch initial peers:', e);
@@ -518,7 +518,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
     const intervalId = setInterval(async () => {
       if (irohDocumentId) {
         try {
-          const peers = await invoke('iroh_list_peers', { workspacePath });
+          const peers = await invoke('iroh_list_peers', { workspace_path: workspacePath });
           setIrohPeers(peers || []);
         } catch (e) {
           console.error('Failed to refresh peers:', e);
@@ -714,7 +714,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
 
           // Refresh peers list if document exists
           if (workspacePath && irohDocumentId) {
-            invoke('iroh_list_peers', { workspacePath })
+            invoke('iroh_list_peers', { workspace_path: workspacePath })
               .then(peers => setIrohPeers(peers || []))
               .catch(err => console.error('Failed to refresh peers:', err));
           }
@@ -2873,13 +2873,13 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                             setSyncLoading(true);
                             setIrohError('');
                             try {
-                              const result = await invoke('iroh_init_document', { workspacePath });
+                              const result = await invoke('iroh_init_document', { workspace_path: workspacePath });
                               setIrohDocumentId(result.documentId || result);
                               setIrohStatus('connected');
                               alert('Iroh document created successfully!');
                               // Fetch ticket after creation
                               try {
-                                const ticket = await invoke('iroh_get_ticket', { workspacePath });
+                                const ticket = await invoke('iroh_get_ticket', { workspace_path: workspacePath });
                                 setIrohTicket(ticket);
                               } catch (e) {
                                 console.error('Failed to get ticket:', e);
@@ -2919,7 +2919,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                             setIrohError('');
                             try {
                               // Fetch peer list
-                              const peers = await invoke('iroh_list_peers', { workspacePath });
+                              const peers = await invoke('iroh_list_peers', { workspace_path: workspacePath });
                               setIrohPeers(peers || []);
 
                               // Update status based on peer count
@@ -3073,10 +3073,10 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
 
                             try {
                               if (enabled) {
-                                await invoke('iroh_start_auto_sync', { workspacePath });
+                                await invoke('iroh_start_auto_sync', { workspace_path: workspacePath });
                                 console.log('Auto-sync started');
                               } else {
-                                await invoke('iroh_stop_auto_sync', { workspacePath });
+                                await invoke('iroh_stop_auto_sync', { workspace_path: workspacePath });
                                 console.log('Auto-sync stopped');
                               }
                             } catch (error) {
@@ -3715,7 +3715,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                   setIrohError('');
                   try {
                     const result = await invoke('iroh_join_document', {
-                      workspacePath,
+                      workspace_path: workspacePath,
                       ticket: joinTicket.trim()
                     });
                     setIrohDocumentId(result.documentId || result);
