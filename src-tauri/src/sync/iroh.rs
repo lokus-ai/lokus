@@ -294,7 +294,9 @@ impl IrohSyncProvider {
         let metadata = Self::get_file_metadata(&full_path).await?;
 
         // Store metadata in iroh-docs
-        let key = format!("file:{}", file_path.to_string_lossy());
+        // Normalize path to Unix format for cross-platform compatibility
+        let normalized_path = file_path.to_string_lossy().replace('\\', "/");
+        let key = format!("file:{}", normalized_path);
         let value = serde_json::to_vec(&metadata)?;
 
         doc.set_bytes(author, key.as_bytes().to_vec(), value)
@@ -504,6 +506,8 @@ impl IrohSyncProvider {
         let app_handle_clone2 = app_handle.clone();
 
         tokio::spawn(async move {
+            let mut last_sync_hashes: Option<Vec<String>> = None;
+
             while sync_running.load(Ordering::SeqCst) {
                 tokio::time::sleep(std::time::Duration::from_secs(30)).await;
 
@@ -513,8 +517,33 @@ impl IrohSyncProvider {
 
                 let provider_mutex = app_handle_for_task2.state::<tokio::sync::Mutex<IrohSyncProvider>>();
                 let mut provider = provider_mutex.lock().await;
+
+                // Compute current file hashes before sync
+                let current_hashes = match provider.compute_workspace_hash().await {
+                    Ok(h) => h,
+                    Err(e) => {
+                        eprintln!("Failed to compute workspace hash: {}", e);
+                        continue;
+                    }
+                };
+
+                // Skip sync if nothing changed since last cycle
+                if let Some(ref last) = last_sync_hashes {
+                    if last == &current_hashes {
+                        eprintln!("[Periodic sync] No changes detected, skipping sync cycle");
+                        continue;
+                    }
+                }
+
                 match provider.scan_and_sync().await {
                     Ok((uploaded, downloaded)) => {
+                        // Only update last_sync_hashes if sync was stable (0 changes)
+                        if uploaded == 0 && downloaded == 0 {
+                            last_sync_hashes = Some(current_hashes);
+                        } else {
+                            last_sync_hashes = None;  // Changes detected, don't cache
+                        }
+
                         let status_event = SyncStatusEvent {
                             status: "synced".to_string(),
                             files_uploaded: uploaded,
@@ -597,7 +626,9 @@ impl IrohSyncProvider {
                 let metadata: FileMetadata = serde_json::from_slice(&content)?;
 
                 if !metadata.deleted {
-                    remote_files.insert(PathBuf::from(path_str), metadata);
+                    // Normalize path before creating PathBuf for cross-platform compatibility
+                    let normalized_path = path_str.replace('\\', "/");
+                    remote_files.insert(PathBuf::from(normalized_path), metadata);
                 }
             }
         }
@@ -632,16 +663,38 @@ impl IrohSyncProvider {
                     .strip_prefix(&workspace)
                     .map_err(|e| SyncError::FileSystem(e.to_string()))?;
 
-                // Check if file needs to be uploaded
-                let needs_upload = if let Some(remote_meta) = remote_files.get(rel_path) {
+                // Normalize rel_path before HashMap lookup for cross-platform compatibility
+                let normalized_rel_path = PathBuf::from(
+                    rel_path.to_string_lossy().replace('\\', "/")
+                );
+
+                // Check if file needs to be uploaded using triple validation
+                let needs_upload = if let Some(remote_meta) = remote_files.get(&normalized_rel_path) {
                     match Self::get_file_metadata(path).await {
-                        Ok(local_meta) => local_meta.hash != remote_meta.hash,
+                        Ok(local_meta) => {
+                            // Triple check: hash, size, AND timestamp
+                            if local_meta.hash != remote_meta.hash {
+                                // Hash mismatch - definitely needs upload
+                                true
+                            } else if local_meta.size != remote_meta.size {
+                                // Size differs despite same hash? Re-upload
+                                eprintln!("WARNING: Hash match but size differs for '{}' - re-uploading", path.display());
+                                true
+                            } else if local_meta.modified > remote_meta.modified + 2 {
+                                // Local is newer by >2 seconds (allow for clock skew)
+                                true
+                            } else {
+                                // All checks pass - file is up to date
+                                false
+                            }
+                        },
                         Err(e) => {
                             eprintln!("Failed to get metadata for '{}': {}. Skipping...", path.display(), e);
                             continue;
                         }
                     }
                 } else {
+                    // Not in remote - definitely needs upload
                     true
                 };
 
@@ -669,6 +722,40 @@ impl IrohSyncProvider {
         }
 
         Ok((uploaded, downloaded))
+    }
+
+    /// Compute a hash signature of all files in the workspace for detecting changes
+    async fn compute_workspace_hash(&self) -> SyncResult<Vec<String>> {
+        let workspace = self.workspace_path.as_ref()
+            .ok_or(SyncError::OperationFailed("Workspace not initialized".to_string()))?;
+
+        let mut hashes = Vec::new();
+
+        let entries = walkdir::WalkDir::new(workspace)
+            .into_iter()
+            .filter_entry(|e| {
+                // Skip hidden files and directories
+                !e.file_name()
+                    .to_str()
+                    .map(|s| s.starts_with('.'))
+                    .unwrap_or(false)
+            });
+
+        for entry in entries {
+            let entry = entry.map_err(|e| SyncError::FileSystem(e.to_string()))?;
+            if entry.file_type().is_file() {
+                let meta = Self::get_file_metadata(entry.path()).await?;
+                // Use normalized path for cross-platform consistency
+                let rel_path = entry.path()
+                    .strip_prefix(workspace)
+                    .map_err(|e| SyncError::FileSystem(e.to_string()))?;
+                let normalized_path = rel_path.to_string_lossy().replace('\\', "/");
+                hashes.push(format!("{}:{}", normalized_path, meta.hash));
+            }
+        }
+
+        hashes.sort();
+        Ok(hashes)
     }
 }
 
@@ -764,7 +851,9 @@ impl SyncProvider for IrohSyncProvider {
                 "Author not initialized".to_string(),
             ))?;
 
-            let key = format!("file:{}", file_path.to_string_lossy());
+            // Normalize path for cross-platform compatibility
+            let normalized_path = file_path.to_string_lossy().replace('\\', "/");
+            let key = format!("file:{}", normalized_path);
             let metadata = FileMetadata {
                 hash: String::new(),
                 modified: 0,
