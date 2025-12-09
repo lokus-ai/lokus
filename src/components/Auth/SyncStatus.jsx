@@ -152,7 +152,7 @@ export default function SyncStatus() {
 
     try {
       if (syncProvider === 'iroh') {
-        const status = await invoke('iroh_sync_status', { workspace_path: workspacePath });
+        const status = await invoke('iroh_sync_status', { workspacePath: workspacePath });
         setIrohStatus(status);
       } else {
         const status = await invoke('git_status', { workspace_path: workspacePath });
@@ -454,7 +454,7 @@ export default function SyncStatus() {
 
     try {
       setSyncStatus('syncing');
-      const result = await invoke('iroh_manual_sync', { workspace_path: workspacePath });
+      const result = await invoke('iroh_manual_sync', { workspacePath: workspacePath });
 
       setSyncStatus('success');
       setLastSync(new Date());

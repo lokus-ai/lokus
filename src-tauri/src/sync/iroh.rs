@@ -7,13 +7,13 @@ use async_trait::async_trait;
 use blake3::Hasher;
 use iroh::client::Doc;
 use iroh::net::key::SecretKey;
-use iroh::node::{Builder, Node};
+use iroh::node::Builder;
 use iroh::node::MemNode;
-use iroh_blobs::BlobFormat;
+// use iroh_blobs::BlobFormat;
 use iroh_docs::AuthorId;
 use iroh::client::docs::ShareMode;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+// use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -271,7 +271,7 @@ impl IrohSyncProvider {
 
     /// List all peers connected to the document
     pub async fn list_peers(&self) -> SyncResult<Vec<PeerInfo>> {
-        let node = self.node.as_ref().ok_or(SyncError::OperationFailed(
+        let _node = self.node.as_ref().ok_or(SyncError::OperationFailed(
             "Node not initialized".to_string(),
         ))?;
         let _doc = self.doc.as_ref().ok_or(SyncError::DocumentNotFound)?;
@@ -682,11 +682,15 @@ impl IrohSyncProvider {
         // Collect remote entries
         use futures::StreamExt;
         let mut entry_stream = entries;
+        let mut total_entries = 0;
+        let mut file_entries = 0;
         while let Some(entry) = entry_stream.next().await {
             let entry = entry.map_err(|e| SyncError::Iroh(format!("Failed to read entry: {}", e)))?;
             let key = String::from_utf8_lossy(entry.key()).to_string();
+            total_entries += 1;
 
             if let Some(path_str) = key.strip_prefix("file:") {
+                file_entries += 1;
                 let node = self.node.as_ref().unwrap();
                 let content = entry
                     .content_bytes(&**node)
@@ -697,10 +701,15 @@ impl IrohSyncProvider {
                 if !metadata.deleted {
                     // Normalize path before creating PathBuf for cross-platform compatibility
                     let normalized_path = path_str.replace('\\', "/");
+                    eprintln!("[Sync] Found remote file: {}", normalized_path);
                     remote_files.insert(PathBuf::from(normalized_path), metadata);
+                } else {
+                    eprintln!("[Sync] Skipping deleted file: {}", path_str);
                 }
             }
         }
+        eprintln!("[Sync] Total document entries: {}, file entries: {}, active files: {}", 
+                  total_entries, file_entries, remote_files.len());
 
         // Download remote files
         for (path, metadata) in &remote_files {
@@ -973,259 +982,4 @@ impl SyncProvider for IrohSyncProvider {
 
 // Tauri commands for Iroh sync
 
-#[tauri::command]
-pub async fn iroh_init(workspace_path: String) -> Result<String, String> {
-    let mut provider = IrohSyncProvider::new();
-    provider
-        .init(PathBuf::from(workspace_path))
-        .await
-        .map_err(|e| format!("Failed to initialize Iroh: {}", e))
-}
-
-#[tauri::command]
-pub async fn iroh_check_saved_document(
-    provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
-    workspace_path: String,
-) -> Result<Option<String>, String> {
-    let mut provider = provider.lock().await;
-
-    // Always update workspace path (important for workspace switching)
-    provider.update_workspace_path(PathBuf::from(&workspace_path));
-
-    // Initialize node if not already initialized
-    if provider.node.is_none() {
-        provider
-            .init(PathBuf::from(&workspace_path))
-            .await
-            .map_err(|e| format!("Failed to initialize Iroh: {}", e))?;
-    }
-
-    // Try to restore from saved ticket (workspace-specific)
-    provider
-        .restore_from_saved_ticket()
-        .await
-        .map_err(|e| format!("Failed to restore document: {}", e))
-}
-
-#[tauri::command]
-pub async fn iroh_init_document(
-    provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
-    workspace_path: String,
-) -> Result<String, String> {
-    let mut provider = provider.lock().await;
-
-    // Always update workspace path
-    provider.update_workspace_path(PathBuf::from(&workspace_path));
-
-    // Initialize node if not already initialized
-    if provider.node.is_none() {
-        provider
-            .init(PathBuf::from(&workspace_path))
-            .await
-            .map_err(|e| format!("Failed to initialize Iroh: {}", e))?;
-    }
-
-    // Create document
-    provider
-        .create_document()
-        .await
-        .map_err(|e| format!("Failed to create document: {}", e))
-}
-
-#[tauri::command]
-pub async fn iroh_leave_document(
-    provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
-) -> Result<String, String> {
-    let mut provider = provider.lock().await;
-    provider
-        .leave_document()
-        .await
-        .map_err(|e| format!("Failed to leave document: {}", e))
-}
-
-#[tauri::command]
-pub async fn iroh_join_document(
-    provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
-    workspace_path: String,
-    ticket: String,
-) -> Result<String, String> {
-    let mut provider = provider.lock().await;
-
-    // Always update workspace path
-    provider.update_workspace_path(PathBuf::from(&workspace_path));
-
-    // Initialize node if not already initialized
-    if provider.node.is_none() {
-        provider
-            .init(PathBuf::from(&workspace_path))
-            .await
-            .map_err(|e| format!("Failed to initialize Iroh: {}", e))?;
-    }
-
-    provider
-        .join_document(&ticket)
-        .await
-        .map_err(|e| format!("Failed to join document: {}", e))
-}
-
-#[tauri::command]
-pub async fn iroh_get_ticket(
-    provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
-    workspace_path: String,
-) -> Result<String, String> {
-    let mut provider = provider.lock().await;
-
-    // Update workspace path for per-workspace document handling
-    provider.update_workspace_path(PathBuf::from(&workspace_path));
-
-    // If document is None, try to restore from saved ticket
-    if provider.doc.is_none() {
-        // Ensure node is initialized first
-        if provider.node.is_none() {
-            provider
-                .init(PathBuf::from(&workspace_path))
-                .await
-                .map_err(|e| format!("Failed to initialize Iroh: {}", e))?;
-        }
-
-        // Try to restore document
-        if let Ok(Some(_)) = provider.restore_from_saved_ticket().await {
-            // Successfully restored
-        }
-    }
-
-    provider
-        .get_ticket()
-        .await
-        .map_err(|e| format!("Failed to get ticket: {}", e))
-}
-
-#[tauri::command]
-pub async fn iroh_sync(
-    provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
-) -> Result<String, String> {
-    let mut provider = provider.lock().await;
-    provider
-        .sync()
-        .await
-        .map_err(|e| format!("Failed to sync: {}", e))
-}
-
-#[tauri::command]
-pub async fn iroh_manual_sync(
-    provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
-) -> Result<String, String> {
-    let mut provider = provider.lock().await;
-    provider
-        .sync()
-        .await
-        .map_err(|e| format!("Failed to sync: {}", e))
-}
-
-#[tauri::command]
-pub async fn iroh_sync_status(
-    provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
-    workspace_path: String,
-) -> Result<SyncStatus, String> {
-    let mut provider = provider.lock().await;
-
-    // Update workspace path for per-workspace document handling
-    provider.update_workspace_path(PathBuf::from(&workspace_path));
-
-    // If document is None, try to restore from saved ticket
-    if provider.doc.is_none() {
-        // Ensure node is initialized first
-        if provider.node.is_none() {
-            provider
-                .init(PathBuf::from(&workspace_path))
-                .await
-                .map_err(|e| format!("Failed to initialize Iroh: {}", e))?;
-        }
-
-        // Try to restore document
-        if let Ok(Some(_)) = provider.restore_from_saved_ticket().await {
-            // Successfully restored
-        }
-    }
-
-    provider
-        .status()
-        .await
-        .map_err(|e| format!("Failed to get status: {}", e))
-}
-
-#[tauri::command]
-pub async fn iroh_list_peers(
-    provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
-    workspace_path: String,
-) -> Result<Vec<PeerInfo>, String> {
-    let mut provider = provider.lock().await;
-
-    // Update workspace path for per-workspace document handling
-    provider.update_workspace_path(PathBuf::from(&workspace_path));
-
-    // If document is None, try to restore from saved ticket
-    if provider.doc.is_none() {
-        // Ensure node is initialized first
-        if provider.node.is_none() {
-            provider
-                .init(PathBuf::from(&workspace_path))
-                .await
-                .map_err(|e| format!("Failed to initialize Iroh: {}", e))?;
-        }
-
-        // Try to restore document
-        if let Ok(Some(_)) = provider.restore_from_saved_ticket().await {
-            // Successfully restored
-        }
-    }
-
-    provider
-        .get_peers()
-        .await
-        .map_err(|e| format!("Failed to list peers: {}", e))
-}
-
-#[tauri::command]
-pub async fn iroh_start_auto_sync(
-    provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
-    workspace_path: String,
-    app_handle: tauri::AppHandle,
-) -> Result<String, String> {
-    let mut provider = provider.lock().await;
-
-    // Update workspace path for per-workspace document handling
-    provider.update_workspace_path(PathBuf::from(&workspace_path));
-
-    // If document is None, try to restore from saved ticket
-    if provider.doc.is_none() {
-        // Ensure node is initialized first
-        if provider.node.is_none() {
-            provider
-                .init(PathBuf::from(&workspace_path))
-                .await
-                .map_err(|e| format!("Failed to initialize Iroh: {}", e))?;
-        }
-
-        // Try to restore document
-        if let Ok(Some(_)) = provider.restore_from_saved_ticket().await {
-            // Successfully restored
-        }
-    }
-
-    provider
-        .start_auto_sync(app_handle)
-        .await
-        .map_err(|e| format!("Failed to start auto-sync: {}", e))
-}
-
-#[tauri::command]
-pub async fn iroh_stop_auto_sync(
-    provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
-) -> Result<String, String> {
-    let mut provider = provider.lock().await;
-    provider
-        .stop_auto_sync()
-        .await
-        .map_err(|e| format!("Failed to stop auto-sync: {}", e))
-}
+// All Tauri commands moved to commands.rs to support V1/V2 wrapper

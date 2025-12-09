@@ -74,7 +74,7 @@ futures = "0.3"
 once_cell = "1.19"
 parking_lot = "0.12"
 bincode = "1.3"
-thiserror = "1.0"
+thiserror = "2.0"
 axum = "0.7"
 git2 = { version = "0.18", default-features = false }
 lazy_static = "1.4"
@@ -93,6 +93,15 @@ iroh = "0.28"
 iroh-docs = "0.28"
 iroh-blobs = "0.28"
 blake3 = "1.5"
+getrandom = "0.2"
+# Compression
+zstd = "0.13"
+# Retry logic
+backoff = { version = "0.4", features = ["tokio"] }
+# Network monitoring
+sysinfo = "0.32"
+# Delta sync
+rdiff = "0.1"
 # Windows crate for credential management
 windows = { version = "0.61", features = ["Win32_Security_Credentials"] }
 

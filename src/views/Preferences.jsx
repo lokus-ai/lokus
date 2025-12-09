@@ -447,7 +447,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
         }
 
         // Try to restore from saved document
-        const savedDocId = await invoke('iroh_check_saved_document', { workspace_path: workspacePath });
+        const savedDocId = await invoke('iroh_check_saved_document', { workspacePath: workspacePath });
         if (savedDocId && !irohDocumentId) {
           // Restored from saved ticket
           console.log('Restored Iroh document from disk:', savedDocId);
@@ -456,7 +456,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
 
           // Get the ticket
           try {
-            const ticket = await invoke('iroh_get_ticket', { workspace_path: workspacePath });
+            const ticket = await invoke('iroh_get_ticket', { workspacePath: workspacePath });
             setIrohTicket(ticket);
           } catch (e) {
             console.error('Failed to get ticket after restore:', e);
@@ -464,7 +464,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
 
           // Fetch peers
           try {
-            const peers = await invoke('iroh_list_peers', { workspace_path: workspacePath });
+            const peers = await invoke('iroh_list_peers', { workspacePath: workspacePath });
             setIrohPeers(peers || []);
           } catch (e) {
             console.error('Failed to fetch peers after restore:', e);
@@ -473,7 +473,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
           // Auto-start auto-sync if it was enabled before
           if (autoSyncEnabled) {
             try {
-              await invoke('iroh_start_auto_sync', { workspace_path: workspacePath });
+              await invoke('iroh_start_auto_sync', { workspacePath: workspacePath });
               console.log('Auto-sync resumed from saved state');
             } catch (e) {
               console.error('Failed to resume auto-sync:', e);
@@ -482,13 +482,13 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
         } else if (irohDocumentId) {
           // We already have a document ID from React state, verify it
           try {
-            const ticket = await invoke('iroh_get_ticket', { workspace_path: workspacePath });
+            const ticket = await invoke('iroh_get_ticket', { workspacePath: workspacePath });
             setIrohTicket(ticket);
             setIrohStatus('connected');
 
             // Also fetch initial peer list
             try {
-              const peers = await invoke('iroh_list_peers', { workspace_path: workspacePath });
+              const peers = await invoke('iroh_list_peers', { workspacePath: workspacePath });
               setIrohPeers(peers || []);
             } catch (e) {
               console.error('Failed to fetch initial peers:', e);
@@ -518,7 +518,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
     const intervalId = setInterval(async () => {
       if (irohDocumentId) {
         try {
-          const peers = await invoke('iroh_list_peers', { workspace_path: workspacePath });
+          const peers = await invoke('iroh_list_peers', { workspacePath: workspacePath });
           setIrohPeers(peers || []);
         } catch (e) {
           console.error('Failed to refresh peers:', e);
@@ -714,7 +714,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
 
           // Refresh peers list if document exists
           if (workspacePath && irohDocumentId) {
-            invoke('iroh_list_peers', { workspace_path: workspacePath })
+            invoke('iroh_list_peers', { workspacePath: workspacePath })
               .then(peers => setIrohPeers(peers || []))
               .catch(err => console.error('Failed to refresh peers:', err));
           }
@@ -2873,13 +2873,13 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                             setSyncLoading(true);
                             setIrohError('');
                             try {
-                              const result = await invoke('iroh_init_document', { workspace_path: workspacePath });
+                              const result = await invoke('iroh_init_document', { workspacePath: workspacePath });
                               setIrohDocumentId(result.documentId || result);
                               setIrohStatus('connected');
                               alert('Iroh document created successfully!');
                               // Fetch ticket after creation
                               try {
-                                const ticket = await invoke('iroh_get_ticket', { workspace_path: workspacePath });
+                                const ticket = await invoke('iroh_get_ticket', { workspacePath: workspacePath });
                                 setIrohTicket(ticket);
                               } catch (e) {
                                 console.error('Failed to get ticket:', e);
@@ -2909,35 +2909,63 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        <button
-                          onClick={async () => {
-                            if (!workspacePath) {
-                              alert('Workspace path not available.');
-                              return;
-                            }
-                            setSyncLoading(true);
-                            setIrohError('');
-                            try {
-                              // Fetch peer list
-                              const peers = await invoke('iroh_list_peers', { workspace_path: workspacePath });
-                              setIrohPeers(peers || []);
-
-                              // Update status based on peer count
-                              if (peers && peers.length > 0) {
-                                setIrohStatus('connected');
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={async () => {
+                              if (!workspacePath) {
+                                alert('Workspace path not available.');
+                                return;
                               }
-                            } catch (err) {
-                              console.error('Failed to fetch peers:', err);
-                              setIrohError('Failed to fetch peers: ' + String(err));
-                            }
-                            setSyncLoading(false);
-                          }}
-                          disabled={syncLoading || !workspacePath}
-                          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
-                        >
-                          <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
-                          Refresh Peer List
-                        </button>
+                              setSyncLoading(true);
+                              setIrohError('');
+                              try {
+                                // Fetch peer list
+                                const peers = await invoke('iroh_list_peers', { workspacePath: workspacePath });
+                                setIrohPeers(peers || []);
+
+                                // Update status based on peer count
+                                if (peers && peers.length > 0) {
+                                  setIrohStatus('connected');
+                                }
+                              } catch (err) {
+                                console.error('Failed to fetch peers:', err);
+                                setIrohError('Failed to fetch peers: ' + String(err));
+                              }
+                              setSyncLoading(false);
+                            }}
+                            disabled={syncLoading || !workspacePath}
+                            className="flex items-center justify-center gap-2 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
+                          >
+                            <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
+                            Refresh Peers
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              if (!confirm('Force sync all files? This will download all files from peers and upload any local files.')) {
+                                return;
+                              }
+                              setSyncLoading(true);
+                              setIrohError('');
+                              try {
+                                const result = await invoke('iroh_manual_sync', { workspacePath: workspacePath });
+                                alert(result);
+                                // Refresh peer list after sync
+                                const peers = await invoke('iroh_list_peers', { workspacePath: workspacePath });
+                                setIrohPeers(peers || []);
+                              } catch (err) {
+                                console.error('Force sync failed:', err);
+                                setIrohError('Force sync failed: ' + String(err));
+                              }
+                              setSyncLoading(false);
+                            }}
+                            disabled={syncLoading || !workspacePath}
+                            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-white transition-colors"
+                          >
+                            <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
+                            Force Sync All
+                          </button>
+                        </div>
 
                         <button
                           onClick={async () => {
@@ -3073,10 +3101,10 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
 
                             try {
                               if (enabled) {
-                                await invoke('iroh_start_auto_sync', { workspace_path: workspacePath });
+                                await invoke('iroh_start_auto_sync', { workspacePath: workspacePath });
                                 console.log('Auto-sync started');
                               } else {
-                                await invoke('iroh_stop_auto_sync', { workspace_path: workspacePath });
+                                await invoke('iroh_stop_auto_sync');
                                 console.log('Auto-sync stopped');
                               }
                             } catch (error) {
@@ -3714,7 +3742,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                   setIrohError('');
                   try {
                     const result = await invoke('iroh_join_document', {
-                      workspace_path: workspacePath,
+                      workspacePath: workspacePath,
                       ticket: joinTicket.trim()
                     });
                     setIrohDocumentId(result.documentId || result);

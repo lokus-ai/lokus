@@ -1,0 +1,150 @@
+.sync-status {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--background-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  min-width: 200px;
+  transition: all 0.3s ease;
+  z-index: 1000;
+}
+
+.sync-status.expanded {
+  width: 320px;
+}
+
+.sync-status-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sync-icon {
+  font-size: 16px;
+  margin-right: 8px;
+  transition: transform 0.3s ease;
+}
+
+.sync-icon.syncing {
+  animation: rotate 2s linear infinite;
+  color: var(--primary-color);
+}
+
+.sync-icon.synced {
+  color: var(--success-color, #4CAF50);
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sync-text {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.sync-toggle {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-left: 8px;
+}
+
+.sync-status-details {
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.sync-metrics {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.metric-label {
+  color: var(--text-secondary);
+}
+
+.metric-value {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.metric-size {
+  color: var(--text-secondary);
+  font-weight: normal;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.metric.error .metric-value {
+  color: var(--error-color, #f44336);
+}
+
+.sync-timing {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.timing-info {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.sync-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+}
+
+.sync-button {
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.sync-button:hover:not(:disabled) {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.sync-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.sync-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .sync-status {
+    background: #1e1e1e;
+    border-color: #333;
+  }
+}

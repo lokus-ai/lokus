@@ -26,7 +26,7 @@ export default function IrohSyncStatus({ workspacePath, onClose }) {
 
   const loadStatus = async () => {
     try {
-      const status = await invoke('iroh_sync_status', { workspace_path: workspacePath });
+      const status = await invoke('iroh_sync_status', { workspacePath: workspacePath });
       setSyncStatus(status);
       setLoading(false);
     } catch (err) {
@@ -38,7 +38,7 @@ export default function IrohSyncStatus({ workspacePath, onClose }) {
 
   const loadPeers = async () => {
     try {
-      const peerList = await invoke('iroh_list_peers', { workspace_path: workspacePath });
+      const peerList = await invoke('iroh_list_peers', { workspacePath: workspacePath });
       setPeers(peerList);
     } catch (err) {
       console.error('[IrohSyncStatus] Failed to load peers:', err);
@@ -50,7 +50,7 @@ export default function IrohSyncStatus({ workspacePath, onClose }) {
     setErrorMessage('');
 
     try {
-      const result = await invoke('iroh_manual_sync', { workspace_path: workspacePath });
+      const result = await invoke('iroh_manual_sync', { workspacePath: workspacePath });
       setLastSync(new Date());
       await loadStatus();
       await loadPeers();

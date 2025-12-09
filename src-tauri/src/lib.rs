@@ -451,17 +451,24 @@ pub fn run() {
       sync::git_force_push,
       sync::git_force_pull,
       // Iroh sync commands
-      // sync::iroh_check_saved_document,
+      sync::iroh_check_saved_document,
       sync::iroh_init_document,
       sync::iroh_join_document,
-      // sync::iroh_leave_document,
+      sync::iroh_leave_document,
       sync::iroh_get_ticket,
       sync::iroh_sync_status,
       sync::iroh_list_peers,
       sync::iroh_manual_sync,
       sync::iroh_start_auto_sync,
       sync::iroh_stop_auto_sync,
+      sync::iroh_notify_file_save,
+      sync::iroh_force_sync_all,
+      sync::iroh_get_sync_metrics,
       // sync::iroh_reset_and_init_with_key,
+      sync::iroh_get_version,
+      sync::iroh_migrate_to_v2,
+      sync::iroh_configure_sync,
+      sync::iroh_get_metrics,
       credentials::store_git_credentials,
       credentials::retrieve_git_credentials,
       credentials::delete_git_credentials,
@@ -606,8 +613,10 @@ pub fn run() {
       let auth_state = auth::SharedAuthState::default();
       app.manage(auth_state);
 
-      // Initialize Iroh sync provider
-      let iroh_provider = tokio::sync::Mutex::new(sync::IrohSyncProvider::new());
+      // Initialize Iroh sync provider (V1 or V2 based on configuration)
+      // Initialize Iroh provider synchronously (it will be initialized on first use)
+      let provider = sync::wrapper::IrohProviderWrapper::new(sync::wrapper::SyncProviderConfig::default());
+      let iroh_provider = tokio::sync::Mutex::new(provider);
       app.manage(iroh_provider);
 
       // Initialize OAuth Server
