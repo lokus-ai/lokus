@@ -155,7 +155,7 @@ export default function SyncStatus() {
         const status = await invoke('iroh_sync_status', { workspace_path: workspacePath });
         setIrohStatus(status);
       } else {
-        const status = await invoke('git_status', { workspacePath });
+        const status = await invoke('git_status', { workspace_path: workspacePath });
         setGitStatus(status);
       }
     } catch (e) {
@@ -206,18 +206,18 @@ export default function SyncStatus() {
       // Commit
       setSyncStatus('committing');
       await invoke('git_commit', {
-        workspacePath,
+        workspace_path: workspacePath,
         message: 'Auto-sync workspace',
-        authorName: syncSettings.authorName || syncSettings.username || 'Lokus',
-        authorEmail: syncSettings.authorEmail || `${syncSettings.username}@users.noreply.github.com`
+        author_name: syncSettings.authorName || syncSettings.username || 'Lokus',
+        author_email: syncSettings.authorEmail || `${syncSettings.username}@users.noreply.github.com`
       });
 
       // Push
       setSyncStatus('pushing');
       const pushResult = await invoke('git_push', {
-        workspacePath,
-        remoteName: 'origin',
-        branchName: syncSettings.branch || 'main',
+        workspace_path: workspacePath,
+        remote_name: 'origin',
+        branch_name: syncSettings.branch || 'main',
         username: syncSettings.username,
         token: token
       });
@@ -283,11 +283,10 @@ export default function SyncStatus() {
 
       setSyncStatus('pulling');
       const result = await invoke('git_pull', {
-        workspacePath,
-        remoteName: 'origin',
-        branchName: syncSettings.branch || 'main',
-        username: syncSettings.username,
-        token: token
+        workspace_path: workspacePath,
+        workspace_id: workspacePath, // Using workspace path as ID for now
+        remote_name: 'origin',
+        branch_name: syncSettings.branch || 'main'
       });
 
       // Check if there are conflicts after merge
@@ -378,9 +377,9 @@ export default function SyncStatus() {
 
       setSyncStatus('pushing');
       await invoke('git_force_push', {
-        workspacePath,
-        remoteName: 'origin',
-        branchName: syncSettings.branch || 'main',
+        workspace_path: workspacePath,
+        remote_name: 'origin',
+        branch_name: syncSettings.branch || 'main',
         username: syncSettings.username,
         token: token
       });
@@ -423,9 +422,9 @@ export default function SyncStatus() {
 
       setSyncStatus('pulling');
       await invoke('git_force_pull', {
-        workspacePath,
-        remoteName: 'origin',
-        branchName: syncSettings.branch || 'main',
+        workspace_path: workspacePath,
+        remote_name: 'origin',
+        branch_name: syncSettings.branch || 'main',
         username: syncSettings.username,
         token: token
       });

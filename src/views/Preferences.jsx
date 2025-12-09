@@ -408,7 +408,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
       if (!workspacePath) return;
 
       try {
-        const branchName = await invoke('git_get_current_branch', { workspacePath });
+        const branchName = await invoke('git_get_current_branch', { workspace_path: workspacePath });
         if (branchName && branchName !== syncBranch) {
           setSyncBranch(branchName);
         }
@@ -3141,7 +3141,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                           }
                           setSyncLoading(true);
                           try {
-                            const result = await invoke('git_init', { workspacePath });
+                            const result = await invoke('git_init', { workspace_path: workspacePath });
                             alert(result);
                           } catch (err) {
                             alert('Git init failed: ' + err);
@@ -3260,9 +3260,9 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                         setSyncLoading(true);
                         try {
                           const result = await invoke('git_add_remote', {
-                            workspacePath,
-                            remoteName: 'origin',
-                            remoteUrl: syncRemoteUrl
+                            workspace_path: workspacePath,
+                            remote_name: 'origin',
+                            remote_url: syncRemoteUrl
                           });
                           alert(result);
                         } catch (err) {
@@ -3345,7 +3345,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                                 }
                                 setSyncLoading(true);
                                 try {
-                                  const result = await invoke('git_init', { workspacePath });
+                                  const result = await invoke('git_init', { workspace_path: workspacePath });
                                   alert(result);
                                 } catch (err) {
                                   alert('Git init failed: ' + err);
@@ -3370,9 +3370,9 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                                 setSyncLoading(true);
                                 try {
                                   const result = await invoke('git_add_remote', {
-                                    workspacePath,
-                                    remoteName: 'origin',
-                                    remoteUrl: syncRemoteUrl
+                                    workspace_path: workspacePath,
+                                    remote_name: 'origin',
+                                    remote_url: syncRemoteUrl
                                   });
                                   alert(result);
                                 } catch (err) {
@@ -3435,11 +3435,10 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                           setSyncLoading(true);
                           try {
                             await invoke('git_pull', {
-                              workspacePath,
-                              remoteName: 'origin',
-                              branchName: syncBranch || 'main',
-                              username: syncUsername,
-                              token: syncToken
+                              workspace_path: workspacePath,
+                              workspace_id: workspacePath, // Using workspace path as ID for now
+                              remote_name: 'origin',
+                              branch_name: syncBranch || 'main'
                             });
                             alert('Pulled successfully!');
                           } catch (err) {
@@ -3469,16 +3468,16 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                           try {
                             // First commit - auto-generate author info from username
                             await invoke('git_commit', {
-                              workspacePath,
+                              workspace_path: workspacePath,
                               message: syncMessage || 'Update workspace',
-                              authorName: syncUsername || 'Lokus',
-                              authorEmail: `${syncUsername || 'lokus'}@users.noreply.github.com`
+                              author_name: syncUsername || 'Lokus',
+                              author_email: `${syncUsername || 'lokus'}@users.noreply.github.com`
                             });
                             // Then push
                             await invoke('git_push', {
-                              workspacePath,
-                              remoteName: 'origin',
-                              branchName: syncBranch || 'main',
+                              workspace_path: workspacePath,
+                              remote_name: 'origin',
+                              branch_name: syncBranch || 'main',
                               username: syncUsername,
                               token: syncToken
                             });
@@ -3506,7 +3505,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                           setSyncLoading(true);
                           try {
                             const status = await invoke('git_status', {
-                              workspacePath
+                              workspace_path: workspacePath
                             });
                             setSyncStatus(status);
                           } catch (err) {
