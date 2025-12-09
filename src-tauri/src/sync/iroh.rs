@@ -397,13 +397,18 @@ impl IrohSyncProvider {
 
         let full_path = workspace.join(file_path);
 
+        eprintln!("[sync_file_from_iroh] Downloading '{}' to '{}'", file_path.display(), full_path.display());
+
         // Check if we need to update the file
         if full_path.exists() {
             let local_metadata = Self::get_file_metadata(&full_path).await?;
             if local_metadata.hash == metadata.hash {
                 // File is up to date
+                eprintln!("[sync_file_from_iroh] File '{}' already up to date (hash match)", file_path.display());
                 return Ok(());
             }
+            eprintln!("[sync_file_from_iroh] File '{}' exists but hash mismatch (local: {}, remote: {})",
+                file_path.display(), local_metadata.hash, metadata.hash);
         }
 
         // Create parent directory if needed
@@ -425,8 +430,11 @@ impl IrohSyncProvider {
             .await
             .map_err(|e| SyncError::Iroh(format!("Failed to read blob: {}", e)))?;
 
+        let blob_len = blob.len();
+
         // Write to file
         fs::write(&full_path, blob).await?;
+        eprintln!("[sync_file_from_iroh] Successfully downloaded '{}' ({} bytes)", file_path.display(), blob_len);
 
         // Update cache
         self.file_cache.insert(file_path.to_path_buf(), metadata.clone());
@@ -496,6 +504,11 @@ impl IrohSyncProvider {
                         if let Some(workspace) = &provider.workspace_path {
                             if let Ok(rel_path) = event.path.strip_prefix(workspace) {
                                 let rel_path = rel_path.to_path_buf();
+
+                                // Skip directories - only sync files
+                                if event.path.is_dir() {
+                                    continue;
+                                }
 
                                 // Emit sync_progress event
                                 let event = SyncProgressEvent {
@@ -641,8 +654,13 @@ impl IrohSyncProvider {
 
         // Download remote files
         for (path, metadata) in &remote_files {
-            self.sync_file_from_iroh(path, metadata).await?;
-            downloaded += 1;
+            match self.sync_file_from_iroh(path, metadata).await {
+                Ok(_) => downloaded += 1,
+                Err(e) => {
+                    eprintln!("Failed to sync file '{}': {}. Skipping...", path.display(), e);
+                    // Continue with next file instead of failing entire sync
+                }
+            }
         }
 
         // Upload local files
@@ -666,15 +684,25 @@ impl IrohSyncProvider {
 
                 // Check if file needs to be uploaded
                 let needs_upload = if let Some(remote_meta) = remote_files.get(rel_path) {
-                    let local_meta = Self::get_file_metadata(path).await?;
-                    local_meta.hash != remote_meta.hash
+                    match Self::get_file_metadata(path).await {
+                        Ok(local_meta) => local_meta.hash != remote_meta.hash,
+                        Err(e) => {
+                            eprintln!("Failed to get metadata for '{}': {}. Skipping...", path.display(), e);
+                            continue;
+                        }
+                    }
                 } else {
                     true
                 };
 
                 if needs_upload {
-                    self.sync_file_to_iroh(rel_path).await?;
-                    uploaded += 1;
+                    match self.sync_file_to_iroh(rel_path).await {
+                        Ok(_) => uploaded += 1,
+                        Err(e) => {
+                            eprintln!("Failed to upload file '{}': {}. Skipping...", rel_path.display(), e);
+                            // Continue with next file
+                        }
+                    }
                 }
             }
         }
