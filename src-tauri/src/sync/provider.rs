@@ -174,7 +174,7 @@ pub fn format_sync_error(error: &SyncError, operation: &str) -> String {
             operation, msg
         ),
         SyncError::DocumentNotFound => format!(
-            "Document not found. Initialize the workspace first."
+            "No Iroh document found. Please create a new document or join an existing one using a ticket."
         ),
         SyncError::InvalidTicket(_) => format!(
             "Invalid sync ticket. Please check the ticket and try again."

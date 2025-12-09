@@ -415,30 +415,78 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
     detectBranch();
   }, [workspacePath]);
 
+  // Clear Iroh document state when workspace changes (for per-workspace documents)
+  useEffect(() => {
+    // Clear document state when workspace changes
+    // Will be repopulated by checkIrohStatus if workspace has a saved document
+    setIrohDocumentId('');
+    setIrohTicket('');
+    setIrohPeers([]);
+    setIrohStatus('not_configured');
+  }, [workspacePath]);
+
   // Check Iroh status when workspace path is available and provider is iroh
   useEffect(() => {
     const checkIrohStatus = async () => {
       if (!workspacePath || syncProvider !== 'iroh') return;
 
-      // If we already have a document ID from config, verify it and get the ticket
-      if (irohDocumentId) {
-        try {
-          const ticket = await invoke('iroh_get_ticket', { workspacePath });
-          setIrohTicket(ticket);
+      // First, check if user explicitly left the document (config has empty string)
+      try {
+        const cfg = await readConfig();
+        const configDocId = cfg?.sync?.iroh?.documentId;
+
+        // If config explicitly says '' (user left), don't restore
+        if (configDocId === '') {
+          console.log('User left document, not restoring');
+          return;
+        }
+
+        // Try to restore from saved document
+        const savedDocId = await invoke('iroh_check_saved_document', { workspacePath });
+        if (savedDocId && !irohDocumentId) {
+          // Restored from saved ticket
+          console.log('Restored Iroh document from disk:', savedDocId);
+          setIrohDocumentId(savedDocId);
           setIrohStatus('connected');
 
-          // Also fetch initial peer list
+          // Get the ticket
+          try {
+            const ticket = await invoke('iroh_get_ticket', { workspacePath });
+            setIrohTicket(ticket);
+          } catch (e) {
+            console.error('Failed to get ticket after restore:', e);
+          }
+
+          // Fetch peers
           try {
             const peers = await invoke('iroh_list_peers', { workspacePath });
             setIrohPeers(peers || []);
           } catch (e) {
-            console.error('Failed to fetch initial peers:', e);
+            console.error('Failed to fetch peers after restore:', e);
           }
-        } catch (e) {
-          console.error('Failed to get Iroh ticket:', e);
-          setIrohStatus('error');
-          setIrohError(String(e));
+        } else if (irohDocumentId) {
+          // We already have a document ID from React state, verify it
+          try {
+            const ticket = await invoke('iroh_get_ticket', { workspacePath });
+            setIrohTicket(ticket);
+            setIrohStatus('connected');
+
+            // Also fetch initial peer list
+            try {
+              const peers = await invoke('iroh_list_peers', { workspacePath });
+              setIrohPeers(peers || []);
+            } catch (e) {
+              console.error('Failed to fetch initial peers:', e);
+            }
+          } catch (e) {
+            console.error('Failed to get Iroh ticket:', e);
+            setIrohStatus('error');
+            setIrohError(String(e));
+          }
         }
+      } catch (e) {
+        console.error('Failed to check saved document:', e);
+        // Continue with normal flow - not a fatal error
       }
     };
 
@@ -2845,35 +2893,85 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                         </button>
                       </div>
                     ) : (
-                      <button
-                        onClick={async () => {
-                          if (!workspacePath) {
-                            alert('Workspace path not available.');
-                            return;
-                          }
-                          setSyncLoading(true);
-                          setIrohError('');
-                          try {
-                            // Fetch peer list
-                            const peers = await invoke('iroh_list_peers', { workspacePath });
-                            setIrohPeers(peers || []);
-
-                            // Update status based on peer count
-                            if (peers && peers.length > 0) {
-                              setIrohStatus('connected');
+                      <div className="space-y-2">
+                        <button
+                          onClick={async () => {
+                            if (!workspacePath) {
+                              alert('Workspace path not available.');
+                              return;
                             }
-                          } catch (err) {
-                            console.error('Failed to fetch peers:', err);
-                            setIrohError('Failed to fetch peers: ' + String(err));
-                          }
-                          setSyncLoading(false);
-                        }}
-                        disabled={syncLoading || !workspacePath}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
-                      >
-                        <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
-                        Refresh Peer List
-                      </button>
+                            setSyncLoading(true);
+                            setIrohError('');
+                            try {
+                              // Fetch peer list
+                              const peers = await invoke('iroh_list_peers', { workspacePath });
+                              setIrohPeers(peers || []);
+
+                              // Update status based on peer count
+                              if (peers && peers.length > 0) {
+                                setIrohStatus('connected');
+                              }
+                            } catch (err) {
+                              console.error('Failed to fetch peers:', err);
+                              setIrohError('Failed to fetch peers: ' + String(err));
+                            }
+                            setSyncLoading(false);
+                          }}
+                          disabled={syncLoading || !workspacePath}
+                          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
+                        >
+                          <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
+                          Refresh Peer List
+                        </button>
+
+                        <button
+                          onClick={async () => {
+                            if (!confirm('Are you sure you want to leave this document? You will need the ticket to rejoin.')) {
+                              return;
+                            }
+                            setSyncLoading(true);
+                            setIrohError('');
+                            try {
+                              // Call backend to clear document and delete ticket file
+                              await invoke('iroh_leave_document');
+
+                              // Clear React state
+                              setIrohDocumentId('');
+                              setIrohTicket('');
+                              setIrohPeers([]);
+                              setIrohStatus('not_configured');
+                              setAutoSyncEnabled(false);
+
+                              // CRITICAL: Wait for auto-save debounce to finish
+                              await new Promise(resolve => setTimeout(resolve, 600));
+
+                              // Explicitly clear config file to prevent restoration
+                              const cfg = await readConfig();
+                              await updateConfig({
+                                sync: {
+                                  ...cfg.sync,
+                                  iroh: {
+                                    documentId: '',
+                                    ticket: ''
+                                  }
+                                }
+                              });
+
+                              alert('Left document successfully. You can now create a new document or join a different one.');
+                            } catch (err) {
+                              console.error('Failed to leave document:', err);
+                              setIrohError('Failed to leave document: ' + String(err));
+                              alert('Failed to leave document: ' + String(err));
+                            }
+                            setSyncLoading(false);
+                          }}
+                          disabled={syncLoading}
+                          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/20 text-red-600 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors"
+                        >
+                          <CloudOff className="w-4 h-4" />
+                          Leave Document
+                        </button>
+                      </div>
                     )}
                   </section>
 

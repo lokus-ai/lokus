@@ -451,8 +451,10 @@ pub fn run() {
       sync::git_force_push,
       sync::git_force_pull,
       // Iroh sync commands
+      sync::iroh_check_saved_document,
       sync::iroh_init_document,
       sync::iroh_join_document,
+      sync::iroh_leave_document,
       sync::iroh_get_ticket,
       sync::iroh_sync_status,
       sync::iroh_list_peers,
