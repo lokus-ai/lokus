@@ -709,7 +709,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
         // Listen for sync errors
         const unlisten2 = await listen('sync_error', (event) => {
           console.error('Sync error:', event.payload);
-          setSyncError(event.payload?.message || event.payload || 'Sync error occurred');
+          setSyncError(event.payload?.error || event.payload?.message || 'Sync error occurred');
           setSyncProgress(null); // Clear progress on error
         });
         unlisteners.push(unlisten2);
