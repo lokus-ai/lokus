@@ -79,6 +79,8 @@ pub struct IrohSyncProvider {
     file_watcher: Option<FileWatcher>,
     /// Flag to indicate if auto-sync is running
     sync_running: Arc<AtomicBool>,
+    /// Whether this is the first sync after joining (bootstrap mode)
+    first_sync: Arc<AtomicBool>,
     /// App handle for event emission
     app_handle: Option<AppHandle>,
 }
@@ -94,6 +96,7 @@ impl IrohSyncProvider {
             file_cache: HashMap::new(),
             file_watcher: None,
             sync_running: Arc::new(AtomicBool::new(false)),
+            first_sync: Arc::new(AtomicBool::new(false)),
             app_handle: None,
         }
     }
@@ -244,6 +247,9 @@ impl IrohSyncProvider {
 
         let doc_id = doc.id();
         self.doc = Some(doc);
+
+        // Mark as first sync - download everything first, skip upload
+        self.first_sync.store(true, Ordering::SeqCst);
 
         // Save ticket to disk for persistence
         self.save_ticket(&ticket_str).await?;
@@ -558,9 +564,11 @@ impl IrohSyncProvider {
 
         tokio::spawn(async move {
             let mut last_sync_hashes: Option<Vec<String>> = None;
+            let mut consecutive_changes = 0;
+            let mut sleep_interval = 60;  // Start at 60 seconds, increase if loop detected
 
             while sync_running.load(Ordering::SeqCst) {
-                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(sleep_interval)).await;
 
                 if !sync_running.load(Ordering::SeqCst) {
                     break;
@@ -588,11 +596,22 @@ impl IrohSyncProvider {
 
                 match provider.scan_and_sync().await {
                     Ok((uploaded, downloaded)) => {
-                        // Only update last_sync_hashes if sync was stable (0 changes)
                         if uploaded == 0 && downloaded == 0 {
+                            // Stable state - reset to normal interval
                             last_sync_hashes = Some(current_hashes);
+                            consecutive_changes = 0;
+                            sleep_interval = 60;
                         } else {
-                            last_sync_hashes = None;  // Changes detected, don't cache
+                            // Changes detected - increment counter
+                            consecutive_changes += 1;
+                            last_sync_hashes = None;
+
+                            // Backoff if loop detected (more than 3 consecutive changes)
+                            if consecutive_changes > 3 {
+                                sleep_interval = (sleep_interval * 2).min(300);  // Max 5 minutes
+                                eprintln!("[Sync] Loop detected ({} consecutive changes), backing off to {} seconds",
+                                    consecutive_changes, sleep_interval);
+                            }
                         }
 
                         let status_event = SyncStatusEvent {
@@ -694,6 +713,14 @@ impl IrohSyncProvider {
             }
         }
 
+        // SKIP upload phase on first sync after join (bootstrap mode)
+        // This ensures fresh workspace downloads everything before uploading
+        if self.first_sync.load(Ordering::SeqCst) {
+            eprintln!("[First sync] Skipping upload phase - download only ({} files downloaded)", downloaded);
+            self.first_sync.store(false, Ordering::SeqCst);
+            return Ok((0, downloaded));
+        }
+
         // Upload local files
         let entries = walkdir::WalkDir::new(&workspace)
             .into_iter()
@@ -718,23 +745,21 @@ impl IrohSyncProvider {
                     rel_path.to_string_lossy().replace('\\', "/")
                 );
 
-                // Check if file needs to be uploaded using triple validation
+                // Check if file needs to be uploaded (hash + size only, NO timestamps)
                 let needs_upload = if let Some(remote_meta) = remote_files.get(&normalized_rel_path) {
                     match Self::get_file_metadata(path).await {
                         Ok(local_meta) => {
-                            // Triple check: hash, size, AND timestamp
+                            // Only check hash and size - IGNORE timestamps to prevent loop
+                            // (Downloaded files get new timestamps, would trigger re-upload)
                             if local_meta.hash != remote_meta.hash {
                                 // Hash mismatch - definitely needs upload
                                 true
                             } else if local_meta.size != remote_meta.size {
-                                // Size differs despite same hash? Re-upload
+                                // Extremely rare: hash collision or corruption
                                 eprintln!("WARNING: Hash match but size differs for '{}' - re-uploading", path.display());
                                 true
-                            } else if local_meta.modified > remote_meta.modified + 2 {
-                                // Local is newer by >2 seconds (allow for clock skew)
-                                true
                             } else {
-                                // All checks pass - file is up to date
+                                // Hash and size match - file is identical
                                 false
                             }
                         },
