@@ -7,12 +7,13 @@ use async_trait::async_trait;
 use blake3::Hasher;
 use iroh::client::Doc;
 use iroh::net::key::SecretKey;
-use iroh::node::Builder;
+use iroh::node::{Builder, Node};
 use iroh::node::MemNode;
+use iroh_blobs::BlobFormat;
 use iroh_docs::AuthorId;
 use iroh::client::docs::ShareMode;
 use serde::{Deserialize, Serialize};
-use serde_json;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -78,6 +79,8 @@ pub struct IrohSyncProvider {
     file_watcher: Option<FileWatcher>,
     /// Flag to indicate if auto-sync is running
     sync_running: Arc<AtomicBool>,
+    /// Whether this is the first sync after joining (bootstrap mode)
+    first_sync: Arc<AtomicBool>,
     /// App handle for event emission
     app_handle: Option<AppHandle>,
 }
@@ -93,60 +96,101 @@ impl IrohSyncProvider {
             file_cache: HashMap::new(),
             file_watcher: None,
             sync_running: Arc::new(AtomicBool::new(false)),
+            first_sync: Arc::new(AtomicBool::new(false)),
             app_handle: None,
         }
     }
 
-    /// Reset/clear all Iroh state to allow fresh initialization
-    pub fn reset(&mut self) {
-        self.node = None;
-        self.doc = None;
-        self.author_id = None;
-        self.workspace_path = None;
-        self.file_cache.clear();
-        self.file_watcher = None;
-        self.sync_running.store(false, std::sync::atomic::Ordering::Relaxed);
+    /// Get path to ticket storage file
+    fn ticket_file_path(&self) -> SyncResult<PathBuf> {
+        let workspace = self.workspace_path.as_ref().ok_or(SyncError::OperationFailed(
+            "Workspace not initialized".to_string(),
+        ))?;
+        Ok(workspace.join(".lokus").join("iroh-ticket.txt"))
     }
 
-    /// Initialize with an existing secret key (for importing existing Iroh identity)
-    pub async fn init_with_key(&mut self, workspace_path: PathBuf, secret_key_hex: String) -> SyncResult<String> {
-        // Parse the hex string to SecretKey
-        let secret_key_bytes = hex::decode(&secret_key_hex)
-            .map_err(|e| SyncError::OperationFailed(format!("Invalid hex key: {}", e)))?;
-        
-        if secret_key_bytes.len() != 32 {
-            return Err(SyncError::OperationFailed(
-                "Secret key must be 32 bytes (64 hex characters)".to_string()
-            ));
+    /// Save ticket to disk for persistence
+    async fn save_ticket(&self, ticket: &str) -> SyncResult<()> {
+        let ticket_path = self.ticket_file_path()?;
+
+        // Ensure .lokus directory exists
+        if let Some(parent) = ticket_path.parent() {
+            fs::create_dir_all(parent)
+                .await
+                .map_err(|e| SyncError::FileSystem(format!("Failed to create .lokus directory: {}", e)))?;
         }
 
-        let mut key_array = [0u8; 32];
-        key_array.copy_from_slice(&secret_key_bytes);
-        let secret_key = SecretKey::from(key_array);
-
-        // Create node with the provided secret key
-        let node = Builder::default()
-            .secret_key(secret_key)
-            .enable_docs()
-            .spawn()
+        fs::write(&ticket_path, ticket)
             .await
-            .map_err(|e| SyncError::Iroh(format!("Failed to create node with provided key: {}", e)))?;
+            .map_err(|e| SyncError::FileSystem(format!("Failed to save ticket: {}", e)))?;
 
-        // Create default author
-        let author = node
-            .authors()
-            .create()
+        Ok(())
+    }
+
+    /// Load ticket from disk
+    async fn load_ticket(&self) -> SyncResult<Option<String>> {
+        let ticket_path = self.ticket_file_path()?;
+
+        if !ticket_path.exists() {
+            return Ok(None);
+        }
+
+        let ticket = fs::read_to_string(&ticket_path)
             .await
-            .map_err(|e| SyncError::Iroh(format!("Failed to create author: {}", e)))?;
+            .map_err(|e| SyncError::FileSystem(format!("Failed to load ticket: {}", e)))?;
 
-        self.node = Some(node);
-        self.author_id = Some(author);
-        self.workspace_path = Some(workspace_path.clone());
+        Ok(Some(ticket.trim().to_string()))
+    }
 
-        Ok(format!(
-            "Iroh node initialized with provided key for workspace: {}",
-            workspace_path.display()
-        ))
+    /// Restore document from saved ticket
+    pub async fn restore_from_saved_ticket(&mut self) -> SyncResult<Option<String>> {
+        // First ensure node is initialized
+        if self.node.is_none() {
+            return Ok(None);
+        }
+
+        // Try to load saved ticket
+        match self.load_ticket().await? {
+            Some(ticket) => {
+                // Join the document using saved ticket
+                match self.join_document(&ticket).await {
+                    Ok(doc_id) => Ok(Some(doc_id)),
+                    Err(e) => {
+                        // If join fails, the ticket might be stale - ignore the error
+                        eprintln!("Failed to restore from saved ticket: {}", e);
+                        Ok(None)
+                    }
+                }
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Leave/clear the current document
+    pub async fn leave_document(&mut self) -> SyncResult<String> {
+        // Stop auto-sync if running
+        if self.sync_running.load(Ordering::SeqCst) {
+            self.stop_auto_sync().await?;
+        }
+
+        // Clear document state
+        self.doc = None;
+        self.file_cache.clear();
+
+        // Delete saved ticket file
+        let ticket_path = self.ticket_file_path()?;
+        if ticket_path.exists() {
+            fs::remove_file(&ticket_path)
+                .await
+                .map_err(|e| SyncError::FileSystem(format!("Failed to delete ticket file: {}", e)))?;
+        }
+
+        Ok("Left document successfully".to_string())
+    }
+
+    /// Update workspace path (for switching workspaces)
+    pub fn update_workspace_path(&mut self, workspace_path: PathBuf) {
+        self.workspace_path = Some(workspace_path);
     }
 
     /// Create a new document and return its ticket
@@ -173,7 +217,11 @@ impl IrohSyncProvider {
 
         self.doc = Some(doc);
 
-        Ok(ticket.to_string())
+        // Save ticket to disk for persistence
+        let ticket_str = ticket.to_string();
+        self.save_ticket(&ticket_str).await?;
+
+        Ok(ticket_str)
     }
 
     /// Join an existing document using a ticket
@@ -182,20 +230,29 @@ impl IrohSyncProvider {
             "Node not initialized".to_string(),
         ))?;
 
+        // Save ticket string before parsing for persistence
+        let ticket_str = ticket.to_string();
+
         // Parse ticket
-        let ticket = ticket
+        let ticket_parsed = ticket
             .parse()
             .map_err(|e| SyncError::InvalidTicket(format!("{}", e)))?;
 
         // Import document (returns Doc directly in 0.28)
         let doc = node
             .docs()
-            .import(ticket)
+            .import(ticket_parsed)
             .await
             .map_err(|e| SyncError::Iroh(format!("Failed to join document: {}", e)))?;
 
         let doc_id = doc.id();
         self.doc = Some(doc);
+
+        // Mark as first sync - download everything first, skip upload
+        self.first_sync.store(true, Ordering::SeqCst);
+
+        // Save ticket to disk for persistence
+        self.save_ticket(&ticket_str).await?;
 
         Ok(format!("Joined document: {}", doc_id))
     }
@@ -507,9 +564,11 @@ impl IrohSyncProvider {
 
         tokio::spawn(async move {
             let mut last_sync_hashes: Option<Vec<String>> = None;
+            let mut consecutive_changes = 0;
+            let mut sleep_interval = 60;  // Start at 60 seconds, increase if loop detected
 
             while sync_running.load(Ordering::SeqCst) {
-                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(sleep_interval)).await;
 
                 if !sync_running.load(Ordering::SeqCst) {
                     break;
@@ -537,11 +596,22 @@ impl IrohSyncProvider {
 
                 match provider.scan_and_sync().await {
                     Ok((uploaded, downloaded)) => {
-                        // Only update last_sync_hashes if sync was stable (0 changes)
                         if uploaded == 0 && downloaded == 0 {
+                            // Stable state - reset to normal interval
                             last_sync_hashes = Some(current_hashes);
+                            consecutive_changes = 0;
+                            sleep_interval = 60;
                         } else {
-                            last_sync_hashes = None;  // Changes detected, don't cache
+                            // Changes detected - increment counter
+                            consecutive_changes += 1;
+                            last_sync_hashes = None;
+
+                            // Backoff if loop detected (more than 3 consecutive changes)
+                            if consecutive_changes > 3 {
+                                sleep_interval = (sleep_interval * 2).min(300);  // Max 5 minutes
+                                eprintln!("[Sync] Loop detected ({} consecutive changes), backing off to {} seconds",
+                                    consecutive_changes, sleep_interval);
+                            }
                         }
 
                         let status_event = SyncStatusEvent {
@@ -566,7 +636,6 @@ impl IrohSyncProvider {
 
         Ok("Auto-sync started successfully".to_string())
     }
-
 
     /// Stop automatic synchronization
     ///
@@ -644,6 +713,14 @@ impl IrohSyncProvider {
             }
         }
 
+        // SKIP upload phase on first sync after join (bootstrap mode)
+        // This ensures fresh workspace downloads everything before uploading
+        if self.first_sync.load(Ordering::SeqCst) {
+            eprintln!("[First sync] Skipping upload phase - download only ({} files downloaded)", downloaded);
+            self.first_sync.store(false, Ordering::SeqCst);
+            return Ok((0, downloaded));
+        }
+
         // Upload local files
         let entries = walkdir::WalkDir::new(&workspace)
             .into_iter()
@@ -668,23 +745,21 @@ impl IrohSyncProvider {
                     rel_path.to_string_lossy().replace('\\', "/")
                 );
 
-                // Check if file needs to be uploaded using triple validation
+                // Check if file needs to be uploaded (hash + size only, NO timestamps)
                 let needs_upload = if let Some(remote_meta) = remote_files.get(&normalized_rel_path) {
                     match Self::get_file_metadata(path).await {
                         Ok(local_meta) => {
-                            // Triple check: hash, size, AND timestamp
+                            // Only check hash and size - IGNORE timestamps to prevent loop
+                            // (Downloaded files get new timestamps, would trigger re-upload)
                             if local_meta.hash != remote_meta.hash {
                                 // Hash mismatch - definitely needs upload
                                 true
                             } else if local_meta.size != remote_meta.size {
-                                // Size differs despite same hash? Re-upload
+                                // Extremely rare: hash collision or corruption
                                 eprintln!("WARNING: Hash match but size differs for '{}' - re-uploading", path.display());
                                 true
-                            } else if local_meta.modified > remote_meta.modified + 2 {
-                                // Local is newer by >2 seconds (allow for clock skew)
-                                true
                             } else {
-                                // All checks pass - file is up to date
+                                // Hash and size match - file is identical
                                 false
                             }
                         },
@@ -908,16 +983,28 @@ pub async fn iroh_init(workspace_path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn iroh_reset_and_init_with_key(
-    workspace_path: String, 
-    secret_key_hex: String
-) -> Result<String, String> {
-    let mut provider = IrohSyncProvider::new();
-    provider.reset(); // Clear any existing state
+pub async fn iroh_check_saved_document(
+    provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
+    workspace_path: String,
+) -> Result<Option<String>, String> {
+    let mut provider = provider.lock().await;
+
+    // Always update workspace path (important for workspace switching)
+    provider.update_workspace_path(PathBuf::from(&workspace_path));
+
+    // Initialize node if not already initialized
+    if provider.node.is_none() {
+        provider
+            .init(PathBuf::from(&workspace_path))
+            .await
+            .map_err(|e| format!("Failed to initialize Iroh: {}", e))?;
+    }
+
+    // Try to restore from saved ticket (workspace-specific)
     provider
-        .init_with_key(PathBuf::from(workspace_path), secret_key_hex)
+        .restore_from_saved_ticket()
         .await
-        .map_err(|e| format!("Failed to initialize Iroh with provided key: {}", e))
+        .map_err(|e| format!("Failed to restore document: {}", e))
 }
 
 #[tauri::command]
@@ -926,6 +1013,9 @@ pub async fn iroh_init_document(
     workspace_path: String,
 ) -> Result<String, String> {
     let mut provider = provider.lock().await;
+
+    // Always update workspace path
+    provider.update_workspace_path(PathBuf::from(&workspace_path));
 
     // Initialize node if not already initialized
     if provider.node.is_none() {
@@ -943,11 +1033,35 @@ pub async fn iroh_init_document(
 }
 
 #[tauri::command]
+pub async fn iroh_leave_document(
+    provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
+) -> Result<String, String> {
+    let mut provider = provider.lock().await;
+    provider
+        .leave_document()
+        .await
+        .map_err(|e| format!("Failed to leave document: {}", e))
+}
+
+#[tauri::command]
 pub async fn iroh_join_document(
     provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
+    workspace_path: String,
     ticket: String,
 ) -> Result<String, String> {
     let mut provider = provider.lock().await;
+
+    // Always update workspace path
+    provider.update_workspace_path(PathBuf::from(&workspace_path));
+
+    // Initialize node if not already initialized
+    if provider.node.is_none() {
+        provider
+            .init(PathBuf::from(&workspace_path))
+            .await
+            .map_err(|e| format!("Failed to initialize Iroh: {}", e))?;
+    }
+
     provider
         .join_document(&ticket)
         .await
@@ -957,8 +1071,29 @@ pub async fn iroh_join_document(
 #[tauri::command]
 pub async fn iroh_get_ticket(
     provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
+    workspace_path: String,
 ) -> Result<String, String> {
-    let provider = provider.lock().await;
+    let mut provider = provider.lock().await;
+
+    // Update workspace path for per-workspace document handling
+    provider.update_workspace_path(PathBuf::from(&workspace_path));
+
+    // If document is None, try to restore from saved ticket
+    if provider.doc.is_none() {
+        // Ensure node is initialized first
+        if provider.node.is_none() {
+            provider
+                .init(PathBuf::from(&workspace_path))
+                .await
+                .map_err(|e| format!("Failed to initialize Iroh: {}", e))?;
+        }
+
+        // Try to restore document
+        if let Ok(Some(_)) = provider.restore_from_saved_ticket().await {
+            // Successfully restored
+        }
+    }
+
     provider
         .get_ticket()
         .await
@@ -990,8 +1125,29 @@ pub async fn iroh_manual_sync(
 #[tauri::command]
 pub async fn iroh_sync_status(
     provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
+    workspace_path: String,
 ) -> Result<SyncStatus, String> {
-    let provider = provider.lock().await;
+    let mut provider = provider.lock().await;
+
+    // Update workspace path for per-workspace document handling
+    provider.update_workspace_path(PathBuf::from(&workspace_path));
+
+    // If document is None, try to restore from saved ticket
+    if provider.doc.is_none() {
+        // Ensure node is initialized first
+        if provider.node.is_none() {
+            provider
+                .init(PathBuf::from(&workspace_path))
+                .await
+                .map_err(|e| format!("Failed to initialize Iroh: {}", e))?;
+        }
+
+        // Try to restore document
+        if let Ok(Some(_)) = provider.restore_from_saved_ticket().await {
+            // Successfully restored
+        }
+    }
+
     provider
         .status()
         .await
@@ -1001,9 +1157,29 @@ pub async fn iroh_sync_status(
 #[tauri::command]
 pub async fn iroh_list_peers(
     provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
-    _workspace_path: String,
+    workspace_path: String,
 ) -> Result<Vec<PeerInfo>, String> {
-    let provider = provider.lock().await;
+    let mut provider = provider.lock().await;
+
+    // Update workspace path for per-workspace document handling
+    provider.update_workspace_path(PathBuf::from(&workspace_path));
+
+    // If document is None, try to restore from saved ticket
+    if provider.doc.is_none() {
+        // Ensure node is initialized first
+        if provider.node.is_none() {
+            provider
+                .init(PathBuf::from(&workspace_path))
+                .await
+                .map_err(|e| format!("Failed to initialize Iroh: {}", e))?;
+        }
+
+        // Try to restore document
+        if let Ok(Some(_)) = provider.restore_from_saved_ticket().await {
+            // Successfully restored
+        }
+    }
+
     provider
         .get_peers()
         .await
@@ -1013,9 +1189,30 @@ pub async fn iroh_list_peers(
 #[tauri::command]
 pub async fn iroh_start_auto_sync(
     provider: tauri::State<'_, tokio::sync::Mutex<IrohSyncProvider>>,
+    workspace_path: String,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     let mut provider = provider.lock().await;
+
+    // Update workspace path for per-workspace document handling
+    provider.update_workspace_path(PathBuf::from(&workspace_path));
+
+    // If document is None, try to restore from saved ticket
+    if provider.doc.is_none() {
+        // Ensure node is initialized first
+        if provider.node.is_none() {
+            provider
+                .init(PathBuf::from(&workspace_path))
+                .await
+                .map_err(|e| format!("Failed to initialize Iroh: {}", e))?;
+        }
+
+        // Try to restore document
+        if let Ok(Some(_)) = provider.restore_from_saved_ticket().await {
+            // Successfully restored
+        }
+    }
+
     provider
         .start_auto_sync(app_handle)
         .await
