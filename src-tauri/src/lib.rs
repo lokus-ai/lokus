@@ -1,6 +1,6 @@
 #![cfg_attr(mobile, tauri::mobile_entry_point)]
 
-mod windows;
+mod window_manager;
 mod menu;
 mod theme;
 mod handlers;
@@ -26,7 +26,7 @@ mod file_locking;
 #[cfg(target_os = "macos")]
 mod macos;
 
-use windows::{open_workspace_window, open_preferences_window, open_launcher_window};
+use window_manager::{open_workspace_window, open_preferences_window, open_launcher_window};
 use tauri::Manager;
 use tauri_plugin_store::{StoreBuilder, JsonValue};
 use std::path::PathBuf;
@@ -118,11 +118,11 @@ fn validate_path_internal(path: &str) -> bool {
 }
 
 #[tauri::command]
-fn validate_workspace_path(app: tauri::AppHandle, path: String) -> bool {
+fn validate_workspace_path(_app: tauri::AppHandle, path: String) -> bool {
     #[cfg(target_os = "macos")]
     {
         // Try to resolve bookmark first to get security-scoped access
-        if let Ok(store) = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build() {
+        if let Ok(store) = StoreBuilder::new(&_app, PathBuf::from(".settings.dat")).build() {
             let _ = store.reload();
             if let Some(bookmark_value) = store.get("last_workspace_bookmark") {
                 if let Ok(bookmark_data) = serde_json::from_value::<Vec<u8>>(bookmark_value.clone()) {
@@ -147,10 +147,10 @@ fn validate_workspace_path(app: tauri::AppHandle, path: String) -> bool {
     validate_path_internal(&path)
 }
 
-fn restore_workspace_access(app: &tauri::AppHandle) -> Option<String> {
+fn restore_workspace_access(_app: &tauri::AppHandle) -> Option<String> {
     #[cfg(target_os = "macos")]
     {
-        if let Ok(store) = StoreBuilder::new(app, PathBuf::from(".settings.dat")).build() {
+        if let Ok(store) = StoreBuilder::new(_app, PathBuf::from(".settings.dat")).build() {
             let _ = store.reload();
             if let Some(bookmark_value) = store.get("last_workspace_bookmark") {
                 if let Ok(bookmark_data) = serde_json::from_value::<Vec<u8>>(bookmark_value.clone()) {
@@ -389,7 +389,7 @@ pub fn run() {
       open_workspace_window,
       open_preferences_window,
       open_launcher_window,
-      windows::sync_window_theme,
+      window_manager::sync_window_theme,
       save_last_workspace,
       clear_last_workspace,
       validate_workspace_path,
@@ -451,16 +451,17 @@ pub fn run() {
       sync::git_force_push,
       sync::git_force_pull,
       // Iroh sync commands
-      sync::iroh_check_saved_document,
+      // sync::iroh_check_saved_document,
       sync::iroh_init_document,
       sync::iroh_join_document,
-      sync::iroh_leave_document,
+      // sync::iroh_leave_document,
       sync::iroh_get_ticket,
       sync::iroh_sync_status,
       sync::iroh_list_peers,
       sync::iroh_manual_sync,
       sync::iroh_start_auto_sync,
       sync::iroh_stop_auto_sync,
+      // sync::iroh_reset_and_init_with_key,
       credentials::store_git_credentials,
       credentials::retrieve_git_credentials,
       credentials::delete_git_credentials,

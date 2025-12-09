@@ -10,6 +10,7 @@ pub mod manager;
 
 pub use git::*;
 pub use iroh::*;
-pub use provider::*;
-pub use file_watcher::*;
-pub use manager::*;
+// Re-exports are available but not currently used
+// pub use provider::*;
+// pub use file_watcher::*;
+// pub use manager::*;

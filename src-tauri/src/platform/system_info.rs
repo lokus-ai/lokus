@@ -290,7 +290,7 @@ impl SystemInfoCollector {
     
     /// Get disk information
     fn get_disk_info() -> Vec<DiskInfo> {
-        let mut disks = Vec::new();
+        let disks = Vec::new();
         
         // This is a simplified implementation
         // In a real implementation, you'd use platform-specific APIs

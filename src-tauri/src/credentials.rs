@@ -77,18 +77,18 @@ pub async fn store_git_credentials(
         let credential_blob = token.as_bytes();
         
         let credential = CREDENTIALW {
-            Flags: 0,
+            Flags: CRED_FLAGS(0),
             Type: CRED_TYPE_GENERIC,
-            TargetName: target_name.as_ptr() as *mut u16,
-            Comment: std::ptr::null_mut(),
+            TargetName: windows::core::PWSTR::from_raw(target_name.as_ptr() as *mut u16),
+            Comment: windows::core::PWSTR::null(),
             LastWritten: Default::default(),
             CredentialBlobSize: credential_blob.len() as u32,
             CredentialBlob: credential_blob.as_ptr() as *mut u8,
             Persist: CRED_PERSIST_LOCAL_MACHINE,
             AttributeCount: 0,
             Attributes: std::ptr::null_mut(),
-            TargetAlias: std::ptr::null_mut(),
-            UserName: username_wide.as_ptr() as *mut u16,
+            TargetAlias: windows::core::PWSTR::null(),
+            UserName: windows::core::PWSTR::from_raw(username_wide.as_ptr() as *mut u16),
         };
         
         unsafe {
@@ -174,7 +174,7 @@ pub async fn retrieve_git_credentials(
         let mut credential_ptr: *mut CREDENTIALW = std::ptr::null_mut();
         
         unsafe {
-            CredReadW(target_name.as_ptr(), CRED_TYPE_GENERIC, 0, &mut credential_ptr)
+            CredReadW(windows::core::PCWSTR::from_raw(target_name.as_ptr()), CRED_TYPE_GENERIC, Some(0), &mut credential_ptr)
                 .map_err(|e| format!("Credentials not found in Credential Manager: {}", e))?;
             
             if credential_ptr.is_null() {
@@ -192,11 +192,14 @@ pub async fn retrieve_git_credentials(
                 .map_err(|e| format!("Invalid token encoding: {}", e))?;
             
             // Get username
-            let username_slice = std::slice::from_raw_parts(
-                credential.UserName,
-                (0..).take_while(|&i| *credential.UserName.offset(i) != 0).count(),
-            );
-            let username = String::from_utf16_lossy(username_slice);
+            let username_ptr = credential.UserName.as_ptr();
+            let username = if !username_ptr.is_null() {
+                let len = (0..).take_while(|&i| *username_ptr.offset(i) != 0).count();
+                let username_slice = std::slice::from_raw_parts(username_ptr, len);
+                String::from_utf16_lossy(username_slice)
+            } else {
+                String::new()
+            };
             
             // Free credential  
             CredFree(credential_ptr as *const _);
@@ -284,7 +287,7 @@ pub async fn delete_git_credentials(workspace_id: String) -> Result<(), String> 
             .collect();
         
         unsafe {
-            CredDeleteW(target_name.as_ptr(), CRED_TYPE_GENERIC, 0)
+            CredDeleteW(windows::core::PCWSTR::from_raw(target_name.as_ptr()), CRED_TYPE_GENERIC, Some(0))
                 .map_err(|e| format!("Failed to delete credentials from Credential Manager: {}", e))?;
         }
     }
@@ -351,18 +354,18 @@ pub async fn store_iroh_keys(
             .collect();
 
         let credential = CREDENTIALW {
-            Flags: 0,
+            Flags: CRED_FLAGS(0),
             Type: CRED_TYPE_GENERIC,
-            TargetName: target_name.as_ptr() as *mut u16,
-            Comment: std::ptr::null_mut(),
+            TargetName: windows::core::PWSTR::from_raw(target_name.as_ptr() as *mut u16),
+            Comment: windows::core::PWSTR::null(),
             LastWritten: Default::default(),
             CredentialBlobSize: private_key.len() as u32,
             CredentialBlob: private_key.as_ptr() as *mut u8,
             Persist: CRED_PERSIST_LOCAL_MACHINE,
             AttributeCount: 0,
             Attributes: std::ptr::null_mut(),
-            TargetAlias: std::ptr::null_mut(),
-            UserName: username_wide.as_ptr() as *mut u16,
+            TargetAlias: windows::core::PWSTR::null(),
+            UserName: windows::core::PWSTR::from_raw(username_wide.as_ptr() as *mut u16),
         };
 
         unsafe {
@@ -434,7 +437,7 @@ pub async fn retrieve_iroh_keys(
         let mut credential_ptr: *mut CREDENTIALW = std::ptr::null_mut();
 
         unsafe {
-            CredReadW(target_name.as_ptr(), CRED_TYPE_GENERIC, 0, &mut credential_ptr)
+            CredReadW(windows::core::PCWSTR::from_raw(target_name.as_ptr()), CRED_TYPE_GENERIC, Some(0), &mut credential_ptr)
                 .map_err(|e| format!("Iroh keys not found in Credential Manager: {}", e))?;
 
             if credential_ptr.is_null() {
@@ -512,7 +515,7 @@ pub async fn delete_iroh_keys(workspace_id: String) -> Result<(), String> {
             .collect();
 
         unsafe {
-            CredDeleteW(target_name.as_ptr(), CRED_TYPE_GENERIC, 0)
+            CredDeleteW(windows::core::PCWSTR::from_raw(target_name.as_ptr()), CRED_TYPE_GENERIC, Some(0))
                 .map_err(|e| format!("Failed to delete iroh keys from Credential Manager: {}", e))?;
         }
     }
