@@ -403,8 +403,21 @@ const WikiLinkSuggest = Extension.create({
             }
           } else {
             // FILE MODE: Insert file reference
-            const from = Math.max((range?.from ?? editor.state.selection.from) - 1, 1)
-            const to = range?.to ?? editor.state.selection.to
+            // Find the [[ position reliably by searching in text (same approach as block mode)
+            const { state } = editor
+            const $pos = state.selection.$from
+            const parentContent = $pos.parent.textContent
+            const textBefore = parentContent.slice(0, $pos.parentOffset)
+
+            // Find where [[ starts
+            const openBracketPos = textBefore.lastIndexOf('[[')
+            if (openBracketPos === -1) {
+              dbg('command: no [[ found in textBefore', { textBefore })
+              return
+            }
+
+            const from = state.selection.from - (textBefore.length - openBracketPos)
+            const to = range?.to ?? state.selection.to
             // Get display name: just the filename without extension
             const rawName = props.title || props.path
             const fileName = rawName.replace(/\.[^.]+$/, '')  // Remove any extension (.md, etc.)
