@@ -133,8 +133,12 @@ const WikiLinkSuggest = Extension.create({
         // Allow after [[ for files OR after ^ for blocks
         allow: ({ state, range }) => {
           const $pos = state.selection.$from
-          const parentContent = $pos.parent.textContent
-          const textBefore = parentContent.slice(Math.max(0, $pos.parentOffset - 2), $pos.parentOffset)
+          const pos = state.selection.from
+          const parentStart = $pos.start()
+
+          // Use textBetween with absolute positions to properly handle inline nodes like WikiLinks
+          // (parentOffset doesn't align with textContent when WikiLinks are present)
+          const textBefore = state.doc.textBetween(Math.max(parentStart, pos - 2), pos)
 
           // Check for [[ pattern (file linking)
           const isAfterDoubleBracket = textBefore.endsWith('[[')
@@ -142,13 +146,14 @@ const WikiLinkSuggest = Extension.create({
           // Check for ^ pattern within [[ ]] (block linking)
           // Look for pattern: [[Filename^ or [[Filename.md^
           const wikiLinkPattern = /\[\[([^\]]+)\^$/
-          const fullTextBefore = parentContent.slice(0, $pos.parentOffset)
+          const fullTextBefore = state.doc.textBetween(parentStart, pos)
           const isAfterCaret = wikiLinkPattern.test(fullTextBefore)
 
           dbg('textBefore check', {
             textBefore,
             fullTextBefore: fullTextBefore.slice(-20),
-            parentOffset: $pos.parentOffset,
+            pos,
+            parentStart,
             rangeFrom: range.from,
             isAfterCaret
           })
@@ -403,8 +408,21 @@ const WikiLinkSuggest = Extension.create({
             }
           } else {
             // FILE MODE: Insert file reference
-            const from = Math.max((range?.from ?? editor.state.selection.from) - 1, 1)
-            const to = range?.to ?? editor.state.selection.to
+            // Find the [[ position reliably by searching in text (same approach as block mode)
+            const { state } = editor
+            const $pos = state.selection.$from
+            const parentContent = $pos.parent.textContent
+            const textBefore = parentContent.slice(0, $pos.parentOffset)
+
+            // Find where [[ starts
+            const openBracketPos = textBefore.lastIndexOf('[[')
+            if (openBracketPos === -1) {
+              dbg('command: no [[ found in textBefore', { textBefore })
+              return
+            }
+
+            const from = state.selection.from - (textBefore.length - openBracketPos)
+            const to = range?.to ?? state.selection.to
             // Get display name: just the filename without extension
             const rawName = props.title || props.path
             const fileName = rawName.replace(/\.[^.]+$/, '')  // Remove any extension (.md, etc.)
