@@ -1,5 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import { PluginLoader } from "../../plugins/PluginLoader.js";
+import { emit } from "@tauri-apps/api/event";
+import { PluginLoader } from "../../plugins/core/PluginLoader.js";
+import { LokusPluginAPI } from "../../plugins/api/LokusPluginAPI.js";
+import { uiManager } from "../ui/UIManager.js";
+import { configManager } from "../config/ConfigManager.js";
+import { filesystemManager } from "../fs/FilesystemManager.js";
 
 /**
  * PluginStateAdapter - UI State Management Facade for Plugin System
@@ -27,9 +32,12 @@ import { PluginLoader } from "../../plugins/PluginLoader.js";
  *
  * @class PluginStateAdapter
  */
+
+
 class PluginStateAdapter {
   constructor() {
     this.plugins = [];
+    this.pluginInstances = new Map(); // Store active plugin instances
     this.enabledPlugins = new Set();
     this.installingPlugins = new Set();
     this.loading = true;
@@ -38,12 +46,73 @@ class PluginStateAdapter {
     this.loadInProgress = false;
     this.pluginLoader = new PluginLoader();
     this.listeners = new Set();
+    this.workspacePath = null;
+    this.workspacePath = null;
 
     // Cache duration for plugin data (5 minutes)
     this.CACHE_DURATION = 5 * 60 * 1000;
 
+    // Initialize global lokus object for plugins
+    if (typeof window !== 'undefined') {
+      window.lokus = window.lokus || {};
+      // Expose the actual instances map so plugins can register themselves
+      window.lokus.plugins = this.pluginInstances;
+
+      // Add helper methods that plugins might expect if they treat it as an object
+      if (!window.lokus.plugins.getPlugin) {
+        window.lokus.plugins.getPlugin = (id) => this.pluginInstances.get(id);
+      }
+
+      // Initialize Event Emitter for Plugins
+      if (!window.lokus.plugins.emit) {
+        window.lokus.plugins.events = new Map();
+
+        window.lokus.plugins.emit = (event, data) => {
+          const handlers = window.lokus.plugins.events.get(event) || [];
+          handlers.forEach(h => {
+            try { h(data); } catch (e) { console.error(`Error in plugin event handler for ${event}:`, e); }
+          });
+        };
+
+        window.lokus.plugins.on = (event, handler) => {
+          const handlers = window.lokus.plugins.events.get(event) || [];
+          handlers.push(handler);
+          window.lokus.plugins.events.set(event, handlers);
+          return () => window.lokus.plugins.off(event, handler);
+        };
+
+        window.lokus.plugins.off = (event, handler) => {
+          const handlers = window.lokus.plugins.events.get(event) || [];
+          const filtered = handlers.filter(h => h !== handler);
+          window.lokus.plugins.events.set(event, filtered);
+        };
+      }
+
+      // Initialize Command Registry
+      window.lokus.commands = window.lokus.commands || {
+        registry: new Map(),
+        registerCommand: (id, callback) => {
+          window.lokus.commands.registry.set(id, callback);
+          return { dispose: () => window.lokus.commands.registry.delete(id) };
+        },
+        executeCommand: (id, ...args) => {
+          const callback = window.lokus.commands.registry.get(id);
+          if (callback) {
+            return callback(...args);
+          } else {
+            console.warn(`Command not found: ${id}`);
+            return Promise.resolve();
+          }
+        }
+      };
+    }
+
     // Initialize plugins
     this.initialize();
+  }
+
+  setWorkspacePath(path) {
+    this.workspacePath = path;
   }
 
   async initialize() {
@@ -54,13 +123,78 @@ class PluginStateAdapter {
     for (const pluginInfo of allPlugins) {
       if (enabledPluginNames.includes(pluginInfo.id)) {
         try {
-          await this.pluginLoader.loadPlugin(pluginInfo);
-          await this.pluginLoader.activatePlugin(pluginInfo.id);
+          // Check if already loaded
+          if (this.pluginInstances.has(pluginInfo.id)) {
+            continue;
+          }
+
+          // Create API for plugin
+          // TODO: Pass editorAPI when available
+          const managers = {
+            commands: window.lokus?.commands,
+            ui: uiManager,
+            workspace: {
+              getWorkspaceFolders: () => this.workspacePath ? [{ uri: { path: this.workspacePath, scheme: 'file' }, name: this.workspacePath.split('/').pop(), index: 0 }] : [],
+              getRootPath: () => this.workspacePath
+            },
+            configuration: configManager,
+            filesystem: filesystemManager
+          };
+          const pluginAPI = new LokusPluginAPI(managers);
+          pluginAPI.setPluginContext(pluginInfo.id, null);
+
+          // Listen for UI events
+          // Note: LokusPluginAPI aggregates events or we listen to specific sub-APIs?
+          // UIAPI emits 'panel-registered'. LokusPluginAPI might not bubble it up automatically.
+          // We might need to listen to pluginAPI.ui
+          if (pluginAPI.ui) {
+            pluginAPI.ui.on('panel-registered', (event) => {
+              this.handlePanelRegistered(event);
+            });
+          }
+
+          // Load plugin
+          const pluginInstance = await this.pluginLoader.loadPlugin(pluginInfo.path, pluginAPI);
+          this.pluginInstances.set(pluginInfo.id, pluginInstance);
+
+          // Activate plugin
+          if (typeof pluginInstance.activate === 'function') {
+            await pluginInstance.activate();
+
+            // Emit activation event
+            try {
+              await emit('plugin-runtime-activated', { pluginId: pluginInfo.id });
+            } catch (e) {
+              console.warn('Failed to emit plugin activation event:', e);
+            }
+          }
+
         } catch (error) {
           console.error('Failed to load plugin:', pluginInfo.id, error);
         }
       }
     }
+  }
+
+  handlePanelRegistered(event) {
+    const { pluginId, id, ...panelData } = event;
+
+    // Update plugins list with new panel
+    this.plugins = this.plugins.map(p => {
+      if (p.id === pluginId) {
+        const panels = p.ui?.panels || [];
+        return {
+          ...p,
+          ui: {
+            ...p.ui,
+            panels: [...panels, { id, ...panelData }]
+          }
+        };
+      }
+      return p;
+    });
+
+    this.notifyListeners();
   }
 
   async loadPlugins(forceReload = false) {
@@ -90,7 +224,7 @@ class PluginStateAdapter {
           w.__TAURI_METADATA__ ||
           (navigator?.userAgent || '').includes('Tauri')
         );
-      } catch {}
+      } catch { }
 
       if (isTauri) {
         // Load real plugins from Tauri backend
@@ -101,6 +235,9 @@ class PluginStateAdapter {
 
         // Convert backend format to frontend format
         const convertedPlugins = pluginInfos.map(pluginInfo => {
+          if (pluginInfo.manifest.id === 'pkmodoro') {
+            console.log('[PluginStateAdapter] pkmodoro raw manifest:', pluginInfo.manifest);
+          }
           const pluginId = pluginInfo.manifest.id || pluginInfo.path.split('/').pop();
           const pluginName = pluginInfo.manifest.name;
           const isEnabled = enabledPluginNames.includes(pluginId);
@@ -122,6 +259,7 @@ class PluginStateAdapter {
             repository: pluginInfo.manifest.repository,
             homepage: pluginInfo.manifest.homepage,
             license: pluginInfo.manifest.license,
+            manifest: pluginInfo.manifest, // Include full manifest
             // Default UI properties
             rating: 0,
             downloads: 0,
@@ -164,8 +302,13 @@ class PluginStateAdapter {
       this.installingPlugins.add(pluginId);
       this.notifyListeners();
 
-      // Call Tauri backend to install plugin
-      await invoke('install_plugin', { path: pluginData.path });
+      // Check if this is a marketplace install
+      if (pluginData.fromMarketplace) {
+        await this.pluginLoader.installFromMarketplace(pluginId, pluginData.version);
+      } else {
+        // Call Tauri backend to install plugin from local path
+        await invoke('install_plugin', { path: pluginData.path });
+      }
 
       // Reload plugins to get updated state (force reload)
       await this.loadPlugins(true);
@@ -212,7 +355,7 @@ class PluginStateAdapter {
           w.__TAURI_METADATA__ ||
           (navigator?.userAgent || '').includes('Tauri')
         );
-      } catch {}
+      } catch { }
 
       if (isTauri) {
         // Use real Tauri commands
@@ -239,6 +382,55 @@ class PluginStateAdapter {
         }
 
         this.notifyListeners();
+      }
+
+      // Handle runtime activation/deactivation
+      if (enabled) {
+        // Check if instance exists, if not load it
+        if (!this.pluginInstances.has(pluginId)) {
+          const pluginInfo = this.plugins.find(p => p.id === pluginId);
+          if (pluginInfo) {
+            // Create API for plugin
+            // TODO: Pass editorAPI when available
+            const managers = {
+              commands: window.lokus?.commands,
+              ui: uiManager,
+              workspace: {
+                getWorkspaceFolders: () => this.workspacePath ? [{ uri: { path: this.workspacePath, scheme: 'file' }, name: this.workspacePath.split('/').pop(), index: 0 }] : [],
+                getRootPath: () => this.workspacePath
+              }
+            };
+            const pluginAPI = new LokusPluginAPI(managers);
+            pluginAPI.setPluginContext(pluginId, null);
+
+            // Listen for UI events
+            if (pluginAPI.ui) {
+              pluginAPI.ui.on('panel-registered', (event) => {
+                this.handlePanelRegistered(event);
+              });
+            }
+
+            const pluginInstance = await this.pluginLoader.loadPlugin(pluginInfo.path, pluginAPI);
+            this.pluginInstances.set(pluginId, pluginInstance);
+          }
+        }
+
+        const instance = this.pluginInstances.get(pluginId);
+        if (instance && typeof instance.activate === 'function') {
+          await instance.activate();
+
+          // Emit activation event for UI components (like StatusBar)
+          try {
+            await emit('plugin-runtime-activated', { pluginId });
+          } catch (e) {
+            console.warn('Failed to emit plugin activation event:', e);
+          }
+        }
+      } else {
+        const instance = this.pluginInstances.get(pluginId);
+        if (instance && typeof instance.deactivate === 'function') {
+          await instance.deactivate();
+        }
       }
 
       return true;

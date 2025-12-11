@@ -7,6 +7,10 @@ import { ThemeProvider } from './hooks/theme'
 import './styles/globals.css'
 import { logger } from './utils/logger.js'
 
+// Expose React and ReactDOM for plugins
+window.React = React;
+window.ReactDOM = ReactDOM;
+
 // Initialize Sentry SDK before rendering
 if (import.meta.env.VITE_ENABLE_CRASH_REPORTS === 'true') {
   try {

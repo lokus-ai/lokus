@@ -28,6 +28,7 @@ export interface EnhancedDevServerOptions {
   inspect?: boolean;
   coverage?: boolean;
   profiling?: boolean;
+  appPath?: string;
 }
 
 interface DevServerMetrics {
@@ -63,7 +64,7 @@ class EnhancedDevServer {
     this.host = options.host || 'localhost';
     this.options = options;
     this.dependencyManager = new DependencyManager(pluginDir);
-    
+
     this.metrics = {
       startTime: Date.now(),
       buildCount: 0,
@@ -73,11 +74,11 @@ class EnhancedDevServer {
       memoryUsage: process.memoryUsage(),
       cpuUsage: process.cpuUsage()
     };
-    
+
     this.app = express();
     this.server = http.createServer(this.app);
     this.wss = new WebSocketServer({ server: this.server });
-    
+
     this.setupServer();
     this.setupWebSocket();
     this.setupMiddleware();
@@ -110,7 +111,7 @@ class EnhancedDevServer {
 
     // Serve static files from build directory
     this.app.use('/plugin', express.static(this.buildDir));
-    
+
     // Serve source maps
     this.app.use('/src', express.static(path.join(this.pluginDir, 'src')));
   }
@@ -119,7 +120,7 @@ class EnhancedDevServer {
     // Error handling middleware
     this.app.use((error: any, req: any, res: any, next: any) => {
       console.error(chalk.red('Server Error:'), error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal Server Error',
         message: this.options.verbose ? error.message : 'Something went wrong'
       });
@@ -152,7 +153,7 @@ class EnhancedDevServer {
       const now = Date.now();
       this.metrics.memoryUsage = process.memoryUsage();
       this.metrics.cpuUsage = process.cpuUsage(this.metrics.cpuUsage);
-      
+
       res.json({
         ...this.metrics,
         uptime: now - this.metrics.startTime,
@@ -165,8 +166,8 @@ class EnhancedDevServer {
         await this.buildPlugin();
         res.json({ success: true, message: 'Plugin rebuilt successfully' });
       } catch (error) {
-        res.status(500).json({ 
-          success: false, 
+        res.status(500).json({
+          success: false,
           error: error instanceof Error ? error.message : 'Build failed'
         });
       }
@@ -177,8 +178,8 @@ class EnhancedDevServer {
         await pluginValidator.validatePluginStructure(this.pluginDir);
         res.json({ valid: true, message: 'Plugin structure is valid' });
       } catch (error) {
-        res.status(400).json({ 
-          valid: false, 
+        res.status(400).json({
+          valid: false,
           error: error instanceof Error ? error.message : 'Validation failed'
         });
       }
@@ -189,14 +190,14 @@ class EnhancedDevServer {
         const packageJsonPath = path.join(this.pluginDir, 'package.json');
         const packageJson = await fs.readJson(packageJsonPath);
         const outdated = await this.dependencyManager.checkOutdated();
-        
+
         res.json({
           dependencies: packageJson.dependencies || {},
           devDependencies: packageJson.devDependencies || {},
           outdated: outdated
         });
       } catch (error) {
-        res.status(500).json({ 
+        res.status(500).json({
           error: error instanceof Error ? error.message : 'Failed to check dependencies'
         });
       }
@@ -227,7 +228,7 @@ class EnhancedDevServer {
   private setupWebSocket(): void {
     this.wss.on('connection', (ws, req) => {
       this.clients.add(ws);
-      
+
       ws.on('close', () => {
         this.clients.delete(ws);
       });
@@ -256,7 +257,7 @@ class EnhancedDevServer {
       case 'ping':
         ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
         break;
-        
+
       case 'get-status':
         ws.send(JSON.stringify({
           type: 'status',
@@ -267,7 +268,7 @@ class EnhancedDevServer {
           }
         }));
         break;
-        
+
       case 'rebuild':
         this.buildPlugin().catch(error => {
           ws.send(JSON.stringify({
@@ -290,22 +291,22 @@ class EnhancedDevServer {
 
   async start(): Promise<void> {
     await this.validateEnvironment();
-    
+
     // Initial build
     await this.initialBuild();
-    
+
     // Setup file watching
     if (this.options.watch !== false) {
       this.setupFileWatcher();
     }
-    
+
     // Start server
     return new Promise((resolve, reject) => {
       this.server.listen(this.port, this.host, () => {
         this.showStartupInfo();
         resolve();
       });
-      
+
       this.server.on('error', (error: any) => {
         if (error.code === 'EADDRINUSE') {
           reject(new Error(`Port ${this.port} is already in use`));
@@ -411,7 +412,7 @@ class EnhancedDevServer {
 
     this.isBuilding = true;
     const buildStart = Date.now();
-    
+
     try {
       this.broadcast({
         type: 'build-start',
@@ -431,7 +432,7 @@ class EnhancedDevServer {
       this.metrics.lastBuildTime = buildTime;
       this.metrics.totalBuildTime += buildTime;
 
-      
+
       this.broadcast({
         type: 'build-success',
         message: `Build completed in ${buildTime}ms`,
@@ -450,9 +451,9 @@ class EnhancedDevServer {
     } catch (error) {
       this.metrics.errorCount++;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+
       console.error(chalk.red('✗ Build failed:'), errorMessage);
-      
+
       this.broadcast({
         type: 'build-error',
         message: errorMessage,
@@ -838,17 +839,17 @@ class EnhancedDevServer {
 
   async stop(): Promise<void> {
     logger.info('Stopping development server...');
-    
+
     if (this.watcher) {
       await this.watcher.close();
     }
-    
+
     this.clients.forEach(client => {
       client.close();
     });
-    
+
     this.wss.close();
-    
+
     return new Promise((resolve) => {
       this.server.close(() => {
         logger.info('Development server stopped');
@@ -872,10 +873,11 @@ export const devEnhancedCommand = new Command('dev')
   .option('--inspect', 'enable Node.js inspector')
   .option('--coverage', 'enable code coverage')
   .option('--profiling', 'enable performance profiling')
+  .option('--app-path <path>', 'path to Lokus application to launch')
   .action(async (options: EnhancedDevServerOptions) => {
     try {
       const cwd = process.cwd();
-      
+
       // Validate plugin directory
       const manifestPath = path.join(cwd, 'plugin.json');
       if (!await fs.pathExists(manifestPath)) {
@@ -883,26 +885,44 @@ export const devEnhancedCommand = new Command('dev')
       }
 
       const devServer = new EnhancedDevServer(cwd, options);
-      
+
       // Handle graceful shutdown
       const shutdown = async () => {
         await devServer.stop();
         process.exit(0);
       };
-      
+
       process.on('SIGINT', shutdown);
       process.on('SIGTERM', shutdown);
-      
+
       await devServer.start();
-      
-      // Open browser if requested
-      if (options.open) {
+
+      // Launch app if requested
+      if (options.appPath) {
+        const url = `http://${options.host || 'localhost'}:${options.port || 3000}`;
+        logger.info(`Launching Lokus app at ${options.appPath}...`);
+        const { execa } = await import('execa');
+
+        try {
+          if (process.platform === 'darwin') {
+            await execa('open', ['-a', options.appPath, '--args', '--dev-plugin-url', url]);
+            logger.success('Lokus app launched successfully');
+          } else {
+            logger.warning('App launching is currently only supported on macOS');
+          }
+        } catch (error) {
+          logger.error(`Failed to launch app: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      // Open browser if requested (and app not launched, or explicitly requested)
+      if (options.open && !options.appPath) {
         const url = `http://${options.host || 'localhost'}:${options.port || 3000}/dev-dashboard`;
         const { execa } = await import('execa');
         await execa('open', [url]).catch(() => {
         });
       }
-      
+
     } catch (error) {
       ErrorHandler.handleError(error);
       process.exit(1);

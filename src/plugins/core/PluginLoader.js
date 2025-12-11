@@ -1,8 +1,12 @@
 import { join } from '@tauri-apps/api/path'
-import { exists, readTextFile } from '@tauri-apps/api/fs'
+import { exists, readTextFile } from '@tauri-apps/plugin-fs'
+import { invoke, convertFileSrc } from '@tauri-apps/api/core'
 import { validateManifest } from './PluginManifest.js'
-import { logger } from '../../utils/Logger.js'
+import { logger } from '../../utils/logger.js'
 import { isVersionCompatible } from '../../utils/semver.js'
+import { RegistryAPI } from '../registry/RegistryAPI.js'
+// Import SDK to expose to plugins
+import * as PluginSDK from '../../../../packages/plugin-sdk/src/index.ts'
 
 /**
  * Plugin Loading Utilities
@@ -48,7 +52,6 @@ export class PluginSandbox {
     this.pluginId = pluginId
     this.api = api
     this.globals = new Map()
-    // COMPLETED TODO: Replaced console with proper logger
     this.logger = logger.createScoped(`PluginSandbox:${pluginId}`)
   }
 
@@ -78,10 +81,26 @@ export class PluginSandbox {
       ReferenceError: ReferenceError,
       SyntaxError: SyntaxError,
       // Plugin API
-      lokusAPI: this.api
+      lokusAPI: this.api,
+      lokus: window.lokus, // Expose global lokus object
+      // VS Code compatibility aliases
+      vscode: window.lokus // Alias vscode to lokus for compatibility
     }
 
-    return restrictedGlobals
+    // Use Proxy to prevent access to unauthorized globals
+    return new Proxy(restrictedGlobals, {
+      get: (target, prop) => {
+        if (prop in target) {
+          return target[prop]
+        }
+        // Allow access to standard globals if they are safe
+        // For now, we block everything else
+        return undefined
+      },
+      has: (target, prop) => {
+        return prop in target
+      }
+    })
   }
 
   /**
@@ -105,7 +124,7 @@ export class PluginSandbox {
       // Limit maximum delay to prevent abuse
       const maxDelay = 60000 // 1 minute
       const actualDelay = Math.min(delay, maxDelay)
-      
+
       return setTimeout(callback, actualDelay, ...args)
     }
   }
@@ -118,7 +137,7 @@ export class PluginSandbox {
       // Limit minimum interval to prevent abuse
       const minDelay = 100 // 100ms
       const actualDelay = Math.max(delay, minDelay)
-      
+
       return setInterval(callback, actualDelay, ...args)
     }
   }
@@ -131,7 +150,6 @@ export class PluginSandbox {
 export class PluginLoader {
   constructor() {
     this.loadedModules = new Map()
-    // COMPLETED TODO: Replaced console with proper logger
     this.logger = logger.createScoped('PluginLoader')
   }
 
@@ -146,7 +164,7 @@ export class PluginLoader {
       // Load and validate manifest
       manifest = await this.loadManifest(pluginPath)
       pluginId = manifest.id
-      
+
       const validation = validateManifest(manifest)
       if (!validation.valid) {
         throw new PluginValidationError(
@@ -163,26 +181,23 @@ export class PluginLoader {
 
       // Load plugin main file
       const pluginModule = await this.loadPluginModule(pluginPath, manifest.main, pluginId)
-      
-      // Validate plugin class
-      const PluginClass = this.validatePluginClass(pluginModule, pluginId)
-      
+
       // Create plugin instance with API
-      const plugin = await this.instantiatePlugin(PluginClass, manifest, pluginAPI)
-      
+      const plugin = await this.instantiatePlugin(pluginModule, manifest, pluginAPI)
+
       this.logger.info(`Successfully loaded plugin: ${pluginId}`)
       return plugin
 
     } catch (error) {
       this.logger.error(`Failed to load plugin ${pluginId || 'unknown'}:`, error)
-      
+
       // Re-throw with proper error type
-      if (error instanceof PluginLoadError || 
-          error instanceof PluginValidationError || 
-          error instanceof PluginDependencyError) {
+      if (error instanceof PluginLoadError ||
+        error instanceof PluginValidationError ||
+        error instanceof PluginDependencyError) {
         throw error
       }
-      
+
       throw new PluginLoadError(
         `Failed to load plugin: ${error.message}`,
         pluginId,
@@ -197,14 +212,14 @@ export class PluginLoader {
   async loadManifest(pluginPath) {
     try {
       const manifestPath = await join(pluginPath, 'plugin.json')
-      
+
       if (!(await exists(manifestPath))) {
         throw new Error('plugin.json not found')
       }
-      
+
       const manifestContent = await readTextFile(manifestPath)
       const manifest = JSON.parse(manifestContent)
-      
+
       return manifest
     } catch (error) {
       throw new Error(`Failed to load manifest: ${error.message}`)
@@ -217,7 +232,7 @@ export class PluginLoader {
   async loadPluginModule(pluginPath, mainFile, pluginId) {
     try {
       const mainPath = await join(pluginPath, mainFile)
-      
+
       if (!(await exists(mainPath))) {
         throw new Error(`Main file not found: ${mainFile}`)
       }
@@ -230,74 +245,128 @@ export class PluginLoader {
         return this.loadedModules.get(moduleId)
       }
 
-      // Dynamic import with timestamp to bust cache
-      const timestamp = Date.now()
-      const modulePath = `${mainPath}?t=${timestamp}`
-      
-      const pluginModule = await import(modulePath)
-      
-      // Cache the module
-      this.loadedModules.set(moduleId, pluginModule)
-      
-      return pluginModule
+      const code = await readTextFile(mainPath);
+
+      // 1. Try CommonJS execution (using new Function)
+      // This supports plugins using module.exports
+      try {
+        const module = { exports: {} };
+        const exports = module.exports;
+        const require = (id) => {
+          if (id === '@lokus/plugin-sdk') {
+            return PluginSDK;
+          }
+          if (id === 'react') {
+            return window.React || { createElement: () => console.warn('React not available') };
+          }
+          if (id === 'react-dom') {
+            return window.ReactDOM || { render: () => console.warn('ReactDOM not available') };
+          }
+          this.logger.warn(`Plugin ${pluginId} tried to require '${id}' which is not supported.`);
+          return {};
+        };
+
+        // Check if code uses module.exports or exports
+        if (code.includes('module.exports') || code.includes('exports.')) {
+          const fn = new Function('module', 'exports', 'require', code);
+          fn(module, exports, require);
+
+          if (module.exports) {
+            this.logger.info(`Loaded ${pluginId} as CommonJS module`);
+            return module.exports;
+          }
+        }
+      } catch (e) {
+        this.logger.warn(`CommonJS load failed for ${pluginId}, trying ES Module import. Error: ${e.message}`);
+      }
+
+      // 2. Fallback to ES Module (Blob URL)
+      // This supports plugins using export default or export class
+      const blob = new Blob([code], { type: 'text/javascript' });
+      const blobUrl = URL.createObjectURL(blob);
+
+      this.logger.info(`Loading plugin module from Blob URL: ${blobUrl} (original: ${mainPath})`);
+
+      try {
+        const pluginModule = await import(blobUrl);
+        return pluginModule.default || pluginModule;
+      } finally {
+        URL.revokeObjectURL(blobUrl); // Cleanup
+      }
     } catch (error) {
       throw new Error(`Failed to load plugin module: ${error.message}`)
     }
   }
 
   /**
-   * Validate plugin class structure
-   */
-  validatePluginClass(pluginModule, pluginId) {
-    const PluginClass = pluginModule.default || pluginModule.Plugin
-    
-    if (!PluginClass) {
-      throw new Error('Plugin must export a default class or Plugin class')
-    }
-    
-    if (typeof PluginClass !== 'function') {
-      throw new Error('Plugin export must be a class constructor')
-    }
-
-    // Check required methods (optional)
-    const prototype = PluginClass.prototype
-    if (prototype) {
-      const recommendedMethods = ['activate', 'deactivate', 'cleanup']
-      const missingMethods = recommendedMethods.filter(method => 
-        typeof prototype[method] !== 'function'
-      )
-      
-      if (missingMethods.length > 0) {
-        this.logger.warn(`Plugin ${pluginId} missing recommended methods: ${missingMethods.join(', ')}`)
-      }
-    }
-    
-    return PluginClass
-  }
-
-  /**
    * Instantiate plugin with security context
    */
-  async instantiatePlugin(PluginClass, manifest, pluginAPI) {
+  async instantiatePlugin(pluginModule, manifest, pluginAPI) {
     try {
       // Create security sandbox
       const sandbox = new PluginSandbox(manifest.id, pluginAPI)
       const context = sandbox.createContext()
-      
-      // Create plugin instance
-      const plugin = new PluginClass()
-      
+
+      let plugin;
+      let PluginClass = pluginModule.default || pluginModule.Plugin;
+
+      this.logger.info(`Loaded plugin module type: ${typeof pluginModule}`);
+      this.logger.info(`PluginClass initially: ${typeof PluginClass}`, PluginClass);
+
+      // Handle CJS default export wrapped in ES module (common with esbuild/TS)
+      if (PluginClass && PluginClass.default) {
+        this.logger.info('Unwrapping nested default export');
+        PluginClass = PluginClass.default;
+      }
+
+      this.logger.info(`PluginClass final: ${typeof PluginClass}`, PluginClass);
+
+      if (typeof PluginClass === 'function') {
+        // Class-based plugin (Lokus standard)
+        try {
+          plugin = new PluginClass(context)
+        } catch (e) {
+          // Factory function fallback
+          plugin = PluginClass(context)
+        }
+      } else if (typeof PluginClass === 'object' && PluginClass !== null) {
+        // Object-based plugin (VS Code style / CommonJS)
+        // Wrap it to adapt to Lokus interface
+        plugin = {
+          ...PluginClass,
+          activate: async () => {
+            if (typeof PluginClass.activate === 'function') {
+              return PluginClass.activate(context);
+            }
+          },
+          deactivate: async () => {
+            if (typeof PluginClass.deactivate === 'function') {
+              return PluginClass.deactivate();
+            }
+          },
+          // Preserve other methods/properties
+          module: PluginClass
+        };
+
+        // If the object has getAPI, ensure it's accessible
+        if (typeof PluginClass.getAPI === 'function') {
+          plugin.getAPI = PluginClass.getAPI.bind(PluginClass);
+        }
+      } else {
+        throw new Error(`Plugin must export a class, factory function, or object. Got: ${typeof PluginClass}`);
+      }
+
       // Set plugin metadata
       plugin.id = manifest.id
       plugin.manifest = manifest
       plugin.api = pluginAPI
       plugin.context = context
-      
+
       // Call initialization if available
       if (typeof plugin.initialize === 'function') {
         await plugin.initialize(pluginAPI)
       }
-      
+
       return plugin
     } catch (error) {
       throw new Error(`Failed to instantiate plugin: ${error.message}`)
@@ -313,32 +382,31 @@ export class PluginLoader {
     }
 
     const missingDeps = []
-    
+
     for (const [depId, depVersion] of Object.entries(manifest.dependencies)) {
       const dep = availablePlugins.get(depId)
-      
+
       if (!dep) {
         missingDeps.push({ id: depId, version: depVersion, reason: 'not_found' })
         continue
       }
-      
+
       // TODO: Implement proper semantic version checking
       if (dep.manifest.version !== depVersion && !this.isVersionCompatible(dep.manifest.version, depVersion)) {
-        missingDeps.push({ 
-          id: depId, 
-          version: depVersion, 
+        missingDeps.push({
+          id: depId,
+          version: depVersion,
           actualVersion: dep.manifest.version,
-          reason: 'version_mismatch' 
+          reason: 'version_mismatch'
         })
       }
     }
-    
+
     return missingDeps
   }
 
   /**
    * Check if versions are compatible
-   * COMPLETED TODO: Implemented proper semver compatibility checking
    */
   isVersionCompatible(actualVersion, requiredVersion) {
     return isVersionCompatible(actualVersion, requiredVersion);
@@ -354,44 +422,62 @@ export class PluginLoader {
         keysToDelete.push(key)
       }
     }
-    
+
     keysToDelete.forEach(key => this.loadedModules.delete(key))
   }
 
   /**
-   * Get loading statistics
+   * Activate a plugin
    */
-  getStats() {
-    return {
-      cachedModules: this.loadedModules.size,
-      loadedModules: Array.from(this.loadedModules.keys())
+  async activatePlugin(pluginId) {
+    const moduleId = Array.from(this.loadedModules.keys()).find(k => k.startsWith(`${pluginId}:`))
+    if (!moduleId) {
+      throw new Error(`Plugin not loaded: ${pluginId}`)
     }
+
+    // We don't store the instance in loadedModules, we store the module
+    // This is a design flaw in PluginLoader if we want to manage active instances
+    // But for now, let's assume the caller has the instance or we need to change how we store things
+
+    // Actually, PluginLoader returns the instance. The caller (PluginStateAdapter) should manage the instance.
+    // But PluginStateAdapter calls this.pluginLoader.activatePlugin(id)
+
+    // So PluginLoader needs to track instances.
+    throw new Error('PluginLoader does not track instances. Caller must manage plugin lifecycle.')
   }
 }
 
 /**
  * Plugin Installation Utilities
  */
+// ...
 export class PluginInstaller {
   constructor(pluginManager) {
     this.pluginManager = pluginManager
-    // COMPLETED TODO: Replaced console with proper logger
     this.logger = logger.createScoped('PluginInstaller')
   }
 
   /**
    * Install plugin from archive
    */
-  async installFromArchive(archivePath, targetDir) {
-    // TODO: Implement plugin installation from zip/tar archives
-    throw new Error('Plugin installation from archive not yet implemented')
+  async installFromArchive(archivePath) {
+    try {
+      this.logger.info(`Installing plugin from archive: ${archivePath}`)
+      const pluginId = await invoke('install_plugin', { path: archivePath })
+      this.logger.success(`Successfully installed plugin: ${pluginId}`)
+      return pluginId
+    } catch (error) {
+      this.logger.error(`Failed to install plugin from archive:`, error)
+      throw error
+    }
   }
 
   /**
    * Install plugin from Git repository
    */
-  async installFromGit(repoUrl, targetDir) {
+  async installFromGit(repoUrl) {
     // TODO: Implement plugin installation from Git
+    // This would likely require a backend command to clone the repo
     throw new Error('Plugin installation from Git not yet implemented')
   }
 
@@ -399,8 +485,42 @@ export class PluginInstaller {
    * Install plugin from marketplace
    */
   async installFromMarketplace(pluginId, version) {
-    // TODO: Implement plugin installation from marketplace
-    throw new Error('Plugin installation from marketplace not yet implemented')
+    try {
+      this.logger.info(`Installing plugin from marketplace: ${pluginId}@${version}`)
+
+      const registry = new RegistryAPI()
+
+      // 1. Download the plugin blob
+      const response = await registry.downloadPlugin(pluginId, version)
+      const blob = response.data
+
+      // 2. Save to temporary file
+      // We need to use Tauri's FS API to write the blob to a temp file
+      // Since we can't directly write a Blob, we convert it to ArrayBuffer then Uint8Array
+      const arrayBuffer = await blob.arrayBuffer()
+      const uint8Array = new Uint8Array(arrayBuffer)
+
+      // Import FS dynamically to avoid issues if not available
+      const { writeFile, BaseDirectory, exists, mkdir } = await import('@tauri-apps/plugin-fs')
+      const { tempDir, join } = await import('@tauri-apps/api/path')
+
+      const tempDirectory = await tempDir()
+      const fileName = `${pluginId}-${version || 'latest'}.lokus`
+      const filePath = await join(tempDirectory, fileName)
+
+      this.logger.info(`Downloading to temp path: ${filePath}`)
+
+      await writeFile(filePath, uint8Array)
+
+      // 3. Install from the local temp file
+      await this.installFromArchive(filePath)
+
+      this.logger.success(`Successfully installed ${pluginId} from marketplace`)
+
+    } catch (error) {
+      this.logger.error(`Failed to install plugin from marketplace:`, error)
+      throw error
+    }
   }
 
   /**
@@ -412,12 +532,13 @@ export class PluginInstaller {
       if (this.pluginManager.isPluginActive(pluginId)) {
         await this.pluginManager.deactivatePlugin(pluginId)
       }
-      
+
       if (this.pluginManager.isPluginLoaded(pluginId)) {
         await this.pluginManager.unloadPlugin(pluginId)
       }
-      
-      // TODO: Remove plugin files from filesystem
+
+      await invoke('uninstall_plugin', { name: pluginId })
+
       this.logger.info(`Uninstalled plugin: ${pluginId}`)
     } catch (error) {
       this.logger.error(`Failed to uninstall plugin ${pluginId}:`, error)
@@ -439,7 +560,6 @@ export class PluginInstaller {
  */
 export class PluginDeveloper {
   constructor() {
-    // COMPLETED TODO: Replaced console with proper logger
     this.logger = logger.createScoped('PluginDeveloper')
   }
 
@@ -459,7 +579,7 @@ export class PluginDeveloper {
       const loader = new PluginLoader()
       const manifest = await loader.loadManifest(pluginPath)
       const validation = validateManifest(manifest)
-      
+
       return {
         valid: validation.valid,
         errors: validation.errors,

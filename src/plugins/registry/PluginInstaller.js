@@ -9,7 +9,7 @@ import { exists, createDir, removeDir, readTextFile, writeTextFile } from '@taur
 import { EventEmitter } from '../../utils/EventEmitter.js'
 import { PluginManifestV2 } from '../manifest/ManifestV2.js'
 import RegistryAPI from './RegistryAPI.js'
-import { logger } from '../../utils/Logger.js'
+import { logger } from '../../utils/logger.js'
 
 /**
  * Installation Status

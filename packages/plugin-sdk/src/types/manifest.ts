@@ -70,7 +70,7 @@ export interface PluginManifest {
   readonly configuration?: ConfigurationSchema
 
   /** Plugin commands */
-  readonly commands?: Command[]
+  readonly commands?: ManifestCommand[]
 
   /** Plugin keybindings */
   readonly keybindings?: Keybinding[]
@@ -149,7 +149,7 @@ export interface PluginRepository {
  * Plugin contributions - defines what the plugin contributes to Lokus
  */
 export interface PluginContributions {
-  commands?: Command[]
+  commands?: ManifestCommand[]
   keybindings?: Keybinding[]
   languages?: Language[]
   grammars?: Grammar[]
@@ -174,7 +174,10 @@ export interface PluginContributions {
 /**
  * Command contribution
  */
-export interface Command {
+/**
+ * Command contribution
+ */
+export interface ManifestCommand {
   command: string
   title: string
   category?: string
@@ -511,22 +514,22 @@ export interface ConfigurationProperty {
 export interface WebResources {
   /** Local web assets directory */
   localResourceRoots?: string[]
-  
+
   /** Content Security Policy */
   csp?: {
     /** CSP directives */
     directives?: Record<string, string[]>
-    
+
     /** Allow unsafe eval */
     'unsafe-eval'?: boolean
-    
+
     /** Allow unsafe inline */
     'unsafe-inline'?: boolean
   }
-  
+
   /** Port mapping for local development */
   portMapping?: Record<string, number>
-  
+
   /** Additional HTTP headers */
   headers?: Record<string, string>
 }
@@ -537,13 +540,13 @@ export interface WebResources {
 export interface PublishConfig {
   /** Registry URL */
   registry?: string
-  
+
   /** Access level */
   access?: 'public' | 'restricted'
-  
+
   /** Tag */
   tag?: string
-  
+
   /** Directory to publish */
   directory?: string
 }
@@ -554,14 +557,14 @@ export interface PublishConfig {
 export interface ManifestValidationResult {
   /** Whether manifest is valid */
   valid: boolean
-  
+
   /** Validation errors */
   errors: Array<{
     path: string
     message: string
     severity: 'error' | 'warning'
   }>
-  
+
   /** Validation warnings */
   warnings: Array<{
     path: string
@@ -576,19 +579,19 @@ export interface ManifestValidationResult {
 export interface ManifestValidatorOptions {
   /** Strict validation mode */
   strict?: boolean
-  
+
   /** Allow unknown properties */
   allowUnknownProperties?: boolean
-  
+
   /** Validate semantic versioning */
   validateSemver?: boolean
-  
+
   /** Check for required fields */
   checkRequired?: boolean
-  
+
   /** Validate URLs */
   validateUrls?: boolean
-  
+
   /** Custom validation rules */
   customRules?: Array<(manifest: PluginManifest) => ManifestValidationResult>
 }

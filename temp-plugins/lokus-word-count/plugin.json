@@ -1,0 +1,37 @@
+{
+  "manifest": "2.0",
+  "id": "lokus-word-count",
+  "name": "lokus-word-count",
+  "version": "0.1.0",
+  "description": "A word count plugin for Lokus",
+  "author": "Lokus Dev",
+  "main": "dist/index.js",
+  "engines": {
+    "lokus": "^1.0.0"
+  },
+  "categories": [
+    "Editor"
+  ],
+  "keywords": [
+    "lokus-word-count",
+    "lokus",
+    "plugin",
+    "editor"
+  ],
+  "permissions": [],
+  "contributes": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Lokus Dev/lokus-word-count.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Lokus Dev/lokus-word-count/issues"
+  },
+  "homepage": "https://github.com/Lokus Dev/lokus-word-count#readme",
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#2c2c2c",
+    "theme": "dark"
+  },
+  "screenshots": []
+}

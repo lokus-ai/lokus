@@ -1,0 +1,37 @@
+{
+  "manifest": "2.0",
+  "id": "test-plugin-v3",
+  "name": "test-plugin-v3",
+  "version": "0.1.0",
+  "description": "Test Description",
+  "author": "Test User",
+  "main": "dist/index.js",
+  "engines": {
+    "lokus": "^1.0.0"
+  },
+  "categories": [
+    "Editor"
+  ],
+  "keywords": [
+    "test-plugin-v3",
+    "lokus",
+    "plugin",
+    "editor"
+  ],
+  "permissions": [],
+  "contributes": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Test User/test-plugin-v3.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Test User/test-plugin-v3/issues"
+  },
+  "homepage": "https://github.com/Test User/test-plugin-v3#readme",
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#2c2c2c",
+    "theme": "dark"
+  },
+  "screenshots": []
+}

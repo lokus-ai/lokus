@@ -7,7 +7,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { join, homeDir } from '@tauri-apps/api/path'
 import { exists, createDir, readTextFile, writeTextFile, removeFile, readDir } from '@tauri-apps/api/fs'
 import { EventEmitter } from '../../utils/EventEmitter.js'
-import { logger } from '../../utils/Logger.js'
+import { logger } from '../../utils/logger.js'
 
 /**
  * Storage Types

@@ -1,17 +1,16 @@
 import { useState, useEffect } from "react";
 import { usePlugins } from "../hooks/usePlugins.jsx";
 import { filterPlugins, sortPlugins } from "../utils/pluginUtils.js";
-import { pluginLoader } from "../plugins/PluginLoader.js";
 
 // Real plugin runtime using PluginLoader
-const pluginRuntime = pluginLoader;
-import { 
-  Search, 
-  Filter, 
-  Star, 
-  Clock, 
-  User, 
-  Shield, 
+// const pluginRuntime = pluginLoader;
+import {
+  Search,
+  Filter,
+  Star,
+  Clock,
+  User,
+  Shield,
   ExternalLink,
   X,
   CheckCircle,
@@ -153,14 +152,14 @@ const PluginItem = ({ plugin, onToggle, onUninstall, onInstall, onSelect, instal
   const isInstalling = installingPlugins.has(plugin.id);
 
   return (
-    <div 
+    <div
       className="flex items-center gap-3 px-3 py-2 hover:bg-app-panel/50 cursor-pointer rounded group"
       onClick={() => onSelect(plugin)}
     >
       <div className="w-8 h-8 rounded bg-app-accent/10 flex items-center justify-center flex-shrink-0">
         <Package className="w-4 h-4 text-app-accent" />
       </div>
-      
+
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-medium text-sm text-app-text truncate">{plugin.name}</span>
@@ -185,17 +184,17 @@ const PluginItem = ({ plugin, onToggle, onUninstall, onInstall, onSelect, instal
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                
+
                 // FIX: Robust handling of undefined/null enabled state
                 const currentEnabled = plugin.enabled === true;
                 const newEnabledState = !currentEnabled;
-                
-                
+
+
                 // Defensive check to ensure we're passing a boolean
                 if (typeof newEnabledState !== 'boolean') {
                   return;
                 }
-                
+
                 onToggle(plugin.id, newEnabledState);
               }}
               className="p-1 text-app-muted hover:text-app-text"
@@ -253,34 +252,10 @@ export default function Extensions({ onSelectExtension }) {
   const [pluginRuntimeReady, setPluginRuntimeReady] = useState(false);
 
   // Initialize plugin runtime when component mounts
+  // PluginStateAdapter handles this now
   useEffect(() => {
-    const initializePluginRuntime = async () => {
-      try {
-        
-        // Expose plugin runtime globally for other components
-        if (typeof window !== 'undefined') {
-          window.pluginRuntime = pluginRuntime;
-        }
-        
-        // Load all enabled plugins into runtime
-        for (const plugin of installedPlugins) {
-          if (plugin.enabled) {
-            try {
-              await pluginRuntime.loadPlugin(plugin);
-              await pluginRuntime.activatePlugin(plugin.id);
-            } catch (error) {
-            }
-          }
-        }
-        
-        setPluginRuntimeReady(true);
-      } catch (error) {
-        setPluginRuntimeReady(true);
-      }
-    };
-
-    initializePluginRuntime();
-  }, [installedPlugins, enabledPlugins]);
+    setPluginRuntimeReady(true);
+  }, []);
 
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
@@ -296,12 +271,12 @@ export default function Extensions({ onSelectExtension }) {
 
   // Filter plugins based on search and filter
   const filteredPlugins = allPlugins.filter(plugin => {
-    const matchesSearch = !searchQuery || 
+    const matchesSearch = !searchQuery ||
       plugin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       plugin.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
       plugin.author?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesFilter = selectedFilter === "all" || 
+    const matchesFilter = selectedFilter === "all" ||
       (selectedFilter === "enabled" && plugin.enabled) ||
       (selectedFilter === "disabled" && plugin.isInstalled && !plugin.enabled);
 
@@ -325,43 +300,25 @@ export default function Extensions({ onSelectExtension }) {
   const handleTogglePlugin = async (pluginId, newEnabledState) => {
     try {
       // FIX: Function signature now matches the expected interface
-      
+
       if (typeof newEnabledState !== 'boolean') {
         throw new Error(`Invalid toggle state for ${pluginId}: ${newEnabledState}`);
       }
-      
+
       await togglePlugin(pluginId, newEnabledState);
-      
-      // Update plugin runtime
-      if (pluginRuntimeReady) {
-        const plugin = allPlugins.find(p => p.id === pluginId);
-        if (plugin) {
-          if (newEnabledState) {
-            // Enable plugin in runtime
-            if (!pluginRuntime.getLoadedPlugins().includes(pluginId)) {
-              await pluginRuntime.loadPlugin(plugin);
-            }
-            await pluginRuntime.activatePlugin(pluginId);
-          } else {
-            // Disable plugin in runtime
-            await pluginRuntime.deactivatePlugin(pluginId);
-          }
-        }
-      }
+
+      // PluginStateAdapter handles runtime updates now
     } catch (error) {
     }
   };
 
   const handleUninstallPlugin = async (plugin) => {
     try {
-      
-      // Remove from runtime first
-      if (pluginRuntimeReady && pluginRuntime.getLoadedPlugins().includes(plugin.id)) {
-        await pluginRuntime.unloadPlugin(plugin.id);
-      }
-      
+
+      // PluginStateAdapter handles runtime updates now
+
       await uninstallPlugin(plugin.id);
-      
+
     } catch (error) {
     }
   };
@@ -372,8 +329,8 @@ export default function Extensions({ onSelectExtension }) {
       onClick={() => toggleSection(sectionKey)}
       className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-app-text hover:bg-app-panel/30 rounded"
     >
-      {expandedSections[sectionKey] ? 
-        <ChevronDown className="w-4 h-4" /> : 
+      {expandedSections[sectionKey] ?
+        <ChevronDown className="w-4 h-4" /> :
         <ChevronRight className="w-4 h-4" />
       }
       <Icon className="w-4 h-4" />
@@ -399,7 +356,7 @@ export default function Extensions({ onSelectExtension }) {
               className="w-full pl-7 pr-3 py-1.5 text-sm bg-app-bg border border-app-border rounded outline-none focus:ring-1 focus:ring-app-accent/40"
             />
           </div>
-          
+
           {/* Filter tabs */}
           <div className="flex items-center gap-1 mt-2">
             {[
@@ -410,11 +367,10 @@ export default function Extensions({ onSelectExtension }) {
               <button
                 key={filter.id}
                 onClick={() => setSelectedFilter(filter.id)}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
-                  selectedFilter === filter.id
-                    ? 'bg-app-accent text-app-accent-fg'
-                    : 'text-app-muted hover:text-app-text hover:bg-app-panel/50'
-                }`}
+                className={`px-2 py-1 text-xs rounded transition-colors ${selectedFilter === filter.id
+                  ? 'bg-app-accent text-app-accent-fg'
+                  : 'text-app-muted hover:text-app-text hover:bg-app-panel/50'
+                  }`}
               >
                 {filter.label}
               </button>
@@ -422,45 +378,45 @@ export default function Extensions({ onSelectExtension }) {
           </div>
         </div>
 
-      {/* Extensions List */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="space-y-1 p-2">
-          {/* Installed Extensions */}
-          {(selectedFilter === "all" || selectedFilter === "enabled" || selectedFilter === "disabled") && installedFiltered.length > 0 && (
-            <div>
-              <SectionHeader 
-                title="Installed" 
-                count={installedFiltered.length} 
-                sectionKey="installed" 
-                icon={CheckCircle}
-              />
-              {expandedSections.installed && (
-                <div className="space-y-1">
-                  {installedFiltered.map(plugin => (
-                    <PluginItem 
-                      key={plugin.id} 
-                      plugin={plugin} 
-                      onToggle={handleTogglePlugin}
-                      onUninstall={handleUninstallPlugin}
-                      onInstall={handleInstallPlugin}
-                      onSelect={handlePluginClick}
-                      installingPlugins={installingPlugins}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+        {/* Extensions List */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="space-y-1 p-2">
+            {/* Installed Extensions */}
+            {(selectedFilter === "all" || selectedFilter === "enabled" || selectedFilter === "disabled") && installedFiltered.length > 0 && (
+              <div>
+                <SectionHeader
+                  title="Installed"
+                  count={installedFiltered.length}
+                  sectionKey="installed"
+                  icon={CheckCircle}
+                />
+                {expandedSections.installed && (
+                  <div className="space-y-1">
+                    {installedFiltered.map(plugin => (
+                      <PluginItem
+                        key={plugin.id}
+                        plugin={plugin}
+                        onToggle={handleTogglePlugin}
+                        onUninstall={handleUninstallPlugin}
+                        onInstall={handleInstallPlugin}
+                        onSelect={handlePluginClick}
+                        installingPlugins={installingPlugins}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
 
-          {filteredPlugins.length === 0 && (
-            <div className="text-center py-8">
-              <Package className="w-8 h-8 mx-auto mb-2 text-app-muted/50" />
-              <p className="text-sm text-app-muted">No extensions found</p>
-            </div>
-          )}
+            {filteredPlugins.length === 0 && (
+              <div className="text-center py-8">
+                <Package className="w-8 h-8 mx-auto mb-2 text-app-muted/50" />
+                <p className="text-sm text-app-muted">No extensions found</p>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
       </div>
 
       {/* Plugin Detail Panel */}
@@ -481,13 +437,12 @@ export default function Extensions({ onSelectExtension }) {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            
+
             <div className="flex items-center gap-2 mb-3">
-              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${
-                selectedPlugin.enabled === true 
-                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                  : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
-              }`}>
+              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${selectedPlugin.enabled === true
+                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
+                }`}>
                 {selectedPlugin.enabled === true ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
                 {selectedPlugin.enabled === true ? 'Enabled' : 'Disabled'}
               </span>
@@ -497,24 +452,23 @@ export default function Extensions({ onSelectExtension }) {
             <div className="flex gap-2">
               <button
                 onClick={() => {
-                  
+
                   // FIX: Robust handling of undefined/null enabled state
                   const currentEnabled = selectedPlugin.enabled === true;
                   const newEnabledState = !currentEnabled;
-                  
-                  
+
+
                   // Defensive check to ensure we're passing a boolean
                   if (typeof newEnabledState !== 'boolean') {
                     return;
                   }
-                  
+
                   handleTogglePlugin(selectedPlugin.id, newEnabledState);
                 }}
-                className={`flex-1 px-3 py-2 rounded text-sm font-medium transition-colors ${
-                  selectedPlugin.enabled === true
-                    ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50'
-                    : 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50'
-                }`}
+                className={`flex-1 px-3 py-2 rounded text-sm font-medium transition-colors ${selectedPlugin.enabled === true
+                  ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50'
+                  : 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50'
+                  }`}
               >
                 {selectedPlugin.enabled === true ? 'Disable' : 'Enable'}
               </button>

@@ -5,7 +5,7 @@
 
 import { EventEmitter } from '../../utils/EventEmitter.js'
 import { PluginManifestV2 } from '../manifest/ManifestV2.js'
-import { logger } from '../../utils/Logger.js'
+import { logger } from '../../utils/logger.js'
 
 /**
  * Installation Status Constants

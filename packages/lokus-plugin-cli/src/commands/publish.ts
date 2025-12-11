@@ -1,3 +1,5 @@
+import FormData from 'form-data';
+import archiver from 'archiver';
 import { Command } from 'commander';
 import * as path from 'path';
 import * as fs from 'fs-extra';
@@ -25,7 +27,7 @@ interface RegistryConfig {
 
 export const publishCommand = new Command('publish')
   .description('Publish plugin to registry')
-  .option('-r, --registry <url>', 'registry URL', 'https://registry.lokus.dev')
+  .option('-r, --registry <url>', 'registry URL', process.env.LOKUS_REGISTRY_URL || 'https://registry.lokus.dev')
   .option('-t, --token <token>', 'authentication token')
   .option('--skip-validation', 'skip plugin validation')
   .option('--dry-run', 'validate and prepare but do not publish')
@@ -34,7 +36,7 @@ export const publishCommand = new Command('publish')
   .action(async (options: PublishOptions) => {
     try {
       const pluginDir = process.cwd();
-      
+
       // Validate plugin directory
       ErrorHandler.validatePluginDirectory(pluginDir);
 
@@ -51,16 +53,6 @@ export const publishCommand = new Command('publish')
 
       // Get registry configuration
       const registryConfig = await getRegistryConfig(options);
-
-      // Check if plugin already exists
-      const existingVersion = await checkPluginExists(registryConfig, manifest.name, manifest.version);
-      
-      if (existingVersion) {
-        throw ErrorHandler.createError(
-          'ValidationError',
-          `Plugin ${manifest.name}@${manifest.version} already exists in registry`
-        );
-      }
 
       // Prepare package data
       const packageData = await preparePackageData(pluginDir, manifest);
@@ -92,12 +84,12 @@ export const publishCommand = new Command('publish')
 
       try {
         const publishResult = await publishToRegistry(registryConfig, packageData, options);
-        
+
         spinner.succeed('Package published successfully');
 
         logger.newLine();
         logger.success(`${manifest.name}@${manifest.version} published to ${registryConfig.url}`);
-        
+
         if (publishResult.url) {
           logger.info(`Package URL: ${chalk.cyan(publishResult.url)}`);
         }
@@ -119,7 +111,7 @@ export const publishCommand = new Command('publish')
 
 async function getRegistryConfig(options: PublishOptions): Promise<RegistryConfig> {
   const config: RegistryConfig = {
-    url: options.registry || 'https://registry.lokus.dev'
+    url: options.registry || process.env.LOKUS_REGISTRY_URL || 'https://registry.lokus.dev'
   };
 
   // Get token from options, environment, or prompt
@@ -130,7 +122,7 @@ async function getRegistryConfig(options: PublishOptions): Promise<RegistryConfi
   } else {
     // Try to read from config file
     const configPath = path.join(require('os').homedir(), '.lokus', 'config.json');
-    
+
     if (await fs.pathExists(configPath)) {
       try {
         const userConfig = await fs.readJson(configPath);
@@ -155,122 +147,90 @@ async function getRegistryConfig(options: PublishOptions): Promise<RegistryConfi
   return config;
 }
 
-async function checkPluginExists(config: RegistryConfig, name: string, version: string): Promise<boolean> {
-  try {
-    const response = await axios.get(`${config.url}/api/plugins/${name}/${version}`, {
-      headers: {
-        'Authorization': `Bearer ${config.token}`,
-        'User-Agent': 'lokus-plugin-cli'
-      },
-      timeout: 10000
+// ... checkPluginExists ...
+
+async function preparePackageData(pluginDir: string, manifest: any): Promise<{ metadata: any, archive: any, size: number }> {
+  const zipPath = path.join(pluginDir, 'package.zip');
+  const output = fs.createWriteStream(zipPath);
+  const archive = archiver('zip', { zlib: { level: 9 } });
+
+  return new Promise((resolve, reject) => {
+    output.on('close', async () => {
+      const size = archive.pointer();
+      const fileStream = fs.createReadStream(zipPath);
+      resolve({
+        metadata: manifest,
+        archive: fileStream,
+        size
+      });
     });
-    
-    return response.status === 200;
-  } catch (error: any) {
-    if (error.response?.status === 404) {
-      return false; // Plugin doesn't exist
+
+    archive.on('error', (err) => reject(err));
+
+    archive.pipe(output);
+
+    // Add manifest
+    archive.file(path.join(pluginDir, 'plugin.json'), { name: 'plugin.json' });
+
+    // Add main file (usually dist/index.js)
+    const mainFile = manifest.main || 'dist/index.js';
+    if (fs.existsSync(path.join(pluginDir, mainFile))) {
+      archive.file(path.join(pluginDir, mainFile), { name: mainFile });
+    } else {
+      logger.warning(`Main file ${mainFile} not found, skipping...`);
     }
-    
-    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-      throw ErrorHandler.createError(
-        'NetworkError',
-        `Cannot connect to registry: ${config.url}`
-      );
+
+    // Add README if exists
+    if (fs.existsSync(path.join(pluginDir, 'README.md'))) {
+      archive.file(path.join(pluginDir, 'README.md'), { name: 'README.md' });
     }
-    
-    throw ErrorHandler.createError(
-      'NetworkError',
-      `Registry error: ${error.message}`
-    );
-  }
-}
 
-async function preparePackageData(pluginDir: string, manifest: any): Promise<{
-  metadata: any;
-  archive: Buffer;
-  size: number;
-}> {
-  const buildDir = path.join(pluginDir, 'dist');
-  
-  // Ensure plugin is built
-  if (!await fs.pathExists(buildDir)) {
-    throw ErrorHandler.createError(
-      'FileNotFoundError',
-      'Plugin not built. Run "lokus-plugin build" first.'
-    );
-  }
+    // Add LICENSE if exists
+    if (fs.existsSync(path.join(pluginDir, 'LICENSE'))) {
+      archive.file(path.join(pluginDir, 'LICENSE'), { name: 'LICENSE' });
+    }
 
-  // Create temporary archive
-  const tempDir = path.join(require('os').tmpdir(), `lokus-plugin-${Date.now()}`);
-  const archivePath = path.join(tempDir, 'package.zip');
-  
-  await fs.ensureDir(tempDir);
-  
-  try {
-    await FileUtils.createArchive(buildDir, archivePath, 'zip');
-    
-    const archive = await fs.readFile(archivePath);
-    const size = archive.length;
+    // Add dist folder if it exists and main is inside it
+    if (fs.existsSync(path.join(pluginDir, 'dist'))) {
+      archive.directory(path.join(pluginDir, 'dist'), 'dist');
+    }
 
-    // Prepare metadata
-    const packageJson = await fs.readJson(path.join(pluginDir, 'package.json'));
-    
-    const metadata = {
-      name: manifest.name,
-      version: manifest.version,
-      description: manifest.description,
-      author: manifest.author,
-      license: packageJson.license || 'MIT',
-      keywords: manifest.keywords || [],
-      categories: manifest.categories || [],
-      permissions: manifest.permissions || [],
-      engines: manifest.engines,
-      repository: packageJson.repository,
-      bugs: packageJson.bugs,
-      homepage: packageJson.homepage,
-      main: manifest.main,
-      contributes: manifest.contributes || {},
-      publishedAt: new Date().toISOString(),
-      size
-    };
-
-    return { metadata, archive, size };
-
-  } finally {
-    // Cleanup
-    await fs.remove(tempDir);
-  }
+    archive.finalize();
+  });
 }
 
 async function publishToRegistry(
-  config: RegistryConfig, 
-  packageData: any, 
+  config: RegistryConfig,
+  packageData: any,
   options: PublishOptions
 ): Promise<{ url?: string }> {
   const formData = new FormData();
-  
-  // Add metadata
-  formData.append('metadata', JSON.stringify(packageData.metadata));
-  
-  // Add package file
-  const blob = new Blob([packageData.archive], { type: 'application/zip' });
-  formData.append('package', blob, 'package.zip');
-  
+
+  // Add metadata as 'manifest' (Server expects 'manifest')
+  formData.append('manifest', JSON.stringify(packageData.metadata));
+
+  // Add package file as 'file' (Server expects 'file')
+  formData.append('file', packageData.archive, {
+    filename: 'package.zip',
+    contentType: 'application/zip',
+    knownLength: packageData.size
+  });
+
   // Add publish options
   if (options.tag) {
     formData.append('tag', options.tag);
   }
-  
+
   if (options.access) {
     formData.append('access', options.access);
   }
 
   try {
-    const response = await axios.post(`${config.url}/api/plugins`, formData, {
+    const response = await axios.post(`${config.url}/api/v1/registry/publish`, formData, {
       headers: {
         'Authorization': `Bearer ${config.token}`,
         'User-Agent': 'lokus-plugin-cli',
-        'Content-Type': 'multipart/form-data'
+        ...formData.getHeaders()
       },
       timeout: 60000, // 1 minute timeout for upload
       maxContentLength: 50 * 1024 * 1024, // 50MB max
@@ -280,10 +240,11 @@ async function publishToRegistry(
     return response.data;
 
   } catch (error: any) {
+    // ... existing error handling ...
     if (error.response) {
       const status = error.response.status;
       const message = error.response.data?.message || error.response.statusText;
-      
+
       switch (status) {
         case 401:
           throw ErrorHandler.createError(
@@ -317,14 +278,14 @@ async function publishToRegistry(
           );
       }
     }
-    
+
     if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
       throw ErrorHandler.createError(
         'NetworkError',
         `Cannot connect to registry: ${config.url}`
       );
     }
-    
+
     throw ErrorHandler.createError(
       'NetworkError',
       `Publication failed: ${error.message}`

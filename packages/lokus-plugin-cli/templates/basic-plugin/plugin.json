@@ -1,0 +1,30 @@
+{
+    "manifest": "2.0",
+    "id": "{{pluginId}}",
+    "name": "{{pluginName}}",
+    "displayName": "{{pluginDisplayName}}",
+    "version": "0.1.0",
+    "publisher": "{{pluginPublisher}}",
+    "description": "{{pluginDescription}}",
+    "author": "{{pluginAuthor}}",
+    "icon": "icon.png",
+    "main": "dist/index.js",
+    "engines": {
+        "lokus": "^1.0.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [],
+    "contributes": {
+        "commands": []
+    },
+    "capabilities": {
+        "untrustedWorkspaces": {
+            "supported": true
+        },
+        "virtualWorkspaces": {
+            "supported": true
+        }
+    }
+}
