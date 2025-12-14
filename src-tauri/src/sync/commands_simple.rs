@@ -43,9 +43,10 @@ pub async fn iroh_leave_document(
 
 #[tauri::command]
 pub async fn iroh_get_ticket(
-    _provider: State<'_, Mutex<IrohProviderWrapper>>,
+    provider: State<'_, Mutex<IrohProviderWrapper>>,
 ) -> Result<String, String> {
-    Err("Get ticket not implemented".to_string())
+    let provider = provider.lock().await;
+    provider.get_ticket().await
 }
 
 #[tauri::command]

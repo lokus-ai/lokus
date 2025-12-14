@@ -301,6 +301,84 @@ ul[data-type="taskList"] li > label > input[type="checkbox"]:checked::after {
     line-height: 1;
 }
 
+/* Task state styling - High frequency states */
+ul[data-type="taskList"] li.task-starred {
+    background-color: rgba(255, 215, 0, 0.1);
+    border-left: 3px solid #FFD700;
+    padding-left: 0.5rem;
+}
+
+ul[data-type="taskList"] li.task-paused {
+    background-color: rgba(128, 128, 128, 0.1);
+    opacity: 0.7;
+    padding-left: 0.5rem;
+}
+
+ul[data-type="taskList"] li.task-scheduled {
+    background-color: rgba(0, 123, 255, 0.1);
+    border-left: 3px solid #007BFF;
+    padding-left: 0.5rem;
+}
+
+ul[data-type="taskList"] li.task-quote {
+    background-color: rgba(108, 117, 125, 0.1);
+    border-left: 3px solid #6C757D;
+    font-style: italic;
+    padding-left: 0.5rem;
+}
+
+ul[data-type="taskList"] li.task-info {
+    background-color: rgba(23, 162, 184, 0.1);
+    border-left: 3px solid #17A2B8;
+    padding-left: 0.5rem;
+}
+
+ul[data-type="taskList"] li.task-blocked {
+    background-color: rgba(220, 53, 69, 0.1);
+    border-left: 3px solid #DC3545;
+    text-decoration: line-through;
+    opacity: 0.6;
+    padding-left: 0.5rem;
+}
+
+/* Task state styling - Medium frequency states */
+ul[data-type="taskList"] li.task-added {
+    background-color: rgba(40, 167, 69, 0.1);
+    border-left: 3px solid #28A745;
+    padding-left: 0.5rem;
+}
+
+ul[data-type="taskList"] li.task-waiting {
+    background-color: rgba(255, 193, 7, 0.1);
+    border-left: 3px solid #FFC107;
+    padding-left: 0.5rem;
+}
+
+ul[data-type="taskList"] li.task-mentioned {
+    background-color: rgba(111, 66, 193, 0.1);
+    border-left: 3px solid #6F42C1;
+    padding-left: 0.5rem;
+}
+
+ul[data-type="taskList"] li.task-review {
+    background-color: rgba(253, 126, 20, 0.1);
+    border-left: 3px solid #FD7E14;
+    padding-left: 0.5rem;
+}
+
+ul[data-type="taskList"] li.task-duplicate {
+    background-color: rgba(108, 117, 125, 0.1);
+    text-decoration: line-through;
+    opacity: 0.5;
+    padding-left: 0.5rem;
+}
+
+ul[data-type="taskList"] li.task-started {
+    background-color: rgba(32, 201, 151, 0.1);
+    border-left: 3px solid #20C997;
+    padding-left: 0.5rem;
+}
+
 /* Strikethrough text */
 .ProseMirror s,
 .ProseMirror del,

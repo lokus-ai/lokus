@@ -580,48 +580,61 @@ impl IrohSyncProviderV2 {
     pub async fn join_document(&mut self, workspace_path: PathBuf, ticket: &str) -> Result<String, String> {
         info!("V2: Joining document with ticket");
         self.set_state(SyncState::Initializing).await;
-        
+
         *self.workspace_path.write().await = Some(workspace_path);
-        
+
         // Parse ticket
         let ticket: DocTicket = ticket.parse()
             .map_err(|e| format!("Invalid ticket: {}", e))?;
-        
+
         // Initialize node
         let node = Builder::default()
             .enable_docs()
             .spawn()
             .await
             .map_err(|e| format!("Failed to spawn node: {}", e))?;
-        
+
         // Create author
         let author = node.authors().create().await
             .map_err(|e| format!("Failed to create author: {}", e))?;
-        
+
         // Import document from parsed ticket
         let doc = node.docs().import(ticket).await
             .map_err(|e| format!("Failed to import document: {}", e))?;
-        
+
         let doc_id = doc.id();
-        
+
         // Store components
         *self.doc.write().await = Some(doc.clone());
         *self.doc_id.write().await = Some(doc_id);
         *self.author_id.write().await = Some(author);
         *self.node.write().await = Some(node);
-        
+
         // Start background tasks
         self.start_background_tasks().await?;
-        
+
         // Initial sync
         self.scan_and_sync().await?;
-        
+
         self.set_state(SyncState::Idle).await;
-        
+
         info!("V2: Successfully joined document");
         Ok("Successfully joined document".to_string())
     }
-    
+
+    /// Get the current document's sharing ticket
+    pub async fn get_ticket(&self) -> Result<String, String> {
+        let doc = self.doc.read().await;
+        let doc = doc.as_ref().ok_or("Document not initialized")?;
+
+        let ticket = doc
+            .share(ShareMode::Write, Default::default())
+            .await
+            .map_err(|e| format!("Failed to get ticket: {}", e))?;
+
+        Ok(ticket.to_string())
+    }
+
     // Start background monitoring and sync tasks
     async fn start_background_tasks(&self) -> Result<(), String> {
         // Start file watcher

@@ -103,7 +103,7 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
   let _app_menu = None::<tauri::menu::Submenu<tauri::Wry>>;
 
   // File menu
-  let _file_menu = SubmenuBuilder::new(app, "File")
+  let file_menu = SubmenuBuilder::new(app, "File")
     .item(&MenuItemBuilder::with_id(FILE_NEW_NOTE_ID, "New Note")
       .accelerator("CmdOrCtrl+N")
       .build(app)?)
@@ -273,7 +273,7 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     .build()?;
 
   // Window menu
-  let window_builder = SubmenuBuilder::new(app, "Window")
+  let mut window_builder = SubmenuBuilder::new(app, "Window")
     .item(&MenuItemBuilder::with_id(WINDOW_MINIMIZE_ID, "Minimize")
       .accelerator("CmdOrCtrl+M")
       .build(app)?);

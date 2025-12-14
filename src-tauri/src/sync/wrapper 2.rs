@@ -150,16 +150,4 @@ impl IrohProviderWrapper {
             }
         }
     }
-
-    pub async fn get_ticket(&self) -> Result<String, String> {
-        match self {
-            IrohProviderWrapper::V1(p) => {
-                p.get_ticket().await
-                    .map_err(|e| format!("{}", e))
-            }
-            IrohProviderWrapper::V2(p) => {
-                p.get_ticket().await
-            }
-        }
-    }
 }

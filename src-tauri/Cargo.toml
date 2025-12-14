@@ -103,7 +103,7 @@ sysinfo = "0.32"
 # Delta sync
 rdiff = "0.1"
 # Windows crate for credential management
-windows = { version = "0.61", features = ["Win32_Security_Credentials"] }
+windows = { version = "0.57", features = ["Win32_Security_Credentials"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.25"

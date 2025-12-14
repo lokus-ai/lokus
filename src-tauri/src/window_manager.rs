@@ -151,7 +151,7 @@ pub fn open_launcher_window(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn sync_window_theme(window: tauri::Window, _is_dark: bool, _bg_color: String) -> Result<(), String> {
+pub fn sync_window_theme(window: tauri::Window, is_dark: bool, _bg_color: String) -> Result<(), String> {
 
   #[cfg(target_os = "macos")]
   {
