@@ -12,7 +12,7 @@
  */
 
 import { EventEmitter } from '../../utils/EventEmitter.js'
-import { createSecureNode, createSecureMark, createSecureExtension } from './PluginSandbox.js';
+
 import { Disposable } from '../../utils/Disposable.js';
 import { errorHandler } from './ErrorHandler.js'
 

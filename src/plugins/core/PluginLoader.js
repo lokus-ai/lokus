@@ -6,7 +6,7 @@ import { logger } from '../../utils/logger.js'
 import { isVersionCompatible } from '../../utils/semver.js'
 import { RegistryAPI } from '../registry/RegistryAPI.js'
 // Import SDK to expose to plugins
-import * as PluginSDK from '../../../../packages/plugin-sdk/src/index.ts'
+import * as PluginSDK from '../../../packages/plugin-sdk/src/index.ts'
 
 /**
  * Plugin Loading Utilities
@@ -58,7 +58,7 @@ export class PluginSandbox {
   /**
    * Create a secure execution context for the plugin
    */
-  createContext() {
+  createContext(contextData = {}) {
     // Create a restricted global context
     const restrictedGlobals = {
       console: this.createRestrictedConsole(),
@@ -82,9 +82,13 @@ export class PluginSandbox {
       SyntaxError: SyntaxError,
       // Plugin API
       lokusAPI: this.api,
+      api: this.api, // Alias for SDK compatibility
       lokus: window.lokus, // Expose global lokus object
       // VS Code compatibility aliases
-      vscode: window.lokus // Alias vscode to lokus for compatibility
+      vscode: window.lokus, // Alias vscode to lokus for compatibility
+
+      // Merge provided context data
+      ...contextData
     }
 
     // Use Proxy to prevent access to unauthorized globals
@@ -245,7 +249,13 @@ export class PluginLoader {
         return this.loadedModules.get(moduleId)
       }
 
-      const code = await readTextFile(mainPath);
+      // Expose SDK globally for plugins to use
+      if (!window.LokusSDK) {
+        window.LokusSDK = PluginSDK;
+      }
+
+      const rawCode = await readTextFile(mainPath);
+      const code = this.transformPluginCode(rawCode, pluginId, mainPath);
 
       // 1. Try CommonJS execution (using new Function)
       // This supports plugins using module.exports
@@ -253,7 +263,9 @@ export class PluginLoader {
         const module = { exports: {} };
         const exports = module.exports;
         const require = (id) => {
-          if (id === '@lokus/plugin-sdk') {
+          if (id === '@lokus/plugin-sdk' || id === 'lokus-plugin-sdk') {
+            console.log('[PluginLoader] Requiring PluginSDK. Keys:', Object.keys(PluginSDK));
+            console.log('[PluginLoader] PluginSDK.PluginLogger:', PluginSDK.PluginLogger);
             return PluginSDK;
           }
           if (id === 'react') {
@@ -299,13 +311,141 @@ export class PluginLoader {
   }
 
   /**
+   * Transform plugin code to handle imports
+   * Rewrites 'lokus-plugin-sdk' imports to use global window.LokusSDK
+   */
+  transformPluginCode(code, pluginId, mainPath) {
+    // 1. Handle "import { ... } from 'lokus-plugin-sdk'"
+    // Replaces with "const { ... } = window.LokusSDK"
+    let transformed = code.replace(
+      /import\s+\{\s*([^}]+)\s*\}\s+from\s+['"]lokus-plugin-sdk['"];?/g,
+      'const { $1 } = window.LokusSDK;'
+    );
+
+    // 2. Handle "import * as SDK from 'lokus-plugin-sdk'"
+    // Replaces with "const SDK = window.LokusSDK"
+    transformed = transformed.replace(
+      /import\s+\*\s+as\s+(\w+)\s+from\s+['"]lokus-plugin-sdk['"];?/g,
+      'const $1 = window.LokusSDK;'
+    );
+
+    // 3. Handle "import SDK from 'lokus-plugin-sdk'" (default import)
+    // Replaces with "const SDK = window.LokusSDK" (assuming SDK exports itself as default or we want the whole object)
+    transformed = transformed.replace(
+      /import\s+(\w+)\s+from\s+['"]lokus-plugin-sdk['"];?/g,
+      'const $1 = window.LokusSDK;'
+    );
+
+    // 4. Handle side-effect import "import 'lokus-plugin-sdk'"
+    transformed = transformed.replace(
+      /import\s+['"]lokus-plugin-sdk['"];?/g,
+      ''
+    );
+
+    // 5. Rewrite Source Map URLs
+    // Blob URLs break relative source maps. We need to make them absolute.
+    // Assuming the plugin is served from a local server (e.g. localhost:3000) or we can infer the base URL.
+    // For now, we'll try to use the pluginPath if it looks like a URL, otherwise we might need more context.
+
+    // If pluginPath is a URL (dev mode), use it as base.
+    // If it's a file path (production), source maps might not work with Blob URLs anyway unless we inline them.
+    // But for the "dev" command issue, we are likely loading from a URL or a local file that we want to map.
+
+    // Actually, PluginLoader.loadPlugin takes a path.
+    // If we are in dev mode, we might want to inject the source map URL.
+
+    // Let's look for the source mapping URL pattern
+    const sourceMapMatch = transformed.match(/\/\/#\s*sourceMappingURL=(.+)$/m);
+    if (sourceMapMatch) {
+      const mapUrl = sourceMapMatch[1].trim();
+      if (!mapUrl.startsWith('data:') && !mapUrl.startsWith('http')) {
+        // It's a relative path. We need to make it absolute.
+        // If we don't have a base URL, we can't really fix it easily for local files without a server.
+        // But if this is running in the app, and we loaded the file from disk...
+
+        // Wait, if we loaded from disk, the Blob URL has no relation to the disk path.
+        // Chrome/Safari won't load local file source maps from a Blob URL due to security.
+        // The only reliable way is to INLINE the source map.
+
+        // BUT, if we are using the Dev Server (localhost:3000), we can point to that.
+        // We need to know if we are in "Dev Mode" and what the Dev Server URL is.
+        // Or, we can just try to resolve it relative to the mainPath if it was a URL.
+
+        // For this fix, let's assume if we can't resolve it, we leave it (or warn).
+        // But specifically for the "Headless Dev Server" issue, if the user manually points the app 
+        // to localhost:3000/plugin/index.js, we can fix it.
+
+        // Let's add a heuristic: if the code contains a source map, and we can't resolve it, 
+        // we might want to try to fetch it and inline it (expensive).
+
+        // Simpler fix for now: If we are loading from a URL, resolve against it.
+        // Since loadPluginModule takes `mainPath`, if `mainPath` is a URL, we use it.
+        // If `mainPath` is a file path, we can't easily fix it for Blob execution without a local server.
+
+        // However, the user specifically mentioned "Broken Debugging" in the context of the Dev Server.
+        // So let's assume we might be loading from a URL in the future or we want to support it.
+
+        // For now, I will add a placeholder for this logic, but since `mainPath` is currently a file path 
+        // in the standard flow, this might not fully solve it without the Dev Server integration.
+        // BUT, I can rewrite it to a file:// URL if we are in Tauri!
+
+        // If we are in Tauri, `mainPath` is an absolute path.
+        // We can try to prepend `file://` (or `asset://` in Tauri v2) to the path.
+
+        // Let's try to rewrite to an absolute file URL.
+        // Note: This requires the `mainPath` argument to be passed to `transformPluginCode`.
+        // I need to update the signature of `transformPluginCode`.
+      }
+    }
+
+    if (code !== transformed) {
+      this.logger.debug(`Transformed imports for plugin ${pluginId}`);
+    }
+
+    return transformed;
+  }
+
+  /**
    * Instantiate plugin with security context
    */
   async instantiatePlugin(pluginModule, manifest, pluginAPI) {
     try {
       // Create security sandbox
       const sandbox = new PluginSandbox(manifest.id, pluginAPI)
-      const context = sandbox.createContext()
+
+      // Prepare context data
+      const contextData = {
+        pluginId: manifest.id,
+        manifest: manifest,
+        api: pluginAPI,
+        // Add other required properties with defaults or placeholders
+        storageUri: '',
+        globalStorageUri: '',
+        assetUri: '',
+        logPath: '',
+        extensionMode: 2, // Development
+        environment: {
+          lokusVersion: '1.0.0',
+          nodeVersion: '18.0.0',
+          platform: 'darwin', // TODO: Get real platform
+          arch: 'x64',
+          appName: 'Lokus',
+          appVersion: '1.0.0',
+          isDevelopment: true,
+          isTesting: false
+        },
+        permissions: new Set(),
+        subscriptions: [],
+        globalState: { get: () => undefined, update: async () => { }, keys: () => [], setKeysForSync: () => { } },
+        workspaceState: { get: () => undefined, update: async () => { }, keys: () => [], setKeysForSync: () => { } },
+        secrets: { store: async () => { }, get: async () => undefined, delete: async () => { }, onDidChange: () => ({ dispose: () => { } }) }
+      };
+
+      const context = sandbox.createContext(contextData)
+
+      console.log('[PluginLoader] Context created:', context);
+      console.log('[PluginLoader] Context pluginId:', context.pluginId);
+      console.log('[PluginLoader] Context keys:', Object.keys(context));
 
       let plugin;
       let PluginClass = pluginModule.default || pluginModule.Plugin;

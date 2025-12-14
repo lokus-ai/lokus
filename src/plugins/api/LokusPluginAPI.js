@@ -298,12 +298,91 @@ export class EditorAPI extends EventEmitter {
  * UI API - Provides access to UI components and panels
  */
 export class UIAPI extends EventEmitter {
-  constructor(uiManager) {
+  constructor(uiManager, notificationsAPI) {
     super();
     this.uiManager = uiManager;
+    this.notificationsAPI = notificationsAPI;
     this.panels = new Map();
     this.dialogs = new Map();
     this.toolbars = new Map();
+  }
+
+  /**
+   * Show information message
+   */
+  async showInformationMessage(message, ...items) {
+    if (this.notificationsAPI) {
+      this.notificationsAPI.show({ type: 'info', message, title: 'Info' });
+    }
+    // TODO: Handle items (actions)
+    return undefined;
+  }
+
+  /**
+   * Show warning message
+   */
+  async showWarningMessage(message, ...items) {
+    if (this.notificationsAPI) {
+      this.notificationsAPI.show({ type: 'warning', message, title: 'Warning' });
+    }
+    return undefined;
+  }
+
+  /**
+   * Show error message
+   */
+  async showErrorMessage(message, ...items) {
+    if (this.notificationsAPI) {
+      this.notificationsAPI.show({ type: 'error', message, title: 'Error' });
+    }
+    return undefined;
+  }
+
+  /**
+   * Create output channel
+   */
+  createOutputChannel(name) {
+    console.log(`[UIAPI] Creating output channel: ${name}`);
+    return {
+      name,
+      append: (value) => console.log(`[${name}] ${value}`),
+      appendLine: (value) => console.log(`[${name}] ${value}`),
+      clear: () => console.clear(),
+      show: (preserveFocus) => console.log(`[UIAPI] Showing output channel: ${name}`),
+      hide: () => console.log(`[UIAPI] Hiding output channel: ${name}`),
+      dispose: () => console.log(`[UIAPI] Disposing output channel: ${name}`)
+    };
+  }
+
+  /**
+   * Show input box
+   */
+  async showInputBox(options = {}) {
+    return this.showPrompt({
+      title: options.title || 'Input',
+      message: options.prompt || '',
+      placeholder: options.placeholder,
+      defaultValue: options.value,
+      validate: options.validateInput
+    });
+  }
+
+  /**
+   * Register custom panel (SDK alias for addPanel)
+   */
+  registerPanel(panel) {
+    const addedPanel = this.addPanel({
+      id: panel.id,
+      title: panel.title,
+      position: panel.location === 'sidebar' ? 'sidebar-left' : 'bottom',
+      icon: panel.icon,
+      component: panel.component, // Assuming component is passed in definition for now
+      props: panel.initialState
+    });
+
+    return new Disposable(() => {
+      this.removePanel(panel.id);
+    });
   }
 
   /**
@@ -492,7 +571,7 @@ export class FilesystemAPI extends EventEmitter {
     }
 
     const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
-    return this.fsManager.readFile(safePath);
+    return this.fsManager.readFile(safePath, 'binary');
   }
 
   /**
@@ -517,6 +596,80 @@ export class FilesystemAPI extends EventEmitter {
 
     const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
     return this.fsManager.exists(safePath);
+  }
+
+  /**
+   * Read directory
+   */
+  async readdir(relativePath) {
+    if (!this.fsManager) {
+      throw new Error('Filesystem not available');
+    }
+
+    const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
+    return this.fsManager.readDirectory(safePath);
+  }
+
+  /**
+   * Create directory
+   */
+  async mkdir(relativePath) {
+    if (!this.fsManager) {
+      throw new Error('Filesystem not available');
+    }
+
+    const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
+    return this.fsManager.createFolder(safePath);
+  }
+
+  /**
+   * Delete file or directory
+   */
+  async delete(relativePath) {
+    if (!this.fsManager) {
+      throw new Error('Filesystem not available');
+    }
+
+    const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
+    return this.fsManager.deleteFile(safePath);
+  }
+
+  /**
+   * Rename file or directory
+   */
+  async rename(oldPath, newPath) {
+    if (!this.fsManager) {
+      throw new Error('Filesystem not available');
+    }
+
+    const safeOldPath = this.fsManager.getPluginFilePath(this.currentPluginId, oldPath);
+    const safeNewPath = this.fsManager.getPluginFilePath(this.currentPluginId, newPath);
+    return this.fsManager.renameFile(safeOldPath, safeNewPath);
+  }
+
+  /**
+   * Copy file
+   */
+  async copy(source, destination) {
+    if (!this.fsManager) {
+      throw new Error('Filesystem not available');
+    }
+
+    const safeSource = this.fsManager.getPluginFilePath(this.currentPluginId, source);
+    const safeDest = this.fsManager.getPluginFilePath(this.currentPluginId, destination);
+    return this.fsManager.copyFile(safeSource, safeDest);
+  }
+
+  /**
+   * Get file stats
+   */
+  async stat(path) {
+    if (!this.fsManager) {
+      throw new Error('Filesystem not available');
+    }
+
+    const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, path);
+    return this.fsManager.stat(safePath);
   }
 }
 
@@ -811,7 +964,8 @@ export class LokusPluginAPI extends EventEmitter {
 
     // Initialize sub-APIs (pass 'this' to APIs that need permission checking)
     this.editor = new EditorAPI();
-    this.ui = new UIAPI(managers.ui);
+    this.notifications = new NotificationsAPI(managers.notifications); // Moved up to be available for UI
+    this.ui = new UIAPI(managers.ui, this.notifications);
     this.fs = new FilesystemAPI(managers.filesystem); // Renamed from filesystem
     this.commands = new CommandsAPI(managers.commands);
     this.network = new NetworkAPI(managers.network, this);
@@ -828,7 +982,6 @@ export class LokusPluginAPI extends EventEmitter {
 
     // Legacy/Runtime-specific APIs (kept for backward compat or internal use)
     this.clipboard = new ClipboardAPI();
-    this.notifications = new NotificationsAPI(managers.notifications); // TODO: Move to UI API
 
     // Plugin context and permissions
     this.currentPluginId = null;

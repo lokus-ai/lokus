@@ -9,7 +9,7 @@ import { ErrorHandler } from '../utils/error-handler';
 
 export const loginCommand = new Command('login')
     .description('Login to the Lokus Plugin Registry')
-    .option('-r, --registry <url>', 'registry URL', process.env.LOKUS_REGISTRY_URL || 'https://registry.lokus.dev')
+    .option('-r, --registry <url>', 'registry URL', process.env.LOKUS_REGISTRY_URL || 'https://lokusmd.com')
     .option('-t, --token <token>', 'authentication token')
     .action(async (options) => {
         try {

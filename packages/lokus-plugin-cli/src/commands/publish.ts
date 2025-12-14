@@ -27,7 +27,7 @@ interface RegistryConfig {
 
 export const publishCommand = new Command('publish')
   .description('Publish plugin to registry')
-  .option('-r, --registry <url>', 'registry URL', process.env.LOKUS_REGISTRY_URL || 'https://registry.lokus.dev')
+  .option('-r, --registry <url>', 'registry URL', process.env.LOKUS_REGISTRY_URL || 'https://lokusmd.com')
   .option('-t, --token <token>', 'authentication token')
   .option('--skip-validation', 'skip plugin validation')
   .option('--dry-run', 'validate and prepare but do not publish')
@@ -111,7 +111,7 @@ export const publishCommand = new Command('publish')
 
 async function getRegistryConfig(options: PublishOptions): Promise<RegistryConfig> {
   const config: RegistryConfig = {
-    url: options.registry || process.env.LOKUS_REGISTRY_URL || 'https://registry.lokus.dev'
+    url: options.registry || process.env.LOKUS_REGISTRY_URL || 'https://lokusmd.com'
   };
 
   // Get token from options, environment, or prompt

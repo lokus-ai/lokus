@@ -60,10 +60,45 @@ export class WorkspaceAPI extends EventEmitter {
      * Open a text document
      */
     async openTextDocument(uriOrFileName) {
-        if (this.currentPlugin && this.currentPlugin.api && this.currentPlugin.api.editor) {
-            return this.currentPlugin.api.editor.openDocument(uriOrFileName);
-        }
+        // TODO: Connect to actual document opener
+        console.warn('[WorkspaceAPI] openTextDocument is not yet implemented');
         return null;
+    }
+
+    /**
+     * Get workspace folder for URI
+     */
+    getWorkspaceFolder(uri) {
+        const uriStr = typeof uri === 'string' ? uri : uri.toString();
+        return this.workspaceFolders.find(folder => uriStr.startsWith(folder.uri.path));
+    }
+
+    /**
+     * Get relative path
+     */
+    asRelativePath(pathOrUri, includeWorkspaceFolder) {
+        const path = typeof pathOrUri === 'string' ? pathOrUri : pathOrUri.path;
+
+        for (const folder of this.workspaceFolders) {
+            if (path.startsWith(folder.uri.path)) {
+                let relative = path.substring(folder.uri.path.length);
+                if (relative.startsWith('/')) relative = relative.substring(1);
+
+                if (includeWorkspaceFolder) {
+                    return `${folder.name}/${relative}`;
+                }
+                return relative;
+            }
+        }
+        return path;
+    }
+
+    /**
+     * Apply workspace edit
+     */
+    async applyEdit(edit) {
+        console.warn('[WorkspaceAPI] applyEdit is not yet implemented');
+        return false;
     }
 
     /**

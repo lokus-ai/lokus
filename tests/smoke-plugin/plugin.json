@@ -1,0 +1,16 @@
+{
+    "id": "smoke-test-plugin",
+    "name": "Smoke Test Plugin",
+    "version": "1.0.0",
+    "description": "Verifies API alignment fixes",
+    "main": "index.js",
+    "permissions": [
+        "filesystem",
+        "ui",
+        "notifications"
+    ],
+    "author": "Lokus Team",
+    "engines": {
+        "lokus": "^1.0.0"
+    }
+}

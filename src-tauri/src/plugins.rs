@@ -23,7 +23,7 @@ pub struct PluginManifest {
     pub permissions: Vec<String>,
     pub dependencies: Option<HashMap<String, String>>,
     pub keywords: Option<Vec<String>>,
-    pub repository: Option<String>,
+    pub repository: Option<serde_json::Value>,
     pub homepage: Option<String>,
     pub license: Option<String>,
     pub contributes: Option<serde_json::Value>,

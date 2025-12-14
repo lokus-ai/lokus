@@ -21,13 +21,13 @@ export const linkCommand = new Command('link')
 
             logger.header('🔗 Linking Plugin');
 
-            // Determine extensions directory
+            // Determine plugins directory
             const homeDir = os.homedir();
-            const extensionsDir = path.join(homeDir, '.lokus', 'extensions');
-            const targetLinkPath = path.join(extensionsDir, manifest.id);
+            const pluginsDir = path.join(homeDir, '.lokus', 'plugins');
+            const targetLinkPath = path.join(pluginsDir, manifest.id);
 
-            // Ensure extensions directory exists
-            await fs.ensureDir(extensionsDir);
+            // Ensure plugins directory exists
+            await fs.ensureDir(pluginsDir);
 
             // Check if link already exists
             if (await fs.pathExists(targetLinkPath)) {

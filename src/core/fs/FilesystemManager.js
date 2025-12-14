@@ -1,19 +1,50 @@
-import { readTextFile, writeTextFile, exists, mkdir, remove } from '@tauri-apps/plugin-fs';
+import { readTextFile, writeTextFile, readFile, writeFile, exists, mkdir, remove, rename, copyFile, stat, readDir } from '@tauri-apps/plugin-fs';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { join, appDataDir } from '@tauri-apps/api/path';
+import { join, homeDir } from '@tauri-apps/api/path';
 
 class FilesystemManager {
     async getPluginFilePath(pluginId, relativePath) {
-        const appData = await appDataDir();
-        return await join(appData, 'plugins', pluginId, relativePath);
+        const home = await homeDir();
+        return await join(home, '.lokus', 'plugins', pluginId, relativePath);
     }
 
-    async readFile(path) {
+    async readFile(path, encoding = 'utf8') {
+        if (encoding === 'binary') {
+            return await readFile(path);
+        }
         return await readTextFile(path);
     }
 
     async writeFile(path, content) {
+        if (content instanceof Uint8Array || content instanceof ArrayBuffer) {
+            return await writeFile(path, content);
+        }
         return await writeTextFile(path, content);
+    }
+
+    async readDirectory(path) {
+        const entries = await readDir(path);
+        return entries.map(e => e.name);
+    }
+
+    async createFolder(path) {
+        return await mkdir(path, { recursive: true });
+    }
+
+    async deleteFile(path) {
+        return await remove(path, { recursive: true });
+    }
+
+    async renameFile(oldPath, newPath) {
+        return await rename(oldPath, newPath);
+    }
+
+    async copyFile(source, destination) {
+        return await copyFile(source, destination);
+    }
+
+    async stat(path) {
+        return await stat(path);
     }
 
     async exists(path) {

@@ -74,6 +74,21 @@ export default function CommandPalette({
   const { process: processTemplate } = useTemplateProcessor()
   const { scopeMode, setLocalScope, setGlobalScope, getScopeStatus } = useFolderScope()
   const { createBase, bases, loadBase, dataManager } = useBases()
+  const [pluginCommands, setPluginCommands] = useState([])
+
+  useEffect(() => {
+    if (open) {
+      // Load plugin commands
+      const registry = window.lokus?.commands?.registry;
+      if (registry) {
+        const cmds = [];
+        registry.forEach((def, id) => {
+          cmds.push({ id, title: def.title || id });
+        });
+        setPluginCommands(cmds);
+      }
+    }
+  }, [open]);
 
   useEffect(() => {
     getActiveShortcuts().then(setShortcuts)
@@ -1397,6 +1412,29 @@ Best regards,
             ))}
           </CommandGroup>
           <CommandSeparator />
+
+          {/* Plugin Commands */}
+          {pluginCommands.length > 0 && (
+            <>
+              <CommandGroup heading="Plugin Commands">
+                {pluginCommands.map((cmd) => (
+                  <CommandItem
+                    key={cmd.id}
+                    onSelect={() => runCommandWithHistory(() => {
+                      if (window.lokus?.commands?.executeCommand) {
+                        window.lokus.commands.executeCommand(cmd.id);
+                      }
+                    }, cmd.title)}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    <span>{cmd.title}</span>
+                    <CommandShortcut className="text-xs">{cmd.id}</CommandShortcut>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              <CommandSeparator />
+            </>
+          )}
 
           {/* Gmail Commands */}
           <CommandGroup heading="Gmail">

@@ -303,7 +303,8 @@ export class TemplateManager {
         ...(isUI ? { jsx: 'react' } : {}),
         declaration: true,
         declarationMap: true,
-        sourceMap: true
+        sourceMap: true,
+        types: context.testing === 'jest' ? ['jest'] : []
       },
       include: ['src/**/*'],
       exclude: ['node_modules', 'dist', '**/*.test.ts', '**/*.spec.ts']

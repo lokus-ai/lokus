@@ -100,6 +100,10 @@ export class PluginValidator {
           type: 'string',
           pattern: '\\.(js|ts)$'
         },
+        lokusVersion: {
+          type: 'string',
+          pattern: '^[\\^~>=<]*\\d+\\.\\d+\\.\\d+'
+        },
         engines: {
           type: 'object',
           required: ['lokus'],

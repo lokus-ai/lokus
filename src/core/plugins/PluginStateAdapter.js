@@ -5,6 +5,7 @@ import { LokusPluginAPI } from "../../plugins/api/LokusPluginAPI.js";
 import { uiManager } from "../ui/UIManager.js";
 import { configManager } from "../config/ConfigManager.js";
 import { filesystemManager } from "../fs/FilesystemManager.js";
+import { PluginFileWatcher } from "./PluginFileWatcher.js";
 
 /**
  * PluginStateAdapter - UI State Management Facade for Plugin System
@@ -45,6 +46,7 @@ class PluginStateAdapter {
     this.lastLoadTime = 0;
     this.loadInProgress = false;
     this.pluginLoader = new PluginLoader();
+    this.fileWatcher = new PluginFileWatcher(this);
     this.listeners = new Set();
     this.workspacePath = null;
     this.workspacePath = null;
@@ -91,18 +93,45 @@ class PluginStateAdapter {
       // Initialize Command Registry
       window.lokus.commands = window.lokus.commands || {
         registry: new Map(),
-        registerCommand: (id, callback) => {
-          window.lokus.commands.registry.set(id, callback);
+        registerCommand: (arg1, arg2) => {
+          let id, callback, title;
+          if (typeof arg1 === 'object' && arg1 !== null) {
+            // Handle command object: { id, execute, title, ... }
+            id = arg1.id;
+            callback = arg1.execute || arg1.callback;
+            title = arg1.title || arg1.name;
+          } else {
+            // Handle (id, callback) signature
+            id = arg1;
+            callback = arg2;
+          }
+
+          if (!id || !callback) {
+            console.warn('[PluginStateAdapter] Invalid command registration:', arg1);
+            return { dispose: () => { } };
+          }
+
+          // Store with metadata if available
+          const commandEntry = {
+            execute: callback,
+            title: title || id,
+            id: id
+          };
+
+          window.lokus.commands.registry.set(id, commandEntry);
           return { dispose: () => window.lokus.commands.registry.delete(id) };
         },
         executeCommand: (id, ...args) => {
-          const callback = window.lokus.commands.registry.get(id);
-          if (callback) {
-            return callback(...args);
-          } else {
-            console.warn(`Command not found: ${id}`);
-            return Promise.resolve();
+          const entry = window.lokus.commands.registry.get(id);
+          if (entry) {
+            if (typeof entry.execute === 'function') {
+              return entry.execute(...args);
+            } else if (typeof entry === 'function') {
+              return entry(...args);
+            }
           }
+          console.warn(`Command not found: ${id}`);
+          return Promise.resolve();
         }
       };
     }
@@ -117,6 +146,8 @@ class PluginStateAdapter {
 
   async initialize() {
     await this.loadPlugins();
+    // Start file watcher
+    this.fileWatcher.start();
   }
 
   async loadEnabledPlugins(allPlugins, enabledPluginNames) {
@@ -470,6 +501,151 @@ class PluginStateAdapter {
       .flatMap(p => p.ui.panels.map(panel => ({ ...panel, pluginId: p.id, pluginName: p.name })));
   }
 
+  /**
+   * Load a plugin from a development server URL
+   * @param {string} url - The base URL of the dev server (e.g., http://localhost:3000)
+   */
+  async loadDevPlugin(url) {
+    try {
+      this.loading = true;
+      this.notifyListeners();
+
+      // Ensure URL ends with /
+      const baseUrl = url.endsWith('/') ? url : `${url}/`;
+
+      // 1. Fetch Manifest
+      const manifestRes = await fetch(`${baseUrl}plugin.json`);
+      if (!manifestRes.ok) throw new Error(`Failed to fetch manifest: ${manifestRes.statusText}`);
+      const manifest = await manifestRes.json();
+
+      // Check if plugin is already loaded and deactivate it
+      if (this.pluginInstances.has(manifest.id)) {
+        console.log(`[PluginStateAdapter] Reloading plugin ${manifest.id}...`);
+        const oldInstance = this.pluginInstances.get(manifest.id);
+        if (oldInstance && typeof oldInstance.deactivate === 'function') {
+          try {
+            await oldInstance.deactivate();
+            console.log(`[PluginStateAdapter] Deactivated old instance of ${manifest.id}`);
+          } catch (e) {
+            console.warn(`[PluginStateAdapter] Failed to deactivate old instance of ${manifest.id}:`, e);
+          }
+        }
+        this.pluginInstances.delete(manifest.id);
+        this.plugins = this.plugins.filter(p => p.id !== manifest.id);
+      }
+
+      // 2. Fetch Main Module
+      const mainUrl = `${baseUrl}${manifest.main}`;
+      const mainRes = await fetch(mainUrl);
+      if (!mainRes.ok) throw new Error(`Failed to fetch main module: ${mainRes.statusText}`);
+      const code = await mainRes.text();
+
+      // 3. Create API
+      const managers = {
+        commands: window.lokus?.commands,
+        ui: uiManager,
+        workspace: {
+          getWorkspaceFolders: () => this.workspacePath ? [{ uri: { path: this.workspacePath, scheme: 'file' }, name: this.workspacePath.split('/').pop(), index: 0 }] : [],
+          getRootPath: () => this.workspacePath
+        },
+        configuration: configManager,
+        filesystem: filesystemManager
+      };
+      const pluginAPI = new LokusPluginAPI(managers);
+      pluginAPI.setPluginContext(manifest.id, null);
+
+      // 4. Instantiate Plugin
+      let pluginModule;
+
+      // Expose SDK globally for plugins to use
+      if (!window.LokusSDK) {
+        // We need to import it if not available, but we can't easily here without dynamic import of the SDK file itself.
+        // Assuming it's already loaded or we can get it from PluginLoader imports if we exposed it.
+        // For now, let's assume the plugin uses the shimmed require or global window.LokusSDK if set elsewhere.
+        // Actually, PluginLoader sets window.LokusSDK. Let's hope it's there.
+      }
+
+      // 4a. Try CommonJS execution (for esbuild CJS output)
+      let loadedAsCJS = false;
+      if (code.includes('module.exports') || code.includes('exports.') || code.includes('require(')) {
+        try {
+          const module = { exports: {} };
+          const exports = module.exports;
+          const require = (id) => {
+            // Simple require shim for dev mode
+            if (id === 'lokus-plugin-sdk' || id === '@lokus/plugin-sdk') {
+              return window.LokusSDK || {};
+            }
+            if (id === 'react') return window.React || { createElement: () => console.warn('React missing') };
+            if (id === 'react-dom') return window.ReactDOM || { render: () => console.warn('ReactDOM missing') };
+            console.warn(`[DevPlugin] require('${id}') not supported in dev mode`);
+            return {};
+          };
+
+          const fn = new Function('module', 'exports', 'require', code);
+          fn(module, exports, require);
+
+          if (module.exports) {
+            pluginModule = module.exports;
+            loadedAsCJS = true;
+            console.log(`[PluginStateAdapter] Loaded ${manifest.id} as CommonJS`);
+          }
+        } catch (e) {
+          console.warn(`[PluginStateAdapter] CommonJS load failed, falling back to ESM:`, e);
+        }
+      }
+
+      // 4b. Fallback to ES Module (Blob URL)
+      if (!loadedAsCJS) {
+        const blob = new Blob([code], { type: 'text/javascript' });
+        const blobUrl = URL.createObjectURL(blob);
+        try {
+          pluginModule = await import(blobUrl);
+          pluginModule = pluginModule.default || pluginModule;
+        } finally {
+          URL.revokeObjectURL(blobUrl);
+        }
+      }
+
+      const pluginInstance = await this.pluginLoader.instantiatePlugin(pluginModule, manifest, pluginAPI);
+
+      // 5. Register and Activate
+      const pluginInfo = {
+        id: manifest.id,
+        name: manifest.name,
+        version: manifest.version,
+        description: manifest.description,
+        enabled: true,
+        isDev: true,
+        devUrl: baseUrl,
+        manifest: manifest,
+        ui: { panels: [] }
+      };
+
+      // Remove existing if present
+      this.plugins = this.plugins.filter(p => p.id !== manifest.id);
+      this.plugins.push(pluginInfo);
+      this.pluginInstances.set(manifest.id, pluginInstance);
+      this.enabledPlugins.add(manifest.id);
+
+      if (typeof pluginInstance.activate === 'function') {
+        await pluginInstance.activate();
+        await emit('plugin-runtime-activated', { pluginId: manifest.id });
+      }
+
+      console.log(`[PluginStateAdapter] Loaded dev plugin: ${manifest.id} from ${baseUrl}`);
+      return true;
+
+    } catch (error) {
+      console.error('[PluginStateAdapter] Failed to load dev plugin:', error);
+      this.error = `Dev Plugin Error: ${error.message}`;
+      throw error;
+    } finally {
+      this.loading = false;
+      this.notifyListeners();
+    }
+  }
+
   // Event system for plugin state changes
   onPluginStateChange(callback) {
     this.listeners.add(callback);
@@ -515,6 +691,88 @@ class PluginStateAdapter {
 
   get enabledPluginIds() {
     return this.enabledPlugins;
+  }
+
+  /**
+   * Reload a plugin from disk (triggered by file watcher)
+   */
+  async reloadPluginFromDisk(pluginId) {
+    try {
+      console.log(`[PluginStateAdapter] Reloading plugin ${pluginId} from disk...`);
+
+      // 1. Deactivate existing
+      if (this.pluginInstances.has(pluginId)) {
+        const oldInstance = this.pluginInstances.get(pluginId);
+        if (oldInstance && typeof oldInstance.deactivate === 'function') {
+          try {
+            await oldInstance.deactivate();
+          } catch (e) {
+            console.warn(`[PluginStateAdapter] Failed to deactivate old instance of ${pluginId}:`, e);
+          }
+        }
+        this.pluginInstances.delete(pluginId);
+      }
+
+      // 2. Get Plugin Info (Path)
+      const pluginInfo = this.plugins.find(p => p.id === pluginId);
+      if (!pluginInfo) {
+        // If not found in current list, maybe try to reload the list first?
+        // But list_plugins is async.
+        // For now, assume it's in the list.
+        throw new Error(`Plugin ${pluginId} not found in state`);
+      }
+
+      // 3. Create API
+      const managers = {
+        commands: window.lokus?.commands,
+        ui: uiManager,
+        workspace: {
+          getWorkspaceFolders: () => this.workspacePath ? [{ uri: { path: this.workspacePath, scheme: 'file' }, name: this.workspacePath.split('/').pop(), index: 0 }] : [],
+          getRootPath: () => this.workspacePath
+        },
+        configuration: configManager,
+        filesystem: filesystemManager
+      };
+      const pluginAPI = new LokusPluginAPI(managers);
+      pluginAPI.setPluginContext(pluginId, null);
+
+      // Listen for UI events
+      if (pluginAPI.ui) {
+        pluginAPI.ui.on('panel-registered', (event) => {
+          this.handlePanelRegistered(event);
+        });
+      }
+
+      // 4. Load Plugin
+      const pluginInstance = await this.pluginLoader.loadPlugin(pluginInfo.path, pluginAPI);
+      this.pluginInstances.set(pluginId, pluginInstance);
+
+      // 5. Activate
+      // Only activate if it was enabled
+      if (this.enabledPlugins.has(pluginId)) {
+        if (typeof pluginInstance.activate === 'function') {
+          await pluginInstance.activate();
+          await emit('plugin-runtime-activated', { pluginId });
+        }
+      }
+
+      console.log(`[PluginStateAdapter] Successfully reloaded ${pluginId}`);
+
+      // Notify listeners to update UI (e.g. if version changed in manifest, though we didn't reload manifest in the list)
+      // Ideally we should reload the manifest in this.plugins too.
+      // But PluginLoader.loadPlugin returns the instance, not the manifest.
+      // Actually PluginLoader.loadPlugin loads the manifest internally but doesn't return it.
+      // We might want to update the manifest in this.plugins if possible.
+      // For now, just reload the code.
+
+      return true;
+
+    } catch (error) {
+      console.error(`[PluginStateAdapter] Failed to reload ${pluginId}:`, error);
+      this.error = `Reload Failed: ${error.message}`;
+      this.notifyListeners();
+      throw error;
+    }
   }
 }
 

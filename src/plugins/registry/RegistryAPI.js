@@ -36,7 +36,7 @@ export class RegistryAPI extends EventEmitter {
     super()
 
     this.config = {
-      baseUrl: 'http://localhost:3000/api/v1/registry',
+      baseUrl: 'https://lokusmd.com/api/v1/registry',
       timeout: 30000,
       retryAttempts: 1,
       retryDelay: 500,
