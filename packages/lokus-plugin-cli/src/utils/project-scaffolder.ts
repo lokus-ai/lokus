@@ -18,6 +18,7 @@ export interface ScaffolderOptions {
   examples: boolean;
   storybook: boolean;
   workspace: boolean;
+  moduleType: 'esm' | 'cjs';
 }
 
 export class ProjectScaffolder {
@@ -213,6 +214,7 @@ export class ProjectScaffolder {
       description: this.options.description,
       author: this.options.author,
       license: 'MIT',
+      type: this.options.moduleType === 'esm' ? 'module' : 'commonjs',
       main: this.options.typescript ? 'dist/index.js' : 'src/index.js',
       types: this.options.typescript ? 'dist/index.d.ts' : undefined,
       files: ['dist', 'plugin.json', 'README.md'],
@@ -487,8 +489,49 @@ export class ProjectScaffolder {
   // Build system config generators
   private async generateESBuildConfig(): Promise<void> {
     const entryExt = this.template.category === 'UI' && this.options.typescript ? 'tsx' : (this.options.typescript ? 'ts' : 'js');
+    const isEsm = this.options.moduleType === 'esm';
 
-    const config = `const esbuild = require('esbuild');
+    const config = isEsm ?
+      `import * as esbuild from 'esbuild';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const isProduction = process.env.NODE_ENV === 'production';
+
+await esbuild.build({
+  entryPoints: ['src/index.${entryExt}'],
+  bundle: true,
+  outfile: 'dist/index.js',
+  platform: 'browser', // Target browser for Lokus runtime
+  target: 'es2020',
+  format: 'esm',
+  sourcemap: !isProduction,
+  minify: isProduction,
+  external: ['lokus-plugin-sdk', 'react', 'react-dom'], // Externalize runtime dependencies
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')
+  }
+}).catch(() => process.exit(1));
+
+if (process.argv.includes('--watch')) {
+  const ctx = await esbuild.context({
+    entryPoints: ['src/index.${entryExt}'],
+    bundle: true,
+    outfile: 'dist/index.js',
+    platform: 'browser',
+    target: 'es2020',
+    format: 'esm',
+    sourcemap: true,
+    external: ['lokus-plugin-sdk', 'react', 'react-dom'],
+    define: {
+      'process.env.NODE_ENV': JSON.stringify('development')
+    }
+  });
+  
+  await ctx.watch();
+  console.log('Watching for changes...');
+}` :
+      `const esbuild = require('esbuild');
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -496,12 +539,12 @@ esbuild.build({
   entryPoints: ['src/index.${entryExt}'],
   bundle: true,
   outfile: 'dist/index.js',
-  platform: 'node',
-  target: 'node16',
+  platform: 'browser', // Target browser for Lokus runtime
+  target: 'es2020',
   format: 'cjs',
   sourcemap: !isProduction,
   minify: isProduction,
-  external: ['lokus-plugin-sdk'],
+  external: ['lokus-plugin-sdk', 'react', 'react-dom'], // Externalize runtime dependencies
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')
   }
@@ -512,11 +555,11 @@ if (process.argv.includes('--watch')) {
     entryPoints: ['src/index.${entryExt}'],
     bundle: true,
     outfile: 'dist/index.js',
-    platform: 'node',
-    target: 'node16',
+    platform: 'browser',
+    target: 'es2020',
     format: 'cjs',
     sourcemap: true,
-    external: ['lokus-plugin-sdk'],
+    external: ['lokus-plugin-sdk', 'react', 'react-dom'],
     define: {
       'process.env.NODE_ENV': JSON.stringify('development')
     }

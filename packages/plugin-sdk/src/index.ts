@@ -88,6 +88,22 @@ export function createPlugin(definition: {
 }
 
 /**
+ * Modern helper for defining plugins with type inference
+ * @example
+ * export default definePlugin({
+ *   async activate(context) {
+ *     // ...
+ *   }
+ * })
+ */
+export function definePlugin(definition: {
+  activate: (context: PluginContext) => void | Promise<void>
+  deactivate?: () => void | Promise<void>
+}): Plugin {
+  return createPlugin(definition)
+}
+
+/**
  * Plugin development utilities namespace
  */
 export namespace PluginSDK {

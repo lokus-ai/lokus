@@ -26,6 +26,7 @@ export interface TemplateContext {
   examples: boolean;
   storybook: boolean;
   workspace: boolean;
+  moduleType: 'esm' | 'cjs';
   [key: string]: any;
 }
 
@@ -86,6 +87,7 @@ export class TemplateManager {
       examples: context.examples ?? true,
       storybook: context.storybook ?? false,
       workspace: context.workspace ?? false,
+      moduleType: context.moduleType || 'esm',
       ...context
     };
   }
@@ -287,7 +289,7 @@ export class TemplateManager {
     return JSON.stringify({
       compilerOptions: {
         target: 'ES2020',
-        module: 'CommonJS',
+        module: context.moduleType === 'esm' ? 'ESNext' : 'CommonJS',
         lib: isUI ? ['ES2020', 'DOM'] : ['ES2020'],
         outDir: './dist',
         rootDir: './src',
@@ -295,7 +297,7 @@ export class TemplateManager {
         esModuleInterop: true,
         skipLibCheck: true,
         forceConsistentCasingInFileNames: true,
-        moduleResolution: 'node',
+        moduleResolution: context.moduleType === 'esm' ? 'bundler' : 'node',
         resolveJsonModule: true,
         allowSyntheticDefaultImports: true,
         experimentalDecorators: true,
