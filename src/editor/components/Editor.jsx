@@ -37,6 +37,8 @@ import CodeBlockIndent from "../extensions/CodeBlockIndent.js";
 import Callout from "../extensions/Callout.js";
 import Folding from "../extensions/Folding.js";
 import MermaidDiagram from "../extensions/MermaidDiagram.jsx";
+import CanvasLink from '../extensions/CanvasLink.js';
+import CanvasSuggest from '../lib/CanvasSuggest.js';
 import liveEditorSettings from "../../core/editor/live-settings.js";
 import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import TaskCreationModal from "../../components/TaskCreationModal.jsx";
@@ -53,6 +55,8 @@ import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 import "../styles/editor.css";
 import "../styles/block-embeds.css";
 import "../../styles/page-preview.css";
+import "../../styles/canvas-extensions.css";
+import "../../styles/canvas-preview.css";
 
 const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading = false }, ref) => {
   const [extensions, setExtensions] = useState(null);
@@ -233,6 +237,10 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
     // Obsidian‑style wikilinks and image embeds
     exts.push(WikiLink);
     exts.push(WikiLinkSuggest);
+
+    // Canvas links
+    exts.push(CanvasLink);
+    exts.push(CanvasSuggest);
 
     // Obsidian-style block IDs (^blockid)
     exts.push(BlockId);

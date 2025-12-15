@@ -65,6 +65,8 @@ import BacklinksPanel from "./BacklinksPanel.jsx";
 import { DailyNotesPanel, NavigationButtons, DatePickerModal } from "../components/DailyNotes/index.js";
 import { ImageViewerTab } from "../components/ImageViewer/ImageViewerTab.jsx";
 import { isImageFile, findImageFiles } from "../utils/imageUtils.js";
+import CanvasPreviewPopup from '../components/CanvasPreviewPopup.jsx';
+import { generatePreview } from '../core/canvas/preview-generator.js';
 import TagManagementModal from "../components/TagManagementModal.jsx";
 import ProductTour from "../components/ProductTour.jsx";
 import ExternalDropZone from "../components/ExternalDropZone.jsx";
@@ -1145,6 +1147,9 @@ function WorkspaceWithScope({ path }) {
   // Image files state for navigation
   const [allImageFiles, setAllImageFiles] = useState([]);
 
+  // Canvas preview state
+  const [canvasPreview, setCanvasPreview] = useState(null);
+
   // Graph sidebar state
   const [graphSidebarData, setGraphSidebarData] = useState({
     selectedNodes: [],
@@ -1694,6 +1699,50 @@ function WorkspaceWithScope({ path }) {
       window.removeEventListener('lokus:scroll-to-block', handleScrollToBlock)
     };
   }, [activeFile]);
+
+  // Canvas link hover preview
+  useEffect(() => {
+    const handleCanvasLinkHover = async (event) => {
+      const { canvasName, canvasPath, position } = event.detail;
+      setCanvasPreview({ canvasName, canvasPath, position, loading: true });
+
+      // Generate preview (async)
+      try {
+        const thumbnailUrl = await generatePreview(canvasPath);
+        setCanvasPreview(prev =>
+          prev?.canvasPath === canvasPath
+            ? { ...prev, thumbnailUrl, loading: false }
+            : null
+        );
+      } catch (error) {
+        console.error('Canvas preview error:', error);
+        setCanvasPreview(prev =>
+          prev?.canvasPath === canvasPath
+            ? { ...prev, error: true, loading: false }
+            : null
+        );
+      }
+    };
+
+    const handleCanvasLinkHoverEnd = () => {
+      setCanvasPreview(null);
+    };
+
+    const handleOpenCanvas = (event) => {
+      const { canvasPath } = event.detail;
+      handleOpenFile({ path: canvasPath }); // Use existing file opening logic
+    };
+
+    window.addEventListener('canvas-link-hover', handleCanvasLinkHover);
+    window.addEventListener('canvas-link-hover-end', handleCanvasLinkHoverEnd);
+    window.addEventListener('lokus:open-canvas', handleOpenCanvas);
+
+    return () => {
+      window.removeEventListener('canvas-link-hover', handleCanvasLinkHover);
+      window.removeEventListener('canvas-link-hover-end', handleCanvasLinkHoverEnd);
+      window.removeEventListener('lokus:open-canvas', handleOpenCanvas);
+    };
+  }, []);
 
   // Tab navigation shortcuts with throttling
   useEffect(() => {
@@ -4904,6 +4953,16 @@ function WorkspaceWithScope({ path }) {
           openTabs={openTabs}
           editor={editor}
         />
+
+        {/* Canvas Preview Popup */}
+        {canvasPreview && (
+          <CanvasPreviewPopup
+            canvasName={canvasPreview.canvasName}
+            canvasPath={canvasPreview.canvasPath}
+            position={canvasPreview.position}
+            onClose={() => setCanvasPreview(null)}
+          />
+        )}
 
         {/* External file drop overlay */}
         <ExternalDropZone
