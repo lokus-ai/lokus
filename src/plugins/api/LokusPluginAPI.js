@@ -6,6 +6,11 @@
 import { EventEmitter } from '../../utils/EventEmitter.js';
 
 import { createBridgedEditorAPI } from './PluginBridge.js';
+import { LanguagesAPI } from './LanguagesAPI.js';
+import { ConfigurationAPI } from './ConfigurationAPI.js';
+import { TerminalAPI } from './TerminalAPI.js';
+import { WorkspaceAPI } from './WorkspaceAPI.js';
+import { Disposable } from '../../utils/Disposable.js';
 
 /**
  * Editor API - Provides access to TipTap editor functionality
@@ -243,6 +248,26 @@ export class EditorAPI extends EventEmitter {
     }
   }
 
+  /**
+   * Get editor text content
+   */
+  async getText() {
+    if (!this.bridgedAPI) {
+      throw new Error('EditorAPI not initialized. Plugin context required.');
+    }
+    return this.bridgedAPI.getText();
+  }
+
+  /**
+   * Subscribe to editor updates
+   */
+  onUpdate(callback) {
+    if (!this.bridgedAPI) {
+      throw new Error('EditorAPI not initialized. Plugin context required.');
+    }
+    return this.bridgedAPI.onUpdate(callback);
+  }
+
   // Cleanup methods for plugin deactivation
   async removeAllExtensions(pluginId) {
     if (!this.bridgedAPI) {
@@ -273,12 +298,91 @@ export class EditorAPI extends EventEmitter {
  * UI API - Provides access to UI components and panels
  */
 export class UIAPI extends EventEmitter {
-  constructor(uiManager) {
+  constructor(uiManager, notificationsAPI) {
     super();
     this.uiManager = uiManager;
+    this.notificationsAPI = notificationsAPI;
     this.panels = new Map();
     this.dialogs = new Map();
     this.toolbars = new Map();
+  }
+
+  /**
+   * Show information message
+   */
+  async showInformationMessage(message, ...items) {
+    if (this.notificationsAPI) {
+      this.notificationsAPI.show({ type: 'info', message, title: 'Info' });
+    }
+    // TODO: Handle items (actions)
+    return undefined;
+  }
+
+  /**
+   * Show warning message
+   */
+  async showWarningMessage(message, ...items) {
+    if (this.notificationsAPI) {
+      this.notificationsAPI.show({ type: 'warning', message, title: 'Warning' });
+    }
+    return undefined;
+  }
+
+  /**
+   * Show error message
+   */
+  async showErrorMessage(message, ...items) {
+    if (this.notificationsAPI) {
+      this.notificationsAPI.show({ type: 'error', message, title: 'Error' });
+    }
+    return undefined;
+  }
+
+  /**
+   * Create output channel
+   */
+  createOutputChannel(name) {
+    console.log(`[UIAPI] Creating output channel: ${name}`);
+    return {
+      name,
+      append: (value) => console.log(`[${name}] ${value}`),
+      appendLine: (value) => console.log(`[${name}] ${value}`),
+      clear: () => console.clear(),
+      show: (preserveFocus) => console.log(`[UIAPI] Showing output channel: ${name}`),
+      hide: () => console.log(`[UIAPI] Hiding output channel: ${name}`),
+      dispose: () => console.log(`[UIAPI] Disposing output channel: ${name}`)
+    };
+  }
+
+  /**
+   * Show input box
+   */
+  async showInputBox(options = {}) {
+    return this.showPrompt({
+      title: options.title || 'Input',
+      message: options.prompt || '',
+      placeholder: options.placeholder,
+      defaultValue: options.value,
+      validate: options.validateInput
+    });
+  }
+
+  /**
+   * Register custom panel (SDK alias for addPanel)
+   */
+  registerPanel(panel) {
+    const addedPanel = this.addPanel({
+      id: panel.id,
+      title: panel.title,
+      position: panel.location === 'sidebar' ? 'sidebar-left' : 'bottom',
+      icon: panel.icon,
+      component: panel.component, // Assuming component is passed in definition for now
+      props: panel.initialState
+    });
+
+    return new Disposable(() => {
+      this.removePanel(panel.id);
+    });
   }
 
   /**
@@ -301,7 +405,7 @@ export class UIAPI extends EventEmitter {
     };
 
     this.panels.set(id, panel);
-    
+
     if (this.uiManager) {
       this.uiManager.addPanel(panel);
     }
@@ -318,7 +422,7 @@ export class UIAPI extends EventEmitter {
     if (!panel) return false;
 
     this.panels.delete(id);
-    
+
     if (this.uiManager) {
       this.uiManager.removePanel(id);
     }
@@ -337,7 +441,7 @@ export class UIAPI extends EventEmitter {
     }
 
     Object.assign(panel.props, props);
-    
+
     if (this.uiManager) {
       this.uiManager.updatePanel(id, props);
     }
@@ -351,7 +455,7 @@ export class UIAPI extends EventEmitter {
    */
   async showPrompt({ title, message, placeholder, validate, defaultValue }) {
     const id = `prompt_${Date.now()}`;
-    
+
     return new Promise((resolve, reject) => {
       const dialog = {
         id,
@@ -372,7 +476,7 @@ export class UIAPI extends EventEmitter {
       };
 
       this.dialogs.set(id, dialog);
-      
+
       if (this.uiManager) {
         this.uiManager.showDialog(dialog);
       }
@@ -384,7 +488,7 @@ export class UIAPI extends EventEmitter {
    */
   async showConfirm({ title, message, confirmText = 'OK', cancelText = 'Cancel' }) {
     const id = `confirm_${Date.now()}`;
-    
+
     return new Promise((resolve, reject) => {
       const dialog = {
         id,
@@ -404,7 +508,7 @@ export class UIAPI extends EventEmitter {
       };
 
       this.dialogs.set(id, dialog);
-      
+
       if (this.uiManager) {
         this.uiManager.showDialog(dialog);
       }
@@ -467,7 +571,7 @@ export class FilesystemAPI extends EventEmitter {
     }
 
     const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
-    return this.fsManager.readFile(safePath);
+    return this.fsManager.readFile(safePath, 'binary');
   }
 
   /**
@@ -493,6 +597,80 @@ export class FilesystemAPI extends EventEmitter {
     const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
     return this.fsManager.exists(safePath);
   }
+
+  /**
+   * Read directory
+   */
+  async readdir(relativePath) {
+    if (!this.fsManager) {
+      throw new Error('Filesystem not available');
+    }
+
+    const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
+    return this.fsManager.readDirectory(safePath);
+  }
+
+  /**
+   * Create directory
+   */
+  async mkdir(relativePath) {
+    if (!this.fsManager) {
+      throw new Error('Filesystem not available');
+    }
+
+    const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
+    return this.fsManager.createFolder(safePath);
+  }
+
+  /**
+   * Delete file or directory
+   */
+  async delete(relativePath) {
+    if (!this.fsManager) {
+      throw new Error('Filesystem not available');
+    }
+
+    const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
+    return this.fsManager.deleteFile(safePath);
+  }
+
+  /**
+   * Rename file or directory
+   */
+  async rename(oldPath, newPath) {
+    if (!this.fsManager) {
+      throw new Error('Filesystem not available');
+    }
+
+    const safeOldPath = this.fsManager.getPluginFilePath(this.currentPluginId, oldPath);
+    const safeNewPath = this.fsManager.getPluginFilePath(this.currentPluginId, newPath);
+    return this.fsManager.renameFile(safeOldPath, safeNewPath);
+  }
+
+  /**
+   * Copy file
+   */
+  async copy(source, destination) {
+    if (!this.fsManager) {
+      throw new Error('Filesystem not available');
+    }
+
+    const safeSource = this.fsManager.getPluginFilePath(this.currentPluginId, source);
+    const safeDest = this.fsManager.getPluginFilePath(this.currentPluginId, destination);
+    return this.fsManager.copyFile(safeSource, safeDest);
+  }
+
+  /**
+   * Get file stats
+   */
+  async stat(path) {
+    if (!this.fsManager) {
+      throw new Error('Filesystem not available');
+    }
+
+    const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, path);
+    return this.fsManager.stat(safePath);
+  }
 }
 
 /**
@@ -508,13 +686,24 @@ export class CommandsAPI extends EventEmitter {
   /**
    * Register a command
    */
-  register(commands) {
+  register(arg1, arg2) {
+    let commands = arg1;
+
+    // Handle register(id, options) signature
+    if (typeof arg1 === 'string' && arg2 && typeof arg2 === 'object') {
+      commands = [{ ...arg2, id: arg1 }];
+      // Map 'callback' to 'execute' if present (template uses callback)
+      if (commands[0].callback && !commands[0].execute) {
+        commands[0].execute = commands[0].callback;
+      }
+    }
+
     const commandList = Array.isArray(commands) ? commands : [commands];
     const registered = [];
 
     for (const command of commandList) {
       const { id, name, shortcut, execute, description } = command;
-      
+
       if (this.commands.has(id)) {
         throw new Error(`Command '${id}' already exists`);
       }
@@ -529,7 +718,7 @@ export class CommandsAPI extends EventEmitter {
       };
 
       this.commands.set(id, fullCommand);
-      
+
       if (this.commandManager) {
         this.commandManager.registerCommand(fullCommand);
       }
@@ -538,7 +727,9 @@ export class CommandsAPI extends EventEmitter {
       this.emit('command_registered', { id, command: fullCommand });
     }
 
-    return registered;
+    return new Disposable(() => {
+      this.unregister(registered.map(c => c.id));
+    });
   }
 
   /**
@@ -553,7 +744,7 @@ export class CommandsAPI extends EventEmitter {
       if (!command) continue;
 
       this.commands.delete(id);
-      
+
       if (this.commandManager) {
         this.commandManager.unregisterCommand(id);
       }
@@ -656,7 +847,7 @@ export class NotificationsAPI extends EventEmitter {
    */
   show({ type, message, title, duration, persistent = false, progress }) {
     const id = `notification_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     const notification = {
       id,
       type, // 'info', 'success', 'warning', 'error', 'loading', 'progress'
@@ -670,7 +861,7 @@ export class NotificationsAPI extends EventEmitter {
     };
 
     this.notifications.set(id, notification);
-    
+
     if (this.notificationManager) {
       this.notificationManager.show(notification);
     }
@@ -689,7 +880,7 @@ export class NotificationsAPI extends EventEmitter {
     }
 
     Object.assign(notification, updates);
-    
+
     if (this.notificationManager) {
       this.notificationManager.update(id, updates);
     }
@@ -706,7 +897,7 @@ export class NotificationsAPI extends EventEmitter {
     if (!notification) return false;
 
     this.notifications.delete(id);
-    
+
     if (this.notificationManager) {
       this.notificationManager.hide(id);
     }
@@ -740,7 +931,7 @@ export class DataAPI extends EventEmitter {
    */
   async getDatabase(name) {
     const dbKey = `${this.currentPluginId}_${name}`;
-    
+
     if (this.databases.has(dbKey)) {
       return this.databases.get(dbKey);
     }
@@ -751,11 +942,15 @@ export class DataAPI extends EventEmitter {
 
     const database = await this.dataManager.getPluginDatabase(this.currentPluginId, name);
     this.databases.set(dbKey, database);
-    
+
     return database;
   }
 }
 
+/**
+ * Main Plugin API Class
+ * This is what gets passed to plugin constructors
+ */
 /**
  * Main Plugin API Class
  * This is what gets passed to plugin constructors
@@ -769,13 +964,24 @@ export class LokusPluginAPI extends EventEmitter {
 
     // Initialize sub-APIs (pass 'this' to APIs that need permission checking)
     this.editor = new EditorAPI();
-    this.ui = new UIAPI(managers.ui);
-    this.filesystem = new FilesystemAPI(managers.filesystem);
+    this.notifications = new NotificationsAPI(managers.notifications); // Moved up to be available for UI
+    this.ui = new UIAPI(managers.ui, this.notifications);
+    this.fs = new FilesystemAPI(managers.filesystem); // Renamed from filesystem
     this.commands = new CommandsAPI(managers.commands);
     this.network = new NetworkAPI(managers.network, this);
+    this.storage = new DataAPI(managers.data); // Renamed from data
+
+    // New APIs (Placeholders/TODOs)
+    this.workspace = new WorkspaceAPI(managers.workspace); // TODO: Implement WorkspaceAPI
+    this.tasks = {}; // TODO: Implement TaskAPI
+    this.debug = {}; // TODO: Implement DebugAPI
+    this.languages = new LanguagesAPI(managers.languages); // TODO: Implement LanguageAPI
+    this.themes = {}; // TODO: Implement ThemeAPI
+    this.config = new ConfigurationAPI(managers.configuration); // TODO: Implement ConfigurationAPI
+    this.terminal = new TerminalAPI(managers.terminal); // TODO: Implement TerminalAPI
+
+    // Legacy/Runtime-specific APIs (kept for backward compat or internal use)
     this.clipboard = new ClipboardAPI();
-    this.notifications = new NotificationsAPI(managers.notifications);
-    this.data = new DataAPI(managers.data);
 
     // Plugin context and permissions
     this.currentPluginId = null;
@@ -815,7 +1021,6 @@ export class LokusPluginAPI extends EventEmitter {
 
   /**
    * Check if a plugin has a specific permission
-   * COMPLETED TODO: Implemented proper permission checking
    */
   hasPermission(pluginId, permission) {
     // If no pluginId provided, use current plugin
@@ -847,15 +1052,19 @@ export class LokusPluginAPI extends EventEmitter {
    */
   bindPluginContext() {
     const apis = [
-      this.editor, this.ui, this.filesystem, this.commands,
-      this.network, this.notifications, this.data
+      this.editor, this.ui, this.fs, this.commands,
+      this.network, this.notifications, this.storage,
+      this.clipboard, this.languages, this.config, this.terminal,
+      this.workspace
     ];
-    
+
     for (const api of apis) {
-      api.currentPluginId = this.currentPluginId;
-      api.currentPlugin = this.currentPlugin;
+      if (api && typeof api === 'object') {
+        api.currentPluginId = this.currentPluginId;
+        api.currentPlugin = this.currentPlugin;
+      }
     }
-    
+
     // Initialize editor API with plugin context
     if (this.editor && this.currentPluginId) {
       this.editor._initializeForPlugin(this.currentPluginId);
@@ -871,7 +1080,7 @@ export class LokusPluginAPI extends EventEmitter {
     this.ui.removeAllPanels(pluginId);
     this.commands.unregisterAll(pluginId);
     this.notifications.hideAll(pluginId);
-    
+
     this.emit('plugin_cleanup', { pluginId });
   }
 

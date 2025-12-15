@@ -90,6 +90,9 @@ export const VALID_PERMISSIONS = [
   'mcp:resources',     // Access MCP resources
   'mcp:tools',         // Execute MCP tools
   'mcp:prompts',       // Access MCP prompts
+  'storage',           // Access storage
+  'notifications',     // Show notifications
+  'statusBar',         // Access status bar
   'all'               // All permissions (dangerous)
 ]
 
@@ -130,6 +133,7 @@ export const VALID_CATEGORIES = [
   'AI Assistant',
   'Data Provider',
   'Tool Provider',
+  'Productivity',
   'Other'
 ]
 
@@ -184,28 +188,28 @@ export class ManifestValidator {
 
     // Validate required fields
     this.validateRequiredFields(manifest)
-    
+
     // Validate field types
     this.validateFieldTypes(manifest)
-    
+
     // Validate specific field formats
     this.validateFieldFormats(manifest)
-    
+
     // Validate dependencies
     this.validateDependencies(manifest)
-    
+
     // Validate permissions
     this.validatePermissions(manifest)
-    
+
     // Validate activation events
     this.validateActivationEvents(manifest)
-    
+
     // Validate contributes section
     this.validateContributes(manifest)
-    
+
     // Validate categories
     this.validateCategories(manifest)
-    
+
     // Validate MCP-specific fields
     this.validateMCPFields(manifest)
 
@@ -269,7 +273,7 @@ export class ManifestValidator {
       if (field in types) {
         const expectedTypes = Array.isArray(types[field]) ? types[field] : [types[field]]
         const actualType = this.getValueType(value)
-        
+
         if (!expectedTypes.includes(actualType)) {
           this.addError(`Field '${field}' has invalid type. Expected: ${expectedTypes.join(' or ')}, got: ${actualType}`)
         }
@@ -356,11 +360,11 @@ export class ManifestValidator {
         if (typeof depId !== 'string' || !depId.trim()) {
           this.addError(`Invalid dependency ID: ${depId}`)
         }
-        
+
         if (typeof depVersion !== 'string' || !depVersion.trim()) {
           this.addError(`Invalid dependency version for ${depId}: ${depVersion}`)
         }
-        
+
         // Check for circular dependency (basic check)
         if (depId === manifest.id) {
           this.addError('Plugin cannot depend on itself')
@@ -457,23 +461,24 @@ export class ManifestValidator {
         'views',
         'viewsContainers',
         'problemMatchers',
-        'taskDefinitions'
+        'taskDefinitions',
+        'statusBar'
       ]
 
       for (const [contribution, value] of Object.entries(manifest.contributes)) {
         if (!validContributions.includes(contribution)) {
           this.addWarning(`Unknown contribution: ${contribution}`)
         }
-        
+
         // Basic validation for common contribution types
         if (contribution === 'commands' && !Array.isArray(value)) {
           this.addError('contributes.commands must be an array')
         }
-        
+
         if (contribution === 'menus' && typeof value !== 'object') {
           this.addError('contributes.menus must be an object')
         }
-        
+
         if (contribution === 'keybindings' && !Array.isArray(value)) {
           this.addError('contributes.keybindings must be an array')
         }
@@ -514,13 +519,13 @@ export class ManifestValidator {
         this.addError('Plugin type must be a string')
         return
       }
-      
+
       if (VALID_MCP_PLUGIN_TYPES.includes(manifest.type)) {
         // This is an MCP plugin, validate MCP configuration
         this.validateMCPConfiguration(manifest)
       }
     }
-    
+
     // Validate MCP configuration if present
     if (manifest.mcp) {
       this.validateMCPConfiguration(manifest)
@@ -532,39 +537,39 @@ export class ManifestValidator {
    */
   validateMCPConfiguration(manifest) {
     const mcpConfig = manifest.mcp
-    
+
     if (!mcpConfig || typeof mcpConfig !== 'object') {
       if (manifest.type && VALID_MCP_PLUGIN_TYPES.includes(manifest.type)) {
         this.addError('MCP plugins must have an mcp configuration object')
       }
       return
     }
-    
+
     // Validate MCP type
     if (mcpConfig.type) {
       if (!VALID_MCP_PLUGIN_TYPES.includes(mcpConfig.type)) {
         this.addError(`Invalid MCP plugin type: ${mcpConfig.type}. Valid types: ${VALID_MCP_PLUGIN_TYPES.join(', ')}`)
       }
     }
-    
+
     // Validate capabilities
     if (mcpConfig.capabilities) {
       this.validateMCPCapabilities(mcpConfig.capabilities)
     }
-    
+
     // Validate resource limits
     if (mcpConfig.memoryLimit && typeof mcpConfig.memoryLimit !== 'number') {
       this.addError('MCP memoryLimit must be a number')
     }
-    
+
     if (mcpConfig.cpuTimeLimit && typeof mcpConfig.cpuTimeLimit !== 'number') {
       this.addError('MCP cpuTimeLimit must be a number')
     }
-    
+
     if (mcpConfig.maxApiCalls && typeof mcpConfig.maxApiCalls !== 'number') {
       this.addError('MCP maxApiCalls must be a number')
     }
-    
+
     // Validate boolean flags
     const booleanFields = ['enableResourceSubscriptions', 'enableToolExecution', 'enablePromptTemplates', 'requireSignature']
     for (const field of booleanFields) {
@@ -572,7 +577,7 @@ export class ManifestValidator {
         this.addError(`MCP ${field} must be a boolean`)
       }
     }
-    
+
     // Validate contributes section for MCP-specific contributions
     if (manifest.contributes && manifest.contributes.mcp) {
       this.validateMCPContributions(manifest.contributes.mcp)
@@ -587,7 +592,7 @@ export class ManifestValidator {
       this.addError('MCP capabilities must be an object')
       return
     }
-    
+
     // Validate resources capabilities
     if (capabilities.resources) {
       if (typeof capabilities.resources !== 'object') {
@@ -601,7 +606,7 @@ export class ManifestValidator {
         }
       }
     }
-    
+
     // Validate tools capabilities
     if (capabilities.tools) {
       if (typeof capabilities.tools !== 'object') {
@@ -612,7 +617,7 @@ export class ManifestValidator {
         }
       }
     }
-    
+
     // Validate prompts capabilities
     if (capabilities.prompts) {
       if (typeof capabilities.prompts !== 'object') {
@@ -623,7 +628,7 @@ export class ManifestValidator {
         }
       }
     }
-    
+
     // Validate logging capabilities
     if (capabilities.logging) {
       if (typeof capabilities.logging !== 'object') {
@@ -644,7 +649,7 @@ export class ManifestValidator {
       this.addError('MCP contributions must be an object')
       return
     }
-    
+
     // Validate servers
     if (mcpContributions.servers) {
       if (!Array.isArray(mcpContributions.servers)) {
@@ -655,7 +660,7 @@ export class ManifestValidator {
         }
       }
     }
-    
+
     // Validate resources
     if (mcpContributions.resources) {
       if (!Array.isArray(mcpContributions.resources)) {
@@ -666,7 +671,7 @@ export class ManifestValidator {
         }
       }
     }
-    
+
     // Validate tools
     if (mcpContributions.tools) {
       if (!Array.isArray(mcpContributions.tools)) {
@@ -677,7 +682,7 @@ export class ManifestValidator {
         }
       }
     }
-    
+
     // Validate prompts
     if (mcpContributions.prompts) {
       if (!Array.isArray(mcpContributions.prompts)) {
@@ -697,19 +702,19 @@ export class ManifestValidator {
     if (!server.id) {
       this.addError(`MCP server contribution ${index} must have an id`)
     }
-    
+
     if (!server.name) {
       this.addError(`MCP server contribution ${index} must have a name`)
     }
-    
+
     if (server.transport && !['stdio', 'tcp', 'websocket'].includes(server.transport)) {
       this.addError(`MCP server contribution ${index} has invalid transport: ${server.transport}`)
     }
-    
+
     if (server.args && !Array.isArray(server.args)) {
       this.addError(`MCP server contribution ${index} args must be an array`)
     }
-    
+
     if (server.env && typeof server.env !== 'object') {
       this.addError(`MCP server contribution ${index} env must be an object`)
     }
@@ -722,11 +727,11 @@ export class ManifestValidator {
     if (!resource.name) {
       this.addError(`MCP resource contribution ${index} must have a name`)
     }
-    
+
     if (!resource.pattern) {
       this.addError(`MCP resource contribution ${index} must have a pattern`)
     }
-    
+
     if (!resource.type) {
       this.addError(`MCP resource contribution ${index} must have a type`)
     } else if (!VALID_MCP_RESOURCE_TYPES.includes(resource.type)) {
@@ -741,17 +746,17 @@ export class ManifestValidator {
     if (!tool.name) {
       this.addError(`MCP tool contribution ${index} must have a name`)
     }
-    
+
     if (!tool.description) {
       this.addError(`MCP tool contribution ${index} must have a description`)
     }
-    
+
     if (!tool.inputSchema) {
       this.addError(`MCP tool contribution ${index} must have an inputSchema`)
     } else if (typeof tool.inputSchema !== 'object') {
       this.addError(`MCP tool contribution ${index} inputSchema must be an object`)
     }
-    
+
     if (!tool.handler) {
       this.addError(`MCP tool contribution ${index} must have a handler`)
     }
@@ -764,15 +769,15 @@ export class ManifestValidator {
     if (!prompt.name) {
       this.addError(`MCP prompt contribution ${index} must have a name`)
     }
-    
+
     if (!prompt.description) {
       this.addError(`MCP prompt contribution ${index} must have a description`)
     }
-    
+
     if (!prompt.template) {
       this.addError(`MCP prompt contribution ${index} must have a template`)
     }
-    
+
     if (prompt.arguments && !Array.isArray(prompt.arguments)) {
       this.addError(`MCP prompt contribution ${index} arguments must be an array`)
     }
@@ -910,7 +915,7 @@ export function createManifestV2Template(options = {}) {
 /**
  * Re-export enhanced validation and migration tools
  */
-export { 
+export {
   // Enhanced validation
   EnhancedManifestValidator,
   BatchManifestValidator,

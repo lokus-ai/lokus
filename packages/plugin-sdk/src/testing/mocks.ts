@@ -117,7 +117,7 @@ export class MockCommandAPI implements CommandAPI {
   private commands = new Map<string, any>()
   private executions: Array<{ commandId: string; args: unknown[] }> = []
 
-  async register(command: any): Promise<Disposable> {
+  register(command: any): Disposable {
     this.commands.set(command.id, command)
     return {
       dispose: () => this.commands.delete(command.id)
@@ -211,7 +211,7 @@ export class MockUIAPI implements UIAPI {
   }
 
   registerPanel(panel: any): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   registerWebviewPanel(panel: any): any {
@@ -221,7 +221,7 @@ export class MockUIAPI implements UIAPI {
       webview: {
         html: panel.html || '',
         options: panel.options || {},
-        onDidReceiveMessage: () => ({ dispose: () => {} }),
+        onDidReceiveMessage: () => ({ dispose: () => { } }),
         postMessage: async () => true,
         asWebviewUri: (uri: string) => uri,
         cspSource: 'mock'
@@ -229,19 +229,19 @@ export class MockUIAPI implements UIAPI {
       options: {},
       active: true,
       visible: true,
-      reveal: () => {},
-      onDidDispose: () => ({ dispose: () => {} }),
-      onDidChangeViewState: () => ({ dispose: () => {} }),
-      dispose: () => {}
+      reveal: () => { },
+      onDidDispose: () => ({ dispose: () => { } }),
+      onDidChangeViewState: () => ({ dispose: () => { } }),
+      dispose: () => { }
     }
   }
 
   registerMenu(menu: any): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   registerToolbar(toolbar: any): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   registerStatusBarItem(statusItem: any): any {
@@ -251,14 +251,14 @@ export class MockUIAPI implements UIAPI {
       text: statusItem.text,
       tooltip: statusItem.tooltip,
       command: statusItem.command,
-      show: () => {},
-      hide: () => {},
-      dispose: () => {}
+      show: () => { },
+      hide: () => { },
+      dispose: () => { }
     }
   }
 
   registerTreeDataProvider<T>(viewId: string, treeDataProvider: any): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   createTerminal(options?: any): any {
@@ -268,29 +268,29 @@ export class MockUIAPI implements UIAPI {
       creationOptions: options || {},
       exitStatus: undefined,
       state: { isInteractedWith: false },
-      sendText: () => {},
-      show: () => {},
-      hide: () => {},
-      dispose: () => {}
+      sendText: () => { },
+      show: () => { },
+      hide: () => { },
+      dispose: () => { }
     }
   }
 
   createOutputChannel(name: string): any {
     return {
       name,
-      append: () => {},
-      appendLine: () => {},
-      replace: () => {},
-      clear: () => {},
-      show: () => {},
-      hide: () => {},
-      dispose: () => {}
+      append: () => { },
+      appendLine: () => { },
+      replace: () => { },
+      clear: () => { },
+      show: () => { },
+      hide: () => { },
+      dispose: () => { }
     }
   }
 
   async withProgress<R>(options: any, task: any): Promise<R> {
-    const progress = { report: () => {} }
-    const token = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose: () => {} }) }
+    const progress = { report: () => { } }
+    const token = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose: () => { } }) }
     return task(progress, token)
   }
 
@@ -367,10 +367,10 @@ export class MockEditorAPI implements EditorAPI {
       viewColumn: 1,
       edit: async () => true,
       insertSnippet: async () => true,
-      setDecorations: () => {},
-      revealRange: () => {},
-      show: () => {},
-      hide: () => {}
+      setDecorations: () => { },
+      revealRange: () => { },
+      show: () => { },
+      hide: () => { }
     }
     this.activeEditor = editor
     return editor
@@ -421,55 +421,55 @@ export class MockEditorAPI implements EditorAPI {
   }
 
   registerCompletionProvider(selector: any, provider: any, ...triggerCharacters: string[]): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   registerHoverProvider(selector: any, provider: any): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   registerDefinitionProvider(selector: any, provider: any): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   registerCodeActionProvider(selector: any, provider: any, metadata?: any): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   registerFormatter(selector: any, provider: any): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   registerRangeFormatter(selector: any, provider: any): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   registerSemanticTokensProvider(selector: any, provider: any, legend: any): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   registerFoldingRangeProvider(selector: any, provider: any): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   registerDocumentLinkProvider(selector: any, provider: any): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   onDidChangeActiveTextEditor(listener: any): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   onDidChangeTextDocument(listener: any): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   onDidChangeTextEditorSelection(listener: any): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   onDidChangeTextEditorVisibleRanges(listener: any): Disposable {
-    return { dispose: () => {} }
+    return { dispose: () => { } }
   }
 
   // Test utilities
@@ -494,18 +494,24 @@ export class MockWorkspaceAPI implements WorkspaceAPI {
   async saveAll(includeUntitled?: boolean) { return true }
   async applyEdit(edit: any) { return true }
   async openTextDocument(uriOrOptions: any) { return {} as any }
-  onDidChangeWorkspaceFolders(listener: any) { return { dispose: () => {} } }
-  onDidOpenTextDocument(listener: any) { return { dispose: () => {} } }
-  onDidCloseTextDocument(listener: any) { return { dispose: () => {} } }
-  onDidSaveTextDocument(listener: any) { return { dispose: () => {} } }
-  onDidChangeTextDocument(listener: any) { return { dispose: () => {} } }
+  onDidChangeWorkspaceFolders(listener: any) { return { dispose: () => { } } }
+  onDidOpenTextDocument(listener: any) { return { dispose: () => { } } }
+  onDidCloseTextDocument(listener: any) { return { dispose: () => { } } }
+  onDidSaveTextDocument(listener: any) { return { dispose: () => { } } }
+  onDidChangeTextDocument(listener: any) { return { dispose: () => { } } }
 }
 
-export class MockFileSystemAPI implements FileSystemAPI { 
-  async readFile(path: string) { return 'mock content' }
-  async writeFile(path: string, content: string) {}
+export class MockFileSystemAPI implements FileSystemAPI {
+  async readFile(path: string) { return new Uint8Array() }
+  async writeFile(path: string, content: Uint8Array) { }
   async exists(path: string) { return true }
-  registerProvider(provider: any) { return { dispose: () => {} } }
+  async readdir(path: string) { return [] }
+  async stat(path: string) { return { type: 1, ctime: 0, mtime: 0, size: 0 } as any }
+  async mkdir(path: string) { }
+  async delete(path: string) { }
+  async rename(source: string, target: string) { }
+  async copy(source: string, target: string) { }
+  registerProvider(provider: any) { return { dispose: () => { } } }
 }
 
 export class MockNetworkAPI implements NetworkAPI {
@@ -514,10 +520,10 @@ export class MockNetworkAPI implements NetworkAPI {
 
 export class MockStorageAPI implements StorageAPI {
   private storage = new Map<string, unknown>()
-  
+
   async get<T>(key: string, defaultValue?: T) { return this.storage.get(key) as T ?? defaultValue }
   async set(key: string, value: unknown) { this.storage.set(key, value) }
-  async remove(key: string) { this.storage.delete(key) }
+  async delete(key: string) { this.storage.delete(key) }
   async keys() { return Array.from(this.storage.keys()) }
   async clear() { this.storage.clear() }
 }
@@ -549,43 +555,71 @@ export class MockEventAPI {
 }
 
 export class MockTaskAPI implements TaskAPI {
-  registerProvider(taskProvider: any) { return { dispose: () => {} } }
-  async execute(task: any) { return {} }
+  registerTaskProvider(type: string, provider: any) { return { dispose: () => { } } }
+  async executeTask(task: any) { return { dispose: () => { } } as any }
 }
 
 export class MockDebugAPI implements DebugAPI {
-  registerAdapter(debugAdapter: any) { return { dispose: () => {} } }
+  startDebugging(config: any) { return Promise.resolve(true) }
+  registerDebugAdapterProvider(type: string, provider: any) { return { dispose: () => { } } }
+  get activeDebugSession() { return undefined }
+  onDidStartDebugSession(listener: any) { return { dispose: () => { } } }
+  onDidTerminateDebugSession(listener: any) { return { dispose: () => { } } }
+  onDidChangeActiveDebugSession(listener: any) { return { dispose: () => { } } }
+  onDidReceiveDebugSessionCustomEvent(listener: any) { return { dispose: () => { } } }
 }
 
 export class MockLanguageAPI implements LanguageAPI {
-  register(language: any) { return { dispose: () => {} } }
-  get(languageId: string) { return null }
-  getByExtension(extension: string) { return null }
+  registerCompletionProvider(selector: any, provider: any, ...triggerCharacters: string[]) { return { dispose: () => { } } }
+  registerHoverProvider(selector: any, provider: any) { return { dispose: () => { } } }
+  getLanguages() { return Promise.resolve([]) }
 }
 
 export class MockThemeAPI implements ThemeAPI {
-  register(theme: any) { return { dispose: () => {} } }
-  getAll() { return [] }
+  registerTheme(theme: any) { return { dispose: () => { } } }
+  getActiveTheme() { return Promise.resolve({ id: 'default', label: 'Default', uiTheme: 'vs-dark', path: '' } as any) }
+  setActiveTheme(id: string) { return Promise.resolve() }
+  onThemeChanged(listener: any) { return { dispose: () => { } } }
 }
 
 export class MockConfigurationAPI implements ConfigurationAPI {
+  getConfiguration(section?: string) {
+    return {
+      get: (key: string) => undefined,
+      has: (key: string) => false,
+      update: async () => { },
+      inspect: () => undefined
+    } as any
+  }
   private config = new Map<string, unknown>()
-  
+
   get<T>(key: string, defaultValue?: T) { return this.config.get(key) as T ?? defaultValue }
-  async set(key: string, value: unknown) { this.config.set(key, value) }
-  async update(key: string, value: unknown) { await this.set(key, value) }
+  update(key: string, value: unknown) { return Promise.resolve() }
+  set(key: string, value: unknown) { return Promise.resolve() }
+  onDidChange(listener: any) { return { dispose: () => { } } }
   inspect<T>(key: string) { return undefined }
   getAll() { return Object.fromEntries(this.config) }
   has(key: string) { return this.config.has(key) }
-  onDidChange(listener: any) { return { dispose: () => {} } }
 }
 
 export class MockTerminalAPI implements TerminalAPI {
-  async create(options?: any) { return {} as any }
-  async getAll() { return [] }
-  async getActive() { return undefined }
-  onDidOpenTerminal(listener: any) { return { dispose: () => {} } }
-  onDidCloseTerminal(listener: any) { return { dispose: () => {} } }
+  createTerminal(options?: any) {
+    return {
+      name: options?.name || 'mock',
+      processId: Promise.resolve(1),
+      creationOptions: {},
+      exitStatus: undefined,
+      state: { isInteractedWith: false },
+      sendText: () => { },
+      show: () => { },
+      hide: () => { },
+      dispose: () => { }
+    } as any
+  }
+  sendText(text: string) { }
+  onDidOpenTerminal(listener: any) { return { dispose: () => { } } }
+  onDidCloseTerminal(listener: any) { return { dispose: () => { } } }
+  onDidChangeActiveTerminal(listener: any) { return { dispose: () => { } } }
 }
 
 /**
@@ -647,7 +681,7 @@ function createMockMemento(): any {
     get: <T>(key: string, defaultValue?: T) => storage.get(key) as T ?? defaultValue,
     update: async (key: string, value: unknown) => storage.set(key, value),
     keys: () => Array.from(storage.keys()),
-    setKeysForSync: () => {}
+    setKeysForSync: () => { }
   }
 }
 
@@ -657,6 +691,6 @@ function createMockSecretStorage(): any {
     store: async (key: string, value: string) => secrets.set(key, value),
     get: async (key: string) => secrets.get(key),
     delete: async (key: string) => secrets.delete(key),
-    onDidChange: () => ({ dispose: () => {} })
+    onDidChange: () => ({ dispose: () => { } })
   }
 }

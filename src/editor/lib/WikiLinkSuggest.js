@@ -461,9 +461,40 @@ const WikiLinkSuggest = Extension.create({
           let container
           const place = (rect) => {
             if (!container || !rect) return
-            container.style.left = `${Math.max(8, rect.left)}px`
-            container.style.top = `${Math.min(window.innerHeight - 16, rect.bottom + 6)}px`
-            container.style.width = '384px'
+            const dialogWidth = 384
+            const padding = 16
+            const viewportWidth = window.innerWidth
+            const viewportHeight = window.innerHeight
+
+            // Calculate initial position
+            let left = rect.left
+            let top = rect.bottom + 6
+
+            // Check right edge overflow
+            if (left + dialogWidth + padding > viewportWidth) {
+              left = viewportWidth - dialogWidth - padding
+            }
+
+            // Check left edge
+            if (left < padding) {
+              left = padding
+            }
+
+            // Get container height for bottom edge check
+            const containerHeight = container.offsetHeight || 300 // fallback estimate
+
+            // Check bottom edge overflow - position above cursor if needed
+            if (top + containerHeight + padding > viewportHeight) {
+              top = rect.top - containerHeight - 6
+              // If still goes beyond top edge, align to top with padding
+              if (top < padding) {
+                top = padding
+              }
+            }
+
+            container.style.left = `${left}px`
+            container.style.top = `${top}px`
+            container.style.width = `${dialogWidth}px`
           }
           return {
             onStart: (props) => {
@@ -473,7 +504,7 @@ const WikiLinkSuggest = Extension.create({
                 const range = props.range
                 const textBefore = props.editor.state.doc.textBetween(Math.max(0, range.from - 2), range.from)
                 const isWikiLink = textBefore.endsWith('[')
-                
+
                 if (isWikiLink) {
                   const pos = Math.max(0, Math.min(props.editor.state.doc.content.size, (props.range?.to ?? props.editor.state.selection.to)))
                   const next = props.editor.state.doc.textBetween(pos, Math.min(props.editor.state.doc.content.size, pos + 2))
@@ -608,9 +639,40 @@ const WikiLinkSuggest = Extension.create({
           let container
           const place = (rect) => {
             if (!container || !rect) return
-            container.style.left = `${Math.max(8, rect.left)}px`
-            container.style.top = `${Math.min(window.innerHeight - 16, rect.bottom + 6)}px`
-            container.style.width = '384px'
+            const dialogWidth = 384
+            const padding = 16
+            const viewportWidth = window.innerWidth
+            const viewportHeight = window.innerHeight
+
+            // Calculate initial position
+            let left = rect.left
+            let top = rect.bottom + 6
+
+            // Check right edge overflow
+            if (left + dialogWidth + padding > viewportWidth) {
+              left = viewportWidth - dialogWidth - padding
+            }
+
+            // Check left edge
+            if (left < padding) {
+              left = padding
+            }
+
+            // Get container height for bottom edge check
+            const containerHeight = container.offsetHeight || 300 // fallback estimate
+
+            // Check bottom edge overflow - position above cursor if needed
+            if (top + containerHeight + padding > viewportHeight) {
+              top = rect.top - containerHeight - 6
+              // If still goes beyond top edge, align to top with padding
+              if (top < padding) {
+                top = padding
+              }
+            }
+
+            container.style.left = `${left}px`
+            container.style.top = `${top}px`
+            container.style.width = `${dialogWidth}px`
           }
           return {
             onStart: (props) => {

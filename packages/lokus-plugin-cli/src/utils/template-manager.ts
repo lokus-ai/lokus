@@ -45,14 +45,16 @@ export class TemplateManager {
     context: Partial<TemplateContext>
   ): Promise<void> {
     const fullTemplatePath = path.join(this.templateBaseDir, templatePath);
-    
+    console.log('DEBUG: fullTemplatePath =', fullTemplatePath);
+
     if (!await fs.pathExists(fullTemplatePath)) {
       throw new Error(`Template not found: ${fullTemplatePath}`);
     }
 
     // Create enhanced context with derived values
     const enhancedContext = this.createEnhancedContext(context);
-    
+    console.log('DEBUG: enhancedContext =', JSON.stringify(enhancedContext, null, 2));
+
     // Process all files in the template
     await this.processDirectory(fullTemplatePath, targetDir, enhancedContext);
   }
@@ -62,7 +64,7 @@ export class TemplateManager {
    */
   private createEnhancedContext(context: Partial<TemplateContext>): TemplateContext {
     const pluginName = context.pluginName || 'my-plugin';
-    
+
     return {
       pluginName,
       pluginNameCamelCase: this.toCamelCase(pluginName),
@@ -74,7 +76,7 @@ export class TemplateManager {
       typescript: context.typescript ?? true,
       currentYear: new Date().getFullYear(),
       currentDate: new Date().toISOString().split('T')[0],
-      sdkVersion: '^1.0.0',
+      sdkVersion: '^1.0.3',
       testing: context.testing || 'jest',
       linting: context.linting || 'eslint',
       formatting: context.formatting || 'prettier',
@@ -97,13 +99,13 @@ export class TemplateManager {
     context: TemplateContext
   ): Promise<void> {
     await fs.ensureDir(targetDir);
-    
+
     const entries = await fs.readdir(sourceDir, { withFileTypes: true });
-    
+
     for (const entry of entries) {
       const sourcePath = path.join(sourceDir, entry.name);
       const targetPath = path.join(targetDir, this.processFileName(entry.name, context));
-      
+
       if (entry.isDirectory()) {
         await this.processDirectory(sourcePath, targetPath, context);
       } else {
@@ -121,7 +123,7 @@ export class TemplateManager {
     context: TemplateContext
   ): Promise<void> {
     const content = await fs.readFile(sourcePath, 'utf-8');
-    
+
     // Check if file should be processed as template
     if (this.shouldProcessAsTemplate(sourcePath)) {
       const processedContent = this.processTemplateContent(content, context);
@@ -164,21 +166,21 @@ export class TemplateManager {
       '.toml', '.xml', '.html', '.css', '.scss', '.less', '.svg', '.env',
       '.gitignore', '.eslintrc', '.prettierrc', '.editorconfig'
     ];
-    
+
     const ext = path.extname(filePath).toLowerCase();
     const basename = path.basename(filePath);
-    
+
     // Check by extension
     if (textExtensions.includes(ext)) {
       return true;
     }
-    
+
     // Check by filename (for files without extensions)
     const textFiles = [
       'dockerfile', 'makefile', 'license', 'readme', 'changelog',
       'contributing', 'code_of_conduct'
     ];
-    
+
     return textFiles.includes(basename.toLowerCase());
   }
 
@@ -193,79 +195,79 @@ export class TemplateManager {
       condition: (ctx: TemplateContext) => boolean;
       files: Array<{ path: string; content: string }>;
     }> = [
-      {
-        condition: (ctx) => ctx.typescript,
-        files: [
-          {
-            path: 'tsconfig.json',
-            content: await this.generateTsConfig(context)
-          }
-        ]
-      },
-      {
-        condition: (ctx) => ctx.testing === 'jest',
-        files: [
-          {
-            path: 'jest.config.js',
-            content: await this.generateJestConfig(context)
-          }
-        ]
-      },
-      {
-        condition: (ctx) => ctx.testing === 'vitest',
-        files: [
-          {
-            path: 'vitest.config.ts',
-            content: await this.generateVitestConfig(context)
-          }
-        ]
-      },
-      {
-        condition: (ctx) => ctx.linting === 'eslint',
-        files: [
-          {
-            path: '.eslintrc.js',
-            content: await this.generateESLintConfig(context)
-          }
-        ]
-      },
-      {
-        condition: (ctx) => ctx.formatting === 'prettier',
-        files: [
-          {
-            path: '.prettierrc',
-            content: await this.generatePrettierConfig(context)
-          }
-        ]
-      },
-      {
-        condition: (ctx) => ctx.cicd === 'github',
-        files: [
-          {
-            path: '.github/workflows/ci.yml',
-            content: await this.generateGitHubWorkflow(context)
-          }
-        ]
-      },
-      {
-        condition: (ctx) => ctx.cicd === 'gitlab',
-        files: [
-          {
-            path: '.gitlab-ci.yml',
-            content: await this.generateGitLabCI(context)
-          }
-        ]
-      },
-      {
-        condition: (ctx) => ctx.storybook,
-        files: [
-          {
-            path: '.storybook/main.js',
-            content: await this.generateStorybookConfig(context)
-          }
-        ]
-      }
-    ];
+        {
+          condition: (ctx) => ctx.typescript,
+          files: [
+            {
+              path: 'tsconfig.json',
+              content: await this.generateTsConfig(context)
+            }
+          ]
+        },
+        {
+          condition: (ctx) => ctx.testing === 'jest',
+          files: [
+            {
+              path: 'jest.config.js',
+              content: await this.generateJestConfig(context)
+            }
+          ]
+        },
+        {
+          condition: (ctx) => ctx.testing === 'vitest',
+          files: [
+            {
+              path: 'vitest.config.ts',
+              content: await this.generateVitestConfig(context)
+            }
+          ]
+        },
+        {
+          condition: (ctx) => ctx.linting === 'eslint',
+          files: [
+            {
+              path: '.eslintrc.js',
+              content: await this.generateESLintConfig(context)
+            }
+          ]
+        },
+        {
+          condition: (ctx) => ctx.formatting === 'prettier',
+          files: [
+            {
+              path: '.prettierrc',
+              content: await this.generatePrettierConfig(context)
+            }
+          ]
+        },
+        {
+          condition: (ctx) => ctx.cicd === 'github',
+          files: [
+            {
+              path: '.github/workflows/ci.yml',
+              content: await this.generateGitHubWorkflow(context)
+            }
+          ]
+        },
+        {
+          condition: (ctx) => ctx.cicd === 'gitlab',
+          files: [
+            {
+              path: '.gitlab-ci.yml',
+              content: await this.generateGitLabCI(context)
+            }
+          ]
+        },
+        {
+          condition: (ctx) => ctx.storybook,
+          files: [
+            {
+              path: '.storybook/main.js',
+              content: await this.generateStorybookConfig(context)
+            }
+          ]
+        }
+      ];
 
     for (const { condition, files } of conditionalFiles) {
       if (condition(context)) {
@@ -280,11 +282,13 @@ export class TemplateManager {
 
   // Configuration generators
   private async generateTsConfig(context: TemplateContext): Promise<string> {
+    const isUI = context.category === 'UI' || (context.template && (context.template as any).category === 'UI');
+
     return JSON.stringify({
       compilerOptions: {
         target: 'ES2020',
         module: 'CommonJS',
-        lib: ['ES2020'],
+        lib: isUI ? ['ES2020', 'DOM'] : ['ES2020'],
         outDir: './dist',
         rootDir: './src',
         strict: true,
@@ -296,9 +300,11 @@ export class TemplateManager {
         allowSyntheticDefaultImports: true,
         experimentalDecorators: true,
         emitDecoratorMetadata: true,
+        ...(isUI ? { jsx: 'react' } : {}),
         declaration: true,
         declarationMap: true,
-        sourceMap: true
+        sourceMap: true,
+        types: context.testing === 'jest' ? ['jest'] : []
       },
       include: ['src/**/*'],
       exclude: ['node_modules', 'dist', '**/*.test.ts', '**/*.spec.ts']
@@ -308,7 +314,7 @@ export class TemplateManager {
   private async generateJestConfig(context: TemplateContext): Promise<string> {
     return `module.exports = {
   preset: '${context.typescript ? 'ts-jest' : 'jest'}',
-  testEnvironment: 'node',
+  testEnvironment: '${context.category === 'UI' ? 'jsdom' : 'node'}',
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.${context.typescript ? 'ts' : 'js'}', '**/*.(test|spec).${context.typescript ? 'ts' : 'js'}'],
   collectCoverageFrom: [
@@ -319,7 +325,7 @@ export class TemplateManager {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
-  setupFilesAfterEnv: ['<rootDir>/src/test/setup.${context.typescript ? 'ts' : 'js'}']
+  setupFilesAfterEnv: ['<rootDir>/test/setup.${context.typescript ? 'ts' : 'js'}']
 };`;
   }
 
@@ -539,7 +545,7 @@ package:
   }
 
   private toPascalCase(str: string): string {
-    return str.replace(/(^|-)[a-z]/g, (match) => 
+    return str.replace(/(^|-)[a-z]/g, (match) =>
       match.replace('-', '').toUpperCase()
     );
   }

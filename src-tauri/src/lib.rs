@@ -690,6 +690,20 @@ pub fn run() {
       // Register deep link handler for auth callbacks
       auth::register_deep_link_handler(&app.handle());
 
+      // Register generic deep link handler for plugin dev
+      let app_handle_deep_link = app.handle().clone();
+      app.listen("deep-link://new-url", move |event| {
+        let payload = event.payload();
+        let _ = app_handle_deep_link.emit("deep-link-received", payload);
+        
+        // If this is a plugin-dev link, try to open devtools
+        if payload.contains("lokus://plugin-dev") {
+          if let Some(window) = app_handle_deep_link.get_webview_window("main") {
+            window.open_devtools();
+          }
+        }
+      });
+
       // Auto-setup MCP integration on first launch
       let app_clone = app.handle().clone();
       tauri::async_runtime::spawn(async move {

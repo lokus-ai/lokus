@@ -10,11 +10,12 @@
  */
 
 import { EventEmitter } from '../../utils/EventEmitter.js';
+import { Disposable } from '../../utils/Disposable.js';
 
 // Panel position constants
 export const PANEL_POSITIONS = {
   SIDEBAR_LEFT: 'sidebar-left',
-  SIDEBAR_RIGHT: 'sidebar-right', 
+  SIDEBAR_RIGHT: 'sidebar-right',
   BOTTOM: 'bottom',
   FLOATING: 'floating',
   MODAL: 'modal',
@@ -59,13 +60,13 @@ export class UIPanel {
     this.when = definition.when; // Conditional visibility
     this.settings = definition.settings || {};
     this.persistence = definition.persistence || { savePosition: true, saveSize: true, saveVisibility: true };
-    
+
     // Panel state
     this.isActive = false;
     this.isDocked = true;
     this.currentSize = { ...this.initialSize };
     this.currentPosition = null;
-    
+
     // Event emitter for panel events
     this.events = new EventEmitter();
   }
@@ -233,24 +234,25 @@ export class UIStatusBarItem {
  * Main UIAPI class for managing all UI extensions
  */
 export class UIAPI extends EventEmitter {
-  constructor() {
+  constructor(uiManager) {
     super();
-    
+    this.uiManager = uiManager;
+
     // Registries for different UI components
     this.panels = new Map();
     this.toolbars = new Map();
     this.contextMenus = new Map();
     this.statusBarItems = new Map();
     this.commandPaletteItems = new Map();
-    
+
     // Plugin tracking
     this.pluginContributions = new Map();
-    
+
     // UI state
     this.activePanel = null;
     this.panelLayout = this.getDefaultLayout();
     this.theme = 'default';
-    
+
     // Settings
     this.settings = {
       enableAnimations: true,
@@ -293,7 +295,10 @@ export class UIAPI extends EventEmitter {
     }
 
     this.emit('panel-registered', { pluginId, panel });
-    return panel;
+
+    return new Disposable(() => {
+      this.unregisterPanel(panelId);
+    });
   }
 
   /**
@@ -423,7 +428,7 @@ export class UIAPI extends EventEmitter {
 
     const oldPosition = panel.position;
     panel.position = newPosition;
-    
+
     if (coordinates) {
       panel.updatePosition(coordinates);
     }
@@ -438,7 +443,7 @@ export class UIAPI extends EventEmitter {
    */
   registerToolbar(pluginId, toolbarDefinition) {
     this.validatePluginId(pluginId);
-    
+
     const toolbarId = `${pluginId}.${toolbarDefinition.id}`;
     const toolbar = new UIToolbar({
       ...toolbarDefinition,
@@ -454,7 +459,11 @@ export class UIAPI extends EventEmitter {
     this.trackContribution(pluginId, UI_COMPONENT_TYPES.TOOLBAR, toolbarId);
 
     this.emit('toolbar-registered', { pluginId, toolbar });
-    return toolbar;
+
+    return new Disposable(() => {
+      this.toolbars.delete(toolbarId);
+      this.emit('toolbar-unregistered', { pluginId, toolbar });
+    });
   }
 
   /**
@@ -473,7 +482,7 @@ export class UIAPI extends EventEmitter {
    */
   registerContextMenu(pluginId, contextMenuDefinition) {
     this.validatePluginId(pluginId);
-    
+
     const menuId = `${pluginId}.${contextMenuDefinition.id}`;
     const contextMenu = new UIContextMenu({
       ...contextMenuDefinition,
@@ -489,7 +498,11 @@ export class UIAPI extends EventEmitter {
     this.trackContribution(pluginId, UI_COMPONENT_TYPES.CONTEXT_MENU, menuId);
 
     this.emit('context-menu-registered', { pluginId, contextMenu });
-    return contextMenu;
+
+    return new Disposable(() => {
+      this.contextMenus.delete(menuId);
+      this.emit('context-menu-unregistered', { pluginId, contextMenu });
+    });
   }
 
   /**
@@ -508,7 +521,7 @@ export class UIAPI extends EventEmitter {
    */
   registerStatusBarItem(pluginId, statusBarDefinition) {
     this.validatePluginId(pluginId);
-    
+
     const itemId = `${pluginId}.${statusBarDefinition.id}`;
     const statusBarItem = new UIStatusBarItem({
       ...statusBarDefinition,
@@ -524,7 +537,11 @@ export class UIAPI extends EventEmitter {
     this.trackContribution(pluginId, UI_COMPONENT_TYPES.STATUS_BAR_ITEM, itemId);
 
     this.emit('status-bar-item-registered', { pluginId, statusBarItem });
-    return statusBarItem;
+
+    return new Disposable(() => {
+      this.statusBarItems.delete(itemId);
+      this.emit('status-bar-item-unregistered', { pluginId, statusBarItem });
+    });
   }
 
   /**
@@ -543,7 +560,7 @@ export class UIAPI extends EventEmitter {
    */
   registerCommandPaletteItem(pluginId, commandDefinition) {
     this.validatePluginId(pluginId);
-    
+
     const commandId = `${pluginId}.${commandDefinition.id}`;
     const command = {
       ...commandDefinition,
@@ -559,7 +576,11 @@ export class UIAPI extends EventEmitter {
     this.trackContribution(pluginId, UI_COMPONENT_TYPES.COMMAND_PALETTE_ITEM, commandId);
 
     this.emit('command-palette-item-registered', { pluginId, command });
-    return command;
+
+    return new Disposable(() => {
+      this.commandPaletteItems.delete(commandId);
+      this.emit('command-palette-item-unregistered', { pluginId, command });
+    });
   }
 
   /**
@@ -570,7 +591,7 @@ export class UIAPI extends EventEmitter {
     if (!query) return items;
 
     const queryLower = query.toLowerCase();
-    return items.filter(item => 
+    return items.filter(item =>
       item.title.toLowerCase().includes(queryLower) ||
       item.description?.toLowerCase().includes(queryLower) ||
       item.keywords?.some(keyword => keyword.toLowerCase().includes(queryLower))
@@ -640,7 +661,7 @@ export class UIAPI extends EventEmitter {
       if (saved) {
         const layout = JSON.parse(saved);
         this.panelLayout = { ...this.getDefaultLayout(), ...layout };
-        
+
         // Restore panel states
         if (layout.panels) {
           for (const [panelId, panelState] of Object.entries(layout.panels)) {
@@ -653,6 +674,113 @@ export class UIAPI extends EventEmitter {
       }
     } catch (error) {
     }
+  }
+
+  /**
+   * Show a quick pick menu
+   */
+  async showQuickPick(items, options = {}) {
+    const id = `quickpick_${Date.now()}`;
+
+    return new Promise((resolve) => {
+      const quickPick = {
+        id,
+        type: 'quickpick',
+        items,
+        options,
+        onSelect: (item) => {
+          this.dialogs.delete(id);
+          resolve(item);
+        },
+        onCancel: () => {
+          this.dialogs.delete(id);
+          resolve(undefined);
+        }
+      };
+
+      this.dialogs.set(id, quickPick);
+
+      if (this.uiManager) {
+        this.uiManager.showDialog(quickPick);
+      }
+    });
+  }
+
+  /**
+   * Show an input box
+   */
+  async showInputBox(options = {}) {
+    const id = `inputbox_${Date.now()}`;
+
+    return new Promise((resolve) => {
+      const inputBox = {
+        id,
+        type: 'inputbox',
+        options,
+        onAccept: (value) => {
+          this.dialogs.delete(id);
+          resolve(value);
+        },
+        onCancel: () => {
+          this.dialogs.delete(id);
+          resolve(undefined);
+        }
+      };
+
+      this.dialogs.set(id, inputBox);
+
+      if (this.uiManager) {
+        this.uiManager.showDialog(inputBox);
+      }
+    });
+  }
+
+  /**
+   * Show information message
+   */
+  async showInformationMessage(message, ...items) {
+    return this.showMessage('info', message, items);
+  }
+
+  /**
+   * Show warning message
+   */
+  async showWarningMessage(message, ...items) {
+    return this.showMessage('warning', message, items);
+  }
+
+  /**
+   * Show error message
+   */
+  async showErrorMessage(message, ...items) {
+    return this.showMessage('error', message, items);
+  }
+
+  /**
+   * Internal helper for showing messages
+   */
+  async showMessage(type, message, items) {
+    const id = `message_${Date.now()}`;
+
+    return new Promise((resolve) => {
+      const dialog = {
+        id,
+        type: 'message',
+        severity: type,
+        message,
+        buttons: items.map(item => typeof item === 'string' ? { title: item } : item),
+        onClose: (button) => {
+          this.dialogs.delete(id);
+          resolve(button ? (typeof items[0] === 'string' ? button.title : button) : undefined);
+        }
+      };
+
+      this.dialogs.set(id, dialog);
+
+      if (this.uiManager) {
+        this.uiManager.showDialog(dialog);
+      }
+    });
   }
 
   // === THEME SUPPORT ===
@@ -715,7 +843,7 @@ export class UIAPI extends EventEmitter {
     if (!this.pluginContributions.has(pluginId)) {
       this.pluginContributions.set(pluginId, new Set());
     }
-    
+
     this.pluginContributions.get(pluginId).add(`${type}:${contributionId}`);
   }
 
@@ -768,7 +896,7 @@ export class UIAPI extends EventEmitter {
 
     for (const contribution of contributions) {
       const [type, id] = contribution.split(':', 2);
-      
+
       switch (type) {
         case UI_COMPONENT_TYPES.PANEL:
           this.panels.delete(id);
@@ -814,7 +942,7 @@ export class UIAPI extends EventEmitter {
   destroy() {
     // Save current state
     this.saveLayout();
-    
+
     // Clear all registrations
     this.panels.clear();
     this.toolbars.clear();
@@ -822,7 +950,7 @@ export class UIAPI extends EventEmitter {
     this.statusBarItems.clear();
     this.commandPaletteItems.clear();
     this.pluginContributions.clear();
-    
+
     // Remove event listeners
     this.removeAllListeners();
   }

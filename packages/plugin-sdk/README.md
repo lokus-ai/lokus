@@ -11,8 +11,13 @@
 ### Installation
 
 ```bash
-npm install @lokus/plugin-sdk
+npm install lokus-plugin-sdk
 ```
+
+> **Tip:** The easiest way to start is using the **CLI**, which sets up the SDK for you:
+> ```bash
+> npx lokus-plugin-cli create my-plugin
+> ```
 
 ### Create Your First Plugin
 

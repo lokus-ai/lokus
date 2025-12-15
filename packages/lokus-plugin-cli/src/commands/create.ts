@@ -14,6 +14,7 @@ export interface PluginTemplate {
   templateDir: string;
   permissions: string[];
   dependencies: Record<string, string>;
+  devDependencies?: Record<string, string>;
 }
 
 export const pluginTemplates: Record<string, PluginTemplate> = {
@@ -23,7 +24,7 @@ export const pluginTemplates: Record<string, PluginTemplate> = {
     templateDir: 'basic-plugin',
     permissions: [],
     dependencies: {
-      '@lokus/plugin-sdk': '^1.0.0'
+      'lokus-plugin-sdk': '^1.0.0'
     }
   },
   'ui-extension': {
@@ -32,7 +33,7 @@ export const pluginTemplates: Record<string, PluginTemplate> = {
     templateDir: 'ui-extension-plugin',
     permissions: ['ui:notifications', 'ui:dialogs'],
     dependencies: {
-      '@lokus/plugin-sdk': '^1.0.0',
+      'lokus-plugin-sdk': '^1.0.0',
       'react': '^18.0.0',
       '@types/react': '^18.0.0'
     }
@@ -43,7 +44,7 @@ export const pluginTemplates: Record<string, PluginTemplate> = {
     templateDir: 'language-support-plugin',
     permissions: ['editor:read', 'editor:write'],
     dependencies: {
-      '@lokus/plugin-sdk': '^1.0.0',
+      'lokus-plugin-sdk': '^1.0.0',
       'vscode-languageserver': '^8.0.0',
       'vscode-languageserver-textdocument': '^1.0.0'
     }
@@ -54,7 +55,7 @@ export const pluginTemplates: Record<string, PluginTemplate> = {
     templateDir: 'theme-plugin',
     permissions: [],
     dependencies: {
-      '@lokus/plugin-sdk': '^1.0.0'
+      'lokus-plugin-sdk': '^1.0.0'
     }
   },
   'debugger': {
@@ -63,7 +64,7 @@ export const pluginTemplates: Record<string, PluginTemplate> = {
     templateDir: 'debug-adapter-plugin',
     permissions: ['debug:access', 'terminal:access'],
     dependencies: {
-      '@lokus/plugin-sdk': '^1.0.0',
+      'lokus-plugin-sdk': '^1.0.0',
       'vscode-debugadapter': '^1.50.0'
     }
   },
@@ -73,7 +74,7 @@ export const pluginTemplates: Record<string, PluginTemplate> = {
     templateDir: 'task-provider-plugin',
     permissions: ['terminal:access', 'filesystem:read'],
     dependencies: {
-      '@lokus/plugin-sdk': '^1.0.0'
+      'lokus-plugin-sdk': '^1.0.0'
     }
   },
   'command': {
@@ -82,7 +83,24 @@ export const pluginTemplates: Record<string, PluginTemplate> = {
     templateDir: 'command-plugin',
     permissions: ['workspace:read', 'workspace:write'],
     dependencies: {
-      '@lokus/plugin-sdk': '^1.0.0'
+      'lokus-plugin-sdk': '^1.0.0'
+    }
+  },
+  'react-panel': {
+    name: 'React UI Panel',
+    description: 'A UI panel using React and styled-components',
+    templateDir: 'react-ui-panel',
+    permissions: ['ui:panel'],
+    dependencies: {
+      'lokus-plugin-sdk': '^1.0.0',
+      'react': '^18.2.0',
+      'react-dom': '^18.2.0',
+      'styled-components': '^6.1.0'
+    },
+    devDependencies: {
+      '@types/react': '^18.2.0',
+      '@types/react-dom': '^18.2.0',
+      '@types/styled-components': '^5.1.34'
     }
   }
 };
@@ -185,7 +203,7 @@ async function createPluginFromTemplate(
   }
 ): Promise<void> {
   const templateDir = path.join(__dirname, '../../templates', template.templateDir);
-  
+
   // Check if template exists
   if (!await fs.pathExists(templateDir)) {
     throw ErrorHandler.createError(
@@ -260,7 +278,8 @@ async function createPluginFromTemplate(
         '@types/node': '^20.8.0',
         '@typescript-eslint/eslint-plugin': '^6.7.0',
         '@typescript-eslint/parser': '^6.7.0'
-      } : {})
+      } : {}),
+      ...(template.devDependencies || {})
     },
     engines: {
       node: '>=16.0.0'
@@ -278,9 +297,10 @@ function getPluginCategories(templateName: string): string[] {
     'Theme Plugin': ['Theme'],
     'Debugger Extension': ['Debugger'],
     'Task Provider': ['Other'],
-    'Command Plugin': ['Other']
+    'Command Plugin': ['Other'],
+    'React UI Panel': ['Other']
   };
-  
+
   return categoryMap[templateName] || ['Other'];
 }
 
@@ -313,16 +333,16 @@ function getPluginContributions(templateName: string): any {
       }]
     }
   };
-  
+
   return contributionMap[templateName] || {};
 }
 
 async function initializeGit(targetDir: string): Promise<void> {
   const { execSync } = require('child_process');
-  
+
   try {
     execSync('git init', { cwd: targetDir, stdio: 'pipe' });
-    
+
     // Create .gitignore
     const gitignore = `
 # Dependencies
@@ -358,12 +378,12 @@ coverage/
 .tmp/
 temp/
 `;
-    
+
     await fs.writeFile(path.join(targetDir, '.gitignore'), gitignore.trim());
-    
+
     execSync('git add .', { cwd: targetDir, stdio: 'pipe' });
     execSync('git commit -m "Initial commit"', { cwd: targetDir, stdio: 'pipe' });
-    
+
     logger.success('Git repository initialized');
   } catch (error) {
     logger.warning('Failed to initialize Git repository');
@@ -372,17 +392,17 @@ temp/
 
 async function installDependencies(targetDir: string): Promise<void> {
   const { execSync } = require('child_process');
-  
+
   try {
     logger.info('Installing dependencies...');
     const spinner = logger.startSpinner('Installing packages');
-    
-    execSync('npm install', { 
-      cwd: targetDir, 
+
+    execSync('npm install', {
+      cwd: targetDir,
       stdio: 'pipe',
       timeout: 300000 // 5 minutes timeout
     });
-    
+
     spinner.succeed('Dependencies installed successfully');
   } catch (error) {
     logger.stopSpinner(false, 'Failed to install dependencies');
@@ -407,12 +427,12 @@ export const createCommand = new Command('create')
       logger.header('🚀 Create Lokus Plugin');
 
       let pluginDetails;
-      
+
       if (options.skipPrompts) {
         if (!name) {
           throw ErrorHandler.createError('ValidationError', 'Plugin name is required when skipping prompts');
         }
-        
+
         pluginDetails = {
           pluginName: name,
           template: options.template || 'basic',
@@ -427,7 +447,7 @@ export const createCommand = new Command('create')
       }
 
       const { pluginName, template, author, description, typescript, initGit, installDeps } = pluginDetails;
-      
+
       // Validate plugin name
       if (!pluginValidator.validatePluginName(pluginName)) {
         throw ErrorHandler.createError(
@@ -445,7 +465,7 @@ export const createCommand = new Command('create')
       }
 
       const targetDir = path.resolve(process.cwd(), pluginName);
-      
+
       // Check if directory already exists
       if (await fs.pathExists(targetDir)) {
         const { overwrite } = await inquirer.prompt([{
@@ -454,12 +474,12 @@ export const createCommand = new Command('create')
           message: `Directory ${pluginName} already exists. Overwrite?`,
           default: false
         }]);
-        
+
         if (!overwrite) {
           logger.info('Plugin creation cancelled');
           return;
         }
-        
+
         await fs.remove(targetDir);
       }
 
@@ -469,7 +489,7 @@ export const createCommand = new Command('create')
       logger.newLine();
 
       const spinner = logger.startSpinner('Creating plugin structure...');
-      
+
       // Create plugin from template
       await createPluginFromTemplate(
         pluginName,
@@ -477,7 +497,7 @@ export const createCommand = new Command('create')
         pluginTemplates[template],
         { author, description, typescript }
       );
-      
+
       spinner.succeed('Plugin structure created');
 
       // Initialize Git if requested
@@ -496,7 +516,7 @@ export const createCommand = new Command('create')
       logger.newLine();
       logger.success(`Plugin ${chalk.cyan(pluginName)} created successfully!`);
       logger.newLine();
-      
+
       logger.info('Next steps:');
       logger.info(`  cd ${pluginName}`);
       if (!installDeps) {
@@ -504,7 +524,7 @@ export const createCommand = new Command('create')
       }
       logger.info('  lokus-plugin dev');
       logger.newLine();
-      
+
       logger.info('Documentation:');
       logger.info('  📖 Plugin Development: https://lokus.dev/docs/plugin-development');
       logger.info('  🔌 Plugin API: https://lokus.dev/docs/plugin-api');
