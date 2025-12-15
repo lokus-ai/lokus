@@ -99,10 +99,14 @@ const CanvasSuggest = Extension.create({
         allow: ({ state, range }) => {
           const $pos = state.selection.$from
           const parentContent = $pos.parent.textContent
-          const textBefore = parentContent.slice(Math.max(0, $pos.parentOffset - 2), $pos.parentOffset)
 
-          // Check for ![ pattern (image/canvas embedding)
-          const isAfterImageSyntax = textBefore.endsWith('![')
+          // Get text before the trigger character
+          // The trigger '[' is at position range.from, so we check the character before it
+          const beforeTriggerPos = Math.max(0, range.from - $pos.start($pos.depth) - 1)
+          const charBeforeTrigger = parentContent[beforeTriggerPos]
+
+          // Check for ! character immediately before [ (image/canvas embedding syntax)
+          const isAfterImageSyntax = charBeforeTrigger === '!'
 
           // Use ProseMirror node types for more reliable list detection
           const parentNode = $pos.node($pos.depth)
@@ -120,7 +124,8 @@ const CanvasSuggest = Extension.create({
 
           const shouldAllow = isAfterImageSyntax && !isInList
           dbg('allow check', {
-            textBefore,
+            charBeforeTrigger,
+            beforeTriggerPos,
             isAfterImageSyntax,
             isInList,
             parentType: parentNode.type.name,
