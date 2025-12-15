@@ -49,18 +49,9 @@ export default function BacklinksPanel({
   const currentNodeId = useMemo(() => {
     if (!currentFile || !graphData || !graphData.nodes) return null;
 
-    // If graphData has documentNodes (GraphData), use it
-    if (graphData.documentNodes) {
-      for (const [docId, nodeId] of graphData.documentNodes.entries()) {
-        if (docId === currentFile) {
-          return nodeId;
-        }
-      }
-    }
-
-    // Otherwise search nodes by path (GraphDatabase compatibility)
+    // Search nodes by path
     for (const [nodeId, node] of graphData.nodes.entries()) {
-      if (node.path === currentFile || node.documentId === currentFile) {
+      if (node.path === currentFile) {
         return nodeId;
       }
     }
@@ -90,7 +81,10 @@ export default function BacklinksPanel({
 
         // Index if not already indexed
         if (!blockBacklinkManager.indexed && graphData?.nodes) {
-          const fileIndex = graphData.nodes.map(node => ({ path: node.id }))
+          const fileIndex = Array.from(graphData.nodes.values()).map(node => ({
+            path: node.path,
+            title: node.title
+          }))
           blockBacklinkManager.indexBlockLinks(fileIndex).catch(err => {
             console.error('[BacklinksPanel] Error indexing block links:', err)
           })
@@ -186,8 +180,8 @@ export default function BacklinksPanel({
     if (!onOpenFile || !graphData) return;
 
     const sourceNode = graphData.nodes.get(backlink.sourceNodeId);
-    if (sourceNode && sourceNode.documentId) {
-      onOpenFile(sourceNode.documentId);
+    if (sourceNode && sourceNode.path) {
+      onOpenFile({ path: sourceNode.path, name: sourceNode.title });
     }
   }, [onOpenFile, graphData]);
 
@@ -196,8 +190,8 @@ export default function BacklinksPanel({
     if (!onOpenFile || !graphData) return;
 
     const sourceNode = graphData.nodes.get(mention.sourceNodeId);
-    if (sourceNode && sourceNode.documentId) {
-      onOpenFile(sourceNode.documentId);
+    if (sourceNode && sourceNode.path) {
+      onOpenFile({ path: sourceNode.path, name: sourceNode.title });
     }
   }, [onOpenFile, graphData]);
 

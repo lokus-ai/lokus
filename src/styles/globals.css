@@ -552,6 +552,99 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   transform: translateY(-1px);
 }
 
+/* ===== Responsive Tab Bar ===== */
+.responsive-tab-bar {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  min-width: 0;
+  position: relative;
+}
+
+.responsive-tab-bar-tabs {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.responsive-tab {
+  /* Inherits from .obsidian-tab but with flex properties */
+  flex: 1 1 auto;
+  min-width: 80px;
+  max-width: 280px;
+  transition: min-width 200ms ease, max-width 200ms ease;
+}
+
+@media (max-width: 1024px) {
+  .responsive-tab {
+    max-width: 180px;
+  }
+}
+
+@media (max-width: 768px) {
+  .responsive-tab {
+    max-width: 120px;
+  }
+}
+
+/* Overflow menu button */
+.overflow-menu-button {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  border-radius: 6px;
+  transition: background-color 150ms ease;
+  cursor: pointer;
+  border: none;
+  background-color: transparent;
+  color: rgb(var(--text-muted));
+}
+
+.overflow-menu-button:hover {
+  background-color: rgb(var(--panel-secondary));
+  color: rgb(var(--text));
+}
+
+/* ===== Responsive Status Bar ===== */
+.responsive-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 24px;
+  padding: 0 12px;
+  flex-shrink: 0;
+}
+
+.responsive-status-bar-section {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.responsive-status-bar-section:last-child {
+  justify-content: flex-end;
+}
+
+.status-bar-item-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: opacity 150ms ease;
+}
+
+.status-bar-item-wrapper.hidden {
+  display: none;
+}
+
 .obsidian-tab:hover::before {
   transform: scaleX(0.5);
 }

@@ -138,11 +138,10 @@ export class GraphDataProcessor {
       // Flatten the hierarchical structure and build index
       this.fileIndex = this.flattenFileStructure(workspaceFiles, excludePatterns, maxDepth);
       this.processingStats.totalFiles = this.fileIndex.length;
-      
-      
-      // Store globally for wiki link resolution
+
+
+      // Store workspace path globally (but NOT file index - Workspace.jsx manages that)
       if (typeof globalThis !== 'undefined') {
-        globalThis.__LOKUS_FILE_INDEX__ = this.fileIndex;
         globalThis.__LOKUS_WORKSPACE_PATH__ = this.workspacePath;
       }
       
@@ -179,6 +178,7 @@ export class GraphDataProcessor {
       const fileExtension = this.getFileExtension(file.name);
       const fileObj = {
         name: file.name,
+        title: file.name, // For WikiLink suggestions compatibility
         path: file.path,
         isDirectory: file.is_directory,
         extension: fileExtension,
@@ -270,12 +270,23 @@ export class GraphDataProcessor {
         this.processingStats.errors++;
         return;
       }
-      
+
       // Skip very large files
       if (content.length > this.maxFileSize) {
         return;
       }
-      
+
+      // Store content in node metadata for backlinks
+      const nodeId = createNodeId(file.path); // Use same ID generation as createFileNode
+      try {
+        this.graphDatabase.setNodeMetadata(nodeId, {
+          content: content,
+          size: content.length
+        });
+      } catch (error) {
+        console.error('[GraphDataProcessor] Failed to set metadata for', nodeId, ':', error);
+      }
+
       // Extract wiki links from content
       const links = this.extractWikiLinks(content);
       

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm, save } from "@tauri-apps/plugin-dialog";
@@ -10,7 +10,7 @@ import { ColoredFileIcon } from "../components/FileIcon.jsx";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
 import Editor from "../editor";
-import StatusBar from "../components/StatusBar.jsx";
+import ResponsiveStatusBar from "../components/StatusBar/ResponsiveStatusBar.jsx";
 import ConnectionStatus from "../components/ConnectionStatus.jsx";
 import Canvas from "./Canvas.jsx";
 import KanbanBoard from "../components/KanbanBoard.jsx";
@@ -21,6 +21,7 @@ import FileContextMenu from "../components/FileContextMenu.jsx";
 import EditorGroupsContainer from "../components/EditorGroupsContainer.jsx";
 import { useEditorGroups } from "../hooks/useEditorGroups.js";
 import TabBar from "../components/TabBar.jsx";
+import { ResponsiveTabBar } from "../components/TabBar/ResponsiveTabBar.jsx";
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -2865,29 +2866,29 @@ function WorkspaceWithScope({ path }) {
     setGraphSidebarData(state);
   }, []);
 
-  // OLD SYSTEM - Commented out since ProfessionalGraphView has its own data loading
-  // const buildGraphData = useCallback(async () => {
-  //   if (!graphProcessorRef.current || isLoadingGraph) return;
-  //   
-  //   setIsLoadingGraph(true);
-  //   
-  //   try {
-  //     const data = await graphProcessorRef.current.buildGraphFromWorkspace({
-  //       includeNonMarkdown: false,
-  //       maxDepth: 10,
-  //       excludePatterns: ['.git', 'node_modules', '.lokus', '.DS_Store'],
-  //       onProgress: (progress) => {
-  //       }
-  //     });
-  //     
-  //     setGraphData(data);
-  //     
-  //   } catch (error) {
-  //     setGraphData(null);
-  //   } finally {
-  //     setIsLoadingGraph(false);
-  //   }
-  // }, [isLoadingGraph]);
+  // Build graph data for backlinks panel
+  // Note: ProfessionalGraphView has its own data loading, but BacklinksPanel needs GraphDatabase
+  const buildGraphData = useCallback(async () => {
+    if (!graphProcessorRef.current || isLoadingGraph) return;
+
+    setIsLoadingGraph(true);
+
+    try {
+      const data = await graphProcessorRef.current.buildGraphFromWorkspace({
+        includeNonMarkdown: false,
+        maxDepth: 10,
+        excludePatterns: ['.git', 'node_modules', '.lokus', '.DS_Store']
+      });
+
+      setGraphData(data);
+
+    } catch (error) {
+      console.error('[Workspace] Failed to build graph:', error);
+      setGraphData(null);
+    } finally {
+      setIsLoadingGraph(false);
+    }
+  }, [isLoadingGraph]);
 
   const handleGraphNodeClick = useCallback((event) => {
     const { nodeId, nodeData } = event;
@@ -2979,23 +2980,12 @@ function WorkspaceWithScope({ path }) {
     }
   }, [activeFile, path]);
 
-  // Build graph data when files change
+  // Build graph data ONCE when workspace is initialized (for backlinks)
   useEffect(() => {
-    if (graphProcessorRef.current && refreshId > 0) {
-      // OLD SYSTEM - Commented out since ProfessionalGraphView has its own data loading
-      // Rebuild graph data when files are refreshed
-      // buildGraphData();
+    if (path && graphProcessorRef.current && !graphData && !isLoadingGraph) {
+      buildGraphData();
     }
-  }, [refreshId]); // Removed buildGraphData dependency
-
-  // OLD SYSTEM - Commented out since ProfessionalGraphView has its own data loading
-  // Auto-build graph when graph view is opened
-  // useEffect(() => {
-  //   const isGraphView = activeFile === '__graph__' || activeFile === '__professional_graph__';
-  //   if (isGraphView && !graphData && !isLoadingGraph && graphProcessorRef.current) {
-  //     buildGraphData();
-  //   }
-  // }, [activeFile, graphData, isLoadingGraph, buildGraphData]);
+  }, [path, graphData, isLoadingGraph, buildGraphData]);
 
   // Cleanup persistent GraphEngine and GraphDatabase when workspace unmounts
   useEffect(() => {
@@ -3680,7 +3670,10 @@ function WorkspaceWithScope({ path }) {
   }, [activeBase, openTabs, filterFileTree]);
 
   // Filter file tree based on folder scope or base scope
-  const filteredFileTree = getBaseAwareFileTree(fileTree);
+  // Memoized to prevent unnecessary re-renders and graph reloads
+  const filteredFileTree = useMemo(() => {
+    return getBaseAwareFileTree(fileTree);
+  }, [fileTree, activeBase?.sourceFolder, openTabs, scopeMode, scopedFolders, filterFileTree]);
 
   return (
     <PanelManager>
@@ -3739,84 +3732,24 @@ function WorkspaceWithScope({ path }) {
             </button>
           </div>
 
-          {/* Center Section: Tab bar */}
+          {/* Center Section: Responsive Tab Bar */}
           <div
-            className="absolute flex items-center overflow-x-auto no-scrollbar px-2"
+            className="absolute flex items-center overflow-hidden px-2"
             style={{
-              left: showLeft ? `${leftW + 57}px` : `${platformService.isMacOS() ? 200 : 120}px`, // After sidebar or after left buttons
-              right: showRight ? `${rightW + 120}px` : '120px', // Account for right sidebar when open + right buttons
+              left: showLeft ? `${leftW + 57}px` : `${platformService.isMacOS() ? 200 : 120}px`,
+              right: showRight ? `${rightW + 120}px` : '120px',
               top: 0,
               height: '32px'
             }}
           >
-            {openTabs.map((tab, index) => {
-              const isActive = activeFile === tab.path;
-              return (
-                <button
-                  key={tab.path}
-                  onClick={() => handleTabClick(tab.path)}
-                  data-tauri-drag-region="false"
-                  className={`
-                  relative flex items-center gap-2 px-4 h-8 text-xs whitespace-nowrap transition-all duration-200
-                  ${isActive ? 'z-10' : 'z-0'}
-                `}
-                  style={{
-                    pointerEvents: 'auto',
-                    marginLeft: index > 0 ? '-12px' : '0',
-                    minWidth: '180px',
-                    maxWidth: '280px',
-                    paddingTop: '6px',
-                    paddingBottom: '6px',
-                    backgroundColor: isActive ? '#3d3d3d' : '#2a2a2a',
-                    color: isActive ? '#ffffff' : '#808080',
-                    borderTopLeftRadius: '8px',
-                    borderTopRightRadius: '8px',
-                    borderBottomLeftRadius: '0',
-                    borderBottomRightRadius: '0',
-                    border: '1px solid #555555',
-                    borderBottom: isActive ? '2px solid #3d3d3d' : '1px solid #555555',
-                    boxShadow: isActive
-                      ? '0 -2px 8px rgba(0, 0, 0, 0.4), 0 1px 0 0 #3d3d3d'
-                      : '0 0 0 0 transparent',
-                    transform: isActive ? 'translateY(0)' : 'translateY(0)',
-                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.backgroundColor = '#353535';
-                      e.currentTarget.style.color = '#ffffff';
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                      e.currentTarget.style.boxShadow = '0 -1px 4px rgba(0, 0, 0, 0.2)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.backgroundColor = '#2a2a2a';
-                      e.currentTarget.style.color = '#808080';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 0 0 0 transparent';
-                    }
-                  }}
-                >
-                  <span className="truncate flex-1">{tab.name}</span>
-                  {unsavedChanges.has(tab.path) && (
-                    <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
-                  )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleTabClose(tab.path);
-                    }}
-                    className="ml-1 hover:bg-white/10 rounded p-1 flex-shrink-0 opacity-0 hover:opacity-100 transition-opacity"
-                    style={isActive ? { opacity: 0.7 } : {}}
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </button>
-              );
-            })}
+            <ResponsiveTabBar
+              tabs={openTabs}
+              activeTab={activeFile}
+              onTabClick={handleTabClick}
+              onTabClose={handleTabClose}
+              unsavedChanges={unsavedChanges}
+              reservedSpace={0}
+            />
           </div>
 
           {/* Right Section: Split View, Right Sidebar, and New Tab buttons */}
@@ -4884,6 +4817,7 @@ function WorkspaceWithScope({ path }) {
           onCreateTemplate={handleCreateTemplate}
           // onOpenGmail={handleOpenGmail} // Gmail disabled
           onOpenDailyNote={handleOpenDailyNote}
+          onRefresh={handleRefreshFiles}
           activeFile={activeFile}
         />
 
@@ -4963,8 +4897,8 @@ function WorkspaceWithScope({ path }) {
           onClose={() => setShowAboutDialog(false)}
         />
 
-        {/* Pluginable Status Bar - replaces the old Obsidian status bar */}
-        <StatusBar
+        {/* Responsive Pluginable Status Bar with overflow menu */}
+        <ResponsiveStatusBar
           activeFile={activeFile}
           unsavedChanges={unsavedChanges}
           openTabs={openTabs}
@@ -5044,10 +4978,10 @@ export default function Workspace({ initialPath = "" }) {
   }
 
   return (
-    <BasesProvider workspacePath={path}>
-      <FolderScopeProvider workspacePath={path}>
+    <FolderScopeProvider workspacePath={path}>
+      <BasesProvider workspacePath={path}>
         <WorkspaceWithScope path={path} />
-      </FolderScopeProvider>
-    </BasesProvider>
+      </BasesProvider>
+    </FolderScopeProvider>
   );
 }
