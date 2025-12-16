@@ -7,10 +7,12 @@ const Preferences = lazy(() => import("./views/Preferences"));
 import UpdateChecker from "./components/UpdateChecker";
 import { RemoteAnnouncement } from "./components/RemoteAnnouncement";
 import { Toaster } from "./components/ui/toaster";
+import { PluginDialogContainer } from "./components/PluginDialogContainer";
 import { usePreferenceActivation } from "./hooks/usePreferenceActivation";
 import { useWorkspaceActivation } from "./hooks/useWorkspaceActivation";
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/shortcuts/registry.js";
 import { PluginProvider } from "./hooks/usePlugins.jsx";
+import pluginStateAdapter from "./core/plugins/PluginStateAdapter.js";
 import { AuthProvider } from "./core/auth/AuthContext.jsx";
 import platformService from "./services/platform/PlatformService.js";
 import { ToastProvider } from "./components/Toast.jsx";
@@ -38,6 +40,11 @@ function App() {
   const { isPrefsWindow } = usePreferenceActivation();
   const activePath = useWorkspaceActivation();
 
+  useEffect(() => {
+    if (activePath) {
+      pluginStateAdapter.setWorkspacePath(activePath);
+    }
+  }, [activePath]);
 
   // Track view navigation with breadcrumbs
   useEffect(() => {
@@ -178,6 +185,7 @@ function App() {
         </ToastProvider>
         <RemoteAnnouncement />
         <Toaster />
+        <PluginDialogContainer />
       </div>
     </div>
   );

@@ -1,17 +1,54 @@
-import React, { useMemo } from 'react';
+
+import React, { useMemo, useState } from 'react';
 import { useStatusBar } from '../hooks/useStatusBar';
 import SyncStatus from './Auth/SyncStatus.jsx';
+import StatusBarContextMenu from './StatusBarContextMenu.jsx';
+import pluginStateAdapter from '../core/plugins/PluginStateAdapter.js';
 
 /**
  * Pluginable Status Bar Component
  * Supports left and right sections with priority-based ordering of widgets
  * Compatible with VS Code-style plugin s tatus bar items
  */
-export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], editor , readingSpeed = 200}) {
+export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], editor, readingSpeed = 200 }) {
   const { leftItems, rightItems } = useStatusBar();
-  
 
-  function countFinder(editor) {
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState({
+    isOpen: false,
+    position: { x: 0, y: 0 },
+    pluginId: null,
+    commands: []
+  });
+
+  const handleContextMenu = (e, pluginId) => {
+    e.preventDefault();
+
+    // Get plugin commands
+    const plugin = pluginStateAdapter.getPlugin(pluginId);
+    const commands = plugin?.manifest?.contributes?.commands || [];
+
+    if (commands.length > 0) {
+      setContextMenu({
+        isOpen: true,
+        position: { x: e.clientX, y: e.clientY },
+        pluginId,
+        commands
+      });
+    }
+  };
+
+  const handleExecuteCommand = async (commandId) => {
+    if (typeof window !== 'undefined' && window.lokus && window.lokus.commands) {
+      // Execute via global command registry
+      window.lokus.commands.executeCommand(commandId);
+    } else {
+      console.warn('Command registry not available');
+    }
+  };
+
+  const stats = useMemo(() => {
+    if (!editor) return null;
 
     let wordCount = 0;
     let charCount = 0;
@@ -36,45 +73,43 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
 
       // Split into words and filter out words without alphanumeric characters
       const words = text
-            .trim()
-            .split(/\s+/)
-            .map((w) => w.replace(/^[^\w@]+|[^\w@]+$/g, "")) // remove punctuation from edges
-            .filter((w) => w.length > 0)
-            .filter((word) => wordRegex.test(word));
+        .trim()
+        .split(/\s+/)
+        .map((w) => w.replace(/^[^\w@]+|[^\w@]+$/g, "")) // remove punctuation from edges
+        .filter((w) => w.length > 0)
+        .filter((word) => wordRegex.test(word));
 
       wordCount += words.length;
     });
 
-  return { wordCount, charCount };
-}
-
-  const stats = useMemo(() => {
-    if (!editor) return null;
-
-    const {wordCount, charCount} = countFinder(editor);
-
     const minutes = wordCount ? Math.max(1, Math.ceil(wordCount / readingSpeed)) : 0;
 
-    return {wordCount, charCount, minutes };
+    return { wordCount, charCount, minutes };
 
   }, [editor?.state?.doc, readingSpeed]);
 
   // DEBUG: Log status bar items
 
   const renderStatusBarItem = (item) => {
-    const { id, component: Component, text, icon, tooltip, command, priority, className } = item;
-    
-    
+    const { id, component: Component, text, icon, tooltip, command, priority, className, pluginId } = item;
+
+
     // If it's a React component, render it directly
     if (Component) {
       // Validate that Component is actually a valid React component
       if (typeof Component === 'function' || (typeof Component === 'object' && Component.$$typeof)) {
+        console.log(`[StatusBar] Rendering component for ${id}`, Component);
         return (
-          <div key={id} className="status-bar-plugin-item">
+          <div
+            key={id}
+            className="status-bar-plugin-item"
+            onContextMenu={(e) => pluginId && handleContextMenu(e, pluginId)}
+          >
             <Component />
           </div>
         );
       } else {
+        console.warn(`[StatusBar] Invalid component for ${id}`, Component);
         return (
           <div key={id} className="status-bar-plugin-item">
             <span className="text-red-500 text-xs">Invalid Component</span>
@@ -82,14 +117,15 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
         );
       }
     }
-    
+
     // Otherwise render as a basic status bar item
     return (
-      <div 
+      <div
         key={id}
-        className={`obsidian-status-bar-item ${command ? 'clickable' : ''} ${className || ''}`}
+        className={`obsidian - status - bar - item ${command ? 'clickable' : ''} ${className || ''} `}
         title={tooltip}
         onClick={command ? () => handleCommand(command) : undefined}
+        onContextMenu={(e) => pluginId && handleContextMenu(e, pluginId)}
       >
         {icon && <span className="w-3 h-3 mr-1">{icon}</span>}
         {text && <span>{text}</span>}
@@ -153,7 +189,7 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
           </>
         )}
       </div>
-      
+
       {/* Right section - plugin items and core items */}
       <div className="obsidian-status-bar-section">
         {/* Plugin items in right section */}
@@ -163,13 +199,13 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
             {index < sortedRightItems.length - 1 && <div className="obsidian-status-bar-separator" />}
           </React.Fragment>
         ))}
-       
+
 
         {/* Core status items */}
         {(sortedRightItems.length > 0 || unsavedChanges.size > 0) && (
           <div className="obsidian-status-bar-separator" />
         )}
-        
+
         {unsavedChanges.size > 0 && (
           <>
             <div className="obsidian-status-bar-item active">
@@ -179,28 +215,28 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
           </>
         )}
 
-         {/* Editor status - hide on small screens */}
+        {/* Editor status - hide on small screens */}
         {editor && (
-            <>
-              <div className="obsidian-status-bar-separator hidden lg:block" />
-              <div className="obsidian-status-bar-item hidden lg:flex">
-                <span>Words: {stats?.wordCount.toLocaleString()}</span>
-              </div>
-              <div className="obsidian-status-bar-separator hidden xl:block" />
-              <div className="obsidian-status-bar-item hidden xl:flex">
-                <span>Chars: {stats?.charCount.toLocaleString()}</span>
-              </div>
-              <div className="obsidian-status-bar-separator hidden xl:block" />
-              <div className="obsidian-status-bar-item hidden xl:flex">
-                <span>~{stats?.minutes} min</span>
-              </div>
-            </>
+          <>
+            <div className="obsidian-status-bar-separator hidden lg:block" />
+            <div className="obsidian-status-bar-item hidden lg:flex">
+              <span>Words: {stats?.wordCount.toLocaleString()}</span>
+            </div>
+            <div className="obsidian-status-bar-separator hidden xl:block" />
+            <div className="obsidian-status-bar-item hidden xl:flex">
+              <span>Chars: {stats?.charCount.toLocaleString()}</span>
+            </div>
+            <div className="obsidian-status-bar-separator hidden xl:block" />
+            <div className="obsidian-status-bar-item hidden xl:flex">
+              <span>~{stats?.minutes} min</span>
+            </div>
+          </>
         )}
 
         <div className="obsidian-status-bar-item clickable">
           {/* GitHub/Markdown icon */}
           <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 16 16">
-            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
           </svg>
           <span className="hidden md:inline">Markdown</span>
         </div>
@@ -211,11 +247,20 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
           </svg>
           <span>Settings</span>
         </div>
-        
+
         {/* Sync Component */}
         <div className="obsidian-status-bar-separator" />
         <SyncStatus />
       </div>
+
+      <StatusBarContextMenu
+        isOpen={contextMenu.isOpen}
+        position={contextMenu.position}
+        pluginId={contextMenu.pluginId}
+        commands={contextMenu.commands}
+        onClose={() => setContextMenu(prev => ({ ...prev, isOpen: false }))}
+        onExecuteCommand={handleExecuteCommand}
+      />
     </div>
   );
 }

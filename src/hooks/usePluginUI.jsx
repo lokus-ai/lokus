@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { pluginLoader } from '../plugins/PluginLoader.js';
+import pluginManager from '../core/plugins/PluginStateAdapter.js';
 import { listen } from '@tauri-apps/api/event';
 
 export function usePluginUI() {
@@ -21,7 +21,7 @@ export function usePluginUI() {
         // Listen for status bar item updates
         unlisten = await listen('status-bar-item-updated', (event) => {
           const { pluginId, action, item } = event.payload;
-          
+
           setStatusBarItems(prev => {
             switch (action) {
               case 'create':
@@ -29,12 +29,12 @@ export function usePluginUI() {
                 // Add or update item
                 const filtered = prev.filter(i => i.id !== item.id);
                 return [...filtered, { ...item, pluginId }];
-              
+
               case 'hide':
               case 'dispose':
                 // Remove item
                 return prev.filter(i => i.id !== item.id);
-              
+
               default:
                 return prev;
             }
@@ -44,7 +44,7 @@ export function usePluginUI() {
         // Listen for command registrations
         const commandUnlisten = await listen('command-registered', (event) => {
           const { pluginId, command, title } = event.payload;
-          
+
           setCommands(prev => {
             const newCommands = new Map(prev);
             newCommands.set(command, {
@@ -61,7 +61,7 @@ export function usePluginUI() {
           if (commandUnlisten) commandUnlisten();
         };
       } catch (error) {
-        return () => {};
+        return () => { };
       }
     };
 
@@ -76,10 +76,10 @@ export function usePluginUI() {
   useEffect(() => {
     const updatePanels = () => {
       const activePanels = [];
-      const activePlugins = pluginLoader.getActivePlugins();
-      
+      const activePlugins = pluginManager.getActivePlugins();
+
       activePlugins.forEach(pluginId => {
-        const pluginInfo = pluginLoader.getPluginInfo(pluginId);
+        const pluginInfo = pluginManager.getPlugin(pluginId);
         if (pluginInfo && pluginInfo.context && pluginInfo.context.panels) {
           pluginInfo.context.panels.forEach((panel, panelId) => {
             activePanels.push({
@@ -91,22 +91,22 @@ export function usePluginUI() {
           });
         }
       });
-      
+
       setPanels(activePanels);
     };
 
     // Update panels initially and whenever plugins change
     updatePanels();
-    
+
     // Set up interval to check for panel updates
     const interval = setInterval(updatePanels, 1000);
-    
+
     return () => clearInterval(interval);
   }, []);
 
   const executePluginCommand = useCallback(async (pluginId, command, args) => {
     try {
-      const pluginInfo = pluginLoader.getPluginInfo(pluginId);
+      const pluginInfo = pluginManager.getPlugin(pluginId);
       if (pluginInfo && pluginInfo.context && pluginInfo.context.commands) {
         const handler = pluginInfo.context.commands.get(command);
         if (handler && typeof handler === 'function') {
@@ -118,7 +118,7 @@ export function usePluginUI() {
   }, []);
 
   const getPluginAPI = useCallback((pluginId) => {
-    return pluginLoader.getPluginAPI(pluginId);
+    return pluginManager.getPluginAPI(pluginId);
   }, []);
 
   const getStatusBarItems = useCallback(() => {

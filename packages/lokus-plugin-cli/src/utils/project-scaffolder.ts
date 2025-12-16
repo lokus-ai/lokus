@@ -25,7 +25,7 @@ export class ProjectScaffolder {
     private targetDir: string,
     private template: AdvancedPluginTemplate,
     private options: ScaffolderOptions
-  ) {}
+  ) { }
 
   /**
    * Create the basic project structure
@@ -71,6 +71,9 @@ export class ProjectScaffolder {
     for (const dir of directories) {
       await fs.ensureDir(path.join(this.targetDir, dir));
     }
+
+    // Create placeholder icon
+    await fs.writeFile(path.join(this.targetDir, 'icon.png'), '');
   }
 
   /**
@@ -78,13 +81,13 @@ export class ProjectScaffolder {
    */
   async generateConfigFiles(): Promise<void> {
     const templateManager = new TemplateManager();
-    
+
     // Generate package.json
     await this.generatePackageJson();
-    
+
     // Generate plugin.json manifest
     await this.generatePluginManifest();
-    
+
     // Generate conditional config files
     await templateManager.createConditionalFiles(this.targetDir, {
       ...this.options
@@ -119,10 +122,10 @@ export class ProjectScaffolder {
     await fs.ensureDir(testDir);
 
     // Create test setup file
-    const setupContent = this.options.testing === 'jest' 
+    const setupContent = this.options.testing === 'jest'
       ? this.generateJestSetup()
       : this.generateVitestSetup();
-    
+
     const setupFile = path.join(testDir, `setup.${this.options.typescript ? 'ts' : 'js'}`);
     await fs.writeFile(setupFile, setupContent);
 
@@ -238,7 +241,7 @@ export class ProjectScaffolder {
 
     // Remove undefined values
     const cleanPackageJson = JSON.parse(JSON.stringify(packageJson));
-    
+
     await fs.writeFile(
       path.join(this.targetDir, 'package.json'),
       JSON.stringify(cleanPackageJson, null, 2)
@@ -257,16 +260,20 @@ export class ProjectScaffolder {
     // Build scripts based on bundler
     switch (this.options.bundler) {
       case 'esbuild':
-        scripts['build:bundle'] = 'esbuild src/index.ts --bundle --outfile=dist/index.js --platform=node --target=node16';
+        scripts.build = `node esbuild.config.js`;
+        scripts.watch = `node esbuild.config.js --watch`;
         break;
       case 'webpack':
-        scripts['build:bundle'] = 'webpack';
+        scripts.build = 'webpack';
+        scripts.watch = 'webpack --watch';
         break;
       case 'rollup':
-        scripts['build:bundle'] = 'rollup -c';
+        scripts.build = 'rollup -c';
+        scripts.watch = 'rollup -c -w';
         break;
       case 'vite':
-        scripts['build:bundle'] = 'vite build';
+        scripts.build = 'vite build';
+        scripts.watch = 'vite build --watch';
         break;
     }
 
@@ -333,6 +340,9 @@ export class ProjectScaffolder {
       if (this.options.typescript) {
         devDeps['ts-jest'] = '^29.1.1';
       }
+      if (this.template.category === 'UI') {
+        devDeps['jest-environment-jsdom'] = '^29.7.0';
+      }
     } else if (this.options.testing === 'vitest') {
       devDeps.vitest = '^0.34.6';
     }
@@ -397,6 +407,8 @@ export class ProjectScaffolder {
 
   private async generatePluginManifest(): Promise<void> {
     const manifest = {
+      manifest: '2.0',
+      id: this.options.pluginName,
       name: this.options.pluginName,
       version: '0.1.0',
       description: this.options.description,
@@ -414,11 +426,6 @@ export class ProjectScaffolder {
       ],
       permissions: this.template.permissions,
       contributes: this.generateContributions(),
-      scripts: {
-        dev: 'npm run dev',
-        build: 'npm run build',
-        test: 'npm test'
-      },
       repository: {
         type: 'git',
         url: `https://github.com/${this.options.author}/${this.options.pluginName}.git`
@@ -426,7 +433,13 @@ export class ProjectScaffolder {
       bugs: {
         url: `https://github.com/${this.options.author}/${this.options.pluginName}/issues`
       },
-      homepage: `https://github.com/${this.options.author}/${this.options.pluginName}#readme`
+      homepage: `https://github.com/${this.options.author}/${this.options.pluginName}#readme`,
+      icon: 'icon.png',
+      galleryBanner: {
+        color: '#2c2c2c',
+        theme: 'dark'
+      },
+      screenshots: []
     };
 
     await fs.writeFile(
@@ -473,12 +486,14 @@ export class ProjectScaffolder {
 
   // Build system config generators
   private async generateESBuildConfig(): Promise<void> {
+    const entryExt = this.template.category === 'UI' && this.options.typescript ? 'tsx' : (this.options.typescript ? 'ts' : 'js');
+
     const config = `const esbuild = require('esbuild');
 
 const isProduction = process.env.NODE_ENV === 'production';
 
 esbuild.build({
-  entryPoints: ['src/index.${this.options.typescript ? 'ts' : 'js'}'],
+  entryPoints: ['src/index.${entryExt}'],
   bundle: true,
   outfile: 'dist/index.js',
   platform: 'node',
@@ -486,20 +501,41 @@ esbuild.build({
   format: 'cjs',
   sourcemap: !isProduction,
   minify: isProduction,
-  external: ['@lokus/plugin-sdk'],
+  external: ['lokus-plugin-sdk'],
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')
   }
-}).catch(() => process.exit(1));`;
+}).catch(() => process.exit(1));
+
+if (process.argv.includes('--watch')) {
+  esbuild.context({
+    entryPoints: ['src/index.${entryExt}'],
+    bundle: true,
+    outfile: 'dist/index.js',
+    platform: 'node',
+    target: 'node16',
+    format: 'cjs',
+    sourcemap: true,
+    external: ['lokus-plugin-sdk'],
+    define: {
+      'process.env.NODE_ENV': JSON.stringify('development')
+    }
+  }).then(ctx => {
+    ctx.watch();
+    console.log('Watching for changes...');
+  });
+}`;
 
     await fs.writeFile(path.join(this.targetDir, 'esbuild.config.js'), config);
   }
 
   private async generateWebpackConfig(): Promise<void> {
+    const entryExt = this.template.category === 'UI' && this.options.typescript ? 'tsx' : (this.options.typescript ? 'ts' : 'js');
+
     const config = `const path = require('path');
 
 module.exports = {
-  entry: './src/index.${this.options.typescript ? 'ts' : 'js'}',
+  entry: './src/index.${entryExt}',
   target: 'node',
   mode: process.env.NODE_ENV || 'development',
   output: {
@@ -508,15 +544,15 @@ module.exports = {
     libraryTarget: 'commonjs2'
   },
   externals: {
-    '@lokus/plugin-sdk': 'commonjs2 @lokus/plugin-sdk'
+    'lokus-plugin-sdk': 'commonjs2 lokus-plugin-sdk'
   },
   ${this.options.typescript ? `resolve: {
-    extensions: ['.ts', '.js']
+    extensions: ['.ts', '.tsx', '.js', '.jsx']
   },
   module: {
     rules: [
       {
-        test: /\\.ts$/,
+        test: /\\.tsx?$/,
         use: 'ts-loader',
         exclude: /node_modules/
       }
@@ -529,18 +565,20 @@ module.exports = {
   }
 
   private async generateRollupConfig(): Promise<void> {
+    const entryExt = this.template.category === 'UI' && this.options.typescript ? 'tsx' : (this.options.typescript ? 'ts' : 'js');
+
     const config = `import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 ${this.options.typescript ? "import typescript from '@rollup/plugin-typescript';" : ''}
 
 export default {
-  input: 'src/index.${this.options.typescript ? 'ts' : 'js'}',
+  input: 'src/index.${entryExt}',
   output: {
     file: 'dist/index.js',
     format: 'cjs',
     sourcemap: true
   },
-  external: ['@lokus/plugin-sdk'],
+  external: ['lokus-plugin-sdk'],
   plugins: [
     resolve(),
     commonjs(),
@@ -552,18 +590,20 @@ export default {
   }
 
   private async generateViteConfig(): Promise<void> {
+    const entryExt = this.template.category === 'UI' && this.options.typescript ? 'tsx' : (this.options.typescript ? 'ts' : 'js');
+
     const config = `import { defineConfig } from 'vite';
 
 export default defineConfig({
   build: {
     lib: {
-      entry: 'src/index.${this.options.typescript ? 'ts' : 'js'}',
+      entry: 'src/index.${entryExt}',
       name: '${this.options.pluginName}',
       fileName: 'index',
       formats: ['cjs']
     },
     rollupOptions: {
-      external: ['@lokus/plugin-sdk']
+      external: ['lokus-plugin-sdk']
     },
     target: 'node16',
     sourcemap: true
@@ -591,8 +631,8 @@ global.console = {
     return `// Vitest setup file
 import { vi } from 'vitest';
 
-// Mock @lokus/plugin-sdk for testing
-vi.mock('@lokus/plugin-sdk', () => ({
+// Mock lokus-plugin-sdk for testing
+vi.mock('lokus-plugin-sdk', () => ({
   PluginContext: vi.fn(),
   Logger: vi.fn(),
   // Add other SDK mocks as needed
@@ -600,11 +640,12 @@ vi.mock('@lokus/plugin-sdk', () => ({
   }
 
   private generateSampleTest(): string {
-    return `import { ${this.options.pluginName.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())} } from './index';
+    const pascalCaseName = this.options.pluginName.replace(/(^|-)([a-z0-9])/g, (match, delimiter, char) => char.toUpperCase());
+    return `import { ${pascalCaseName} } from './index';
 
 describe('${this.options.pluginName}', () => {
   it('should be defined', () => {
-    expect(${this.options.pluginName.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())}).toBeDefined();
+    expect(${pascalCaseName}).toBeDefined();
   });
 
   // Add more tests here

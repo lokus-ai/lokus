@@ -1,4 +1,4 @@
-import { {{pluginNamePascalCase}} } from '../src';
+import { TestPluginV3 } from '../src';
 import { PluginContext } from '@lokus/plugin-sdk';
 
 // Mock the plugin SDK
@@ -7,9 +7,9 @@ jest.mock('@lokus/plugin-sdk', () => ({
   Logger: jest.fn()
 }));
 
-describe('{{pluginNamePascalCase}}', () => {
+describe('TestPluginV3', () => {
   let mockContext: jest.Mocked<PluginContext>;
-  let plugin: {{pluginNamePascalCase}};
+  let plugin: TestPluginV3;
 
   beforeEach(() => {
     // Create mock context
@@ -33,7 +33,7 @@ describe('{{pluginNamePascalCase}}', () => {
       }
     } as any;
 
-    plugin = new {{pluginNamePascalCase}}(mockContext);
+    plugin = new TestPluginV3(mockContext);
   });
 
   afterEach(() => {
@@ -42,8 +42,8 @@ describe('{{pluginNamePascalCase}}', () => {
 
   describe('constructor', () => {
     it('should create plugin instance', () => {
-      expect(plugin).toBeInstanceOf({{pluginNamePascalCase}});
-      expect(mockContext.logger.info).toHaveBeenCalledWith('{{pluginNamePascalCase}} plugin initialized');
+      expect(plugin).toBeInstanceOf(TestPluginV3);
+      expect(mockContext.logger.info).toHaveBeenCalledWith('TestPluginV3 plugin initialized');
     });
   });
 
@@ -51,12 +51,12 @@ describe('{{pluginNamePascalCase}}', () => {
     it('should activate plugin successfully', async () => {
       await plugin.activate();
 
-      expect(mockContext.logger.info).toHaveBeenCalledWith('Activating {{pluginName}} plugin...');
-      expect(mockContext.commands.register).toHaveBeenCalledWith('{{pluginName}}.helloWorld', {
+      expect(mockContext.logger.info).toHaveBeenCalledWith('Activating test-plugin-v3 plugin...');
+      expect(mockContext.commands.register).toHaveBeenCalledWith('test-plugin-v3.helloWorld', {
         title: 'Hello World',
         callback: expect.any(Function)
       });
-      expect(mockContext.logger.info).toHaveBeenCalledWith('{{pluginName}} plugin activated successfully');
+      expect(mockContext.logger.info).toHaveBeenCalledWith('test-plugin-v3 plugin activated successfully');
     });
 
     it('should handle activation errors', async () => {
@@ -72,8 +72,8 @@ describe('{{pluginNamePascalCase}}', () => {
     it('should deactivate plugin successfully', async () => {
       await plugin.deactivate();
 
-      expect(mockContext.logger.info).toHaveBeenCalledWith('Deactivating {{pluginName}} plugin...');
-      expect(mockContext.logger.info).toHaveBeenCalledWith('{{pluginName}} plugin deactivated successfully');
+      expect(mockContext.logger.info).toHaveBeenCalledWith('Deactivating test-plugin-v3 plugin...');
+      expect(mockContext.logger.info).toHaveBeenCalledWith('test-plugin-v3 plugin deactivated successfully');
     });
   });
 
@@ -85,7 +85,7 @@ describe('{{pluginNamePascalCase}}', () => {
     it('should execute hello world command', () => {
       // Get the registered command callback
       const registerCall = mockContext.commands.register.mock.calls.find(
-        call => call[0] === '{{pluginName}}.helloWorld'
+        call => call[0] === 'test-plugin-v3.helloWorld'
       );
       
       expect(registerCall).toBeDefined();
@@ -94,7 +94,7 @@ describe('{{pluginNamePascalCase}}', () => {
       callback();
 
       expect(mockContext.ui.showMessage).toHaveBeenCalledWith(
-        'Hello World from {{pluginName}}!',
+        'Hello World from test-plugin-v3!',
         'info'
       );
       expect(mockContext.logger.info).toHaveBeenCalledWith('Hello World command executed');
@@ -127,7 +127,7 @@ describe('Plugin Entry Points', () => {
     
     const plugin = activate(mockContext);
     
-    expect(plugin).toBeInstanceOf({{pluginNamePascalCase}});
+    expect(plugin).toBeInstanceOf(TestPluginV3);
   });
 
   it('should deactivate plugin through entry point', async () => {

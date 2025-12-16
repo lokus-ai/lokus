@@ -1,7 +1,7 @@
-import { PluginContext, WebviewPanel, Disposable } from '@lokus/plugin-sdk';
+import { PluginContext, WebviewPanel, Disposable } from 'lokus-plugin-sdk';
 
-export class {{pluginNamePascalCase}}Panel implements Disposable {
-  private webviewPanel?: WebviewPanel;
+export class {{ pluginNamePascalCase }}Panel implements Disposable {
+  private webviewPanel ?: WebviewPanel;
   private disposables: Disposable[] = [];
 
   constructor(private context: PluginContext) {
@@ -14,78 +14,78 @@ export class {{pluginNamePascalCase}}Panel implements Disposable {
   }
 
   public show(): void {
-    if (this.webviewPanel) {
-      this.webviewPanel.reveal();
-    } else {
-      // Create new panel if none exists
-      this.context.ui.createWebviewPanel(
-        '{{pluginNameCamelCase}}.panel',
-        '{{pluginNamePascalCase}}',
-        'aside',
-        {
-          enableScripts: true,
-          retainContextWhenHidden: true
-        }
-      ).then(panel => {
-        this.setWebviewPanel(panel);
-        panel.reveal();
-      });
-    }
+    if(this.webviewPanel) {
+    this.webviewPanel.reveal();
+  } else {
+    // Create new panel if none exists
+    this.context.ui.createWebviewPanel(
+      '{{pluginNameCamelCase}}.panel',
+      '{{pluginNamePascalCase}}',
+      'aside',
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true
+      }
+    ).then(panel => {
+      this.setWebviewPanel(panel);
+      panel.reveal();
+    });
   }
+}
 
   public refresh(): void {
-    if (this.webviewPanel) {
-      this.updateWebviewContent();
-    }
+  if(this.webviewPanel) {
+  this.updateWebviewContent();
+}
   }
 
   public dispose(): void {
-    this.disposables.forEach(d => d.dispose());
-    this.disposables = [];
-    
-    if (this.webviewPanel) {
-      this.webviewPanel.dispose();
-    }
+  this.disposables.forEach(d => d.dispose());
+  this.disposables = [];
+
+  if(this.webviewPanel) {
+  this.webviewPanel.dispose();
+}
   }
 
   private setupEventListeners(): void {
-    // Listen for configuration changes
-    const configDisposable = this.context.config.onDidChange('{{pluginNameCamelCase}}', () => {
-      this.refresh();
-    });
+  // Listen for configuration changes
+  const configDisposable = this.context.config.onDidChange('{{pluginNameCamelCase}}', () => {
+    this.refresh();
+  });
 
-    this.disposables.push(configDisposable);
-  }
+  this.disposables.push(configDisposable);
+}
 
   private setupWebview(): void {
-    if (!this.webviewPanel) return;
+  if(!this.webviewPanel) return;
 
-    // Handle messages from webview
-    const messageDisposable = this.webviewPanel.onDidReceiveMessage(message => {
-      this.handleWebviewMessage(message);
-    });
+  // Handle messages from webview
+  const messageDisposable = this.webviewPanel.onDidReceiveMessage(message => {
+    this.handleWebviewMessage(message);
+  });
 
-    // Handle panel disposal
-    const disposeDisposable = this.webviewPanel.onDidDispose(() => {
-      this.webviewPanel = undefined;
-    });
+  // Handle panel disposal
+  const disposeDisposable = this.webviewPanel.onDidDispose(() => {
+    this.webviewPanel = undefined;
+  });
 
-    this.disposables.push(messageDisposable, disposeDisposable);
+  this.disposables.push(messageDisposable, disposeDisposable);
 
-    // Set initial content
-    this.updateWebviewContent();
-  }
+  // Set initial content
+  this.updateWebviewContent();
+}
 
   private updateWebviewContent(): void {
-    if (!this.webviewPanel) return;
+  if(!this.webviewPanel) return;
 
-    const config = this.context.config.get('{{pluginNameCamelCase}}', {});
-    
-    this.webviewPanel.webview.html = this.getWebviewContent(config);
-  }
+  const config = this.context.config.get('{{pluginNameCamelCase}}', {});
+
+  this.webviewPanel.webview.html = this.getWebviewContent(config);
+}
 
   private getWebviewContent(config: any): string {
-    return `
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -258,87 +258,87 @@ export class {{pluginNamePascalCase}}Panel implements Disposable {
     </script>
 </body>
 </html>`;
-  }
+}
 
   private handleWebviewMessage(message: any): void {
-    switch (message.type) {
+  switch(message.type) {
       case 'refresh':
-        this.refresh();
-        break;
+  this.refresh();
+  break;
         
       case 'updateConfig':
-        this.updateConfiguration(message.data);
-        break;
+  this.updateConfiguration(message.data);
+  break;
         
       case 'sendMessage':
-        this.sendMessage(message.data.message);
-        break;
+  this.sendMessage(message.data.message);
+  break;
         
       case 'showData':
-        this.showData();
-        break;
+  this.showData();
+  break;
         
       case 'exportData':
-        this.exportData();
-        break;
+  this.exportData();
+  break;
         
       default:
-        this.context.logger.warning('Unknown webview message type:', message.type);
-    }
+  this.context.logger.warning('Unknown webview message type:', message.type);
+}
   }
 
-  private async updateConfiguration(data: any): Promise<void> {
-    try {
-      await this.context.config.update('{{pluginNameCamelCase}}', data);
-      this.context.ui.showInformationMessage('Configuration updated');
-    } catch (error) {
-      this.context.logger.error('Failed to update configuration:', error);
-      this.context.ui.showErrorMessage('Failed to update configuration');
-    }
+  private async updateConfiguration(data: any): Promise < void> {
+  try {
+    await this.context.config.update('{{pluginNameCamelCase}}', data);
+    this.context.ui.showInformationMessage('Configuration updated');
+  } catch(error: any) {
+    this.context.logger.error('Failed to update configuration:', error);
+    this.context.ui.showErrorMessage('Failed to update configuration');
   }
+}
 
   private sendMessage(message: string): void {
-    this.context.ui.showInformationMessage(message);
-    this.context.logger.info('Message sent:', message);
-  }
+  this.context.ui.showInformationMessage(message);
+  this.context.logger.info('Message sent:', message);
+}
 
   private showData(): void {
+  const data = {
+    timestamp: new Date().toISOString(),
+    config: this.context.config.get('{{pluginNameCamelCase}}', {}),
+    plugin: '{{pluginName}}'
+  };
+
+  this.context.logger.json('Plugin data:', data);
+  this.context.ui.showInformationMessage('Data logged to console');
+}
+
+  private async exportData(): Promise < void> {
+  try {
     const data = {
       timestamp: new Date().toISOString(),
       config: this.context.config.get('{{pluginNameCamelCase}}', {}),
-      plugin: '{{pluginName}}'
+      plugin: '{{pluginName}}',
+      version: '0.1.0'
     };
-    
-    this.context.logger.json('Plugin data:', data);
-    this.context.ui.showInformationMessage('Data logged to console');
-  }
 
-  private async exportData(): Promise<void> {
-    try {
-      const data = {
-        timestamp: new Date().toISOString(),
-        config: this.context.config.get('{{pluginNameCamelCase}}', {}),
-        plugin: '{{pluginName}}',
-        version: '0.1.0'
-      };
-      
-      const content = JSON.stringify(data, null, 2);
-      
-      // Show save dialog and write file
-      const uri = await this.context.ui.showSaveDialog({
-        defaultUri: 'plugin-data.json',
-        filters: {
-          'JSON': ['json']
-        }
-      });
-      
-      if (uri) {
-        await this.context.fs.writeFile(uri, content);
-        this.context.ui.showInformationMessage('Data exported successfully');
+    const content = JSON.stringify(data, null, 2);
+
+    // Show save dialog and write file
+    const uri = await this.context.ui.showSaveDialog({
+      defaultUri: 'plugin-data.json',
+      filters: {
+        'JSON': ['json']
       }
-    } catch (error) {
-      this.context.logger.error('Failed to export data:', error);
-      this.context.ui.showErrorMessage('Failed to export data');
+    });
+
+    if(uri) {
+      await this.context.fs.writeFile(uri, content);
+      this.context.ui.showInformationMessage('Data exported successfully');
     }
+  } catch(error: any) {
+    this.context.logger.error('Failed to export data:', error);
+    this.context.ui.showErrorMessage('Failed to export data');
   }
+}
 }

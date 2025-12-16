@@ -144,3 +144,10 @@ Progress.md
 
 nul
 Guide-To-Fix-Domain.md
+packages/lokus-plugin-cli/my-react-plugin-sixteen
+packages/lokus-plugin-cli/my-react-plugin-ten
+packages/lokus-plugin-cli/test-plugin
+*.tgz
+test-plugins/*/package-lock.json
+test-plugin-v3/package-lock.json
+temp-plugins/

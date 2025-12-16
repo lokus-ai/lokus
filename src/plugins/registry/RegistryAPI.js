@@ -4,7 +4,7 @@
  */
 
 import { EventEmitter } from '../../utils/EventEmitter.js'
-import { logger } from '../../utils/Logger.js'
+import { logger } from '../../utils/logger.js'
 
 /**
  * API Response Status
@@ -20,7 +20,7 @@ export const API_STATUS = {
 }
 
 /**
- * Authentication Methods
+* Authentication Methods
  */
 export const AUTH_METHODS = {
   API_KEY: 'api_key',
@@ -36,7 +36,7 @@ export class RegistryAPI extends EventEmitter {
     super()
 
     this.config = {
-      baseUrl: 'https://registry.lokus.dev/api/v1',
+      baseUrl: 'https://lokusmd.com/api/v1/registry',
       timeout: 30000,
       retryAttempts: 1,
       retryDelay: 500,
@@ -161,52 +161,69 @@ export class RegistryAPI extends EventEmitter {
       ...options
     })
 
-    return this.request('GET', `/plugins/search?${params}`, null, {
+    return this.request('GET', `/search?${params}`, null, {
       cacheable: true,
       cacheKey: `search_${query}_${JSON.stringify(options)}`
     })
   }
 
   async getPlugin(pluginId, version = 'latest') {
-    return this.request('GET', `/plugins/${pluginId}/${version}`, null, {
+    // If version is 'latest', we use the plugin details endpoint which returns latest
+    // If specific version, we might need a different endpoint or query param
+    // My API: /api/v1/registry/plugin/[id] returns details + versions
+    return this.request('GET', `/plugin/${pluginId}`, null, {
       cacheable: true,
       cacheKey: `plugin_${pluginId}_${version}`
     })
   }
 
   async getFeaturedPlugins(limit = 10) {
-    return this.request('GET', `/plugins/featured?limit=${limit}`, null, {
+    // My API: /api/v1/registry/featured (I need to create this or use search)
+    // For now, let's use search with sort
+    return this.request('GET', `/search?sort=downloads&limit=${limit}`, null, {
       cacheable: true,
       cacheKey: `featured_${limit}`
     })
   }
 
   async getPluginVersions(pluginId) {
-    return this.request('GET', `/plugins/${pluginId}/versions`, null, {
-      cacheable: true,
-      cacheKey: `versions_${pluginId}`
-    })
+    // Included in getPlugin response in my API
+    const response = await this.getPlugin(pluginId)
+    return { ...response, data: response.data.versions || [] }
   }
 
   async getPluginStats(pluginId) {
-    return this.request('GET', `/plugins/${pluginId}/stats`, null, {
-      cacheable: true,
-      cacheKey: `stats_${pluginId}`
-    })
+    // Included in getPlugin response
+    return this.getPlugin(pluginId)
   }
 
   async downloadPlugin(pluginId, version = 'latest') {
-    const response = await this.request('GET', `/plugins/${pluginId}/${version}/download`, null, {
+    // My API: /api/v1/registry/download/[id]/[version]
+    // If version is latest, we need to resolve it first or backend handles it
+    // My backend expects specific version for download
+
+    let targetVersion = version;
+    if (version === 'latest') {
+      const plugin = await this.getPlugin(pluginId);
+      targetVersion = plugin.data.latest_version;
+    }
+
+    const response = await this.request('GET', `/download/${pluginId}/${targetVersion}`, null, {
       skipCache: true,
-      responseType: 'blob'
+      responseType: 'json' // My API returns a JSON with signed URL
     })
 
-    // Track download
-    this.trackDownload(pluginId, version).catch(err =>
-      this.logger.warn('Failed to track download:', err)
-    )
+    // Now fetch the actual file from the signed URL
+    if (response.data && response.data.url) {
+      const fileResponse = await fetch(response.data.url);
+      if (!fileResponse.ok) throw new Error('Failed to download file from storage');
+      return {
+        data: await fileResponse.blob(),
+        status: API_STATUS.SUCCESS
+      };
+    }
 
-    return response
+    throw new Error('Invalid download response');
   }
 
   /**

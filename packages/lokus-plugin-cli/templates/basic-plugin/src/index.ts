@@ -1,4 +1,4 @@
-import { BasePlugin, PluginContext, PluginActivationContext } from '@lokus/plugin-sdk';
+import { BasePlugin, PluginContext, PluginActivationContext } from 'lokus-plugin-sdk';
 
 /**
  * {{pluginNamePascalCase}} - {{description}}
@@ -9,16 +9,13 @@ import { BasePlugin, PluginContext, PluginActivationContext } from '@lokus/plugi
  * @author {{author}}
  * @version 0.1.0
  */
-export class {{pluginNamePascalCase}} extends BasePlugin {
+export class {{ pluginNamePascalCase }} extends BasePlugin {
   constructor(context: PluginContext) {
     super(context);
     this.logger.info('{{pluginNamePascalCase}} plugin initialized');
   }
 
   /**
-   * Plugin activation lifecycle method.
-   * Called when the plugin is activated by Lokus.
-   */
   async activate(context: PluginActivationContext): Promise<void> {
     this.logger.info('Activating {{pluginNamePascalCase}} plugin...');
 
@@ -40,15 +37,15 @@ export class {{pluginNamePascalCase}} extends BasePlugin {
    * Plugin deactivation lifecycle method.
    * Called when the plugin is deactivated or Lokus is shutting down.
    */
-  async deactivate(): Promise<void> {
+  async deactivate(): Promise < void> {
     this.logger.info('Deactivating {{pluginNamePascalCase}} plugin...');
 
     try {
       // Clean up resources, remove event listeners, etc.
       await this.cleanup();
-      
+
       this.logger.info('{{pluginNamePascalCase}} plugin deactivated successfully');
-    } catch (error) {
+    } catch(error) {
       this.logger.error('Error during plugin deactivation:', error);
     }
   }
@@ -56,7 +53,7 @@ export class {{pluginNamePascalCase}} extends BasePlugin {
   /**
    * Register plugin contributions (commands, menus, etc.)
    */
-  private async registerContributions(context: PluginActivationContext): Promise<void> {
+  private async registerContributions(context: PluginActivationContext): Promise < void> {
     // Example: Register a command
     const disposable = context.commands.registerCommand('{{pluginNameCamelCase}}.helloWorld', () => {
       this.showHelloWorldMessage();
@@ -69,12 +66,12 @@ export class {{pluginNamePascalCase}} extends BasePlugin {
   /**
    * Initialize plugin-specific features
    */
-  private async initializeFeatures(): Promise<void> {
+  private async initializeFeatures(): Promise < void> {
     // Add your plugin initialization logic here
     this.logger.debug('Initializing plugin features...');
-    
+
     // Example: Set up configuration listeners
-    this.config.onDidChange('{{pluginNameCamelCase}}', (newValue, oldValue) => {
+    this.config.onDidChange('{{pluginNameCamelCase}}', (newValue: unknown, oldValue: unknown) => {
       this.logger.info('Configuration changed:', { newValue, oldValue });
     });
   }
@@ -82,7 +79,7 @@ export class {{pluginNamePascalCase}} extends BasePlugin {
   /**
    * Clean up plugin resources
    */
-  private async cleanup(): Promise<void> {
+  private async cleanup(): Promise < void> {
     this.logger.debug('Cleaning up plugin resources...');
     // All disposables are automatically cleaned up by the base class
   }
@@ -92,14 +89,14 @@ export class {{pluginNamePascalCase}} extends BasePlugin {
    */
   private showHelloWorldMessage(): void {
     const message = 'Hello from {{pluginNamePascalCase}} plugin!';
-    
+
     // Show notification
     this.context.ui.showInformationMessage(message);
-    
+
     // Log the action
     this.logger.info('Hello World command executed');
   }
 }
 
 // Export the plugin class as default for dynamic loading
-export default {{pluginNamePascalCase}};
+export default {{ pluginNamePascalCase }};

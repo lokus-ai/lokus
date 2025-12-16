@@ -26,22 +26,22 @@ import type { Permission } from '../permissions.js'
 export interface LokusAPI {
   /** Commands API - Register and execute commands */
   readonly commands: CommandAPI
-  
+
   /** Editor API - Text editor operations */
   readonly editor: EditorAPI
-  
+
   /** UI API - User interface extensions */
   readonly ui: UIAPI
-  
+
   /** Workspace API - Workspace and project operations */
   readonly workspace: WorkspaceAPI
-  
+
   /** File System API - File operations */
   readonly fs: FileSystemAPI
-  
+
   /** Network API - HTTP requests and networking */
   readonly network: NetworkAPI
-  
+
   /** Storage API - Plugin-scoped storage */
   readonly storage: StorageAPI
 
@@ -50,13 +50,13 @@ export interface LokusAPI {
 
   /** Task API - Task and build systems */
   readonly tasks: TaskAPI
-  
+
   /** Debug API - Debugging support */
   readonly debug: DebugAPI
-  
+
   /** Language API - Language support */
   readonly languages: LanguageAPI
-  
+
   /** Theme API - Theme registration */
   readonly themes: ThemeAPI
 
@@ -65,22 +65,22 @@ export interface LokusAPI {
 
   /** Terminal API - Terminal operations */
   readonly terminal: TerminalAPI
-  
+
   /** Plugin ID */
   readonly pluginId: string
-  
+
   /** Plugin manifest */
   readonly manifest: PluginManifest
-  
+
   /** Check if plugin has permission */
   hasPermission(permission: Permission): boolean
-  
+
   /** Add disposable for cleanup */
   addDisposable(disposable: Disposable): void
-  
+
   /** Get plugin context information */
   getContext(): PluginContext
-  
+
   /** Log message */
   log(level: LogLevel, message: string, ...args: unknown[]): void
 }
@@ -91,22 +91,22 @@ export interface LokusAPI {
 export interface PluginContext {
   /** Plugin ID */
   pluginId: string
-  
+
   /** Plugin version */
   version: string
-  
+
   /** Whether plugin is active */
   isActive: boolean
-  
+
   /** Granted permissions */
   permissions: string[]
-  
+
   /** Plugin storage path */
   storagePath: string
-  
+
   /** Plugin asset path */
   assetPath: string
-  
+
   /** Development mode */
   isDevelopment: boolean
 }
@@ -129,19 +129,19 @@ export enum LogLevel {
 export interface APIVersion {
   /** Major version */
   major: number
-  
+
   /** Minor version */
   minor: number
-  
+
   /** Patch version */
   patch: number
-  
+
   /** Pre-release tag */
   prerelease?: string
-  
+
   /** Build metadata */
   build?: string
-  
+
   /** Full version string */
   version: string
 }
@@ -152,10 +152,10 @@ export interface APIVersion {
 export interface APICompatibility {
   /** Current API version */
   current: APIVersion
-  
+
   /** Minimum supported version */
   minimum: APIVersion
-  
+
   /** Deprecated features */
   deprecated: Array<{
     feature: string
@@ -163,7 +163,7 @@ export interface APICompatibility {
     replacedBy?: string
     willBeRemovedIn?: string
   }>
-  
+
   /** Breaking changes */
   breakingChanges: Array<{
     version: string
@@ -178,31 +178,31 @@ export interface APICompatibility {
 export enum APIErrorCode {
   /** Permission denied */
   PERMISSION_DENIED = 'PERMISSION_DENIED',
-  
+
   /** Invalid parameters */
   INVALID_PARAMS = 'INVALID_PARAMS',
-  
+
   /** Resource not found */
   NOT_FOUND = 'NOT_FOUND',
-  
+
   /** Operation not supported */
   NOT_SUPPORTED = 'NOT_SUPPORTED',
-  
+
   /** Rate limit exceeded */
   RATE_LIMITED = 'RATE_LIMITED',
-  
+
   /** Resource exhausted */
   RESOURCE_EXHAUSTED = 'RESOURCE_EXHAUSTED',
-  
+
   /** Internal error */
   INTERNAL_ERROR = 'INTERNAL_ERROR',
-  
+
   /** Network error */
   NETWORK_ERROR = 'NETWORK_ERROR',
-  
+
   /** Timeout */
   TIMEOUT = 'TIMEOUT',
-  
+
   /** Cancelled */
   CANCELLED = 'CANCELLED'
 }
@@ -227,22 +227,22 @@ export class APIError extends Error {
 export interface APIRequestOptions {
   /** Request timeout in milliseconds */
   timeout?: number
-  
+
   /** Whether to retry on failure */
   retry?: boolean
-  
+
   /** Number of retry attempts */
   retries?: number
-  
+
   /** Retry delay in milliseconds */
   retryDelay?: number
-  
+
   /** Abort signal */
   signal?: AbortSignal
-  
+
   /** Request priority */
   priority?: 'low' | 'normal' | 'high'
-  
+
   /** Additional context */
   context?: Record<string, unknown>
 }
@@ -253,39 +253,39 @@ export interface APIRequestOptions {
 export interface APIResponse<T = unknown> {
   /** Response data */
   data: T
-  
+
   /** Response metadata */
   metadata?: {
     /** Request ID */
     requestId: string
-    
+
     /** Response time in milliseconds */
     responseTime: number
-    
+
     /** API version used */
     apiVersion: string
-    
+
     /** Additional metadata */
     [key: string]: unknown
   }
-  
+
   /** Pagination info (if applicable) */
   pagination?: {
     /** Current page */
     page: number
-    
+
     /** Items per page */
     pageSize: number
-    
+
     /** Total items */
     total: number
-    
+
     /** Total pages */
     totalPages: number
-    
+
     /** Has next page */
     hasNext: boolean
-    
+
     /** Has previous page */
     hasPrevious: boolean
   }
@@ -297,16 +297,16 @@ export interface APIResponse<T = unknown> {
 export interface PaginatedRequestOptions extends APIRequestOptions {
   /** Page number (1-based) */
   page?: number
-  
+
   /** Items per page */
   pageSize?: number
-  
+
   /** Sort field */
   sortBy?: string
-  
+
   /** Sort order */
   sortOrder?: 'asc' | 'desc'
-  
+
   /** Filter criteria */
   filter?: Record<string, unknown>
 }
@@ -318,13 +318,13 @@ export interface ProgressCallback {
   (progress: {
     /** Current progress (0-100) */
     percentage: number
-    
+
     /** Progress message */
     message?: string
-    
+
     /** Whether operation can be cancelled */
     cancellable?: boolean
-    
+
     /** Additional progress data */
     data?: Record<string, unknown>
   }): void
@@ -333,16 +333,7 @@ export interface ProgressCallback {
 /**
  * Cancellation token
  */
-export interface CancellationToken {
-  /** Whether cancellation was requested */
-  isCancellationRequested: boolean
-  
-  /** Cancellation event */
-  onCancellationRequested: Event<void>
-  
-  /** Throw if cancelled */
-  throwIfCancelled(): void
-}
+import type { CancellationToken } from '../models.js'
 
 /**
  * Progress reporter
@@ -352,7 +343,7 @@ export interface ProgressReporter {
   report(progress: {
     /** Progress increment */
     increment?: number
-    
+
     /** Progress message */
     message?: string
   }): void
@@ -364,19 +355,19 @@ export interface ProgressReporter {
 export interface LongRunningOperationOptions extends APIRequestOptions {
   /** Progress callback */
   onProgress?: ProgressCallback
-  
+
   /** Cancellation token */
   cancellationToken?: CancellationToken
-  
+
   /** Operation title */
   title?: string
-  
+
   /** Whether operation can be cancelled */
   cancellable?: boolean
-  
+
   /** Whether to show progress in UI */
   showProgress?: boolean
-  
+
   /** Location to show progress */
   location?: 'notification' | 'window' | 'source-control'
 }
