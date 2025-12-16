@@ -1,11 +1,4 @@
-import { Node, mergeAttributes, InputRule } from '@tiptap/core'
-
-// Parse canvas link to extract name
-function parseCanvasLink(raw) {
-  return {
-    name: raw.trim()
-  }
-}
+import { Node, mergeAttributes } from '@tiptap/core'
 
 // Resolve canvas file from the global file index
 async function resolveCanvasPath(canvasName) {
@@ -61,7 +54,42 @@ export const CanvasLink = Node.create({
   },
 
   parseHTML() {
-    return [{ tag: 'a[data-type="canvas-link"]' }]
+    return [
+      {
+        // Match span (new format)
+        tag: 'span[data-type="canvas-link"]',
+        getAttrs: (node) => {
+          const href = node.getAttribute('href') || ''
+          const textContent = node.textContent || ''
+          const className = node.getAttribute('class') || ''
+
+          return {
+            canvasName: textContent.trim(),
+            canvasPath: href,
+            exists: !className.includes('canvas-link-broken'),
+            thumbnailUrl: '',
+            id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
+          }
+        }
+      },
+      {
+        // Also match <a> for backwards compatibility with existing files
+        tag: 'a[data-type="canvas-link"]',
+        getAttrs: (node) => {
+          const href = node.getAttribute('href') || ''
+          const textContent = node.textContent || ''
+          const className = node.getAttribute('class') || ''
+
+          return {
+            canvasName: textContent.trim(),
+            canvasPath: href,
+            exists: !className.includes('canvas-link-broken'),
+            thumbnailUrl: '',
+            id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
+          }
+        }
+      }
+    ]
   },
 
   renderHTML({ HTMLAttributes }) {
@@ -69,11 +97,12 @@ export const CanvasLink = Node.create({
     const className = exists ? 'canvas-link' : 'canvas-link canvas-link-broken'
 
     return [
-      'a',
+      'span',
       mergeAttributes(HTMLAttributes, {
         'data-type': 'canvas-link',
         class: className,
-        href: canvasPath || canvasName
+        href: canvasPath || canvasName,
+        style: 'cursor: pointer'
       }),
       canvasName
     ]
@@ -128,39 +157,35 @@ export const CanvasLink = Node.create({
 
   addNodeView() {
     return ({ node }) => {
-      const dom = document.createElement('a')
+      // Use span instead of <a> to prevent browser navigation/shell.open
+      const dom = document.createElement('span')
       dom.classList.add('canvas-link')
       dom.setAttribute('data-type', 'canvas-link')
+      // Store path in data-href for click handler in Editor.jsx
       dom.setAttribute('href', node.attrs.canvasPath || node.attrs.canvasName)
+      dom.style.cursor = 'pointer'
 
       // Mark broken links
       if (!node.attrs.exists) {
         dom.classList.add('canvas-link-broken')
       }
 
-      // Create icon element
-      const icon = document.createElement('span')
-      icon.classList.add('canvas-link-icon')
-      icon.textContent = '🎨' // Canvas icon
-
-      // Create text element
-      const text = document.createElement('span')
-      text.classList.add('canvas-link-text')
-      text.textContent = node.attrs.canvasName
-
-      dom.appendChild(icon)
-      dom.appendChild(text)
+      // Just show the canvas name - no emoji
+      dom.textContent = node.attrs.canvasName
 
       let hoverTimeout = null
 
       // Hover event handlers
       dom.addEventListener('mouseenter', (event) => {
         hoverTimeout = setTimeout(() => {
+          // Use canvasPath if available, otherwise try to construct from canvasName
+          const pathForPreview = node.attrs.canvasPath || node.attrs.canvasName
+
           // Dispatch custom event with canvas link details
           window.dispatchEvent(new CustomEvent('canvas-link-hover', {
             detail: {
               canvasName: node.attrs.canvasName,
-              canvasPath: node.attrs.canvasPath,
+              canvasPath: pathForPreview,
               exists: node.attrs.exists,
               thumbnailUrl: node.attrs.thumbnailUrl,
               position: {
@@ -184,8 +209,6 @@ export const CanvasLink = Node.create({
       })
 
       dom.addEventListener('click', (event) => {
-        event.preventDefault()
-
         // Clear timeout if link is clicked
         if (hoverTimeout) {
           clearTimeout(hoverTimeout)
@@ -195,15 +218,8 @@ export const CanvasLink = Node.create({
         // Close preview when link is clicked
         window.dispatchEvent(new CustomEvent('canvas-link-hover-end'))
 
-        // Dispatch event to open canvas
-        if (node.attrs.exists && node.attrs.canvasPath) {
-          window.dispatchEvent(new CustomEvent('lokus:open-canvas', {
-            detail: {
-              canvasName: node.attrs.canvasName,
-              canvasPath: node.attrs.canvasPath
-            }
-          }))
-        }
+        // Click handling is done in Editor.jsx handleDOMEvents
+        // which uses Tauri emit() for proper file opening
       })
 
       return {
@@ -215,57 +231,8 @@ export const CanvasLink = Node.create({
         }
       }
     }
-  },
-
-  addInputRules() {
-    return [
-      // ![Canvas Name] pattern
-      new InputRule({
-        find: /!\[([^\]]+)\]$/,
-        handler: ({ range, match, chain }) => {
-          const raw = match[1]
-          const id = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)
-          const parts = parseCanvasLink(raw)
-
-          const baseAttrs = {
-            id,
-            canvasName: parts.name,
-            canvasPath: '',
-            thumbnailUrl: '',
-            exists: false
-          }
-
-          chain().deleteRange(range).insertContent({ type: this.name, attrs: baseAttrs }).run()
-
-          // Resolve canvas path asynchronously
-          resolveCanvasPath(parts.name).then(resolved => {
-            this.editor.commands.command(({ tr, state, dispatch }) => {
-              let pos = -1
-              state.doc.descendants((node, position) => {
-                if (pos !== -1) return false
-                if (node.type.name === this.name && node.attrs.id === id) {
-                  pos = position
-                  return false
-                }
-                return true
-              })
-
-              if (pos !== -1) {
-                const newAttrs = {
-                  ...baseAttrs,
-                  canvasPath: resolved.path || '',
-                  exists: resolved.exists
-                }
-                tr.setNodeMarkup(pos, undefined, newAttrs)
-                dispatch(tr)
-              }
-              return true
-            })
-          })
-        }
-      })
-    ]
   }
+  // InputRule removed - canvas links are now created via WikiLinkSuggest autocomplete
 })
 
 export default CanvasLink

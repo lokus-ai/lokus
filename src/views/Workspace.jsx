@@ -1729,8 +1729,34 @@ function WorkspaceWithScope({ path }) {
     };
 
     const handleOpenCanvas = (event) => {
-      const { canvasPath } = event.detail;
-      handleOpenFile({ path: canvasPath }); // Use existing file opening logic
+      let { canvasPath } = event.detail;
+
+      // Resolve path if it's not absolute (just a canvas name)
+      if (canvasPath && !canvasPath.startsWith('/') && !canvasPath.includes('/')) {
+        const fileIndex = globalThis.__LOKUS_FILE_INDEX__ || [];
+        const canvasFileName = canvasPath.endsWith('.canvas') ? canvasPath : `${canvasPath}.canvas`;
+
+        const matchedFile = fileIndex.find(file => {
+          const fileName = file.name || file.path.split('/').pop();
+          return fileName === canvasFileName || fileName === canvasPath;
+        });
+
+        if (matchedFile) {
+          canvasPath = matchedFile.path;
+        }
+      }
+
+      // Open canvas file directly using the same logic as openPath
+      if (canvasPath) {
+        const name = canvasPath.split('/').pop() || canvasPath;
+        setOpenTabs(prevTabs => {
+          const newTabs = prevTabs.filter(t => t.path !== canvasPath);
+          newTabs.unshift({ path: canvasPath, name });
+          if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
+          return newTabs;
+        });
+        setActiveFile(canvasPath);
+      }
     };
 
     window.addEventListener('canvas-link-hover', handleCanvasLinkHover);
@@ -4960,6 +4986,9 @@ function WorkspaceWithScope({ path }) {
             canvasName={canvasPreview.canvasName}
             canvasPath={canvasPreview.canvasPath}
             position={canvasPreview.position}
+            thumbnailUrl={canvasPreview.thumbnailUrl}
+            loading={canvasPreview.loading}
+            error={canvasPreview.error}
             onClose={() => setCanvasPreview(null)}
           />
         )}

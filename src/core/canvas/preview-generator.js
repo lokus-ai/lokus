@@ -46,14 +46,31 @@ export async function generatePreview(canvasPath) {
       throw new Error('Invalid canvas path');
     }
 
-    // Check cache first
-    const cached = getCachedPreview(canvasPath);
+    // Resolve path if it's not absolute (just a canvas name)
+    let resolvedPath = canvasPath;
+    if (!canvasPath.startsWith('/') && !canvasPath.includes('/')) {
+      // Try to find the canvas in the file index
+      const fileIndex = globalThis.__LOKUS_FILE_INDEX__ || [];
+      const canvasFileName = canvasPath.endsWith('.canvas') ? canvasPath : `${canvasPath}.canvas`;
+
+      const matchedFile = fileIndex.find(file => {
+        const fileName = file.name || file.path.split('/').pop();
+        return fileName === canvasFileName || fileName === canvasPath;
+      });
+
+      if (matchedFile) {
+        resolvedPath = matchedFile.path;
+      }
+    }
+
+    // Check cache first (use resolved path for caching)
+    const cached = getCachedPreview(resolvedPath);
     if (cached) {
       return cached;
     }
 
     // Load canvas data using canvas manager
-    const tldrawSnapshot = await canvasManager.loadCanvas(canvasPath);
+    const tldrawSnapshot = await canvasManager.loadCanvas(resolvedPath);
 
     // Validate snapshot structure
     if (!tldrawSnapshot || typeof tldrawSnapshot !== 'object') {
@@ -192,14 +209,30 @@ export function getCacheStats() {
  * @private
  */
 function extractShapes(tldrawSnapshot) {
-  if (!tldrawSnapshot.records || !Array.isArray(tldrawSnapshot.records)) {
-    return [];
+  // Handle format with records array (TLDraw export format)
+  if (tldrawSnapshot.records && Array.isArray(tldrawSnapshot.records)) {
+    return tldrawSnapshot.records.filter(record =>
+      record.typeName === 'shape' && record.type
+    );
   }
 
-  // Filter for shape records only (exclude camera, page, instance, etc.)
-  return tldrawSnapshot.records.filter(record =>
-    record.typeName === 'shape' && record.type
-  );
+  // Handle format with document.store (Lokus canvas format)
+  if (tldrawSnapshot.document?.store) {
+    const store = tldrawSnapshot.document.store;
+    return Object.values(store).filter(record =>
+      record.typeName === 'shape' && record.type
+    );
+  }
+
+  // Handle format with just store (alternative format)
+  if (tldrawSnapshot.store) {
+    const store = tldrawSnapshot.store;
+    return Object.values(store).filter(record =>
+      record.typeName === 'shape' && record.type
+    );
+  }
+
+  return [];
 }
 
 /**
@@ -226,16 +259,43 @@ function calculateBounds(shapes) {
   shapes.forEach(shape => {
     const x = shape.x || 0;
     const y = shape.y || 0;
-    const width = shape.props?.w || 100;
-    const height = shape.props?.h || 50;
 
-    minX = Math.min(minX, x);
-    minY = Math.min(minY, y);
-    maxX = Math.max(maxX, x + width);
-    maxY = Math.max(maxY, y + height);
+    // Handle draw shapes - calculate bounds from segment points
+    if (shape.type === 'draw' && shape.props?.segments) {
+      for (const segment of shape.props.segments) {
+        for (const point of segment.points || []) {
+          minX = Math.min(minX, x + point.x);
+          minY = Math.min(minY, y + point.y);
+          maxX = Math.max(maxX, x + point.x);
+          maxY = Math.max(maxY, y + point.y);
+        }
+      }
+    }
+    // Handle arrow shapes - calculate bounds from start/end points
+    else if (shape.type === 'arrow') {
+      const startX = x + (shape.props?.start?.x || 0);
+      const startY = y + (shape.props?.start?.y || 0);
+      const endX = x + (shape.props?.end?.x || 0);
+      const endY = y + (shape.props?.end?.y || 0);
+
+      minX = Math.min(minX, startX, endX);
+      minY = Math.min(minY, startY, endY);
+      maxX = Math.max(maxX, startX, endX);
+      maxY = Math.max(maxY, startY, endY);
+    }
+    // Handle standard shapes with w/h
+    else {
+      const width = shape.props?.w || 100;
+      const height = shape.props?.h || 50;
+
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + width);
+      maxY = Math.max(maxY, y + height);
+    }
   });
 
-  // Add padding (10% of dimensions)
+  // Add padding
   const padding = 20;
   minX -= padding;
   minY -= padding;
@@ -279,8 +339,8 @@ function generateSvgFromShapes(shapes, bounds) {
 <svg xmlns="http://www.w3.org/2000/svg"
      width="${finalWidth}"
      height="${finalHeight}"
-     viewBox="0 0 ${viewBoxWidth} ${viewBoxHeight}"
-     style="background: white;">
+     viewBox="0 0 ${viewBoxWidth} ${viewBoxHeight}">
+  <rect width="100%" height="100%" fill="#1e1e2e" rx="4" />
   <g transform="translate(${-minX}, ${-minY})">
     ${shapeElements}
   </g>
@@ -329,23 +389,50 @@ function convertShapeToSvg(shape, offsetX = 0, offsetY = 0) {
  */
 function convertTextShape(shape, x, y, color, opacity) {
   const width = shape.props?.w || 200;
-  const height = shape.props?.h || 50;
-  const text = shape.props?.text || '';
-  const fontSize = shape.props?.size === 's' ? 12 : shape.props?.size === 'l' ? 20 : 16;
+  const scale = shape.props?.scale || 1;
+
+  // Extract text from richText format or fallback to text property
+  let text = '';
+  if (shape.props?.richText?.content) {
+    // New richText format
+    text = shape.props.richText.content
+      .map(para => {
+        if (para.content) {
+          return para.content.map(node => node.text || '').join('');
+        }
+        return '';
+      })
+      .join('\n');
+  } else {
+    // Fallback to old format
+    text = shape.props?.text || '';
+  }
+
+  if (!text) {
+    return null;
+  }
+
+  // Calculate font size based on size prop and scale
+  const baseFontSize = shape.props?.size === 's' ? 16 : shape.props?.size === 'l' ? 32 : 24;
+  const fontSize = baseFontSize * scale;
 
   // Escape HTML entities in text
   const escapedText = escapeXml(text);
 
-  // Simple text wrapping for previews
-  const lines = wrapText(escapedText, 30); // Rough character limit per line
+  // Handle text alignment
+  const textAlign = shape.props?.textAlign || 'start';
+  const anchor = textAlign === 'middle' ? 'middle' : textAlign === 'end' ? 'end' : 'start';
+  const textX = textAlign === 'middle' ? x + width / 2 : textAlign === 'end' ? x + width : x;
+
+  // Split into lines
+  const lines = escapedText.split('\n');
   const lineHeight = fontSize * 1.2;
-  const textY = y + (height - lines.length * lineHeight) / 2 + fontSize;
 
   const textElements = lines.map((line, i) =>
-    `<tspan x="${x + 5}" dy="${i === 0 ? 0 : lineHeight}">${line}</tspan>`
+    `<tspan x="${textX}" dy="${i === 0 ? 0 : lineHeight}">${line}</tspan>`
   ).join('\n      ');
 
-  return `<text x="${x}" y="${textY}" font-size="${fontSize}" fill="${color}" opacity="${opacity}" font-family="sans-serif">
+  return `<text x="${textX}" y="${y + fontSize}" font-size="${fontSize}" fill="${color}" opacity="${opacity}" font-family="sans-serif" text-anchor="${anchor}">
       ${textElements}
     </text>`;
 }
@@ -444,7 +531,7 @@ function convertImageShape(shape, x, y, opacity) {
 
   // For preview, just show a placeholder rectangle with image icon
   return `<g opacity="${opacity}">
-      <rect x="${x}" y="${y}" width="${width}" height="${height}" fill="#f0f0f0" stroke="#ccc" stroke-width="1" />
+      <rect x="${x}" y="${y}" width="${width}" height="${height}" fill="rgba(128, 128, 128, 0.2)" stroke="rgba(128, 128, 128, 0.5)" stroke-width="1" />
       <text x="${x + width / 2}" y="${y + height / 2}" font-size="24" text-anchor="middle" alignment-baseline="middle">🖼️</text>
     </g>`;
 }
@@ -454,20 +541,48 @@ function convertImageShape(shape, x, y, opacity) {
  * @private
  */
 function convertDrawShape(shape, x, y, color, opacity) {
-  // Draw shapes are complex paths - for preview, show simplified placeholder
-  const width = shape.props?.w || 50;
-  const height = shape.props?.h || 50;
+  const segments = shape.props?.segments || [];
 
-  return `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="none" stroke="${color}" stroke-width="2" opacity="${opacity}" rx="5" />`;
+  if (segments.length === 0) {
+    return null;
+  }
+
+  // Convert segments to SVG path data
+  let pathData = '';
+
+  for (const segment of segments) {
+    const points = segment.points || [];
+    if (points.length === 0) continue;
+
+    // Move to first point
+    const firstPoint = points[0];
+    pathData += `M ${x + firstPoint.x} ${y + firstPoint.y} `;
+
+    // Line to subsequent points
+    for (let i = 1; i < points.length; i++) {
+      const point = points[i];
+      pathData += `L ${x + point.x} ${y + point.y} `;
+    }
+  }
+
+  if (!pathData) {
+    return null;
+  }
+
+  const strokeWidth = shape.props?.size === 's' ? 1 : shape.props?.size === 'l' ? 3 : 2;
+
+  return `<path d="${pathData}" fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}" />`;
 }
 
 /**
  * Convert TLDraw color names to hex values
+ * TLDraw's "black" color appears as white/light on dark backgrounds,
+ * so we map it to a light color for preview visibility
  * @private
  */
 function getColorHex(colorName) {
   const colorMap = {
-    black: '#1d1d1d',
+    black: '#e1e1e1',  // Light gray for dark mode visibility
     grey: '#adb5bd',
     'light-gray': '#ced4da',
     white: '#ffffff',
@@ -483,7 +598,7 @@ function getColorHex(colorName) {
     'light-green': '#8ce99a'
   };
 
-  return colorMap[colorName] || '#1d1d1d';
+  return colorMap[colorName] || '#e1e1e1';
 }
 
 /**
@@ -535,13 +650,12 @@ function createEmptyCanvasSvg() {
 <svg xmlns="http://www.w3.org/2000/svg"
      width="${MAX_PREVIEW_WIDTH}"
      height="${MAX_PREVIEW_HEIGHT}"
-     viewBox="0 0 ${MAX_PREVIEW_WIDTH} ${MAX_PREVIEW_HEIGHT}"
-     style="background: white;">
-  <rect width="100%" height="100%" fill="#fafafa" />
-  <text x="50%" y="50%" font-size="16" fill="#aaa" text-anchor="middle" alignment-baseline="middle" font-family="sans-serif">Empty Canvas</text>
+     viewBox="0 0 ${MAX_PREVIEW_WIDTH} ${MAX_PREVIEW_HEIGHT}">
+  <rect width="100%" height="100%" fill="#1e1e2e" rx="4" />
+  <text x="50%" y="50%" font-size="16" fill="#666" text-anchor="middle" alignment-baseline="middle" font-family="sans-serif">Empty Canvas</text>
 </svg>`;
 
-  return svgToDataUrl(svg);
+  return svg;
 }
 
 /**
@@ -553,11 +667,10 @@ function createErrorSvg(errorMessage) {
 <svg xmlns="http://www.w3.org/2000/svg"
      width="${MAX_PREVIEW_WIDTH}"
      height="${MAX_PREVIEW_HEIGHT}"
-     viewBox="0 0 ${MAX_PREVIEW_WIDTH} ${MAX_PREVIEW_HEIGHT}"
-     style="background: white;">
-  <rect width="100%" height="100%" fill="#fff5f5" />
+     viewBox="0 0 ${MAX_PREVIEW_WIDTH} ${MAX_PREVIEW_HEIGHT}">
+  <rect width="100%" height="100%" fill="#1e1e2e" rx="4" />
   <text x="50%" y="40%" font-size="32" text-anchor="middle" alignment-baseline="middle">⚠️</text>
-  <text x="50%" y="60%" font-size="14" fill="#c92a2a" text-anchor="middle" alignment-baseline="middle" font-family="sans-serif">Preview Error</text>
+  <text x="50%" y="60%" font-size="14" fill="#ff6b6b" text-anchor="middle" alignment-baseline="middle" font-family="sans-serif">Preview Error</text>
 </svg>`;
 
   return svg;

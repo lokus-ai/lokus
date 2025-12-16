@@ -2,80 +2,38 @@
 /* Styles for canvas links, previews, and related components */
 
 /* ========================================
-   Canvas Link Badge Styles
+   Canvas Link Styles (distinct from wiki links)
+   Uses purple/violet color to differentiate from blue wiki links
    ======================================== */
 
 .canvas-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.25rem 0.5rem;
-  background: rgb(var(--accent) / 0.1);
-  border: 1px solid rgb(var(--accent) / 0.2);
-  border-radius: 4px;
-  color: rgb(var(--accent));
-  font-size: 0.85em;
-  font-family: ui-monospace, monospace;
-  transition: all 0.2s ease;
+  display: inline;
+  padding: 0.125rem 0.25rem;
+  background: rgba(139, 92, 246, 0.1);
+  border-radius: 3px;
+  color: rgb(139, 92, 246);
+  font-size: inherit;
+  transition: all 0.15s ease;
   cursor: pointer;
-  user-select: none;
-  position: relative;
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(139, 92, 246, 0.5);
 }
 
 .canvas-link:hover {
-  background: rgb(var(--accent) / 0.15);
-  border-color: rgb(var(--accent) / 0.35);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgb(var(--accent) / 0.15);
-}
-
-.canvas-link:active {
-  transform: translateY(0);
-  box-shadow: 0 1px 3px rgb(var(--accent) / 0.1);
-}
-
-.canvas-link-icon {
-  width: 1em;
-  height: 1em;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  opacity: 0.8;
-  transition: opacity 0.2s ease;
-}
-
-.canvas-link:hover .canvas-link-icon {
-  opacity: 1;
+  background: rgba(139, 92, 246, 0.2);
+  color: rgb(167, 139, 250);
+  border-bottom-color: rgb(167, 139, 250);
 }
 
 /* ========================================
-   Broken Canvas Link Styles
+   Broken Canvas Link - subtle styling, no strikethrough
    ======================================== */
 
 .canvas-link-broken {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.25rem 0.5rem;
-  background: rgb(var(--danger) / 0.1);
-  border: 1px solid rgb(var(--danger) / 0.2);
-  border-radius: 4px;
-  color: rgb(var(--danger));
-  font-size: 0.85em;
-  font-family: ui-monospace, monospace;
-  transition: all 0.2s ease;
-  cursor: not-allowed;
-  user-select: none;
-  opacity: 0.75;
-  text-decoration: line-through;
-}
-
-.canvas-link-broken:hover {
-  background: rgb(var(--danger) / 0.15);
-  border-color: rgb(var(--danger) / 0.35);
-  opacity: 0.9;
-  box-shadow: 0 2px 6px rgb(var(--danger) / 0.15);
+  color: rgb(139, 92, 246);
+  opacity: 0.6;
+  border-bottom-style: dotted;
+  cursor: pointer;
 }
 
 .canvas-link-broken-icon {

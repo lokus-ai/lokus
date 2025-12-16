@@ -13,12 +13,9 @@ import { X, FileImage, Loader2, AlertCircle, FileQuestion } from 'lucide-react';
  * - Auto-hide on mouseleave
  * - Themed styling using CSS variables
  */
-const CanvasPreviewPopup = ({ canvasName, canvasPath, position, onClose }) => {
+const CanvasPreviewPopup = ({ canvasName, canvasPath, position, thumbnailUrl, loading, error, onClose }) => {
   const previewRef = useRef(null);
   const [adjustedPosition, setAdjustedPosition] = useState(position);
-  const [previewState, setPreviewState] = useState('loading'); // loading, success, error, empty, missing
-  const [svgContent, setSvgContent] = useState(null);
-  const [errorMessage, setErrorMessage] = useState('');
 
   // Smart positioning logic - adjust if goes off-screen
   useEffect(() => {
@@ -60,66 +57,7 @@ const CanvasPreviewPopup = ({ canvasName, canvasPath, position, onClose }) => {
     }
 
     setAdjustedPosition({ x, y });
-  }, [position, previewState]); // Re-run when state changes (content height may change)
-
-  // Fetch canvas preview
-  useEffect(() => {
-    if (!canvasPath) {
-      setPreviewState('missing');
-      return;
-    }
-
-    const fetchCanvasPreview = async () => {
-      try {
-        setPreviewState('loading');
-
-        // TODO: Replace with actual canvas preview generator when available
-        // For now, simulate loading and show placeholder
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Check if canvas file exists
-        // const exists = await window.__TAURI__.fs.exists(canvasPath);
-        // if (!exists) {
-        //   setPreviewState('missing');
-        //   return;
-        // }
-
-        // Load canvas data and generate preview
-        // const canvasData = await window.__TAURI__.fs.readTextFile(canvasPath);
-        // const preview = await generateCanvasPreview(canvasData);
-
-        // Simulate different states for development
-        const random = Math.random();
-        if (random < 0.2) {
-          setPreviewState('empty');
-        } else if (random < 0.3) {
-          setPreviewState('error');
-          setErrorMessage('Failed to generate preview');
-        } else {
-          // Generate placeholder SVG for now
-          const placeholderSvg = `
-            <svg width="400" height="300" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
-              <rect width="400" height="300" fill="#f5f5f5"/>
-              <text x="200" y="150" font-family="Arial" font-size="16" fill="#666" text-anchor="middle">
-                Canvas Preview
-              </text>
-              <text x="200" y="180" font-family="Arial" font-size="14" fill="#999" text-anchor="middle">
-                ${canvasName}
-              </text>
-            </svg>
-          `.trim();
-          setSvgContent(placeholderSvg);
-          setPreviewState('success');
-        }
-      } catch (error) {
-        console.error('Error loading canvas preview:', error);
-        setPreviewState('error');
-        setErrorMessage(error.message || 'Failed to load preview');
-      }
-    };
-
-    fetchCanvasPreview();
-  }, [canvasPath, canvasName]);
+  }, [position, loading, thumbnailUrl]); // Re-run when state changes (content height may change)
 
   // Auto-hide on mouseleave
   const handleMouseLeave = () => {
@@ -156,47 +94,33 @@ const CanvasPreviewPopup = ({ canvasName, canvasPath, position, onClose }) => {
         </button>
       </div>
       <div className="canvas-preview-content">
-        {previewState === 'loading' && (
+        {loading && (
           <div className="canvas-preview-state">
             <Loader2 size={32} className="canvas-preview-spinner" />
             <p className="canvas-preview-state-text">Loading preview...</p>
           </div>
         )}
 
-        {previewState === 'success' && svgContent && (
-          <div
-            className="canvas-preview-svg"
-            dangerouslySetInnerHTML={{ __html: svgContent }}
+        {!loading && !error && thumbnailUrl && (
+          <img
+            src={thumbnailUrl}
+            alt={`Preview of ${canvasName}`}
+            className="canvas-preview-image"
+            style={{ maxWidth: '400px', maxHeight: '300px', objectFit: 'contain' }}
           />
         )}
 
-        {previewState === 'error' && (
+        {!loading && error && (
           <div className="canvas-preview-state">
             <AlertCircle size={32} className="canvas-preview-error-icon" />
             <p className="canvas-preview-state-text">Preview unavailable</p>
-            {errorMessage && (
-              <p className="canvas-preview-error-message">{errorMessage}</p>
-            )}
           </div>
         )}
 
-        {previewState === 'empty' && (
-          <div className="canvas-preview-state">
-            <FileImage size={32} className="canvas-preview-empty-icon" />
-            <p className="canvas-preview-state-text">Empty Canvas</p>
-            <p className="canvas-preview-info">
-              This canvas has no content yet.
-            </p>
-          </div>
-        )}
-
-        {previewState === 'missing' && (
+        {!loading && !error && !thumbnailUrl && !canvasPath && (
           <div className="canvas-preview-state">
             <FileQuestion size={32} className="canvas-preview-missing-icon" />
             <p className="canvas-preview-state-text">Canvas not found</p>
-            <p className="canvas-preview-info">
-              The canvas file could not be located.
-            </p>
           </div>
         )}
       </div>

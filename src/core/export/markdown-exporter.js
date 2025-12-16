@@ -133,7 +133,14 @@ export class MarkdownExporter {
               } else {
                 result += `[[${target}]]`;
               }
-            } else {
+            }
+            // Handle canvas links
+            else if (dataType === 'canvas-link' && preserveWikiLinks) {
+              // Get canvas name from the link text (content) or data attribute
+              const canvasName = content.trim();
+              result += `![${canvasName}]`;
+            }
+            else {
               result += `[${content}](${href})`;
             }
             break;
@@ -229,7 +236,7 @@ export class MarkdownExporter {
             result += this.processTable(child);
             break;
 
-          // Math (KaTeX)
+          // Math (KaTeX) and Canvas Links
           case 'span':
             const dataMath = child.getAttribute('data-math');
             const dataType2 = child.getAttribute('data-type');
@@ -237,6 +244,10 @@ export class MarkdownExporter {
               result += `$${dataMath}$`;
             } else if (dataType2 === 'math-block' && dataMath) {
               result += `\n$$${dataMath}$$\n\n`;
+            } else if (dataType2 === 'canvas-link') {
+              // Handle canvas links (now using span instead of a)
+              const canvasName = child.textContent.trim();
+              result += `![${canvasName}]`;
             } else {
               result += content;
             }
