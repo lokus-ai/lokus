@@ -76,7 +76,7 @@ const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
     };
 
     loadData();
-  }, [isVisible, activeBase, activeView, executeQuery, refreshKey, itemsPerPage]);
+  }, [isVisible, activeBase, activeView, executeQuery, refreshKey, itemsPerPage, scopeMode]);
 
   // Load available properties
   useEffect(() => {

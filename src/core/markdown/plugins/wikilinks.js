@@ -78,7 +78,113 @@ function resolveWikiLinkPath(target) {
   }
 }
 
+// Helper to resolve canvas file path using file index
+function resolveCanvasPath(canvasName) {
+  try {
+    const index = globalThis.__LOKUS_FILE_INDEX__ || []
+    if (!Array.isArray(index) || !index.length || !canvasName) {
+      return { exists: false, path: '', name: canvasName }
+    }
+
+    const canvasFileName = `${canvasName}.canvas`
+
+    // Find canvas file in the index
+    const matchedFile = index.find(file => {
+      const fileName = file.name || file.path.split('/').pop()
+      return fileName === canvasFileName || fileName === canvasName
+    })
+
+    if (matchedFile) {
+      return { exists: true, path: matchedFile.path, name: canvasName }
+    }
+
+    return { exists: false, path: '', name: canvasName }
+  } catch (e) {
+    return { exists: false, path: '', name: canvasName }
+  }
+}
+
 export default function markdownItWikiLinks(md) {
+  // Inline rule for ![Canvas Name] (canvas links)
+  // Must be registered before 'image' to take precedence
+  md.inline.ruler.before('image', 'canvaslink', (state, silent) => {
+    const start = state.pos;
+    const max = state.posMax;
+
+    // Check if we're at ![
+    if (state.src.charCodeAt(start) !== 0x21 /* ! */ ||
+        state.src.charCodeAt(start + 1) !== 0x5B /* [ */) {
+      return false;
+    }
+
+    // Find the closing ]
+    let pos = start + 2;
+    let found = false;
+
+    while (pos < max) {
+      if (state.src.charCodeAt(pos) === 0x5D /* ] */) {
+        found = true;
+        break;
+      }
+      pos++;
+    }
+
+    if (!found) {
+      return false;
+    }
+
+    // Check that this is NOT followed by ( which would make it a regular image
+    if (pos + 1 < max && state.src.charCodeAt(pos + 1) === 0x28 /* ( */) {
+      return false; // Let the image rule handle this
+    }
+
+    // Also check it's not a wiki-style image embed ![[...]]
+    if (state.src.charCodeAt(start + 2) === 0x5B /* [ */) {
+      return false; // Let the wiki image rule handle this
+    }
+
+    // Extract the canvas name
+    const canvasName = state.src.slice(start + 2, pos).trim();
+
+    if (!canvasName) {
+      return false;
+    }
+
+    if (!silent) {
+      // Resolve canvas path
+      const resolved = resolveCanvasPath(canvasName);
+
+      const token = state.push('canvaslink_open', 'span', 1);
+      token.attrs = [
+        ['data-type', 'canvas-link'],
+        ['class', resolved.exists ? 'canvas-link' : 'canvas-link canvas-link-broken'],
+        ['href', resolved.path || canvasName],
+        ['style', 'cursor: pointer']
+      ];
+
+      const textToken = state.push('text', '', 0);
+      textToken.content = canvasName;
+
+      state.push('canvaslink_close', 'span', -1);
+    }
+
+    state.pos = pos + 1;
+    return true;
+  });
+
+  // Renderer for canvas links
+  md.renderer.rules.canvaslink_open = (tokens, idx) => {
+    const token = tokens[idx];
+    const href = token.attrGet('href');
+    const className = token.attrGet('class');
+
+    return `<span data-type="canvas-link" class="${md.utils.escapeHtml(className)}" href="${md.utils.escapeHtml(href)}" style="cursor: pointer">`;
+  };
+
+  md.renderer.rules.canvaslink_close = () => {
+    return '</span>';
+  };
+
   // Inline rule for [[...]]
   md.inline.ruler.before('link', 'wikilink', (state, silent) => {
     const start = state.pos;

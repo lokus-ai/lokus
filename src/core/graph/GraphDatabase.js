@@ -262,9 +262,30 @@ export class GraphDatabase extends EventEmitter {
   }
 
   /**
+   * Set metadata for a node (e.g., file content, size)
+   * @param {string} nodeId - Node ID
+   * @param {object} metadata - Metadata object
+   */
+  setNodeMetadata(nodeId, metadata) {
+    if (!this.nodes.has(nodeId)) {
+      throw new Error(`Node ${nodeId} does not exist`);
+    }
+    this.nodeMetadata.set(nodeId, metadata);
+  }
+
+  /**
+   * Get metadata for a node
+   * @param {string} nodeId - Node ID
+   * @returns {object} - Metadata object or empty object
+   */
+  getNodeMetadata(nodeId) {
+    return this.nodeMetadata.get(nodeId) || {};
+  }
+
+  /**
    * Add a connection between two nodes with metadata
    * @param {string} sourceFile - Source node ID
-   * @param {string} targetFile - Target node ID  
+   * @param {string} targetFile - Target node ID
    * @param {object} metadata - Connection metadata
    * @returns {boolean} - True if added, false if updated
    */

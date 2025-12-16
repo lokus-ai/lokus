@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 
 const FolderScopeContext = createContext();
 
@@ -6,6 +6,16 @@ export function FolderScopeProvider({ children, workspacePath }) {
   const [scopeMode, setScopeMode] = useState('global'); // 'global' or 'local'
   const [scopedFolders, setScopedFolders] = useState([]); // Array of folder paths
   const [recentScopes, setRecentScopes] = useState([]); // Recently used folder combinations
+
+  // Cache refs for filterFileTree optimization
+  const previousFilterResultRef = useRef(null);
+  const previousFilterInputRef = useRef(null);
+
+  // Clear cache when scope mode or folders change
+  useEffect(() => {
+    previousFilterResultRef.current = null;
+    previousFilterInputRef.current = null;
+  }, [scopeMode, scopedFolders]);
 
   // Load persisted scope settings
   useEffect(() => {
@@ -44,7 +54,7 @@ export function FolderScopeProvider({ children, workspacePath }) {
     // Add to recent scopes (avoid duplicates)
     const newRecentScopes = [folders, ...recentScopes.filter(scope =>
       JSON.stringify(scope.sort()) !== JSON.stringify(folders.sort())
-    )].slice(0, 5); // Keep only last 5
+    )].slice(0, 1); // Keep only last 1
 
     setRecentScopes(newRecentScopes);
     saveSettings(newRecentScopes);
@@ -90,7 +100,15 @@ export function FolderScopeProvider({ children, workspacePath }) {
 
   // Filter file tree based on scope
   const filterFileTree = useCallback((fileTree) => {
+    // Quick reference check - if same input, return cached result
+    if (previousFilterInputRef.current === fileTree && previousFilterResultRef.current) {
+      return previousFilterResultRef.current;
+    }
+
+    // Global mode - return fileTree as-is (preserve reference)
     if (scopeMode === 'global' || scopedFolders.length === 0) {
+      previousFilterInputRef.current = fileTree;
+      previousFilterResultRef.current = fileTree;
       return fileTree;
     }
 
@@ -135,11 +153,17 @@ export function FolderScopeProvider({ children, workspacePath }) {
       entry.is_directory && scopedFolders.includes(entry.path)
     );
 
+    let result;
     if (rootScopedFolders.length > 0) {
-      return rootScopedFolders;
+      result = rootScopedFolders;
+    } else {
+      result = filterEntries(fileTree);
     }
 
-    return filterEntries(fileTree);
+    // Cache the result
+    previousFilterInputRef.current = fileTree;
+    previousFilterResultRef.current = result;
+    return result;
   }, [scopeMode, scopedFolders]);
 
   // Check if a file path is within current scope

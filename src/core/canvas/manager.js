@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { isValidCanvasData, isValidFilePath, sanitizeUserInput } from '../security/index.js';
 import { joinPath, ensureExtension } from '../../utils/pathUtils.js';
+import { invalidateCache } from './preview-generator.js';
 
 /**
  * Canvas File Manager
@@ -199,6 +200,7 @@ export class CanvasManager {
         content
       });      // Clear cache to force fresh read next time
       this.canvasCache.delete(canvasPath);
+      invalidateCache(canvasPath);
 
     } catch (error) {
       console.error(`[Canvas SAVE] Error:`, error.message);
@@ -487,6 +489,15 @@ export class CanvasManager {
     if (allPromises.length > 0) {
       await Promise.all(allPromises);
     }
+  }
+
+  /**
+   * Get all canvas files from workspace
+   * @returns {Array} - Array of canvas file paths
+   */
+  getAllCanvasFiles() {
+    const fileIndex = globalThis.__LOKUS_FILE_INDEX__ || [];
+    return fileIndex.filter(f => f.path.endsWith('.canvas'));
   }
 }
 

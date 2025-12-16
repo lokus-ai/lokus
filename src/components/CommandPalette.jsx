@@ -62,6 +62,7 @@ export default function CommandPalette({
   onShowTemplatePicker,
   onCreateTemplate,
   onOpenDailyNote,
+  onRefresh,
   activeFile
 }) {
   const [shortcuts, setShortcuts] = useState({})
@@ -225,7 +226,11 @@ export default function CommandPalette({
       setLocalScope(selectedFolders)
     }
     setShowFolderSelector(false)
-  }, [setLocalScope, setGlobalScope])
+    // Refresh file tree to update UI
+    if (onRefresh) {
+      onRefresh()
+    }
+  }, [setLocalScope, setGlobalScope, onRefresh])
 
   const handleToggleScope = React.useCallback(() => {
     if (scopeMode === 'global') {
@@ -233,8 +238,12 @@ export default function CommandPalette({
       handleOpenFolderSelector()
     } else {
       setGlobalScope()
+      // Refresh file tree to update UI
+      if (onRefresh) {
+        onRefresh()
+      }
     }
-  }, [scopeMode, setGlobalScope, handleOpenFolderSelector])
+  }, [scopeMode, setGlobalScope, handleOpenFolderSelector, onRefresh])
 
 
   // Parse Gmail template from file content (supports flexible YAML, simple field, and Markdown formats)
@@ -1369,7 +1378,10 @@ Best regards,
               <CommandShortcut>⌘⇧L</CommandShortcut>
             </CommandItem>
             {scopeMode === 'local' && (
-              <CommandItem onSelect={() => runCommandWithHistory(setGlobalScope, 'Switch to Global View')}>
+              <CommandItem onSelect={() => runCommandWithHistory(() => {
+                setGlobalScope();
+                if (onRefresh) onRefresh();
+              }, 'Switch to Global View')}>
                 <Globe className="mr-2 h-4 w-4" />
                 <span>Switch to Global View</span>
                 <div className="ml-auto text-xs text-app-muted">

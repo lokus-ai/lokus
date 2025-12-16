@@ -2,10 +2,12 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { BaseManager } from './core/BaseManager.js';
 import { BasesDataManager } from './data/index.js';
 import { BaseConfigManager } from './core/BaseConfigManager.js';
+import { useFolderScope } from '../contexts/FolderScopeContext.jsx';
 
 const BasesContext = createContext();
 
 export function BasesProvider({ children, workspacePath }) {
+  const { isFileInScope, scopeMode } = useFolderScope();
 
   const [baseManager] = useState(() => new BaseManager());
   const [dataManager] = useState(() => new BasesDataManager());
@@ -263,8 +265,13 @@ export function BasesProvider({ children, workspacePath }) {
       // Get all files from workspace
       const files = await dataManager.getAllFiles();
 
-      // Apply base-level filters
+      // Apply folder scope filtering
       let filteredFiles = files;
+      if (scopeMode === 'local') {
+        filteredFiles = files.filter(file => isFileInScope(file.path));
+      }
+
+      // Apply base-level filters
       if (activeBase.filters && activeBase.filters.length > 0) {
         // Apply global base filters
         // This will be handled by the QueryExecutor
@@ -291,7 +298,7 @@ export function BasesProvider({ children, workspacePath }) {
     } finally {
       setIsLoading(false);
     }
-  }, [activeBase, activeView, dataManager]);
+  }, [activeBase, activeView, dataManager, scopeMode, isFileInScope]);
 
   // Get available properties for filtering/display
   const getAvailableProperties = useCallback(async () => {

@@ -23,6 +23,7 @@ import '../components/graph/GraphUI.css';
 import { invoke } from "@tauri-apps/api/core";
 import { loadGraphConfig, saveGraphConfig, getDefaultConfig, debouncedSaveGraphConfig } from '../core/graph/config-manager.js';
 import analytics from '../services/analytics.js';
+import { generateFileTreeHash } from '../utils/fileTreeUtils.js';
 
 export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile, fileTree = [], onGraphStateChange }) => {
   // Core state
@@ -82,6 +83,11 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   const forceGraph2DRef = useRef(null);
   const forceGraph3DRef = useRef(null);
   const performanceTimerRef = useRef(null);
+
+  // File tree change detection refs
+  const prevFileTreeHashRef = useRef(null);
+  const isInitializedRef = useRef(false);
+  const reloadTimerRef = useRef(null);
 
   // Container dimensions state
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -280,12 +286,28 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     };
   }, [isVisible, workspacePath, viewMode, graphDataManager, graphRenderer]); // Add viewMode dependency
 
-  // Reload data when fileTree changes (separate effect)
+  // Reload data when fileTree changes (with debouncing and hash comparison)
   useEffect(() => {
     if (!isVisible || !graphDataManager || !workspacePath) return;
 
-    const reloadData = async () => {
+    // Clear any pending reload
+    if (reloadTimerRef.current) {
+      clearTimeout(reloadTimerRef.current);
+    }
+
+    // Debounce reload by 150ms to prevent rapid successive reloads
+    reloadTimerRef.current = setTimeout(async () => {
       try {
+        // Generate hash of current fileTree structure
+        const currentHash = generateFileTreeHash(fileTree);
+
+        // Skip reload if hash hasn't changed (unless first load)
+        if (isInitializedRef.current && prevFileTreeHashRef.current === currentHash) {
+          return;
+        }
+
+        prevFileTreeHashRef.current = currentHash;
+        isInitializedRef.current = true;
 
         if (fileTree.length > 0) {
           await loadWorkspaceData(graphDataManager, workspacePath, fileTree);
@@ -301,10 +323,14 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       } catch (error) {
         console.error('Failed to reload graph data:', error);
       }
-    };
+    }, 150);
 
-    reloadData();
-  }, [fileTree, workspacePath, graphDataManager]); // Reload when fileTree changes
+    return () => {
+      if (reloadTimerRef.current) {
+        clearTimeout(reloadTimerRef.current);
+      }
+    };
+  }, [fileTree, workspacePath, graphDataManager, isVisible]); // Reload when fileTree changes
 
   // Load real workspace data
   const loadWorkspaceData = async (dataManager, workspacePath, providedFileTree = null) => {

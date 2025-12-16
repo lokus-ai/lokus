@@ -3,6 +3,7 @@ import { InputRule } from '@tiptap/pm/inputrules'
 
 // Enhanced task states with visual indicators
 const TASK_STATES = {
+  // Basic states
   ' ': { checked: false, state: 'todo', label: 'Todo', class: 'task-todo' },
   'x': { checked: true, state: 'completed', label: 'Completed', class: 'task-completed' },
   'X': { checked: true, state: 'completed', label: 'Completed', class: 'task-completed' },
@@ -10,7 +11,23 @@ const TASK_STATES = {
   '!': { checked: false, state: 'urgent', label: 'Urgent', class: 'task-urgent' },
   '?': { checked: false, state: 'question', label: 'Question', class: 'task-question' },
   '-': { checked: false, state: 'cancelled', label: 'Cancelled', class: 'task-cancelled' },
-  '>': { checked: false, state: 'delegated', label: 'Delegated', class: 'task-delegated' }
+  '>': { checked: false, state: 'delegated', label: 'Delegated', class: 'task-delegated' },
+
+  // High frequency states
+  '*': { checked: false, state: 'starred', label: 'Important/Starred', class: 'task-starred' },
+  '~': { checked: false, state: 'paused', label: 'Paused', class: 'task-paused' },
+  '<': { checked: false, state: 'scheduled', label: 'Scheduled', class: 'task-scheduled' },
+  '"': { checked: false, state: 'quote', label: 'Quote/Reference', class: 'task-quote' },
+  'i': { checked: false, state: 'info', label: 'Info/Note', class: 'task-info' },
+  'b': { checked: false, state: 'blocked', label: 'Blocked', class: 'task-blocked' },
+
+  // Medium frequency states
+  '+': { checked: false, state: 'added', label: 'Added/New', class: 'task-added' },
+  'w': { checked: false, state: 'waiting', label: 'Waiting', class: 'task-waiting' },
+  '@': { checked: false, state: 'mentioned', label: 'Mentioned', class: 'task-mentioned' },
+  'R': { checked: false, state: 'review', label: 'Review', class: 'task-review' },
+  'D': { checked: false, state: 'duplicate', label: 'Duplicate', class: 'task-duplicate' },
+  'S': { checked: false, state: 'started', label: 'Started', class: 'task-started' }
 }
 
 // Convert extended task syntax into Task List items with enhanced states
@@ -53,10 +70,23 @@ export const SmartTask = Extension.create({
   },
 
   addInputRules() {
+    // Debug: Test InputRule regex
+    const inputRuleRegex = /\[([x X/!?\->\s*~<"ib+w@RDS])\]\s$/
+    console.log('[SMARTTASK-DEBUG] Testing InputRule regex on all symbols:')
+    const testCases = [
+      '[ ] ', '[x] ', '[X] ', '[/] ', '[!] ', '[?] ', '[-] ', '[>] ',
+      '[*] ', '[~] ', '[<] ', '["] ', '[i] ', '[b] ', '[+] ', '[w] ',
+      '[@] ', '[R] ', '[D] ', '[S] '
+    ]
+    testCases.forEach(test => {
+      const match = inputRuleRegex.test(test)
+      console.log(`  ${test.trim()}: ${match ? '✓' : '✗'}`)
+    })
+
     return [
       // Enhanced input rule for task states in list items: [!] text
       new InputRule({
-        find: /\[([xX\/!\?\->\s])\]\s$/,
+        find: /\[([x X/!?\->\s*~<"ib+w@RDS])\]\s$/,
         handler: ({ chain, range, match, editor }) => {
           const symbol = match[1]
           const taskConfig = TASK_STATES[symbol]
@@ -89,7 +119,7 @@ export const SmartTask = Extension.create({
 
       // Also handle pasted markdown with enhanced task states
       new InputRule({
-        find: /^(\s*)-\s\[([x X/!?\->]|\s)\]\s(.+)$/,
+        find: /^(\s*)-\s\[([x X/!?\->\s*~<"ib+w@RDS])\]\s(.+)$/,
         handler: ({ chain, range, match, editor }) => {
           const indent = match[1]
           const symbol = match[2]
