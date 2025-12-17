@@ -27,7 +27,7 @@ mod file_locking;
 mod macos;
 
 use window_manager::{open_workspace_window, open_preferences_window, open_launcher_window};
-use tauri::Manager;
+use tauri::{Manager, Listener, Emitter};
 use tauri_plugin_store::{StoreBuilder, JsonValue};
 use std::path::PathBuf;
 

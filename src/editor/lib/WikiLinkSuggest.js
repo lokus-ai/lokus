@@ -137,36 +137,15 @@ const WikiLinkSuggest = Extension.create({
           // Use textBetween with absolute positions to properly handle inline nodes like WikiLinks
           // (parentOffset doesn't align with textContent when WikiLinks are present)
           const textBefore = state.doc.textBetween(Math.max(parentStart, pos - 2), pos)
-
-          const parentContent = $pos.parent.textContent
-          const textBefore = parentContent.slice(Math.max(0, $pos.parentOffset - 2), $pos.parentOffset)
-          const fullTextBefore = parentContent.slice(0, $pos.parentOffset)
-
+          const fullTextBefore = state.doc.textBetween(parentStart, pos)
 
           // Check for [[ pattern (file linking)
           const isAfterDoubleBracket = textBefore.endsWith('[[')
 
-          // Check for ![ pattern (canvas linking) - use regex to match ![...] anywhere before cursor
-          const isAfterImageSyntax = /!\[[^\]]*$/.test(fullTextBefore)
-
           // Check for ^ pattern within [[ ]] (block linking)
           // Look for pattern: [[Filename^ or [[Filename.md^
           const wikiLinkPattern = /\[\[([^\]]+)\^$/
-
-          const fullTextBefore = state.doc.textBetween(parentStart, pos)
           const isAfterCaret = wikiLinkPattern.test(fullTextBefore)
-
-          dbg('textBefore check', {
-            textBefore,
-            fullTextBefore: fullTextBefore.slice(-20),
-            pos,
-            parentStart,
-            rangeFrom: range.from,
-            isAfterCaret
-          })
-
-          const isAfterCaret = wikiLinkPattern.test(fullTextBefore)
-
 
           // Use ProseMirror node types for more reliable list detection
           const parentNode = $pos.node($pos.depth)
@@ -182,7 +161,8 @@ const WikiLinkSuggest = Extension.create({
 
           const isInList = isInListItem || isInTaskItem || isInNestedList
 
-          const shouldAllow = (isAfterDoubleBracket || isAfterCaret || isAfterImageSyntax) && !isInList
+          // Note: ![ for canvas is handled by Plugin 2
+          const shouldAllow = (isAfterDoubleBracket || isAfterCaret) && !isInList
           return shouldAllow
         },
         items: async ({ query, editor }) => {
@@ -233,59 +213,8 @@ const WikiLinkSuggest = Extension.create({
             return filtered
           }
 
-          // Check if we're in canvas mode (![ pattern)
-          const isCanvasMode = /!\[.*$/.test(textBefore)
-
-          // CANVAS MODE: Show only .canvas files
-          if (isCanvasMode) {
-            const idx = getIndex()
-            const canvasFiles = idx.filter(f => f.path.endsWith('.canvas'))
-
-            // For empty query, show all canvas files (sorted by recency)
-            if (!cleanQuery) {
-              const results = canvasFiles.sort((a,b) => scoreItem(b, '', active) - scoreItem(a, '', active)).slice(0, 30)
-              cachedResults = results
-              lastQuery = ''
-              return results
-            }
-
-            // Filter and score canvas files - prioritize prefix matches
-            const q = cleanQuery.toLowerCase()
-            const scored = canvasFiles.map(f => {
-              const title = f.title.toLowerCase()
-              const fileName = title.replace('.canvas', '')
-              let score = 0
-
-              // Highest priority: title starts with query
-              if (fileName.startsWith(q)) {
-                score = 1000
-              }
-              // Medium priority: title contains query
-              else if (fileName.includes(q)) {
-                score = 100
-              }
-              // Low priority: path contains query
-              else if (f.path.toLowerCase().includes(q)) {
-                score = 10
-              }
-              // No match
-              else {
-                score = -1
-              }
-
-              return { ...f, score }
-            })
-
-            // Only show matches (score >= 0)
-            const filtered = scored.filter(f => f.score >= 0)
-            const sorted = filtered.sort((a, b) => b.score - a.score)
-            const results = sorted.slice(0, 30)
-            cachedResults = results
-            lastQuery = cleanQuery
-            return results
-          }
-
           // FILE MODE: Show files with instant results
+          // Note: Canvas mode (![ pattern) is handled by Plugin 2
 
           // For empty query, show all files (sorted by recency)
           if (!cleanQuery) {
@@ -435,7 +364,6 @@ const WikiLinkSuggest = Extension.create({
             // Find where [[ starts
             const openBracketPos = textBefore.lastIndexOf('[[')
             if (openBracketPos === -1) {
-              dbg('command: no [[ found in textBefore', { textBefore })
               return
             }
 
