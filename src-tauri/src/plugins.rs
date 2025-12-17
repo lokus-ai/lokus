@@ -23,9 +23,10 @@ pub struct PluginManifest {
     pub permissions: Vec<String>,
     pub dependencies: Option<HashMap<String, String>>,
     pub keywords: Option<Vec<String>>,
-    pub repository: Option<String>,
+    pub repository: Option<serde_json::Value>,
     pub homepage: Option<String>,
     pub license: Option<String>,
+    pub contributes: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -233,6 +234,12 @@ pub fn get_plugin_info(name: String) -> Result<PluginInfo, String> {
 #[tauri::command]
 pub async fn install_plugin(path: String) -> Result<String, String> {
     let plugins_dir = PathBuf::from(create_plugins_directory()?);
+    
+    // Check if it's a URL
+    if path.starts_with("http://") || path.starts_with("https://") {
+        return install_plugin_from_url(&path, &plugins_dir).await;
+    }
+
     let source_path = PathBuf::from(&path);
     
     if !source_path.exists() {
@@ -247,6 +254,32 @@ pub async fn install_plugin(path: String) -> Result<String, String> {
     } else {
         Err("Invalid plugin source path".to_string())
     }
+}
+
+async fn install_plugin_from_url(url: &str, plugins_dir: &Path) -> Result<String, String> {
+    // Download the file
+    let response = reqwest::get(url)
+        .await
+        .map_err(|e| format!("Failed to download plugin: {}", e))?;
+    
+    if !response.status().is_success() {
+        return Err(format!("Failed to download plugin: HTTP {}", response.status()));
+    }
+    
+    let content = response.bytes()
+        .await
+        .map_err(|e| format!("Failed to read download content: {}", e))?;
+    
+    // Save to temporary file
+    let temp_dir = tempfile::tempdir()
+        .map_err(|e| format!("Failed to create temporary directory: {}", e))?;
+    let temp_path = temp_dir.path().join("plugin.zip");
+    
+    fs::write(&temp_path, content)
+        .map_err(|e| format!("Failed to write temporary file: {}", e))?;
+    
+    // Install from the downloaded zip
+    install_plugin_from_zip(&temp_path, plugins_dir).await
 }
 
 async fn install_plugin_from_directory(source_dir: &Path, plugins_dir: &Path) -> Result<String, String> {
@@ -613,7 +646,7 @@ fn get_plugin_settings(app: &AppHandle) -> Result<PluginSettings, String> {
     }
 }
 
-fn save_plugin_settings(app: &AppHandle, settings: &PluginSettings) -> Result<(), String> {
+fn save_plugin_settings_internal(app: &AppHandle, settings: &PluginSettings) -> Result<(), String> {
     
     let store = StoreBuilder::new(app, PathBuf::from(".settings.dat")).build()
         .map_err(|e| {
@@ -715,7 +748,7 @@ fn update_plugin_enabled_state(app: &AppHandle, plugin_name: &str, enabled: bool
     }
     
     // Save settings atomically
-    save_plugin_settings(app, &settings)?;
+    save_plugin_settings_internal(app, &settings)?;
     
     Ok(())
 }
@@ -786,7 +819,7 @@ pub fn get_enabled_plugins(app: AppHandle) -> Result<Vec<String>, String> {
 pub fn set_plugin_permission(app: AppHandle, plugin_name: String, permissions: Vec<String>) -> Result<(), String> {
     let mut settings = get_plugin_settings(&app)?;
     settings.plugin_permissions.insert(plugin_name, permissions);
-    save_plugin_settings(&app, &settings)?;
+    save_plugin_settings_internal(&app, &settings)?;
     Ok(())
 }
 
@@ -808,7 +841,7 @@ pub fn set_plugin_setting(app: AppHandle, plugin_name: String, key: String, valu
         map.insert(key, value);
     }
     
-    save_plugin_settings(&app, &settings)?;
+    save_plugin_settings_internal(&app, &settings)?;
     Ok(())
 }
 
@@ -825,6 +858,16 @@ pub fn get_plugin_setting(app: AppHandle, plugin_name: String, key: String) -> R
     } else {
         Ok(None)
     }
+}
+
+#[tauri::command]
+pub fn save_plugin_settings(app: AppHandle, plugin_id: String, settings: JsonValue) -> Result<(), String> {
+    let mut current_settings = get_plugin_settings(&app)?;
+    
+    current_settings.plugin_settings.insert(plugin_id, settings);
+    
+    save_plugin_settings_internal(&app, &current_settings)?;
+    Ok(())
 }
 
 // === Plugin File Operations ===

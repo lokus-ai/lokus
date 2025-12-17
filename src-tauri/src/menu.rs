@@ -100,7 +100,7 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
 
   // Windows doesn't have an app menu like macOS
   #[cfg(not(target_os = "macos"))]
-  let app_menu = None::<tauri::menu::Submenu<tauri::Wry>>;
+  let _app_menu = None::<tauri::menu::Submenu<tauri::Wry>>;
 
   // File menu
   let file_menu = SubmenuBuilder::new(app, "File")
@@ -404,7 +404,7 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         let _ = app.emit("lokus:show-about", ());
       }
       PREFERENCES_ID => {
-        let _ = crate::windows::open_preferences_window(app.clone(), None);
+        let _ = crate::window_manager::open_preferences_window(app.clone(), None);
       }
       
       // File menu

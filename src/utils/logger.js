@@ -10,8 +10,8 @@
  * Format: [timestamp] [LEVEL] [context] message
  */
 
-const isDev = import.meta.env.DEV;
-const isProduction = import.meta.env.PROD;
+const isDev = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV) || process.env.NODE_ENV === 'development';
+const isProduction = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.PROD) || process.env.NODE_ENV === 'production';
 
 /**
  * Get formatted timestamp

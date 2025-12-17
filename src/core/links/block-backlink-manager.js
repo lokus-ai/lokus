@@ -22,6 +22,11 @@ export class BlockBacklinkManager {
     this.blockLinks.clear()
 
     for (const file of fileIndex) {
+      // Skip files with invalid paths or non-markdown files
+      if (!file.path || typeof file.path !== 'string' || !file.path.endsWith('.md')) {
+        continue
+      }
+
       try {
         await this.parseFileForBlockLinks(file.path)
       } catch (error) {

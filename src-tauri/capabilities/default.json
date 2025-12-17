@@ -1,7 +1,9 @@
 {
   "identifier": "default",
   "description": "Permissions for the main application functionality",
-  "windows": ["*"],
+  "windows": [
+    "*"
+  ],
   "permissions": [
     "core:path:allow-resolve-directory",
     "core:path:allow-join",
@@ -20,8 +22,12 @@
     {
       "identifier": "fs:scope",
       "allow": [
-        { "path": "$DOCUMENT/**" },
-        { "path": "$APP/**" }
+        {
+          "path": "$DOCUMENT/**"
+        },
+        {
+          "path": "$APP/**"
+        }
       ]
     },
     "fs:allow-read-file",
@@ -38,6 +44,7 @@
     "updater:allow-check",
     "updater:allow-download",
     "updater:allow-install",
-    "updater:allow-download-and-install"
+    "updater:allow-download-and-install",
+    "deep-link:default"
   ]
 }

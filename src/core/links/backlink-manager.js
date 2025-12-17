@@ -21,21 +21,31 @@ export class BacklinkManager {
       return [];
     }
 
+    // Check cache first
+    if (this.backlinkCache.has(nodeId)) {
+      return this.backlinkCache.get(nodeId);
+    }
+
     const backlinks = [];
+
+    // Get target node info
+    const targetNode = this.graphData.nodes.get(nodeId);
+    const targetTitleRaw = targetNode?.title || targetNode?.label || '';
+    // Strip .md extension for matching (wiki links don't include extensions)
+    const targetTitle = targetTitleRaw.replace(/\.md$/i, '');
+
+    if (!targetNode || !targetTitle) {
+      return [];
+    }
 
     // Find all nodes that link to this node
     for (const [sourceId, sourceNode] of this.graphData.nodes.entries()) {
       if (sourceId === nodeId) continue;
 
-      const content = sourceNode.metadata?.content || '';
+      // Get content from node metadata
+      const metadata = this.graphData.getNodeMetadata(sourceId);
+      const content = metadata?.content || '';
       if (!content) continue;
-
-      // Check if content contains links to the target node
-      const targetNode = this.graphData.nodes.get(nodeId);
-      if (!targetNode) continue;
-
-      const targetTitle = targetNode.title || targetNode.label || '';
-      if (!targetTitle) continue;
 
       // Simple check for wiki link patterns
       const patterns = [
@@ -62,7 +72,12 @@ export class BacklinkManager {
       }
     }
 
-    return backlinks.sort((a, b) => b.created - a.created);
+    const sortedBacklinks = backlinks.sort((a, b) => b.created - a.created);
+
+    // Cache the results
+    this.backlinkCache.set(nodeId, sortedBacklinks);
+
+    return sortedBacklinks;
   }
 
   /**

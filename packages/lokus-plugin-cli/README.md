@@ -8,18 +8,57 @@ Advanced CLI toolkit for developing Lokus plugins with interactive templates, ho
 npm install -g lokus-plugin-cli
 ```
 
+> **Note:** This CLI automatically installs the `@lokus/plugin-sdk` (or `lokus-plugin-sdk`) for you when you create a new project. You don't need to install the SDK manually unless you are adding it to an existing project.
+
 ## Usage
 
-### Create a new plugin
+### Creating a Plugin
 
+You can create a new plugin interactively or using command-line flags.
+
+**Interactive Mode:**
 ```bash
-lokus-plugin create my-awesome-plugin
+lokus-plugin create my-plugin
 ```
 
-Interactive prompts will guide you through:
-- Plugin type (Editor, UI Panel, Data Provider, Theme, Integration)
-- TypeScript or JavaScript
-- Description and author information
+**Non-Interactive Mode (using flags):**
+```bash
+lokus-plugin create my-plugin \
+  --template basic-typescript \
+  --author "Lokus Team" \
+  --publisher "lokus" \
+  --description "My awesome plugin" \
+  --skip-prompts
+```
+
+**Partial Interactivity:**
+You can provide some flags and let the CLI prompt for the rest:
+```bash
+lokus-plugin create my-plugin --template react-ui-panel
+# CLI will skip template selection and ask for other details
+```
+
+**Available Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `-t, --template <id>` | Plugin template to use (e.g., `basic-typescript`, `react-ui-panel`) |
+| `-a, --author <name>` | Plugin author name |
+| `-p, --publisher <id>` | Publisher ID (lowercase, alphanumeric) |
+| `-d, --description <text>` | Plugin description |
+| `--skip-prompts` | Skip all prompts and use defaults/flags |
+| `--no-typescript` | Use JavaScript instead of TypeScript |
+| `--no-git` | Skip Git initialization |
+| `--no-install` | Skip dependency installation |
+| `--testing <framework>` | `jest`, `vitest`, or `none` |
+| `--linting <tool>` | `eslint`, `biome`, or `none` |
+| `--formatting <tool>` | `prettier`, `biome`, or `none` |
+| `--bundler <tool>` | `esbuild`, `webpack`, `rollup`, or `vite` |
+| `--cicd <platform>` | `github`, `gitlab`, or `none` |
+| `--documentation <tool>` | `typedoc`, `jsdoc`, or `none` |
+| `--examples` | Include example code |
+| `--storybook` | Include Storybook (UI templates only) |
+| `--workspace` | Setup as monorepo workspace |
 
 ### Development
 

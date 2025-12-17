@@ -118,10 +118,6 @@ const debouncedFilter = debounce((query, activePath, callback) => {
 const WikiLinkSuggest = Extension.create({
   name: 'wikiLinkSuggest',
   addProseMirrorPlugins() {
-    const dbg = (...args) => {
-      try {
-      } catch {}
-    }
     return [
       // Plugin 1: Handle [[ for file suggestions
       suggestion({
@@ -130,9 +126,11 @@ const WikiLinkSuggest = Extension.create({
         char: '[',
         allowSpaces: true,
         startOfLine: false,
-        // Allow after [[ for files OR after ^ for blocks
+        allowedPrefixes: [' ', '!', '[', null],  // Allow after space, !, [, or start of line
+        // Allow after [[ for files OR after ^ for blocks OR after ![ for canvas
         allow: ({ state, range }) => {
           const $pos = state.selection.$from
+
           const pos = state.selection.from
           const parentStart = $pos.start()
 
@@ -140,12 +138,21 @@ const WikiLinkSuggest = Extension.create({
           // (parentOffset doesn't align with textContent when WikiLinks are present)
           const textBefore = state.doc.textBetween(Math.max(parentStart, pos - 2), pos)
 
+          const parentContent = $pos.parent.textContent
+          const textBefore = parentContent.slice(Math.max(0, $pos.parentOffset - 2), $pos.parentOffset)
+          const fullTextBefore = parentContent.slice(0, $pos.parentOffset)
+
+
           // Check for [[ pattern (file linking)
           const isAfterDoubleBracket = textBefore.endsWith('[[')
+
+          // Check for ![ pattern (canvas linking) - use regex to match ![...] anywhere before cursor
+          const isAfterImageSyntax = /!\[[^\]]*$/.test(fullTextBefore)
 
           // Check for ^ pattern within [[ ]] (block linking)
           // Look for pattern: [[Filename^ or [[Filename.md^
           const wikiLinkPattern = /\[\[([^\]]+)\^$/
+
           const fullTextBefore = state.doc.textBetween(parentStart, pos)
           const isAfterCaret = wikiLinkPattern.test(fullTextBefore)
 
@@ -157,6 +164,9 @@ const WikiLinkSuggest = Extension.create({
             rangeFrom: range.from,
             isAfterCaret
           })
+
+          const isAfterCaret = wikiLinkPattern.test(fullTextBefore)
+
 
           // Use ProseMirror node types for more reliable list detection
           const parentNode = $pos.node($pos.depth)
@@ -172,16 +182,7 @@ const WikiLinkSuggest = Extension.create({
 
           const isInList = isInListItem || isInTaskItem || isInNestedList
 
-          const shouldAllow = (isAfterDoubleBracket || isAfterCaret) && !isInList
-          dbg('allow check', {
-            textBefore,
-            isAfterDoubleBracket,
-            isAfterCaret,
-            isInList,
-            parentType: parentNode.type.name,
-            shouldAllow,
-            from: range.from
-          })
+          const shouldAllow = (isAfterDoubleBracket || isAfterCaret || isAfterImageSyntax) && !isInList
           return shouldAllow
         },
         items: async ({ query, editor }) => {
@@ -204,8 +205,6 @@ const WikiLinkSuggest = Extension.create({
             // BLOCK MODE: Show blocks from the specified file
             const fileName = blockRefMatch[1].trim()
             const blockQuery = blockRefMatch[2]
-
-            dbg('items (block mode)', { fileName, blockQuery })
 
             // Load real blocks from file
             const blocks = await getFileBlocks(fileName)
@@ -231,8 +230,59 @@ const WikiLinkSuggest = Extension.create({
                 )
               : formattedBlocks
 
-            dbg('items (block mode) returning', { blocks: filtered, count: filtered.length })
             return filtered
+          }
+
+          // Check if we're in canvas mode (![ pattern)
+          const isCanvasMode = /!\[.*$/.test(textBefore)
+
+          // CANVAS MODE: Show only .canvas files
+          if (isCanvasMode) {
+            const idx = getIndex()
+            const canvasFiles = idx.filter(f => f.path.endsWith('.canvas'))
+
+            // For empty query, show all canvas files (sorted by recency)
+            if (!cleanQuery) {
+              const results = canvasFiles.sort((a,b) => scoreItem(b, '', active) - scoreItem(a, '', active)).slice(0, 30)
+              cachedResults = results
+              lastQuery = ''
+              return results
+            }
+
+            // Filter and score canvas files - prioritize prefix matches
+            const q = cleanQuery.toLowerCase()
+            const scored = canvasFiles.map(f => {
+              const title = f.title.toLowerCase()
+              const fileName = title.replace('.canvas', '')
+              let score = 0
+
+              // Highest priority: title starts with query
+              if (fileName.startsWith(q)) {
+                score = 1000
+              }
+              // Medium priority: title contains query
+              else if (fileName.includes(q)) {
+                score = 100
+              }
+              // Low priority: path contains query
+              else if (f.path.toLowerCase().includes(q)) {
+                score = 10
+              }
+              // No match
+              else {
+                score = -1
+              }
+
+              return { ...f, score }
+            })
+
+            // Only show matches (score >= 0)
+            const filtered = scored.filter(f => f.score >= 0)
+            const sorted = filtered.sort((a, b) => b.score - a.score)
+            const results = sorted.slice(0, 30)
+            cachedResults = results
+            lastQuery = cleanQuery
+            return results
           }
 
           // FILE MODE: Show files with instant results
@@ -242,7 +292,6 @@ const WikiLinkSuggest = Extension.create({
             const results = filterAndScoreItems('', active)
             cachedResults = results
             lastQuery = ''
-            dbg('items (empty query)', { results: results.length })
             return results
           }
 
@@ -253,7 +302,6 @@ const WikiLinkSuggest = Extension.create({
             // Rebuild cache if empty OR if file index size changed (files added/removed)
             if (firstCharCache.size === 0 || Array.from(firstCharCache.values()).reduce((sum, arr) => sum + arr.length, 0) !== idx.length) {
               rebuildFirstCharCache()
-              dbg('items (rebuilt cache)', { cacheSize: firstCharCache.size, fileCount: idx.length })
             }
 
             const firstChar = cleanQuery.toLowerCase()
@@ -264,7 +312,6 @@ const WikiLinkSuggest = Extension.create({
               const results = filterAndScoreItems(cleanQuery, active)
               cachedResults = results
               lastQuery = cleanQuery
-              dbg('items (cache miss, full search)', { query: cleanQuery, results: results.length })
               return results
             }
 
@@ -273,7 +320,6 @@ const WikiLinkSuggest = Extension.create({
 
             cachedResults = results
             lastQuery = cleanQuery
-            dbg('items (first char cache hit)', { query: cleanQuery, cached: cached.length, results: results.length })
             return results
           }
 
@@ -284,7 +330,6 @@ const WikiLinkSuggest = Extension.create({
               f.title.toLowerCase().includes(cleanQuery.toLowerCase()) ||
               f.path.toLowerCase().includes(cleanQuery.toLowerCase())
             )
-            dbg('items (cached)', { query, cleanQuery, lastQuery, cached: cachedResults.length, quickFiltered: quickFiltered.length })
 
             // Trigger debounced update in background
             debouncedFilter(cleanQuery, active, null)
@@ -294,7 +339,6 @@ const WikiLinkSuggest = Extension.create({
 
           // For new queries, return immediate results but trigger debounced update
           const immediateResults = filterAndScoreItems(cleanQuery, active)
-          dbg('items (new query)', { query, cleanQuery, results: immediateResults.length })
           return immediateResults
         },
         command: async ({ editor, range, props }) => {
@@ -313,7 +357,6 @@ const WikiLinkSuggest = Extension.create({
 
               // Generate new random ID
               const newBlockId = blockIdManager.generateId()
-              dbg('Auto-generating block ID:', newBlockId, 'for block:', props)
 
               // Write ID back to source file
               const fileIndex = getIndex()
@@ -327,9 +370,6 @@ const WikiLinkSuggest = Extension.create({
                     if (success) {
                       // Invalidate cache for this file
                       blockIdManager.invalidateFile(fileEntry.path)
-                      dbg('✅ Generated and wrote block ID:', newBlockId, 'to', fileEntry.path)
-                    } else {
-                      dbg('⚠️ Failed to write block ID to file')
                     }
                   })
                   .catch(err => {
@@ -350,7 +390,6 @@ const WikiLinkSuggest = Extension.create({
             // Find where ^ starts
             const caretMatch = /\[\[([^\]^]+)\^(.*)$/.exec(textBefore)
             if (!caretMatch) {
-              dbg('command: no caret found in textBefore', { textBefore })
               return
             }
 
@@ -368,20 +407,6 @@ const WikiLinkSuggest = Extension.create({
               ? state.selection.from + closingBracketsPos
               : state.selection.to
 
-            dbg('command select (block)', {
-              blockId,
-              fileName,
-              textBefore,
-              textAfter: textAfter.slice(0, 20),
-              hasClosingBrackets,
-              closingBracketsPos,
-              absoluteClosingPos,
-              caretPos,
-              absoluteCaretPos,
-              selectionFrom: state.selection.from,
-              selectionTo: state.selection.to
-            })
-
             // Delete entire [[...]] and insert as WikiLink node
             try {
               // Find the [[ start
@@ -391,12 +416,6 @@ const WikiLinkSuggest = Extension.create({
               const deleteEnd = hasClosingBrackets ? absoluteClosingPos + 2 : state.selection.to
               const wikiLinkText = `${fileName}^${blockId}`
 
-              dbg('Creating WikiLink node', {
-                wikiLinkText,
-                deleteFrom: absoluteOpenPos,
-                deleteTo: deleteEnd
-              })
-
               // Delete [[Filename^...]] and insert WikiLink node
               editor.chain()
                 .focus()
@@ -404,7 +423,7 @@ const WikiLinkSuggest = Extension.create({
                 .setWikiLink(wikiLinkText)
                 .run()
             } catch (e) {
-              dbg('insertContent error', e)
+              // Silent fail
             }
           } else {
             // FILE MODE: Insert file reference
@@ -448,29 +467,46 @@ const WikiLinkSuggest = Extension.create({
             // Format: [[path|displayName]] - path for resolution, displayName for viewing
             const wikiLinkTarget = `${relativePath}|${fileName}`
 
-            dbg('command select (file)', { fileName, fullPath, relativePath, wikiLinkTarget, from, to })
+            // Delete the ![ or [[ and query
+            try { editor.chain().focus().deleteRange({ from, to }).run() } catch (e) { /* silent */ }
 
-            // Delete the [[ and query
-            try { editor.chain().focus().deleteRange({ from, to }).run() } catch (e) { dbg('deleteRange error', e) }
+            // Check if this is a canvas file
+            const isCanvasFile = fullPath.endsWith('.canvas')
 
-            // Create WikiLink node with path|alias format
-            const id = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)
-            editor.chain()
-              .focus()
-              .insertContent({
-                type: 'wikiLink',
-                attrs: {
-                  id,
-                  target: wikiLinkTarget,  // Full format: path|displayName
-                  alt: fileName,           // Display name only
-                  embed: false,
-                  href: fullPath,          // Full path for navigation
-                  src: '',
-                }
-              })
-              .run()
-
-            dbg('inserted wikiLink node', { wikiLinkTarget, fullPath })
+            if (isCanvasFile) {
+              // Create CanvasLink node
+              const id = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)
+              editor.chain()
+                .focus()
+                .insertContent({
+                  type: 'canvasLink',
+                  attrs: {
+                    id,
+                    canvasName: fileName,
+                    canvasPath: fullPath,
+                    thumbnailUrl: '',
+                    exists: true
+                  }
+                })
+                .run()
+            } else {
+              // Create WikiLink node with path|alias format
+              const id = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)
+              editor.chain()
+                .focus()
+                .insertContent({
+                  type: 'wikiLink',
+                  attrs: {
+                    id,
+                    target: wikiLinkTarget,  // Full format: path|displayName
+                    alt: fileName,           // Display name only
+                    embed: false,
+                    href: fullPath,          // Full path for navigation
+                    src: '',
+                  }
+                })
+                .run()
+            }
           }
         },
         render: () => {
@@ -515,12 +551,11 @@ const WikiLinkSuggest = Extension.create({
           }
           return {
             onStart: (props) => {
-              dbg('onStart', { range: props.range, query: props.query })
-              // Only auto-pair if this is actually a wiki link (after [[)
+              // Only auto-pair if this is actually a wiki link (after [[), NOT canvas link (after ![)
               try {
                 const range = props.range
                 const textBefore = props.editor.state.doc.textBetween(Math.max(0, range.from - 2), range.from)
-                const isWikiLink = textBefore.endsWith('[')
+                const isWikiLink = textBefore === '[[' // Must be exactly [[, not ![
 
                 if (isWikiLink) {
                   const pos = Math.max(0, Math.min(props.editor.state.doc.content.size, (props.range?.to ?? props.editor.state.selection.to)))
@@ -544,7 +579,6 @@ const WikiLinkSuggest = Extension.create({
               if (props.clientRect) place(props.clientRect())
             },
             onUpdate: (props) => {
-              dbg('onUpdate', { query: props.query })
               component.updateProps(props)
               if (props.clientRect) place(props.clientRect())
             },
@@ -569,7 +603,112 @@ const WikiLinkSuggest = Extension.create({
         },
       }),
 
-      // Plugin 2: Handle ^ for block suggestions
+      // Plugin 2: Handle ![ for canvas file suggestions
+      suggestion({
+        pluginKey: new PluginKey('canvasLinkSuggestion'),
+        editor: this.editor,
+        char: '![',
+        allowSpaces: true,
+        startOfLine: false,
+        allowedPrefixes: [' ', null],  // Allow after space or start of line
+        allow: ({ state, range }) => {
+          const $pos = state.selection.$from
+          const parentNode = $pos.node($pos.depth)
+          const isInList = parentNode.type.name === 'listItem' || parentNode.type.name === 'taskItem'
+          return !isInList
+        },
+        items: async ({ query }) => {
+          const active = (globalThis.__LOKUS_ACTIVE_FILE__ || '')
+          const idx = getIndex()
+          const canvasFiles = idx.filter(f => f.path.endsWith('.canvas'))
+
+          // For empty query, show all canvas files
+          if (!query) {
+            return canvasFiles.sort((a,b) => scoreItem(b, '', active) - scoreItem(a, '', active)).slice(0, 30)
+          }
+
+          // Filter and score - prioritize prefix matches
+          const q = query.toLowerCase()
+          const scored = canvasFiles.map(f => {
+            const fileName = f.title.toLowerCase().replace('.canvas', '')
+            let score = -1
+
+            if (fileName.startsWith(q)) score = 1000
+            else if (fileName.includes(q)) score = 100
+            else if (f.path.toLowerCase().includes(q)) score = 10
+
+            return { ...f, score }
+          })
+
+          return scored.filter(f => f.score >= 0).sort((a, b) => b.score - a.score).slice(0, 30)
+        },
+        command: ({ editor, range, props }) => {
+          const from = range.from
+          const to = range.to
+          const fileName = props.title?.replace('.canvas', '') || props.title
+          const fullPath = props.path || ''
+
+          // Delete ![ and query, insert canvasLink node
+          editor.chain()
+            .focus()
+            .deleteRange({ from, to })
+            .insertContent({
+              type: 'canvasLink',
+              attrs: {
+                id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+                canvasName: fileName,
+                canvasPath: fullPath,
+                thumbnailUrl: '',
+                exists: true
+              }
+            })
+            .run()
+        },
+        render: () => {
+          let component
+          let container
+          const place = (rect) => {
+            if (!container || !rect) return
+            container.style.left = `${Math.max(8, rect.left)}px`
+            container.style.top = `${Math.min(window.innerHeight - 16, rect.bottom + 6)}px`
+            container.style.width = '384px'
+          }
+          return {
+            onStart: (props) => {
+              component = new ReactRenderer(WikiLinkList, { props, editor: props.editor })
+              container = document.createElement('div')
+              container.style.position = 'fixed'
+              container.style.zIndex = '2147483647'
+              container.style.pointerEvents = 'auto'
+              container.style.maxHeight = '60vh'
+              container.style.overflow = 'hidden'
+              container.appendChild(component.element)
+              document.body.appendChild(container)
+              if (props.clientRect) place(props.clientRect())
+            },
+            onUpdate: (props) => {
+              component.updateProps(props)
+              if (props.clientRect) place(props.clientRect())
+            },
+            onKeyDown: (props) => {
+              if (props.event.key === 'Escape') {
+                if (container?.parentNode) container.parentNode.removeChild(container)
+                container = null
+                return true
+              }
+              if (!component || !component.ref) return false
+              return component.ref.onKeyDown(props)
+            },
+            onExit: () => {
+              try { if (container?.parentNode) container.parentNode.removeChild(container) } catch {}
+              container = null
+              if (component) component.destroy()
+            },
+          }
+        },
+      }),
+
+      // Plugin 3: Handle ^ for block suggestions
       suggestion({
         pluginKey: new PluginKey('blockSuggestion'),
         editor: this.editor,
@@ -584,7 +723,6 @@ const WikiLinkSuggest = Extension.create({
 
           // Check if we have [[Filename pattern before ^
           const hasWikiLink = /\[\[([^\]]+)$/.test(textBefore)
-          dbg('^ allow check', { textBefore: textBefore.slice(-20), hasWikiLink })
 
           return hasWikiLink
         },
@@ -597,18 +735,14 @@ const WikiLinkSuggest = Extension.create({
 
           const match = /\[\[([^\]^]+)\^(.*)$/.exec(textBefore)
           if (!match) {
-            dbg('^ items - no match', { textBefore })
             return []
           }
 
           const fileName = match[1].trim()
           const blockQuery = match[2] || query
 
-          dbg('^ items', { fileName, blockQuery, query })
-
           // Load real blocks from the file using getFileBlocks
           const blocks = await getFileBlocks(fileName)
-          dbg('^ loaded blocks from file', { fileName, count: blocks.length })
 
           // Format blocks for WikiLinkList (title/path format)
           const formattedBlocks = blocks.map(block => ({
@@ -629,15 +763,12 @@ const WikiLinkSuggest = Extension.create({
               )
             : formattedBlocks
 
-          dbg('^ items returning', { blocks: filtered, count: filtered.length })
           return filtered
         },
         command: ({ editor, range, props }) => {
           const from = range?.from ?? editor.state.selection.from
           const to = range?.to ?? editor.state.selection.to
           const blockId = props.blockId
-
-          dbg('^ command', { blockId, from, to })
 
           // Delete the ^ and query, insert blockid]]
           try {
@@ -647,7 +778,7 @@ const WikiLinkSuggest = Extension.create({
               .insertContent(`^${blockId}]]`)
               .run()
           } catch (e) {
-            dbg('^ insert error', e)
+            // Silent fail
           }
         },
         // Reuse the same render logic
@@ -693,12 +824,6 @@ const WikiLinkSuggest = Extension.create({
           }
           return {
             onStart: (props) => {
-              dbg('^ onStart', {
-                range: props.range,
-                query: props.query,
-                itemsCount: props.items?.length,
-                items: props.items
-              })
               component = new ReactRenderer(WikiLinkList, { props, editor: props.editor })
               container = document.createElement('div')
               container.style.position = 'fixed'
@@ -711,7 +836,6 @@ const WikiLinkSuggest = Extension.create({
               if (props.clientRect) place(props.clientRect())
             },
             onUpdate: (props) => {
-              dbg('^ onUpdate', { query: props.query })
               component.updateProps(props)
               if (props.clientRect) place(props.clientRect())
             },

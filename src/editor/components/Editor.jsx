@@ -37,6 +37,7 @@ import CodeBlockIndent from "../extensions/CodeBlockIndent.js";
 import Callout from "../extensions/Callout.js";
 import Folding from "../extensions/Folding.js";
 import MermaidDiagram from "../extensions/MermaidDiagram.jsx";
+import CanvasLink from '../extensions/CanvasLink.js';
 import liveEditorSettings from "../../core/editor/live-settings.js";
 import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import TaskCreationModal from "../../components/TaskCreationModal.jsx";
@@ -53,6 +54,8 @@ import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 import "../styles/editor.css";
 import "../styles/block-embeds.css";
 import "../../styles/page-preview.css";
+import "../../styles/canvas-extensions.css";
+import "../../styles/canvas-preview.css";
 
 const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading = false }, ref) => {
   const [extensions, setExtensions] = useState(null);
@@ -233,6 +236,9 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
     // Obsidian‑style wikilinks and image embeds
     exts.push(WikiLink);
     exts.push(WikiLinkSuggest);
+
+    // Canvas links
+    exts.push(CanvasLink);
 
     // Obsidian-style block IDs (^blockid)
     exts.push(BlockId);
@@ -466,6 +472,39 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
             const src = img.getAttribute('src') || '';
             if (src) {
               setImageViewerState({ isOpen: true, imagePath: src });
+            }
+            return true;
+          }
+
+          // Handle canvas-link clicks
+          const canvasEl = t.closest('[data-type="canvas-link"]');
+          if (canvasEl) {
+            event.preventDefault();
+            let canvasPath = canvasEl.getAttribute('href') || '';
+
+            // Resolve path if it's just a canvas name
+            if (canvasPath && !canvasPath.startsWith('/') && !canvasPath.includes('/')) {
+              const fileIndex = globalThis.__LOKUS_FILE_INDEX__ || [];
+              const canvasFileName = canvasPath.endsWith('.canvas') ? canvasPath : `${canvasPath}.canvas`;
+              const matchedFile = fileIndex.find(file => {
+                const fileName = file.name || file.path.split('/').pop();
+                return fileName === canvasFileName || fileName === canvasPath;
+              });
+              if (matchedFile) {
+                canvasPath = matchedFile.path;
+              }
+            }
+
+            if (canvasPath) {
+              // Use same emit logic as wiki-links
+              (async () => {
+                try {
+                  const { emit } = await import('@tauri-apps/api/event');
+                  await emit('lokus:open-file', canvasPath);
+                } catch {
+                  window.dispatchEvent(new CustomEvent('lokus:open-file', { detail: canvasPath }));
+                }
+              })();
             }
             return true;
           }

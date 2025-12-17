@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { useToast } from "./use-toast";
 import pluginManager from "../core/plugins/PluginStateAdapter.js";
 
 const PluginContext = createContext(null);
@@ -10,6 +11,7 @@ export function PluginProvider({ children }) {
   const [error, setError] = useState(pluginManager.currentError);
   const [installingPlugins, setInstallingPlugins] = useState(pluginManager.installingPluginIds);
   const [enabledPlugins, setEnabledPlugins] = useState(pluginManager.enabledPluginIds);
+  const { toast } = useToast();
 
   // Subscribe to plugin manager state changes
   useEffect(() => {
@@ -37,13 +39,62 @@ export function PluginProvider({ children }) {
         w.__TAURI_METADATA__ ||
         (navigator?.userAgent || '').includes('Tauri')
       );
-    } catch {}
+    } catch { }
+
+    // Expose manual loader for dev mode
+    window.loadDevPlugin = async (url) => {
+      console.log(`[Manual] Loading dev plugin from ${url}...`);
+      try {
+        await pluginManager.loadDevPlugin(url);
+        console.log('[Manual] Plugin loaded successfully');
+        return "Success";
+      } catch (e) {
+        console.error('[Manual] Failed to load plugin:', e);
+        throw e;
+      }
+    };
 
     if (isTauri) {
       const unlistenPromise = listen("plugins:updated", () => {
         pluginManager.loadPlugins(true); // Force reload on external updates
       });
-      return () => { unlistenPromise.then(unlisten => unlisten()); };
+
+      // Listen for deep links (e.g. lokus://plugin-dev?url=...)
+      const deepLinkUnlistenPromise = listen("deep-link-received", async (event) => {
+        const urlStr = event.payload;
+        if (typeof urlStr === 'string' && urlStr.startsWith('lokus://plugin-dev')) {
+          try {
+            const urlObj = new URL(urlStr);
+            const devUrl = urlObj.searchParams.get('url');
+            if (devUrl) {
+              toast({
+                title: "Loading Dev Plugin",
+                description: `Connecting to ${devUrl}...`,
+              });
+
+              await pluginManager.loadDevPlugin(devUrl);
+
+              toast({
+                title: "Plugin Loaded",
+                description: "Development plugin loaded successfully.",
+                variant: "success" // Assuming success variant exists, or default
+              });
+            }
+          } catch (error) {
+            console.error("Failed to load dev plugin from deep link:", error);
+            toast({
+              title: "Plugin Load Failed",
+              description: error.message,
+              variant: "destructive"
+            });
+          }
+        }
+      });
+
+      return () => {
+        unlistenPromise.then(unlisten => unlisten());
+        deepLinkUnlistenPromise.then(unlisten => unlisten());
+      };
     } else {
       const onDom = () => pluginManager.loadPlugins(true);
       window.addEventListener('plugins:updated', onDom);

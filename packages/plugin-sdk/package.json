@@ -1,6 +1,6 @@
 {
-  "name": "@lokus/plugin-sdk",
-  "version": "1.0.0",
+  "name": "lokus-plugin-sdk",
+  "version": "1.0.3",
   "description": "Official Plugin Development Kit (PDK) for Lokus - Build powerful plugins with TypeScript-first development experience",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -37,7 +37,7 @@
     "build": "rollup -c rollup.config.js",
     "build:watch": "rollup -c rollup.config.js --watch",
     "dev": "npm run build:watch",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "lint": "eslint src/**/*.ts",

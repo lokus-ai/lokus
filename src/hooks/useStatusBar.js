@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
+import pluginStateAdapter from '../core/plugins/PluginStateAdapter';
 
 /**
  * Hook for managing status bar items from plugins
@@ -43,6 +44,12 @@ export function useStatusBar() {
           cleanupPluginStatusBarItems(pluginId);
         });
 
+        // Register items for already active plugins
+        const activePlugins = pluginStateAdapter.getEnabledPlugins();
+        activePlugins.forEach(plugin => {
+          registerPluginStatusBarItems(plugin.id);
+        });
+
         // Cleanup function
         return () => {
           unlistenCreate();
@@ -52,7 +59,7 @@ export function useStatusBar() {
           unlistenDeactivated();
         };
       } catch (error) {
-        return () => {}; // Return empty cleanup function
+        return () => { }; // Return empty cleanup function
       }
     };
 
@@ -61,18 +68,27 @@ export function useStatusBar() {
 
   // Register status bar items for a newly activated plugin
   const registerPluginStatusBarItems = async (pluginId) => {
+    console.log(`[useStatusBar] Registering items for ${pluginId}`);
     try {
-      // Get plugin info from runtime
-      if (typeof window !== 'undefined' && window.pluginRuntime) {
-        const pluginInfo = window.pluginRuntime.getPluginInfo(pluginId);
-        if (pluginInfo && pluginInfo.manifest && pluginInfo.manifest.contributes?.statusBar) {
-          const statusBarConfig = pluginInfo.manifest.contributes.statusBar;
-          
-          // Import and register the component
-          await registerPluginComponent(pluginId, statusBarConfig);
-        }
+      // Get plugin info from adapter
+      const pluginInfo = pluginStateAdapter.getPlugin(pluginId);
+
+      if (pluginInfo && pluginInfo.manifest && pluginInfo.manifest.contributes?.statusBar) {
+        const statusBarConfig = pluginInfo.manifest.contributes.statusBar;
+        console.log(`[useStatusBar] Found config for ${pluginId}:`, statusBarConfig);
+
+        // Import and register the component
+        await registerPluginComponent(pluginId, statusBarConfig);
+      } else {
+        console.log(`[useStatusBar] No status bar config for ${pluginId}`, {
+          hasPluginInfo: !!pluginInfo,
+          hasManifest: !!pluginInfo?.manifest,
+          contributes: pluginInfo?.manifest?.contributes,
+          fullManifest: pluginInfo?.manifest
+        });
       }
     } catch (error) {
+      console.warn(`Failed to register status bar items for ${pluginId}:`, error);
     }
   };
 
@@ -80,15 +96,19 @@ export function useStatusBar() {
   const registerPluginComponent = async (pluginId, config) => {
     try {
       const { component, position = 'right', priority = 0 } = config;
-      
+      console.log(`[useStatusBar] Registering component ${component} for ${pluginId}`);
+
       // Check if the plugin has registered its components globally
       if (typeof window !== 'undefined' && window.lokusPluginComponents) {
         const pluginComponents = window.lokusPluginComponents[pluginId];
+        console.log(`[useStatusBar] Global components for ${pluginId}:`, pluginComponents);
+
         if (pluginComponents && pluginComponents[component]) {
           const Component = pluginComponents[component];
-          
+
           // Validate the component before registering
           if (typeof Component === 'function' || (typeof Component === 'object' && Component.$$typeof)) {
+            console.log(`[useStatusBar] Valid component found for ${pluginId}, adding item`);
             addStatusBarItem(
               `${pluginId}-${component}`,
               position,
@@ -99,14 +119,18 @@ export function useStatusBar() {
                 tooltip: `${pluginId} status`
               }
             );
-            
+
             return;
           } else {
+            console.warn(`[useStatusBar] Invalid component type for ${pluginId}:`, typeof Component);
           }
         } else {
+          console.warn(`[useStatusBar] Component ${component} not found in global registry for ${pluginId}`);
         }
+      } else {
+        console.warn(`[useStatusBar] window.lokusPluginComponents not found`);
       }
-      
+
       // Check window.lokus.plugins for component access
       if (typeof window !== 'undefined' && window.lokus && window.lokus.plugins) {
         const plugin = window.lokus.plugins.get(pluginId);
@@ -117,14 +141,14 @@ export function useStatusBar() {
             try {
               // Look for the component in various places
               let Component = null;
-              
+
               // Try direct access
               if (plugin.TimeTrackerStatus) {
                 Component = plugin.TimeTrackerStatus;
               } else if (plugin[component]) {
                 Component = plugin[component];
               }
-              
+
               if (Component) {
                 addStatusBarItem(
                   `${pluginId}-${component}`,
@@ -136,17 +160,17 @@ export function useStatusBar() {
                     tooltip: 'Time Tracker'
                   }
                 );
-                
+
                 return;
               }
             } catch (error) {
             }
           }
-          
+
           // Generic plugin component handling
           if (plugin[component]) {
             const Component = plugin[component];
-            
+
             addStatusBarItem(
               `${pluginId}-${component}`,
               position,
@@ -197,8 +221,8 @@ export function useStatusBar() {
 
   // Update a status bar item
   const updateStatusBarItem = (id, updateData) => {
-    const updateItems = (items) => 
-      items.map(item => 
+    const updateItems = (items) =>
+      items.map(item =>
         item.id === id ? { ...item, ...updateData } : item
       );
 
@@ -208,7 +232,7 @@ export function useStatusBar() {
 
   // Clean up all status bar items for a plugin
   const cleanupPluginStatusBarItems = (pluginId) => {
-    const filterItems = (items) => 
+    const filterItems = (items) =>
       items.filter(item => item.pluginId !== pluginId);
 
     setLeftItems(filterItems);
@@ -218,18 +242,18 @@ export function useStatusBar() {
   // Manual API for adding status bar items (can be used by plugins directly)
   const addItem = (id, config) => {
     const { position = 'right', priority = 0, component, ...itemData } = config;
-    
+
     // Extract actual component if it's wrapped
     let actualComponent = component;
     if (component && typeof component === 'object' && component.default) {
       actualComponent = component.default;
     }
-    
+
     // Validate component if provided
     if (actualComponent && !(typeof actualComponent === 'function' || (typeof actualComponent === 'object' && actualComponent.$$typeof))) {
       return;
     }
-    
+
     addStatusBarItem(id, position, priority, { component: actualComponent, ...itemData });
   };
 

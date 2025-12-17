@@ -1,0 +1,201 @@
+/* Canvas Preview Styles */
+/* Hover preview for canvas links */
+
+.canvas-preview {
+  max-width: 400px;
+  max-height: 300px;
+  background: rgb(var(--panel));
+  border: 1px solid rgb(var(--border));
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.canvas-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgb(var(--border));
+  background: rgb(var(--bg));
+}
+
+.canvas-preview-title-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.canvas-preview-icon {
+  color: rgb(var(--text-secondary));
+  flex-shrink: 0;
+}
+
+.canvas-preview-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgb(var(--text));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.canvas-preview-close {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: rgb(var(--muted));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.canvas-preview-close:hover {
+  background: rgb(var(--panel-secondary));
+  color: rgb(var(--text));
+}
+
+.canvas-preview-content {
+  padding: 16px;
+  max-height: 300px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(var(--bg));
+}
+
+/* State containers (loading, error, empty, missing) */
+.canvas-preview-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 16px;
+  text-align: center;
+  width: 100%;
+}
+
+.canvas-preview-state-text {
+  margin: 0;
+  color: rgb(var(--text));
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.canvas-preview-info {
+  margin: 0;
+  color: rgb(var(--muted));
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Loading spinner */
+.canvas-preview-spinner {
+  color: rgb(var(--accent));
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Error icon */
+.canvas-preview-error-icon {
+  color: rgb(var(--error, 239 68 68)); /* Fallback to red-500 */
+}
+
+.canvas-preview-error-message {
+  margin: 4px 0 0 0;
+  color: rgb(var(--muted));
+  font-size: 11px;
+  font-family: monospace;
+}
+
+/* Empty canvas icon */
+.canvas-preview-empty-icon {
+  color: rgb(var(--muted));
+}
+
+/* Missing canvas icon */
+.canvas-preview-missing-icon {
+  color: rgb(var(--text-secondary));
+}
+
+/* SVG preview container */
+.canvas-preview-svg {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.canvas-preview-svg svg {
+  max-width: 400px;
+  max-height: 300px;
+  width: auto;
+  height: auto;
+  display: block;
+}
+
+/* Animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Dark theme adjustments */
+[data-theme="dark"] .canvas-preview {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .canvas-preview-svg svg {
+  filter: brightness(0.95);
+}
+
+/* Light theme adjustments */
+[data-theme="light"] .canvas-preview {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Scrollbar styling (in case content overflows) */
+.canvas-preview-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.canvas-preview-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.canvas-preview-content::-webkit-scrollbar-thumb {
+  background: rgb(var(--border));
+  border-radius: 3px;
+}
+
+.canvas-preview-content::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--muted));
+}
