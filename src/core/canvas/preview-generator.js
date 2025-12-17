@@ -105,6 +105,44 @@ export async function generatePreview(canvasPath) {
 }
 
 /**
+ * Generate SVG preview from TLDraw snapshot data directly (no file I/O)
+ * Used for embedded canvas fragments where we already have the data in memory
+ *
+ * @param {Object} tldrawSnapshot - TLDraw snapshot data (records array or document.store format)
+ * @returns {string} SVG data URL (data:image/svg+xml;base64,...)
+ */
+export function generatePreviewFromData(tldrawSnapshot) {
+  try {
+    // Validate input
+    if (!tldrawSnapshot || typeof tldrawSnapshot !== 'object') {
+      return svgToDataUrl(createEmptyCanvasSvg());
+    }
+
+    // Parse shapes from snapshot
+    const shapes = extractShapes(tldrawSnapshot);
+
+    // Handle empty canvas
+    if (shapes.length === 0) {
+      const emptySvg = createEmptyCanvasSvg();
+      return svgToDataUrl(emptySvg);
+    }
+
+    // Calculate canvas bounds
+    const bounds = calculateBounds(shapes);
+
+    // Generate SVG from shapes
+    const svg = generateSvgFromShapes(shapes, bounds);
+
+    return svgToDataUrl(svg);
+
+  } catch (error) {
+    console.error('[Preview Generator] Error generating preview from data:', error.message);
+    const errorSvg = createErrorSvg(error.message);
+    return svgToDataUrl(errorSvg);
+  }
+}
+
+/**
  * Get cached preview if available and not expired
  *
  * @param {string} canvasPath - Absolute path to the .canvas file

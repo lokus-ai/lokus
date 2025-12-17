@@ -105,6 +105,80 @@ function resolveCanvasPath(canvasName) {
 }
 
 export default function markdownItWikiLinks(md) {
+  // Inline rule for ![canvas:uuid:WxH] (embedded canvas)
+  // Must be registered before 'image' to take precedence
+  md.inline.ruler.before('image', 'embeddedcanvas', (state, silent) => {
+    const start = state.pos;
+    const max = state.posMax;
+
+    // Check if we're at ![canvas:
+    if (state.src.charCodeAt(start) !== 0x21 /* ! */ ||
+        state.src.charCodeAt(start + 1) !== 0x5B /* [ */) {
+      return false;
+    }
+
+    // Check for "canvas:" prefix
+    if (!state.src.slice(start + 2, start + 9).startsWith('canvas:')) {
+      return false;
+    }
+
+    // Find the closing ]
+    let pos = start + 2;
+    let found = false;
+
+    while (pos < max) {
+      if (state.src.charCodeAt(pos) === 0x5D /* ] */) {
+        found = true;
+        break;
+      }
+      pos++;
+    }
+
+    if (!found) {
+      return false;
+    }
+
+    // Check that this is NOT followed by ( which would make it something else
+    if (pos + 1 < max && state.src.charCodeAt(pos + 1) === 0x28 /* ( */) {
+      return false;
+    }
+
+    // Extract content: canvas:uuid:WxH
+    const content = state.src.slice(start + 2, pos).trim();
+    const match = content.match(/^canvas:([a-f0-9-]+):(\d+)x(\d+)$/);
+
+    if (!match) {
+      return false;
+    }
+
+    const fragmentId = match[1];
+    const width = match[2];
+    const height = match[3];
+
+    if (!silent) {
+      // Create embedded-canvas element
+      const token = state.push('embedded_canvas', 'embedded-canvas', 0);
+      token.attrs = [
+        ['data-fragment-id', fragmentId],
+        ['data-width', width],
+        ['data-height', height]
+      ];
+    }
+
+    state.pos = pos + 1;
+    return true;
+  });
+
+  // Renderer for embedded canvas
+  md.renderer.rules.embedded_canvas = (tokens, idx) => {
+    const token = tokens[idx];
+    const fragmentId = token.attrGet('data-fragment-id');
+    const width = token.attrGet('data-width');
+    const height = token.attrGet('data-height');
+
+    return `<embedded-canvas data-fragment-id="${md.utils.escapeHtml(fragmentId)}" data-width="${md.utils.escapeHtml(width)}" data-height="${md.utils.escapeHtml(height)}"></embedded-canvas>`;
+  };
+
   // Inline rule for ![Canvas Name] (canvas links)
   // Must be registered before 'image' to take precedence
   md.inline.ruler.before('image', 'canvaslink', (state, silent) => {

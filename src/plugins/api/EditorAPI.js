@@ -961,6 +961,12 @@ export class EditorPluginAPI extends EventEmitter {
    */
   setEditorInstance(editor) {
     this.editorInstance = editor
+
+    // Handle null editor (during cleanup/unmount)
+    if (!editor) {
+      return
+    }
+
     this.emit('editor-attached', { editor })
 
     // Listen for editor updates

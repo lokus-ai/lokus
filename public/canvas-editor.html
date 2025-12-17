@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Canvas Editor</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body, #root {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    /* Done button overlay */
+    .done-button {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 10000;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      transition: background 0.2s;
+    }
+
+    .done-button:hover {
+      background: #2563eb;
+    }
+
+    .done-button svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Loading state */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #666;
+      font-size: 16px;
+    }
+
+    /* Hide TLDraw's default UI elements we don't need */
+    .tl-container [data-testid="main-menu"] {
+      display: none !important;
+    }
+  </style>
+
+  <!-- Import map to ensure consistent React versions -->
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.2.0",
+      "react-dom": "https://esm.sh/react-dom@18.2.0",
+      "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+      "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",
+      "tldraw": "https://esm.sh/tldraw@2.4.7?external=react,react-dom"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="root">
+    <div class="loading">Loading canvas editor...</div>
+  </div>
+
+  <script type="module">
+    // Import with proper module resolution
+    import React from 'react';
+    import * as ReactDOM from 'react-dom/client';
+    import { Tldraw, createTLStore, defaultShapeUtils, defaultBindingUtils, loadSnapshot, getSnapshot } from 'tldraw';
+
+    // Import TLDraw CSS
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://esm.sh/tldraw@2.4.7/tldraw.css';
+    document.head.appendChild(link);
+
+    // State
+    let store = null;
+    let editor = null;
+    let hasUnsavedChanges = false;
+
+    // Create TLDraw store
+    store = createTLStore({
+      shapeUtils: defaultShapeUtils,
+      bindingUtils: defaultBindingUtils
+    });
+
+    // Listen for messages from parent
+    window.addEventListener('message', (event) => {
+      const { type, data } = event.data || {};
+
+      switch (type) {
+        case 'load':
+          // Load fragment data into store
+          if (data && store) {
+            try {
+              loadSnapshot(store, data);
+              hasUnsavedChanges = false;
+            } catch (err) {
+              console.error('[Canvas Editor] Failed to load snapshot:', err);
+            }
+          }
+          break;
+
+        case 'theme':
+          // Theme updates handled by TLDraw's dark mode detection
+          break;
+      }
+    });
+
+    // Send message to parent
+    function sendToParent(type, data) {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type, data }, '*');
+      }
+    }
+
+    // Auto-save with debounce
+    let saveTimeout = null;
+    function scheduleAutoSave() {
+      if (saveTimeout) clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(() => {
+        if (editor && hasUnsavedChanges) {
+          const snapshot = getSnapshot(editor.store);
+          sendToParent('save', snapshot);
+          hasUnsavedChanges = false;
+        }
+      }, 300);
+    }
+
+    // Handle done button click
+    function handleDone() {
+      if (editor) {
+        const snapshot = getSnapshot(editor.store);
+        sendToParent('save', snapshot);
+      }
+      sendToParent('done');
+    }
+
+    // Make handleDone available globally for the button
+    window.handleCanvasDone = handleDone;
+
+    // React App using createElement (no JSX needed)
+    function CanvasEditorApp() {
+      const handleMount = React.useCallback((editorInstance) => {
+        editor = editorInstance;
+
+        // Listen for changes
+        editor.store.listen(() => {
+          hasUnsavedChanges = true;
+          scheduleAutoSave();
+        });
+
+        // Tell parent we're ready
+        sendToParent('ready');
+      }, []);
+
+      return React.createElement('div', {
+        style: { width: '100%', height: '100%', position: 'relative' }
+      }, [
+        // Done button
+        React.createElement('button', {
+          key: 'done-btn',
+          className: 'done-button',
+          onClick: handleDone
+        }, [
+          React.createElement('svg', {
+            key: 'icon',
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: 2
+          }, React.createElement('polyline', { points: '20 6 9 17 4 12' })),
+          'Done'
+        ]),
+
+        // TLDraw
+        React.createElement(Tldraw, {
+          key: 'tldraw',
+          store: store,
+          onMount: handleMount,
+          autoFocus: true
+        })
+      ]);
+    }
+
+    // Render app
+    const root = document.getElementById('root');
+    ReactDOM.createRoot(root).render(React.createElement(CanvasEditorApp));
+
+    // Signal ready to parent
+    sendToParent('ready');
+  </script>
+</body>
+</html>

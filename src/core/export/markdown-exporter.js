@@ -266,6 +266,16 @@ export class MarkdownExporter {
             }
             break;
 
+          // Embedded Canvas (inline TLDraw)
+          case 'embedded-canvas':
+            const fragmentId = child.getAttribute('data-fragment-id') || '';
+            const canvasWidth = child.getAttribute('data-width') || '600';
+            const canvasHeight = child.getAttribute('data-height') || '400';
+            if (fragmentId) {
+              result += `\n![canvas:${fragmentId}:${canvasWidth}x${canvasHeight}]\n\n`;
+            }
+            break;
+
           // Line breaks
           case 'br':
             result += '\n';
