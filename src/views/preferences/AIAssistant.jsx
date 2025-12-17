@@ -18,7 +18,6 @@ export default function AIAssistant() {
       setIsConfigured(status);
       setSetupState(status ? 'success' : 'not-setup');
     } catch (error) {
-      console.error('Failed to check MCP status:', error);
       setSetupState('not-setup');
     }
   };
@@ -37,7 +36,6 @@ export default function AIAssistant() {
       setSetupState('success');
       setIsConfigured(true);
     } catch (error) {
-      console.error('Setup failed:', error);
       setErrorMessage(error.toString());
       setSetupState('error');
     }
@@ -154,7 +152,6 @@ export default function AIAssistant() {
                         setSetupState('success');
                         setErrorMessage(result);
                       } catch (error) {
-                        console.error('Restart failed:', error);
                         setErrorMessage(error.toString());
                         setSetupState('error');
                       }

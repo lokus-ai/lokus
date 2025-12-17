@@ -102,7 +102,6 @@ export function BasesProvider({ children, workspacePath }) {
         }
 
       } catch (err) {
-        console.error('BasesContext initialization failed:', err);
         setError(err.message);
       } finally {
         setIsLoading(false);
@@ -205,7 +204,6 @@ export function BasesProvider({ children, workspacePath }) {
         throw new Error(result.error);
       }
     } catch (err) {
-      console.error('Failed to save base:', err);
       setError(err.message);
       return { success: false, error: err.message };
     } finally {
@@ -234,7 +232,6 @@ export function BasesProvider({ children, workspacePath }) {
         throw new Error(result.error);
       }
     } catch (err) {
-      console.error('Failed to delete base:', err);
       setError(err.message);
       return { success: false, error: err.message };
     } finally {
@@ -306,7 +303,6 @@ export function BasesProvider({ children, workspacePath }) {
       const properties = await dataManager.getAvailableProperties();
       return { success: true, properties };
     } catch (err) {
-      console.error('Failed to get properties:', err);
       return { success: false, error: err.message };
     }
   }, [dataManager]);
@@ -317,7 +313,6 @@ export function BasesProvider({ children, workspacePath }) {
       const results = await baseManager.searchBases(query, workspacePath);
       return { success: true, results };
     } catch (err) {
-      console.error('Failed to search bases:', err);
       return { success: false, error: err.message };
     }
   }, [baseManager, workspacePath]);

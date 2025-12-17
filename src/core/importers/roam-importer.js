@@ -364,7 +364,6 @@ export class RoamImporter extends BaseImporter {
         await invoke('create_directory', { path: destPath, recursive: true });
       }
     } catch (error) {
-      console.error('Error creating destination directory:', error);
       throw error;
     }
   }

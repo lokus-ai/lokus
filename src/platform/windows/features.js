@@ -23,7 +23,6 @@ export const fileAssociations = {
       });
       return true;
     } catch (error) {
-      console.error('Failed to register file associations:', error);
       return false;
     }
   },
@@ -35,7 +34,6 @@ export const fileAssociations = {
     try {
       return await invoke('windows_check_file_associations');
     } catch (error) {
-      console.error('Failed to check file associations:', error);
       return false;
     }
   }
@@ -66,7 +64,6 @@ export const jumpList = {
       });
       return true;
     } catch (error) {
-      console.error('Failed to update jump list:', error);
       return false;
     }
   },
@@ -79,7 +76,6 @@ export const jumpList = {
       await invoke('windows_clear_jump_list');
       return true;
     } catch (error) {
-      console.error('Failed to clear jump list:', error);
       return false;
     }
   }
@@ -99,7 +95,6 @@ export const contextMenu = {
       });
       return true;
     } catch (error) {
-      console.error('Failed to register context menu:', error);
       return false;
     }
   },
@@ -112,7 +107,6 @@ export const contextMenu = {
       await invoke('windows_unregister_context_menu');
       return true;
     } catch (error) {
-      console.error('Failed to unregister context menu:', error);
       return false;
     }
   }
@@ -135,7 +129,6 @@ export const taskbarProgress = {
       });
       return true;
     } catch (error) {
-      console.error('Failed to set taskbar progress:', error);
       return false;
     }
   },
@@ -148,7 +141,6 @@ export const taskbarProgress = {
       await invoke('windows_clear_taskbar_progress');
       return true;
     } catch (error) {
-      console.error('Failed to clear taskbar progress:', error);
       return false;
     }
   }
@@ -175,7 +167,6 @@ export const notifications = {
       const id = await invoke('windows_show_notification', notification);
       return id;
     } catch (error) {
-      console.error('Failed to show notification:', error);
       return null;
     }
   },
@@ -188,7 +179,6 @@ export const notifications = {
       await invoke('windows_clear_notification', { id: notificationId });
       return true;
     } catch (error) {
-      console.error('Failed to clear notification:', error);
       return false;
     }
   }
@@ -225,7 +215,6 @@ export const themeIntegration = {
       });
       return unlisten;
     } catch (error) {
-      console.error('Failed to watch theme changes:', error);
       return null;
     }
   }
@@ -245,7 +234,6 @@ export const searchIntegration = {
       });
       return true;
     } catch (error) {
-      console.error('Failed to index workspace:', error);
       return false;
     }
   },
@@ -260,7 +248,6 @@ export const searchIntegration = {
       });
       return true;
     } catch (error) {
-      console.error('Failed to remove from index:', error);
       return false;
     }
   }

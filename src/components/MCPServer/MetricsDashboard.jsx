@@ -65,9 +65,7 @@ export default function MetricsDashboard() {
       
       setMetrics(mockMetrics);
       setLastUpdate(new Date());
-    } catch (error) {
-      console.error('Failed to load metrics:', error);
-    } finally {
+    } catch { } finally {
       setIsLoading(false);
     }
   };

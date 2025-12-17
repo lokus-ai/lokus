@@ -21,6 +21,7 @@ impl Default for SyncConfig {
     }
 }
 
+#[allow(dead_code)]
 pub struct IrohSyncProviderV2 {
     workspace_path: Option<PathBuf>,
     files_uploaded: Arc<AtomicU64>,
@@ -28,6 +29,7 @@ pub struct IrohSyncProviderV2 {
     config: Arc<RwLock<SyncConfig>>,
 }
 
+#[allow(dead_code)]
 impl IrohSyncProviderV2 {
     pub fn new() -> Self {
         Self {

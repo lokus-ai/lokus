@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Emitter};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Emitter, TitleBarStyle};
 use std::path::Path;
 
 fn base_label_from_path(path: &str) -> String {
@@ -84,9 +84,20 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
     .and_then(|n| n.to_str())
     .unwrap_or("Workspace");
 
+  // Build window with platform-specific titlebar style to match main window
+  #[cfg(target_os = "macos")]
   let win = WebviewWindowBuilder::new(&app, &label, url)
     .title(format!("Lokus — {}", workspace_name))
     .inner_size(1200.0, 800.0)
+    .title_bar_style(TitleBarStyle::Overlay)
+    .build()
+    .map_err(|e| e.to_string())?;
+
+  #[cfg(not(target_os = "macos"))]
+  let win = WebviewWindowBuilder::new(&app, &label, url)
+    .title(format!("Lokus — {}", workspace_name))
+    .inner_size(1200.0, 800.0)
+    .decorations(true)
     .build()
     .map_err(|e| e.to_string())?;
 
@@ -120,12 +131,26 @@ pub fn open_preferences_window(app: AppHandle, workspace_path: Option<String>) -
     "index.html?view=prefs".to_string()
   };
   let url = WebviewUrl::App(url_string.into());
+
+  // Build window with platform-specific titlebar style to match main window
+  #[cfg(target_os = "macos")]
   let _win = WebviewWindowBuilder::new(&app, label, url)
     .title("Preferences")
     .inner_size(760.0, 560.0)
     .resizable(true)
+    .title_bar_style(TitleBarStyle::Overlay)
     .build()
     .map_err(|e| e.to_string())?;
+
+  #[cfg(not(target_os = "macos"))]
+  let _win = WebviewWindowBuilder::new(&app, label, url)
+    .title("Preferences")
+    .inner_size(760.0, 560.0)
+    .resizable(true)
+    .decorations(true)
+    .build()
+    .map_err(|e| e.to_string())?;
+
   Ok(())
 }
 
@@ -140,13 +165,25 @@ pub fn open_launcher_window(app: AppHandle) -> Result<(), String> {
 
   // Pass forceWelcome parameter so the frontend shows welcome screen
   let url = WebviewUrl::App("index.html?forceWelcome=true".into());
-  let _win = WebviewWindowBuilder::new(&app, &label, url)
+
+  // Build window with platform-specific titlebar style to match main window
+  #[cfg(target_os = "macos")]
+  let builder = WebviewWindowBuilder::new(&app, &label, url)
     .title("Lokus")
     .inner_size(900.0, 700.0)
     .min_inner_size(600.0, 500.0)
     .center()
-    .build()
-    .map_err(|e| e.to_string())?;
+    .title_bar_style(TitleBarStyle::Overlay);
+
+  #[cfg(not(target_os = "macos"))]
+  let builder = WebviewWindowBuilder::new(&app, &label, url)
+    .title("Lokus")
+    .inner_size(900.0, 700.0)
+    .min_inner_size(600.0, 500.0)
+    .center()
+    .decorations(true);
+
+  let _win = builder.build().map_err(|e| e.to_string())?;
   Ok(())
 }
 

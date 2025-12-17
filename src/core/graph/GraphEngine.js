@@ -270,8 +270,7 @@ export class GraphEngine {
             this.sigma.refresh();
             this.sigma.getCamera().disable();
             this.sigma.getCamera().enable();
-          } catch (error) {
-          }
+          } catch { }
         }, 100);
       }
     };
@@ -381,8 +380,7 @@ export class GraphEngine {
           const autoEdgeId = this.graph.addEdge(source, target, edgeAttributes);
           this.stats.edgeCount++;
           this.emit('edgeAdded', { edgeId: autoEdgeId, source, target, attributes: edgeAttributes });
-        } catch (fallbackError) {
-        }
+        } catch { }
       }
     } else {
     }
@@ -670,8 +668,7 @@ export class GraphEngine {
       if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
       } else {
       }
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -834,8 +831,7 @@ export class GraphEngine {
         batch.forEach(({ key, attributes }) => {
           try {
             this.addNode(key, attributes);
-          } catch (error) {
-          }
+          } catch { }
         });
       }
     }
@@ -859,8 +855,7 @@ export class GraphEngine {
             const edgeAttributes = attributes || {};
 
             this.addEdge(key, source, target, edgeAttributes);
-          } catch (error) {
-          }
+          } catch { }
         });
       }
     }
@@ -895,8 +890,7 @@ export class GraphEngine {
       for (let i = 0; i < listeners.length; i++) {
         try {
           listeners[i](data);
-        } catch (error) {
-        }
+        } catch { }
       }
     }
   }
@@ -1034,16 +1028,12 @@ export class GraphEngine {
       };
 
       this.webWorker.onerror = (error) => {
-        console.error('GraphWorker error:', error);
       };
 
     } catch (error) {
-      console.error('Failed to initialize worker', error);
       // Fall back to main thread calculations handled elsewhere
     }
   }
-
-
 
   /**
    * Send message to worker
@@ -1424,7 +1414,6 @@ export class GraphEngine {
    */
   endNodeDrag() {
     if (!this.physics.isDragging) return;
-
 
     const draggedNode = this.physics.draggedNode;
     this.physics.isDragging = false;

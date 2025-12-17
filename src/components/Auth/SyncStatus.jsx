@@ -115,8 +115,7 @@ export default function SyncStatus() {
           if (currentWorkspace) {
             path = currentWorkspace;
           }
-        } catch (e) {
-        }
+        } catch { }
       }
 
       if (!path) return;
@@ -142,9 +141,7 @@ export default function SyncStatus() {
         }
         setIsConfigured(configured);
       }
-    } catch (e) {
-      console.error('[SyncStatus] Failed to load config:', e);
-    }
+    } catch { }
   };
 
   const checkSyncStatus = async () => {
@@ -238,7 +235,6 @@ export default function SyncStatus() {
         setErrorType('');
       }, 3000);
     } catch (err) {
-      console.error('[SyncStatus] Sync failed:', err);
 
       // Parse structured error
       const gitError = parseGitError(err);
@@ -326,7 +322,6 @@ export default function SyncStatus() {
         }, 3000);
       }
     } catch (err) {
-      console.error('[SyncStatus] Pull failed:', err);
 
       // Parse structured error
       const gitError = parseGitError(err);
@@ -392,7 +387,6 @@ export default function SyncStatus() {
         setSyncStatus('idle');
       }, 2000);
     } catch (err) {
-      console.error('[SyncStatus] Force push failed:', err);
       setSyncStatus('error');
       setTimeout(() => {
         setSyncStatus('idle');
@@ -437,7 +431,6 @@ export default function SyncStatus() {
         setSyncStatus('idle');
       }, 2000);
     } catch (err) {
-      console.error('[SyncStatus] Force pull failed:', err);
       setSyncStatus('error');
       setTimeout(() => {
         setSyncStatus('idle');
@@ -469,7 +462,6 @@ export default function SyncStatus() {
         setErrorType('');
       }, 3000);
     } catch (err) {
-      console.error('[SyncStatus] Iroh sync failed:', err);
       setErrorMessage(String(err));
       setSyncStatus('error');
 

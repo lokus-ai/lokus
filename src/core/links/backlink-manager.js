@@ -170,9 +170,7 @@ export class BacklinkManager {
       this.listeners.get(event).forEach(callback => {
         try {
           callback(data);
-        } catch (error) {
-          console.error(`Error in backlink manager listener for ${event}:`, error);
-        }
+        } catch { }
       });
     }
   }

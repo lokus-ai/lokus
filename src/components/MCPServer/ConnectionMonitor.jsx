@@ -70,9 +70,7 @@ export default function ConnectionMonitor() {
       
       setConnections(mockConnections);
       setLastUpdate(new Date());
-    } catch (error) {
-      console.error('Failed to load connections:', error);
-    } finally {
+    } catch { } finally {
       setIsLoading(false);
     }
   };
@@ -83,9 +81,7 @@ export default function ConnectionMonitor() {
       // await invoke('disconnect_client', { connectionId });
       
       setConnections(prev => prev.filter(conn => conn.id !== connectionId));
-    } catch (error) {
-      console.error('Failed to disconnect client:', error);
-    }
+    } catch { }
   };
 
   const formatDuration = (isoString) => {

@@ -42,9 +42,7 @@ export class DailyNotesManager {
           ...globalConfig.dailyNotes
         };
       }
-    } catch (error) {
-      console.error('Failed to load daily notes config:', error);
-    }
+    } catch { }
   }
 
   /**
@@ -61,7 +59,6 @@ export class DailyNotesManager {
         dailyNotes: this.config
       });
     } catch (error) {
-      console.error('Failed to save daily notes config:', error);
       throw error;
     }
   }
@@ -73,7 +70,6 @@ export class DailyNotesManager {
     try {
       return format(date, this.config.format);
     } catch (error) {
-      console.error('Failed to format date:', error);
       // Fallback to ISO format
       return format(date, 'yyyy-MM-dd');
     }
@@ -87,7 +83,6 @@ export class DailyNotesManager {
       const parsed = parse(dateString, this.config.format, new Date());
       return isValid(parsed) ? parsed : null;
     } catch (error) {
-      console.error('Failed to parse date:', error);
       return null;
     }
   }
@@ -135,7 +130,6 @@ export class DailyNotesManager {
       }
     } catch (error) {
       // If folder exists, that's fine, otherwise log the error
-      console.error('Failed to create daily notes folder:', error);
     }
   }
 
@@ -221,7 +215,6 @@ export class DailyNotesManager {
 
         return content;
       } catch (error) {
-        console.error('Failed to process template:', error);
         // Fall through to default content
       }
     }
@@ -244,7 +237,6 @@ export class DailyNotesManager {
       await invoke('write_file_content', { path: filePath, content });
       return filePath;
     } catch (error) {
-      console.error('Failed to create daily note:', error);
       throw new Error(`Failed to create daily note: ${error.message}`);
     }
   }

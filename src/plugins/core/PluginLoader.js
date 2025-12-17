@@ -264,15 +264,13 @@ export class PluginLoader {
         const exports = module.exports;
         const require = (id) => {
           if (id === '@lokus/plugin-sdk' || id === 'lokus-plugin-sdk') {
-            console.log('[PluginLoader] Requiring PluginSDK. Keys:', Object.keys(PluginSDK));
-            console.log('[PluginLoader] PluginSDK.PluginLogger:', PluginSDK.PluginLogger);
             return PluginSDK;
           }
           if (id === 'react') {
-            return window.React || { createElement: () => console.warn('React not available') };
+            return window.React || { createElement: () => {} };
           }
           if (id === 'react-dom') {
-            return window.ReactDOM || { render: () => console.warn('ReactDOM not available') };
+            return window.ReactDOM || { render: () => {} };
           }
           this.logger.warn(`Plugin ${pluginId} tried to require '${id}' which is not supported.`);
           return {};
@@ -442,10 +440,6 @@ export class PluginLoader {
       };
 
       const context = sandbox.createContext(contextData)
-
-      console.log('[PluginLoader] Context created:', context);
-      console.log('[PluginLoader] Context pluginId:', context.pluginId);
-      console.log('[PluginLoader] Context keys:', Object.keys(context));
 
       let plugin;
       let PluginClass = pluginModule.default || pluginModule.Plugin;

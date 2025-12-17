@@ -7,11 +7,9 @@ const MarkdownPaste = Extension.create({
   name: 'markdownPaste',
 
   onCreate() {
-    console.log('[MarkdownPaste] Extension created successfully');
   },
 
   addProseMirrorPlugins() {
-    console.log('[MarkdownPaste] Adding ProseMirror plugin');
     const editor = this.editor
 
     return [
@@ -24,7 +22,6 @@ const MarkdownPaste = Extension.create({
             const text = clipboardData.getData('text/plain')
             const html = clipboardData.getData('text/html')
 
-
             // Use our universal markdown compiler
             if (text) {
               // Use local sync compiler for quick checks
@@ -36,7 +33,6 @@ const MarkdownPaste = Extension.create({
                 const isMarkdownText = syncCompiler.isMarkdown(text)
                 const htmlTextRatio = html.length / (text?.length || 1)
 
-
                 // If text is clearly markdown, process it even if HTML is present
                 if (isMarkdownText) {
                 } else if (htmlTextRatio > 5) {
@@ -45,7 +41,6 @@ const MarkdownPaste = Extension.create({
               }
 
               if (syncCompiler.isMarkdown(text)) {
-                console.log('[MarkdownPaste] Detected as markdown:', text.substring(0, 100));
 
                 try {
                   // Prevent default paste immediately
@@ -53,7 +48,6 @@ const MarkdownPaste = Extension.create({
 
                   // Compile markdown to HTML asynchronously
                   workerCompiler.compile(text).then(htmlContent => {
-                    console.log('[MarkdownPaste] Compiled HTML:', htmlContent.substring(0, 200));
                     if (!htmlContent) return
 
                     // Insert the converted HTML with better parsing options
@@ -69,7 +63,6 @@ const MarkdownPaste = Extension.create({
                       })
                       .run()
                   }).catch(err => {
-                    console.error('Markdown paste compilation failed:', err)
                     // Fallback to inserting text if compilation fails
                     editor.chain().focus().insertContent(text).run()
                   })
@@ -79,7 +72,6 @@ const MarkdownPaste = Extension.create({
                   return false
                 }
               } else {
-                console.log('[MarkdownPaste] NOT detected as markdown:', text.substring(0, 100));
               }
             }
 

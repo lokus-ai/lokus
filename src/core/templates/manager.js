@@ -105,7 +105,6 @@ export class TemplateManager {
     // Validate template syntax
     const validation = this.parser.validate(content);
     if (!validation.valid) {
-      console.error('[TemplateManager] Invalid template syntax:', validation.errors);
       throw new Error(`Invalid template syntax: ${validation.errors.join(', ')}`);
     }
 

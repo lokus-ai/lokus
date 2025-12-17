@@ -161,7 +161,6 @@ const MermaidComponent = ({ node, updateAttributes }) => {
     renderDiagram();
   }, [localCode, themeVersion, forceRender]);
 
-
   // Handlers
   const handleDoubleClick = () => {
     setIsEditing(true);

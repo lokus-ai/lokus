@@ -170,9 +170,7 @@ function KanbanColumn({ column, columnId, tasks, onTaskUpdate, onTaskDelete, onA
         await onAddTask(newTaskTitle.trim(), columnId)
         setNewTaskTitle('')
         setIsAdding(false)
-      } catch (error) {
-        console.error('Failed to add task:', error)
-      }
+      } catch { }
     }
   }, [newTaskTitle, columnId, onAddTask])
 
@@ -350,7 +348,6 @@ export default function KanbanBoard({ workspacePath, boardPath, onFileOpen }) {
       setError(null)
     } catch (err) {
       setError('Failed to load kanban board')
-      console.error('Failed to load board:', err)
     } finally {
       setLoading(false)
     }
@@ -371,7 +368,6 @@ export default function KanbanBoard({ workspacePath, boardPath, onFileOpen }) {
       })
       setBoard(updatedBoard)
     } catch (err) {
-      console.error('Failed to save board:', err)
       throw err
     }
   }, [boardPath])
@@ -455,9 +451,7 @@ export default function KanbanBoard({ workspacePath, boardPath, onFileOpen }) {
           break
         }
       }
-    } catch (error) {
-      console.error('Failed to delete card:', error)
-    }
+    } catch { }
   }, [board, boardPath, saveBoard])
 
   // Add new column
@@ -479,9 +473,7 @@ export default function KanbanBoard({ workspacePath, boardPath, onFileOpen }) {
       await saveBoard(updatedBoard)
       setNewColumnName('')
       setIsAddingColumn(false)
-    } catch (error) {
-      console.error('Failed to add column:', error)
-    }
+    } catch { }
   }, [board, boardPath, newColumnName, saveBoard])
 
   // Rename column
@@ -494,7 +486,6 @@ export default function KanbanBoard({ workspacePath, boardPath, onFileOpen }) {
       updatedBoard.metadata.modified = new Date().toISOString()
       await saveBoard(updatedBoard)
     } catch (error) {
-      console.error('Failed to rename column:', error)
       throw error
     }
   }, [board, boardPath, saveBoard])
@@ -508,9 +499,7 @@ export default function KanbanBoard({ workspacePath, boardPath, onFileOpen }) {
       delete updatedBoard.columns[columnId]
       updatedBoard.metadata.modified = new Date().toISOString()
       await saveBoard(updatedBoard)
-    } catch (error) {
-      console.error('Failed to delete column:', error)
-    }
+    } catch { }
   }, [board, boardPath, saveBoard])
 
   // Handle drag start
@@ -555,9 +544,7 @@ export default function KanbanBoard({ workspacePath, boardPath, onFileOpen }) {
         updatedBoard.metadata.modified = new Date().toISOString()
         await saveBoard(updatedBoard)
       }
-    } catch (error) {
-      console.error('Failed to move card:', error)
-    }
+    } catch { }
   }, [board, boardPath, saveBoard])
 
   if (loading) {

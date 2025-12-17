@@ -96,7 +96,6 @@ export default function ExportModal({
 
       onClose();
     } catch (error) {
-      console.error('Export failed:', error);
       alert(`Export failed: ${error.message}`);
     } finally {
       setIsExporting(false);

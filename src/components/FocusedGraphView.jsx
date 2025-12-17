@@ -97,7 +97,6 @@ export default function FocusedGraphView({ currentFile, editorRef, fileIndex = [
 
       return graphNodes;
     } catch (e) {
-      console.error('Error creating nodes:', e);
       return [];
     }
   }, [currentFile, fileIndex, connections, dimensions]);
@@ -179,9 +178,7 @@ export default function FocusedGraphView({ currentFile, editorRef, fileIndex = [
           ctx.stroke();
         }
       });
-    } catch (e) {
-      console.error('Error drawing graph:', e);
-    }
+    } catch { }
   }, [nodes, dimensions, hoveredNode]);
 
   // Draw on changes

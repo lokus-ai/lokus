@@ -36,9 +36,7 @@ export class BaseManager {
     this.listeners.forEach(listener => {
       try {
         listener(event)
-      } catch (error) {
-        console.error('Base listener error:', error)
-      }
+      } catch { }
     })
   }
 
@@ -168,7 +166,6 @@ export class BaseManager {
       // Check if file exists
       const exists = await this.fileExists(basePath)
       if (!exists) {
-        console.error('❌ Base file not found at path:', basePath)
         throw new Error(`Base file not found: ${basePath}`)
       }
 
@@ -181,7 +178,6 @@ export class BaseManager {
       })
 
       if (!parseResult.success) {
-        console.error('❌ Parse failed:', parseResult.error)
         throw new ParseError(parseResult.error, parseResult.line, parseResult.column)
       }
 
@@ -385,7 +381,6 @@ export class BaseManager {
         .filter(file => file.name.endsWith('.base'))
         .map(file => file.path)
 
-
       const bases = []
 
       // Load metadata for each base
@@ -437,7 +432,6 @@ export class BaseManager {
       }
 
     } catch (error) {
-      console.error('Error in listBases:', error)
       return {
         success: false,
         error: error.message || String(error),
@@ -773,14 +767,10 @@ export class BaseManager {
               workspacePath: lokusPath, 
               name: 'bases' 
             })
-          } catch (basesError) {
-            console.warn('Could not create bases directory:', basesError)
-          }
+          } catch { }
         } else {
-          console.warn('Could not find .lokus in path:', basesDir)
         }
     } catch (createError) {
-      console.warn('Could not create bases directory:', createError)
       // Continue anyway - maybe the directory exists but we can't read it
     }
   }

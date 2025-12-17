@@ -42,7 +42,7 @@ export function GmailProvider({ children }) {
       
       // Trigger queue processing when coming back online
       if (gmailAuth.isAuthenticated) {
-        gmailQueue.processQueue().catch(console.error);
+        gmailQueue.processQueue().catch(() => {});
       }
     };
 
@@ -76,7 +76,6 @@ export function GmailProvider({ children }) {
           }));
 
           if (error) {
-            console.error('Gmail sync error:', error);
             addNotification({
               type: 'error',
               message: `Gmail sync failed: ${error}`,
@@ -121,9 +120,7 @@ export function GmailProvider({ children }) {
         });
         listeners.push(tokenRefreshListener);
 
-      } catch (error) {
-        console.error('Failed to setup Gmail event listeners:', error);
-      }
+      } catch { }
     };
 
     if (gmailAuth.isAuthenticated) {
@@ -223,7 +220,6 @@ export function GmailProvider({ children }) {
       }));
       
     } catch (error) {
-      console.error('Background sync failed:', error);
       setGlobalState(prev => ({ ...prev, syncInProgress: false }));
       
       addNotification({
@@ -278,7 +274,6 @@ export function GmailProvider({ children }) {
       await triggerBackgroundSync();
       
     } catch (error) {
-      console.error('Failed to refresh Gmail data:', error);
       throw error;
     } finally {
       setGlobalState(prev => ({ ...prev, syncInProgress: false }));

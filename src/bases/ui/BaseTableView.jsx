@@ -31,7 +31,6 @@ import { FrontmatterWriter } from '../data/FrontmatterWriter.js'
 import { formatProperty } from '../data/FrontmatterParser.js'
 import { invoke } from '@tauri-apps/api/core'
 
-
 // Helper function to get filename from path
 const getFileName = (filePath) => {
   if (!filePath) return 'Untitled';
@@ -53,7 +52,6 @@ const formatCellValue = (value, column) => {
   // For all other values, use formatProperty
   return formatProperty(value);
 };
-
 
 // Helper function to evaluate a single filter rule
 const evaluateFilter = (item, rule) => {
@@ -259,7 +257,6 @@ export default function BaseTableView({
   // Get columns based on enabled state and custom order
   const displayColumns = useMemo(() => {
     const defaultOrder = ['name', ...Object.keys(enabledColumns).filter(col => col !== 'name' && enabledColumns[col])]
-
 
     if (!columnOrder) {
       return defaultOrder
@@ -952,7 +949,6 @@ export default function BaseTableView({
     { value: 'extension', label: 'File Extension' },
     { value: 'path', label: 'File Path' },
   ];
-
 
   if (!base) {
     return (

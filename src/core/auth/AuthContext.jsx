@@ -53,7 +53,6 @@ export const AuthProvider = ({ children }) => {
     try {
       await authManager.signIn();
     } catch (error) {
-      console.error('Sign in failed:', error);
       throw error;
     }
   };
@@ -62,7 +61,6 @@ export const AuthProvider = ({ children }) => {
     try {
       await authManager.signOut();
     } catch (error) {
-      console.error('Sign out failed:', error);
       throw error;
     }
   };

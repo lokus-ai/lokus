@@ -16,7 +16,6 @@ export default function KanbanList({ workspacePath, onBoardOpen, onCreateBoard }
       })
       setBoards(boardList || [])
     } catch (error) {
-      console.error('Failed to load kanban boards:', error)
       setBoards([])
     } finally {
       setLoading(false)

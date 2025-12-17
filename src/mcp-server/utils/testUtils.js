@@ -740,9 +740,7 @@ export class TestEnvironment {
     for (const cleanupFn of this.cleanup) {
       try {
         await cleanupFn();
-      } catch (error) {
-        console.warn('Cleanup error:', error);
-      }
+      } catch { }
     }
     
     this.mockServers = [];

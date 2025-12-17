@@ -144,8 +144,7 @@ function App() {
           window.removeEventListener('focus', onFocus);
           window.removeEventListener('blur', onBlur);
         };
-      } catch (e) {
-      }
+      } catch { }
     };
 
     const unlistenPromise = setupShortcuts();
@@ -161,8 +160,8 @@ function App() {
 
   return (
     <div className="app-root">
-      {/* Titlebar only for Workspace - Preferences and Launcher don't need it */}
-      {!isPrefsWindow && activePath && (
+      {/* Titlebar for Workspace and Launcher - enables window dragging */}
+      {!isPrefsWindow && (
         <div className="app-titlebar" data-tauri-drag-region></div>
       )}
 

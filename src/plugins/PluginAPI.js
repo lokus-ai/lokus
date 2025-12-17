@@ -171,7 +171,6 @@ export class PluginAPI extends EventEmitter {
    * Methods for interacting with the user interface
    */
 
-
   /**
    * Register a custom panel in the UI
    */
@@ -556,8 +555,7 @@ export class PluginAPIFactory {
     for (const [pluginId, api] of this.apis) {
       try {
         await api.cleanup()
-      } catch (error) {
-      }
+      } catch { }
     }
     this.apis.clear()
   }

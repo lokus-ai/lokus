@@ -189,7 +189,6 @@ const PluginItem = ({ plugin, onToggle, onUninstall, onInstall, onSelect, instal
                 const currentEnabled = plugin.enabled === true;
                 const newEnabledState = !currentEnabled;
 
-
                 // Defensive check to ensure we're passing a boolean
                 if (typeof newEnabledState !== 'boolean') {
                   return;
@@ -293,8 +292,7 @@ export default function Extensions({ onSelectExtension }) {
   const handleInstallPlugin = async (plugin) => {
     try {
       await installPlugin(plugin.id, plugin);
-    } catch (error) {
-    }
+    } catch { }
   };
 
   const handleTogglePlugin = async (pluginId, newEnabledState) => {
@@ -308,8 +306,7 @@ export default function Extensions({ onSelectExtension }) {
       await togglePlugin(pluginId, newEnabledState);
 
       // PluginStateAdapter handles runtime updates now
-    } catch (error) {
-    }
+    } catch { }
   };
 
   const handleUninstallPlugin = async (plugin) => {
@@ -319,10 +316,8 @@ export default function Extensions({ onSelectExtension }) {
 
       await uninstallPlugin(plugin.id);
 
-    } catch (error) {
-    }
+    } catch { }
   };
-
 
   const SectionHeader = ({ title, count, sectionKey, icon: Icon }) => (
     <button
@@ -408,7 +403,6 @@ export default function Extensions({ onSelectExtension }) {
               </div>
             )}
 
-
             {filteredPlugins.length === 0 && (
               <div className="text-center py-8">
                 <Package className="w-8 h-8 mx-auto mb-2 text-app-muted/50" />
@@ -456,7 +450,6 @@ export default function Extensions({ onSelectExtension }) {
                   // FIX: Robust handling of undefined/null enabled state
                   const currentEnabled = selectedPlugin.enabled === true;
                   const newEnabledState = !currentEnabled;
-
 
                   // Defensive check to ensure we're passing a boolean
                   if (typeof newEnabledState !== 'boolean') {

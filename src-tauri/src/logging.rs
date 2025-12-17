@@ -108,11 +108,7 @@ fn cleanup_old_logs(log_dir: &PathBuf, max_days: u64) -> Result<(), String> {
                             if age > max_age {
                                 let path = entry.path();
                                 if path.extension().and_then(|s| s.to_str()) == Some("log") {
-                                    if let Err(e) = fs::remove_file(&path) {
-                                        eprintln!("Failed to remove old log file {:?}: {}", path, e);
-                                    } else {
-                                        eprintln!("Removed old log file: {:?}", path);
-                                    }
+                                    let _ = fs::remove_file(&path);
                                 }
                             }
                         }
@@ -121,9 +117,8 @@ fn cleanup_old_logs(log_dir: &PathBuf, max_days: u64) -> Result<(), String> {
             }
             Ok(())
         }
-        Err(e) => {
+        Err(_) => {
             // If directory doesn't exist or can't be read, it's not critical
-            eprintln!("Warning: Could not clean up old logs: {}", e);
             Ok(())
         }
     }

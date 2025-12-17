@@ -89,8 +89,7 @@ export default function Canvas({
           const emptyTldrawData = jsonCanvasToTldraw({ nodes: [], edges: [] })
           loadSnapshot(store, emptyTldrawData)
           setIsDirty(false)
-        } catch (loadError) {
-        }
+        } catch { }
       } finally {
         setIsLoading(false)
       }
@@ -160,8 +159,7 @@ export default function Canvas({
           return true
         } else {
         }
-      } catch (error) {
-      }
+      } catch { }
     }
     
     return false
@@ -272,8 +270,7 @@ export default function Canvas({
             try {
               const canvasData = tldrawToJsonCanvas(finalCurrentSnapshot)
               onContentChange(canvasData)
-            } catch (error) {
-            }
+            } catch { }
           }
           
           // Auto-save immediately when real changes are detected

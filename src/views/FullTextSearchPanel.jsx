@@ -37,9 +37,7 @@ const FullTextSearchPanel = ({ isOpen, onClose, onResultClick, workspacePath }) 
       try {
         const history = JSON.parse(saved);
         setSearchHistory(history);
-      } catch (err) {
-        console.error('Failed to load search history:', err);
-      }
+      } catch { }
     }
   }, []);
 
@@ -104,7 +102,6 @@ const FullTextSearchPanel = ({ isOpen, onClose, onResultClick, workspacePath }) 
 
       // Log performance
     } catch (err) {
-      console.error('Search error:', err);
       setError(err.message || 'Search failed');
       setResults([]);
     } finally {

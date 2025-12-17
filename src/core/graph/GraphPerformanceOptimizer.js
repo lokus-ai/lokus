@@ -88,7 +88,6 @@ export class GraphPerformanceOptimizer {
 
     const duration = performance.now() - start;
     if (duration > 16) {
-      console.warn(`[GraphOptimizer] Culling took ${duration.toFixed(2)}ms for ${nodes.length} nodes`);
     }
 
     return visibleNodes;
@@ -180,7 +179,6 @@ export class GraphPerformanceOptimizer {
       chunks.push(allNodes.slice(i, i + chunkSize));
     }
 
-
     // Load chunks progressively
     let loadedNodes = [];
     for (let i = 0; i < chunks.length; i++) {
@@ -245,7 +243,6 @@ export class GraphPerformanceOptimizer {
       this.fps = Math.round(1000 / delta);
 
       if (this.fps < 30) {
-        console.warn(`[GraphOptimizer] Low FPS detected: ${this.fps}`);
         this.enableEmergencyOptimizations();
       }
     }
@@ -282,7 +279,6 @@ export class GraphPerformanceOptimizer {
       return { ...graphData, optimized: false };
     }
 
-
     // Apply various optimizations
     let optimizedNodes = nodes;
     let optimizedLinks = links;
@@ -307,7 +303,6 @@ export class GraphPerformanceOptimizer {
 
     // 3. Limit max nodes if needed
     if (optimizedNodes.length > this.options.maxRenderNodes) {
-      console.warn(`[GraphOptimizer] Limiting to ${this.options.maxRenderNodes} nodes`);
       optimizedNodes = optimizedNodes.slice(0, this.options.maxRenderNodes);
 
       // Update links accordingly

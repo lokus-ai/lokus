@@ -194,9 +194,7 @@ export const useCache = (key, fetcher, deps = []) => {
         }
 
         setData(result);
-      } catch (error) {
-        console.error('Cache fetch error:', error);
-      } finally {
+      } catch { } finally {
         setLoading(false);
       }
     };

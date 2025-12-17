@@ -31,7 +31,6 @@ async function getFileBlocks(fileName) {
       return []
     }
 
-
     // Check if blocks are already cached
     let blocks = blockIdManager.getFileBlocks(fileEntry.path)
 
@@ -47,7 +46,6 @@ async function getFileBlocks(fileName) {
 
     return blocks
   } catch (error) {
-    console.error('[WikiLinkSuggest] Error loading blocks:', error)
     return []
   }
 }
@@ -302,7 +300,6 @@ const WikiLinkSuggest = Extension.create({
                     }
                   })
                   .catch(err => {
-                    console.error('[WikiLinkSuggest] Error writing block ID:', err)
                   })
               }
 

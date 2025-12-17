@@ -438,9 +438,7 @@ export default function ColumnManager({
     try {
       await onUpdateColumns(localColumns)
       setHasChanges(false)
-    } catch (error) {
-      console.error('Failed to save column changes:', error)
-    } finally {
+    } catch { } finally {
       setIsSaving(false)
     }
   }, [localColumns, onUpdateColumns])

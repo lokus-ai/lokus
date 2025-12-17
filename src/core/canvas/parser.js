@@ -292,7 +292,6 @@ export function tldrawToJsonCanvas(storeData) {
     return createEmptyJsonCanvas();
   }
 
-
   // Extract shapes and convert to nodes/edges
   const shapes = storeData.records.filter(record => record.typeName === 'shape');
   

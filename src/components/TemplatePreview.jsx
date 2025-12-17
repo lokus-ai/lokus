@@ -142,8 +142,7 @@ export default function TemplatePreview({
     if (previewData?.result) {
       try {
         await navigator.clipboard.writeText(previewData.result);
-      } catch (err) {
-      }
+      } catch { }
     }
   };
 

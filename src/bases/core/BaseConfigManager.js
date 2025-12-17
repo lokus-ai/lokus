@@ -53,7 +53,6 @@ export class BaseConfigManager {
       });
       return true;
     } catch (error) {
-      console.error('Failed to save base config:', error);
       return false;
     }
   }

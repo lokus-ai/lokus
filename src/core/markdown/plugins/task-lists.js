@@ -46,7 +46,6 @@ const TASK_STATES = {
 const TASK_REGEX = /^\[([x X/!?\->\s*~<"ib+w@RDS])\]\s+(.*)$/
 
 // Debug: Test regex on startup
-console.log('[TASK-DEBUG] Testing regex pattern on all 23 symbols:')
 const testCases = [
   '[ ] Todo', '[x] Completed', '[X] Completed', '[/] In Progress',
   '[!] Urgent', '[?] Question', '[-] Cancelled', '[>] Delegated',
@@ -56,7 +55,6 @@ const testCases = [
 ]
 testCases.forEach(test => {
   const match = TASK_REGEX.test(test)
-  console.log(`  ${test}: ${match ? '✓' : '✗'}`)
 })
 
 export default function markdownItTaskLists(md) {
@@ -103,13 +101,10 @@ function checkForTaskItems(tokens, startIdx) {
       if (depth === 0) break
     } else if (token.type === 'inline' && depth === 1) {
       // Check if this inline content starts with task syntax
-      console.log('[TASK-DEBUG] Checking inline content:', JSON.stringify(token.content))
       const match = token.content.match(TASK_REGEX)
       if (match) {
-        console.log('[TASK-DEBUG] ✓ MATCHED! Symbol:', JSON.stringify(match[1]), 'Text:', JSON.stringify(match[2]))
         return true
       } else {
-        console.log('[TASK-DEBUG] ✗ NO MATCH for:', JSON.stringify(token.content))
       }
     }
   }
@@ -143,8 +138,6 @@ function processTaskList(tokens, startIdx) {
           const text = match[2]
           const config = TASK_STATES[symbol] || TASK_STATES[' ']
 
-          console.log('[TASK-DEBUG] Processing task item - Symbol:', JSON.stringify(symbol), 'State:', config.state, 'Text:', JSON.stringify(text))
-
           // Add TipTap-compatible attributes to the <li>
           token.attrPush(['data-type', 'taskItem'])
           token.attrPush(['data-checked', String(config.checked)])
@@ -165,7 +158,6 @@ function processTaskList(tokens, startIdx) {
             }
           }
         } else {
-          console.log('[TASK-DEBUG] No match in processTaskList for:', JSON.stringify(inlineToken.content))
         }
       }
     }

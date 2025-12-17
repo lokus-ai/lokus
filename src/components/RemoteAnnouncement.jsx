@@ -15,11 +15,9 @@ export const RemoteAnnouncement = () => {
         // 1. Check Date Range (Seasonality)
         const now = new Date();
         if (start_date && new Date(start_date) > now) {
-            console.log('Announcement not yet active');
             return;
         }
         if (end_date && new Date(end_date) < now) {
-            console.log('Announcement expired');
             return;
         }
 
@@ -35,7 +33,6 @@ export const RemoteAnnouncement = () => {
             description: message,
             action: action_label && action_url ? (
                 <ToastAction altText={action_label} onClick={(e) => {
-                    console.log('Toast button clicked!');
                     e.preventDefault(); // Prevent default toast behavior if any
 
                     const openLink = async () => {
@@ -55,7 +52,6 @@ export const RemoteAnnouncement = () => {
                                 }
                             }
                         } catch (err) {
-                            console.error('Failed to open link:', err);
                             // Ultimate fallback
                             window.open(action_url, '_blank');
                         }

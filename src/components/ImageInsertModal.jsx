@@ -70,7 +70,6 @@ export default function ImageInsertModal({
       const files = await invoke('find_workspace_images', { workspacePath });
       setImageFiles(files || []);
     } catch (error) {
-      console.error('Failed to load workspace images:', error);
       setImageFiles([]);
     } finally {
       setIsLoadingFiles(false);

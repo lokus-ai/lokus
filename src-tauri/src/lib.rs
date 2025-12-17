@@ -327,9 +327,7 @@ pub fn run() {
       .unwrap_or_else(|_| "production".to_string()),
   };
 
-  if let Err(e) = logging::init_logging(log_config) {
-    eprintln!("Failed to initialize logging: {}", e);
-  }
+  let _ = logging::init_logging(log_config);
 
   tracing::info!("Lokus starting...");
 

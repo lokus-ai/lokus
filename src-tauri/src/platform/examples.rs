@@ -174,16 +174,13 @@ pub fn example_clipboard_operations() -> Result<(), PlatformError> {
     
     
     if let Some(_max_length) = clipboard_info.max_text_length {
-        println!("  Max text length: {}", _max_length);
     } else {
     }
     
     // Usage recommendations
     let recommendations = ClipboardUtils::get_usage_recommendations();
     if !recommendations.is_empty() {
-        println!("Usage Tips:");
         for _recommendation in recommendations {
-            println!("  - {}", _recommendation);
         }
     }
     

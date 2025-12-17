@@ -34,14 +34,11 @@ const TaskCreationModal = ({ isOpen, onClose, onCreateTask }) => {
     try {
       const workspacePath = globalThis.__LOKUS_WORKSPACE_PATH__ || localStorage.getItem('workspace_path')
       if (!workspacePath) {
-        console.error('No workspace path available')
         return
       }
       const boardInfos = await invoke('list_kanban_boards', { workspacePath })
       setBoards(boardInfos || [])
-    } catch (error) {
-      console.error('Failed to load boards:', error)
-    }
+    } catch { }
   }
 
   const loadColumns = async (boardInfo) => {
@@ -61,9 +58,7 @@ const TaskCreationModal = ({ isOpen, onClose, onCreateTask }) => {
         )
         setSelectedColumnIndex(todoIndex >= 0 ? todoIndex : 0)
       }
-    } catch (error) {
-      console.error('Failed to load columns:', error)
-    }
+    } catch { }
   }
 
   const handleKeyDown = (e) => {
@@ -162,9 +157,7 @@ const TaskCreationModal = ({ isOpen, onClose, onCreateTask }) => {
         taskName: taskName.trim()
       })
       onClose()
-    } catch (error) {
-      console.error('Failed to create task:', error)
-    } finally {
+    } catch { } finally {
       setLoading(false)
     }
   }

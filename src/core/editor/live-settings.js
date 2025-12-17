@@ -106,8 +106,7 @@ class LiveEditorSettings {
 
         this.settings = { ...this.defaultSettings, ...config.editorSettings };
       }
-    } catch (e) {
-    }
+    } catch { }
 
     // Apply initial styles to document root
     this.updateCSSVariables();
@@ -213,8 +212,7 @@ class LiveEditorSettings {
     this.listeners.forEach(callback => {
       try {
         callback(key, value, this.settings);
-      } catch (e) {
-      }
+      } catch { }
     });
   }
 
@@ -232,8 +230,7 @@ class LiveEditorSettings {
         Object.keys(newSettings).forEach(key => {
           callback(key, newSettings[key], this.settings);
         });
-      } catch (e) {
-      }
+      } catch { }
     });
   }
   
@@ -257,8 +254,7 @@ class LiveEditorSettings {
     this.listeners.forEach(callback => {
       try {
         callback('reset', this.settings, this.settings);
-      } catch (e) {
-      }
+      } catch { }
     });
   }
   

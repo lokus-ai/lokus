@@ -6,7 +6,6 @@
 
 import { normalizePath } from '../../utils/pathUtils.js';
 
-
 export { PropertyTypes, PropertyType } from './PropertyTypes.js';
 export { PropertyScanner } from './PropertyScanner.js';
 
@@ -70,7 +69,6 @@ export class BasesDataManager {
       this.isInitialized = true;
 
     } catch (error) {
-      console.error('Failed to initialize BasesDataManager:', error);
       throw error;
     }
   }
@@ -207,14 +205,12 @@ export class BasesDataManager {
       return this.fileListCache;
     }
 
-
     try {
       // Use Tauri backend to get workspace files
       const { invoke } = await import('@tauri-apps/api/core');
       const files = await invoke('read_workspace_files', {
         workspacePath: this.workspacePath
       });
-
 
       // Flatten nested file structure (backend returns nested children)
       const flattenFiles = (fileList) => {
@@ -314,7 +310,6 @@ export class BasesDataManager {
 
       return results;
     } catch (error) {
-      console.error('❌ BasesDataManager: Failed to get files from backend:', error);
 
       // Fallback to test data
       return [
@@ -349,14 +344,12 @@ export class BasesDataManager {
       throw new Error('BasesDataManager not initialized');
     }
 
-
     try {
       // Get base file list
       let fileList = files;
       if (!fileList) {
         fileList = await this.getAllFiles();
       }
-
 
       // Apply filters if specified
       let filteredFiles = fileList;
@@ -383,7 +376,6 @@ export class BasesDataManager {
 
       return result;
     } catch (error) {
-      console.error('❌ BasesDataManager: Query execution failed:', error);
       throw error;
     }
   }
@@ -480,7 +472,6 @@ export class BasesDataManager {
       throw new Error('BasesDataManager not properly initialized');
     }
 
-
     // Clear existing data
     this.propertyIndexer.getIndex().clearIndex();
     this.fileMetadata.clearCache();
@@ -542,7 +533,6 @@ export class BasesDataManager {
       this.propertyIndexer.getIndex().import(data.propertyIndex);
       return true;
     } catch (error) {
-      console.error('Failed to import data:', error);
       return false;
     }
   }
@@ -603,7 +593,6 @@ export const examples = {
         { key: 'status', operator: 'equals', value: 'published' },
         { key: 'tags', operator: 'contains', value: 'important' }
       ]);
-
 
       // Get comprehensive info for a specific file
       const _fileInfo = await manager.getFileInfo('/path/to/file.md');

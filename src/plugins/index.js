@@ -138,8 +138,7 @@ export async function initializePluginSystem(editorAPI = null, options = {}) {
       try {
         const { initializeMCP } = await import('./mcp/index.js')
         mcpIntegration = await initializeMCP(pluginManager, pluginManager.securityManager, options.mcp)
-      } catch (error) {
-      }
+      } catch { }
     }
     
     // Initialize template system if enabled
@@ -148,8 +147,7 @@ export async function initializePluginSystem(editorAPI = null, options = {}) {
       try {
         const { initializeTemplateSystem } = await import('./templates/index.js')
         templateSystem = await initializeTemplateSystem(pluginManager)
-      } catch (error) {
-      }
+      } catch { }
     }
     
     // Initialize registry system if enabled
@@ -189,8 +187,7 @@ export async function initializePluginSystem(editorAPI = null, options = {}) {
           config: registryConfig
         }
         
-      } catch (error) {
-      }
+      } catch { }
     }
     
     return {
@@ -214,8 +211,7 @@ export async function shutdownPluginSystem() {
     try {
       // Note: Registry components should be shut down in reverse order of initialization
       // This would require access to the registry system instance
-    } catch (error) {
-    }
+    } catch { }
     
     // Shutdown template system
     try {
@@ -224,15 +220,13 @@ export async function shutdownPluginSystem() {
       if (templateSystem) {
         await templateSystem.shutdown()
       }
-    } catch (error) {
-    }
+    } catch { }
     
     // Shutdown MCP integration
     try {
       const { shutdownMCP } = await import('./mcp/index.js')
       await shutdownMCP()
-    } catch (error) {
-    }
+    } catch { }
     
     // Shutdown plugin manager
     const { pluginManager } = await import('./PluginManager.js')

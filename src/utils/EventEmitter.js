@@ -62,8 +62,7 @@ export class EventEmitter {
     for (const listener of listeners) {
       try {
         listener(...args)
-      } catch (error) {
-      }
+      } catch { }
     }
     
     return true

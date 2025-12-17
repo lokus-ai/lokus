@@ -40,7 +40,6 @@ export const RemoteConfigProvider = ({ children }) => {
             setConfig({ ...DEFAULT_CONFIG, ...remoteData });
             setError(null);
         } catch (err) {
-            console.warn('Remote Config fetch failed, using defaults:', err);
             setError(err);
             // Keep using default config (already set in initial state)
         } finally {

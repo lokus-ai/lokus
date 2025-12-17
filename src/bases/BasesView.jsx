@@ -29,7 +29,6 @@ const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
     deleteBase
   } = useBases();
 
-
   const { filterFileTree, scopeMode, setGlobalScope, setLocalScope } = useFolderScope();
 
   const [viewData, setViewData] = useState([]);

@@ -28,9 +28,7 @@ export default function DailyNotesPanel({ workspacePath, onOpenDailyNote, curren
         const allNotes = await dailyNotesManager.listDailyNotes();
         // Get most recent 10 notes
         setRecentNotes(allNotes.slice(0, 10));
-      } catch (error) {
-        console.error('Failed to load recent notes:', error);
-      } finally {
+      } catch { } finally {
         setIsLoading(false);
       }
     };

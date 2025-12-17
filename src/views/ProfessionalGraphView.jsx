@@ -112,7 +112,6 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   useEffect(() => {
     if (!isVisible || graphDataManager) return; // Prevent duplicate initialization
 
-
     const initializeDataManager = async () => {
       try {
         // Initialize graph data manager (disable persistence to avoid stale cache)
@@ -146,8 +145,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         setGraphData(initialData);
         updateStats(dataManager);
 
-      } catch (error) {
-      }
+      } catch { }
     };
 
     initializeDataManager();
@@ -173,9 +171,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       try {
         const config = await loadGraphConfig(workspacePath);
         setGraphConfig(config);
-      } catch (error) {
-        console.error('[GraphView] Failed to load config:', error);
-      }
+      } catch { }
     };
 
     loadConfig();
@@ -224,9 +220,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
 
       // Forces updated - no restart needed to avoid node spreading on UI changes
       // The simulation will naturally adapt to new force values
-    } catch (error) {
-      console.error('[GraphView] Failed to apply force config:', error);
-    }
+    } catch { }
   }, [viewMode, graphConfig.repelStrength, graphConfig.linkDistance, graphConfig.linkStrength, graphConfig.centerStrength]);
 
   // Initial warmup: Reheat simulation when graph data first loads
@@ -243,9 +237,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         if (simulation) {
           simulation.alpha(1.0).restart(); // Full energy for initial spread
         }
-      } catch (error) {
-        console.error('[GraphView] Failed initial warmup:', error);
-      }
+      } catch { }
     }, 100);
 
     return () => clearTimeout(timer);
@@ -320,9 +312,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         setGraphData(updatedData);
         updateStats(graphDataManager);
 
-      } catch (error) {
-        console.error('Failed to reload graph data:', error);
-      }
+      } catch { }
     }, 150);
 
     return () => {
@@ -350,7 +340,6 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       dataManager.stats.nodeCount = 0;
       dataManager.stats.linkCount = 0;
       dataManager.stats.wikiLinkCount = 0;
-
 
       let files;
 
@@ -408,19 +397,15 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
                   created: Date.now() // Simplified - could get actual file dates
                 }
               });
-            } catch (err) {
-              console.error(`Error processing file ${path}:`, err);
-            }
+            } catch { }
           }
         } catch (error) {
-          console.error("Failed to bulk read files:", error);
           // Fallback to sequential reading if bulk fails
           for (const file of markdownFiles) {
             // ... existing sequential logic could go here as fallback ...
           }
         }
       }
-
 
     } catch (error) {
       // Fallback to sample data
@@ -523,8 +508,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         await dataManager.getOrCreateWikiLinkNode(concept);
       }
 
-    } catch (error) {
-    }
+    } catch { }
   };
 
   /**
@@ -870,8 +854,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         // Restart simulation to apply changes
         simulation.alpha(0.3).restart();
       }
-    } catch (error) {
-    }
+    } catch { }
   }, [viewMode]);
 
   const handlePresetSelect = useCallback((presetName, presetConfig) => {

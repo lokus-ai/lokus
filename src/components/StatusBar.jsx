@@ -43,7 +43,6 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
       // Execute via global command registry
       window.lokus.commands.executeCommand(commandId);
     } else {
-      console.warn('Command registry not available');
     }
   };
 
@@ -93,12 +92,10 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
   const renderStatusBarItem = (item) => {
     const { id, component: Component, text, icon, tooltip, command, priority, className, pluginId } = item;
 
-
     // If it's a React component, render it directly
     if (Component) {
       // Validate that Component is actually a valid React component
       if (typeof Component === 'function' || (typeof Component === 'object' && Component.$$typeof)) {
-        console.log(`[StatusBar] Rendering component for ${id}`, Component);
         return (
           <div
             key={id}
@@ -109,7 +106,6 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
           </div>
         );
       } else {
-        console.warn(`[StatusBar] Invalid component for ${id}`, Component);
         return (
           <div key={id} className="status-bar-plugin-item">
             <span className="text-red-500 text-xs">Invalid Component</span>
@@ -199,7 +195,6 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
             {index < sortedRightItems.length - 1 && <div className="obsidian-status-bar-separator" />}
           </React.Fragment>
         ))}
-
 
         {/* Core status items */}
         {(sortedRightItems.length > 0 || unsavedChanges.size > 0) && (

@@ -56,7 +56,6 @@ export class PropertyIndex {
       });
 
     } catch (error) {
-      console.error('Failed to build property index:', error);
       this.emitChange({ type: 'index_error', error });
     } finally {
       this.isIndexing = false;
@@ -701,8 +700,7 @@ export class PropertyIndex {
     for (const callback of this.changeListeners) {
       try {
         callback(event);
-      } catch (error) {
-      }
+      } catch { }
     }
   }
 
@@ -770,7 +768,6 @@ export class PropertyIndex {
 
       return true;
     } catch (error) {
-      console.error('Failed to import index data:', error);
       this.clearIndex();
       return false;
     }

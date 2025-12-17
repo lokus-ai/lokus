@@ -89,8 +89,7 @@ async function example4() {
   for (const code of dangerousCodes) {
     try {
       await sandbox.execute(code);
-    } catch (error) {
-    }
+    } catch { }
   }
 
   sandbox.dispose();
@@ -105,8 +104,7 @@ async function example5() {
   try {
     // This will timeout after 1 second
     await sandbox.execute('while(true) {}');
-  } catch (error) {
-  }
+  } catch { }
 
   sandbox.dispose();
 }
@@ -168,9 +166,7 @@ async function runAllExamples() {
     await example6();
     await example7();
 
-  } catch (error) {
-    console.error('Example failed:', error);
-  }
+  } catch { }
 }
 
 // Uncomment to run examples

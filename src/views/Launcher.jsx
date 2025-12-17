@@ -25,9 +25,7 @@ async function openWorkspace(path) {
     if (visuals && visuals.theme) {
       await setGlobalActiveTheme(visuals.theme);
     }
-  } catch (error) {
-    console.warn('Could not persist theme before opening workspace:', error);
-  }
+  } catch { }
 
   // In test mode or browser mode, transition current window to workspace
   const isTestMode = new URLSearchParams(window.location.search).get('testMode') === 'true';

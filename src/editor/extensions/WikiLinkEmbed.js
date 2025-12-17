@@ -185,7 +185,6 @@ export const WikiLinkEmbed = Node.create({
 
           return true
         } catch (error) {
-          console.error('[WikiLinkEmbed] Error fetching block content:', error)
 
           // Update with error
           editor.commands.command(({ tr, state }) => {

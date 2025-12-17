@@ -116,7 +116,6 @@ export default function CommandPalette({
           setRecentEmails(emailsArray.slice(0, 5))
         }
       } catch (error) {
-        console.error('Failed to check Gmail auth:', error)
         setIsGmailAuthenticated(false)
       }
     }
@@ -164,7 +163,6 @@ export default function CommandPalette({
 
   const allFiles = flattenFileTree(fileTree)
 
-
   // Helper function to ensure Gmail authentication
   const ensureGmailAuth = async () => {
     if (!isGmailAuthenticated) {
@@ -192,7 +190,6 @@ export default function CommandPalette({
       sessionStorage.setItem('gmailOpenEmail', email.id)
 
     } catch (error) {
-      console.error('Failed to open email:', error)
       alert(`Failed to open email: ${error.message}`)
     }
   }, [isGmailAuthenticated, onOpenGmail])
@@ -208,7 +205,6 @@ export default function CommandPalette({
       sessionStorage.setItem('gmailSearch', query)
 
     } catch (error) {
-      console.error('Failed to search emails:', error)
       alert(`Failed to search emails: ${error.message}`)
     }
   }, [isGmailAuthenticated, onOpenGmail])
@@ -244,7 +240,6 @@ export default function CommandPalette({
       }
     }
   }, [scopeMode, setGlobalScope, handleOpenFolderSelector, onRefresh])
-
 
   // Parse Gmail template from file content (supports flexible YAML, simple field, and Markdown formats)
   const parseGmailTemplate = (content) => {
@@ -310,7 +305,6 @@ export default function CommandPalette({
             body = afterFrontmatter.replace(/<!--.*?-->/gs, '').trim();
           }
 
-
           if (metadata.to !== undefined && metadata.subject !== undefined) {
             return {
               to: metadata.to ? metadata.to.split(',').map(email => email.trim()).filter(email => email) : [],
@@ -356,8 +350,6 @@ export default function CommandPalette({
         const bodyLines = lines.slice(bodyStartIndex);
         fields.body = bodyLines.join('\n').trim();
       }
-
-
 
       if (fields.to && fields.subject) {
         const result = {
@@ -425,9 +417,7 @@ export default function CommandPalette({
         };
       }
 
-    } catch (error) {
-      console.error('Error parsing Gmail template:', error);
-    }
+    } catch { }
     return null;
   };
 
@@ -439,7 +429,6 @@ export default function CommandPalette({
         await ensureGmailAuth()
       }
 
-
       // Read the file content using Tauri command
       const fileContent = await invoke('read_file_content', { path: file.path });
 
@@ -447,22 +436,17 @@ export default function CommandPalette({
       const gmailTemplate = parseGmailTemplate(fileContent);
 
       if (!gmailTemplate) {
-        console.error(`❌ [DEBUG] File "${file.name}" is not a valid Gmail template`);
         return;
       }
 
       // Validate required fields
       if (gmailTemplate.to.length === 0) {
-        console.error('❌ [DEBUG] Gmail template must have a "To:" field with at least one email address.');
         return;
       }
 
       if (!gmailTemplate.subject.trim()) {
-        console.error('❌ [DEBUG] Gmail template must have a "Subject:" field.');
         return;
       }
-
-
 
       // Send the email
       const result = await gmailEmails.sendEmail({
@@ -474,16 +458,11 @@ export default function CommandPalette({
         attachments: []
       });
 
-
-
     } catch (error) {
       if (error.isAuthRedirect) {
         // Show user-friendly message instead of error
         alert('Please complete Gmail authentication in the opened browser window, then try sending the email again.');
       } else {
-        console.error('❌ [DEBUG] Failed to send Gmail from file:', error);
-        console.error('❌ [DEBUG] Error stack:', error.stack);
-        console.error(`❌ [DEBUG] Failed to send email: ${error.message}`);
         alert(`Failed to send email: ${error.message}`);
       }
     }
@@ -498,7 +477,6 @@ export default function CommandPalette({
         context: {}
       })
 
-
       // Call onShowTemplatePicker with processed content
       if (onShowTemplatePicker) {
         // Create a mock event that mimics the TemplatePicker selection
@@ -512,8 +490,6 @@ export default function CommandPalette({
       // Close command palette
       setOpen(false)
     } catch (err) {
-      console.error('[CommandPalette] ERROR processing template:', err);
-      console.error('[CommandPalette] Error stack:', err.stack);
       // Fallback to raw template content
       if (onShowTemplatePicker) {
         const mockSelection = {
@@ -764,7 +740,6 @@ Best regards,
           setBasesFiles(files)
         })
         .catch(error => {
-          console.error('❌ [CommandPalette] Failed to load files from Bases:', error)
           // Fallback to current file tree
           setBasesFiles(flattenFileTree(fileTree))
         })
@@ -876,7 +851,6 @@ Best regards,
         }
       }
     } catch (error) {
-      console.error('Failed to save email as note:', error)
       throw new Error(`Failed to save email as note: ${error.message}`)
     }
   }
@@ -1402,9 +1376,7 @@ Best regards,
                 });
                 if (result.success) {
                 }
-              } catch (error) {
-                console.error('Failed to create base:', error);
-              }
+              } catch { }
             }, 'Create New Base')}>
               <Database className="mr-2 h-4 w-4" />
               <span>Create New Base</span>
@@ -1455,7 +1427,6 @@ Best regards,
                 try {
                   await ensureGmailAuth()
                 } catch (error) {
-                  console.error('Gmail auth failed:', error)
                   alert('Gmail authentication failed')
                 }
               }, 'Authenticate Gmail')}>

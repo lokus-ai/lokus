@@ -1,5 +1,6 @@
 // Enterprise-Grade Iroh V2 Implementation
 // Designed to handle 300+ files reliably with proper error handling and performance
+// Note: This module contains features not yet integrated into the main app
 
 // use async_trait::async_trait; // Not used
 use iroh::{
@@ -234,7 +235,7 @@ struct FileEntry {
 
 // Conflict information
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ConflictInfo {
+pub struct ConflictInfo {
     local_entry: FileEntry,
     remote_entry: FileEntry,
     conflict_type: ConflictType,
@@ -1123,7 +1124,7 @@ impl IrohSyncProviderV2 {
         doc: Doc,
         author: AuthorId,
         relative_path: PathBuf,
-        mut entry: FileEntry,
+        entry: FileEntry,
         metrics: SyncMetrics,
         memory_limiter: Arc<MemoryLimiter>,
     ) -> Result<(), String> {
@@ -1141,7 +1142,7 @@ impl IrohSyncProviderV2 {
             let full_path = full_path.clone();
             let doc = doc.clone();
             let relative_path = relative_path.clone();
-            let mut entry = entry.clone();
+            let entry = entry.clone();
             let metrics = metrics.clone();
             let memory_limiter = memory_limiter.clone();
             

@@ -52,7 +52,6 @@ class AnalyticsService {
         this.savePreferences();
       }
     } catch (error) {
-      console.error('[Analytics] Failed to load preferences:', error);
       this.enabled = true; // Default to enabled on error
     }
   }
@@ -67,9 +66,7 @@ class AnalyticsService {
         enabled: this.enabled,
         lastUpdated: new Date().toISOString()
       }));
-    } catch (error) {
-      console.error('[Analytics] Failed to save preferences:', error);
-    }
+    } catch { }
   }
 
   /**
@@ -93,7 +90,6 @@ class AnalyticsService {
 
     // Check if website ID is configured
     if (!this.websiteId) {
-      console.warn('[Analytics] VITE_UMAMI_WEBSITE_ID not configured - analytics disabled');
       return;
     }
 
@@ -108,9 +104,7 @@ class AnalyticsService {
         version: await this.getAppVersion(),
         platform: await this.getPlatform()
       });
-    } catch (error) {
-      console.error('[Analytics] Initialization failed:', error);
-    }
+    } catch { }
   }
 
   /**
@@ -192,9 +186,7 @@ class AnalyticsService {
       if (window.umami) {
         window.umami.track(eventName, sanitizedData);
       }
-    } catch (error) {
-      console.error('[Analytics] Failed to track event:', error);
-    }
+    } catch { }
   }
 
   /**

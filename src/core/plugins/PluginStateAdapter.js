@@ -34,7 +34,6 @@ import { PluginFileWatcher } from "./PluginFileWatcher.js";
  * @class PluginStateAdapter
  */
 
-
 class PluginStateAdapter {
   constructor() {
     this.plugins = [];
@@ -72,7 +71,7 @@ class PluginStateAdapter {
         window.lokus.plugins.emit = (event, data) => {
           const handlers = window.lokus.plugins.events.get(event) || [];
           handlers.forEach(h => {
-            try { h(data); } catch (e) { console.error(`Error in plugin event handler for ${event}:`, e); }
+            try { h(data); } catch { }
           });
         };
 
@@ -107,7 +106,6 @@ class PluginStateAdapter {
           }
 
           if (!id || !callback) {
-            console.warn('[PluginStateAdapter] Invalid command registration:', arg1);
             return { dispose: () => { } };
           }
 
@@ -130,7 +128,6 @@ class PluginStateAdapter {
               return entry(...args);
             }
           }
-          console.warn(`Command not found: ${id}`);
           return Promise.resolve();
         }
       };
@@ -195,14 +192,10 @@ class PluginStateAdapter {
             // Emit activation event
             try {
               await emit('plugin-runtime-activated', { pluginId: pluginInfo.id });
-            } catch (e) {
-              console.warn('Failed to emit plugin activation event:', e);
-            }
+            } catch { }
           }
 
-        } catch (error) {
-          console.error('Failed to load plugin:', pluginInfo.id, error);
-        }
+        } catch { }
       }
     }
   }
@@ -267,7 +260,6 @@ class PluginStateAdapter {
         // Convert backend format to frontend format
         const convertedPlugins = pluginInfos.map(pluginInfo => {
           if (pluginInfo.manifest.id === 'pkmodoro') {
-            console.log('[PluginStateAdapter] pkmodoro raw manifest:', pluginInfo.manifest);
           }
           const pluginId = pluginInfo.manifest.id || pluginInfo.path.split('/').pop();
           const pluginName = pluginInfo.manifest.name;
@@ -318,7 +310,6 @@ class PluginStateAdapter {
       }
     } catch (err) {
       this.error = err.message;
-      console.error('Failed to load plugins:', err);
     } finally {
       this.loading = false;
       this.loadInProgress = false;
@@ -453,9 +444,7 @@ class PluginStateAdapter {
           // Emit activation event for UI components (like StatusBar)
           try {
             await emit('plugin-runtime-activated', { pluginId });
-          } catch (e) {
-            console.warn('Failed to emit plugin activation event:', e);
-          }
+          } catch { }
         }
       } else {
         const instance = this.pluginInstances.get(pluginId);
@@ -520,15 +509,11 @@ class PluginStateAdapter {
 
       // Check if plugin is already loaded and deactivate it
       if (this.pluginInstances.has(manifest.id)) {
-        console.log(`[PluginStateAdapter] Reloading plugin ${manifest.id}...`);
         const oldInstance = this.pluginInstances.get(manifest.id);
         if (oldInstance && typeof oldInstance.deactivate === 'function') {
           try {
             await oldInstance.deactivate();
-            console.log(`[PluginStateAdapter] Deactivated old instance of ${manifest.id}`);
-          } catch (e) {
-            console.warn(`[PluginStateAdapter] Failed to deactivate old instance of ${manifest.id}:`, e);
-          }
+          } catch { }
         }
         this.pluginInstances.delete(manifest.id);
         this.plugins = this.plugins.filter(p => p.id !== manifest.id);
@@ -576,9 +561,8 @@ class PluginStateAdapter {
             if (id === 'lokus-plugin-sdk' || id === '@lokus/plugin-sdk') {
               return window.LokusSDK || {};
             }
-            if (id === 'react') return window.React || { createElement: () => console.warn('React missing') };
-            if (id === 'react-dom') return window.ReactDOM || { render: () => console.warn('ReactDOM missing') };
-            console.warn(`[DevPlugin] require('${id}') not supported in dev mode`);
+            if (id === 'react') return window.React || { createElement: () => {} };
+            if (id === 'react-dom') return window.ReactDOM || { render: () => {} };
             return {};
           };
 
@@ -588,11 +572,8 @@ class PluginStateAdapter {
           if (module.exports) {
             pluginModule = module.exports;
             loadedAsCJS = true;
-            console.log(`[PluginStateAdapter] Loaded ${manifest.id} as CommonJS`);
           }
-        } catch (e) {
-          console.warn(`[PluginStateAdapter] CommonJS load failed, falling back to ESM:`, e);
-        }
+        } catch { }
       }
 
       // 4b. Fallback to ES Module (Blob URL)
@@ -633,11 +614,9 @@ class PluginStateAdapter {
         await emit('plugin-runtime-activated', { pluginId: manifest.id });
       }
 
-      console.log(`[PluginStateAdapter] Loaded dev plugin: ${manifest.id} from ${baseUrl}`);
       return true;
 
     } catch (error) {
-      console.error('[PluginStateAdapter] Failed to load dev plugin:', error);
       this.error = `Dev Plugin Error: ${error.message}`;
       throw error;
     } finally {
@@ -666,9 +645,7 @@ class PluginStateAdapter {
           installingPlugins: this.installingPlugins,
           enabledPlugins: this.enabledPlugins
         });
-      } catch (error) {
-        console.error('Error in plugin state listener:', error);
-      }
+      } catch { }
     });
   }
 
@@ -698,7 +675,6 @@ class PluginStateAdapter {
    */
   async reloadPluginFromDisk(pluginId) {
     try {
-      console.log(`[PluginStateAdapter] Reloading plugin ${pluginId} from disk...`);
 
       // 1. Deactivate existing
       if (this.pluginInstances.has(pluginId)) {
@@ -706,9 +682,7 @@ class PluginStateAdapter {
         if (oldInstance && typeof oldInstance.deactivate === 'function') {
           try {
             await oldInstance.deactivate();
-          } catch (e) {
-            console.warn(`[PluginStateAdapter] Failed to deactivate old instance of ${pluginId}:`, e);
-          }
+          } catch { }
         }
         this.pluginInstances.delete(pluginId);
       }
@@ -756,8 +730,6 @@ class PluginStateAdapter {
         }
       }
 
-      console.log(`[PluginStateAdapter] Successfully reloaded ${pluginId}`);
-
       // Notify listeners to update UI (e.g. if version changed in manifest, though we didn't reload manifest in the list)
       // Ideally we should reload the manifest in this.plugins too.
       // But PluginLoader.loadPlugin returns the instance, not the manifest.
@@ -768,7 +740,6 @@ class PluginStateAdapter {
       return true;
 
     } catch (error) {
-      console.error(`[PluginStateAdapter] Failed to reload ${pluginId}:`, error);
       this.error = `Reload Failed: ${error.message}`;
       this.notifyListeners();
       throw error;

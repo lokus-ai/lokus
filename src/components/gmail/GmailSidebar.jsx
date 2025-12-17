@@ -54,7 +54,6 @@ export default function GmailSidebar({
             const count = await gmailEmails.getLabelCount(label.id);
             return { ...label, count };
           } catch (error) {
-            console.error(`Failed to get count for ${label.id}:`, error);
             return label;
           }
         })
@@ -66,13 +65,9 @@ export default function GmailSidebar({
       try {
         const customLabelList = await gmailEmails.getCustomLabels();
         setCustomLabels(customLabelList);
-      } catch (error) {
-        console.error('Failed to load custom labels:', error);
-      }
+      } catch { }
       
-    } catch (error) {
-      console.error('Failed to load labels:', error);
-    } finally {
+    } catch { } finally {
       setLoading(false);
     }
   };
@@ -81,9 +76,7 @@ export default function GmailSidebar({
     try {
       const storage = await gmailEmails.getStorageInfo();
       setStorageInfo(storage);
-    } catch (error) {
-      console.error('Failed to load storage info:', error);
-    }
+    } catch { }
   };
 
   const formatStorageSize = (bytes) => {

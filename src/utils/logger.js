@@ -64,53 +64,34 @@ async function sendToSentry(context, error, extraData) {
 
 /**
  * Logger instance with severity levels
+ * All console output disabled for production
  */
 export const logger = {
   /**
-   * Debug level - development only
-   * Use for detailed diagnostic information
+   * Debug level - disabled
    */
-  debug: (context, ...args) => {
-    if (isDev) {
-      console.log(...formatMessage('DEBUG', context, args));
-    }
-  },
+  debug: () => {},
 
   /**
-   * Info level - development only
-   * Use for informational messages
+   * Info level - disabled
    */
-  info: (context, ...args) => {
-    if (isDev) {
-      console.log(...formatMessage('INFO', context, args));
-    }
-  },
+  info: () => {},
 
   /**
-   * Log level - alias for info (for console.log compatibility)
+   * Log level - disabled
    */
-  log: (context, ...args) => {
-    if (isDev) {
-      console.log(...formatMessage('INFO', context, args));
-    }
-  },
+  log: () => {},
 
   /**
-   * Warning level - always logged
-   * Use for warning messages that don't prevent operation
+   * Warning level - disabled
    */
-  warn: (context, ...args) => {
-    console.warn(...formatMessage('WARN', context, args));
-  },
+  warn: () => {},
 
   /**
-   * Error level - always logged with Sentry integration
-   * Use for error conditions that need attention
+   * Error level - Sentry only, no console output
    */
   error: (context, ...args) => {
-    console.error(...formatMessage('ERROR', context, args));
-
-    // Send to Sentry in production
+    // Send to Sentry in production (no console output)
     if (isProduction && args.length > 0) {
       const firstArg = args[0];
       const extraData = args.length > 1 ? { additionalInfo: args.slice(1) } : {};

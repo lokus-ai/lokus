@@ -36,6 +36,7 @@ struct FileMetadata {
 }
 
 /// Sync progress event payload
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 struct SyncProgressEvent {
     status: String,
@@ -55,6 +56,7 @@ struct SyncStatusEvent {
 }
 
 /// Sync error event payload
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 struct SyncErrorEvent {
     error: String,
@@ -64,6 +66,7 @@ struct SyncErrorEvent {
 }
 
 /// Iroh-based sync provider
+#[allow(dead_code)]
 pub struct IrohSyncProvider {
     /// Iroh node instance
     node: Option<MemNode>,
@@ -85,6 +88,7 @@ pub struct IrohSyncProvider {
     app_handle: Option<AppHandle>,
 }
 
+#[allow(dead_code)]
 impl IrohSyncProvider {
     /// Create a new Iroh sync provider
     pub fn new() -> Self {
@@ -155,9 +159,8 @@ impl IrohSyncProvider {
                 // Join the document using saved ticket
                 match self.join_document(&ticket).await {
                     Ok(doc_id) => Ok(Some(doc_id)),
-                    Err(e) => {
+                    Err(_) => {
                         // If join fails, the ticket might be stale - ignore the error
-                        eprintln!("Failed to restore from saved ticket: {}", e);
                         Ok(None)
                     }
                 }
@@ -405,18 +408,13 @@ impl IrohSyncProvider {
 
         let full_path = workspace.join(file_path);
 
-        eprintln!("[sync_file_from_iroh] Downloading '{}' to '{}'", file_path.display(), full_path.display());
-
         // Check if we need to update the file
         if full_path.exists() {
             let local_metadata = Self::get_file_metadata(&full_path).await?;
             if local_metadata.hash == metadata.hash {
                 // File is up to date
-                eprintln!("[sync_file_from_iroh] File '{}' already up to date (hash match)", file_path.display());
                 return Ok(());
             }
-            eprintln!("[sync_file_from_iroh] File '{}' exists but hash mismatch (local: {}, remote: {})",
-                file_path.display(), local_metadata.hash, metadata.hash);
         }
 
         // Create parent directory if needed
@@ -438,11 +436,8 @@ impl IrohSyncProvider {
             .await
             .map_err(|e| SyncError::Iroh(format!("Failed to read blob: {}", e)))?;
 
-        let blob_len = blob.len();
-
         // Write to file
         fs::write(&full_path, blob).await?;
-        eprintln!("[sync_file_from_iroh] Successfully downloaded '{}' ({} bytes)", file_path.display(), blob_len);
 
         // Update cache
         self.file_cache.insert(file_path.to_path_buf(), metadata.clone());
@@ -580,8 +575,7 @@ impl IrohSyncProvider {
                 // Compute current file hashes before sync
                 let current_hashes = match provider.compute_workspace_hash().await {
                     Ok(h) => h,
-                    Err(e) => {
-                        eprintln!("Failed to compute workspace hash: {}", e);
+                    Err(_) => {
                         continue;
                     }
                 };
@@ -589,7 +583,6 @@ impl IrohSyncProvider {
                 // Skip sync if nothing changed since last cycle
                 if let Some(ref last) = last_sync_hashes {
                     if last == &current_hashes {
-                        eprintln!("[Periodic sync] No changes detected, skipping sync cycle");
                         continue;
                     }
                 }
@@ -609,8 +602,6 @@ impl IrohSyncProvider {
                             // Backoff if loop detected (more than 3 consecutive changes)
                             if consecutive_changes > 3 {
                                 sleep_interval = (sleep_interval * 2).min(300);  // Max 5 minutes
-                                eprintln!("[Sync] Loop detected ({} consecutive changes), backing off to {} seconds",
-                                    consecutive_changes, sleep_interval);
                             }
                         }
 
@@ -682,15 +673,11 @@ impl IrohSyncProvider {
         // Collect remote entries
         use futures::StreamExt;
         let mut entry_stream = entries;
-        let mut total_entries = 0;
-        let mut file_entries = 0;
         while let Some(entry) = entry_stream.next().await {
             let entry = entry.map_err(|e| SyncError::Iroh(format!("Failed to read entry: {}", e)))?;
             let key = String::from_utf8_lossy(entry.key()).to_string();
-            total_entries += 1;
 
             if let Some(path_str) = key.strip_prefix("file:") {
-                file_entries += 1;
                 let node = self.node.as_ref().unwrap();
                 let content = entry
                     .content_bytes(&**node)
@@ -701,22 +688,17 @@ impl IrohSyncProvider {
                 if !metadata.deleted {
                     // Normalize path before creating PathBuf for cross-platform compatibility
                     let normalized_path = path_str.replace('\\', "/");
-                    eprintln!("[Sync] Found remote file: {}", normalized_path);
                     remote_files.insert(PathBuf::from(normalized_path), metadata);
                 } else {
-                    eprintln!("[Sync] Skipping deleted file: {}", path_str);
                 }
             }
         }
-        eprintln!("[Sync] Total document entries: {}, file entries: {}, active files: {}", 
-                  total_entries, file_entries, remote_files.len());
 
         // Download remote files
         for (path, metadata) in &remote_files {
             match self.sync_file_from_iroh(path, metadata).await {
                 Ok(_) => downloaded += 1,
-                Err(e) => {
-                    eprintln!("Failed to sync file '{}': {}. Skipping...", path.display(), e);
+                Err(_) => {
                     // Continue with next file instead of failing entire sync
                 }
             }
@@ -725,7 +707,6 @@ impl IrohSyncProvider {
         // SKIP upload phase on first sync after join (bootstrap mode)
         // This ensures fresh workspace downloads everything before uploading
         if self.first_sync.load(Ordering::SeqCst) {
-            eprintln!("[First sync] Skipping upload phase - download only ({} files downloaded)", downloaded);
             self.first_sync.store(false, Ordering::SeqCst);
             return Ok((0, downloaded));
         }
@@ -764,16 +745,14 @@ impl IrohSyncProvider {
                                 // Hash mismatch - definitely needs upload
                                 true
                             } else if local_meta.size != remote_meta.size {
-                                // Extremely rare: hash collision or corruption
-                                eprintln!("WARNING: Hash match but size differs for '{}' - re-uploading", path.display());
+                                // Extremely rare: hash collision or corruption - re-upload
                                 true
                             } else {
                                 // Hash and size match - file is identical
                                 false
                             }
                         },
-                        Err(e) => {
-                            eprintln!("Failed to get metadata for '{}': {}. Skipping...", path.display(), e);
+                        Err(_) => {
                             continue;
                         }
                     }
@@ -785,8 +764,7 @@ impl IrohSyncProvider {
                 if needs_upload {
                     match self.sync_file_to_iroh(rel_path).await {
                         Ok(_) => uploaded += 1,
-                        Err(e) => {
-                            eprintln!("Failed to upload file '{}': {}. Skipping...", rel_path.display(), e);
+                        Err(_) => {
                             // Continue with next file
                         }
                     }

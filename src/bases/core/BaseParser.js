@@ -416,9 +416,7 @@ export class BaseParser {
       if ((this.validateOnParse || options.validate) && options.validate !== false) {
         const validation = baseValidator.validateBase(baseDefinition)
         if (!validation.isValid) {
-          console.error('❌ Base validation errors:', validation.errors)
           validation.errors.forEach((error, index) => {
-            console.error(`   Error ${index + 1}:`, error.message, 'at path:', error.path)
           })
           const error = new ValidationError('Base validation failed', validation.errors)
           error.validationResult = validation

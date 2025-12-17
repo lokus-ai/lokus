@@ -39,7 +39,6 @@ export function useGmailAuth() {
         });
       }
     } catch (error) {
-      console.error('Gmail auth status check failed:', error);
       setAuthState({
         isAuthenticated: false,
         profile: null,
@@ -63,9 +62,7 @@ export function useGmailAuth() {
         unsubscribe = await listen('gmail-auth-changed', () => {
           checkAuthStatus();
         });
-      } catch (error) {
-        console.error('Failed to setup Gmail auth listener:', error);
-      }
+      } catch { }
     };
 
     setupListener();
@@ -89,7 +86,6 @@ export function useGmailAuth() {
       
       return authUrl;
     } catch (error) {
-      console.error('Gmail login failed:', error);
       setAuthState(prev => ({
         ...prev,
         isLoading: false,
@@ -112,7 +108,6 @@ export function useGmailAuth() {
         error: null
       });
     } catch (error) {
-      console.error('Gmail logout failed:', error);
       setAuthState(prev => ({
         ...prev,
         isLoading: false,
@@ -137,7 +132,6 @@ export function useGmailAuth() {
 
       return profile;
     } catch (error) {
-      console.error('Gmail auth completion failed:', error);
       setAuthState(prev => ({
         ...prev,
         isLoading: false,
@@ -207,7 +201,6 @@ export function useGmailEmails(initialOptions = {}) {
     } catch (error) {
       if (error.name === 'AbortError') return;
       
-      console.error('Failed to load emails:', error);
       setEmailState(prev => ({
         ...prev,
         isLoading: false,
@@ -241,7 +234,6 @@ export function useGmailEmails(initialOptions = {}) {
 
       return result;
     } catch (error) {
-      console.error('Failed to search emails:', error);
       setEmailState(prev => ({
         ...prev,
         isLoading: false,
@@ -268,7 +260,6 @@ export function useGmailEmails(initialOptions = {}) {
     try {
       return await gmailService.emails.getEmail(messageId, format);
     } catch (error) {
-      console.error('Failed to get email:', error);
       throw error;
     }
   }, []);
@@ -330,7 +321,6 @@ export function useGmailComposer() {
 
       return result;
     } catch (error) {
-      console.error('Failed to send email:', error);
       setComposerState({
         isSending: false,
         error: error.message,
@@ -358,7 +348,6 @@ export function useGmailComposer() {
 
       return result;
     } catch (error) {
-      console.error('Failed to reply to email:', error);
       setComposerState({
         isSending: false,
         error: error.message,
@@ -386,7 +375,6 @@ export function useGmailComposer() {
 
       return result;
     } catch (error) {
-      console.error('Failed to forward email:', error);
       setComposerState({
         isSending: false,
         error: error.message,
@@ -438,7 +426,6 @@ export function useGmailActions() {
         lastAction: { action: actionName, messageIds, timestamp: Date.now() }
       });
     } catch (error) {
-      console.error(`Failed to ${actionName}:`, error);
       setActionsState({
         isProcessing: false,
         error: error.message,
@@ -520,7 +507,6 @@ export function useGmailLabels() {
 
       return labels;
     } catch (error) {
-      console.error('Failed to load labels:', error);
       setLabelsState(prev => ({
         ...prev,
         isLoading: false,
@@ -594,7 +580,6 @@ export function useGmailQueue() {
 
       return stats;
     } catch (error) {
-      console.error('Failed to load queue stats:', error);
       setQueueState(prev => ({
         ...prev,
         isLoading: false,
@@ -625,7 +610,6 @@ export function useGmailQueue() {
 
       return result;
     } catch (error) {
-      console.error('Failed to process queue:', error);
       setQueueState(prev => ({
         ...prev,
         isProcessing: false,
@@ -654,7 +638,6 @@ export function useGmailQueue() {
         error: null
       }));
     } catch (error) {
-      console.error('Failed to clear queue:', error);
       setQueueState(prev => ({
         ...prev,
         isProcessing: false,
@@ -682,9 +665,7 @@ export function useGmailQueue() {
         unsubscribe = await listen('gmail-queue-changed', () => {
           loadQueueStats();
         });
-      } catch (error) {
-        console.error('Failed to setup Gmail queue listener:', error);
-      }
+      } catch { }
     };
 
     setupListener();

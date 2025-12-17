@@ -45,9 +45,7 @@ export default function DailyNotesCalendar({ onDateSelect, workspacePath }) {
           )
         );
         setNoteDates(dates);
-      } catch (error) {
-        console.error('Failed to load daily notes:', error);
-      } finally {
+      } catch { } finally {
         setIsLoading(false);
       }
     };

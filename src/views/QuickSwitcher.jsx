@@ -99,9 +99,7 @@ export default function QuickSwitcher({ isOpen, onClose, onSelectFile, workspace
         } else {
           setResults(files.slice(0, 10));
         }
-      } catch (error) {
-        console.error('Failed to load file index:', error);
-      } finally {
+      } catch { } finally {
         setLoading(false);
       }
     };

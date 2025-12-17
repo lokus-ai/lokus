@@ -59,7 +59,6 @@ const EditorPane = ({
       setLocalContent(content);
       setLocalTitle(fileName?.replace(/\.md$/, '') || '');
     } catch (error) {
-      console.error('Failed to load file content:', error);
       setLocalContent('');
       setLocalTitle('');
     } finally {
@@ -101,9 +100,7 @@ const EditorPane = ({
           path: pane.file, 
           content: localContent 
         });
-      } catch (error) {
-        console.error('Failed to save pane content:', error);
-      }
+      } catch { }
     }
   };
 
@@ -166,9 +163,7 @@ const EditorPane = ({
                   path: pane.file, 
                   content: JSON.stringify(canvasData, null, 2) 
                 });
-              } catch (error) {
-                console.error('Failed to save canvas:', error);
-              }
+              } catch { }
             }}
             onContentChange={() => {
               // Mark as unsaved

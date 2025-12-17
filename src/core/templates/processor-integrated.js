@@ -123,7 +123,6 @@ export class IntegratedTemplateProcessor {
                   try {
                     return fn(chainedDate, correctedPattern);
                   } catch (retryErr) {
-                    console.warn('Date format failed:', retryErr.message);
                     return `[Invalid date format: ${pattern}]`;
                   }
                 }
@@ -169,7 +168,6 @@ export class IntegratedTemplateProcessor {
       strictMode: this.strictMode,
       iteration: 0
     };
-
 
     try {
       let processed = template;
@@ -238,7 +236,6 @@ export class IntegratedTemplateProcessor {
 
       const totalTime = this.performanceTracking ? Date.now() - startTime : 0;
 
-
       return {
         result: processed,
         variables: context.variables,
@@ -261,7 +258,6 @@ export class IntegratedTemplateProcessor {
    */
   async processPrompts(template, context, options) {
     const startTime = Date.now();
-
 
     // Extract prompts
     const prompts = this.prompts.parsePrompts(template);
@@ -578,22 +574,13 @@ export class IntegratedTemplateProcessor {
   getVariableValue(path, variables) {
     if (!path) return undefined;
 
-    console.log('[getVariableValue] Resolving path:', path);
-    console.log('[getVariableValue] Variables keys:', Object.keys(variables));
-
     const keys = path.split('.');
     let value = variables;
 
-    console.log('[getVariableValue] Split into keys:', keys);
-
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i];
-      console.log(`[getVariableValue] Processing key [${i}]:`, key);
-      console.log(`[getVariableValue] Current value type:`, typeof value);
-      console.log(`[getVariableValue] Current value:`, value);
 
       if (value === null || value === undefined) {
-        console.log('[getVariableValue] Value is null/undefined, returning undefined');
         return undefined;
       }
 
@@ -603,7 +590,6 @@ export class IntegratedTemplateProcessor {
       if (methodMatch) {
         const methodName = methodMatch[1];
         const argsString = methodMatch[2];
-        console.log(`[getVariableValue] Detected method call: ${methodName}(${argsString})`);
 
         // Parse arguments
         const args = [];
@@ -623,27 +609,19 @@ export class IntegratedTemplateProcessor {
             }
           }
         }
-        console.log(`[getVariableValue] Parsed args:`, args);
 
         // Call the method
-        console.log(`[getVariableValue] Checking if value[${methodName}] is a function:`, typeof value[methodName]);
         if (typeof value[methodName] === 'function') {
-          console.log(`[getVariableValue] Calling ${methodName} with args:`, args);
           value = value[methodName](...args);
-          console.log(`[getVariableValue] Method returned:`, value);
         } else {
-          console.log(`[getVariableValue] Method ${methodName} not found, returning undefined`);
           return undefined;
         }
       } else {
         // Regular property access
-        console.log(`[getVariableValue] Regular property access: ${key}`);
         value = value[key];
-        console.log(`[getVariableValue] Property value:`, value);
       }
     }
 
-    console.log('[getVariableValue] Final value:', value);
     return value;
   }
 

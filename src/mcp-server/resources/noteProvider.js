@@ -40,9 +40,7 @@ export class NoteProvider {
 
       // Setup monitoring
       this.setupNoteListeners();
-    } catch (error) {
-      console.warn('[NoteProvider] Failed to initialize note monitoring:', error);
-    }
+    } catch { }
   }
 
   /**
@@ -66,9 +64,7 @@ export class NoteProvider {
 
       // Notify subscribers
       this.notifySubscribers('notes:loaded');
-    } catch (error) {
-      console.error('[NoteProvider] Failed to load notes:', error);
-    }
+    } catch { }
   }
 
   /**
@@ -120,7 +116,6 @@ export class NoteProvider {
 
       return noteData;
     } catch (error) {
-      console.error(`[NoteProvider] Failed to load note content for ${notePath}:`, error);
       return null;
     }
   }
@@ -160,9 +155,7 @@ export class NoteProvider {
         }
         if (frontmatter.created) metadata.createdDate = frontmatter.created;
         if (frontmatter.modified) metadata.modifiedDate = frontmatter.modified;
-      } catch (error) {
-        console.warn(`[NoteProvider] Failed to parse frontmatter for ${notePath}:`, error);
-      }
+      } catch { }
     }
 
     // Extract inline tags (#tag)
@@ -276,9 +269,7 @@ export class NoteProvider {
 
         setInterval(checkWorkspaceChange, 1000);
       }
-    } catch (error) {
-      console.warn('[NoteProvider] Failed to setup note listeners:', error);
-    }
+    } catch { }
   }
 
   /**
@@ -372,7 +363,6 @@ export class NoteProvider {
           throw new Error(`Unknown resource path: ${path}`);
       }
     } catch (error) {
-      console.error('[NoteProvider] Error reading resource:', error);
       return {
         contents: [{
           type: 'text',
@@ -612,9 +602,7 @@ export class NoteProvider {
     for (const callback of this.subscribers) {
       try {
         callback(event, data);
-      } catch (error) {
-        console.error('[NoteProvider] Error notifying subscriber:', error);
-      }
+      } catch { }
     }
   }
 

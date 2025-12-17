@@ -113,8 +113,7 @@ export function usePluginUI() {
           return await handler(...args);
         }
       }
-    } catch (error) {
-    }
+    } catch { }
   }, []);
 
   const getPluginAPI = useCallback((pluginId) => {

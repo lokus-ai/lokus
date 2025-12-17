@@ -26,8 +26,7 @@ export class TaskManager {
     this.listeners.forEach(listener => {
       try {
         listener(event)
-      } catch (error) {
-      }
+      } catch { }
     })
   }
 

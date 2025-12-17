@@ -13,7 +13,6 @@ export default function AuthButton() {
     try {
       await signIn();
     } catch (error) {
-      console.error('Sign in failed:', error);
       // You could show a toast notification here
     }
   };
@@ -23,9 +22,7 @@ export default function AuthButton() {
       setIsSigningOut(true);
       await signOut();
       setShowDropdown(false);
-    } catch (error) {
-      console.error('Sign out failed:', error);
-    } finally {
+    } catch { } finally {
       setIsSigningOut(false);
     }
   };

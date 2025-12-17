@@ -84,8 +84,7 @@ export default function TemplateEditor({
       setCategories(getCategories());
       setAllTags(getTags());
       setBuiltinVariables(getVariablesByCategory());
-    } catch (err) {
-    }
+    } catch { }
   }, [getCategories, getTags, getVariablesByCategory]);
 
   // Validate template content

@@ -105,9 +105,7 @@ export const Folding = Extension.create({
                 try {
                   const positions = JSON.parse(stored);
                   extension.storage.foldedSections = new Set(positions);
-                } catch (e) {
-                  console.error('Failed to load fold state:', e);
-                }
+                } catch { }
               }
             }
             return buildDecorations(state);

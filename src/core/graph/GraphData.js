@@ -146,8 +146,7 @@ export class GraphData {
 
       this.rebuildIndices();
       this.emit('dataLoaded', { nodeCount: nodes.length, linkCount: links.length });
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -485,7 +484,6 @@ export class GraphData {
 
       return tags;
     } catch (error) {
-      console.error('[GraphData] Failed to extract tags:', error);
       return [];
     }
   }
@@ -530,7 +528,6 @@ export class GraphData {
 
     this.persistNode(node);
     this.emit('nodeCreated', { node });
-
 
     // Clean up any existing placeholder for this document
     this.cleanupPlaceholderForDocument(documentId, metadata.title);
@@ -694,7 +691,6 @@ export class GraphData {
     this.persistNode(node);
     this.emit('nodeCreated', { node });
 
-
     return node;
   }
 
@@ -704,7 +700,6 @@ export class GraphData {
   async updateWikiLinksForNode(nodeId, wikiLinks) {
     const node = this.nodes.get(nodeId);
     if (!node) return;
-
 
     // Remove existing forward links for this node
     const existingForwardLinks = this.forwardlinks.get(nodeId) || new Set();
@@ -755,8 +750,7 @@ export class GraphData {
           this.stats.wikiLinkCount++;
         }
 
-      } catch (error) {
-      }
+      } catch { }
     }
 
     // Update node link count
@@ -779,7 +773,6 @@ export class GraphData {
     const targetNode = this.nodes.get(targetId);
     const sourceTitle = sourceNode ? sourceNode.title : sourceId;
     const targetTitle = targetNode ? targetNode.title : targetId;
-
 
     const link = {
       id: linkId,
@@ -1150,8 +1143,7 @@ export class GraphData {
       const transaction = this.db.transaction(['nodes'], 'readwrite');
       const store = transaction.objectStore('nodes');
       await store.put(node);
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -1164,8 +1156,7 @@ export class GraphData {
       const transaction = this.db.transaction(['links'], 'readwrite');
       const store = transaction.objectStore('links');
       await store.put(link);
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -1178,8 +1169,7 @@ export class GraphData {
       const transaction = this.db.transaction(['links'], 'readwrite');
       const store = transaction.objectStore('links');
       await store.delete(linkId);
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -1207,8 +1197,7 @@ export class GraphData {
       this.listeners.get(event).forEach(callback => {
         try {
           callback(data);
-        } catch (error) {
-        }
+        } catch { }
       });
     }
   }
@@ -1319,8 +1308,7 @@ export class GraphData {
       const transaction = this.db.transaction(['nodes'], 'readwrite');
       const store = transaction.objectStore('nodes');
       await store.delete(nodeId);
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**

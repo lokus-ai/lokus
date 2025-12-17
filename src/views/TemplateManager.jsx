@@ -131,16 +131,14 @@ export default function TemplateManager() {
       await duplicateTemplate(template.id, newId, {
         name: `${template.name} (Copy)`
       });
-    } catch (err) {
-    }
+    } catch { }
   };
 
   const handleDelete = async (template) => {
     if (window.confirm(`Are you sure you want to delete "${template.name}"?`)) {
       try {
         await deleteTemplate(template.id);
-      } catch (err) {
-      }
+      } catch { }
     }
   };
 
@@ -154,8 +152,7 @@ export default function TemplateManager() {
       a.download = `${template.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (err) {
-    }
+    } catch { }
   };
 
   const handleImport = () => {
@@ -188,9 +185,7 @@ export default function TemplateManager() {
   const handleRefresh = async () => {
     try {
       await refreshTemplates();
-    } catch (err) {
-      console.error('Failed to refresh templates:', err);
-    }
+    } catch { }
   };
 
   // Handle tag toggle

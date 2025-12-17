@@ -99,7 +99,6 @@ export class LogseqImporter extends BaseImporter {
 
       return files;
     } catch (error) {
-      console.error('Error finding markdown files:', error);
       return [];
     }
   }
@@ -263,7 +262,6 @@ export class LogseqImporter extends BaseImporter {
         await invoke('create_directory', { path: destPath, recursive: true });
       }
     } catch (error) {
-      console.error('Error creating destination directory:', error);
       throw error;
     }
   }

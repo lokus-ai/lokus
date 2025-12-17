@@ -860,6 +860,7 @@ pub fn get_plugin_setting(app: AppHandle, plugin_name: String, key: String) -> R
     }
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 pub fn save_plugin_settings(app: AppHandle, plugin_id: String, settings: JsonValue) -> Result<(), String> {
     let mut current_settings = get_plugin_settings(&app)?;

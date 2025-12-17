@@ -51,7 +51,6 @@ const DiffView = ({ workspacePath, filePath, version1, version2, onClose }) => {
         newContent: content2,
       });
     } catch (error) {
-      console.error("Failed to load diff:", error);
       setError(error.toString());
     } finally {
       setLoading(false);

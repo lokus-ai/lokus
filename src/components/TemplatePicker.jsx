@@ -68,9 +68,7 @@ export default function TemplatePicker({
       try {
         setCategories(getCategories());
         setTags(getTags());
-      } catch (err) {
-        console.error('Error loading categories/tags:', err);
-      }
+      } catch { }
     }
   }, [open, getCategories, getTags, templates]);
 
@@ -166,9 +164,7 @@ export default function TemplatePicker({
       await duplicateTemplate(template.id, newId, {
         name: `${template.name} (Copy)`
       });
-    } catch (err) {
-      console.error('Failed to duplicate template:', err);
-    }
+    } catch { }
   };
 
   const handleDelete = async (template, event) => {
@@ -177,9 +173,7 @@ export default function TemplatePicker({
     if (window.confirm(`Are you sure you want to delete "${template.name}"?`)) {
       try {
         await deleteTemplate(template.id);
-      } catch (err) {
-        console.error('Failed to delete template:', err);
-      }
+      } catch { }
     }
   };
 

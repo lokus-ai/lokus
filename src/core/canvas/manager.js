@@ -88,7 +88,6 @@ export class CanvasManager {
       if (!isValidFilePath(canvasPath)) {
         const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
         if (isDev) {
-          console.error(`[Canvas LOAD] Invalid file path: ${canvasPath}`);
         }
         throw new Error('Invalid canvas path');
       }
@@ -107,12 +106,10 @@ export class CanvasManager {
         if (!tldrawSnapshot.schema) {
           const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
           if (isDev) {
-            console.warn(`[Canvas LOAD] Missing schema, adding default schema`);
           }
           tldrawSnapshot.schema = this.createEmptyTldrawSnapshot().schema;
         }
       } catch (parseError) {
-        console.error(`[Canvas LOAD] Parse error:`, parseError.message);
         tldrawSnapshot = this.createEmptyTldrawSnapshot();
       }
 
@@ -121,7 +118,6 @@ export class CanvasManager {
 
       return tldrawSnapshot;
     } catch (error) {
-      console.error(`[Canvas LOAD] Error:`, error.message);
       return this.createEmptyTldrawSnapshot();
     }
   }
@@ -189,7 +185,6 @@ export class CanvasManager {
       if (!isValidFilePath(canvasPath)) {
         const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
         if (isDev) {
-          console.error(`[Canvas SAVE] Invalid file path: ${canvasPath}`);
         }
         throw new Error('Invalid canvas path');
       }      // Save TLDraw snapshot directly - no conversion!
@@ -203,7 +198,6 @@ export class CanvasManager {
       invalidateCache(canvasPath);
 
     } catch (error) {
-      console.error(`[Canvas SAVE] Error:`, error.message);
       throw error;
     }
   }
@@ -254,7 +248,6 @@ export class CanvasManager {
    */
   validateCanvasData(data) {
     if (!data || typeof data !== 'object') {
-      console.warn(`[Canvas Manager] Invalid canvas data type, creating empty canvas`);
       return this.createEmptyCanvasData();
     }
 
@@ -279,7 +272,6 @@ export class CanvasManager {
     validated.nodes = validated.nodes.filter((node, index) => {
       const isValid = this._validateNode(node);
       if (!isValid) {
-        console.warn(`[Canvas Manager] Removed invalid node at index ${index}:`, node);
       }
       return isValid;
     });
@@ -288,7 +280,6 @@ export class CanvasManager {
     validated.edges = validated.edges.filter((edge, index) => {
       const isValid = this._validateEdge(edge);
       if (!isValid) {
-        console.warn(`[Canvas Manager] Removed invalid edge at index ${index}:`, edge);
       }
       return isValid;
     });
@@ -299,12 +290,10 @@ export class CanvasManager {
       const fromExists = nodeIds.has(edge.fromNode);
       const toExists = nodeIds.has(edge.toNode);
       if (!fromExists || !toExists) {
-        console.warn(`[Canvas Manager] Removed edge with missing node references:`, edge);
         return false;
       }
       return true;
     });
-
 
     return validated;
   }

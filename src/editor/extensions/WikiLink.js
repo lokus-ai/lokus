@@ -59,7 +59,6 @@ export const WikiLink = Node.create({
           detail: { category, key, value }
         }));
       } else {
-        console.warn('[WikiLink] Editor instance not available for reload');
       }
     });  },
 

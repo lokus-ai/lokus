@@ -77,9 +77,7 @@ class MCPClient {
     this.subscribers.forEach(callback => {
       try {
         callback(data)
-      } catch (error) {
-        console.error('Error in MCP client subscriber:', error)
-      }
+      } catch { }
     })
   }
 }

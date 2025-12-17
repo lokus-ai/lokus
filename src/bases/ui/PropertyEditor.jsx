@@ -561,7 +561,6 @@ export default function PropertyEditor({
       }
       onClose()
     } catch (error) {
-      console.error('Failed to save property:', error)
       setErrors({ general: 'Failed to save property' })
     } finally {
       setIsSaving(false)

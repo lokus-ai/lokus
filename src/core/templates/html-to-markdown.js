@@ -121,7 +121,6 @@ class HTMLToMarkdownConverter {
 
       return markdown;
     } catch (error) {
-      console.error('[HTMLToMarkdown] Conversion error:', error);
       // Fallback: try to extract text content
       const div = document.createElement('div');
       div.innerHTML = html;

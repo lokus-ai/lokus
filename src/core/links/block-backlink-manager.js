@@ -29,9 +29,7 @@ export class BlockBacklinkManager {
 
       try {
         await this.parseFileForBlockLinks(file.path)
-      } catch (error) {
-        console.error('[BlockBacklinkManager] Error parsing file:', file.path, error)
-      }
+      } catch { }
     }
 
     this.indexed = true

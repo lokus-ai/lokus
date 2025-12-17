@@ -33,7 +33,6 @@ export class FileBasedTemplateStorage {
 
       this.initialized = true;
     } catch (error) {
-      console.error('[FileStorage] Initialization error:', error);
       throw new Error(`Storage initialization failed: ${error.message}`);
     }
   }
@@ -55,7 +54,6 @@ export class FileBasedTemplateStorage {
       const filename = this.generateFilename(template.id);
       const filepath = `${this.templateDir}/${filename}`;
 
-
       // Ensure directory exists before writing
       const dirExists = await exists(this.templateDir);
       if (!dirExists) {
@@ -68,7 +66,6 @@ export class FileBasedTemplateStorage {
       // Combine frontmatter and content
       const fileContent = `---\n${frontmatter}---\n\n${template.content || ''}`;
 
-
       // Write to file
       await writeTextFile(filepath, fileContent);
 
@@ -77,7 +74,6 @@ export class FileBasedTemplateStorage {
       if (!fileExists) {
         throw new Error('File write succeeded but file does not exist');
       }
-
 
       // Update cache
       this.cache.set(template.id, template);
@@ -88,10 +84,6 @@ export class FileBasedTemplateStorage {
         id: template.id
       };
     } catch (error) {
-      console.error('[FileStorage] Save error for template:', template?.id, template?.name);
-      console.error('[FileStorage] Error details:', error);
-      console.error('[FileStorage] Error message:', error.message);
-      console.error('[FileStorage] Stack trace:', error.stack);
       throw new Error(`Failed to save template "${template?.name || template?.id}": ${error.message}`);
     }
   }
@@ -163,7 +155,6 @@ export class FileBasedTemplateStorage {
             templatesMap.set(template.id, template);
           }
         } catch (error) {
-          console.error(`[FileStorage] Error loading ${entry.name}:`, error);
           // Continue loading other templates
         }
       }
@@ -177,7 +168,6 @@ export class FileBasedTemplateStorage {
         templates: templatesMap
       };
     } catch (error) {
-      console.error('[FileStorage] Load error:', error);
 
       // If directory doesn't exist, return empty
       if (error.message.includes('No such file') || error.message.includes('not found')) {
@@ -217,7 +207,6 @@ export class FileBasedTemplateStorage {
         filepath
       };
     } catch (error) {
-      console.error('[FileStorage] Delete error:', error);
       throw new Error(`Failed to delete template: ${error.message}`);
     }
   }
@@ -274,7 +263,6 @@ export class FileBasedTemplateStorage {
         await mkdir(this.templateDir, { recursive: true });
       }
     } catch (error) {
-      console.error('[FileStorage] Error creating directory:', error);
       // Directory might already exist, or we need to create parent dirs
       throw error;
     }
@@ -367,7 +355,6 @@ export class FileBasedTemplateStorage {
         }
       };
     } catch (error) {
-      console.error('[FileStorage] Parse error:', error);
       return null;
     }
   }

@@ -176,8 +176,7 @@ class MarkdownSyntaxConfig {
       if (globalConfig && globalConfig.markdownSyntax) {
         this.config = this.mergeConfig(this.defaultConfig, globalConfig.markdownSyntax);
       }
-    } catch (e) {
-    }
+    } catch { }
   }
 
   async loadWorkspaceConfig() {
@@ -188,7 +187,6 @@ class MarkdownSyntaxConfig {
 
       // Try to get workspace from window variable first (set by Workspace component)
       const workspacePath = (typeof window !== 'undefined' && window.__LOKUS_WORKSPACE_PATH__) || getSavedWorkspacePath();
-
 
       if (!workspacePath) return null;
 
@@ -213,7 +211,6 @@ class MarkdownSyntaxConfig {
       // Try to get workspace from window variable first (set by Workspace component)
       let workspacePath = (typeof window !== 'undefined' && window.__LOKUS_WORKSPACE_PATH__) || getSavedWorkspacePath();
 
-
       if (!workspacePath) {
         return false;
       }
@@ -227,7 +224,6 @@ class MarkdownSyntaxConfig {
       await writeTextFile(configPath, JSON.stringify(this.config, null, 2));
       return true;
     } catch (e) {
-      console.error('[MarkdownSyntax] Error saving workspace config:', e);
       return false;
     }
   }
@@ -266,7 +262,6 @@ class MarkdownSyntaxConfig {
       this.config[category][key] = value;
     }
 
-
     this.notifyListeners(category, key, value);
 
     // Auto-save after each change for immediate persistence
@@ -274,7 +269,6 @@ class MarkdownSyntaxConfig {
       if (success) {
       }
     }).catch(e => {
-      console.error('[MarkdownSyntax] Auto-save failed:', e);
     });
   }
 
@@ -294,7 +288,6 @@ class MarkdownSyntaxConfig {
       }
       return success;
     } catch (e) {
-      console.error('Failed to save markdown syntax config:', e);
       return false;
     }
   }
@@ -312,7 +305,6 @@ class MarkdownSyntaxConfig {
       this.notifyListeners('import', null, this.config);
       return true;
     } catch (e) {
-      console.error('Failed to import config:', e);
       return false;
     }
   }
@@ -327,9 +319,7 @@ class MarkdownSyntaxConfig {
     this.listeners.forEach(callback => {
       try {
         callback(category, key, value);
-      } catch (e) {
-        console.error('Listener error:', e);
-      }
+      } catch { }
     });
   }
 
