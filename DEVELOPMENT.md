@@ -1,18 +1,18 @@
-# Claude Development Guide for Lokus
+# Lokus Development Guide
 
-## 🚀 **Quick Start Commands**
+## Quick Start Commands
 
-### **Development**
+### Development
 ```bash
 npm run tauri dev
 ```
 
-### **Build**
+### Build
 ```bash
 npm run tauri build
 ```
 
-### **Testing**
+### Testing
 ```bash
 # Unit tests
 npm test
@@ -24,12 +24,12 @@ npm run test:e2e:ui
 npm run test:e2e:headed
 ```
 
-## 📁 **Project Structure**
+## Project Structure
 
-### **Frontend (React + TipTap)**
+### Frontend (React + TipTap)
 - `src/editor/` - Rich text editor components
 - `src/views/` - Main app views (Workspace, Preferences)
-- `src/core/` - Core functionality (themes, config, wiki, **templates**)
+- `src/core/` - Core functionality (themes, config, wiki, templates)
   - `src/core/templates/` - Template system implementation
     - `file-storage.js` - File-based template storage
     - `processor-integrated.js` - Main template processor
@@ -45,32 +45,32 @@ npm run test:e2e:headed
   - `CreateTemplate.jsx` - Template creation UI
 - `src/styles/` - CSS and styling
 
-### **Backend (Tauri + Rust)**
+### Backend (Tauri + Rust)
 - `src-tauri/src/main.rs` - Main Tauri backend
 - `src-tauri/src/` - Rust modules
 
-## ✨ **Key Features Implemented**
+## Key Features
 
-### **Editor Features**
-- ✅ Rich text editing with TipTap
-- ✅ Markdown support (all standard features)
-- ✅ Math equations (KaTeX) - inline `$x^2$` and block `$$E=mc^2$$`
-- ✅ Wiki links `[[page]]` with autocomplete
-- ✅ Task lists with checkboxes
-- ✅ Tables with resizing
-- ✅ Code blocks with syntax highlighting
-- ✅ Images (local and web URLs)
-- ✅ Strikethrough `~~text~~`
-- ✅ Highlights `==text==`
-- ✅ Superscript `H^2^O` and subscript `H~2~O`
-- ✅ Smart paste (markdown → rich text)
+### Editor Features
+- Rich text editing with TipTap
+- Markdown support (all standard features)
+- Math equations (KaTeX) - inline `$x^2$` and block `$$E=mc^2$$`
+- Wiki links `[[page]]` with autocomplete
+- Task lists with checkboxes
+- Tables with resizing
+- Code blocks with syntax highlighting
+- Images (local and web URLs)
+- Strikethrough `~~text~~`
+- Highlights `==text==`
+- Superscript `H^2^O` and subscript `H~2~O`
+- Smart paste (markdown to rich text)
 
-### **App Features**
-- ✅ File management and workspace
-- ✅ Theme system (light/dark + custom themes)
-- ✅ Preferences with real-time editor customization
-- ✅ Daily Notes system with date navigation
-- ✅ Advanced template system with 90+ features
+### App Features
+- File management and workspace
+- Theme system (light/dark + custom themes)
+- Preferences with real-time editor customization
+- Daily Notes system with date navigation
+- Advanced template system with 90+ features
   - File-based storage (.md files with YAML frontmatter)
   - 70+ date operations with method chaining
   - 60+ text/array/number/date filters
@@ -80,7 +80,7 @@ npm run test:e2e:headed
   - Template includes for composition
   - HTML to Markdown auto-conversion
   - Duplicate detection and overwrite protection
-- ✅ Crash reporting with GlitchTip/Sentry
+- Crash reporting with GlitchTip/Sentry
   - Self-hosted at crash.lokusmd.com
   - Frontend (React) and backend (Rust) error tracking
   - React Error Boundary for component crashes
@@ -89,24 +89,24 @@ npm run test:e2e:headed
   - Production source maps for debugging
   - Development crash testing tools
 
-## 🔧 **Common Tasks**
+## Common Tasks
 
-### **Adding New Editor Features**
+### Adding New Editor Features
 1. Create extension in `src/editor/extensions/`
 2. Import and add to extensions array in `Editor.jsx`
 3. Add slash command in `slash-command.jsx`
 4. Update CSS in `editor.css`
 
-### **Adding New Views**
+### Adding New Views
 1. Create component in `src/views/`
 2. Import and route in `App.jsx`
 3. Add navigation if needed
 
-### **Modifying Themes**
+### Modifying Themes
 - Edit `src/core/theme/manager.js`
 - CSS variables in `src/styles/globals.css`
 
-### **Working with Templates**
+### Working with Templates
 - **Documentation**: See `docs/templates/` for complete guides
   - `README.md` - Overview and quick start
   - `syntax-reference.md` - Complete syntax guide
@@ -120,7 +120,7 @@ npm run test:e2e:headed
   - Storage: `src/core/templates/file-storage.js`
   - UI: `src/components/CreateTemplate.jsx`
 
-### **Crash Reporting Setup (GlitchTip/Sentry)**
+### Crash Reporting Setup (GlitchTip/Sentry)
 - **Dashboard**: https://crash.lokusmd.com
 - **Configuration**:
   - DSN configured in `.env` and `.env.production`
@@ -144,7 +144,7 @@ npm run test:e2e:headed
   - Manual chunking for better caching
   - Session replay captures 10% of sessions, 100% of errors
 
-### **Mac App Store Deployment**
+### Mac App Store Deployment
 - **Build Command**: `npm run build:appstore`
 - **Configuration**: Uses `src-tauri/tauri.appstore.conf.json`
 - **Key Differences from Direct Distribution**:
@@ -168,29 +168,16 @@ npm run test:e2e:headed
   4. Upload to App Store Connect via Transporter
   5. Configure TestFlight for beta testing
   6. Submit for App Review
-- **See Also**: Comprehensive guide in research notes for full submission process
 
-## 🐛 **Known Issues**
+## Development Notes
 
-### **Fixed**
-- ✅ Math rendering (KaTeX integration)
-- ✅ WikiLink autocomplete conflicts with regular links
-- ✅ Paste functionality blocking all operations
-- ✅ Link colors not blue
-- ✅ Brackets in lists triggering wiki suggestions
-
-### **Current Issues**
-- Need better file organization
-
-## 📝 **Development Notes**
-
-### **Code Style**
+### Code Style
 - React functional components with hooks
 - TipTap extensions for editor functionality
 - Tauri commands for file operations
 - CSS custom properties for theming
 
-### **Testing Strategy**
+### Testing Strategy
 - **Unit tests** (`tests/unit/`) - Core functions and utilities
 - **E2E tests** (`tests/e2e/`) - Complete user workflows
   - App navigation and preferences
@@ -200,16 +187,7 @@ npm run test:e2e:headed
 - **CI/CD** - GitHub Actions for automated testing
 - **Manual testing** - Complex editor interactions
 
-### **Performance Considerations**
+### Performance Considerations
 - Lazy loading for large documents
 - Debounced save operations
 - Efficient re-renders with React.memo
-
----
-
-*Last Updated: September 12, 2025*
-*Status: Ready for SaaS development phase*
-
-
-
-Never Mention Claude in anything no pr no issue no commits no comments never mention claude
