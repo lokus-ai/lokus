@@ -130,9 +130,18 @@ const WikiLinkSuggest = Extension.create({
         // Allow after [[ for files OR after ^ for blocks OR after ![ for canvas
         allow: ({ state, range }) => {
           const $pos = state.selection.$from
+
+          const pos = state.selection.from
+          const parentStart = $pos.start()
+
+          // Use textBetween with absolute positions to properly handle inline nodes like WikiLinks
+          // (parentOffset doesn't align with textContent when WikiLinks are present)
+          const textBefore = state.doc.textBetween(Math.max(parentStart, pos - 2), pos)
+
           const parentContent = $pos.parent.textContent
           const textBefore = parentContent.slice(Math.max(0, $pos.parentOffset - 2), $pos.parentOffset)
           const fullTextBefore = parentContent.slice(0, $pos.parentOffset)
+
 
           // Check for [[ pattern (file linking)
           const isAfterDoubleBracket = textBefore.endsWith('[[')
@@ -143,7 +152,21 @@ const WikiLinkSuggest = Extension.create({
           // Check for ^ pattern within [[ ]] (block linking)
           // Look for pattern: [[Filename^ or [[Filename.md^
           const wikiLinkPattern = /\[\[([^\]]+)\^$/
+
+          const fullTextBefore = state.doc.textBetween(parentStart, pos)
           const isAfterCaret = wikiLinkPattern.test(fullTextBefore)
+
+          dbg('textBefore check', {
+            textBefore,
+            fullTextBefore: fullTextBefore.slice(-20),
+            pos,
+            parentStart,
+            rangeFrom: range.from,
+            isAfterCaret
+          })
+
+          const isAfterCaret = wikiLinkPattern.test(fullTextBefore)
+
 
           // Use ProseMirror node types for more reliable list detection
           const parentNode = $pos.node($pos.depth)
@@ -172,8 +195,8 @@ const WikiLinkSuggest = Extension.create({
           // Pattern: [[Filename^query
           const { state } = editor
           const $pos = state.selection.$from
-          const parentContent = $pos.parent.textContent
-          const textBefore = parentContent.slice(0, $pos.parentOffset)
+          // Use textBetween for proper handling when WikiLinks exist on the line
+          const textBefore = state.doc.textBetween($pos.start(), $pos.pos)
 
           // Check if we have [[...^ pattern
           const blockRefMatch = /\[\[([^\]^]+)\^(.*)$/.exec(textBefore)
@@ -359,10 +382,10 @@ const WikiLinkSuggest = Extension.create({
             }
 
             // Find the position of ^ in the document
+            // Use textBetween for proper handling when WikiLinks exist on the line
             const { state } = editor
             const $pos = state.selection.$from
-            const parentContent = $pos.parent.textContent
-            const textBefore = parentContent.slice(0, $pos.parentOffset)
+            const textBefore = state.doc.textBetween($pos.start(), $pos.pos)
 
             // Find where ^ starts
             const caretMatch = /\[\[([^\]^]+)\^(.*)$/.exec(textBefore)
@@ -372,10 +395,10 @@ const WikiLinkSuggest = Extension.create({
 
             const fileName = caretMatch[1].trim()
             const caretPos = textBefore.lastIndexOf('^')
-            const absoluteCaretPos = state.selection.from - (textBefore.length - caretPos)
+            const absoluteCaretPos = $pos.pos - (textBefore.length - caretPos)
 
             // Check if ]] already exists after cursor
-            const textAfter = parentContent.slice($pos.parentOffset)
+            const textAfter = state.doc.textBetween($pos.pos, $pos.end())
             const closingBracketsPos = textAfter.indexOf(']]')
             const hasClosingBrackets = closingBracketsPos !== -1
 
@@ -388,7 +411,7 @@ const WikiLinkSuggest = Extension.create({
             try {
               // Find the [[ start
               const openBracketPos = textBefore.lastIndexOf('[[')
-              const absoluteOpenPos = state.selection.from - (textBefore.length - openBracketPos)
+              const absoluteOpenPos = $pos.pos - (textBefore.length - openBracketPos)
 
               const deleteEnd = hasClosingBrackets ? absoluteClosingPos + 2 : state.selection.to
               const wikiLinkText = `${fileName}^${blockId}`
@@ -404,8 +427,20 @@ const WikiLinkSuggest = Extension.create({
             }
           } else {
             // FILE MODE: Insert file reference
-            const from = Math.max((range?.from ?? editor.state.selection.from) - 1, 1)
-            const to = range?.to ?? editor.state.selection.to
+            // Use textBetween for proper handling when WikiLinks exist on the line
+            const { state } = editor
+            const $pos = state.selection.$from
+            const textBefore = state.doc.textBetween($pos.start(), $pos.pos)
+
+            // Find where [[ starts
+            const openBracketPos = textBefore.lastIndexOf('[[')
+            if (openBracketPos === -1) {
+              dbg('command: no [[ found in textBefore', { textBefore })
+              return
+            }
+
+            const from = $pos.pos - (textBefore.length - openBracketPos)
+            const to = range?.to ?? state.selection.to
             // Get display name: just the filename without extension
             const rawName = props.title || props.path
             const fileName = rawName.replace(/\.[^.]+$/, '')  // Remove any extension (.md, etc.)
@@ -681,10 +716,10 @@ const WikiLinkSuggest = Extension.create({
         allowSpaces: true,
         startOfLine: false,
         // Only allow ^ inside [[...^
-        allow: ({ state, range }) => {
+        allow: ({ state }) => {
           const $pos = state.selection.$from
-          const parentContent = $pos.parent.textContent
-          const textBefore = parentContent.slice(0, $pos.parentOffset)
+          // Use textBetween for proper handling when WikiLinks exist on the line
+          const textBefore = state.doc.textBetween($pos.start(), $pos.pos)
 
           // Check if we have [[Filename pattern before ^
           const hasWikiLink = /\[\[([^\]]+)$/.test(textBefore)
@@ -695,8 +730,8 @@ const WikiLinkSuggest = Extension.create({
           // Extract filename from [[Filename^
           const { state } = editor
           const $pos = state.selection.$from
-          const parentContent = $pos.parent.textContent
-          const textBefore = parentContent.slice(0, $pos.parentOffset)
+          // Use textBetween for proper handling when WikiLinks exist on the line
+          const textBefore = state.doc.textBetween($pos.start(), $pos.pos)
 
           const match = /\[\[([^\]^]+)\^(.*)$/.exec(textBefore)
           if (!match) {
