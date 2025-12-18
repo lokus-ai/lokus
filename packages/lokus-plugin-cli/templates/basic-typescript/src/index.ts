@@ -59,9 +59,10 @@ export class {{pluginNamePascalCase}} {
    */
   private async registerCommands(): Promise<void> {
     // Register your plugin commands here
-    this.context.api.commands.register('{{pluginName}}.helloWorld', {
+    this.context.api.commands.register({
+      id: '{{pluginName}}.helloWorld',
       title: 'Hello World',
-      callback: () => this.helloWorld()
+      handler: () => this.helloWorld()
     });
   }
 
@@ -85,7 +86,7 @@ export class {{pluginNamePascalCase}} {
    * Example command: Hello World
    */
   private helloWorld(): void {
-    this.context.api.ui.showMessage('Hello World from {{pluginName}}!', 'info');
+    this.context.api.ui.showNotification('Hello World from {{pluginName}}!', 'info');
     this.logger.info('Hello World command executed');
   }
 }
