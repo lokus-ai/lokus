@@ -10,7 +10,7 @@ const DEFAULT_CONFIG = {
 
 // URL to your remote JSON file
 // URL to your remote JSON file
-const REMOTE_CONFIG_URL = 'https://updates.lokusmd.com/config.json';
+const REMOTE_CONFIG_URL = 'https://config.lokusmd.com/config.json';
 
 export const RemoteConfigContext = createContext({
     config: DEFAULT_CONFIG,

@@ -13,6 +13,7 @@ import markdownItTexmath from "markdown-it-texmath"
 import katex from "katex"
 import markdownItWikiLinks from "./plugins/wikilinks.js"
 import markdownItMermaid from "./plugins/mermaid.js"
+import markdownItTaskLists from "./plugins/task-lists.js"
 
 export class MarkdownCompiler {
   constructor(options = {}) {
@@ -27,6 +28,7 @@ export class MarkdownCompiler {
       .use(markdownItMark)
       .use(markdownItStrikethrough)
       .use(markdownItWikiLinks)
+      .use(markdownItTaskLists)
       .use(markdownItMermaid)
       .use(markdownItTexmath, {
         engine: katex,
@@ -68,7 +70,7 @@ export class MarkdownCompiler {
       /!\[[^\]]*\]\([^)]*\)/, // ![alt](url) images
       /\[[^\]]*\]\([^)]*\)/,  // [link](url)
       /```[\s\S]*?```/,       // ```code blocks```
-      /^\s*- \[[x\s]\]/m,     // - [x] task lists
+      /^\s*- \[[x X/!?\->\s*~<"ib+w@RDS]\]/m,     // - [x] task lists (supports all 23 states)
       /^---+$/m,              // --- horizontal rules
       /^\s*\|\s*[^|]+\s*\|/m, // | table cells |
     ]

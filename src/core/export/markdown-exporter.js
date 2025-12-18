@@ -133,7 +133,14 @@ export class MarkdownExporter {
               } else {
                 result += `[[${target}]]`;
               }
-            } else {
+            }
+            // Handle canvas links
+            else if (dataType === 'canvas-link' && preserveWikiLinks) {
+              // Get canvas name from the link text (content) or data attribute
+              const canvasName = content.trim();
+              result += `![${canvasName}]`;
+            }
+            else {
               result += `[${content}](${href})`;
             }
             break;
@@ -155,13 +162,49 @@ export class MarkdownExporter {
 
           // Task lists
           case 'li':
-            const checkbox = child.querySelector('input[type="checkbox"]');
-            if (checkbox) {
-              const checked = checkbox.checked ? 'x' : ' ';
-              const text = this.getTextContent(child, checkbox);
-              result += `- [${checked}] ${text}\n`;
-            } else {
-              result += `- ${content}\n`;
+            // Check for TipTap task item (new structure with data-type attribute)
+            const isTaskItem = child.getAttribute('data-type') === 'taskItem';
+            const taskState = child.getAttribute('data-task-state');
+
+            if (isTaskItem && taskState) {
+              // Map task state to markdown symbol (supports all 23 SmartTask states)
+              const stateToSymbol = {
+                'todo': ' ',
+                'completed': 'x',
+                'in-progress': '/',
+                'urgent': '!',
+                'question': '?',
+                'cancelled': '-',
+                'delegated': '>',
+                // High frequency
+                'starred': '*',
+                'paused': '~',
+                'scheduled': '<',
+                'quote': '"',
+                'info': 'i',
+                'blocked': 'b',
+                // Medium frequency
+                'added': '+',
+                'waiting': 'w',
+                'mentioned': '@',
+                'review': 'R',
+                'duplicate': 'D',
+                'started': 'S'
+              };
+              const symbol = stateToSymbol[taskState] || ' ';
+              const text = this.getTextContent(child);
+              result += `- [${symbol}] ${text}\n`;
+            }
+            // Fallback for legacy checkbox HTML (backward compatibility)
+            else {
+              const checkbox = child.querySelector('input[type="checkbox"]');
+              if (checkbox) {
+                const checked = checkbox.checked ? 'x' : ' ';
+                const text = this.getTextContent(child, checkbox);
+                result += `- [${checked}] ${text}\n`;
+              } else {
+                result += `- ${content}\n`;
+              }
             }
             break;
 
@@ -193,7 +236,7 @@ export class MarkdownExporter {
             result += this.processTable(child);
             break;
 
-          // Math (KaTeX)
+          // Math (KaTeX) and Canvas Links
           case 'span':
             const dataMath = child.getAttribute('data-math');
             const dataType2 = child.getAttribute('data-type');
@@ -201,6 +244,10 @@ export class MarkdownExporter {
               result += `$${dataMath}$`;
             } else if (dataType2 === 'math-block' && dataMath) {
               result += `\n$$${dataMath}$$\n\n`;
+            } else if (dataType2 === 'canvas-link') {
+              // Handle canvas links (now using span instead of a)
+              const canvasName = child.textContent.trim();
+              result += `![${canvasName}]`;
             } else {
               result += content;
             }
@@ -247,16 +294,52 @@ export class MarkdownExporter {
 
     for (let li of listElement.children) {
       if (li.tagName.toLowerCase() === 'li') {
-        const checkbox = li.querySelector('input[type="checkbox"]');
         const marker = ordered ? `${index}.` : '-';
 
-        if (checkbox) {
-          const checked = checkbox.checked ? 'x' : ' ';
-          const text = this.getTextContent(li, checkbox);
-          result += `${marker} [${checked}] ${text}\n`;
-        } else {
-          const content = this.processNode(li, options).trim();
-          result += `${marker} ${content}\n`;
+        // Check for TipTap task item (new structure with data-type attribute)
+        const isTaskItem = li.getAttribute('data-type') === 'taskItem';
+        const taskState = li.getAttribute('data-task-state');
+
+        if (isTaskItem && taskState) {
+          // Map task state to markdown symbol (supports all 23 SmartTask states)
+          const stateToSymbol = {
+            'todo': ' ',
+            'completed': 'x',
+            'in-progress': '/',
+            'urgent': '!',
+            'question': '?',
+            'cancelled': '-',
+            'delegated': '>',
+            // High frequency
+            'starred': '*',
+            'paused': '~',
+            'scheduled': '<',
+            'quote': '"',
+            'info': 'i',
+            'blocked': 'b',
+            // Medium frequency
+            'added': '+',
+            'waiting': 'w',
+            'mentioned': '@',
+            'review': 'R',
+            'duplicate': 'D',
+            'started': 'S'
+          };
+          const symbol = stateToSymbol[taskState] || ' ';
+          const text = this.getTextContent(li);
+          result += `${marker} [${symbol}] ${text}\n`;
+        }
+        // Fallback for legacy checkbox HTML (backward compatibility)
+        else {
+          const checkbox = li.querySelector('input[type="checkbox"]');
+          if (checkbox) {
+            const checked = checkbox.checked ? 'x' : ' ';
+            const text = this.getTextContent(li, checkbox);
+            result += `${marker} [${checked}] ${text}\n`;
+          } else {
+            const content = this.processNode(li, options).trim();
+            result += `${marker} ${content}\n`;
+          }
         }
 
         if (ordered) index++;

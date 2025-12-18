@@ -1,8 +1,6 @@
 #![cfg_attr(mobile, tauri::mobile_entry_point)]
 
-use tauri::{Emitter, Listener};
-
-mod windows;
+mod window_manager;
 mod menu;
 mod theme;
 mod handlers;
@@ -28,7 +26,7 @@ mod file_locking;
 #[cfg(target_os = "macos")]
 mod macos;
 
-use windows::{open_workspace_window, open_preferences_window, open_launcher_window};
+use window_manager::{open_workspace_window, open_preferences_window, open_launcher_window};
 use tauri::Manager;
 use tauri_plugin_store::{StoreBuilder, JsonValue};
 use std::path::PathBuf;
@@ -120,11 +118,11 @@ fn validate_path_internal(path: &str) -> bool {
 }
 
 #[tauri::command]
-fn validate_workspace_path(app: tauri::AppHandle, path: String) -> bool {
+fn validate_workspace_path(_app: tauri::AppHandle, path: String) -> bool {
     #[cfg(target_os = "macos")]
     {
         // Try to resolve bookmark first to get security-scoped access
-        if let Ok(store) = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build() {
+        if let Ok(store) = StoreBuilder::new(&_app, PathBuf::from(".settings.dat")).build() {
             let _ = store.reload();
             if let Some(bookmark_value) = store.get("last_workspace_bookmark") {
                 if let Ok(bookmark_data) = serde_json::from_value::<Vec<u8>>(bookmark_value.clone()) {
@@ -149,10 +147,10 @@ fn validate_workspace_path(app: tauri::AppHandle, path: String) -> bool {
     validate_path_internal(&path)
 }
 
-fn restore_workspace_access(app: &tauri::AppHandle) -> Option<String> {
+fn restore_workspace_access(_app: &tauri::AppHandle) -> Option<String> {
     #[cfg(target_os = "macos")]
     {
-        if let Ok(store) = StoreBuilder::new(app, PathBuf::from(".settings.dat")).build() {
+        if let Ok(store) = StoreBuilder::new(_app, PathBuf::from(".settings.dat")).build() {
             let _ = store.reload();
             if let Some(bookmark_value) = store.get("last_workspace_bookmark") {
                 if let Ok(bookmark_data) = serde_json::from_value::<Vec<u8>>(bookmark_value.clone()) {
@@ -391,7 +389,7 @@ pub fn run() {
       open_workspace_window,
       open_preferences_window,
       open_launcher_window,
-      windows::sync_window_theme,
+      window_manager::sync_window_theme,
       save_last_workspace,
       clear_last_workspace,
       validate_workspace_path,
@@ -452,9 +450,31 @@ pub fn run() {
       sync::git_get_current_branch,
       sync::git_force_push,
       sync::git_force_pull,
+      // Iroh sync commands
+      sync::iroh_check_saved_document,
+      sync::iroh_init_document,
+      sync::iroh_join_document,
+      sync::iroh_leave_document,
+      sync::iroh_get_ticket,
+      sync::iroh_sync_status,
+      sync::iroh_list_peers,
+      sync::iroh_manual_sync,
+      sync::iroh_start_auto_sync,
+      sync::iroh_stop_auto_sync,
+      sync::iroh_notify_file_save,
+      sync::iroh_force_sync_all,
+      sync::iroh_get_sync_metrics,
+      // sync::iroh_reset_and_init_with_key,
+      sync::iroh_get_version,
+      sync::iroh_migrate_to_v2,
+      sync::iroh_configure_sync,
+      sync::iroh_get_metrics,
       credentials::store_git_credentials,
       credentials::retrieve_git_credentials,
       credentials::delete_git_credentials,
+      credentials::store_iroh_keys,
+      credentials::retrieve_iroh_keys,
+      credentials::delete_iroh_keys,
       clipboard::clipboard_write_text,
       clipboard::clipboard_read_text,
       clipboard::clipboard_write_html,
@@ -592,6 +612,12 @@ pub fn run() {
       // Initialize auth state
       let auth_state = auth::SharedAuthState::default();
       app.manage(auth_state);
+
+      // Initialize Iroh sync provider (V1 or V2 based on configuration)
+      // Initialize Iroh provider synchronously (it will be initialized on first use)
+      let provider = sync::wrapper::IrohProviderWrapper::new(sync::wrapper::SyncProviderConfig::default());
+      let iroh_provider = tokio::sync::Mutex::new(provider);
+      app.manage(iroh_provider);
 
       // Initialize OAuth Server
       let oauth_server = oauth_server::OAuthServer::new();

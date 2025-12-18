@@ -5,7 +5,7 @@
 
 use super::{
     FileSystemOperations, SystemIntegration, PlatformProvider, PlatformFeature, PlatformConfig,
-    errors::{PlatformError, PlatformErrorKind, ErrorMessages}
+    errors::{PlatformError, ErrorMessages}
 };
 use std::path::Path;
 use std::process::Command;
