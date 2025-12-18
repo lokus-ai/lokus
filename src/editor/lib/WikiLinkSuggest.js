@@ -137,11 +137,7 @@ const WikiLinkSuggest = Extension.create({
           // Use textBetween with absolute positions to properly handle inline nodes like WikiLinks
           // (parentOffset doesn't align with textContent when WikiLinks are present)
           const textBefore = state.doc.textBetween(Math.max(parentStart, pos - 2), pos)
-
-          const parentContent = $pos.parent.textContent
-          const textBefore = parentContent.slice(Math.max(0, $pos.parentOffset - 2), $pos.parentOffset)
-          const fullTextBefore = parentContent.slice(0, $pos.parentOffset)
-
+          const fullTextBefore = state.doc.textBetween(parentStart, pos)
 
           // Check for [[ pattern (file linking)
           const isAfterDoubleBracket = textBefore.endsWith('[[')
@@ -152,8 +148,6 @@ const WikiLinkSuggest = Extension.create({
           // Check for ^ pattern within [[ ]] (block linking)
           // Look for pattern: [[Filename^ or [[Filename.md^
           const wikiLinkPattern = /\[\[([^\]]+)\^$/
-
-          const fullTextBefore = state.doc.textBetween(parentStart, pos)
           const isAfterCaret = wikiLinkPattern.test(fullTextBefore)
 
           dbg('textBefore check', {
@@ -164,8 +158,6 @@ const WikiLinkSuggest = Extension.create({
             rangeFrom: range.from,
             isAfterCaret
           })
-
-          const isAfterCaret = wikiLinkPattern.test(fullTextBefore)
 
 
           // Use ProseMirror node types for more reliable list detection
