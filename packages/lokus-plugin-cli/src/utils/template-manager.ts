@@ -343,7 +343,7 @@ export default defineConfig({
       reporter: ['text', 'lcov', 'html'],
       exclude: ['node_modules/', 'dist/', '**/*.test.ts', '**/*.spec.ts']
     },
-    setupFiles: ['./src/test/setup.ts']
+    setupFiles: ['./test/setup.ts']
   }
 });`;
   }

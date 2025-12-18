@@ -26,8 +26,15 @@ export const validateCommand = new Command('validate')
         console.error(chalk.red(`Missing required fields: ${missing.join(', ')}`))
         process.exit(1)
       }
-      
-      
+
+      // Validation passed - show success output
+      console.log(chalk.green('✓ Plugin manifest is valid'))
+      console.log(chalk.dim(`  Name: ${manifest.name}`))
+      console.log(chalk.dim(`  Version: ${manifest.version}`))
+      if (manifest.description) {
+        console.log(chalk.dim(`  Description: ${manifest.description}`))
+      }
+
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : String(error))
       process.exit(1)

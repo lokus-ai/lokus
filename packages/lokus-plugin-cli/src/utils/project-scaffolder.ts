@@ -73,8 +73,7 @@ export class ProjectScaffolder {
       await fs.ensureDir(path.join(this.targetDir, dir));
     }
 
-    // Create placeholder icon
-    await fs.writeFile(path.join(this.targetDir, 'icon.png'), '');
+    // Note: icon.png should be created by the user, not as an empty placeholder
   }
 
   /**
@@ -208,6 +207,9 @@ export class ProjectScaffolder {
   // Private helper methods
 
   private async generatePackageJson(): Promise<void> {
+    // Sanitize author name for URLs (replace spaces with dashes, lowercase)
+    const authorSlug = this.options.author.replace(/\s+/g, '-').toLowerCase();
+
     const packageJson = {
       name: this.options.pluginName,
       version: '0.1.0',
@@ -227,12 +229,12 @@ export class ProjectScaffolder {
       ],
       repository: {
         type: 'git',
-        url: `https://github.com/${this.options.author}/${this.options.pluginName}.git`
+        url: `https://github.com/${authorSlug}/${this.options.pluginName}.git`
       },
       bugs: {
-        url: `https://github.com/${this.options.author}/${this.options.pluginName}/issues`
+        url: `https://github.com/${authorSlug}/${this.options.pluginName}/issues`
       },
-      homepage: `https://github.com/${this.options.author}/${this.options.pluginName}#readme`,
+      homepage: `https://github.com/${authorSlug}/${this.options.pluginName}#readme`,
       engines: {
         node: '>=16.0.0',
         lokus: '^1.0.0'
@@ -281,8 +283,11 @@ export class ProjectScaffolder {
 
     // Testing scripts
     if (this.options.testing !== 'none') {
-      scripts.test = this.options.testing;
-      scripts['test:watch'] = `${this.options.testing} --watch`;
+      // Use --run flag for vitest to prevent watch mode during initial test
+      scripts.test = this.options.testing === 'vitest'
+        ? 'vitest --run'
+        : this.options.testing;
+      scripts['test:watch'] = this.options.testing;
       scripts['test:coverage'] = `${this.options.testing} --coverage`;
     }
 
@@ -408,10 +413,14 @@ export class ProjectScaffolder {
   }
 
   private async generatePluginManifest(): Promise<void> {
+    // Sanitize author name for URLs (replace spaces with dashes, lowercase)
+    const authorSlug = this.options.author.replace(/\s+/g, '-').toLowerCase();
+
     const manifest = {
       manifest: '2.0',
       id: this.options.pluginName,
       name: this.options.pluginName,
+      displayName: this.options.pluginName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
       version: '0.1.0',
       description: this.options.description,
       author: this.options.author,
@@ -430,13 +439,13 @@ export class ProjectScaffolder {
       contributes: this.generateContributions(),
       repository: {
         type: 'git',
-        url: `https://github.com/${this.options.author}/${this.options.pluginName}.git`
+        url: `https://github.com/${authorSlug}/${this.options.pluginName}.git`
       },
       bugs: {
-        url: `https://github.com/${this.options.author}/${this.options.pluginName}/issues`
+        url: `https://github.com/${authorSlug}/${this.options.pluginName}/issues`
       },
-      homepage: `https://github.com/${this.options.author}/${this.options.pluginName}#readme`,
-      icon: 'icon.png',
+      homepage: `https://github.com/${authorSlug}/${this.options.pluginName}#readme`,
+      // Icon field is optional - users should provide their own icon.png
       galleryBanner: {
         color: '#2c2c2c',
         theme: 'dark'
