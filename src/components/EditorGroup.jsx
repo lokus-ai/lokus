@@ -65,9 +65,7 @@ export default function EditorGroup({
               try {
                 await canvasManager.saveCanvas(activeFile, canvasData);
                 onContentChange && onContentChange(activeFile, false); // Mark as saved
-              } catch (error) {
-                console.error('Failed to save canvas:', error);
-              }
+              } catch { }
             }}
             onChange={() => {
               onContentChange && onContentChange(activeFile, true); // Mark as unsaved

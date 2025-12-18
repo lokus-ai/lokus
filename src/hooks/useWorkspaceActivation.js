@@ -40,6 +40,8 @@ export function useWorkspaceActivation() {
           const isValid = await WorkspaceManager.validatePath(decodedPath);
           if (isValid) {
             setPath(decodedPath);
+            // Save for refresh recovery
+            WorkspaceManager.saveWorkspacePath(decodedPath);
             setIsInitialized(true);
             return;
           }
@@ -54,8 +56,7 @@ export function useWorkspaceActivation() {
           setIsInitialized(true);
           return;
         }
-      } catch (error) {
-      }
+      } catch { }
 
       // Strategy 3: No valid workspace found, path remains null (shows launcher)
       setIsInitialized(true);
@@ -83,8 +84,9 @@ export function useWorkspaceActivation() {
             const isValid = await WorkspaceManager.validatePath(p);
             if (isValid) {
               setPath(p);
+              // Save for refresh recovery
+              WorkspaceManager.saveWorkspacePath(p);
               setIsInitialized(true);
-            } else {
             }
           }
         })

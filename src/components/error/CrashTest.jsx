@@ -43,7 +43,6 @@ function CrashTest() {
       throw new Error('Test Handled Error - This is intentional for testing crash reporting');
     } catch (error) {
       Sentry.captureException(error);
-      console.error('Captured error:', error);
       alert('Error captured and sent to GlitchTip! Check the dashboard at crash.lokusmd.com');
     }
   };

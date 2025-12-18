@@ -537,8 +537,7 @@ export class AntiLagManager {
     for (const operation of batch) {
       try {
         operation.execute();
-      } catch (error) {
-      }
+      } catch { }
     }
   }
 
@@ -549,8 +548,7 @@ export class AntiLagManager {
     for (const operation of batch) {
       try {
         operation.execute();
-      } catch (error) {
-      }
+      } catch { }
     }
   }
 

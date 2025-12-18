@@ -17,7 +17,6 @@ export default function ProductTour({ autoStart = true, delay = 1500 }) {
       }
     };
 
-
     return () => {
       delete window.lokusDevTour;
     };

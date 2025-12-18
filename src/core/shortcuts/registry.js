@@ -145,13 +145,9 @@ export async function setShortcut(actionId, accelerator) {
   const shortcuts = { ...(cfg.shortcuts || {}), [actionId]: accelerator };
   await updateConfig({ shortcuts });
   if (isTauri) {
-    try { await emit('shortcuts:updated', { actionId, accelerator }); } catch (e) {
-      console.error('Failed to emit shortcuts:updated event:', e);
-    }
+    try { await emit('shortcuts:updated', { actionId, accelerator }); } catch { }
   } else {
-    try { window.dispatchEvent(new CustomEvent('shortcuts:updated', { detail: { actionId, accelerator } })); } catch (e) {
-      console.error('Failed to dispatch shortcuts:updated event:', e);
-    }
+    try { window.dispatchEvent(new CustomEvent('shortcuts:updated', { detail: { actionId, accelerator } })); } catch { }
   }
 }
 
@@ -162,13 +158,9 @@ export async function resetShortcuts() {
     await updateConfig(cfg);
   }
   if (isTauri) {
-    try { await emit('shortcuts:updated', { reset: true }); } catch (e) {
-      console.error('Failed to emit shortcuts:updated event (reset):', e);
-    }
+    try { await emit('shortcuts:updated', { reset: true }); } catch { }
   } else {
-    try { window.dispatchEvent(new CustomEvent('shortcuts:updated', { detail: { reset: true } })); } catch (e) {
-      console.error('Failed to dispatch shortcuts:updated event (reset):', e);
-    }
+    try { window.dispatchEvent(new CustomEvent('shortcuts:updated', { detail: { reset: true } })); } catch { }
   }
 }
 
@@ -208,23 +200,17 @@ export async function registerGlobalShortcuts() {
             // Try to get workspace path from window if available
             const workspacePath = window.__WORKSPACE_PATH__ || null;
             await invoke('open_preferences_window', { workspacePath });
-          } catch (e) {
-            console.error('Failed to open preferences:', e);
-          }
+          } catch { }
         } else {
           // Use Tauri events in Tauri environment, DOM events otherwise
           if (isTauri) {
             try {
               await emit(a.event);
-            } catch (e) {
-              console.error(`Failed to emit event ${a.event}:`, e);
-            }
+            } catch { }
           } else {
             try {
               window.dispatchEvent(new CustomEvent(a.event));
-            } catch (e) {
-              console.error(`Failed to dispatch event ${a.event}:`, e);
-            }
+            } catch { }
           }
         }
       });

@@ -23,9 +23,7 @@ const VersionHistoryPanel = ({ workspacePath, filePath, onClose, onSelectVersion
         filePath,
       });
       setVersions(result || []);
-    } catch (error) {
-      console.error("Failed to load versions:", error);
-    } finally {
+    } catch { } finally {
       setLoading(false);
     }
   };
@@ -47,9 +45,7 @@ const VersionHistoryPanel = ({ workspacePath, filePath, onClose, onSelectVersion
       if (onSelectVersion) {
         onSelectVersion(null);
       }
-    } catch (error) {
-      console.error("Failed to restore version:", error);
-    }
+    } catch { }
   };
 
   const handleViewDiff = (version) => {

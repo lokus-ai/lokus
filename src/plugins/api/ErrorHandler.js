@@ -174,7 +174,6 @@ export class EditorPluginErrorHandler extends EventEmitter {
         strategy.execute(pluginId, errorInfo)
         this.emit('recovery-attempted', { pluginId, strategy: strategy.name, success: true })
       } catch (recoveryError) {
-        console.error(`[ErrorHandler] Recovery failed for ${pluginId}:`, recoveryError)
         this.emit('recovery-attempted', { pluginId, strategy: strategy.name, success: false, error: recoveryError })
       }
     }
@@ -496,25 +495,20 @@ export class EditorPluginErrorHandler extends EventEmitter {
     try {
       // Emit disable event for plugin system to handle
       this.emit('disable-plugin-request', { pluginId, reason })
-    } catch (error) {
-      console.error(`[ErrorHandler] Failed to disable plugin ${pluginId}:`, error)
-    }
+    } catch { }
   }
 
   /**
    * Quarantine plugin for security or critical issues
    */
   quarantinePlugin(pluginId, reason) {
-    console.error(`[ErrorHandler] Quarantining plugin ${pluginId} due to: ${reason}`)
     
     this.quarantinedPlugins.add(pluginId)
     
     try {
       // Emit quarantine event for plugin system to handle
       this.emit('quarantine-plugin-request', { pluginId, reason })
-    } catch (error) {
-      console.error(`[ErrorHandler] Failed to quarantine plugin ${pluginId}:`, error)
-    }
+    } catch { }
   }
 
   /**

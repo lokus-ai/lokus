@@ -6,6 +6,8 @@ const Preferences = lazy(() => import("./views/Preferences"));
 
 import UpdateChecker from "./components/UpdateChecker";
 import { RemoteAnnouncement } from "./components/RemoteAnnouncement";
+import WhatsNew from "./components/WhatsNew";
+import TipOfTheDay from "./components/TipOfTheDay";
 import { Toaster } from "./components/ui/toaster";
 import { PluginDialogContainer } from "./components/PluginDialogContainer";
 import { usePreferenceActivation } from "./hooks/usePreferenceActivation";
@@ -144,8 +146,7 @@ function App() {
           window.removeEventListener('focus', onFocus);
           window.removeEventListener('blur', onBlur);
         };
-      } catch (e) {
-      }
+      } catch { }
     };
 
     const unlistenPromise = setupShortcuts();
@@ -161,8 +162,8 @@ function App() {
 
   return (
     <div className="app-root">
-      {/* Titlebar only for Workspace - Preferences and Launcher don't need it */}
-      {!isPrefsWindow && activePath && (
+      {/* Titlebar for Workspace and Launcher - enables window dragging */}
+      {!isPrefsWindow && (
         <div className="app-titlebar" data-tauri-drag-region></div>
       )}
 
@@ -184,6 +185,8 @@ function App() {
           <UpdateChecker />
         </ToastProvider>
         <RemoteAnnouncement />
+        <WhatsNew />
+        {activePath && <TipOfTheDay />}
         <Toaster />
         <PluginDialogContainer />
       </div>

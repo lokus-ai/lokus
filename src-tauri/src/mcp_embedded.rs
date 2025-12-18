@@ -1,7 +1,11 @@
 /// Embedded MCP Server
 /// This module contains the MCP server code embedded directly in the binary
+/// All dependencies are bundled - no external files needed
 
+/// Bundled MCP server for stdio transport (used by Claude Desktop)
 pub const MCP_SERVER_CODE: &str = include_str!("../resources/mcp-bundle/mcp-server.js");
+
+/// Launcher script for stdio transport
 pub const MCP_INDEX_CODE: &str = r#"#!/usr/bin/env node
 /**
  * Lokus MCP Server Launcher (stdio transport)
@@ -10,14 +14,15 @@ pub const MCP_INDEX_CODE: &str = r#"#!/usr/bin/env node
 require('./mcp-server.js');
 "#;
 
-// TODO: Bundle http-server.js properly - for now use source
-// This will be replaced with proper bundled version
-pub const MCP_HTTP_SERVER_CODE: &str = include_str!("../../src/mcp-server/http-server.js");
+/// Bundled HTTP server for HTTP transport (used by Claude CLI)
+/// This is a fully bundled version with all dependencies included
+pub const MCP_HTTP_SERVER_CODE: &str = include_str!("../resources/mcp-bundle/http-server-bundle.js");
 
 use std::fs;
 use std::path::PathBuf;
 
-/// Extract the embedded MCP server to a temporary directory
+/// Extract the embedded MCP server to ~/.lokus/mcp-server/
+/// All files are self-contained bundles - no external dependencies needed
 pub fn extract_mcp_server() -> Result<PathBuf, String> {
     let home = dirs::home_dir().ok_or("Could not find home directory")?;
     let mcp_dir = home.join(".lokus").join("mcp-server");
@@ -26,76 +31,21 @@ pub fn extract_mcp_server() -> Result<PathBuf, String> {
     fs::create_dir_all(&mcp_dir)
         .map_err(|e| format!("Failed to create MCP directory: {}", e))?;
 
-    // Write bundled MCP server file (for stdio transport)
+    // Write bundled MCP server file (for stdio transport - Claude Desktop)
     let server_path = mcp_dir.join("mcp-server.js");
     fs::write(&server_path, MCP_SERVER_CODE)
         .map_err(|e| format!("Failed to write MCP server: {}", e))?;
 
-    // Write stdio index file (for Desktop)
+    // Write stdio index file (launcher for Desktop)
     let index_path = mcp_dir.join("index.js");
     fs::write(&index_path, MCP_INDEX_CODE)
         .map_err(|e| format!("Failed to write MCP index: {}", e))?;
 
-    // Write HTTP server file (for CLI)
+    // Write bundled HTTP server file (for HTTP transport - Claude CLI)
+    // This is a fully self-contained bundle with all tools/resources included
     let http_server_path = mcp_dir.join("http-server.js");
     fs::write(&http_server_path, MCP_HTTP_SERVER_CODE)
         .map_err(|e| format!("Failed to write HTTP server: {}", e))?;
-
-    // Copy tools directory for http-server.js dependencies
-    // In dev mode, create symlink; in production, copy files
-    {
-        let source_tools = std::env::current_dir()
-            .ok()
-            .and_then(|d| Some(d.parent()?.join("src/mcp-server")));
-
-        if let Some(source_dir) = source_tools {
-            if source_dir.exists() {
-                let target_tools = mcp_dir.join("tools");
-                let target_utils = mcp_dir.join("utils");
-                let target_resources = mcp_dir.join("resources");
-                let target_workspace_matcher = mcp_dir.join("workspace-matcher.js");
-
-                // Remove old symlinks/dirs if they exist
-                let _ = fs::remove_dir_all(&target_tools);
-                let _ = fs::remove_dir_all(&target_utils);
-                let _ = fs::remove_dir_all(&target_resources);
-                let _ = fs::remove_file(&target_workspace_matcher);
-
-                // In debug mode, create symlinks (faster)
-                #[cfg(all(unix, debug_assertions))]
-                {
-                    use std::os::unix::fs::symlink;
-                    let _ = symlink(source_dir.join("tools"), &target_tools);
-                    let _ = symlink(source_dir.join("utils"), &target_utils);
-                    let _ = symlink(source_dir.join("resources"), &target_resources);
-                    let _ = symlink(source_dir.join("workspace-matcher.js"), &target_workspace_matcher);
-                }
-
-                // In production or Windows, copy files
-                #[cfg(any(not(debug_assertions), not(unix)))]
-                {
-                    fn copy_dir_all(src: impl AsRef<std::path::Path>, dst: impl AsRef<std::path::Path>) -> std::io::Result<()> {
-                        std::fs::create_dir_all(&dst)?;
-                        for entry in std::fs::read_dir(src)? {
-                            let entry = entry?;
-                            if entry.file_type()?.is_dir() {
-                                copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
-                            } else {
-                                std::fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
-                            }
-                        }
-                        Ok(())
-                    }
-
-                    let _ = copy_dir_all(source_dir.join("tools"), &target_tools);
-                    let _ = copy_dir_all(source_dir.join("utils"), &target_utils);
-                    let _ = copy_dir_all(source_dir.join("resources"), &target_resources);
-                    let _ = std::fs::copy(source_dir.join("workspace-matcher.js"), &target_workspace_matcher);
-                }
-
-            }
-        }
-    }
 
     // Make scripts executable on Unix
     #[cfg(unix)]
@@ -117,8 +67,15 @@ pub fn extract_mcp_server() -> Result<PathBuf, String> {
         http_perms.set_mode(0o755);
         fs::set_permissions(&http_server_path, http_perms)
             .map_err(|e| format!("Failed to set HTTP server permissions: {}", e))?;
-    }
 
+        // Make mcp-server.js executable
+        let mut server_perms = fs::metadata(&server_path)
+            .map_err(|e| format!("Failed to read server permissions: {}", e))?
+            .permissions();
+        server_perms.set_mode(0o755);
+        fs::set_permissions(&server_path, server_perms)
+            .map_err(|e| format!("Failed to set server permissions: {}", e))?;
+    }
 
     Ok(index_path)
 }

@@ -139,7 +139,6 @@ export class GraphDataProcessor {
       this.fileIndex = this.flattenFileStructure(workspaceFiles, excludePatterns, maxDepth);
       this.processingStats.totalFiles = this.fileIndex.length;
 
-
       // Store workspace path globally (but NOT file index - Workspace.jsx manages that)
       if (typeof globalThis !== 'undefined') {
         globalThis.__LOKUS_WORKSPACE_PATH__ = this.workspacePath;
@@ -283,9 +282,7 @@ export class GraphDataProcessor {
           content: content,
           size: content.length
         });
-      } catch (error) {
-        console.error('[GraphDataProcessor] Failed to set metadata for', nodeId, ':', error);
-      }
+      } catch { }
 
       // Extract wiki links from content
       const links = this.extractWikiLinks(content);

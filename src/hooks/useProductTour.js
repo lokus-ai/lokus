@@ -24,7 +24,6 @@ export function useProductTour() {
         const seen = config?.hasSeenProductTour ?? false;
         setHasSeenTour(seen);
       } catch (error) {
-        console.error('Failed to check tour status:', error);
         setHasSeenTour(false); // Default to showing tour on error
       } finally {
         setIsLoading(false);
@@ -38,9 +37,7 @@ export function useProductTour() {
     try {
       await updateConfig({ hasSeenProductTour: true });
       setHasSeenTour(true);
-    } catch (error) {
-      console.error('Failed to mark tour as complete:', error);
-    }
+    } catch { }
   }, []);
 
   const startFullTour = useCallback(() => {
@@ -381,9 +378,7 @@ export function useProductTour() {
     try {
       await updateConfig({ hasSeenProductTour: false });
       setHasSeenTour(false);
-    } catch (error) {
-      console.error('Failed to reset tour:', error);
-    }
+    } catch { }
   }, []);
 
   return {

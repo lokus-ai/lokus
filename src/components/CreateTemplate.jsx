@@ -48,9 +48,7 @@ export default function CreateTemplate({
     if (open) {
       try {
         setCategories(getCategories());
-      } catch (err) {
-        console.error('Failed to load categories:', err);
-      }
+      } catch { }
     }
   }, [open, getCategories]);
 
@@ -66,7 +64,6 @@ export default function CreateTemplate({
           try {
             processedContent = htmlToMarkdown.convert(initialContent);
           } catch (err) {
-            console.error('HTML to Markdown conversion failed:', err);
             processedContent = initialContent;
           }
         }

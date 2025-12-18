@@ -280,7 +280,6 @@ function isValidCanvasNode(node) {
   // Validate node type
   const validTypes = ['text', 'file', 'group', 'image', 'link'];
   if (!validTypes.includes(node.type)) {
-    console.error(`[Canvas Validator] Invalid node type: "${node.type}". Valid types: ${validTypes.join(', ')}`);
     return false;
   }
 

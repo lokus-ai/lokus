@@ -149,7 +149,6 @@ export class FileMetadata {
       return metadata;
 
     } catch (error) {
-      console.error(`Failed to extract metadata for ${filePath}:`, error);
       return this.getDefaultMetadata(filePath);
     }
   }
@@ -697,8 +696,7 @@ export class FileMetadata {
     for (const callback of this.listeners) {
       try {
         callback(event);
-      } catch (error) {
-      }
+      } catch { }
     }
   }
 

@@ -45,7 +45,6 @@ function formatDate(date) {
       timeZoneName: 'short'
     });
   } catch (error) {
-    console.error('Error formatting date:', error);
     return 'Invalid date';
   }
 }
@@ -263,8 +262,7 @@ export function generateEmailFilename(email, options = {}) {
       const date = new Date(email.date || email.internalDate);
       const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
       filename += `${dateStr}-`;
-    } catch (error) {
-    }
+    } catch { }
   }
   
   // Add sender info
@@ -356,7 +354,6 @@ export async function saveEmailAsNote(email, workspacePath, options = {}) {
     
     return filePath;
   } catch (error) {
-    console.error('Error saving email as note:', error);
     throw new Error(`Failed to save email as note: ${error.message}`);
   }
 }
@@ -402,7 +399,6 @@ export async function saveEmailsAsNotes(emails, workspacePath, options = {}) {
         
         return { email, filePath, success: true };
       } catch (error) {
-        console.error(`Error converting email ${email.id || 'unknown'}:`, error);
         
         // Report progress
         if (onProgress) {

@@ -646,8 +646,7 @@ export class UIAPI extends EventEmitter {
 
     try {
       localStorage.setItem('lokus-ui-layout', JSON.stringify(layout));
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -672,8 +671,7 @@ export class UIAPI extends EventEmitter {
           }
         }
       }
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -868,8 +866,7 @@ export class UIAPI extends EventEmitter {
     try {
       const key = `lokus-panel-${panelId}`;
       localStorage.setItem(key, JSON.stringify(state));
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**

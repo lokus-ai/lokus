@@ -284,8 +284,7 @@ export class TaskSyncManager {
       try {
         const content = await callback.getCurrentContent()
         syncPromises.push(this.syncFromEditor(filePath, content))
-      } catch (error) {
-      }
+      } catch { }
     }
 
     return Promise.allSettled(syncPromises)

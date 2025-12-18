@@ -215,8 +215,7 @@ export class FileServer {
         if (watcher.close) {
           watcher.close()
         }
-      } catch (error) {
-      }
+      } catch { }
     }
     
     this.watchedPaths.clear()

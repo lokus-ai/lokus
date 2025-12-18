@@ -59,9 +59,7 @@ export default function EmailViewer({ email, onCompose, onRefresh, workspacePath
         setAttachments([]);
       }
       
-    } catch (error) {
-      console.error('Failed to load email details:', error);
-    } finally {
+    } catch { } finally {
       setLoading(false);
     }
   };
@@ -82,18 +80,14 @@ export default function EmailViewer({ email, onCompose, onRefresh, workspacePath
     try {
       await gmailEmails.archiveEmail(email.id);
       onRefresh();
-    } catch (error) {
-      console.error('Failed to archive email:', error);
-    }
+    } catch { }
   };
 
   const handleDelete = async () => {
     try {
       await gmailEmails.deleteEmail(email.id);
       onRefresh();
-    } catch (error) {
-      console.error('Failed to delete email:', error);
-    }
+    } catch { }
   };
 
   const handleStarToggle = async () => {
@@ -105,14 +99,11 @@ export default function EmailViewer({ email, onCompose, onRefresh, workspacePath
       }
       email.isStarred = !email.isStarred;
       onRefresh();
-    } catch (error) {
-      console.error('Failed to toggle star:', error);
-    }
+    } catch { }
   };
 
   const handleSaveAsNote = async () => {
     if (!workspacePath) {
-      console.error('Workspace path not available');
       return;
     }
 
@@ -132,7 +123,6 @@ export default function EmailViewer({ email, onCompose, onRefresh, workspacePath
       alert(`Email saved as note: ${fileName}`);
       
     } catch (error) {
-      console.error('Failed to save email as note:', error);
       alert(`Failed to save email as note: ${error.message}`);
     } finally {
       setSavingNote(false);
@@ -142,9 +132,7 @@ export default function EmailViewer({ email, onCompose, onRefresh, workspacePath
   const downloadAttachment = async (attachment) => {
     try {
       await gmailEmails.downloadAttachment(email.id, attachment.id, attachment.filename);
-    } catch (error) {
-      console.error('Failed to download attachment:', error);
-    }
+    } catch { }
   };
 
   const formatEmailAddress = (address) => {

@@ -23,7 +23,6 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
     }
   }, [isVisible])
 
-
   // Perform search
   const performSearch = useCallback(() => {
     if (!editor || !query.trim()) {
@@ -87,8 +86,7 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
       const tr = editor.state.tr.setSelection(selection)
       editor.view.dispatch(tr)
       editor.commands.scrollIntoView()
-    } catch (error) {
-    }
+    } catch { }
   }, [editor, matches])
 
   // Navigate to next match
@@ -120,8 +118,7 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
       
       // Re-search after replacing
       setTimeout(() => performSearch(), 100)
-    } catch (error) {
-    }
+    } catch { }
   }, [editor, matches, currentMatch, replaceQuery, performSearch])
 
   // Replace all matches
@@ -141,8 +138,7 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
       
       // Re-search after replacing
       setTimeout(() => performSearch(), 100)
-    } catch (error) {
-    }
+    } catch { }
   }, [editor, matches, replaceQuery, performSearch])
 
   // Handle keyboard shortcuts

@@ -43,7 +43,6 @@ export default function Gmail({ workspacePath }) {
         setUserProfile(profile);
       }
     } catch (error) {
-      console.error('Failed to check auth status:', error);
       setIsAuthenticated(false);
     } finally {
       setLoading(false);
@@ -78,7 +77,6 @@ export default function Gmail({ workspacePath }) {
         setSelectedEmail(null);
       }
     } catch (error) {
-      console.error('Failed to load emails:', error);
       // Show error toast/notification here
     } finally {
       setRefreshing(false);
@@ -96,9 +94,7 @@ export default function Gmail({ workspacePath }) {
       const results = await gmailEmails.searchEmails(query);
       setEmails(results);
       setSearchQuery(query);
-    } catch (error) {
-      console.error('Search failed:', error);
-    } finally {
+    } catch { } finally {
       setRefreshing(false);
     }
   };
@@ -115,7 +111,7 @@ export default function Gmail({ workspacePath }) {
     setSelectedEmail(email);
     // Mark as read if unread
     if (!email.isRead) {
-      gmailEmails.markAsRead(email.id).catch(console.error);
+      gmailEmails.markAsRead(email.id).catch(() => {});
     }
   };
 
@@ -142,9 +138,7 @@ export default function Gmail({ workspacePath }) {
       
       setSelectedEmails(new Set());
       loadEmails(); // Refresh the list
-    } catch (error) {
-      console.error('Bulk action failed:', error);
-    }
+    } catch { }
   };
 
   const handleLogout = async () => {
@@ -155,9 +149,7 @@ export default function Gmail({ workspacePath }) {
       setEmails([]);
       setSelectedEmail(null);
       setSelectedEmails(new Set());
-    } catch (error) {
-      console.error('Logout failed:', error);
-    }
+    } catch { }
   };
 
   if (loading) {

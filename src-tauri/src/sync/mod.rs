@@ -6,13 +6,19 @@
 pub mod git;
 pub mod iroh;
 pub mod iroh_v2_minimal;
+#[allow(dead_code, unused_variables)]
 pub mod iroh_v2_enterprise;
+#[allow(dead_code, unused_variables)]
 pub mod provider;
+#[allow(dead_code, unused_variables)]
 pub mod file_watcher;
+#[allow(dead_code, unused_variables)]
 pub mod manager;
 pub mod wrapper;
 pub mod commands_simple;
+#[allow(dead_code, unused_variables)]
 pub mod network_monitor;
+#[allow(dead_code, unused_variables)]
 pub mod retry_utils;
 
 // Export Git commands

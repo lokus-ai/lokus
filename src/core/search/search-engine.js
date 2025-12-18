@@ -367,9 +367,7 @@ class SearchEngine {
       });
       this.documents = new Map(data.documents);
       this.notifyListeners('indexImported');
-    } catch (error) {
-      console.error('Failed to import index:', error);
-    }
+    } catch { }
   }
 
   /**
@@ -384,9 +382,7 @@ class SearchEngine {
     this.listeners.forEach(callback => {
       try {
         callback(event, data);
-      } catch (error) {
-        console.error('Listener error:', error);
-      }
+      } catch { }
     });
   }
 }

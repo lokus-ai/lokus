@@ -20,7 +20,6 @@ async function initTauriModules() {
       ({ appDataDir, join } = await import("@tauri-apps/api/path"));
       ({ readTextFile, writeTextFile, mkdir, exists } = await import("@tauri-apps/plugin-fs"));
     } catch (e) {
-      console.error("Failed to load Tauri modules:", e);
       isTauri = false;
     }
   }
@@ -41,7 +40,12 @@ async function readJson(p) {
   if (!isTauri) {
     try { return JSON.parse(localStorage.getItem(BROWSER_KEY) || "null"); } catch { return null; }
   }
-  try { return JSON.parse(await readTextFile(p)); } catch { return null; }
+  try {
+    const content = await readTextFile(p);
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
 }
 
 async function writeJson(p, data) {

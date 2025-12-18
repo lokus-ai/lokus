@@ -48,8 +48,6 @@ class TestRunner {
       this.tests.push({ name, status: 'failed', duration, error: error.message });
       this.failed++;
       if (TEST_CONFIG.verbose) {
-        console.error(`✗ ${name} (${duration}ms)`);
-        console.error(`  Error: ${error.message}`);
       }
     }
   }
@@ -86,7 +84,6 @@ class TestRunner {
  */
 export async function runIntegrationTests() {
   const runner = new TestRunner();
-
 
   // Test 1: Filter System
   await runner.test('Filters - String filters work correctly', async () => {
@@ -491,8 +488,7 @@ export async function runSmokeTests() {
         passed++;
       } else {
       }
-    } catch (error) {
-    }
+    } catch { }
   }
 
   return { total: tests.length, passed };

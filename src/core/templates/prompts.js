@@ -185,7 +185,6 @@ export class TemplatePrompts {
       return template;
     }
 
-
     let result = template;
 
     // Replace all prompt types
@@ -197,7 +196,6 @@ export class TemplatePrompts {
 
     const afterCheckbox = this.replaceCheckboxPrompts(result, values);
     result = afterCheckbox;
-
 
     return result;
   }
@@ -213,7 +211,6 @@ export class TemplatePrompts {
     const result = template.replace(this.promptPattern, (fullMatch, varName, question, defaultValue = '') => {
       matchCount++;
       const trimmedVarName = varName.trim();
-
 
       if (values.hasOwnProperty(trimmedVarName)) {
         const replacement = String(values[trimmedVarName]);
@@ -240,7 +237,6 @@ export class TemplatePrompts {
       matchCount++;
       const trimmedVarName = varName.trim();
 
-
       if (values.hasOwnProperty(trimmedVarName)) {
         const replacement = String(values[trimmedVarName]);
         return replacement;
@@ -266,7 +262,6 @@ export class TemplatePrompts {
     const result = template.replace(this.checkboxPattern, (fullMatch, varName, question, defaultValue = 'false') => {
       matchCount++;
       const trimmedVarName = varName.trim();
-
 
       if (values.hasOwnProperty(trimmedVarName)) {
         const replacement = String(values[trimmedVarName]);

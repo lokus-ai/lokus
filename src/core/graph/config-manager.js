@@ -68,9 +68,7 @@ async function ensureLokusDir(workspacePath) {
     if (!dirExists) {
       await mkdir(lokusDir, { recursive: true });
     }
-  } catch (error) {
-    console.error('[GraphConfig] Failed to create .lokus directory:', error);
-  }
+  } catch { }
 }
 
 /**
@@ -78,7 +76,6 @@ async function ensureLokusDir(workspacePath) {
  */
 export async function loadGraphConfig(workspacePath) {
   if (!workspacePath) {
-    console.warn('[GraphConfig] No workspace path provided, using defaults');
     return getDefaultConfig();
   }
 
@@ -99,7 +96,6 @@ export async function loadGraphConfig(workspacePath) {
 
     return mergedConfig;
   } catch (error) {
-    console.error('[GraphConfig] Failed to load config:', error);
     return getDefaultConfig();
   }
 }
@@ -109,7 +105,6 @@ export async function loadGraphConfig(workspacePath) {
  */
 export async function saveGraphConfig(workspacePath, config) {
   if (!workspacePath) {
-    console.warn('[GraphConfig] No workspace path provided, cannot save');
     return false;
   }
 
@@ -131,7 +126,6 @@ export async function saveGraphConfig(workspacePath, config) {
 
     return true;
   } catch (error) {
-    console.error('[GraphConfig] Failed to save config:', error);
     return false;
   }
 }

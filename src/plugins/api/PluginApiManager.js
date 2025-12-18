@@ -282,8 +282,7 @@ export class PluginApiManager {
       for (const callback of listeners) {
         try {
           callback(data)
-        } catch (error) {
-        }
+        } catch { }
       }
     }
   }
@@ -394,8 +393,7 @@ export class PluginApiManager {
       try {
         const handler = this.commandRegistry.get(command)
         handler(...(args || []))
-      } catch (error) {
-      }
+      } catch { }
     } else {
       // Emit to other systems (like command palette)
       this.emitEvent('command-execute', payload)

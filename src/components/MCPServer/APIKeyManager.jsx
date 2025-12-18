@@ -48,9 +48,7 @@ export default function APIKeyManager() {
         }
       ];
       setApiKeys(mockKeys);
-    } catch (error) {
-      console.error('Failed to load API keys:', error);
-    }
+    } catch { }
   };
 
   const generateAPIKey = async (name, permissions) => {
@@ -77,7 +75,6 @@ export default function APIKeyManager() {
       
       return newKey;
     } catch (error) {
-      console.error('Failed to generate API key:', error);
       throw error;
     }
   };
@@ -93,9 +90,7 @@ export default function APIKeyManager() {
         next.delete(keyId);
         return next;
       });
-    } catch (error) {
-      console.error('Failed to revoke API key:', error);
-    }
+    } catch { }
   };
 
   const toggleKeyVisibility = (keyId) => {
@@ -121,9 +116,7 @@ export default function APIKeyManager() {
           return next;
         });
       }, 2000);
-    } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
-    }
+    } catch { }
   };
 
   const toggleKeyStatus = async (keyId) => {
@@ -134,9 +127,7 @@ export default function APIKeyManager() {
       setApiKeys(prev => prev.map(key => 
         key.id === keyId ? { ...key, isActive: !key.isActive } : key
       ));
-    } catch (error) {
-      console.error('Failed to toggle key status:', error);
-    }
+    } catch { }
   };
 
   const formatKey = (key, isVisible) => {

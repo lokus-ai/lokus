@@ -34,7 +34,7 @@ where
 {
     
     let mut attempts = 0;
-    let mut last_error = String::new();
+    let mut last_error;
     
     loop {
         attempts += 1;

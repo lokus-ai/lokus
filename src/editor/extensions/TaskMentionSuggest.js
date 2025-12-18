@@ -39,14 +39,10 @@ async function getAllTasks() {
             }
           }
         }
-      } catch (err) {
-        console.error(`[TaskMentionSuggest] Failed to load board ${boardInfo.name}:`, err)
-      }
+      } catch { }
     }
     return allTasks
-  } catch (error) {
-    console.error('[TaskMentionSuggest] Failed to get tasks:', error)
-  }
+  } catch { }
   return []
 }
 

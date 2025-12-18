@@ -49,8 +49,7 @@ function renderMathHTML(src, displayMode) {
       })
       return rendered
     }
-  } catch (error) {
-  }
+  } catch { }
   // Fallback: show TeX source with delimiters  
   return displayMode ? `$$${src}$$` : `$${src}$`
 }

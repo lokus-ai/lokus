@@ -112,7 +112,6 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   useEffect(() => {
     if (!isVisible || graphDataManager) return; // Prevent duplicate initialization
 
-
     const initializeDataManager = async () => {
       try {
         // Initialize graph data manager (disable persistence to avoid stale cache)
@@ -146,8 +145,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         setGraphData(initialData);
         updateStats(dataManager);
 
-      } catch (error) {
-      }
+      } catch { }
     };
 
     initializeDataManager();
@@ -173,9 +171,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       try {
         const config = await loadGraphConfig(workspacePath);
         setGraphConfig(config);
-      } catch (error) {
-        console.error('[GraphView] Failed to load config:', error);
-      }
+      } catch { }
     };
 
     loadConfig();
@@ -224,9 +220,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
 
       // Forces updated - no restart needed to avoid node spreading on UI changes
       // The simulation will naturally adapt to new force values
-    } catch (error) {
-      console.error('[GraphView] Failed to apply force config:', error);
-    }
+    } catch { }
   }, [viewMode, graphConfig.repelStrength, graphConfig.linkDistance, graphConfig.linkStrength, graphConfig.centerStrength]);
 
   // Initial warmup: Reheat simulation when graph data first loads
@@ -243,9 +237,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         if (simulation) {
           simulation.alpha(1.0).restart(); // Full energy for initial spread
         }
-      } catch (error) {
-        console.error('[GraphView] Failed initial warmup:', error);
-      }
+      } catch { }
     }, 100);
 
     return () => clearTimeout(timer);
@@ -320,9 +312,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         setGraphData(updatedData);
         updateStats(graphDataManager);
 
-      } catch (error) {
-        console.error('Failed to reload graph data:', error);
-      }
+      } catch { }
     }, 150);
 
     return () => {
@@ -350,7 +340,6 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       dataManager.stats.nodeCount = 0;
       dataManager.stats.linkCount = 0;
       dataManager.stats.wikiLinkCount = 0;
-
 
       let files;
 
@@ -408,19 +397,15 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
                   created: Date.now() // Simplified - could get actual file dates
                 }
               });
-            } catch (err) {
-              console.error(`Error processing file ${path}:`, err);
-            }
+            } catch { }
           }
         } catch (error) {
-          console.error("Failed to bulk read files:", error);
           // Fallback to sequential reading if bulk fails
           for (const file of markdownFiles) {
             // ... existing sequential logic could go here as fallback ...
           }
         }
       }
-
 
     } catch (error) {
       // Fallback to sample data
@@ -523,8 +508,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         await dataManager.getOrCreateWikiLinkNode(concept);
       }
 
-    } catch (error) {
-    }
+    } catch { }
   };
 
   /**
@@ -870,8 +854,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         // Restart simulation to apply changes
         simulation.alpha(0.3).restart();
       }
-    } catch (error) {
-    }
+    } catch { }
   }, [viewMode]);
 
   const handlePresetSelect = useCallback((presetName, presetConfig) => {
@@ -879,11 +862,32 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   }, []);
 
   // Enhanced color schemes - using theme colors
+  // Returns hex color (e.g., "#7c3aed") for Three.js compatibility
+  const DEFAULT_ACCENT = '#6366f1';
+  const DEFAULT_MUTED = '#6b7280';
+
+  // Validate that a string is a valid hex color
+  const isValidHexColor = (color) => {
+    if (typeof color !== 'string') return false;
+    return /^#[0-9A-Fa-f]{6}$/.test(color) || /^#[0-9A-Fa-f]{3}$/.test(color);
+  };
+
   const getThemeColor = (varName, fallback) => {
     if (typeof window === 'undefined') return fallback;
-    const root = getComputedStyle(document.documentElement);
-    const value = root.getPropertyValue(varName).trim();
-    return value ? `rgb(${value})` : fallback;
+    try {
+      const root = getComputedStyle(document.documentElement);
+      const value = root.getPropertyValue(varName).trim();
+      if (!value) return fallback;
+      // Convert space-separated RGB (e.g., "124 58 237") to hex for Three.js compatibility
+      const parts = value.split(' ').map(Number);
+      if (parts.length === 3 && parts.every(n => !isNaN(n) && n >= 0 && n <= 255)) {
+        // Round to integers to avoid invalid hex from floats (e.g., 124.5 -> "7c.8")
+        return `#${parts.map(n => Math.round(n).toString(16).padStart(2, '0')).join('')}`;
+      }
+      return fallback;
+    } catch {
+      return fallback;
+    }
   };
 
   const colorSchemes = {
@@ -922,63 +926,75 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     custom: nodeGroups // User-defined color groups
   };
 
-  // Node styling functions
+  // Node styling functions - returns validated hex colors only
   const getNodeColor = useCallback((node) => {
-    if (selectedNodes.includes(node.id)) {
-      return getThemeColor('--accent', '#6366f1'); // Highlight with theme accent
-    }
+    // Helper to safely return a color with validation
+    const safeColor = (color) => {
+      if (color && isValidHexColor(color)) return color;
+      return DEFAULT_ACCENT;
+    };
 
-    const scheme = colorSchemes[colorScheme] || colorSchemes.type;
+    try {
+      if (selectedNodes.includes(node.id)) {
+        return safeColor(getThemeColor('--accent', DEFAULT_ACCENT));
+      }
 
-    switch (colorScheme) {
-      case 'type':
-        return scheme[node.type] || scheme.document || getThemeColor('--accent', '#6366f1');
+      const scheme = colorSchemes[colorScheme] || colorSchemes.type;
 
-      case 'folder':
-        if (node.metadata?.path) {
-          const depth = node.metadata.path.split('/').length - 1;
-          return scheme[`depth${Math.min(depth, 5)}`] || scheme.default;
-        }
-        return scheme.default;
+      switch (colorScheme) {
+        case 'type':
+          return safeColor(scheme[node.type] || scheme.document);
 
-      case 'tag':
-        if (node.metadata?.tags && node.metadata.tags.length > 0) {
-          const primaryTag = node.metadata.tags[0].toLowerCase();
-          for (const [category, color] of Object.entries(scheme)) {
-            if (primaryTag.includes(category)) {
-              return color;
+        case 'folder':
+          if (node.metadata?.path) {
+            const depth = node.metadata.path.split('/').length - 1;
+            return safeColor(scheme[`depth${Math.min(depth, 5)}`] || scheme.default);
+          }
+          return safeColor(scheme.default);
+
+        case 'tag':
+          if (node.metadata?.tags && node.metadata.tags.length > 0) {
+            const primaryTag = node.metadata.tags[0].toLowerCase();
+            for (const [category, color] of Object.entries(scheme)) {
+              if (primaryTag.includes(category)) {
+                return safeColor(color);
+              }
             }
           }
-        }
-        return scheme.note;
+          return safeColor(scheme.note);
 
-      case 'creation-date':
-      case 'modification-date':
-        if (node.metadata?.created || node.metadata?.modified) {
-          const date = new Date(node.metadata.created || node.metadata.modified);
-          const now = new Date();
-          const daysDiff = (now - date) / (1000 * 60 * 60 * 24);
+        case 'creation-date':
+        case 'modification-date':
+          if (node.metadata?.created || node.metadata?.modified) {
+            const date = new Date(node.metadata.created || node.metadata.modified);
+            const now = new Date();
+            const daysDiff = (now - date) / (1000 * 60 * 60 * 24);
 
-          if (daysDiff < 7) return scheme.recent;
-          if (daysDiff < 30) return scheme.week;
-          if (daysDiff < 90) return scheme.month;
-          return scheme.old;
-        }
-        return scheme.old;
+            if (daysDiff < 7) return safeColor(scheme.recent);
+            if (daysDiff < 30) return safeColor(scheme.week);
+            if (daysDiff < 90) return safeColor(scheme.month);
+            return safeColor(scheme.old) || DEFAULT_MUTED;
+          }
+          return safeColor(scheme.old) || DEFAULT_MUTED;
 
-      case 'custom':
-        // Check if node belongs to any custom group
-        if (Array.isArray(nodeGroups)) {
-          for (const group of nodeGroups) {
-            if (group.nodeIds && group.nodeIds.includes(node.id)) {
-              return group.color;
+        case 'custom':
+          if (Array.isArray(nodeGroups)) {
+            for (const group of nodeGroups) {
+              if (group.nodeIds && group.nodeIds.includes(node.id)) {
+                if (group.color && isValidHexColor(group.color)) {
+                  return group.color;
+                }
+              }
             }
           }
-        }
-        return getThemeColor('--accent', '#6366f1');
+          return safeColor(getThemeColor('--accent', DEFAULT_ACCENT));
 
-      default:
-        return colorSchemes.type[node.type] || getThemeColor('--accent', '#6366f1');
+        default:
+          return safeColor(colorSchemes.type[node.type]);
+      }
+    } catch {
+      // Ultimate fallback
+      return DEFAULT_ACCENT;
     }
   }, [selectedNodes, colorScheme, nodeGroups]);
 
@@ -999,15 +1015,26 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   }, [selectedNodes, graphConfig.nodeSizeMultiplier]);
 
   const getLinkColor = useCallback((link) => {
-    const sourceSelected = selectedNodes.includes(link.source?.id || link.source);
-    const targetSelected = selectedNodes.includes(link.target?.id || link.target);
+    try {
+      const sourceSelected = selectedNodes.includes(link.source?.id || link.source);
+      const targetSelected = selectedNodes.includes(link.target?.id || link.target);
 
-    if (sourceSelected || targetSelected) {
-      const accentColor = getThemeColor('--accent', '#6366f1');
-      return accentColor + '80'; // Theme accent with transparency
+      if (sourceSelected || targetSelected) {
+        // Return hex color (Three.js in 3D mode doesn't support rgba)
+        const color = getThemeColor('--accent', DEFAULT_ACCENT);
+        return isValidHexColor(color) ? color : DEFAULT_ACCENT;
+      }
+      // Validate link.color before using it - invalid colors crash polished/Three.js
+      if (link.color && isValidHexColor(link.color)) {
+        return link.color;
+      }
+      // Return safe default hex color
+      const color = getThemeColor('--muted', DEFAULT_MUTED);
+      return isValidHexColor(color) ? color : DEFAULT_MUTED;
+    } catch {
+      // Ultimate fallback - must always return valid hex
+      return DEFAULT_MUTED;
     }
-    const mutedColor = getThemeColor('--muted', '#ffffff');
-    return link.color || mutedColor + '40'; // Theme muted with low opacity
   }, [selectedNodes]);
 
   const getLinkWidth = useCallback((link) => {

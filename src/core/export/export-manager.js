@@ -231,7 +231,6 @@ export class ExportManager {
 
       return files;
     } catch (error) {
-      console.error('Error getting folder files:', error);
       return [];
     }
   }
@@ -320,7 +319,6 @@ export class ExportManager {
         size: stats.size,
       };
     } catch (error) {
-      console.error('Error getting file metadata:', error);
       return {
         title: this.getBaseName(filePath),
       };
@@ -344,9 +342,7 @@ export class ExportManager {
           // Convert local image to base64
           const base64 = await this.imageToBase64(src);
           img.setAttribute('src', base64);
-        } catch (error) {
-          console.error('Error embedding image:', error);
-        }
+        } catch { }
       }
     }
 

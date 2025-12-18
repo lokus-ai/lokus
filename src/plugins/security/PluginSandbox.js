@@ -489,8 +489,7 @@ export class PluginSandbox extends EventEmitter {
         })
       }
 
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**

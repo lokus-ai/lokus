@@ -467,7 +467,6 @@ export const dateFilters = {
 
       return format(date, correctedPattern);
     } catch (error) {
-      console.error('[dateFormat filter] Error:', error);
       return `[Date format error: ${error.message}]`;
     }
   },
@@ -552,7 +551,6 @@ export const dateFilters = {
 
       return formatDistance(date, new Date(), { addSuffix: true });
     } catch (error) {
-      console.error('[timeAgo filter] Error:', error);
       return `[Time ago error]`;
     }
   },
@@ -581,7 +579,6 @@ export const dateFilters = {
 
       return formatDistance(date, new Date(), { addSuffix: true });
     } catch (error) {
-      console.error('[fromNow filter] Error:', error);
       return `[From now error]`;
     }
   },

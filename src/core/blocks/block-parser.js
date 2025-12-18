@@ -293,7 +293,6 @@ export async function parseBlocksFromFile(filePath) {
     // Fallback for non-Tauri environments (testing, etc.)
     return []
   } catch (error) {
-    console.error('[BlockParser] Error reading file:', filePath, error)
     return []
   }
 }
@@ -335,7 +334,6 @@ function extractBlockFromHTML(html, blockId) {
 
     return element.outerHTML
   } catch (error) {
-    console.error('[BlockParser] Error extracting block from HTML:', error)
     return null
   }
 }
@@ -438,7 +436,6 @@ export async function extractBlockContent(filePath, blockId) {
 
     return null
   } catch (error) {
-    console.error('[BlockParser] Error extracting block content:', error)
     return null
   }
 }

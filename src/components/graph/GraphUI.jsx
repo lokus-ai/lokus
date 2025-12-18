@@ -83,7 +83,6 @@ export const GraphUI = ({
 
       if (e.key === 'Escape') {
         setIsSearchFocused(false);
-        setShowSettings(false);
         searchInputRef.current?.blur();
       }
 
@@ -353,7 +352,6 @@ const ControlsPanel = ({
   </div>
 );
 
-
 // Statistics Panel Component
 const StatsPanel = ({ stats }) => (
   <div className="stats-panel">
@@ -403,7 +401,6 @@ const StatsPanel = ({ stats }) => (
     </div>
   </div>
 );
-
 
 // Node Information Card Component
 const NodeInfoCard = ({ node }) => (

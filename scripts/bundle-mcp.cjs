@@ -2,7 +2,9 @@
 
 /**
  * Bundle MCP Server for Production
- * Creates a self-contained MCP server bundle that works without node_modules
+ * Creates self-contained MCP server bundles that work without node_modules
+ * - mcp-server.js: stdio transport (Claude Desktop)
+ * - http-server-bundle.js: HTTP transport (Claude CLI)
  */
 
 const fs = require('fs');
@@ -21,7 +23,13 @@ if (!fs.existsSync(DIST_DIR)) {
 
 console.log('🔨 Bundling MCP Server for production...');
 
-// Use esbuild or webpack to bundle the MCP server
+// Common esbuild options for Node.js builtins
+const nodeExternals = [
+  'fs', 'fs/promises', 'path', 'os', 'child_process', 'crypto', 'url', 'util',
+  'stream', 'buffer', 'events', 'querystring', 'string_decoder', 'timers',
+  'zlib', 'http', 'https', 'net', 'tls', 'dns', 'readline'
+].map(ext => `--external:${ext}`).join(' ');
+
 try {
   // First, install esbuild if not present
   try {
@@ -31,38 +39,38 @@ try {
     execSync('npm install --save-dev esbuild', { cwd: ROOT_DIR, stdio: 'inherit' });
   }
 
-  // Bundle the MCP server with all dependencies
-  console.log('🎯 Creating self-contained bundle...');
+  // 1. Bundle the stdio MCP server (for Claude Desktop)
+  console.log('🎯 Bundling stdio server (index.js -> mcp-server.js)...');
 
-  const esbuildCmd = `npx esbuild "${MCP_DIR}/index.js" \
+  const stdioBundleCmd = `npx esbuild "${MCP_DIR}/index.js" \
     --bundle \
     --platform=node \
     --target=node18 \
     --outfile="${DIST_DIR}/mcp-server.js" \
     --minify \
-    --external:fs \
-    --external:path \
-    --external:os \
-    --external:child_process \
-    --external:crypto \
-    --external:url \
-    --external:util \
-    --external:stream \
-    --external:buffer \
-    --external:events \
-    --external:querystring \
-    --external:string_decoder \
-    --external:timers \
-    --external:zlib \
-    --external:http \
-    --external:https \
-    --external:net \
-    --external:tls \
-    --external:dns \
-    --external:readline \
+    ${nodeExternals} \
+    --format=cjs \
+    --banner:js="#!/usr/bin/env node"`;
+
+  execSync(stdioBundleCmd, { cwd: ROOT_DIR, stdio: 'inherit' });
+  console.log('✅ mcp-server.js bundled');
+
+  // 2. Bundle the HTTP server (for Claude CLI)
+  console.log('🎯 Bundling HTTP server (http-server.js -> http-server-bundle.js)...');
+
+  // Use CJS format for Node.js compatibility (no package.json type:module needed)
+  // Don't add banner - source file already has shebang
+  const httpBundleCmd = `npx esbuild "${MCP_DIR}/http-server.js" \
+    --bundle \
+    --platform=node \
+    --target=node18 \
+    --outfile="${DIST_DIR}/http-server-bundle.js" \
+    --minify \
+    ${nodeExternals} \
     --format=cjs`;
 
-  execSync(esbuildCmd, { cwd: ROOT_DIR, stdio: 'inherit' });
+  execSync(httpBundleCmd, { cwd: ROOT_DIR, stdio: 'inherit' });
+  console.log('✅ http-server-bundle.js bundled');
 
   // Copy package.json (minimal version)
   const packageJson = {
@@ -89,13 +97,18 @@ require('./mcp-server.js');
 
   fs.writeFileSync(path.join(DIST_DIR, 'index.js'), launcher);
   fs.chmodSync(path.join(DIST_DIR, 'index.js'), '755');
+  fs.chmodSync(path.join(DIST_DIR, 'mcp-server.js'), '755');
+  fs.chmodSync(path.join(DIST_DIR, 'http-server-bundle.js'), '755');
 
-  console.log('✅ MCP Server bundled successfully!');
+  console.log('');
+  console.log('✅ MCP Server bundles created successfully!');
   console.log(`📁 Output: ${DIST_DIR}`);
 
-  // Show bundle size
-  const stats = fs.statSync(path.join(DIST_DIR, 'mcp-server.js'));
-  console.log(`📊 Bundle size: ${(stats.size / 1024).toFixed(2)} KB`);
+  // Show bundle sizes
+  const stdioStats = fs.statSync(path.join(DIST_DIR, 'mcp-server.js'));
+  const httpStats = fs.statSync(path.join(DIST_DIR, 'http-server-bundle.js'));
+  console.log(`📊 stdio server (mcp-server.js): ${(stdioStats.size / 1024).toFixed(2)} KB`);
+  console.log(`📊 HTTP server (http-server-bundle.js): ${(httpStats.size / 1024).toFixed(2)} KB`);
 
 } catch (error) {
   console.error('❌ Bundling failed:', error.message);

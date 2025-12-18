@@ -25,9 +25,7 @@ async function openWorkspace(path) {
     if (visuals && visuals.theme) {
       await setGlobalActiveTheme(visuals.theme);
     }
-  } catch (error) {
-    console.warn('Could not persist theme before opening workspace:', error);
-  }
+  } catch { }
 
   // In test mode or browser mode, transition current window to workspace
   const isTestMode = new URLSearchParams(window.location.search).get('testMode') === 'true';
@@ -58,6 +56,7 @@ async function openWorkspace(path) {
 export default function Launcher() {
   const [recents, setRecents] = useState([]);
   const [isTestMode, setIsTestMode] = useState(false);
+  const [reauthWorkspace, setReauthWorkspace] = useState(null); // { path, name } of workspace needing re-auth
   const toast = useToast();
 
   useEffect(() => {
@@ -107,9 +106,55 @@ export default function Launcher() {
       await WorkspaceManager.saveWorkspacePath(path);
       await openWorkspace(path);
     } else {
-      toast.error("This workspace is no longer accessible. It may have been moved or deleted.");
-      removeRecent(path);
+      // Check if this is a permission issue (needs re-auth) vs actually deleted
+      const needsReauth = await WorkspaceManager.checkNeedsReauth(path);
+      if (needsReauth) {
+        // Workspace exists but permission lost (e.g., after app update)
+        const name = path.split('/').pop() || 'Workspace';
+        setReauthWorkspace({ path, name });
+      } else {
+        // Actually deleted or moved
+        toast.error("This workspace is no longer accessible. It may have been moved or deleted.");
+        removeRecent(path);
+        setRecents(readRecents());
+      }
+    }
+  };
+
+  const handleReauthorize = async () => {
+    if (!reauthWorkspace) return;
+
+    // Open folder picker - user needs to re-select the folder to grant permission
+    const selected = await open({
+      directory: true,
+      defaultPath: reauthWorkspace.path,
+      title: `Re-authorize access to "${reauthWorkspace.name}"`
+    });
+
+    if (selected) {
+      // User selected a folder - this grants new permission
+      const isValid = await WorkspaceManager.validatePath(selected);
+      if (isValid) {
+        addRecent(selected);
+        setRecents(readRecents());
+        await WorkspaceManager.saveWorkspacePath(selected);
+        setReauthWorkspace(null);
+        await openWorkspace(selected);
+      } else {
+        toast.error("The selected folder cannot be used as a workspace.");
+      }
+    }
+  };
+
+  const handleCancelReauth = () => {
+    setReauthWorkspace(null);
+  };
+
+  const handleRemoveStaleWorkspace = () => {
+    if (reauthWorkspace) {
+      removeRecent(reauthWorkspace.path);
       setRecents(readRecents());
+      setReauthWorkspace(null);
     }
   };
 
@@ -124,7 +169,49 @@ export default function Launcher() {
       {/* Test Mode Indicator */}
       {isTestMode && (
         <div className="fixed top-4 right-4 bg-yellow-500 text-black px-3 py-1 rounded-md text-sm font-medium z-50">
-          🧪 Test Mode Active
+          Test Mode Active
+        </div>
+      )}
+
+      {/* Re-authorization Dialog */}
+      {reauthWorkspace && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-app-panel border border-app-border rounded-xl p-6 max-w-md w-full shadow-2xl">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                <Icon path="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" className="w-6 h-6 text-amber-500" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-app-text">Re-authorize Workspace</h3>
+                <p className="text-sm text-app-muted mt-1">
+                  Access to <span className="font-medium text-app-text">"{reauthWorkspace.name}"</span> has been lost, possibly due to an app update.
+                </p>
+                <p className="text-sm text-app-muted mt-2">
+                  Please re-select the folder to restore access.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={handleReauthorize}
+                className="flex-1 px-4 py-2.5 bg-app-accent text-app-accent-fg rounded-lg hover:bg-app-accent/90 transition-colors font-medium"
+              >
+                Re-select Folder
+              </button>
+              <button
+                onClick={handleRemoveStaleWorkspace}
+                className="px-4 py-2.5 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500/30 transition-colors"
+              >
+                Remove
+              </button>
+              <button
+                onClick={handleCancelReauth}
+                className="px-4 py-2.5 bg-app-bg border border-app-border rounded-lg hover:bg-app-panel transition-colors text-app-muted"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
       

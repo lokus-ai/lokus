@@ -43,13 +43,10 @@ export function PluginProvider({ children }) {
 
     // Expose manual loader for dev mode
     window.loadDevPlugin = async (url) => {
-      console.log(`[Manual] Loading dev plugin from ${url}...`);
       try {
         await pluginManager.loadDevPlugin(url);
-        console.log('[Manual] Plugin loaded successfully');
         return "Success";
       } catch (e) {
-        console.error('[Manual] Failed to load plugin:', e);
         throw e;
       }
     };
@@ -81,7 +78,6 @@ export function PluginProvider({ children }) {
               });
             }
           } catch (error) {
-            console.error("Failed to load dev plugin from deep link:", error);
             toast({
               title: "Plugin Load Failed",
               description: error.message,

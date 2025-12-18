@@ -96,7 +96,6 @@ export async function generatePreview(canvasPath) {
     return cacheSvg(canvasPath, svg);
 
   } catch (error) {
-    console.error(`[Preview Generator] Error generating preview for ${canvasPath}:`, error.message);
 
     // Return error placeholder SVG
     const errorSvg = createErrorSvg(error.message);

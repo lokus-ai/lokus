@@ -71,7 +71,6 @@ export const macosPathUtils = {
         const home = await homeDir();
         return path.replace('~/', home.endsWith('/') ? home : `${home}/`);
       } catch (error) {
-        console.error('Failed to expand tilde path:', error);
         // Fallback: return path as-is if we can't get home dir
         return path;
       }

@@ -30,18 +30,13 @@ const SlashCommandList = forwardRef((props, ref) => {
   }, [allItems]);
 
   const selectItem = (itemTitle) => {
-    console.log('[SlashCommandList] selectItem called with:', itemTitle);
     const item = allItems.find(i => i.title.toLowerCase() === itemTitle?.toLowerCase());
-    console.log('[SlashCommandList] Found item:', item);
     if (item) {
-      console.log('[SlashCommandList] Executing command for item:', item.title);
       if (typeof props.command === 'function') {
         props.command(item);
       } else {
-        console.error('[SlashCommandList] props.command is not a function:', props.command);
       }
     } else {
-      console.warn('[SlashCommandList] Item not found for title:', itemTitle);
     }
   };
 

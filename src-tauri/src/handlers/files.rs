@@ -365,8 +365,7 @@ pub async fn copy_external_files_to_workspace(
             tokio::fs::copy(source, &target_path).await.map(|_| ())
         } {
             Ok(_) => result.success.push(target_path.to_string_lossy().to_string()),
-            Err(e) => {
-                eprintln!("Failed to copy {}: {}", file_path, e);
+            Err(_) => {
                 result.failed.push(file_path);
             }
         }

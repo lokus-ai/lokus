@@ -255,7 +255,6 @@ export class PluginCompatibilityTester extends EventEmitter {
       return result
       
     } catch (error) {
-      console.error(`[Test] ${testName} - ERROR:`, error)
       throw error
     }
   }
@@ -310,7 +309,6 @@ export class PluginCompatibilityTester extends EventEmitter {
       return result
       
     } catch (error) {
-      console.error(`[Test] ${testName} - ERROR:`, error)
       throw error
     }
   }
@@ -362,7 +360,6 @@ export class PluginCompatibilityTester extends EventEmitter {
       return result
       
     } catch (error) {
-      console.error(`[Test] ${testName} - ERROR:`, error)
       throw error
     }
   }
@@ -410,7 +407,6 @@ export class PluginCompatibilityTester extends EventEmitter {
       return result
       
     } catch (error) {
-      console.error(`[Test] ${testName} - ERROR:`, error)
       throw error
     }
   }
@@ -451,7 +447,6 @@ export class PluginCompatibilityTester extends EventEmitter {
       return result
       
     } catch (error) {
-      console.error(`[Test] ${testName} - ERROR:`, error)
       throw error
     }
   }
@@ -486,7 +481,6 @@ export class PluginCompatibilityTester extends EventEmitter {
       return result
       
     } catch (error) {
-      console.error(`[Test] ${testName} - ERROR:`, error)
       throw error
     }
   }
@@ -532,7 +526,6 @@ export class PluginCompatibilityTester extends EventEmitter {
       return result
       
     } catch (error) {
-      console.error(`[Test] ${testName} - ERROR:`, error)
       throw error
     }
   }
@@ -573,7 +566,6 @@ export class PluginCompatibilityTester extends EventEmitter {
       return result
       
     } catch (error) {
-      console.error(`[Test] ${testName} - ERROR:`, error)
       throw error
     }
   }
@@ -618,7 +610,6 @@ export class PluginCompatibilityTester extends EventEmitter {
       return result
       
     } catch (error) {
-      console.error(`[Test] ${testName} - ERROR:`, error)
       throw error
     }
   }
@@ -657,7 +648,6 @@ export class PluginCompatibilityTester extends EventEmitter {
       return result
       
     } catch (error) {
-      console.error(`[Test] ${testName} - ERROR:`, error)
       throw error
     }
   }
@@ -694,7 +684,6 @@ export class PluginCompatibilityTester extends EventEmitter {
       return result
       
     } catch (error) {
-      console.error(`[Test] ${testName} - ERROR:`, error)
       throw error
     }
   }
@@ -732,7 +721,6 @@ export class PluginCompatibilityTester extends EventEmitter {
       return result
       
     } catch (error) {
-      console.error(`[Test] ${testName} - ERROR:`, error)
       throw error
     }
   }
@@ -841,8 +829,7 @@ export class PluginCompatibilityTester extends EventEmitter {
     for (const [pluginId, plugin] of this.mockPlugins) {
       try {
         await extensionManager.unloadPluginExtensions(pluginId)
-      } catch (error) {
-      }
+      } catch { }
     }
     
     this.mockPlugins.clear()

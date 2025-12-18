@@ -146,9 +146,7 @@ ${replyToEmail.textContent || replyToEmail.content || ''}`;
       await gmailEmails.saveDraft(draftData);
       setLastSaved(new Date());
       setIsDirty(false);
-    } catch (error) {
-      console.error('Failed to save draft:', error);
-    }
+    } catch { }
   };
 
   const handleSend = async () => {
@@ -175,7 +173,6 @@ ${replyToEmail.textContent || replyToEmail.content || ''}`;
       await gmailEmails.sendEmail(emailData);
       onSend();
     } catch (error) {
-      console.error('Failed to send email:', error);
       alert('Failed to send email. Please try again.');
     } finally {
       setSending(false);

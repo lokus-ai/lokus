@@ -273,8 +273,7 @@ export const searchInFiles = async (query, files, options = {}) => {
           matchCount: fileMatches.length
         });
       }
-    } catch (error) {
-    }
+    } catch { }
   }
 
   return results;

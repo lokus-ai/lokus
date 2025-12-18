@@ -48,7 +48,6 @@ export class SecureTemplateSandbox {
       this.isolate = new ivm.Isolate({
         memoryLimit: this.memoryLimit,
         onCatastrophicError: (err) => {
-          console.error('Catastrophic isolate error:', err);
         }
       });
 

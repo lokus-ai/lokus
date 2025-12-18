@@ -125,8 +125,7 @@ export default function WikiLinkModal({
 
       setFiles(filteredFiles)
       setFilteredFiles(filteredFiles)
-    } catch (error) {
-    } finally {
+    } catch { } finally {
       setIsLoading(false)
     }
   }

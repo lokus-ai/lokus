@@ -39,7 +39,6 @@ export function useImageViewer(initialImagePath, allImageFiles, onPathChange) {
         setLoading(false);
       })
       .catch((err) => {
-        console.error('Failed to load image:', err);
         setError(err);
         setLoading(false);
       });

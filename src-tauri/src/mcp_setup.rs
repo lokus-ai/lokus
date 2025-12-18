@@ -281,6 +281,22 @@ Happy note-taking! ✨
 
     /// Check if setup has been completed
     pub fn is_setup_complete(&self) -> bool {
+        // First check if MCP server files actually exist
+        let home = match dirs::home_dir() {
+            Some(h) => h,
+            None => return false,
+        };
+
+        let mcp_dir = home.join(".lokus").join("mcp-server");
+        let index_exists = mcp_dir.join("index.js").exists();
+        let http_server_exists = mcp_dir.join("http-server.js").exists();
+
+        // If MCP files don't exist, setup is not complete
+        if !index_exists || !http_server_exists {
+            return false;
+        }
+
+        // Then check if Desktop config is set up
         if let Ok(config_path) = self.get_ai_desktop_config_path() {
             if !config_path.exists() {
                 return false;

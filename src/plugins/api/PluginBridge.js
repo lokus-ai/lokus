@@ -40,7 +40,6 @@ export function createBridgedEditorAPI(pluginId) {
          */
         removeExtension: (extensionId) => {
             // TODO: Implement granular unregistration in EditorAPI
-            console.warn(`[PluginBridge] removeExtension not fully supported yet. ID: ${extensionId}`);
             return false;
         },
 
@@ -56,7 +55,6 @@ export function createBridgedEditorAPI(pluginId) {
          */
         addContextMenuItem: (config) => {
             // TODO: Implement context menu registry in EditorAPI
-            console.warn(`[PluginBridge] addContextMenuItem not supported yet. Plugin: ${pluginId}`);
             return null;
         },
 
@@ -65,7 +63,6 @@ export function createBridgedEditorAPI(pluginId) {
          */
         addDropHandler: (config) => {
             // TODO: Implement drop handler registry in EditorAPI
-            console.warn(`[PluginBridge] addDropHandler not supported yet. Plugin: ${pluginId}`);
             return null;
         },
 
@@ -153,7 +150,6 @@ export function createBridgedEditorAPI(pluginId) {
             // For now, we rely on the fact that EditorAPI tracks contributions
             // and we might need to manually iterate/clear them if EditorAPI exposed a method.
             // Since it doesn't expose a bulk cleanup yet, we log it.
-            console.debug(`[PluginBridge] Cleanup requested for plugin ${pluginId}`);
         },
 
         /**

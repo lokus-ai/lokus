@@ -40,9 +40,7 @@ export function useWindowsFeatures() {
           if (unlisten) unlisten();
           windowsFeatures.cleanupWindowsFeatures();
         };
-      } catch (error) {
-        console.error('Failed to initialize Windows features:', error);
-      }
+      } catch { }
     };
 
     initFeatures();
@@ -54,9 +52,7 @@ export function useWindowsFeatures() {
     
     try {
       await windowsFeatures.jumpList.update(recentWorkspaces);
-    } catch (error) {
-      console.error('Failed to update jump list:', error);
-    }
+    } catch { }
   }, [isWindows]);
 
   // Show Windows notification
@@ -74,9 +70,7 @@ export function useWindowsFeatures() {
 
     try {
       return await windowsFeatures.notifications.show(options);
-    } catch (error) {
-      console.error('Failed to show Windows notification:', error);
-    }
+    } catch { }
   }, [isWindows]);
 
   // Set taskbar progress
@@ -87,9 +81,7 @@ export function useWindowsFeatures() {
     
     try {
       await windowsFeatures.taskbarProgress.setProgress(progress, state);
-    } catch (error) {
-      console.error('Failed to set taskbar progress:', error);
-    }
+    } catch { }
   }, [isWindows]);
 
   // Clear taskbar progress
@@ -100,9 +92,7 @@ export function useWindowsFeatures() {
     
     try {
       await windowsFeatures.taskbarProgress.clear();
-    } catch (error) {
-      console.error('Failed to clear taskbar progress:', error);
-    }
+    } catch { }
   }, [isWindows]);
 
   return {

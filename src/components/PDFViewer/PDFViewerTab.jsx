@@ -36,7 +36,6 @@ export default function PDFViewerTab({ file, onClose }) {
         // Important: Set data in a way that doesn't trigger re-render
         setPdfData(uint8Array);
       } catch (err) {
-        console.error('Failed to load PDF:', err);
         setError('Failed to load PDF file: ' + err.message);
         setLoading(false);
       }
@@ -59,7 +58,6 @@ export default function PDFViewerTab({ file, onClose }) {
   }
 
   function onDocumentLoadError(error) {
-    console.error('Error loading PDF:', error);
     setError('Failed to load PDF file. The file might be corrupted or in an unsupported format.');
     setLoading(false);
     setDocumentLoaded(false);

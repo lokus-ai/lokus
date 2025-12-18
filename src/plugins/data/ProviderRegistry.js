@@ -89,7 +89,6 @@ export class ProviderRegistry extends EventEmitter {
       return providerId
 
     } catch (error) {
-      console.error(`❌ Failed to register provider ${providerId}:`, error)
       this.metrics.errors++
       throw error
     }
@@ -140,7 +139,6 @@ export class ProviderRegistry extends EventEmitter {
       
 
     } catch (error) {
-      console.error(`❌ Failed to unregister provider ${providerId}:`, error)
       this.metrics.errors++
       throw error
     }
@@ -180,7 +178,6 @@ export class ProviderRegistry extends EventEmitter {
       this.emit('activeProviderChanged', { type, providerId, provider })
 
     } catch (error) {
-      console.error(`❌ Failed to set active provider ${providerId}:`, error)
       this.metrics.errors++
       
       // Try to activate fallback
@@ -274,9 +271,7 @@ export class ProviderRegistry extends EventEmitter {
         if (fallbackProvider && fallbackProvider.isConnected) {
           try {
             return await operation(fallbackProvider, ...args)
-          } catch (fallbackError) {
-            console.error(`Fallback ${type} provider also failed:`, fallbackError)
-          }
+          } catch { }
         }
       }
 
@@ -357,9 +352,7 @@ export class ProviderRegistry extends EventEmitter {
     this.healthCheckInterval = setInterval(async () => {
       try {
         await this.performHealthCheck()
-      } catch (error) {
-        console.error('Health check failed:', error)
-      }
+      } catch { }
     }, intervalMs)
   }
 
@@ -405,9 +398,7 @@ export class ProviderRegistry extends EventEmitter {
     if (fallbackProviderId) {
       try {
         await this.setActiveProvider(type, fallbackProviderId)
-      } catch (error) {
-        console.error(`❌ Failed to activate fallback ${type} provider:`, error)
-      }
+      } catch { }
     } else {
       // Try to find any available provider of this type
       const availableProviders = this.getProvidersByType(type)
@@ -416,9 +407,7 @@ export class ProviderRegistry extends EventEmitter {
           try {
             await this.setActiveProvider(type, provider.id)
             break
-          } catch (error) {
-            console.error(`❌ Failed to activate ${type} provider ${provider.id}:`, error)
-          }
+          } catch { }
         }
       }
     }
@@ -437,8 +426,7 @@ export class ProviderRegistry extends EventEmitter {
         this.providerConfigs.set(providerId, config)
       }
 
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -450,9 +438,7 @@ export class ProviderRegistry extends EventEmitter {
       // In a real implementation, this would save to persistent storage
       // localStorage.setItem('lokus-provider-configs', JSON.stringify(configs))
       
-    } catch (error) {
-      console.error('❌ Failed to save provider configurations:', error)
-    }
+    } catch { }
   }
 
   /**
@@ -464,7 +450,6 @@ export class ProviderRegistry extends EventEmitter {
       await this.registerProvider(type, provider, config)
       return provider
     } catch (error) {
-      console.error(`❌ Failed to create ${type} provider ${id}:`, error)
       throw error
     }
   }
@@ -522,9 +507,7 @@ export class ProviderRegistry extends EventEmitter {
       try {
         await provider.disconnect()
         await provider.cleanup?.()
-      } catch (error) {
-        console.error('Error cleaning up provider:', error)
-      }
+      } catch { }
     }
 
     // Save configurations before destroying

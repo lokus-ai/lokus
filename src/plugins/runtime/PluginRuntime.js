@@ -79,8 +79,7 @@ export class PluginRuntime {
       // Emit activation event
       try {
         await emit('plugin-runtime-activated', { pluginId })
-      } catch (error) {
-      }
+      } catch { }
       
       
     } catch (error) {
@@ -105,12 +104,10 @@ export class PluginRuntime {
       // Emit deactivation event
       try {
         await emit('plugin-runtime-deactivated', { pluginId })
-      } catch (error) {
-      }
+      } catch { }
       
       
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -133,8 +130,7 @@ export class PluginRuntime {
       }
       
       
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -412,8 +408,7 @@ export class PluginRuntime {
           }
         }
       }
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -442,8 +437,7 @@ export class PluginRuntime {
             tooltip: 'Time Tracker'
           });
           
-        } catch (error) {
-        }
+        } catch { }
       } else {
         // Generic component registration
         const componentId = `${pluginId}-status-bar`;
@@ -458,8 +452,7 @@ export class PluginRuntime {
           tooltip: `${pluginId} status`
         });
       }
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**

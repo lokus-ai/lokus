@@ -86,7 +86,6 @@ export class ExtensionManager extends EventEmitter {
           successCount++
         } else {
           errorCount++
-          console.error(`[ExtensionManager] ❌ Failed to load extensions for ${pluginId}:`, result.reason)
         }
       })
       
@@ -107,7 +106,6 @@ export class ExtensionManager extends EventEmitter {
       }
       
     } catch (error) {
-      console.error('[ExtensionManager] Failed to load extensions:', error)
       this.emit('load-error', { error })
       throw error
     }
@@ -189,7 +187,6 @@ export class ExtensionManager extends EventEmitter {
         plugin
       })
       
-      console.error(`[ExtensionManager] Failed to load extensions for ${pluginId}:`, error)
       
       // Track error
       const currentErrors = this.errorCounts.get(pluginId) || 0
@@ -266,7 +263,6 @@ export class ExtensionManager extends EventEmitter {
           extension
         })
         
-        console.error(`[ExtensionManager] Failed to register extension for ${pluginId}:`, error)
         // Continue with other extensions even if one fails
       }
     }
@@ -317,7 +313,6 @@ export class ExtensionManager extends EventEmitter {
       this.emit('hot-reload-completed', { pluginId })
       
     } catch (error) {
-      console.error(`[ExtensionManager] Hot reload failed for ${pluginId}:`, error)
       this.emit('hot-reload-failed', { pluginId, error })
     } finally {
       this.isHotReloading = false
@@ -347,7 +342,6 @@ export class ExtensionManager extends EventEmitter {
       this.emit('hot-reload-all-completed')
       
     } catch (error) {
-      console.error('[ExtensionManager] Hot reload all failed:', error)
       this.emit('hot-reload-all-failed', { error })
     }
   }
@@ -400,7 +394,6 @@ export class ExtensionManager extends EventEmitter {
       await this.loadPluginExtensions(pluginId)
     } catch (error) {
       // Error is already handled in loadPluginExtensions
-      console.error(`[ExtensionManager] Failed to load extensions for enabled plugin ${pluginId}:`, error)
     }
   }
   
@@ -420,16 +413,13 @@ export class ExtensionManager extends EventEmitter {
       
       this.emit('plugin-auto-disabled', { pluginId, reason })
       
-    } catch (error) {
-      console.error(`[ExtensionManager] Failed to disable plugin ${pluginId}:`, error)
-    }
+    } catch { }
   }
   
   /**
    * Handle quarantine plugin request from error handler
    */
   async handleQuarantinePluginRequest({ pluginId, reason }) {
-    console.error(`[ExtensionManager] Quarantining plugin ${pluginId} due to: ${reason}`)
     
     try {
       // Unload extensions immediately
@@ -442,9 +432,7 @@ export class ExtensionManager extends EventEmitter {
       
       this.emit('plugin-quarantined', { pluginId, reason })
       
-    } catch (error) {
-      console.error(`[ExtensionManager] Failed to quarantine plugin ${pluginId}:`, error)
-    }
+    } catch { }
   }
   
   /**
@@ -458,9 +446,7 @@ export class ExtensionManager extends EventEmitter {
       
       this.emit('plugin-reloaded', { pluginId, useFallback })
       
-    } catch (error) {
-      console.error(`[ExtensionManager] Failed to reload plugin ${pluginId}:`, error)
-    }
+    } catch { }
   }
   
   /**
@@ -481,9 +467,7 @@ export class ExtensionManager extends EventEmitter {
       
       this.emit('plugin-caches-cleared', { pluginId })
       
-    } catch (error) {
-      console.error(`[ExtensionManager] Failed to clear caches for plugin ${pluginId}:`, error)
-    }
+    } catch { }
   }
   
   /**
@@ -501,9 +485,7 @@ export class ExtensionManager extends EventEmitter {
       
       this.emit('plugin-optimized', { pluginId })
       
-    } catch (error) {
-      console.error(`[ExtensionManager] Failed to optimize plugin ${pluginId}:`, error)
-    }
+    } catch { }
   }
 
   /**
@@ -513,9 +495,7 @@ export class ExtensionManager extends EventEmitter {
     
     try {
       await this.unloadPluginExtensions(pluginId)
-    } catch (error) {
-      console.error(`[ExtensionManager] Failed to unload extensions for disabled plugin ${pluginId}:`, error)
-    }
+    } catch { }
   }
 
   /**
@@ -533,7 +513,6 @@ export class ExtensionManager extends EventEmitter {
    * Handle extension error event
    */
   handleExtensionError({ pluginId, error }) {
-    console.error(`[ExtensionManager] Extension error for plugin ${pluginId}:`, error)
     
     // Track error count
     const currentErrors = this.errorCounts.get(pluginId) || 0
@@ -547,7 +526,6 @@ export class ExtensionManager extends EventEmitter {
    * Handle hot reload error event
    */
   handleHotReloadError({ error }) {
-    console.error('[ExtensionManager] Hot reload error:', error)
     this.emit('hot-reload-error', { error })
   }
 

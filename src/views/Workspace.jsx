@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useRemoteLinks, useUIVisibility, useLayoutDefaults } from "../contexts/RemoteConfigContext";
+import ServiceStatus from "../components/ServiceStatus";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm, save } from "@tauri-apps/plugin-dialog";
@@ -49,7 +51,8 @@ import analytics from "../services/analytics.js";
 import CreateTemplate from "../components/CreateTemplate.jsx";
 import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
 import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
-import { setGlobalActiveTheme, getSystemPreferredTheme, setupSystemThemeListener } from "../core/theme/manager.js";
+import { setGlobalActiveTheme, getSystemPreferredTheme, setupSystemThemeListener, readGlobalVisuals } from "../core/theme/manager.js";
+import { useTheme } from "../hooks/theme.jsx";
 import SplitEditor from "../components/SplitEditor/SplitEditor.jsx";
 import PDFViewerTab from "../components/PDFViewer/PDFViewerTab.jsx";
 import { isPDFFile } from "../utils/pdfUtils.js";
@@ -206,11 +209,10 @@ const Icon = ({ path, className = "w-5 h-5" }) => (
 );
 
 // --- Draggable Column Hook ---
-function useDragColumns({ minLeft = 220, maxLeft = 500, minRight = 220, maxRight = 500 }) {
-  const [leftW, setLeftW] = useState(280);
-  const [rightW, setRightW] = useState(280);
+function useDragColumns({ minLeft = 220, maxLeft = 500, minRight = 220, maxRight = 500, initialLeft = 280, initialRight = 280 }) {
+  const [leftW, setLeftW] = useState(initialLeft);
+  const [rightW, setRightW] = useState(initialRight);
   const dragRef = useRef(null);
-
 
   const startLeftDrag = useCallback((e) => {
     dragRef.current = { side: "left", startX: e.clientX, left0: leftW, right0: rightW };
@@ -435,7 +437,6 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       setRenamingPath(null);
       onRefresh && onRefresh();
     } catch (e) {
-      console.error('Failed to rename:', e);
       toast?.error(`Failed to rename: ${e.message || e}`);
       setRenamingPath(null);
     }
@@ -452,7 +453,6 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       await invoke("write_file_content", { path: `${base}/${name}`, content: "" });
       onRefresh && onRefresh();
     } catch (e) {
-      console.error('Failed to create file:', e);
       toast?.error(`Failed to create file: ${e.message || e}`);
     }
   };
@@ -465,7 +465,6 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       await invoke("create_folder_in_workspace", { workspacePath: base, name });
       onRefresh && onRefresh();
     } catch (e) {
-      console.error('Failed to create folder:', e);
       toast?.error(`Failed to create folder: ${e.message || e}`);
     }
   };
@@ -496,7 +495,6 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
               const content = await invoke('read_file_content', { path: file.path });
               setRightPaneContent(content || '');
             } catch (err) {
-              console.error('Failed to load file content:', err);
               setRightPaneContent('');
             }
           }
@@ -520,17 +518,13 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       case 'revealInFinder':
         try {
           await invoke('platform_reveal_in_file_manager', { path: file.path });
-        } catch (e) {
-          console.error('Failed to reveal in file manager:', e);
-        }
+        } catch { }
         break;
       case 'openInTerminal':
         try {
           const terminalPath = file.is_directory ? file.path : file.path.split("/").slice(0, -1).join("/");
           await invoke('platform_open_terminal', { path: terminalPath });
-        } catch (e) {
-          console.error('Failed to open terminal:', e);
-        }
+        } catch { }
         break;
       case 'cut':
         // Cut file to clipboard
@@ -545,8 +539,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       case 'copyPath':
         try {
           await navigator.clipboard.writeText(file.path);
-        } catch (e) {
-        }
+        } catch { }
         break;
       case 'copyRelativePath':
         try {
@@ -573,8 +566,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
             await invoke('delete_file', { path: file.path });
             onRefresh && onRefresh();
           }
-        } catch (e) {
-        }
+        } catch { }
         break;
       case 'selectForCompare':
         // Select file for comparison
@@ -790,9 +782,7 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
       }
 
       onRefresh();
-    } catch (error) {
-      console.error("Failed to move file:", error);
-    }
+    } catch { }
   };
 
   return (
@@ -1029,11 +1019,24 @@ function EditorDropZone({ children }) {
 // --- Inner Workspace Component (with folder scope) ---
 function WorkspaceWithScope({ path }) {
   const toast = useToast();
+  const { theme: currentTheme } = useTheme();
   const { filterFileTree, scopeMode, scopedFolders } = useFolderScope();
   const { activeBase } = useBases();
-  const { leftW, rightW, startLeftDrag, startRightDrag } = useDragColumns({});
-  const [showLeft, setShowLeft] = useState(true);
-  const [showRight, setShowRight] = useState(false);
+  const remoteLinks = useRemoteLinks();
+  const remoteLinksRef = useRef(remoteLinks);
+  const uiVisibility = useUIVisibility();
+  const layoutDefaults = useLayoutDefaults();
+
+  // Keep ref updated with latest links for event handlers
+  useEffect(() => {
+    remoteLinksRef.current = remoteLinks;
+  }, [remoteLinks]);
+  const { leftW, rightW, startLeftDrag, startRightDrag } = useDragColumns({
+    initialLeft: layoutDefaults.left_sidebar_width,
+    initialRight: layoutDefaults.right_sidebar_width,
+  });
+  const [showLeft, setShowLeft] = useState(layoutDefaults.left_sidebar_visible);
+  const [showRight, setShowRight] = useState(layoutDefaults.right_sidebar_visible);
   const [refreshId, setRefreshId] = useState(0);
 
   // Toggle right sidebar (outline)
@@ -1109,9 +1112,7 @@ function WorkspaceWithScope({ path }) {
           return newSet;
         });
       }
-    } catch (error) {
-      console.error("Failed to reload file:", error);
-    }
+    } catch { }
   }, [activeFile, openTabs]);
 
   // Editor groups system for VSCode-style split view
@@ -1246,7 +1247,6 @@ function WorkspaceWithScope({ path }) {
           }
         }
       }).catch(err => {
-        console.error('[Workspace] Failed to load session:', err);
       });
     }
   }, [path]);
@@ -1316,9 +1316,7 @@ function WorkspaceWithScope({ path }) {
               }
             }
 
-          } catch (error) {
-            console.error('File drop error:', error);
-          } finally {
+          } catch { } finally {
             setHoveredFolder(null);
           }
         });
@@ -1334,9 +1332,7 @@ function WorkspaceWithScope({ path }) {
           setHoveredFolder(null);
         });
 
-      } catch (error) {
-        console.error('Failed to setup file drop listeners:', error);
-      }
+      } catch { }
     };
 
     setupFileDropListeners();
@@ -1375,9 +1371,7 @@ function WorkspaceWithScope({ path }) {
         try {
           const markdownSyntaxConfig = (await import('../core/markdown/syntax-config.js')).default;
           await markdownSyntaxConfig.init();
-        } catch (e) {
-          console.error('[Workspace] Failed to reload markdown config:', e);
-        }
+        } catch { }
       });
       return () => { sub.then((un) => un()); };
     }
@@ -1502,7 +1496,6 @@ function WorkspaceWithScope({ path }) {
           setIsLoadingContent(false); // Loading complete
         })
         .catch((err) => {
-          console.error(`Failed to load file: ${fileToLoad}`, err);
           if (fileToLoad === activeFile) {
             setIsLoadingContent(false);
             // Show error message in editor
@@ -1531,14 +1524,12 @@ function WorkspaceWithScope({ path }) {
     const openPath = (p, switchToTab = true) => {
       if (!p) return;
 
-
       setOpenTabs(prevTabs => {
         const name = getFilename(p);
         const wasAlreadyOpen = prevTabs.some(t => t.path === p);
         const newTabs = prevTabs.filter(t => t.path !== p);
         newTabs.unshift({ path: p, name });
         if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
-
 
         return newTabs;
       });
@@ -1591,8 +1582,7 @@ function WorkspaceWithScope({ path }) {
               setGraphData(updatedGraphData);
             }
           }
-        } catch (error) {
-        }
+        } catch { }
       }
     };
 
@@ -1605,14 +1595,12 @@ function WorkspaceWithScope({ path }) {
       const blockId = e.detail
       if (!blockId) return
 
-
       // Try scrolling multiple times with increasing delays (wait for editor to render)
       const attemptScroll = (delay, attemptNum) => {
         setTimeout(() => {
 
           const editorEl = document.querySelector('.tiptap.ProseMirror')
           if (!editorEl) {
-            console.warn('   ⚠️ Editor element not found')
             return
           }
 
@@ -1678,7 +1666,6 @@ function WorkspaceWithScope({ path }) {
             }, 2000)
 
           } else {
-            console.warn('   ❌ Block not found:', blockId)
             if (attemptNum === 3) {
             }
           }
@@ -1715,7 +1702,6 @@ function WorkspaceWithScope({ path }) {
             : null
         );
       } catch (error) {
-        console.error('Canvas preview error:', error);
         setCanvasPreview(prev =>
           prev?.canvasPath === canvasPath
             ? { ...prev, error: true, loading: false }
@@ -1801,7 +1787,6 @@ function WorkspaceWithScope({ path }) {
     // Throttled versions with 200ms cooldown
     const handleNextTab = throttle(handleNextTabImmediate, 200);
     const handlePrevTab = throttle(handlePrevTabImmediate, 200);
-
 
     let isTauri = false;
     try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch { }
@@ -1926,8 +1911,7 @@ function WorkspaceWithScope({ path }) {
               const tr = editorRef.current.state.tr.setSelection(selection);
               editorRef.current.view.dispatch(tr);
               editorRef.current.commands.scrollIntoView();
-            } catch (error) {
-            }
+            } catch { }
           }
         }, 100);
       }
@@ -1997,7 +1981,6 @@ function WorkspaceWithScope({ path }) {
                 setRightPaneContent(content || '');
               })
               .catch(err => {
-                console.error('Failed to load right pane content:', err);
                 setRightPaneContent('');
               });
           }
@@ -2028,7 +2011,6 @@ function WorkspaceWithScope({ path }) {
       return;
     }
     lastCloseTimeRef.current = now;
-
 
     const closeTab = () => {
       setOpenTabs(prevTabs => {
@@ -2075,9 +2057,7 @@ function WorkspaceWithScope({ path }) {
           closeTab();
         } else {
         }
-      } catch (error) {
-        console.error('[TabClose] Error showing dialog:', error);
-      } finally {
+      } catch { } finally {
         isShowingDialogRef.current = false;
         currentlyClosingPathRef.current = null;
       }
@@ -2142,8 +2122,7 @@ function WorkspaceWithScope({ path }) {
           body: body.replace(/<!--.*?-->/gs, '').trim() // Remove HTML comments
         };
       }
-    } catch (error) {
-    }
+    } catch { }
 
     return null;
   }; */
@@ -2201,7 +2180,6 @@ function WorkspaceWithScope({ path }) {
           setVersionRefreshKey(prev => prev + 1);
 
         } catch (error) {
-          console.warn("[Version] Failed to save version:", error);
           // Non-blocking - don't show error to user
         }
       } else {
@@ -2224,7 +2202,6 @@ function WorkspaceWithScope({ path }) {
               body: gmailTemplate.body,
               attachments: [] // For future implementation
             });
-
 
             // Optional: Show success notification to user
             // You could add a toast notification here
@@ -2272,8 +2249,7 @@ function WorkspaceWithScope({ path }) {
           // it will build the graph data including this file's changes
         }
       }
-    } catch (error) {
-    }
+    } catch { }
   }, []);
 
   const handleSaveAs = useCallback(async () => {
@@ -2376,8 +2352,7 @@ function WorkspaceWithScope({ path }) {
         handleRefreshFiles();
 
       }
-    } catch (error) {
-    }
+    } catch { }
   }, []);
 
   const handleExportHtml = useCallback(async () => {
@@ -2489,8 +2464,7 @@ function WorkspaceWithScope({ path }) {
         await invoke("write_file_content", { path: filePath, content: htmlContent });
 
       }
-    } catch (error) {
-    }
+    } catch { }
   }, []);
 
   const handleExportPdf = useCallback(async () => {
@@ -2671,24 +2645,24 @@ function WorkspaceWithScope({ path }) {
           document.body.removeChild(iframe);
         }, 1000);
       }
-    } catch (error) {
-      console.error('Failed to export PDF:', error);
-    }
+    } catch { }
   }, []);
 
   const handleOpenWorkspace = useCallback(async () => {
     try {
+
+      // Ensure current theme is saved globally so launcher window inherits it
+      if (currentTheme) {
+        await setGlobalActiveTheme(currentTheme);
+      }
+
       // First clear the saved workspace to ensure launcher shows
       await invoke('clear_last_workspace');
 
       // Use backend command to create launcher window (same approach as preferences)
       await invoke('open_launcher_window');
-    } catch (error) {
-    }
-  }, []);
-
-
-
+    } catch { }
+  }, [currentTheme]);
 
   // Helper function to determine target path for file creation
   // Priority: 1. Bases folder, 2. Local scope folder, 3. Workspace root
@@ -2715,8 +2689,7 @@ function WorkspaceWithScope({ path }) {
       const newFilePath = await invoke("create_file_in_workspace", { workspacePath: targetPath, name: "Untitled.md" });
       handleRefreshFiles();
       handleFileOpen({ path: newFilePath, name: "Untitled.md", is_directory: false });
-    } catch (error) {
-    }
+    } catch { }
   };
 
   const handleCreateCanvas = async () => {
@@ -2725,8 +2698,7 @@ function WorkspaceWithScope({ path }) {
       const newCanvasPath = await canvasManager.createCanvas(targetPath, "Untitled Canvas");
       handleRefreshFiles();
       handleFileOpen({ path: newCanvasPath, name: "Untitled Canvas.canvas", is_directory: false });
-    } catch (error) {
-    }
+    } catch { }
   };
 
   const handleCreateKanban = async () => {
@@ -2742,9 +2714,7 @@ function WorkspaceWithScope({ path }) {
       const fileName = "New Board.kanban";
       const boardPath = `${targetPath}/${fileName}`;
       handleFileOpen({ path: boardPath, name: fileName, is_directory: false });
-    } catch (error) {
-      console.error("Failed to create kanban board:", error);
-    }
+    } catch { }
   };
 
   const handleOpenDailyNote = async () => {
@@ -2764,9 +2734,7 @@ function WorkspaceWithScope({ path }) {
 
       // Track daily note access
       analytics.trackDailyNote();
-    } catch (error) {
-      console.error('Failed to open daily note:', error);
-    }
+    } catch { }
   };
 
   const handleOpenDailyNoteByDate = async (date) => {
@@ -2788,9 +2756,7 @@ function WorkspaceWithScope({ path }) {
 
       // Track daily note access
       analytics.trackDailyNote();
-    } catch (error) {
-      console.error('Failed to open daily note:', error);
-    }
+    } catch { }
   };
 
   // Check if a file path is a daily note
@@ -2826,8 +2792,7 @@ function WorkspaceWithScope({ path }) {
         const targetPath = getTargetPath();
         await invoke("create_folder_in_workspace", { workspacePath: targetPath, name });
         handleRefreshFiles();
-      } catch (error) {
-      }
+      } catch { }
     }
     setIsCreatingFolder(false);
   };
@@ -2958,7 +2923,6 @@ function WorkspaceWithScope({ path }) {
       setGraphData(data);
 
     } catch (error) {
-      console.error('[Workspace] Failed to build graph:', error);
       setGraphData(null);
     } finally {
       setIsLoadingGraph(false);
@@ -3122,7 +3086,6 @@ function WorkspaceWithScope({ path }) {
                   const content = await invoke("read_file_content", { path: nextTab.path });
                   setRightPaneContent(content || '');
                 } catch (err) {
-                  console.error('Failed to load right pane content:', err);
                   setRightPaneContent('');
                 }
               }
@@ -3309,15 +3272,9 @@ function WorkspaceWithScope({ path }) {
 
     // Template picker event listener
     const handleTemplatePicker = (event) => {
-      console.log('[Workspace] Template picker event received:', event);
-      console.log('[Workspace] Event detail:', event?.detail);
-      console.log('[Workspace] Event type:', event?.type);
       const data = event?.detail || event;
-      console.log('[Workspace] Data to be set:', data);
-      console.log('[Workspace] Setting template picker data and opening modal...');
       setTemplatePickerData(data);
       setShowTemplatePicker(true);
-      console.log('[Workspace] State updated. showTemplatePicker should be true');
     };
     const unlistenTemplatePicker = Promise.resolve(addDom('open-template-picker', handleTemplatePicker));
 
@@ -3473,21 +3430,28 @@ function WorkspaceWithScope({ path }) {
     };
 
     const handleHelpAction = (action) => {
+      const links = remoteLinksRef.current;
       switch (action) {
         case 'help':
-          // Open help documentation
-          window.open('https://docs.lokus.dev', '_blank');
+          // Open help documentation (server-driven URL)
+          if (links.documentation) {
+            window.open(links.documentation, '_blank');
+          }
           break;
         case 'keyboard-shortcuts':
           setShowShortcutHelp(true);
           break;
         case 'release-notes':
-          // Open release notes
-          window.open('https://github.com/lokus-app/lokus/releases', '_blank');
+          // Open release notes (server-driven URL)
+          if (links.releases) {
+            window.open(links.releases, '_blank');
+          }
           break;
         case 'report-issue':
-          // Open issue tracker
-          window.open('https://github.com/lokus-app/lokus/issues', '_blank');
+          // Open issue tracker (server-driven URL)
+          if (links.issues) {
+            window.open(links.issues, '_blank');
+          }
           break;
       }
     };
@@ -3522,7 +3486,6 @@ function WorkspaceWithScope({ path }) {
     const unlistenPaste = isTauri ? listen("lokus:edit-paste", () => handleEditorEdit('paste')) : Promise.resolve(addDom('lokus:edit-paste', () => handleEditorEdit('paste')));
     const unlistenSelectAll = isTauri ? listen("lokus:edit-select-all", () => handleEditorEdit('select-all')) : Promise.resolve(addDom('lokus:edit-select-all', () => handleEditorEdit('select-all')));
     const unlistenFindReplace = isTauri ? listen("lokus:find-replace", () => setShowInFileSearch(true)) : Promise.resolve(addDom('lokus:find-replace', () => setShowInFileSearch(true)));
-
 
     // View menu events
     const unlistenZoomIn = isTauri ? listen("lokus:zoom-in", () => handleViewAction('zoom-in')) : Promise.resolve(addDom('lokus:zoom-in', () => handleViewAction('zoom-in')));
@@ -3756,6 +3719,9 @@ function WorkspaceWithScope({ path }) {
         {/* Product Tour */}
         <ProductTour autoStart={true} delay={1500} />
 
+        {/* Service Status / Maintenance Banner */}
+        <ServiceStatus />
+
         {/* Test Mode Indicator */}
         {isTestMode && (
           <div className="fixed top-4 right-4 bg-yellow-500 text-black px-3 py-1 rounded-md text-sm font-medium z-50">
@@ -3777,34 +3743,40 @@ function WorkspaceWithScope({ path }) {
         >
           {/* Left Section: New File, New Folder, New Canvas buttons */}
           <div className="flex items-center gap-1">
-            <button
-              onClick={handleCreateFile}
-              className="obsidian-button icon-only small"
-              title={`New File (${platformService.getModifierSymbol()}+N)`}
-              data-tauri-drag-region="false"
-              data-tour="create-note"
-              style={{ pointerEvents: 'auto' }}
-            >
-              <FilePlusCorner className="w-5 h-5" strokeWidth={2} />
-            </button>
-            <button
-              onClick={handleCreateFolder}
-              className="obsidian-button icon-only small"
-              title={`New Folder (${platformService.getModifierSymbol()}+Shift+N)`}
-              data-tauri-drag-region="false"
-              style={{ pointerEvents: 'auto' }}
-            >
-              <FolderOpen className="w-5 h-5" strokeWidth={2} />
-            </button>
-            <button
-              onClick={handleCreateCanvas}
-              className="obsidian-button icon-only small"
-              title="New Canvas"
-              data-tauri-drag-region="false"
-              style={{ pointerEvents: 'auto' }}
-            >
-              <SquareKanban className="w-5 h-5" strokeWidth={2} />
-            </button>
+            {uiVisibility.toolbar_new_file && (
+              <button
+                onClick={handleCreateFile}
+                className="obsidian-button icon-only small"
+                title={`New File (${platformService.getModifierSymbol()}+N)`}
+                data-tauri-drag-region="false"
+                data-tour="create-note"
+                style={{ pointerEvents: 'auto' }}
+              >
+                <FilePlusCorner className="w-5 h-5" strokeWidth={2} />
+              </button>
+            )}
+            {uiVisibility.toolbar_new_folder && (
+              <button
+                onClick={handleCreateFolder}
+                className="obsidian-button icon-only small"
+                title={`New Folder (${platformService.getModifierSymbol()}+Shift+N)`}
+                data-tauri-drag-region="false"
+                style={{ pointerEvents: 'auto' }}
+              >
+                <FolderOpen className="w-5 h-5" strokeWidth={2} />
+              </button>
+            )}
+            {uiVisibility.toolbar_new_canvas && (
+              <button
+                onClick={handleCreateCanvas}
+                className="obsidian-button icon-only small"
+                title="New Canvas"
+                data-tauri-drag-region="false"
+                style={{ pointerEvents: 'auto' }}
+              >
+                <SquareKanban className="w-5 h-5" strokeWidth={2} />
+              </button>
+            )}
           </div>
 
           {/* Center Section: Responsive Tab Bar */}
@@ -3829,16 +3801,18 @@ function WorkspaceWithScope({ path }) {
 
           {/* Right Section: Split View, Right Sidebar, and New Tab buttons */}
           <div className="flex items-center gap-1">
-            <button
-              onClick={handleToggleSplitView}
-              className={`obsidian-button icon-only small ${useSplitView ? 'active' : ''}`}
-              title={useSplitView ? "Exit Split View" : "Enter Split View"}
-              data-tauri-drag-region="false"
-              data-tour="split-view"
-              style={{ pointerEvents: 'auto' }}
-            >
-              <SquareSplitHorizontal className="w-5 h-5" strokeWidth={2} />
-            </button>
+            {uiVisibility.toolbar_split_view && (
+              <button
+                onClick={handleToggleSplitView}
+                className={`obsidian-button icon-only small ${useSplitView ? 'active' : ''}`}
+                title={useSplitView ? "Exit Split View" : "Enter Split View"}
+                data-tauri-drag-region="false"
+                data-tour="split-view"
+                style={{ pointerEvents: 'auto' }}
+              >
+                <SquareSplitHorizontal className="w-5 h-5" strokeWidth={2} />
+              </button>
+            )}
             <button
               onClick={() => setShowRight(v => !v)}
               className={`obsidian-button icon-only small ${showRight ? 'active' : ''}`}
@@ -3908,106 +3882,116 @@ function WorkspaceWithScope({ path }) {
                 <FolderOpen className="w-5 h-5" style={!showKanban && !showPlugins && !showBases && !showGraphView && showLeft ? { color: 'rgb(var(--accent))' } : {}} />
               </button>
 
-              <button
-                onClick={() => {
-                  setShowKanban(true);
-                  setShowPlugins(false);
-                  setShowBases(false);
-                  setShowGraphView(false);
-                  setShowLeft(true);
-                }}
-                title="Task Board"
-                className="obsidian-button icon-only w-full mb-1"
-                onMouseEnter={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = 'rgb(var(--accent))';
-                }}
-                onMouseLeave={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = (showKanban && !showPlugins && !showBases && !showGraphView) ? 'rgb(var(--accent))' : '';
-                }}
-              >
-                <LayoutGrid className="w-5 h-5" style={showKanban && !showPlugins && !showBases && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
-              </button>
+              {uiVisibility.sidebar_kanban && (
+                <button
+                  onClick={() => {
+                    setShowKanban(true);
+                    setShowPlugins(false);
+                    setShowBases(false);
+                    setShowGraphView(false);
+                    setShowLeft(true);
+                  }}
+                  title="Task Board"
+                  className="obsidian-button icon-only w-full mb-1"
+                  onMouseEnter={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = 'rgb(var(--accent))';
+                  }}
+                  onMouseLeave={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = (showKanban && !showPlugins && !showBases && !showGraphView) ? 'rgb(var(--accent))' : '';
+                  }}
+                >
+                  <LayoutGrid className="w-5 h-5" style={showKanban && !showPlugins && !showBases && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
+                </button>
+              )}
 
-              <button
-                onClick={() => {
-                  setShowPlugins(true);
-                  setShowKanban(false);
-                  setShowBases(false);
-                  setShowGraphView(false);
-                  setShowLeft(true);
-                }}
-                title="Extensions"
-                className="obsidian-button icon-only w-full mb-1"
-                onMouseEnter={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = 'rgb(var(--accent))';
-                }}
-                onMouseLeave={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = (showPlugins && !showKanban && !showBases && !showGraphView) ? 'rgb(var(--accent))' : '';
-                }}
-              >
-                <Puzzle className="w-5 h-5" style={showPlugins && !showKanban && !showBases && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
-              </button>
+              {uiVisibility.sidebar_plugins && (
+                <button
+                  onClick={() => {
+                    setShowPlugins(true);
+                    setShowKanban(false);
+                    setShowBases(false);
+                    setShowGraphView(false);
+                    setShowLeft(true);
+                  }}
+                  title="Extensions"
+                  className="obsidian-button icon-only w-full mb-1"
+                  onMouseEnter={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = 'rgb(var(--accent))';
+                  }}
+                  onMouseLeave={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = (showPlugins && !showKanban && !showBases && !showGraphView) ? 'rgb(var(--accent))' : '';
+                  }}
+                >
+                  <Puzzle className="w-5 h-5" style={showPlugins && !showKanban && !showBases && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
+                </button>
+              )}
 
-              <button
-                onClick={() => {
-                  handleOpenBasesTab();
-                }}
-                title="Bases"
-                data-tour="bases"
-                className="obsidian-button icon-only w-full mb-1"
-                onMouseEnter={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = 'rgb(var(--accent))';
-                }}
-                onMouseLeave={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = (showBases && !showKanban && !showPlugins && !showGraphView) ? 'rgb(var(--accent))' : '';
-                }}
-              >
-                <Database className="w-5 h-5" style={showBases && !showKanban && !showPlugins && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
-              </button>
+              {uiVisibility.sidebar_bases && (
+                <button
+                  onClick={() => {
+                    handleOpenBasesTab();
+                  }}
+                  title="Bases"
+                  data-tour="bases"
+                  className="obsidian-button icon-only w-full mb-1"
+                  onMouseEnter={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = 'rgb(var(--accent))';
+                  }}
+                  onMouseLeave={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = (showBases && !showKanban && !showPlugins && !showGraphView) ? 'rgb(var(--accent))' : '';
+                  }}
+                >
+                  <Database className="w-5 h-5" style={showBases && !showKanban && !showPlugins && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
+                </button>
+              )}
 
-              <button
-                onClick={handleOpenGraphView}
-                title="Graph View"
-                data-tour="graph"
-                className="obsidian-button icon-only w-full mb-1"
-                onMouseEnter={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = 'rgb(var(--accent))';
-                }}
-                onMouseLeave={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = '';
-                }}
-              >
-                <Network className="w-5 h-5" />
-              </button>
+              {uiVisibility.sidebar_graph && (
+                <button
+                  onClick={handleOpenGraphView}
+                  title="Graph View"
+                  data-tour="graph"
+                  className="obsidian-button icon-only w-full mb-1"
+                  onMouseEnter={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = 'rgb(var(--accent))';
+                  }}
+                  onMouseLeave={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = '';
+                  }}
+                >
+                  <Network className="w-5 h-5" />
+                </button>
+              )}
 
-              <button
-                onClick={() => {
-                  setShowDailyNotesPanel(!showDailyNotesPanel);
-                  setShowRight(true);
-                  setShowVersionHistory(false);
-                }}
-                title="Daily Notes"
-                className={`obsidian-button icon-only w-full mb-1 ${showDailyNotesPanel ? 'active' : ''}`}
-                data-tour="daily-notes"
-                onMouseEnter={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = 'rgb(var(--accent))';
-                }}
-                onMouseLeave={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = showDailyNotesPanel ? 'rgb(var(--accent))' : '';
-                }}
-              >
-                <Calendar className="w-5 h-5" style={showDailyNotesPanel ? { color: 'rgb(var(--accent))' } : {}} />
-              </button>
+              {uiVisibility.sidebar_daily_notes && (
+                <button
+                  onClick={() => {
+                    setShowDailyNotesPanel(!showDailyNotesPanel);
+                    setShowRight(true);
+                    setShowVersionHistory(false);
+                  }}
+                  title="Daily Notes"
+                  className={`obsidian-button icon-only w-full mb-1 ${showDailyNotesPanel ? 'active' : ''}`}
+                  data-tour="daily-notes"
+                  onMouseEnter={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = 'rgb(var(--accent))';
+                  }}
+                  onMouseLeave={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = showDailyNotesPanel ? 'rgb(var(--accent))' : '';
+                  }}
+                >
+                  <Calendar className="w-5 h-5" style={showDailyNotesPanel ? { color: 'rgb(var(--accent))' } : {}} />
+                </button>
+              )}
 
               {/* Gmail button disabled to improve startup performance */}
               {/* <button
@@ -4216,9 +4200,7 @@ function WorkspaceWithScope({ path }) {
                                   newSet.delete(rightPaneFile);
                                   return newSet;
                                 });
-                              } catch (error) {
-                                console.error('Failed to save canvas:', error);
-                              }
+                              } catch { }
                             }}
                             onChange={() => {
                               setUnsavedChanges(prev => new Set(prev).add(rightPaneFile));
@@ -4310,8 +4292,7 @@ function WorkspaceWithScope({ path }) {
                               newSet.delete(activeFile);
                               return newSet;
                             });
-                          } catch (error) {
-                          }
+                          } catch { }
                         }}
                         onContentChange={(canvasData) => {
                           setUnsavedChanges(prev => {
@@ -4482,10 +4463,10 @@ function WorkspaceWithScope({ path }) {
                         </div>
                       </div>
                     ) : (
-                      <div className="h-full flex flex-col">
+                      <div className="h-full flex flex-col overflow-hidden">
                         {/* Modern Welcome Screen - VS Code Inspired */}
-                        <div className="flex-1 flex items-center justify-center p-8">
-                          <div className="max-w-4xl w-full">
+                        <div className="flex-1 overflow-y-auto p-8">
+                          <div className="max-w-4xl w-full mx-auto min-h-full flex flex-col justify-center">
 
                             {/* Header Section */}
                             <div className="text-center mb-10">
@@ -4774,7 +4755,6 @@ function WorkspaceWithScope({ path }) {
                     const beforeCursor = content.substring(0, cursorIndex);
                     const afterCursor = content.substring(cursorIndex + 10); // 10 = '{{cursor}}'.length
 
-
                     // Insert content in parts to position cursor correctly
                     return editorRef.current.chain()
                       .focus()
@@ -4793,8 +4773,7 @@ function WorkspaceWithScope({ path }) {
 
                 try {
                   insertTemplateContent(processedWithMarkdown);
-                } catch (err) {
-                }
+                } catch { }
               }
               return;
             }
@@ -4823,7 +4802,6 @@ function WorkspaceWithScope({ path }) {
                         // Split content at cursor position
                         const beforeCursor = content.substring(0, cursorIndex);
                         const afterCursor = content.substring(cursorIndex + 10); // 10 = '{{cursor}}'.length
-
 
                         // Insert content in parts to position cursor correctly
                         return editorRef.current.chain()
@@ -4875,15 +4853,13 @@ function WorkspaceWithScope({ path }) {
                       try {
                         const result = insertMethods[i]();
                         inserted = true;
-                      } catch (err) {
-                      }
+                      } catch { }
                     }
 
                     if (!inserted) {
                     }
 
-                  } catch (err) {
-                  }
+                  } catch { }
                 } else {
                 }
               }
@@ -5033,7 +5009,6 @@ export default function Workspace({ initialPath = "" }) {
         .then(() => {
         })
         .catch((error) => {
-          console.error('[Workspace] Failed to initialize kanban:', error);
         });
     }
   }, [initialPath]);

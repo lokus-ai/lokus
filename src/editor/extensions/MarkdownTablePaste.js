@@ -66,7 +66,6 @@ const MarkdownTablePaste = Extension.create({
               editor.chain().focus().insertContent(html).run();
               return true;
             } catch (e) {
-              console.warn('[md-table] paste failed:', e);
               return false;
             }
           },

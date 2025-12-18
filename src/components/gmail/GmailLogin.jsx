@@ -37,7 +37,6 @@ export default function GmailLogin({ onLoginSuccess }) {
             }, 1500);
           }
         } catch (error) {
-          console.error('[GMAIL LOGIN] Auth callback error:', error);
           clearInterval(pollInterval);
           polling = false;
           setError(error.message);
@@ -72,7 +71,6 @@ export default function GmailLogin({ onLoginSuccess }) {
       await invoke('open_auth_url', { authUrl: url });
       
     } catch (error) {
-      console.error('Login failed:', error);
       setError(error.message);
       setLoginState('error');
     }

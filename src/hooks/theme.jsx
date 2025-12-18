@@ -6,30 +6,67 @@ import {
   readGlobalVisuals,
   setGlobalActiveTheme,
 } from "../core/theme/manager.js";
+import { useThemeOverrides } from "../contexts/RemoteConfigContext";
+
+// Apply server-side theme overrides as CSS variables
+const applyThemeOverrides = (overrides) => {
+  if (!overrides) return;
+
+  const tokenMap = {
+    accent: '--accent',
+    accent_fg: '--accent-fg',
+    bg: '--bg',
+    panel: '--panel',
+    border: '--border',
+    text: '--text',
+    muted: '--muted',
+    danger: '--danger',
+    success: '--success',
+    warning: '--warning',
+    info: '--info',
+  };
+
+  Object.entries(overrides).forEach(([key, value]) => {
+    if (value && tokenMap[key]) {
+      document.documentElement.style.setProperty(tokenMap[key], value);
+    }
+  });
+};
 
 const ThemeCtx = createContext(null);
 
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(null);
   const [isThemeLoaded, setIsThemeLoaded] = useState(false);
+  const themeOverrides = useThemeOverrides();
+
+  // Apply server-side theme overrides whenever they change
+  useEffect(() => {
+    if (isThemeLoaded && themeOverrides) {
+      applyThemeOverrides(themeOverrides);
+    }
+  }, [isThemeLoaded, themeOverrides]);
 
   // Load initial theme from config with better error handling
   useEffect(() => {
     async function loadInitial() {
-      try {        // Apply initial theme immediately to prevent flash of unthemed content
+      try {
+        // Apply initial theme immediately to prevent flash of unthemed content
         await applyInitialTheme();
 
         // Then read the actual configured theme
-        const visuals = await readGlobalVisuals();        if (visuals && visuals.theme) {
+        const visuals = await readGlobalVisuals();
+        if (visuals && visuals.theme) {
           setTheme(visuals.theme);
           // Re-apply theme if it's different from the initial
           await setGlobalActiveTheme(visuals.theme);
         } else {
-          // Fallback to a default theme if none is configured          setTheme('default');
+          // Fallback to a default theme if none is configured
+          setTheme('default');
         }
 
-        setIsThemeLoaded(true);      } catch (error) {
-        console.error('🎨 Error loading initial theme:', error);
+        setIsThemeLoaded(true);
+      } catch (error) {
         // Ensure we still mark as loaded to prevent infinite loading
         setIsThemeLoaded(true);
       }

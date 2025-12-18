@@ -27,7 +27,6 @@ export default function UpdateChecker() {
       // (e.g., first release with updater enabled, or old releases without updater artifacts)
       if (err.message && err.message.includes('Could not fetch')) {
       } else {
-        console.error('Update check failed:', err);
         setError(err.message);
       }
       return null;
@@ -60,7 +59,6 @@ export default function UpdateChecker() {
 
       await relaunch();
     } catch (err) {
-      console.error('Update installation failed:', err);
       setError(err.message);
       setDownloading(false);
     }

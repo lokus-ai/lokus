@@ -313,8 +313,7 @@ export class CLITemplateGenerator {
     if (options.initGit !== false) {
       try {
         await this.initializeGit(projectPath)
-      } catch (error) {
-      }
+      } catch { }
     }
 
     // Install dependencies if package.json was created
@@ -422,7 +421,6 @@ export class CLITemplateGenerator {
         filter.features.some(feature => t.features?.includes(feature))
       )
     }
-
 
     const categories = {}
     for (const template of filteredTemplates) {

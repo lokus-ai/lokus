@@ -277,9 +277,7 @@ export class EditorAPI extends EventEmitter {
     try {
       await this.bridgedAPI.cleanup();
       this.emit('extensions_cleaned_up', { pluginId });
-    } catch (error) {
-      console.error('Error cleaning up extensions:', error);
-    }
+    } catch { }
   }
 
   /**
@@ -342,15 +340,14 @@ export class UIAPI extends EventEmitter {
    * Create output channel
    */
   createOutputChannel(name) {
-    console.log(`[UIAPI] Creating output channel: ${name}`);
     return {
       name,
-      append: (value) => console.log(`[${name}] ${value}`),
-      appendLine: (value) => console.log(`[${name}] ${value}`),
-      clear: () => console.clear(),
-      show: (preserveFocus) => console.log(`[UIAPI] Showing output channel: ${name}`),
-      hide: () => console.log(`[UIAPI] Hiding output channel: ${name}`),
-      dispose: () => console.log(`[UIAPI] Disposing output channel: ${name}`)
+      append: () => {},
+      appendLine: () => {},
+      clear: () => {},
+      show: () => {},
+      hide: () => {},
+      dispose: () => {}
     };
   }
 

@@ -66,7 +66,7 @@ impl IrohProviderWrapper {
     pub async fn manual_sync(&mut self) -> Result<String, String> {
         match self {
             IrohProviderWrapper::V1(p) => {
-                p.sync();
+                let _ = p.sync();
                 Ok("V1 sync triggered".to_string())
             },
             IrohProviderWrapper::V2(p) => p.scan_and_sync().await,

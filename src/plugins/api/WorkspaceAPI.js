@@ -61,7 +61,6 @@ export class WorkspaceAPI extends EventEmitter {
      */
     async openTextDocument(uriOrFileName) {
         // TODO: Connect to actual document opener
-        console.warn('[WorkspaceAPI] openTextDocument is not yet implemented');
         return null;
     }
 
@@ -97,7 +96,6 @@ export class WorkspaceAPI extends EventEmitter {
      * Apply workspace edit
      */
     async applyEdit(edit) {
-        console.warn('[WorkspaceAPI] applyEdit is not yet implemented');
         return false;
     }
 

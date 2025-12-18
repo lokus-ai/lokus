@@ -28,8 +28,7 @@ export default function ConnectionStatus({ className = '' }) {
       if (isAuthenticated) {
         try {
           queueStats = await gmailQueue.getQueueStats();
-        } catch (error) {
-        }
+        } catch { }
       }
       
       setGmailStatus({
@@ -39,7 +38,6 @@ export default function ConnectionStatus({ className = '' }) {
         queueStats
       });
     } catch (error) {
-      console.error('Failed to check Gmail status:', error);
       setGmailStatus({
         connected: false,
         checking: false,

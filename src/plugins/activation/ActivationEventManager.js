@@ -473,15 +473,13 @@ export class ActivationEventManager {
         return
       }
 
-
       // Activate plugins in parallel with timeout
       const activationPromises = pluginsToActivate.map(pluginId => 
         this.activatePlugin(pluginId, context)
       )
 
       await Promise.allSettled(activationPromises)
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -522,8 +520,7 @@ export class ActivationEventManager {
       
       this.notifyListeners('pluginDeactivated', { pluginId })
       
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -553,8 +550,7 @@ export class ActivationEventManager {
       this.listeners.get(event).forEach(listener => {
         try {
           listener(data)
-        } catch (error) {
-        }
+        } catch { }
       })
     }
   }

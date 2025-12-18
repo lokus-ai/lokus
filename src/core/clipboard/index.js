@@ -175,8 +175,7 @@ class ClipboardManager {
     this.listeners.forEach(callback => {
       try {
         callback({ type, data, timestamp: Date.now() });
-      } catch (error) {
-      }
+      } catch { }
     });
   }
 

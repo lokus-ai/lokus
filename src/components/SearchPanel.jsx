@@ -55,8 +55,7 @@ export default function SearchPanel({ isOpen, onClose, onFileOpen, workspacePath
     if (saved) {
       try {
         setRecentSearches(JSON.parse(saved))
-      } catch (error) {
-      }
+      } catch { }
     }
   }, [])
 

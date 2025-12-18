@@ -29,9 +29,7 @@ class PlatformService {
     try {
       this.platformModule = await getPlatformModule();
       this.initialized = true;
-    } catch (error) {
-      console.error('Failed to initialize platform service:', error);
-    }
+    } catch { }
   }
 
   // Platform detection

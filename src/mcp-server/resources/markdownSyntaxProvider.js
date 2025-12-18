@@ -972,7 +972,6 @@ Use triple backticks for code blocks:
 
 \\\`\\\`\\\`
 function hello() {
-  console.log("Hello World");
 }
 \\\`\\\`\\\`
 

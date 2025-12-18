@@ -525,7 +525,6 @@ export class EditorPluginAPI extends EventEmitter {
             }
             return [config.tag || 'div', HTMLAttributes]
           } catch (error) {
-            console.error(`[EditorAPI] Error in renderHTML for ${config.name}:`, error)
             return [config.tag || 'div', HTMLAttributes, '[Render Error]']
           }
         },
@@ -619,7 +618,6 @@ export class EditorPluginAPI extends EventEmitter {
         config
       })
 
-      console.error(`[EditorAPI] Failed to create node ${config.name} for plugin ${pluginId}:`, error)
       throw new Error(`Failed to create node: ${error.message}`)
     }
   }
@@ -653,7 +651,6 @@ export class EditorPluginAPI extends EventEmitter {
             }
             return [config.tag || 'span', HTMLAttributes]
           } catch (error) {
-            console.error(`[EditorAPI] Error in renderHTML for mark ${config.name}:`, error)
             return [config.tag || 'span', HTMLAttributes]
           }
         },
@@ -695,7 +692,6 @@ export class EditorPluginAPI extends EventEmitter {
 
       return markDefinition
     } catch (error) {
-      console.error(`[EditorAPI] Failed to create mark ${config.name} for plugin ${pluginId}:`, error)
       throw new Error(`Failed to create mark: ${error.message}`)
     }
   }
@@ -784,7 +780,6 @@ export class EditorPluginAPI extends EventEmitter {
 
       return extensionDefinition
     } catch (error) {
-      console.error(`[EditorAPI] Failed to create extension ${config.name} for plugin ${pluginId}:`, error)
       throw new Error(`Failed to create extension: ${error.message}`)
     }
   }
@@ -815,7 +810,6 @@ export class EditorPluginAPI extends EventEmitter {
           handlerName: handler.name || 'anonymous'
         })
 
-        console.error(`[EditorAPI] Command error in plugin ${pluginId}:`, error)
         this.emit('command-error', { pluginId, args, error, errorInfo })
         return false
       }
@@ -845,7 +839,6 @@ export class EditorPluginAPI extends EventEmitter {
           handlerName: handler.name || 'anonymous'
         })
 
-        console.error(`[EditorAPI] Input rule error in plugin ${pluginId}:`, error)
         this.emit('input-rule-error', { pluginId, args, error, errorInfo })
         return false
       }
@@ -876,8 +869,6 @@ export class EditorPluginAPI extends EventEmitter {
           nodeType: props.node?.type?.name,
           props
         })
-
-        console.error(`[EditorAPI] Node view error in plugin ${pluginId}:`, error)
 
         // Return safe fallback
         return {
@@ -921,7 +912,6 @@ export class EditorPluginAPI extends EventEmitter {
       try {
         return handler(...args)
       } catch (error) {
-        console.error(`[EditorAPI] Lifecycle error in plugin ${pluginId}:`, error)
         this.emit('lifecycle-error', { pluginId, args, error })
       }
     }
@@ -934,7 +924,6 @@ export class EditorPluginAPI extends EventEmitter {
     try {
       return pluginFactory()
     } catch (error) {
-      console.error(`[EditorAPI] ProseMirror plugin error in plugin ${pluginId}:`, error)
       return null
     }
   }
@@ -947,7 +936,6 @@ export class EditorPluginAPI extends EventEmitter {
       try {
         return handler(...args)
       } catch (error) {
-        console.error(`[EditorAPI] Format handler error in plugin ${pluginId}:`, error)
         this.emit('format-error', { pluginId, args, error })
         throw error
       }
@@ -961,6 +949,11 @@ export class EditorPluginAPI extends EventEmitter {
    */
   setEditorInstance(editor) {
     this.editorInstance = editor
+
+    if (!editor) {
+      return
+    }
+
     this.emit('editor-attached', { editor })
 
     // Listen for editor updates
@@ -1073,7 +1066,6 @@ export class EditorPluginAPI extends EventEmitter {
       // Emit event for editor recreation
       this.emit('hot-reload-requested', { extensions: validExtensions, content })
 
-
     } catch (error) {
       // Handle error with context
       const errorInfo = errorHandler.handleError('system', error, {
@@ -1081,7 +1073,6 @@ export class EditorPluginAPI extends EventEmitter {
         extensionCount: this.getAllExtensions().length
       })
 
-      console.error('[EditorAPI] Hot reload failed:', error)
       this.emit('hot-reload-error', { error, errorInfo })
     }
   }

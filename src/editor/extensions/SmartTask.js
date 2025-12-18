@@ -72,7 +72,6 @@ export const SmartTask = Extension.create({
   addInputRules() {
     // Debug: Test InputRule regex
     const inputRuleRegex = /\[([x X/!?\->\s*~<"ib+w@RDS])\]\s$/
-    console.log('[SMARTTASK-DEBUG] Testing InputRule regex on all symbols:')
     const testCases = [
       '[ ] ', '[x] ', '[X] ', '[/] ', '[!] ', '[?] ', '[-] ', '[>] ',
       '[*] ', '[~] ', '[<] ', '["] ', '[i] ', '[b] ', '[+] ', '[w] ',
@@ -80,7 +79,6 @@ export const SmartTask = Extension.create({
     ]
     testCases.forEach(test => {
       const match = inputRuleRegex.test(test)
-      console.log(`  ${test.trim()}: ${match ? '✓' : '✗'}`)
     })
 
     return [

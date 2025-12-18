@@ -107,7 +107,6 @@ function normalize(val) {
     const clean = val.replace("#", "");
     // Validate hex characters
     if (!/^[0-9A-Fa-f]{3}$|^[0-9A-Fa-f]{6}$/.test(clean)) {
-      console.warn(`Invalid hex color: ${val}`);
       return val; // Return as-is instead of processing
     }
     const full = clean.length === 3 ? clean.split("").map((c) => c + c).join("") : clean;
@@ -120,7 +119,6 @@ function normalize(val) {
 export async function applyTokens(tokens) {
   // Add null check - Bug fix #5
   if (!tokens || typeof tokens !== 'object') {
-    console.warn('applyTokens called with invalid tokens:', tokens);
     return;
   }
 
@@ -163,7 +161,6 @@ export async function applyTokens(tokens) {
       });
     } catch (e) {
       // Silently fail - window theme sync is not critical
-      console.debug('Window theme sync not available:', e);
     }
   }
 }
@@ -183,9 +180,7 @@ export async function installDefaultThemes() {
     const themeJsonPath = await join(themesDir, `${themeId}.json`);
     if (!(await exists(themeJsonPath))) {
       try { await writeTextFile(themeJsonPath, DEFAULT_THEME_CONTENT[themeId]); }
-      catch (e) {
-        console.error(`Failed to install default theme ${themeId}:`, e);
-      }
+      catch { }
     }
   }
 }
@@ -197,9 +192,7 @@ export async function loadThemeManifestById(id) {
   // First, check if it's a built-in theme
   if (DEFAULT_THEME_CONTENT[id]) {
     try { return JSON.parse(DEFAULT_THEME_CONTENT[id]); }
-    catch (e) {
-      console.error(`Failed to parse built-in theme ${id}:`, e);
-    }
+    catch { }
   }
 
   // Otherwise, try to load from Rust backend (custom themes in ~/.lokus/themes/)
@@ -208,9 +201,7 @@ export async function loadThemeManifestById(id) {
       await ensureTauriInvoke();
       const tokens = await invoke('get_theme_tokens', { themeId: id });
       return { tokens };
-    } catch (e) {
-      console.error(`Failed to load theme ${id} from backend:`, e);
-    }
+    } catch { }
   }
 
   return null;
@@ -238,9 +229,7 @@ export async function listAvailableThemes() {
           .replace(/[^a-z0-9_-]/g, '_');
         themeMap.set(themeId, { id: themeId, name: manifest.name });
       }
-    } catch (e) {
-      console.error('Failed to load custom themes:', e);
-    }
+    } catch { }
   }
 
   return Array.from(themeMap.values());

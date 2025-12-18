@@ -217,9 +217,7 @@ const NewBaseModal = ({ isOpen, onClose, onCreateBase, workspacePath }) => {
       setBaseName('')
       setSourceFolder('')
       onClose()
-    } catch (error) {
-      console.error('Failed to create base:', error)
-    } finally {
+    } catch { } finally {
       setIsCreating(false)
     }
   }
@@ -352,7 +350,6 @@ export default function BaseSidebar({
   }, [onDeleteBase])
 
   const scopeStatus = getScopeStatus()
-
 
   return (
     <div className={`flex flex-col bg-rgb(var(--panel)) border-r border-rgb(var(--border)) ${className}`}>

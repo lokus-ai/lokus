@@ -588,9 +588,7 @@ export default function FilterBuilder({
       const finalFilter = filterMode === 'text' ? { text: textFilter } : filterConfig
       await onSave?.(finalFilter)
       if (mode === 'dialog') onClose()
-    } catch (error) {
-      console.error('Failed to save filter:', error)
-    } finally {
+    } catch { } finally {
       setIsSaving(false)
     }
   }, [filterConfig, textFilter, filterMode, onSave, onClose, mode])

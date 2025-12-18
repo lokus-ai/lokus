@@ -27,7 +27,6 @@ export async function insertBlockIdIntoFile(filePath, lineNumber, blockId) {
       return await insertBlockIdIntoMarkdown(content, filePath, lineNumber, blockId)
     }
   } catch (error) {
-    console.error('[BlockWriter] Error inserting block ID:', error)
     return false
   }
 }
@@ -75,7 +74,6 @@ async function insertBlockIdIntoHTML(html, filePath, lineNumber, blockId) {
     if (targetElement) {
       // Check if it already has a block ID
       if (targetElement.getAttribute('data-block-id')) {
-        console.warn('[BlockWriter] Element already has block ID, skipping')
         return false
       }
 
@@ -86,10 +84,8 @@ async function insertBlockIdIntoHTML(html, filePath, lineNumber, blockId) {
       return true
     }
 
-    console.warn('[BlockWriter] Could not find element at line', lineNumber)
     return false
   } catch (error) {
-    console.error('[BlockWriter] Error inserting into HTML:', error)
     return false
   }
 }
@@ -108,7 +104,6 @@ async function insertBlockIdIntoMarkdown(markdown, filePath, lineNumber, blockId
     const lines = markdown.split('\n')
 
     if (lineNumber < 1 || lineNumber > lines.length) {
-      console.warn('[BlockWriter] Line number out of range:', lineNumber)
       return false
     }
 
@@ -117,7 +112,6 @@ async function insertBlockIdIntoMarkdown(markdown, filePath, lineNumber, blockId
 
     // Check if line already has a block ID
     if (/\s+\^[a-zA-Z0-9_-]+\s*$/.test(line)) {
-      console.warn('[BlockWriter] Line already has block ID, skipping')
       return false
     }
 
@@ -128,7 +122,6 @@ async function insertBlockIdIntoMarkdown(markdown, filePath, lineNumber, blockId
     await writeTextFile(filePath, lines.join('\n'))
     return true
   } catch (error) {
-    console.error('[BlockWriter] Error inserting into Markdown:', error)
     return false
   }
 }
@@ -150,7 +143,6 @@ const writeQueue = new Map()
 export async function queueBlockIdWrite(filePath, lineNumber, blockId) {
   // Check if write is already queued for this file
   if (writeQueue.has(filePath)) {
-    console.warn('[BlockWriter] Write already queued for:', filePath)
     return false
   }
 

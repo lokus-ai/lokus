@@ -116,9 +116,7 @@ export default function LogViewer({ enabled = true }) {
       });
       
       setLastUpdate(new Date());
-    } catch (error) {
-      console.error('Failed to load logs:', error);
-    } finally {
+    } catch { } finally {
       setIsLoading(false);
     }
   };
@@ -129,9 +127,7 @@ export default function LogViewer({ enabled = true }) {
       // await invoke('clear_mcp_logs');
       setLogs([]);
       setFilteredLogs([]);
-    } catch (error) {
-      console.error('Failed to clear logs:', error);
-    }
+    } catch { }
   };
 
   const exportLogs = async () => {
@@ -155,9 +151,7 @@ export default function LogViewer({ enabled = true }) {
       a.download = `mcp-logs-${new Date().toISOString().slice(0, 19)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Failed to export logs:', error);
-    }
+    } catch { }
   };
 
   const getLevelColor = (level) => {

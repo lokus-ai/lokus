@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { X, Github, Globe, Heart, Coffee } from 'lucide-react';
 import { getAppInfo } from '../utils/appInfo';
 import { logger } from '../utils/logger';
+import { useRemoteLinks } from '../contexts/RemoteConfigContext';
 
 const AboutDialog = ({ isOpen, onClose }) => {
   const [appInfo, setAppInfo] = useState(null);
+  const links = useRemoteLinks();
 
   useEffect(() => {
     if (isOpen) {
@@ -67,33 +69,39 @@ const AboutDialog = ({ isOpen, onClose }) => {
 
         {/* Links */}
         <div className="space-y-3 mb-6">
-          <a
-            href="https://github.com/lokus-ai/lokus"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-3 p-3 rounded-lg hover:bg-app-hover text-app-text transition-colors"
-          >
-            <Github className="w-5 h-5" />
-            <span className="text-sm">GitHub Repository</span>
-          </a>
-          <a
-            href="https://lokus.io"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-3 p-3 rounded-lg hover:bg-app-hover text-app-text transition-colors"
-          >
-            <Globe className="w-5 h-5" />
-            <span className="text-sm">Official Website</span>
-          </a>
-          <a
-            href="https://opencollective.com/lokus"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-3 p-3 rounded-lg hover:bg-app-hover text-app-text transition-colors"
-          >
-            <Heart className="w-5 h-5 text-red-500" />
-            <span className="text-sm">Support the Project</span>
-          </a>
+          {links.github && (
+            <a
+              href={links.github}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 p-3 rounded-lg hover:bg-app-hover text-app-text transition-colors"
+            >
+              <Github className="w-5 h-5" />
+              <span className="text-sm">GitHub Repository</span>
+            </a>
+          )}
+          {links.website && (
+            <a
+              href={links.website}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 p-3 rounded-lg hover:bg-app-hover text-app-text transition-colors"
+            >
+              <Globe className="w-5 h-5" />
+              <span className="text-sm">Official Website</span>
+            </a>
+          )}
+          {links.donate && (
+            <a
+              href={links.donate}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 p-3 rounded-lg hover:bg-app-hover text-app-text transition-colors"
+            >
+              <Heart className="w-5 h-5 text-red-500" />
+              <span className="text-sm">Support the Project</span>
+            </a>
+          )}
         </div>
 
         {/* Technical Info */}

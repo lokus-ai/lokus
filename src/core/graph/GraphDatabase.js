@@ -78,11 +78,6 @@ export class GraphDatabase extends EventEmitter {
       this._initializeMetrics();
     }
     
-    this.logger.info('GraphDatabase initialized', {
-      maxNodes: this.options.maxNodes,
-      maxEdgesPerNode: this.options.maxEdgesPerNode,
-      enableMetrics: this.options.enableMetrics
-    });
   }
 
   /**

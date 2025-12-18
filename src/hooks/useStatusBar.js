@@ -68,47 +68,34 @@ export function useStatusBar() {
 
   // Register status bar items for a newly activated plugin
   const registerPluginStatusBarItems = async (pluginId) => {
-    console.log(`[useStatusBar] Registering items for ${pluginId}`);
     try {
       // Get plugin info from adapter
       const pluginInfo = pluginStateAdapter.getPlugin(pluginId);
 
       if (pluginInfo && pluginInfo.manifest && pluginInfo.manifest.contributes?.statusBar) {
         const statusBarConfig = pluginInfo.manifest.contributes.statusBar;
-        console.log(`[useStatusBar] Found config for ${pluginId}:`, statusBarConfig);
 
         // Import and register the component
         await registerPluginComponent(pluginId, statusBarConfig);
       } else {
-        console.log(`[useStatusBar] No status bar config for ${pluginId}`, {
-          hasPluginInfo: !!pluginInfo,
-          hasManifest: !!pluginInfo?.manifest,
-          contributes: pluginInfo?.manifest?.contributes,
-          fullManifest: pluginInfo?.manifest
-        });
       }
-    } catch (error) {
-      console.warn(`Failed to register status bar items for ${pluginId}:`, error);
-    }
+    } catch { }
   };
 
   // Register a React component from plugin
   const registerPluginComponent = async (pluginId, config) => {
     try {
       const { component, position = 'right', priority = 0 } = config;
-      console.log(`[useStatusBar] Registering component ${component} for ${pluginId}`);
 
       // Check if the plugin has registered its components globally
       if (typeof window !== 'undefined' && window.lokusPluginComponents) {
         const pluginComponents = window.lokusPluginComponents[pluginId];
-        console.log(`[useStatusBar] Global components for ${pluginId}:`, pluginComponents);
 
         if (pluginComponents && pluginComponents[component]) {
           const Component = pluginComponents[component];
 
           // Validate the component before registering
           if (typeof Component === 'function' || (typeof Component === 'object' && Component.$$typeof)) {
-            console.log(`[useStatusBar] Valid component found for ${pluginId}, adding item`);
             addStatusBarItem(
               `${pluginId}-${component}`,
               position,
@@ -122,13 +109,10 @@ export function useStatusBar() {
 
             return;
           } else {
-            console.warn(`[useStatusBar] Invalid component type for ${pluginId}:`, typeof Component);
           }
         } else {
-          console.warn(`[useStatusBar] Component ${component} not found in global registry for ${pluginId}`);
         }
       } else {
-        console.warn(`[useStatusBar] window.lokusPluginComponents not found`);
       }
 
       // Check window.lokus.plugins for component access
@@ -163,8 +147,7 @@ export function useStatusBar() {
 
                 return;
               }
-            } catch (error) {
-            }
+            } catch { }
           }
 
           // Generic plugin component handling
@@ -184,8 +167,7 @@ export function useStatusBar() {
           }
         }
       }
-    } catch (error) {
-    }
+    } catch { }
   };
 
   // Add a status bar item
@@ -196,7 +178,6 @@ export function useStatusBar() {
       priority,
       ...itemData
     };
-
 
     if (position === 'left') {
       setLeftItems(prev => {

@@ -143,9 +143,7 @@ const ReadingModeView = ({ content, editorSettings }) => {
             }
           };
           renderMath();
-        } catch (err) {
-          console.error('Failed to render math:', err);
-        }
+        } catch { }
       }
 
       return () => {

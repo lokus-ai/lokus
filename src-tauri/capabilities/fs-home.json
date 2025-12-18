@@ -6,7 +6,8 @@
     "main",
     "ws-lokus-workspace",
     "prefs",
-    "ws-*"
+    "ws-*",
+    "launcher-*"
   ],
   "permissions": [
     "fs:default",

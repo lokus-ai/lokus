@@ -1031,8 +1031,7 @@ export class PerformanceManager {
     try {
       this.updatePerformanceMetrics();
       this.sigma.refresh();
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**

@@ -282,7 +282,6 @@ export class PropertyScanner {
 
       return results;
     } catch (error) {
-      console.error('Failed to scan directory:', error);
       return results;
     }
   }
@@ -316,8 +315,7 @@ export class PropertyScanner {
           }
         }
       }
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -475,8 +473,7 @@ export class PropertyScanner {
     for (const callback of this.listeners) {
       try {
         callback(event);
-      } catch (error) {
-      }
+      } catch { }
     }
   }
 

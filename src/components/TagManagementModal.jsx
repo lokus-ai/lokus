@@ -40,7 +40,6 @@ const TagManagementModal = ({ isOpen, onClose, file, onTagsUpdated }) => {
       const parsed = parseFrontmatter(content);
       setTags(parsed.tags || []);
     } catch (error) {
-      console.error('Failed to load tags:', error);
       setTags([]);
     } finally {
       setIsLoading(false);
@@ -164,7 +163,6 @@ const TagManagementModal = ({ isOpen, onClose, file, onTagsUpdated }) => {
 
       onClose();
     } catch (error) {
-      console.error('Failed to save tags:', error);
       alert(`Failed to save tags: ${error.message || error}`);
     } finally {
       setIsSaving(false);

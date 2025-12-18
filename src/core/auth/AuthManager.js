@@ -36,9 +36,7 @@ class AuthManager {
           }
         }
       });
-    } catch (error) {
-      console.error('Failed to register deep link listener:', error);
-    }
+    } catch { }
 
     // Listen for localhost auth completion events
     try {
@@ -47,13 +45,10 @@ class AuthManager {
       });
 
       await listen('auth-error', (event) => {
-        console.error('❌ [AuthManager] Authentication failed:', event.payload);
         alert(`Authentication failed: ${JSON.stringify(event.payload)}`);
         this.notifyListeners(); // Update UI to show error state
       });
-    } catch (error) {
-      console.error('[AuthManager] Failed to register auth event listeners:', error);
-    }
+    } catch { }
   }
 
   async checkAuthStatus() {
@@ -80,7 +75,6 @@ class AuthManager {
 
       this.notifyListeners();
     } catch (error) {
-      console.error('Failed to check auth status:', error);
       this.isAuthenticated = false;
       this.user = null;
       this.notifyListeners();
@@ -100,9 +94,7 @@ class AuthManager {
       }
 
       this.handleAuthCallback(params);
-    } catch (error) {
-      console.error('Failed to parse deep link URL:', error);
-    }
+    } catch { }
   }
 
   async handleAuthCallback(params) {
@@ -125,11 +117,9 @@ class AuthManager {
       await this.checkAuthStatus(); // Refresh user profile
 
     } catch (error) {
-      console.error('Auth callback failed:', error);
       this.notifyListeners();
     }
   }
-
 
   async signIn() {
     try {
@@ -137,7 +127,6 @@ class AuthManager {
       const authUrl = await invoke('initiate_oauth_flow');
       await invoke('open_auth_url', { authUrl });
     } catch (error) {
-      console.error('❌ [AuthManager] Failed to initiate OAuth flow:', error);
       alert(`Failed to start authentication: ${error}`);
       throw error;
     }
@@ -150,7 +139,6 @@ class AuthManager {
       this.user = null;
       this.notifyListeners();
     } catch (error) {
-      console.error('Failed to sign out:', error);
       throw error;
     }
   }
@@ -200,7 +188,6 @@ class AuthManager {
 
       return tokenData.access_token;
     } catch (error) {
-      console.error('Failed to get access token:', error);
       return null;
     }
   }
@@ -236,7 +223,6 @@ class AuthManager {
         await invoke('refresh_auth_token');
         await this.checkAuthStatus(); // Refresh auth state
       } catch (error) {
-        console.error('Failed to refresh token:', error);
         // If refresh fails, sign out the user
         await this.signOut();
         throw error;
@@ -296,9 +282,7 @@ class AuthManager {
           isAuthenticated: this.isAuthenticated,
           user: this.user
         });
-      } catch (error) {
-        console.error('Error in auth state listener:', error);
-      }
+      } catch { }
     });
   }
 

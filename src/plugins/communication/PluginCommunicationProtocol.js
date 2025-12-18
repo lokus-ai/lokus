@@ -311,8 +311,7 @@ export class PluginCommunicationProtocol extends EventEmitter {
     if (handler) {
       try {
         await handler(params, { method, pluginId: this.pluginId })
-      } catch (error) {
-      }
+      } catch { }
     }
   }
 
@@ -327,8 +326,7 @@ export class PluginCommunicationProtocol extends EventEmitter {
       for (const handler of handlers) {
         try {
           handler(data)
-        } catch (error) {
-        }
+        } catch { }
       }
     }
   }

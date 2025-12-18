@@ -146,8 +146,7 @@ export class GraphData {
 
       this.rebuildIndices();
       this.emit('dataLoaded', { nodeCount: nodes.length, linkCount: links.length });
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -485,7 +484,6 @@ export class GraphData {
 
       return tags;
     } catch (error) {
-      console.error('[GraphData] Failed to extract tags:', error);
       return [];
     }
   }
@@ -530,7 +528,6 @@ export class GraphData {
 
     this.persistNode(node);
     this.emit('nodeCreated', { node });
-
 
     // Clean up any existing placeholder for this document
     this.cleanupPlaceholderForDocument(documentId, metadata.title);
@@ -694,7 +691,6 @@ export class GraphData {
     this.persistNode(node);
     this.emit('nodeCreated', { node });
 
-
     return node;
   }
 
@@ -704,7 +700,6 @@ export class GraphData {
   async updateWikiLinksForNode(nodeId, wikiLinks) {
     const node = this.nodes.get(nodeId);
     if (!node) return;
-
 
     // Remove existing forward links for this node
     const existingForwardLinks = this.forwardlinks.get(nodeId) || new Set();
@@ -755,8 +750,7 @@ export class GraphData {
           this.stats.wikiLinkCount++;
         }
 
-      } catch (error) {
-      }
+      } catch { }
     }
 
     // Update node link count
@@ -779,7 +773,6 @@ export class GraphData {
     const targetNode = this.nodes.get(targetId);
     const sourceTitle = sourceNode ? sourceNode.title : sourceId;
     const targetTitle = targetNode ? targetNode.title : targetId;
-
 
     const link = {
       id: linkId,
@@ -991,23 +984,23 @@ export class GraphData {
 
   /**
    * Get link color based on type
+   * Returns 6-digit hex colors (no alpha) for compatibility with Three.js/polished
    */
   getLinkColor(type) {
     // Try to get color from CSS variables (theme-aware)
     const baseColor = getCSSVariable('--graph-link');
-    const hoverColor = getCSSVariable('--graph-link-hover');
 
-    // Add transparency to theme colors
-    if (baseColor && baseColor.startsWith('#')) {
-      return baseColor + '60'; // Add 60 alpha (37.5% opacity)
+    // Return base color without alpha (Three.js/polished don't support 8-digit hex)
+    if (baseColor && /^#[0-9A-Fa-f]{6}$/.test(baseColor)) {
+      return baseColor;
     }
 
-    // Fallback colors if CSS variables not available
+    // Fallback colors - 6-digit hex only (no alpha)
     const fallbackColors = {
-      wikilink: '#ffffff60',
-      tag: '#ef444460',
-      folder: '#f59e0b60',
-      default: '#ffffff40'
+      wikilink: '#ffffff',
+      tag: '#ef4444',
+      folder: '#f59e0b',
+      default: '#6b7280'
     };
 
     return fallbackColors[type] || fallbackColors.default;
@@ -1150,8 +1143,7 @@ export class GraphData {
       const transaction = this.db.transaction(['nodes'], 'readwrite');
       const store = transaction.objectStore('nodes');
       await store.put(node);
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -1164,8 +1156,7 @@ export class GraphData {
       const transaction = this.db.transaction(['links'], 'readwrite');
       const store = transaction.objectStore('links');
       await store.put(link);
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -1178,8 +1169,7 @@ export class GraphData {
       const transaction = this.db.transaction(['links'], 'readwrite');
       const store = transaction.objectStore('links');
       await store.delete(linkId);
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**
@@ -1207,8 +1197,7 @@ export class GraphData {
       this.listeners.get(event).forEach(callback => {
         try {
           callback(data);
-        } catch (error) {
-        }
+        } catch { }
       });
     }
   }
@@ -1319,8 +1308,7 @@ export class GraphData {
       const transaction = this.db.transaction(['nodes'], 'readwrite');
       const store = transaction.objectStore('nodes');
       await store.delete(nodeId);
-    } catch (error) {
-    }
+    } catch { }
   }
 
   /**

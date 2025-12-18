@@ -18,9 +18,7 @@ function SyncStatus() {
         ]);
         setStatus(statusData);
         setMetrics(metricsData);
-      } catch (error) {
-        console.error('Failed to fetch sync data:', error);
-      }
+      } catch { }
     }, 1000);
     
     return () => clearInterval(interval);
@@ -30,10 +28,7 @@ function SyncStatus() {
     setLoading(true);
     try {
       const result = await invoke('iroh_force_sync_all');
-      console.log('Force sync result:', result);
-    } catch (error) {
-      console.error('Force sync failed:', error);
-    } finally {
+    } catch { } finally {
       setLoading(false);
     }
   };

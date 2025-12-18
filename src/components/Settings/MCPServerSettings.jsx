@@ -56,9 +56,7 @@ export default function MCPServerSettings() {
     try {
       const result = await invoke('mcp_status')
       setStatus(result)
-    } catch (error) {
-      console.error('Failed to load MCP status:', error)
-    }
+    } catch { }
   }
 
   // Start server

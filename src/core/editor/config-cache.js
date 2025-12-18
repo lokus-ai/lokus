@@ -19,7 +19,6 @@ class EditorConfigCache {
       const cfg = await readConfig() || {};
       this.config = this.mergeDefaults(cfg);
     } catch (e) {
-      console.warn('[EditorConfigCache] Failed to load config, using defaults:', e);
       this.config = this.getDefaults();
     }
     this.loading = false;

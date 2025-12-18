@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Image as ImageIcon, Link as LinkIcon, Upload, X, ExternalLink } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 
 export default function ImageInsertModal({
   isOpen,
@@ -70,7 +70,6 @@ export default function ImageInsertModal({
       const files = await invoke('find_workspace_images', { workspacePath });
       setImageFiles(files || []);
     } catch (error) {
-      console.error('Failed to load workspace images:', error);
       setImageFiles([]);
     } finally {
       setIsLoadingFiles(false);
@@ -100,9 +99,10 @@ export default function ImageInsertModal({
   };
 
   const handleInsert = () => {
-    const src = mode === 'url' ? imageUrl : selectedFile;
+    // For workspace files, convert to asset URL that Tauri can load
+    const src = mode === 'url' ? imageUrl : convertFileSrc(selectedFile);
 
-    if (!src || !src.trim()) {
+    if (!src || (mode === 'url' && !src.trim())) {
       return;
     }
 
@@ -267,7 +267,7 @@ export default function ImageInsertModal({
                         }`}
                       >
                         <img
-                          src={`file://${file}`}
+                          src={convertFileSrc(file)}
                           alt={file.split('/').pop()}
                           className="w-full h-full object-cover"
                         />
@@ -308,7 +308,7 @@ export default function ImageInsertModal({
                   <p className="text-sm font-medium text-app-text mb-2">Preview</p>
                   <div className="flex justify-center items-center bg-app-panel rounded-lg overflow-hidden">
                     <img
-                      src={`file://${previewSrc}`}
+                      src={convertFileSrc(previewSrc)}
                       alt="Preview"
                       className="max-w-full max-h-64 object-contain"
                     />

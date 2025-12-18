@@ -41,7 +41,6 @@ const MERMAID_START_REGEX = /^``mm$/;
             try {
               code = atob(dataCode); // Base64 decode
             } catch (e) {
-              console.error('[MermaidDiagram] Failed to decode mermaid code:', e);
               code = '';
             }
           } else {

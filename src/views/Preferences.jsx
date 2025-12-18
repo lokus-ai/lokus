@@ -9,6 +9,8 @@ import { open, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import liveEditorSettings from "../core/editor/live-settings.js";
+// Import editor styles for Live Preview
+import "../editor/styles/editor.css";
 import markdownSyntaxConfig from "../core/markdown/syntax-config.js";
 import AIAssistant from "./preferences/AIAssistant.jsx";
 import ConnectionStatus from "../components/ConnectionStatus.jsx";
@@ -255,9 +257,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
           setThemeTokens(tokens);
           setOriginalTokens(tokens);
           setHasUnsavedChanges(false);
-        } catch (error) {
-          console.error('Failed to load initial theme tokens:', error);
-        }
+        } catch { }
       }
 
       // load markdown prefs if present
@@ -304,9 +304,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
             }
           }
         }
-      } catch (e) {
-        console.error('Failed to load sync settings:', e);
-      }
+      } catch { }
 
       // Load daily notes settings
       try {
@@ -319,9 +317,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
             openOnStartup: cfg.dailyNotes.openOnStartup || false
           });
         }
-      } catch (e) {
-        console.error('Failed to load daily notes settings:', e);
-      }
+      } catch { }
 
       // Get workspace path from opener, URL params, or backend API
       try {
@@ -348,16 +344,11 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
             if (currentWorkspace) {              setWorkspacePath(currentWorkspace);
             } else {
               if (import.meta.env.DEV) {
-                console.warn('No current workspace in API state');
               }
             }
-          } catch (e) {
-            console.error('Failed to get current workspace from API:', e);
-          }
+          } catch { }
         }
-      } catch (e) {
-        console.error('Failed to get workspace path:', e);
-      }
+      } catch { }
     }
     loadData().catch(() => {});
   }, []);
@@ -375,7 +366,6 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
         // Keep saving indicator visible briefly
         setTimeout(() => setSyncSaving(false), 500);
       } catch (e) {
-        console.error('Failed to save sync settings:', e);
         setSyncSaving(false);
       }
     }, 500),
@@ -442,7 +432,6 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
 
         // If config explicitly says '' (user left), don't restore
         if (configDocId === '') {
-          console.log('User left document, not restoring');
           return;
         }
 
@@ -450,7 +439,6 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
         const savedDocId = await invoke('iroh_check_saved_document', { workspacePath: workspacePath });
         if (savedDocId && !irohDocumentId) {
           // Restored from saved ticket
-          console.log('Restored Iroh document from disk:', savedDocId);
           setIrohDocumentId(savedDocId);
           setIrohStatus('connected');
 
@@ -458,26 +446,19 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
           try {
             const ticket = await invoke('iroh_get_ticket', { workspacePath: workspacePath });
             setIrohTicket(ticket);
-          } catch (e) {
-            console.error('Failed to get ticket after restore:', e);
-          }
+          } catch { }
 
           // Fetch peers
           try {
             const peers = await invoke('iroh_list_peers', { workspacePath: workspacePath });
             setIrohPeers(peers || []);
-          } catch (e) {
-            console.error('Failed to fetch peers after restore:', e);
-          }
+          } catch { }
 
           // Auto-start auto-sync if it was enabled before
           if (autoSyncEnabled) {
             try {
               await invoke('iroh_start_auto_sync', { workspacePath: workspacePath });
-              console.log('Auto-sync resumed from saved state');
-            } catch (e) {
-              console.error('Failed to resume auto-sync:', e);
-            }
+            } catch { }
           }
         } else if (irohDocumentId) {
           // We already have a document ID from React state, verify it
@@ -490,17 +471,13 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
             try {
               const peers = await invoke('iroh_list_peers', { workspacePath: workspacePath });
               setIrohPeers(peers || []);
-            } catch (e) {
-              console.error('Failed to fetch initial peers:', e);
-            }
+            } catch { }
           } catch (e) {
-            console.error('Failed to get Iroh ticket:', e);
             setIrohStatus('error');
             setIrohError(String(e));
           }
         }
       } catch (e) {
-        console.error('Failed to check saved document:', e);
         // Continue with normal flow - not a fatal error
       }
     };
@@ -520,9 +497,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
         try {
           const peers = await invoke('iroh_list_peers', { workspacePath: workspacePath });
           setIrohPeers(peers || []);
-        } catch (e) {
-          console.error('Failed to refresh peers:', e);
-        }
+        } catch { }
       }
     }, 30000);
 
@@ -582,7 +557,6 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
         setOriginalTokens(tokens);
         setHasUnsavedChanges(false);
       } catch (error) {
-        console.error('Failed to load theme tokens:', error);
         setThemeTokens({});
         setOriginalTokens({});
       }
@@ -707,7 +681,6 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
       try {
         // Listen for sync status updates
         const unlisten1 = await listen('sync_status_updated', (event) => {
-          console.log('Sync status updated:', event.payload);
           setSyncProgress(null); // Clear progress
           setLastSyncTime(new Date().toISOString());
           setSyncError(null); // Clear any previous errors
@@ -716,14 +689,13 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
           if (workspacePath && irohDocumentId) {
             invoke('iroh_list_peers', { workspacePath: workspacePath })
               .then(peers => setIrohPeers(peers || []))
-              .catch(err => console.error('Failed to refresh peers:', err));
+              .catch(() => {});
           }
         });
         unlisteners.push(unlisten1);
 
         // Listen for sync errors
         const unlisten2 = await listen('sync_error', (event) => {
-          console.error('Sync error:', event.payload);
           setSyncError(event.payload?.error || event.payload?.message || 'Sync error occurred');
           setSyncProgress(null); // Clear progress on error
         });
@@ -731,14 +703,11 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
 
         // Listen for sync progress
         const unlisten3 = await listen('sync_progress', (event) => {
-          console.log('Sync progress:', event.payload);
           setSyncProgress(event.payload);
           setSyncError(null); // Clear errors during active sync
         });
         unlisteners.push(unlisten3);
-      } catch (error) {
-        console.error('Failed to setup event listeners:', error);
-      }
+      } catch { }
     };
 
     setupListeners();
@@ -774,7 +743,6 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
       setSaveStatus('success');
       setTimeout(() => setSaveStatus(''), 3000);
     } catch (e) {
-      console.error('Failed to save editor settings:', e);
       setSaveStatus('error');
       setTimeout(() => setSaveStatus(''), 3000);
     }
@@ -783,9 +751,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
   const saveDailyNotesSettings = async () => {
     try {
       await updateConfig({ dailyNotes: dailyNotesSettings });
-    } catch (e) {
-      console.error('Failed to save daily notes settings:', e);
-    }
+    } catch { }
   };
 
   const resetEditorSettings = () => {
@@ -833,16 +799,18 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
     try {
       const { updateConfig } = await import("../core/config/store.js");
       await updateConfig({ markdown: next });
-    } catch (e) {
-      console.error('Failed to update markdown preferences:', e);
-    }
+    } catch { }
   };
 
   // Add error boundary
   try {
     return (
       <div className="h-full bg-app-bg text-app-text flex flex-col">
-        <header className="h-12 px-4 flex items-center border-b border-app-border bg-app-panel">
+        {/* Titlebar drag region for macOS traffic lights */}
+        <header
+          data-tauri-drag-region
+          className="h-12 pl-20 pr-4 flex items-center border-b border-app-border bg-app-panel shrink-0"
+        >
           <div className="font-medium text-sm">Preferences</div>
         </header>
 
@@ -2361,11 +2329,8 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                           config: markdownSyntaxConfig.getAll()
                         });
                         if (import.meta.env.DEV) {
-                          console.log('[Preferences] Emitted lokus:markdown-config-changed event');
                         }
-                      } catch (e) {
-                        console.error('[Preferences] Failed to emit config change event:', e);
-                      }
+                      } catch { }
                     }
                   }}
                   className="px-6 py-2 text-sm rounded-lg bg-app-accent text-white hover:bg-app-accent/90 transition-colors relative"
@@ -2660,9 +2625,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                       onClick={async () => {
                         try {
                           await signIn();
-                        } catch (error) {
-                          console.error('Sign in failed:', error);
-                        }
+                        } catch { }
                       }}
                       className="inline-flex items-center gap-2 px-6 py-3 bg-app-accent text-white font-medium rounded-lg hover:bg-app-accent/90 transition-colors"
                     >
@@ -2701,9 +2664,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                           try {
                             setIsSigningOut(true);
                             await signOut();
-                          } catch (error) {
-                            console.error('Sign out failed:', error);
-                          } finally {
+                          } catch { } finally {
                             setIsSigningOut(false);
                           }
                         }}
@@ -2881,9 +2842,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                               try {
                                 const ticket = await invoke('iroh_get_ticket', { workspacePath: workspacePath });
                                 setIrohTicket(ticket);
-                              } catch (e) {
-                                console.error('Failed to get ticket:', e);
-                              }
+                              } catch { }
                             } catch (err) {
                               setIrohStatus('error');
                               setIrohError(String(err));
@@ -2928,7 +2887,6 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                                   setIrohStatus('connected');
                                 }
                               } catch (err) {
-                                console.error('Failed to fetch peers:', err);
                                 setIrohError('Failed to fetch peers: ' + String(err));
                               }
                               setSyncLoading(false);
@@ -2954,7 +2912,6 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                                 const peers = await invoke('iroh_list_peers', { workspacePath: workspacePath });
                                 setIrohPeers(peers || []);
                               } catch (err) {
-                                console.error('Force sync failed:', err);
                                 setIrohError('Force sync failed: ' + String(err));
                               }
                               setSyncLoading(false);
@@ -3002,7 +2959,6 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
 
                               alert('Left document successfully. You can now create a new document or join a different one.');
                             } catch (err) {
-                              console.error('Failed to leave document:', err);
                               setIrohError('Failed to leave document: ' + String(err));
                               alert('Failed to leave document: ' + String(err));
                             }
@@ -3102,13 +3058,10 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                             try {
                               if (enabled) {
                                 await invoke('iroh_start_auto_sync', { workspacePath: workspacePath });
-                                console.log('Auto-sync started');
                               } else {
                                 await invoke('iroh_stop_auto_sync');
-                                console.log('Auto-sync stopped');
                               }
                             } catch (error) {
-                              console.error('Failed to toggle auto-sync:', error);
                               setSyncError(String(error));
                               setAutoSyncEnabled(!enabled); // Revert on error
                             }
@@ -3770,7 +3723,6 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
     </div>
     );
   } catch (error) {
-    console.error('🔧 Preferences rendering error:', error);
     return (
       <div className="p-5 bg-app-bg text-app-text min-h-full">
         <h1 className="text-2xl font-bold mb-4">Preferences</h1>

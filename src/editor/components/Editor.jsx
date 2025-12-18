@@ -19,6 +19,7 @@ import * as StrikeExt from "@tiptap/extension-strike";
 import * as HighlightExt from "@tiptap/extension-highlight";
 import * as HorizontalRuleExt from "@tiptap/extension-horizontal-rule";
 import { InputRule, nodeInputRule } from "@tiptap/core";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import MathExt from "../extensions/Math.js";
 import WikiLink from "../extensions/WikiLink.js";
 import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
@@ -152,8 +153,13 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
               find: /!\[([^\]]*)\]\(([^)]+)\)$/,
               type: this.type,
               getAttributes: (match) => {
-                const src = match[2];
+                let src = match[2];
                 const alt = match[1];
+                // Convert local file paths to asset URLs that Tauri can load
+                // URLs and data URIs pass through unchanged
+                if (src && !src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('asset:')) {
+                  src = convertFileSrc(src);
+                }
                 return {
                   src,
                   alt
@@ -273,7 +279,6 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
 
     // Mermaid diagrams
     exts.push(MermaidDiagram);
-
 
     // Add plugin extensions
     exts.push(...pluginExtensions);
@@ -437,9 +442,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
             tagManager.indexNote(activeFile, content);
           });
         }
-      } catch (error) {
-        console.error('[Editor] Failed to index tags:', error);
-      }
+      } catch { }
     }, 2000);
   }, [onContentChange]);
 
@@ -521,7 +524,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           // Detect modifier keys for "open in new tab" behavior
           const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
           const openInNewTab = isMac ? event.metaKey : event.ctrlKey;
-
 
           // Check if this is a block reference (contains ^)
           // Check BOTH href and target since target might be empty when loaded from disk
@@ -625,7 +627,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     if (editor) onEditorReady(editor);
     return () => onEditorReady(null);
   }, [editor, onEditorReady]);
-
 
   // Keyboard shortcuts and event listeners for WikiLink and Task insertion
   useEffect(() => {
@@ -915,7 +916,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
                     }
                   })
                   .catch(err => {
-                    console.error('[Editor] Error writing block ID:', err)
                   })
               }
             }
@@ -930,9 +930,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
 
             // Optional: Show toast notification (if you have a toast system)
             // toast.success('Block reference copied to clipboard')
-          } catch (error) {
-            console.error('[Editor] Error copying block reference:', error)
-          }
+          } catch { }
         })()
         break;
       default:
@@ -965,7 +963,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
       />
     );
   }
-
 
   // Edit and Live Preview modes - show TipTap editor
   // In live mode, we keep editor editable but could add visual hints

@@ -14,9 +14,6 @@ async function getTemplateManager() {
     const workspacePath = await WorkspaceManager.getValidatedWorkspacePath();
     const templateDir = workspacePath ? `${workspacePath}/templates` : null;
 
-    console.log('[useTemplates] Workspace path:', workspacePath);
-    console.log('[useTemplates] Templates directory:', templateDir);
-
     if (!templateDir) {
       throw new Error('No workspace selected. Please open a workspace first.');
     }
@@ -26,7 +23,6 @@ async function getTemplateManager() {
       templateDir
     });
     await templateStorage.initialize();
-    console.log('[useTemplates] Storage initialized');
 
     templateManager = new TemplateManager({
       storage: templateStorage,
@@ -35,7 +31,6 @@ async function getTemplateManager() {
 
     // Load existing templates from files
     const result = await templateManager.initialize();
-    console.log('[useTemplates] Manager initialized. Loaded', result.count, 'templates');
   }
   return templateManager;
 }
@@ -52,16 +47,13 @@ export function useTemplates() {
   // Initialize manager
   useEffect(() => {
     let mounted = true;
-    console.log('[useTemplates] Initializing template manager...');
     getTemplateManager().then(mgr => {
       if (mounted) {
-        console.log('[useTemplates] Template manager initialized successfully');
         setManager(mgr);
         setLoading(false);
       }
     }).catch(err => {
       if (mounted) {
-        console.error('[useTemplates] Failed to initialize template manager:', err);
         setError(err.message);
         setLoading(false);
       }
@@ -78,7 +70,6 @@ export function useTemplates() {
       const result = manager.list(options);      setTemplates(result.templates);
       return result;
     } catch (err) {
-      console.error('[useTemplates] Load error:', err);
       setError(err.message);
       return { templates: [], total: 0 };
     } finally {
@@ -91,7 +82,6 @@ export function useTemplates() {
     if (!manager) return { templates: [], total: 0 };
 
     if (import.meta.env.DEV) {
-      console.log('[useTemplates] Refreshing templates from filesystem...');
     }
     setLoading(true);
     setError(null);
@@ -100,19 +90,16 @@ export function useTemplates() {
       // Refresh from filesystem
       await manager.refresh();
       if (import.meta.env.DEV) {
-        console.log('[useTemplates] Filesystem refresh complete');
       }
 
       // Now get the formatted list
       const result = manager.list();
       if (import.meta.env.DEV) {
-        console.log('[useTemplates] Loaded templates after refresh:', result);
       }
 
       setTemplates(result.templates);
       return result;
     } catch (err) {
-      console.error('[useTemplates] Refresh error:', err);
       setError(err.message);
       return { templates: [], total: 0 };
     } finally {
@@ -125,8 +112,6 @@ export function useTemplates() {
 
     try {      const template = await manager.create(templateData);      await loadTemplates(); // Refresh list      return template;
     } catch (err) {
-      console.error('[useTemplates] Create error:', err);
-      console.error('[useTemplates] Error message:', err.message);
       setError(err.message);
       throw err;
     }
@@ -321,10 +306,8 @@ This project is licensed under the MIT License.
   useEffect(() => {
     if (manager) {
       const init = async () => {
-        console.log('[useTemplates] Loading templates on mount...');
         await initializeDemoTemplates();
         const result = await loadTemplates();
-        console.log('[useTemplates] Initial load complete. Template count:', result.total);
       };
       init();
     }
@@ -381,7 +364,6 @@ export function useTemplateProcessor() {
       // Merge with built-in variables
       const builtins = builtinVariables.resolveAll(options.context || {});
       const allVariables = { ...builtins, ...variables };
-
 
       const result = await manager.process(templateId, allVariables, options);
       return result;
@@ -535,8 +517,7 @@ export function useTemplateOrganization() {
       setCategories(categoriesData);
       setTags(tagsData);
       setStats(statsData);
-    } catch (err) {
-    }
+    } catch { }
   }, [getCategories, getTags, getStatistics]);
 
   // Load data on mount
