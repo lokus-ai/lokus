@@ -33,6 +33,9 @@ export class EditorPluginAPI extends EventEmitter {
     this.editorCommands = new Map()
     this.formats = new Map()
 
+    // Language feature providers
+    this.providers = new Map()
+
     // Plugin tracking for cleanup
     this.pluginContributions = new Map()
 
@@ -44,8 +47,9 @@ export class EditorPluginAPI extends EventEmitter {
 
     // Performance monitoring
     this.loadTimes = new Map()
-    // Performance monitoring
-    this.loadTimes = new Map()
+
+    // Current plugin ID for tracking provider registrations
+    this.currentPluginId = null
   }
 
   // === ADAPTERS FOR SDK COMPATIBILITY ===
@@ -54,37 +58,69 @@ export class EditorPluginAPI extends EventEmitter {
    * Create a TextDocument adapter from TipTap state
    */
   _createDocumentAdapter(state, uri = 'untitled:default') {
+    const self = this
+    const text = state.doc.textContent
+    const lines = text.split('\n')
+
     return {
       uri: { toString: () => uri, path: uri, scheme: 'untitled' },
       fileName: uri,
       isUntitled: true,
-      languageId: 'markdown', // Default to markdown
+      languageId: 'markdown',
       version: 1,
       isDirty: false,
       isClosed: false,
-      eol: 1, // LF
-      lineCount: state.doc.childCount, // Approximation
+      eol: 1,
+      lineCount: lines.length,
 
       getText: (range) => {
-        if (range) {
-          // TODO: Implement range text extraction
-          return ''
-        }
-        return state.doc.textContent
+        if (!range) return text
+        const startOffset = self._positionToOffset(range.start)
+        const endOffset = self._positionToOffset(range.end)
+        return text.substring(startOffset, endOffset)
       },
 
-      lineAt: (line) => {
-        // TODO: Implement line extraction
+      lineAt: (lineOrPosition) => {
+        const lineNum = typeof lineOrPosition === 'number'
+          ? lineOrPosition
+          : lineOrPosition.line
+        const lineText = lines[lineNum] || ''
         return {
-          lineNumber: line,
-          text: '',
-          range: { start: { line, character: 0 }, end: { line, character: 0 } },
-          isEmptyOrWhitespace: true
+          lineNumber: lineNum,
+          text: lineText,
+          range: {
+            start: { line: lineNum, character: 0 },
+            end: { line: lineNum, character: lineText.length }
+          },
+          rangeIncludingLineBreak: {
+            start: { line: lineNum, character: 0 },
+            end: { line: lineNum + 1, character: 0 }
+          },
+          firstNonWhitespaceCharacterIndex: lineText.search(/\S/),
+          isEmptyOrWhitespace: lineText.trim().length === 0
         }
       },
 
-      offsetAt: (position) => 0, // TODO: Implement
-      positionAt: (offset) => ({ line: 0, character: 0 }), // TODO: Implement
+      offsetAt: (position) => {
+        let offset = 0
+        for (let i = 0; i < position.line && i < lines.length; i++) {
+          offset += lines[i].length + 1 // +1 for newline
+        }
+        offset += Math.min(position.character, (lines[position.line] || '').length)
+        return offset
+      },
+
+      positionAt: (offset) => {
+        let remaining = offset
+        for (let line = 0; line < lines.length; line++) {
+          if (remaining <= lines[line].length) {
+            return { line, character: remaining }
+          }
+          remaining -= lines[line].length + 1
+        }
+        return { line: lines.length - 1, character: (lines[lines.length - 1] || '').length }
+      },
+
       validateRange: (range) => range,
       validatePosition: (position) => position,
       save: async () => true
@@ -138,6 +174,545 @@ export class EditorPluginAPI extends EventEmitter {
   getActiveEditor() {
     return Promise.resolve(this._createEditorAdapter(this.editorInstance))
   }
+
+  /**
+   * Get editor content
+   * @returns {Promise<string>} Current editor content
+   */
+  async getContent() {
+    if (!this.editorInstance) {
+      throw new Error('Editor not initialized')
+    }
+    return this.editorInstance.getHTML()
+  }
+
+  /**
+   * Set editor content
+   */
+  async setContent(content) {
+    if (!this.editorInstance) {
+      throw new Error('Editor not initialized')
+    }
+    this.editorInstance.commands.setContent(content)
+    this.emit('content-changed', { content })
+  }
+
+  /**
+   * Insert content at cursor position
+   * @param {string} content - Content to insert
+   */
+  async insertContent(content) {
+    if (!this.editorInstance) {
+      throw new Error('Editor not initialized')
+    }
+    this.editorInstance.commands.insertContent(content)
+    this.emit('content-inserted', { content })
+  }
+
+  /**
+   * Set selection in editor
+   */
+  async setSelection(selection) {
+    if (!this.editorInstance) {
+      throw new Error('Editor not initialized')
+    }
+
+    // Convert from SDK Selection format to TipTap format
+    const from = this._positionToOffset(selection.start || selection.anchor)
+    const to = this._positionToOffset(selection.end || selection.active)
+
+    this.editorInstance.commands.setTextSelection({ from, to })
+    this.emit('selection-changed', { from, to })
+  }
+
+  /**
+   * Get all selections (currently only supports single selection)
+   * @returns {Promise<Selection[]>} Array of selections
+   */
+  async getSelections() {
+    if (!this.editorInstance) {
+      throw new Error('Editor not initialized')
+    }
+
+    const selection = this._createSelectionFromEditor(this.editorInstance)
+    return [selection]
+  }
+
+  /**
+   * Set multiple selections (currently only supports single selection)
+   * @param {Selection[]} selections - Array of selections
+   */
+  async setSelections(selections) {
+    if (!this.editorInstance) {
+      throw new Error('Editor not initialized')
+    }
+
+    if (!selections || selections.length === 0) {
+      return
+    }
+
+    // For now, only set the first selection
+    const selection = selections[0]
+    await this.setSelection(selection)
+  }
+
+  /**
+   * Replace text in a range
+   * @param {Range} range - Range to replace
+   * @param {string} text - New text
+   */
+  async replaceText(range, text) {
+    if (!this.editorInstance) {
+      throw new Error('Editor not initialized')
+    }
+
+    const from = this._positionToOffset(range.start)
+    const to = this._positionToOffset(range.end)
+
+    // Delete the range and insert new text
+    this.editorInstance
+      .chain()
+      .focus()
+      .deleteRange({ from, to })
+      .insertContentAt(from, text)
+      .run()
+
+    this.emit('text-replaced', { range, text })
+  }
+
+  /**
+   * Get text in range
+   */
+  async getTextInRange(range) {
+    if (!this.editorInstance) {
+      throw new Error('Editor not initialized')
+    }
+
+    const from = this._positionToOffset(range.start)
+    const to = this._positionToOffset(range.end)
+
+    return this.editorInstance.state.doc.textBetween(from, to)
+  }
+
+  /**
+   * Convert Position to offset
+   */
+  _positionToOffset(position) {
+    if (typeof position === 'number') return position
+    if (!this.editorInstance) return 0
+
+    // If position is {line, character} format
+    if (position && typeof position.line === 'number') {
+      const doc = this.editorInstance.state.doc
+      const text = doc.textContent
+      const lines = text.split('\n')
+
+      let offset = 0
+      for (let i = 0; i < position.line && i < lines.length; i++) {
+        offset += lines[i].length + 1 // +1 for newline
+      }
+      offset += Math.min(position.character || 0, (lines[position.line] || '').length)
+
+      return offset
+    }
+
+    return 0
+  }
+
+  /**
+   * Convert offset to Position
+   */
+  _offsetToPosition(offset) {
+    if (!this.editorInstance) {
+      return { line: 0, character: 0 }
+    }
+
+    const text = this.editorInstance.state.doc.textContent
+    const lines = text.split('\n')
+
+    let remaining = offset
+    for (let line = 0; line < lines.length; line++) {
+      if (remaining <= lines[line].length) {
+        return { line, character: remaining }
+      }
+      remaining -= lines[line].length + 1
+    }
+
+    return { line: lines.length - 1, character: (lines[lines.length - 1] || '').length }
+  }
+
+  /**
+   * Listen to active editor changes
+   */
+  onDidChangeActiveTextEditor(listener) {
+    const handler = (editor) => {
+      listener(this._createEditorAdapter(editor))
+    }
+    this.on('editor-changed', handler)
+
+    return new Disposable(() => {
+      this.off('editor-changed', handler)
+    })
+  }
+
+  /**
+   * Listen to selection changes
+   */
+  onDidChangeTextEditorSelection(listener) {
+    if (!this.editorInstance) {
+      // Queue for when editor is ready
+      const setupListener = () => {
+        this.editorInstance.on('selectionUpdate', ({ editor }) => {
+          const event = {
+            textEditor: this._createEditorAdapter(editor.view),
+            selections: [this._createSelectionFromEditor(editor)],
+            kind: 1 // Keyboard
+          }
+          listener(event)
+        })
+      }
+
+      this.once('editor-attached', setupListener)
+      return new Disposable(() => {
+        this.off('editor-attached', setupListener)
+      })
+    }
+
+    const handler = ({ editor }) => {
+      const event = {
+        textEditor: this._createEditorAdapter(editor.view),
+        selections: [this._createSelectionFromEditor(editor)],
+        kind: 1
+      }
+      listener(event)
+    }
+
+    this.editorInstance.on('selectionUpdate', handler)
+
+    return new Disposable(() => {
+      this.editorInstance?.off('selectionUpdate', handler)
+    })
+  }
+
+  /**
+   * Listen to text document changes
+   * @param {Function} listener - Callback function
+   * @returns {Disposable} Disposable to unregister the listener
+   */
+  onDidChangeTextDocument(listener) {
+    if (!this.editorInstance) {
+      // Queue for when editor is ready
+      const setupListener = () => {
+        this.editorInstance.on('update', ({ editor }) => {
+          const event = {
+            document: this._createDocumentAdapter(editor.state),
+            contentChanges: [],
+            reason: undefined
+          }
+          listener(event)
+        })
+      }
+
+      this.once('editor-attached', setupListener)
+      return new Disposable(() => {
+        this.off('editor-attached', setupListener)
+      })
+    }
+
+    const handler = ({ editor }) => {
+      const event = {
+        document: this._createDocumentAdapter(editor.state),
+        contentChanges: [],
+        reason: undefined
+      }
+      listener(event)
+    }
+
+    this.editorInstance.on('update', handler)
+
+    return new Disposable(() => {
+      this.editorInstance?.off('update', handler)
+    })
+  }
+
+  /**
+   * Listen to visible range changes
+   * @param {Function} listener - Callback function
+   * @returns {Disposable} Disposable to unregister the listener
+   */
+  onDidChangeTextEditorVisibleRanges(listener) {
+    if (!this.editorInstance) {
+      // Queue for when editor is ready
+      const setupListener = () => {
+        this.editorInstance.on('update', ({ editor }) => {
+          const event = {
+            textEditor: this._createEditorAdapter(editor.view),
+            visibleRanges: []
+          }
+          listener(event)
+        })
+      }
+
+      this.once('editor-attached', setupListener)
+      return new Disposable(() => {
+        this.off('editor-attached', setupListener)
+      })
+    }
+
+    const handler = ({ editor }) => {
+      const event = {
+        textEditor: this._createEditorAdapter(editor.view),
+        visibleRanges: []
+      }
+      listener(event)
+    }
+
+    this.editorInstance.on('update', handler)
+
+    return new Disposable(() => {
+      this.editorInstance?.off('update', handler)
+    })
+  }
+
+  /**
+   * Create selection from TipTap editor
+   */
+  _createSelectionFromEditor(editor) {
+    const { from, to } = editor.state.selection
+    return {
+      start: this._offsetToPosition(from),
+      end: this._offsetToPosition(to),
+      anchor: this._offsetToPosition(from),
+      active: this._offsetToPosition(to),
+      isEmpty: from === to,
+      isSingleLine: true // Simplified
+    }
+  }
+
+  // === LANGUAGE PROVIDER REGISTRATION METHODS ===
+
+  /**
+   * Register a completion item provider
+   * @param {string|object} selector - Document selector (language ID or {language, scheme, pattern})
+   * @param {object} provider - Completion provider with provideCompletionItems method
+   * @param {string[]} [triggerCharacters] - Characters that trigger completion
+   * @returns {Disposable} Disposable to unregister the provider
+   */
+  registerCompletionProvider(selector, provider, ...triggerCharacters) {
+    const id = `completion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    const registration = {
+      id,
+      type: 'completion',
+      selector,
+      provider,
+      triggerCharacters,
+      pluginId: this.currentPluginId
+    }
+
+    this.providers.set(id, registration)
+
+    this.emit('completion-provider-registered', registration)
+
+    return new Disposable(() => {
+      this.providers.delete(id)
+      this.emit('completion-provider-unregistered', { id })
+    })
+  }
+
+  /**
+   * Register a hover provider
+   * @param {string|object} selector - Document selector
+   * @param {object} provider - Hover provider with provideHover method
+   * @returns {Disposable} Disposable to unregister
+   */
+  registerHoverProvider(selector, provider) {
+    const id = `hover_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    const registration = {
+      id,
+      type: 'hover',
+      selector,
+      provider,
+      pluginId: this.currentPluginId
+    }
+
+    this.providers.set(id, registration)
+
+    this.emit('hover-provider-registered', registration)
+
+    return new Disposable(() => {
+      this.providers.delete(id)
+      this.emit('hover-provider-unregistered', { id })
+    })
+  }
+
+  /**
+   * Register a definition provider (go-to-definition)
+   * @param {string|object} selector - Document selector
+   * @param {object} provider - Definition provider with provideDefinition method
+   * @returns {Disposable} Disposable to unregister
+   */
+  registerDefinitionProvider(selector, provider) {
+    const id = `definition_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    const registration = {
+      id,
+      type: 'definition',
+      selector,
+      provider,
+      pluginId: this.currentPluginId
+    }
+
+    this.providers.set(id, registration)
+
+    this.emit('definition-provider-registered', registration)
+
+    return new Disposable(() => {
+      this.providers.delete(id)
+      this.emit('definition-provider-unregistered', { id })
+    })
+  }
+
+  /**
+   * Register a code action provider (quick fixes, refactoring)
+   * @param {string|object} selector - Document selector
+   * @param {object} provider - Code action provider with provideCodeActions method
+   * @param {object} [metadata] - Provider metadata (providedCodeActionKinds, etc.)
+   * @returns {Disposable} Disposable to unregister
+   */
+  registerCodeActionProvider(selector, provider, metadata) {
+    const id = `codeaction_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    const registration = {
+      id,
+      type: 'codeAction',
+      selector,
+      provider,
+      metadata,
+      pluginId: this.currentPluginId
+    }
+
+    this.providers.set(id, registration)
+
+    this.emit('code-action-provider-registered', registration)
+
+    return new Disposable(() => {
+      this.providers.delete(id)
+      this.emit('code-action-provider-unregistered', { id })
+    })
+  }
+
+  /**
+   * Register a document formatting provider
+   * @param {string|object} selector - Document selector
+   * @param {object} provider - Formatting provider with provideDocumentFormattingEdits method
+   * @returns {Disposable} Disposable to unregister
+   */
+  registerDocumentFormattingProvider(selector, provider) {
+    const id = `formatting_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    const registration = {
+      id,
+      type: 'formatting',
+      selector,
+      provider,
+      pluginId: this.currentPluginId
+    }
+
+    this.providers.set(id, registration)
+
+    this.emit('formatting-provider-registered', registration)
+
+    return new Disposable(() => {
+      this.providers.delete(id)
+      this.emit('formatting-provider-unregistered', { id })
+    })
+  }
+
+  /**
+   * Register a folding range provider
+   * @param {string|object} selector - Document selector
+   * @param {object} provider - Folding range provider with provideFoldingRanges method
+   * @returns {Disposable} Disposable to unregister
+   */
+  registerFoldingRangeProvider(selector, provider) {
+    const id = `folding_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    const registration = {
+      id,
+      type: 'folding',
+      selector,
+      provider,
+      pluginId: this.currentPluginId
+    }
+
+    this.providers.set(id, registration)
+
+    this.emit('folding-provider-registered', registration)
+
+    return new Disposable(() => {
+      this.providers.delete(id)
+      this.emit('folding-provider-unregistered', { id })
+    })
+  }
+
+  /**
+   * Register a document link provider
+   * @param {string|object} selector - Document selector
+   * @param {object} provider - Link provider with provideDocumentLinks method
+   * @returns {Disposable} Disposable to unregister
+   */
+  registerDocumentLinkProvider(selector, provider) {
+    const id = `link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    const registration = {
+      id,
+      type: 'link',
+      selector,
+      provider,
+      pluginId: this.currentPluginId
+    }
+
+    this.providers.set(id, registration)
+
+    this.emit('link-provider-registered', registration)
+
+    return new Disposable(() => {
+      this.providers.delete(id)
+      this.emit('link-provider-unregistered', { id })
+    })
+  }
+
+  /**
+   * Get providers by type
+   * @param {string} type - Provider type (completion, hover, definition, etc.)
+   * @returns {Array} Array of providers matching the type
+   */
+  getProviders(type) {
+    const providers = []
+    for (const provider of this.providers.values()) {
+      if (provider.type === type) {
+        providers.push(provider)
+      }
+    }
+    return providers
+  }
+
+  /**
+   * Unregister all providers for a specific plugin
+   * @param {string} pluginId - Plugin ID
+   */
+  unregisterAllProviders(pluginId) {
+    for (const [id, provider] of this.providers) {
+      if (provider.pluginId === pluginId) {
+        this.providers.delete(id)
+        this.emit(`${provider.type}-provider-unregistered`, { id })
+      }
+    }
+  }
+
+  // === TIPTAP EXTENSION REGISTRATION METHODS ===
 
   /**
    * Register a custom TipTap node
@@ -1393,6 +1968,9 @@ export class EditorPluginAPI extends EventEmitter {
 
     this.pluginContributions.delete(pluginId)
 
+    // Unregister all language providers
+    this.unregisterAllProviders(pluginId)
+
     // Hot reload to remove the extensions
     if (this.editorInstance) {
       this.hotReloadExtensions()
@@ -1418,6 +1996,7 @@ export class EditorPluginAPI extends EventEmitter {
       nodeViews: this.nodeViews.size,
       editorCommands: this.editorCommands.size,
       formats: this.formats.size,
+      providers: this.providers.size,
       totalPlugins: this.pluginContributions.size,
       averageLoadTime: this.getAverageLoadTime(),
       // Add error handler stats

@@ -7,7 +7,7 @@ import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, /* Mail, */ Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, FoldVertical, SquareSplitHorizontal, FilePlus as FilePlusCorner, SquareKanban, RefreshCw } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, /* Mail, */ Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, FoldVertical, SquareSplitHorizontal, FilePlus as FilePlusCorner, SquareKanban, RefreshCw, Terminal } from "lucide-react";
 import { ColoredFileIcon } from "../components/FileIcon.jsx";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
@@ -82,6 +82,8 @@ import Breadcrumbs from "../components/FileTree/Breadcrumbs.jsx";
 import AboutDialog from "../components/AboutDialog.jsx";
 import { copyFiles, cutFiles, getClipboardState, getRelativePath } from "../utils/clipboard.js";
 import "../styles/product-tour.css";
+import TerminalPanel from "../components/TerminalPanel/TerminalPanel.jsx";
+import { OutputPanel } from "../components/OutputPanel/OutputPanel.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -1140,6 +1142,9 @@ function WorkspaceWithScope({ path }) {
   // Graph view now opens as a tab instead of sidebar panel
   const [showGraphView, setShowGraphView] = useState(false);
   const [showDailyNotesPanel, setShowDailyNotesPanel] = useState(false);
+  const [showTerminalPanel, setShowTerminalPanel] = useState(false);
+  const [showOutputPanel, setShowOutputPanel] = useState(false);
+  const [bottomPanelTab, setBottomPanelTab] = useState('terminal'); // 'terminal' or 'output'
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
   const [currentDailyNoteDate, setCurrentDailyNoteDate] = useState(null);
   const [graphData, setGraphData] = useState(null);
@@ -3214,6 +3219,13 @@ function WorkspaceWithScope({ path }) {
         }
         return;
       }
+
+      // Ctrl/Cmd+`: Toggle terminal panel
+      if ((e.metaKey || e.ctrlKey) && e.key === '`' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        setShowTerminalPanel(prev => !prev);
+        return;
+      }
     };
 
     document.addEventListener('keydown', handleKeyDown, { capture: true });
@@ -4948,12 +4960,130 @@ function WorkspaceWithScope({ path }) {
           onClose={() => setShowAboutDialog(false)}
         />
 
+        {/* Bottom Panel with Tabs (Terminal and Output) */}
+        {(showTerminalPanel || showOutputPanel) && (
+          <div style={{
+            height: '250px',
+            borderTop: '1px solid rgb(var(--border))',
+            backgroundColor: 'rgb(var(--panel))',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            {/* Bottom Panel Tab Bar */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              borderBottom: '1px solid rgb(var(--border))',
+              backgroundColor: 'rgb(var(--panel))',
+              height: '32px'
+            }}>
+              <button
+                onClick={() => {
+                  setBottomPanelTab('terminal');
+                  setShowTerminalPanel(true);
+                  setShowOutputPanel(false);
+                }}
+                style={{
+                  padding: '0 12px',
+                  height: '100%',
+                  border: 'none',
+                  background: bottomPanelTab === 'terminal' ? 'rgb(var(--app-panel))' : 'transparent',
+                  color: bottomPanelTab === 'terminal' ? 'rgb(var(--text))' : 'rgb(var(--text-muted))',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  borderBottom: bottomPanelTab === 'terminal' ? '2px solid rgb(var(--accent))' : 'none',
+                  fontWeight: bottomPanelTab === 'terminal' ? '500' : 'normal'
+                }}
+              >
+                Terminal
+              </button>
+              <button
+                onClick={() => {
+                  setBottomPanelTab('output');
+                  setShowOutputPanel(true);
+                  setShowTerminalPanel(false);
+                }}
+                style={{
+                  padding: '0 12px',
+                  height: '100%',
+                  border: 'none',
+                  background: bottomPanelTab === 'output' ? 'rgb(var(--app-panel))' : 'transparent',
+                  color: bottomPanelTab === 'output' ? 'rgb(var(--text))' : 'rgb(var(--text-muted))',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  borderBottom: bottomPanelTab === 'output' ? '2px solid rgb(var(--accent))' : 'none',
+                  fontWeight: bottomPanelTab === 'output' ? '500' : 'normal'
+                }}
+              >
+                Output
+              </button>
+              <div style={{ flex: 1 }}></div>
+              <button
+                onClick={() => {
+                  setShowTerminalPanel(false);
+                  setShowOutputPanel(false);
+                }}
+                style={{
+                  padding: '0 12px',
+                  height: '100%',
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'rgb(var(--text-muted))',
+                  cursor: 'pointer',
+                  fontSize: '16px'
+                }}
+                title="Close panel"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Panel Content */}
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              {bottomPanelTab === 'terminal' && showTerminalPanel && (
+                <TerminalPanel
+                  isOpen={showTerminalPanel}
+                  onClose={() => {
+                    setShowTerminalPanel(false);
+                    setShowOutputPanel(false);
+                  }}
+                />
+              )}
+              {bottomPanelTab === 'output' && showOutputPanel && (
+                <OutputPanel
+                  isOpen={showOutputPanel}
+                  onClose={() => {
+                    setShowOutputPanel(false);
+                    setShowTerminalPanel(false);
+                  }}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Responsive Pluginable Status Bar with overflow menu */}
         <ResponsiveStatusBar
           activeFile={activeFile}
           unsavedChanges={unsavedChanges}
           openTabs={openTabs}
           editor={editor}
+          showTerminal={showTerminalPanel}
+          onToggleTerminal={() => {
+            setShowTerminalPanel(prev => !prev);
+            if (!showTerminalPanel) {
+              setBottomPanelTab('terminal');
+              setShowOutputPanel(false);
+            }
+          }}
+          showOutput={showOutputPanel}
+          onToggleOutput={() => {
+            setShowOutputPanel(prev => !prev);
+            if (!showOutputPanel) {
+              setBottomPanelTab('output');
+              setShowTerminalPanel(false);
+            }
+          }}
         />
 
         {/* Canvas Preview Popup */}

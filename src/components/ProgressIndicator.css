@@ -1,0 +1,199 @@
+.progress-indicator {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: rgb(var(--panel));
+  border: 1px solid rgb(var(--border));
+  border-radius: var(--radius);
+  min-width: 300px;
+  max-width: 500px;
+}
+
+.progress-indicator-container {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 9000;
+  pointer-events: none;
+}
+
+.progress-indicator-container .progress-indicator {
+  pointer-events: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: progress-slide-in 0.2s ease-out;
+}
+
+@keyframes progress-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Location-specific styles */
+.progress-notification {
+  /* Default notification style (bottom-right) */
+}
+
+.progress-window {
+  /* Full window progress - larger, centered */
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10000;
+  min-width: 400px;
+  max-width: 600px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.progress-source-control {
+  /* Source control panel progress - compact */
+  min-width: 250px;
+  padding: 8px;
+}
+
+.progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.progress-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: rgb(var(--text));
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress-message {
+  font-size: var(--text-sm);
+  color: rgb(var(--text-secondary));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress-bar-container {
+  height: 4px;
+  background: rgb(var(--border));
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: rgb(var(--accent));
+  border-radius: 2px;
+  transition: width 0.2s ease-out;
+}
+
+.progress-bar-fill.indeterminate {
+  width: 30%;
+  animation: progress-indeterminate 1.5s ease-in-out infinite;
+}
+
+@keyframes progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(233%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.progress-percentage {
+  font-size: var(--text-xs);
+  color: rgb(var(--muted));
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-cancel-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: transparent;
+  border: none;
+  color: rgb(var(--text-secondary));
+  cursor: pointer;
+  border-radius: calc(var(--radius) - 2px);
+  transition: all 0.15s ease;
+}
+
+.progress-cancel-button:hover {
+  background: rgba(var(--danger), 0.1);
+  color: rgb(var(--danger));
+}
+
+.progress-cancel-button:active {
+  transform: scale(0.95);
+}
+
+/* Compact variant for inline progress */
+.progress-indicator.compact {
+  min-width: 200px;
+  padding: 8px;
+  gap: 6px;
+}
+
+.progress-indicator.compact .progress-title {
+  font-size: var(--text-xs);
+}
+
+.progress-indicator.compact .progress-message {
+  font-size: var(--text-xs);
+}
+
+.progress-indicator.compact .progress-bar-container {
+  height: 3px;
+}
+
+/* Theme overrides for window progress (more prominent) */
+.progress-window .progress-bar-container {
+  height: 6px;
+}
+
+.progress-window .progress-title {
+  font-size: var(--text-base);
+}
+
+.progress-window .progress-message {
+  font-size: var(--text-base);
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar-fill {
+    transition: none;
+  }
+
+  .progress-bar-fill.indeterminate {
+    animation: none;
+    width: 100%;
+  }
+
+  @keyframes progress-slide-in {
+    from, to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+}

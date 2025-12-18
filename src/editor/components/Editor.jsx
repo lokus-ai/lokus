@@ -39,6 +39,8 @@ import Callout from "../extensions/Callout.js";
 import Folding from "../extensions/Folding.js";
 import MermaidDiagram from "../extensions/MermaidDiagram.jsx";
 import CanvasLink from '../extensions/CanvasLink.js';
+import PluginCompletion from '../extensions/PluginCompletion.js';
+import PluginHover from '../extensions/PluginHover.js';
 import liveEditorSettings from "../../core/editor/live-settings.js";
 import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import TaskCreationModal from "../../components/TaskCreationModal.jsx";
@@ -279,6 +281,10 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
 
     // Mermaid diagrams
     exts.push(MermaidDiagram);
+
+    // Plugin completion and hover providers
+    exts.push(PluginCompletion);
+    exts.push(PluginHover);
 
     // Add plugin extensions
     exts.push(...pluginExtensions);

@@ -8,6 +8,21 @@ export class TerminalAPI extends EventEmitter {
         super();
         this.terminalManager = terminalManager;
         this.terminals = new Map();
+
+        // Forward manager events to API events
+        if (this.terminalManager) {
+            this.terminalManager.on('terminal-created', (terminal) => {
+                this.emit('terminal-opened', terminal);
+            });
+
+            this.terminalManager.on('terminal-disposed', ({ terminalId }) => {
+                this.emit('terminal-closed', { terminalId });
+            });
+
+            this.terminalManager.on('active-terminal-changed', (terminal) => {
+                this.emit('active-terminal-changed', terminal);
+            });
+        }
     }
 
     /**
@@ -67,10 +82,75 @@ export class TerminalAPI extends EventEmitter {
     }
 
     /**
+     * Send text to a terminal
+     */
+    sendText(terminalId, text, addNewLine = true) {
+        if (this.terminalManager) {
+            this.terminalManager.sendText(terminalId, text, addNewLine);
+        }
+    }
+
+    /**
      * Get active terminal
      */
-    get activeTerminal() {
-        // TODO: Implement getting active terminal from manager
+    getActiveTerminal() {
+        if (this.terminalManager && this.terminalManager.getActiveTerminal) {
+            return this.terminalManager.getActiveTerminal();
+        }
         return undefined;
+    }
+
+    /**
+     * Get active terminal (getter alias)
+     */
+    get activeTerminal() {
+        return this.getActiveTerminal();
+    }
+
+    /**
+     * Get all terminals
+     */
+    getTerminals() {
+        if (this.terminalManager && this.terminalManager.getTerminals) {
+            return this.terminalManager.getTerminals();
+        }
+        return [];
+    }
+
+    /**
+     * Listen for terminal open events
+     */
+    onDidOpenTerminal(listener) {
+        return this.on('terminal-opened', listener);
+    }
+
+    /**
+     * Listen for terminal close events
+     */
+    onDidCloseTerminal(listener) {
+        return this.on('terminal-closed', listener);
+    }
+
+    /**
+     * Listen for active terminal change events
+     */
+    onDidChangeActiveTerminal(listener) {
+        return this.on('active-terminal-changed', listener);
+    }
+
+    /**
+     * Clean up all terminals for a plugin
+     */
+    cleanupPlugin(pluginId) {
+        if (this.terminalManager && this.terminalManager.cleanupPlugin) {
+            this.terminalManager.cleanupPlugin(pluginId);
+        }
+
+        // Also clean up local references
+        for (const [id, terminal] of this.terminals) {
+            if (terminal.pluginId === pluginId) {
+                this.terminals.delete(id);
+            }
+        }
     }
 }

@@ -1,9 +1,11 @@
 
 import React, { useMemo, useState } from 'react';
 import { useStatusBar } from '../hooks/useStatusBar';
+import { usePluginStatusItems } from '../hooks/usePluginStatusItems.js';
 import SyncStatus from './Auth/SyncStatus.jsx';
 import StatusBarContextMenu from './StatusBarContextMenu.jsx';
 import pluginStateAdapter from '../core/plugins/PluginStateAdapter.js';
+import { commandRegistry } from '../plugins/registry/CommandRegistry.js';
 
 /**
  * Pluginable Status Bar Component
@@ -12,6 +14,7 @@ import pluginStateAdapter from '../core/plugins/PluginStateAdapter.js';
  */
 export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], editor, readingSpeed = 200 }) {
   const { leftItems, rightItems } = useStatusBar();
+  const pluginStatusItems = usePluginStatusItems();
 
   // Context Menu State
   const [contextMenu, setContextMenu] = useState({
@@ -136,9 +139,37 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
     }
   };
 
+  // Separate plugin status items by alignment
+  const pluginLeftItems = pluginStatusItems.filter(item => item.alignment === 1);
+  const pluginRightItems = pluginStatusItems.filter(item => item.alignment !== 1);
+
   // Sort items by priority (higher priority first)
   const sortedLeftItems = [...leftItems].sort((a, b) => (b.priority || 0) - (a.priority || 0));
   const sortedRightItems = [...rightItems].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+
+  // Render plugin status item (from new API)
+  const renderPluginStatusItem = (item) => {
+    return (
+      <div
+        key={item.id}
+        className={`obsidian-status-bar-item ${item.command ? 'clickable' : ''}`}
+        title={item.tooltip}
+        style={{
+          color: item.color,
+          backgroundColor: item.backgroundColor
+        }}
+        onClick={() => {
+          if (item.command) {
+            const cmd = typeof item.command === 'string' ? item.command : item.command.command;
+            const args = typeof item.command === 'object' ? item.command.arguments : [];
+            commandRegistry.execute(cmd, ...(args || []));
+          }
+        }}
+      >
+        {item.text}
+      </div>
+    );
+  };
 
   return (
     <div className="obsidian-status-bar">
@@ -184,20 +215,48 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
             ))}
           </>
         )}
+
+        {/* Plugin status items (new API) in left section */}
+        {pluginLeftItems.length > 0 && (
+          <>
+            {(sortedLeftItems.length > 0 || openTabs.length > 0 || activeFile) && (
+              <div className="obsidian-status-bar-separator" />
+            )}
+            {pluginLeftItems.map((item, index) => (
+              <React.Fragment key={item.id}>
+                {index > 0 && <div className="obsidian-status-bar-separator" />}
+                {renderPluginStatusItem(item)}
+              </React.Fragment>
+            ))}
+          </>
+        )}
       </div>
 
       {/* Right section - plugin items and core items */}
       <div className="obsidian-status-bar-section">
-        {/* Plugin items in right section */}
-        {sortedRightItems.map((item, index) => (
+        {/* Plugin status items (new API) in right section */}
+        {pluginRightItems.map((item, index) => (
           <React.Fragment key={item.id}>
-            {renderStatusBarItem(item)}
-            {index < sortedRightItems.length - 1 && <div className="obsidian-status-bar-separator" />}
+            {renderPluginStatusItem(item)}
+            {index < pluginRightItems.length - 1 && <div className="obsidian-status-bar-separator" />}
           </React.Fragment>
         ))}
 
+        {/* Plugin items in right section */}
+        {sortedRightItems.length > 0 && (
+          <>
+            {pluginRightItems.length > 0 && <div className="obsidian-status-bar-separator" />}
+            {sortedRightItems.map((item, index) => (
+              <React.Fragment key={item.id}>
+                {renderStatusBarItem(item)}
+                {index < sortedRightItems.length - 1 && <div className="obsidian-status-bar-separator" />}
+              </React.Fragment>
+            ))}
+          </>
+        )}
+
         {/* Core status items */}
-        {(sortedRightItems.length > 0 || unsavedChanges.size > 0) && (
+        {(sortedRightItems.length > 0 || pluginRightItems.length > 0 || unsavedChanges.size > 0) && (
           <div className="obsidian-status-bar-separator" />
         )}
 
