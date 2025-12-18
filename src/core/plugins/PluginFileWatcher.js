@@ -1,5 +1,6 @@
-import { watch, readDir, lstat, readLink } from '@tauri-apps/plugin-fs';
+import { watch, readDir, lstat } from '@tauri-apps/plugin-fs';
 import { homeDir, join } from '@tauri-apps/api/path';
+import { invoke } from '@tauri-apps/api/core';
 import { logger } from '../../utils/logger.js';
 
 /**
@@ -67,6 +68,23 @@ export class PluginFileWatcher {
         }
     }
 
+    /**
+     * Try to read a symlink target using Tauri command.
+     * Returns null if the command doesn't exist or fails.
+     */
+    async readSymlinkTarget(path) {
+        try {
+            // Try using the Tauri fs read_link command
+            const target = await invoke('plugin:fs|read_link', { path });
+            return target;
+        } catch (e) {
+            // readLink may not be available in all Tauri FS plugin versions
+            // Fall back gracefully
+            logger.debug(`[PluginFileWatcher] Could not read symlink target for ${path}:`, e);
+            return null;
+        }
+    }
+
     async scanAndWatchSymlinks(pluginsDir) {
         try {
             const entries = await readDir(pluginsDir);
@@ -74,14 +92,17 @@ export class PluginFileWatcher {
                 try {
                     const entryPath = await join(pluginsDir, entry.name);
                     const metadata = await lstat(entryPath);
-                    
+
                     if (metadata.isSymlink) {
-                        // It's a symlink! Find the target.
-                        const target = await readLink(entryPath);
+                        // It's a symlink! Try to find the target.
+                        const target = await this.readSymlinkTarget(entryPath);
                         if (target) {
                             logger.info(`[PluginFileWatcher] Found symlink for ${entry.name} -> ${target}`);
                             // Watch the target directory
                             await this.addWatcher(target, entry.name);
+                        } else {
+                            // Can't resolve symlink, but the main watcher will still work
+                            logger.debug(`[PluginFileWatcher] Symlink ${entry.name} target unknown, relying on main watcher`);
                         }
                     }
                 } catch (e) {
