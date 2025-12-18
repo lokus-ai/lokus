@@ -37,6 +37,7 @@ import CodeBlockIndent from "../extensions/CodeBlockIndent.js";
 import Callout from "../extensions/Callout.js";
 import Folding from "../extensions/Folding.js";
 import MermaidDiagram from "../extensions/MermaidDiagram.jsx";
+import EmbeddedCanvas from "../extensions/EmbeddedCanvas.jsx";
 import CanvasLink from '../extensions/CanvasLink.js';
 import liveEditorSettings from "../../core/editor/live-settings.js";
 import WikiLinkModal from "../../components/WikiLinkModal.jsx";
@@ -274,6 +275,8 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
     // Mermaid diagrams
     exts.push(MermaidDiagram);
 
+    // Embedded Canvas (inline TLDraw)
+    exts.push(EmbeddedCanvas);
 
     // Add plugin extensions
     exts.push(...pluginExtensions);
