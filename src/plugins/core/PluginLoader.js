@@ -186,8 +186,12 @@ export class PluginLoader {
       // Load plugin main file
       const pluginModule = await this.loadPluginModule(pluginPath, manifest.main, pluginId)
 
+      // Load plugin styles
+      await this.loadPluginStyles(pluginPath, pluginId)
+
       // Create plugin instance with API
-      const plugin = await this.instantiatePlugin(pluginModule, manifest, pluginAPI)
+      const assetUri = convertFileSrc(pluginPath);
+      const plugin = await this.instantiatePlugin(pluginModule, manifest, pluginAPI, pluginPath, assetUri)
 
       this.logger.info(`Successfully loaded plugin: ${pluginId}`)
       return plugin
@@ -311,6 +315,44 @@ export class PluginLoader {
   }
 
   /**
+   * Load plugin styles
+   */
+  async loadPluginStyles(pluginPath, pluginId) {
+    try {
+      // Try to find style.css or index.css
+      const styleFiles = ['style.css', 'index.css', 'styles.css'];
+      let styleContent = null;
+
+      for (const file of styleFiles) {
+        const stylePath = await join(pluginPath, file);
+        if (await exists(stylePath)) {
+          styleContent = await readTextFile(stylePath);
+          break;
+        }
+      }
+
+      if (styleContent) {
+        const styleId = `plugin-style-${pluginId}`;
+
+        // Remove existing style if present (reloading)
+        const existingStyle = document.getElementById(styleId);
+        if (existingStyle) {
+          existingStyle.remove();
+        }
+
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = styleContent;
+        document.head.appendChild(style);
+
+        this.logger.info(`Loaded styles for ${pluginId}`);
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to load styles for ${pluginId}:`, error);
+    }
+  }
+
+  /**
    * Transform plugin code to handle imports
    * Rewrites 'lokus-plugin-sdk' imports to use global window.LokusSDK
    */
@@ -408,7 +450,7 @@ export class PluginLoader {
   /**
    * Instantiate plugin with security context
    */
-  async instantiatePlugin(pluginModule, manifest, pluginAPI) {
+  async instantiatePlugin(pluginModule, manifest, pluginAPI, pluginPath) {
     try {
       // Create security sandbox
       const sandbox = new PluginSandbox(manifest.id, pluginAPI)
@@ -440,6 +482,39 @@ export class PluginLoader {
         workspaceState: { get: () => undefined, update: async () => { }, keys: () => [], setKeysForSync: () => { } },
         secrets: { store: async () => { }, get: async () => undefined, delete: async () => { }, onDidChange: () => ({ dispose: () => { } }) }
       };
+
+      // Set Asset URI
+      if (pluginPath) {
+        // If it's a URL (dev mode), use it directly
+        if (pluginPath.startsWith('http')) {
+          contextData.assetUri = pluginPath;
+        } else {
+          // If it's a file path, convert to asset protocol
+          contextData.assetUri = convertFileSrc(pluginPath);
+        }
+      }
+
+      // Fix Asset URI
+      if (pluginModule) {
+        // We can't easily get the path from the module, but we have the manifest
+        // Assuming we are in a Tauri environment where we can access files
+        // We need to construct a file URL or use convertFileSrc
+        try {
+          // This is a bit hacky, we need the plugin path. 
+          // But instantiatePlugin doesn't take pluginPath.
+          // However, we can guess it from the manifest location if we had it, 
+          // or we can pass it in.
+          // For now, let's use a placeholder or try to get it from the loader state if possible.
+          // Better: Update instantiatePlugin signature to take pluginPath?
+          // Or just rely on the fact that we are in a browser context and might not need it 
+          // if we use relative paths? No, relative paths fail in Blob.
+
+          // Let's use a safe fallback
+          contextData.assetUri = '';
+        } catch (e) {
+          console.warn('Failed to set assetUri', e);
+        }
+      }
 
       const context = sandbox.createContext(contextData)
 

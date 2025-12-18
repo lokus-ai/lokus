@@ -1,6 +1,6 @@
 {
   "name": "lokus-plugin-sdk",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Official Plugin Development Kit (PDK) for Lokus - Build powerful plugins with TypeScript-first development experience",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

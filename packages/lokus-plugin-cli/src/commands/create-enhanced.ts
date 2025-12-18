@@ -271,6 +271,7 @@ export interface AdvancedCreateOptions {
   workspace?: boolean;
   publisher?: string;
   displayName?: string;
+  moduleType?: 'esm' | 'cjs';
 }
 
 async function showWelcomeScreen(): Promise<void> {
@@ -327,6 +328,7 @@ async function promptForAdvancedPluginDetails(name?: string, options: AdvancedCr
   initGit: boolean;
   installDeps: boolean;
   workspace: boolean;
+  moduleType: 'esm' | 'cjs';
 }> {
 
   // First, let user browse templates by category
@@ -516,6 +518,17 @@ async function promptForAdvancedPluginDetails(name?: string, options: AdvancedCr
     },
     {
       type: 'list',
+      name: 'moduleType',
+      message: 'Choose module system:',
+      choices: [
+        { name: '📦 ES Modules (Recommended)', value: 'esm' },
+        { name: '🐢 CommonJS (Legacy)', value: 'cjs' }
+      ],
+      default: 'esm',
+      when: !options.moduleType
+    },
+    {
+      type: 'list',
       name: 'testing',
       message: 'Choose testing framework:',
       choices: [
@@ -654,7 +667,8 @@ async function promptForAdvancedPluginDetails(name?: string, options: AdvancedCr
     storybook: options.storybook !== undefined ? options.storybook : conditionalOptions.storybook,
     initGit: options.git !== undefined ? options.git : finalOptions.initGit,
     installDeps: options.install !== undefined ? options.install : finalOptions.installDeps,
-    workspace: options.workspace !== undefined ? options.workspace : finalOptions.workspace
+    workspace: options.workspace !== undefined ? options.workspace : finalOptions.workspace,
+    moduleType: options.moduleType || advancedOptions.moduleType
   };
 }
 

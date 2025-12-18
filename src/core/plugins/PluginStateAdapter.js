@@ -607,7 +607,7 @@ class PluginStateAdapter {
         }
       }
 
-      const pluginInstance = await this.pluginLoader.instantiatePlugin(pluginModule, manifest, pluginAPI);
+      const pluginInstance = await this.pluginLoader.instantiatePlugin(pluginModule, manifest, pluginAPI, baseUrl);
 
       // 5. Register and Activate
       const pluginInfo = {

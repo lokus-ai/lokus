@@ -18,6 +18,7 @@ export interface ScaffolderOptions {
   examples: boolean;
   storybook: boolean;
   workspace: boolean;
+  moduleType: 'esm' | 'cjs';
 }
 
 export class ProjectScaffolder {
@@ -72,8 +73,7 @@ export class ProjectScaffolder {
       await fs.ensureDir(path.join(this.targetDir, dir));
     }
 
-    // Create placeholder icon
-    await fs.writeFile(path.join(this.targetDir, 'icon.png'), '');
+    // Note: icon.png should be created by the user, not as an empty placeholder
   }
 
   /**
@@ -207,12 +207,16 @@ export class ProjectScaffolder {
   // Private helper methods
 
   private async generatePackageJson(): Promise<void> {
+    // Sanitize author name for URLs (replace spaces with dashes, lowercase)
+    const authorSlug = this.options.author.replace(/\s+/g, '-').toLowerCase();
+
     const packageJson = {
       name: this.options.pluginName,
       version: '0.1.0',
       description: this.options.description,
       author: this.options.author,
       license: 'MIT',
+      type: this.options.moduleType === 'esm' ? 'module' : 'commonjs',
       main: this.options.typescript ? 'dist/index.js' : 'src/index.js',
       types: this.options.typescript ? 'dist/index.d.ts' : undefined,
       files: ['dist', 'plugin.json', 'README.md'],
@@ -225,12 +229,12 @@ export class ProjectScaffolder {
       ],
       repository: {
         type: 'git',
-        url: `https://github.com/${this.options.author}/${this.options.pluginName}.git`
+        url: `https://github.com/${authorSlug}/${this.options.pluginName}.git`
       },
       bugs: {
-        url: `https://github.com/${this.options.author}/${this.options.pluginName}/issues`
+        url: `https://github.com/${authorSlug}/${this.options.pluginName}/issues`
       },
-      homepage: `https://github.com/${this.options.author}/${this.options.pluginName}#readme`,
+      homepage: `https://github.com/${authorSlug}/${this.options.pluginName}#readme`,
       engines: {
         node: '>=16.0.0',
         lokus: '^1.0.0'
@@ -279,8 +283,11 @@ export class ProjectScaffolder {
 
     // Testing scripts
     if (this.options.testing !== 'none') {
-      scripts.test = this.options.testing;
-      scripts['test:watch'] = `${this.options.testing} --watch`;
+      // Use --run flag for vitest to prevent watch mode during initial test
+      scripts.test = this.options.testing === 'vitest'
+        ? 'vitest --run'
+        : this.options.testing;
+      scripts['test:watch'] = this.options.testing;
       scripts['test:coverage'] = `${this.options.testing} --coverage`;
     }
 
@@ -406,10 +413,14 @@ export class ProjectScaffolder {
   }
 
   private async generatePluginManifest(): Promise<void> {
+    // Sanitize author name for URLs (replace spaces with dashes, lowercase)
+    const authorSlug = this.options.author.replace(/\s+/g, '-').toLowerCase();
+
     const manifest = {
       manifest: '2.0',
       id: this.options.pluginName,
       name: this.options.pluginName,
+      displayName: this.options.pluginName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
       version: '0.1.0',
       description: this.options.description,
       author: this.options.author,
@@ -428,13 +439,13 @@ export class ProjectScaffolder {
       contributes: this.generateContributions(),
       repository: {
         type: 'git',
-        url: `https://github.com/${this.options.author}/${this.options.pluginName}.git`
+        url: `https://github.com/${authorSlug}/${this.options.pluginName}.git`
       },
       bugs: {
-        url: `https://github.com/${this.options.author}/${this.options.pluginName}/issues`
+        url: `https://github.com/${authorSlug}/${this.options.pluginName}/issues`
       },
-      homepage: `https://github.com/${this.options.author}/${this.options.pluginName}#readme`,
-      icon: 'icon.png',
+      homepage: `https://github.com/${authorSlug}/${this.options.pluginName}#readme`,
+      // Icon field is optional - users should provide their own icon.png
       galleryBanner: {
         color: '#2c2c2c',
         theme: 'dark'
@@ -487,8 +498,49 @@ export class ProjectScaffolder {
   // Build system config generators
   private async generateESBuildConfig(): Promise<void> {
     const entryExt = this.template.category === 'UI' && this.options.typescript ? 'tsx' : (this.options.typescript ? 'ts' : 'js');
+    const isEsm = this.options.moduleType === 'esm';
 
-    const config = `const esbuild = require('esbuild');
+    const config = isEsm ?
+      `import * as esbuild from 'esbuild';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const isProduction = process.env.NODE_ENV === 'production';
+
+await esbuild.build({
+  entryPoints: ['src/index.${entryExt}'],
+  bundle: true,
+  outfile: 'dist/index.js',
+  platform: 'browser', // Target browser for Lokus runtime
+  target: 'es2020',
+  format: 'esm',
+  sourcemap: !isProduction,
+  minify: isProduction,
+  external: ['lokus-plugin-sdk', 'react', 'react-dom'], // Externalize runtime dependencies
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')
+  }
+}).catch(() => process.exit(1));
+
+if (process.argv.includes('--watch')) {
+  const ctx = await esbuild.context({
+    entryPoints: ['src/index.${entryExt}'],
+    bundle: true,
+    outfile: 'dist/index.js',
+    platform: 'browser',
+    target: 'es2020',
+    format: 'esm',
+    sourcemap: true,
+    external: ['lokus-plugin-sdk', 'react', 'react-dom'],
+    define: {
+      'process.env.NODE_ENV': JSON.stringify('development')
+    }
+  });
+  
+  await ctx.watch();
+  console.log('Watching for changes...');
+}` :
+      `const esbuild = require('esbuild');
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -496,12 +548,12 @@ esbuild.build({
   entryPoints: ['src/index.${entryExt}'],
   bundle: true,
   outfile: 'dist/index.js',
-  platform: 'node',
-  target: 'node16',
+  platform: 'browser', // Target browser for Lokus runtime
+  target: 'es2020',
   format: 'cjs',
   sourcemap: !isProduction,
   minify: isProduction,
-  external: ['lokus-plugin-sdk'],
+  external: ['lokus-plugin-sdk', 'react', 'react-dom'], // Externalize runtime dependencies
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')
   }
@@ -512,11 +564,11 @@ if (process.argv.includes('--watch')) {
     entryPoints: ['src/index.${entryExt}'],
     bundle: true,
     outfile: 'dist/index.js',
-    platform: 'node',
-    target: 'node16',
+    platform: 'browser',
+    target: 'es2020',
     format: 'cjs',
     sourcemap: true,
-    external: ['lokus-plugin-sdk'],
+    external: ['lokus-plugin-sdk', 'react', 'react-dom'],
     define: {
       'process.env.NODE_ENV': JSON.stringify('development')
     }

@@ -3,7 +3,7 @@ import { Logger as SDKLogger } from 'lokus-plugin-sdk';
 /**
  * Enhanced logger utility for {{pluginName}}
  */
-export class {{ pluginNamePascalCase }}Logger {
+export class {{pluginNamePascalCase}}Logger {
   private logger: SDKLogger;
   private prefix: string;
 
@@ -36,8 +36,8 @@ export class {{ pluginNamePascalCase }}Logger {
   /**
    * Log error message
    */
-  error(message: string, error ?: Error, ...args: any[]): void {
-    if(error) {
+  error(message: string, error?: Error, ...args: any[]): void {
+    if (error) {
       this.logger.error(`[${this.prefix}] ${message}`, error, ...args);
     } else {
       this.logger.error(`[${this.prefix}] ${message}`, ...args);
@@ -47,35 +47,34 @@ export class {{ pluginNamePascalCase }}Logger {
   /**
    * Create a child logger with additional prefix
    */
-  child(childPrefix: string): { { pluginNamePascalCase } }Logger {
-    return new {{ pluginNamePascalCase }
-  } Logger(this.logger, `${this.prefix}:${childPrefix}`);
-}
+  child(childPrefix: string): {{pluginNamePascalCase}}Logger {
+    return new {{pluginNamePascalCase}}Logger(this.logger, `${this.prefix}:${childPrefix}`);
+  }
 
   /**
    * Time a function execution
    */
-  async time<T>(label: string, fn: () => Promise<T>): Promise < T > {
-  const start = Date.now();
-  this.debug(`Starting ${label}...`);
+  async time<T>(label: string, fn: () => Promise<T>): Promise<T> {
+    const start = Date.now();
+    this.debug(`Starting ${label}...`);
 
-  try {
-    const result = await fn();
-    const duration = Date.now() - start;
-    this.debug(`Completed ${label} in ${duration}ms`);
-    return result;
-  } catch(error) {
-    const duration = Date.now() - start;
-    this.error(`Failed ${label} after ${duration}ms`, error as Error);
-    throw error;
+    try {
+      const result = await fn();
+      const duration = Date.now() - start;
+      this.debug(`Completed ${label} in ${duration}ms`);
+      return result;
+    } catch (error) {
+      const duration = Date.now() - start;
+      this.error(`Failed ${label} after ${duration}ms`, error as Error);
+      throw error;
+    }
   }
-}
 
-/**
- * Log with performance timing
- */
-perf(message: string, startTime: number): void {
-  const duration = Date.now() - startTime;
-  this.debug(`${message} (${duration}ms)`);
-}
+  /**
+   * Log with performance timing
+   */
+  perf(message: string, startTime: number): void {
+    const duration = Date.now() - startTime;
+    this.debug(`${message} (${duration}ms)`);
+  }
 }

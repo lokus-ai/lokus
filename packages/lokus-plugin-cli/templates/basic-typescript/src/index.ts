@@ -2,11 +2,11 @@ import { PluginContext, PluginLogger } from 'lokus-plugin-sdk';
 
 /**
  * {{description}}
- * 
+ *
  * @author {{author}}
  * @version 0.1.0
  */
-export class {{ pluginNamePascalCase }} {
+export class {{pluginNamePascalCase}} {
   private logger: PluginLogger;
   private context: PluginContext;
 
@@ -31,7 +31,7 @@ export class {{ pluginNamePascalCase }} {
       await this.initialize();
 
       this.logger.info('{{pluginName}} plugin activated successfully');
-    } catch(error: any) {
+    } catch (error: any) {
       this.logger.error('Failed to activate plugin:', error);
       throw error;
     }
@@ -48,7 +48,7 @@ export class {{ pluginNamePascalCase }} {
       await this.cleanup();
 
       this.logger.info('{{pluginName}} plugin deactivated successfully');
-    } catch(error: any) {
+    } catch (error: any) {
       this.logger.error('Failed to deactivate plugin:', error);
       throw error;
     }
@@ -91,13 +91,13 @@ export class {{ pluginNamePascalCase }} {
 }
 
 // Plugin entry point
-export default function activate(context: PluginContext): {{ pluginNamePascalCase }} {
-  const plugin = new {{ pluginNamePascalCase }}(context);
+export default function activate(context: PluginContext): {{pluginNamePascalCase}} {
+  const plugin = new {{pluginNamePascalCase}}(context);
   plugin.activate();
   return plugin;
 }
 
 // Export for deactivation
-export function deactivate(plugin: {{ pluginNamePascalCase }}): void {
+export function deactivate(plugin: {{pluginNamePascalCase}}): void {
   plugin.deactivate();
 }
