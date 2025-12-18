@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/core'
-import { Plus, X, MoreHorizontal, GripVertical, Pencil, Trash2, RefreshCw } from 'lucide-react'
+import { Plus, X, MoreHorizontal, GripVertical, Pencil, Trash2, RefreshCw, FileText } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 
 // Initialize markdown renderer
@@ -15,13 +15,21 @@ const md = new MarkdownIt({
 // Individual task card component
 function TaskCard({ task, onUpdate, onDelete, isDragging }) {
   const [isEditing, setIsEditing] = useState(false)
+  const [isEditingDescription, setIsEditingDescription] = useState(false)
   const [title, setTitle] = useState(task.title)
+  const [description, setDescription] = useState(task.description || '')
   const [showMenu, setShowMenu] = useState(false)
 
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: task.id,
     data: { type: 'card', task }
   })
+
+  // Sync state when task prop changes
+  useEffect(() => {
+    setTitle(task.title)
+    setDescription(task.description || '')
+  }, [task.title, task.description])
 
   // Render markdown description
   const renderedDescription = useMemo(() => {
@@ -48,6 +56,30 @@ function TaskCard({ task, onUpdate, onDelete, isDragging }) {
       setIsEditing(false)
     }
   }, [task.title, handleSave])
+
+  const handleSaveDescription = useCallback(async () => {
+    const trimmedDesc = description.trim()
+    if (trimmedDesc !== (task.description || '')) {
+      try {
+        await onUpdate(task.id, { description: trimmedDesc || null })
+      } catch (error) {
+        setDescription(task.description || '')
+      }
+    }
+    setIsEditingDescription(false)
+  }, [task.id, task.description, description, onUpdate])
+
+  const handleDescriptionKeyDown = useCallback((e) => {
+    if (e.key === 'Escape') {
+      setDescription(task.description || '')
+      setIsEditingDescription(false)
+    }
+    // Allow Enter for newlines in textarea, Cmd/Ctrl+Enter to save
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      handleSaveDescription()
+    }
+  }, [task.description, handleSaveDescription])
 
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
@@ -112,7 +144,17 @@ function TaskCard({ task, onUpdate, onDelete, isDragging }) {
                   className="w-full text-left px-3 py-2 text-xs hover:bg-app-hover text-app-text flex items-center gap-2"
                 >
                   <Pencil className="w-3 h-3" />
-                  Edit
+                  Edit Title
+                </button>
+                <button
+                  onClick={() => {
+                    setIsEditingDescription(true)
+                    setShowMenu(false)
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-app-hover text-app-text flex items-center gap-2"
+                >
+                  <FileText className="w-3 h-3" />
+                  {task.description ? 'Edit Description' : 'Add Description'}
                 </button>
                 <button
                   onClick={() => {
@@ -130,12 +172,29 @@ function TaskCard({ task, onUpdate, onDelete, isDragging }) {
         </div>
       </div>
 
-      {task.description && (
+      {isEditingDescription ? (
+        <div className="mt-2">
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            onBlur={handleSaveDescription}
+            onKeyDown={handleDescriptionKeyDown}
+            placeholder="Add a description... (Markdown supported)"
+            className="w-full bg-app-bg border border-app-accent rounded-lg px-2 py-1.5 text-xs text-app-text outline-none resize-none min-h-16 max-h-48"
+            rows={3}
+            autoFocus
+          />
+          <div className="text-[10px] text-app-muted mt-1">
+            Press Cmd/Ctrl+Enter to save, Escape to cancel
+          </div>
+        </div>
+      ) : task.description ? (
         <div
-          className="mt-2 text-xs text-app-muted kanban-card-markdown max-h-48 overflow-y-auto"
+          className="mt-2 text-xs text-app-muted kanban-card-markdown max-h-48 overflow-y-auto cursor-pointer hover:bg-app-hover/50 rounded p-1 -m-1"
+          onClick={() => setIsEditingDescription(true)}
           dangerouslySetInnerHTML={{ __html: renderedDescription }}
         />
-      )}
+      ) : null}
 
       {task.due_date && (
         <div className="mt-2 text-xs text-app-muted/70 flex items-center gap-1">

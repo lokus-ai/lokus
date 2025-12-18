@@ -6,12 +6,46 @@ import {
   readGlobalVisuals,
   setGlobalActiveTheme,
 } from "../core/theme/manager.js";
+import { useThemeOverrides } from "../contexts/RemoteConfigContext";
+
+// Apply server-side theme overrides as CSS variables
+const applyThemeOverrides = (overrides) => {
+  if (!overrides) return;
+
+  const tokenMap = {
+    accent: '--accent',
+    accent_fg: '--accent-fg',
+    bg: '--bg',
+    panel: '--panel',
+    border: '--border',
+    text: '--text',
+    muted: '--muted',
+    danger: '--danger',
+    success: '--success',
+    warning: '--warning',
+    info: '--info',
+  };
+
+  Object.entries(overrides).forEach(([key, value]) => {
+    if (value && tokenMap[key]) {
+      document.documentElement.style.setProperty(tokenMap[key], value);
+    }
+  });
+};
 
 const ThemeCtx = createContext(null);
 
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(null);
   const [isThemeLoaded, setIsThemeLoaded] = useState(false);
+  const themeOverrides = useThemeOverrides();
+
+  // Apply server-side theme overrides whenever they change
+  useEffect(() => {
+    if (isThemeLoaded && themeOverrides) {
+      applyThemeOverrides(themeOverrides);
+    }
+  }, [isThemeLoaded, themeOverrides]);
 
   // Load initial theme from config with better error handling
   useEffect(() => {
