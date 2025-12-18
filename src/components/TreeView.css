@@ -1,0 +1,166 @@
+/* TreeView Component Styles */
+
+.tree-view {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+
+.tree-view-title {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--background-modifier-border);
+  user-select: none;
+}
+
+.tree-view-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.tree-view-loading,
+.tree-view-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Tree Item Styles */
+
+.tree-item-container {
+  width: 100%;
+}
+
+.tree-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  line-height: 1.4;
+  transition: background-color 0.1s ease;
+}
+
+.tree-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+.tree-item:active {
+  background: var(--background-modifier-active-hover);
+}
+
+/* Chevron (expand/collapse arrow) */
+
+.tree-item-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.tree-item-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.tree-item-spacer {
+  display: inline-block;
+  width: 16px;
+  margin-right: 4px;
+}
+
+/* Icon */
+
+.tree-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  font-size: 14px;
+}
+
+/* Label */
+
+.tree-item-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-normal);
+}
+
+/* Description */
+
+.tree-item-description {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Children container */
+
+.tree-item-children {
+  width: 100%;
+}
+
+.tree-item-loading {
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Context value classes (for custom styling by plugins) */
+
+.tree-item.file {
+  /* Example: style for file items */
+}
+
+.tree-item.folder {
+  /* Example: style for folder items */
+}
+
+.tree-item.selected {
+  background: var(--background-modifier-active);
+}
+
+/* Scrollbar styling */
+
+.tree-view-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tree-view-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tree-view-content::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-bg);
+  border-radius: 4px;
+}
+
+.tree-view-content::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}

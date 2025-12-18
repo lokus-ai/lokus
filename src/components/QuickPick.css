@@ -1,0 +1,233 @@
+.quick-pick-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+  z-index: 9999;
+  animation: quick-pick-fade-in 0.15s ease-out;
+}
+
+@keyframes quick-pick-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.quick-pick-container {
+  background: rgb(var(--panel));
+  border: 1px solid rgb(var(--border));
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  width: 90%;
+  max-width: 640px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: quick-pick-slide-in 0.15s ease-out;
+}
+
+@keyframes quick-pick-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.quick-pick-title {
+  padding: 12px 16px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: rgb(var(--text));
+  border-bottom: 1px solid rgb(var(--border));
+  background: rgb(var(--panel-secondary));
+}
+
+.quick-pick-input-wrapper {
+  padding: 8px;
+  border-bottom: 1px solid rgb(var(--border));
+}
+
+.quick-pick-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: rgb(var(--bg));
+  border: 1px solid rgb(var(--border));
+  border-radius: calc(var(--radius) - 2px);
+  color: rgb(var(--text));
+  font-size: var(--text-base);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.quick-pick-input:focus {
+  border-color: rgb(var(--accent));
+  box-shadow: 0 0 0 3px rgba(var(--accent), 0.1);
+}
+
+.quick-pick-input::placeholder {
+  color: rgb(var(--muted));
+}
+
+.quick-pick-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px;
+  min-height: 0;
+}
+
+.quick-pick-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-radius: calc(var(--radius) - 2px);
+  transition: all 0.1s ease;
+  color: rgb(var(--text));
+  user-select: none;
+}
+
+.quick-pick-item:hover {
+  background: rgba(var(--accent), 0.1);
+}
+
+.quick-pick-item.selected {
+  background: rgba(var(--accent), 0.15);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent), 0.3);
+}
+
+.quick-pick-item.checked {
+  background: rgba(var(--accent), 0.2);
+}
+
+.quick-pick-checkbox {
+  display: flex;
+  align-items: center;
+  margin-right: 4px;
+}
+
+.quick-pick-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: rgb(var(--accent));
+}
+
+.quick-pick-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.quick-pick-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.quick-pick-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quick-pick-label {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: rgb(var(--text));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quick-pick-description {
+  font-size: var(--text-sm);
+  color: rgb(var(--text-secondary));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+}
+
+.quick-pick-detail {
+  font-size: var(--text-xs);
+  color: rgb(var(--muted));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.quick-pick-empty {
+  padding: 24px;
+  text-align: center;
+  color: rgb(var(--muted));
+  font-size: var(--text-sm);
+}
+
+.quick-pick-footer {
+  padding: 8px;
+  border-top: 1px solid rgb(var(--border));
+  background: rgb(var(--panel-secondary));
+  display: flex;
+  justify-content: flex-end;
+}
+
+.quick-pick-confirm {
+  padding: 6px 16px;
+  background: rgb(var(--accent));
+  color: rgb(var(--accent-fg));
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.quick-pick-confirm:hover {
+  background: rgb(var(--accent-hover));
+}
+
+.quick-pick-confirm:active {
+  transform: scale(0.98);
+}
+
+/* Scrollbar styling */
+.quick-pick-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.quick-pick-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.quick-pick-list::-webkit-scrollbar-thumb {
+  background: rgb(var(--border));
+  border-radius: 4px;
+}
+
+.quick-pick-list::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--border-hover));
+}

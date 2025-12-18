@@ -6,6 +6,7 @@ import { uiManager } from "../ui/UIManager.js";
 import { configManager } from "../config/ConfigManager.js";
 import { filesystemManager } from "../fs/FilesystemManager.js";
 import { PluginFileWatcher } from "./PluginFileWatcher.js";
+import { pluginEventBridge } from "../../plugins/PluginEventBridge.js";
 
 /**
  * PluginStateAdapter - UI State Management Facade for Plugin System
@@ -170,6 +171,9 @@ class PluginStateAdapter {
           };
           const pluginAPI = new LokusPluginAPI(managers);
           pluginAPI.setPluginContext(pluginInfo.id, null);
+
+          // Initialize event bridge with this API instance (idempotent)
+          pluginEventBridge.initialize(pluginAPI);
 
           // Listen for UI events
           // Note: LokusPluginAPI aggregates events or we listen to specific sub-APIs?
@@ -425,6 +429,9 @@ class PluginStateAdapter {
             const pluginAPI = new LokusPluginAPI(managers);
             pluginAPI.setPluginContext(pluginId, null);
 
+            // Initialize event bridge with this API instance (idempotent)
+            pluginEventBridge.initialize(pluginAPI);
+
             // Listen for UI events
             if (pluginAPI.ui) {
               pluginAPI.ui.on('panel-registered', (event) => {
@@ -538,6 +545,9 @@ class PluginStateAdapter {
       };
       const pluginAPI = new LokusPluginAPI(managers);
       pluginAPI.setPluginContext(manifest.id, null);
+
+      // Initialize event bridge with this API instance (idempotent)
+      pluginEventBridge.initialize(pluginAPI);
 
       // 4. Instantiate Plugin
       let pluginModule;
@@ -709,6 +719,9 @@ class PluginStateAdapter {
       };
       const pluginAPI = new LokusPluginAPI(managers);
       pluginAPI.setPluginContext(pluginId, null);
+
+      // Initialize event bridge with this API instance (idempotent)
+      pluginEventBridge.initialize(pluginAPI);
 
       // Listen for UI events
       if (pluginAPI.ui) {

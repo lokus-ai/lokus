@@ -10,6 +10,8 @@ import WhatsNew from "./components/WhatsNew";
 import TipOfTheDay from "./components/TipOfTheDay";
 import { Toaster } from "./components/ui/toaster";
 import { PluginDialogContainer } from "./components/PluginDialogContainer";
+import { ProgressIndicatorContainer } from "./components/ProgressIndicator";
+import { usePluginProgress } from "./hooks/usePluginProgress";
 import { usePreferenceActivation } from "./hooks/usePreferenceActivation";
 import { useWorkspaceActivation } from "./hooks/useWorkspaceActivation";
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/shortcuts/registry.js";
@@ -41,6 +43,7 @@ function App() {
   // Use the hooks' values directly (no setter param expected)
   const { isPrefsWindow } = usePreferenceActivation();
   const activePath = useWorkspaceActivation();
+  const progressItems = usePluginProgress();
 
   useEffect(() => {
     if (activePath) {
@@ -189,6 +192,7 @@ function App() {
         {activePath && <TipOfTheDay />}
         <Toaster />
         <PluginDialogContainer />
+        <ProgressIndicatorContainer progressItems={progressItems} />
       </div>
     </div>
   );

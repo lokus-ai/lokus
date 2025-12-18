@@ -3,6 +3,7 @@ import { uiManager } from '../core/ui/UIManager';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { QuickPick } from './QuickPick';
 
 export function PluginDialogContainer() {
     const [dialogs, setDialogs] = useState([]);
@@ -110,9 +111,26 @@ function PluginDialog({ dialog, onClose }) {
         );
     }
 
-    // TODO: Implement QuickPick
     if (dialog.type === 'quickpick') {
-        return null;
+        return (
+            <QuickPick
+                items={dialog.items || []}
+                options={dialog.options || {}}
+                onSelect={(selected) => {
+                    if (dialog.onSelect) {
+                        dialog.onSelect(selected);
+                    }
+                    onClose(selected);
+                }}
+                onCancel={() => {
+                    if (dialog.onCancel) {
+                        dialog.onCancel();
+                    }
+                    onClose(undefined);
+                }}
+                isOpen={true}
+            />
+        );
     }
 
     return null;

@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel
 } from '../ui/dropdown-menu';
-import { MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal, Terminal } from 'lucide-react';
 
 /**
  * ResponsiveStatusBar - Adaptive status bar with priority-based progressive hiding
@@ -21,7 +21,9 @@ export default function ResponsiveStatusBar({
   unsavedChanges,
   openTabs = [],
   editor,
-  readingSpeed = 200
+  readingSpeed = 200,
+  showTerminal = false,
+  onToggleTerminal = null
 }) {
   const { leftItems, rightItems } = useStatusBar();
 
@@ -356,6 +358,21 @@ export default function ResponsiveStatusBar({
             {item.render()}
           </React.Fragment>
         ))}
+
+        {/* Terminal Toggle (if callback provided) */}
+        {onToggleTerminal && (
+          <>
+            <div className="obsidian-status-bar-separator" />
+            <div
+              className={`obsidian-status-bar-item clickable ${showTerminal ? 'active' : ''}`}
+              onClick={onToggleTerminal}
+              title="Toggle Terminal (Ctrl+`)"
+            >
+              <Terminal className="w-3 h-3" />
+              <span>Terminal</span>
+            </div>
+          </>
+        )}
 
         {/* Sync Status (CRITICAL - always visible) */}
         <div className="obsidian-status-bar-separator" />

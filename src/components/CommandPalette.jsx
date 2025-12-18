@@ -44,6 +44,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useFolderScope } from '../contexts/FolderScopeContext'
 import { useBases } from '../bases/BasesContext.jsx'
 import FolderSelector from './FolderSelector.jsx'
+import { useCommands, useCommandExecute } from '../hooks/useCommands.js'
 
 export default function CommandPalette({
   open,
@@ -75,21 +76,10 @@ export default function CommandPalette({
   const { process: processTemplate } = useTemplateProcessor()
   const { scopeMode, setLocalScope, setGlobalScope, getScopeStatus } = useFolderScope()
   const { createBase, bases, loadBase, dataManager } = useBases()
-  const [pluginCommands, setPluginCommands] = useState([])
 
-  useEffect(() => {
-    if (open) {
-      // Load plugin commands
-      const registry = window.lokus?.commands?.registry;
-      if (registry) {
-        const cmds = [];
-        registry.forEach((def, id) => {
-          cmds.push({ id, title: def.title || id });
-        });
-        setPluginCommands(cmds);
-      }
-    }
-  }, [open]);
+  // Use the new useCommands hook for plugin commands
+  const pluginCommands = useCommands()
+  const executeCommand = useCommandExecute()
 
   useEffect(() => {
     getActiveShortcuts().then(setShortcuts)
@@ -1404,15 +1394,31 @@ Best regards,
                 {pluginCommands.map((cmd) => (
                   <CommandItem
                     key={cmd.id}
-                    onSelect={() => runCommandWithHistory(() => {
-                      if (window.lokus?.commands?.executeCommand) {
-                        window.lokus.commands.executeCommand(cmd.id);
-                      }
-                    }, cmd.title)}
+                    onSelect={() => runCommandWithHistory(
+                      async () => {
+                        try {
+                          await executeCommand(cmd.id);
+                        } catch (error) {
+                          console.error(`Failed to execute command ${cmd.id}:`, error);
+                        }
+                      },
+                      cmd.title || cmd.id,
+                      { commandId: cmd.id, pluginId: cmd.pluginId }
+                    )}
                   >
-                    <FileText className="mr-2 h-4 w-4" />
-                    <span>{cmd.title}</span>
-                    <CommandShortcut className="text-xs">{cmd.id}</CommandShortcut>
+                    {cmd.icon ? (
+                      typeof cmd.icon === 'string' ? (
+                        <FileText className="mr-2 h-4 w-4" />
+                      ) : (
+                        <cmd.icon className="mr-2 h-4 w-4" />
+                      )
+                    ) : (
+                      <FileText className="mr-2 h-4 w-4" />
+                    )}
+                    <span>{cmd.title || cmd.id}</span>
+                    {cmd.category && (
+                      <CommandShortcut className="text-xs">{cmd.category}</CommandShortcut>
+                    )}
                   </CommandItem>
                 ))}
               </CommandGroup>
