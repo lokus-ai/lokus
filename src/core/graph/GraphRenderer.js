@@ -264,7 +264,7 @@ export class GraphRenderer {
         source: link.source,
         target: link.target,
         strength: link.strength || 1,
-        color: link.color || '#ffffff40',
+        color: link.color || '#6b7280',
         width: link.width || this.linkWidth,
         data: link.data || {}
       };
@@ -521,7 +521,7 @@ export class GraphRenderer {
     ctx.clearRect(0, 0, this.width, this.height);
     
     // Render links first
-    ctx.strokeStyle = '#ffffff20';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.13)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     

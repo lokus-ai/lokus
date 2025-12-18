@@ -147,6 +147,70 @@ fn validate_workspace_path(_app: tauri::AppHandle, path: String) -> bool {
     validate_path_internal(&path)
 }
 
+/// Check if a workspace path needs re-authorization
+/// Returns true if the workspace likely exists but we can't access it due to stale bookmark
+/// This helps distinguish between "deleted/moved" vs "permission lost after app update"
+#[tauri::command]
+fn check_workspace_needs_reauth(_app: tauri::AppHandle, path: String) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        // First, check if we have a stored bookmark for this path
+        if let Ok(store) = StoreBuilder::new(&_app, PathBuf::from(".settings.dat")).build() {
+            let _ = store.reload();
+
+            // Check if the stored path matches
+            let stored_path = store.get("last_workspace_path")
+                .and_then(|v| v.as_str().map(String::from));
+
+            if stored_path.as_deref() == Some(path.as_str()) {
+                // We have a stored path matching this one
+                // Try to resolve the bookmark
+                if let Some(bookmark_value) = store.get("last_workspace_bookmark") {
+                    if let Ok(bookmark_data) = serde_json::from_value::<Vec<u8>>(bookmark_value.clone()) {
+                        match macos::bookmarks::resolve_bookmark(&bookmark_data) {
+                            Ok(resolved_path) => {
+                                // Bookmark still works - don't need reauth
+                                macos::bookmarks::stop_accessing(&resolved_path);
+                                return false;
+                            }
+                            Err(_) => {
+                                // Bookmark is stale - need reauth
+                                // The workspace likely still exists, just can't access it
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // No bookmark found for this path, or path doesn't match
+        // This could be a recent workspace without a bookmark
+        // Try direct access as fallback (will fail in sandbox but might work in dev)
+        let workspace_path = std::path::Path::new(&path);
+        if workspace_path.exists() && workspace_path.is_dir() {
+            return false; // Can access directly
+        }
+
+        // Can't determine - assume needs reauth if the path looks valid
+        // (has parent directory structure that suggests it once existed)
+        if let Some(parent) = workspace_path.parent() {
+            if parent.exists() {
+                return true; // Parent exists, so workspace might have existed
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        // On non-macOS, just check if path exists
+        let workspace_path = std::path::Path::new(&path);
+        return !workspace_path.exists();
+    }
+
+    false
+}
+
 fn restore_workspace_access(_app: &tauri::AppHandle) -> Option<String> {
     #[cfg(target_os = "macos")]
     {
@@ -391,6 +455,7 @@ pub fn run() {
       save_last_workspace,
       clear_last_workspace,
       validate_workspace_path,
+      check_workspace_needs_reauth,
       get_validated_workspace_path,
       clear_all_workspace_data,
       is_development_mode,

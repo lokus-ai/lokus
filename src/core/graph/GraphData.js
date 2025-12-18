@@ -984,23 +984,23 @@ export class GraphData {
 
   /**
    * Get link color based on type
+   * Returns 6-digit hex colors (no alpha) for compatibility with Three.js/polished
    */
   getLinkColor(type) {
     // Try to get color from CSS variables (theme-aware)
     const baseColor = getCSSVariable('--graph-link');
-    const hoverColor = getCSSVariable('--graph-link-hover');
 
-    // Add transparency to theme colors
-    if (baseColor && baseColor.startsWith('#')) {
-      return baseColor + '60'; // Add 60 alpha (37.5% opacity)
+    // Return base color without alpha (Three.js/polished don't support 8-digit hex)
+    if (baseColor && /^#[0-9A-Fa-f]{6}$/.test(baseColor)) {
+      return baseColor;
     }
 
-    // Fallback colors if CSS variables not available
+    // Fallback colors - 6-digit hex only (no alpha)
     const fallbackColors = {
-      wikilink: '#ffffff60',
-      tag: '#ef444460',
-      folder: '#f59e0b60',
-      default: '#ffffff40'
+      wikilink: '#ffffff',
+      tag: '#ef4444',
+      folder: '#f59e0b',
+      default: '#6b7280'
     };
 
     return fallbackColors[type] || fallbackColors.default;

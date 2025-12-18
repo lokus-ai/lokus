@@ -83,7 +83,6 @@ export const GraphUI = ({
 
       if (e.key === 'Escape') {
         setIsSearchFocused(false);
-        setShowSettings(false);
         searchInputRef.current?.blur();
       }
 

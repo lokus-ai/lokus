@@ -26,7 +26,11 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' asset: https://asset.localhost blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob: asset: https://asset.localhost; font-src 'self' data:; connect-src 'self' https: wss: asset: https://asset.localhost; media-src 'self' data: blob: asset: https://asset.localhost; object-src 'none'; frame-src 'self' blob:; base-uri 'self'; form-action 'none'; upgrade-insecure-requests;"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' asset: https://asset.localhost blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob: asset: https://asset.localhost; font-src 'self' data:; connect-src 'self' https: wss: asset: https://asset.localhost; media-src 'self' data: blob: asset: https://asset.localhost; object-src 'none'; frame-src 'self' blob:; base-uri 'self'; form-action 'none'; upgrade-insecure-requests;",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$HOME/**", "$DOCUMENT/**", "$DESKTOP/**", "$DOWNLOAD/**", "$PICTURE/**"]
+      }
     },
     "withGlobalTauri": false
   },

@@ -806,7 +806,11 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
   try {
     return (
       <div className="h-full bg-app-bg text-app-text flex flex-col">
-        <header className="h-12 px-4 flex items-center border-b border-app-border bg-app-panel">
+        {/* Titlebar drag region for macOS traffic lights */}
+        <header
+          data-tauri-drag-region
+          className="h-12 pl-20 pr-4 flex items-center border-b border-app-border bg-app-panel shrink-0"
+        >
           <div className="font-medium text-sm">Preferences</div>
         </header>
 

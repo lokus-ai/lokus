@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useRemoteLinks, useUIVisibility, useLayoutDefaults } from "../contexts/RemoteConfigContext";
+import ServiceStatus from "../components/ServiceStatus";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm, save } from "@tauri-apps/plugin-dialog";
@@ -207,9 +209,9 @@ const Icon = ({ path, className = "w-5 h-5" }) => (
 );
 
 // --- Draggable Column Hook ---
-function useDragColumns({ minLeft = 220, maxLeft = 500, minRight = 220, maxRight = 500 }) {
-  const [leftW, setLeftW] = useState(280);
-  const [rightW, setRightW] = useState(280);
+function useDragColumns({ minLeft = 220, maxLeft = 500, minRight = 220, maxRight = 500, initialLeft = 280, initialRight = 280 }) {
+  const [leftW, setLeftW] = useState(initialLeft);
+  const [rightW, setRightW] = useState(initialRight);
   const dragRef = useRef(null);
 
   const startLeftDrag = useCallback((e) => {
@@ -1020,9 +1022,21 @@ function WorkspaceWithScope({ path }) {
   const { theme: currentTheme } = useTheme();
   const { filterFileTree, scopeMode, scopedFolders } = useFolderScope();
   const { activeBase } = useBases();
-  const { leftW, rightW, startLeftDrag, startRightDrag } = useDragColumns({});
-  const [showLeft, setShowLeft] = useState(true);
-  const [showRight, setShowRight] = useState(false);
+  const remoteLinks = useRemoteLinks();
+  const remoteLinksRef = useRef(remoteLinks);
+  const uiVisibility = useUIVisibility();
+  const layoutDefaults = useLayoutDefaults();
+
+  // Keep ref updated with latest links for event handlers
+  useEffect(() => {
+    remoteLinksRef.current = remoteLinks;
+  }, [remoteLinks]);
+  const { leftW, rightW, startLeftDrag, startRightDrag } = useDragColumns({
+    initialLeft: layoutDefaults.left_sidebar_width,
+    initialRight: layoutDefaults.right_sidebar_width,
+  });
+  const [showLeft, setShowLeft] = useState(layoutDefaults.left_sidebar_visible);
+  const [showRight, setShowRight] = useState(layoutDefaults.right_sidebar_visible);
   const [refreshId, setRefreshId] = useState(0);
 
   // Toggle right sidebar (outline)
@@ -3416,21 +3430,28 @@ function WorkspaceWithScope({ path }) {
     };
 
     const handleHelpAction = (action) => {
+      const links = remoteLinksRef.current;
       switch (action) {
         case 'help':
-          // Open help documentation
-          window.open('https://docs.lokus.dev', '_blank');
+          // Open help documentation (server-driven URL)
+          if (links.documentation) {
+            window.open(links.documentation, '_blank');
+          }
           break;
         case 'keyboard-shortcuts':
           setShowShortcutHelp(true);
           break;
         case 'release-notes':
-          // Open release notes
-          window.open('https://github.com/lokus-app/lokus/releases', '_blank');
+          // Open release notes (server-driven URL)
+          if (links.releases) {
+            window.open(links.releases, '_blank');
+          }
           break;
         case 'report-issue':
-          // Open issue tracker
-          window.open('https://github.com/lokus-app/lokus/issues', '_blank');
+          // Open issue tracker (server-driven URL)
+          if (links.issues) {
+            window.open(links.issues, '_blank');
+          }
           break;
       }
     };
@@ -3698,6 +3719,9 @@ function WorkspaceWithScope({ path }) {
         {/* Product Tour */}
         <ProductTour autoStart={true} delay={1500} />
 
+        {/* Service Status / Maintenance Banner */}
+        <ServiceStatus />
+
         {/* Test Mode Indicator */}
         {isTestMode && (
           <div className="fixed top-4 right-4 bg-yellow-500 text-black px-3 py-1 rounded-md text-sm font-medium z-50">
@@ -3719,34 +3743,40 @@ function WorkspaceWithScope({ path }) {
         >
           {/* Left Section: New File, New Folder, New Canvas buttons */}
           <div className="flex items-center gap-1">
-            <button
-              onClick={handleCreateFile}
-              className="obsidian-button icon-only small"
-              title={`New File (${platformService.getModifierSymbol()}+N)`}
-              data-tauri-drag-region="false"
-              data-tour="create-note"
-              style={{ pointerEvents: 'auto' }}
-            >
-              <FilePlusCorner className="w-5 h-5" strokeWidth={2} />
-            </button>
-            <button
-              onClick={handleCreateFolder}
-              className="obsidian-button icon-only small"
-              title={`New Folder (${platformService.getModifierSymbol()}+Shift+N)`}
-              data-tauri-drag-region="false"
-              style={{ pointerEvents: 'auto' }}
-            >
-              <FolderOpen className="w-5 h-5" strokeWidth={2} />
-            </button>
-            <button
-              onClick={handleCreateCanvas}
-              className="obsidian-button icon-only small"
-              title="New Canvas"
-              data-tauri-drag-region="false"
-              style={{ pointerEvents: 'auto' }}
-            >
-              <SquareKanban className="w-5 h-5" strokeWidth={2} />
-            </button>
+            {uiVisibility.toolbar_new_file && (
+              <button
+                onClick={handleCreateFile}
+                className="obsidian-button icon-only small"
+                title={`New File (${platformService.getModifierSymbol()}+N)`}
+                data-tauri-drag-region="false"
+                data-tour="create-note"
+                style={{ pointerEvents: 'auto' }}
+              >
+                <FilePlusCorner className="w-5 h-5" strokeWidth={2} />
+              </button>
+            )}
+            {uiVisibility.toolbar_new_folder && (
+              <button
+                onClick={handleCreateFolder}
+                className="obsidian-button icon-only small"
+                title={`New Folder (${platformService.getModifierSymbol()}+Shift+N)`}
+                data-tauri-drag-region="false"
+                style={{ pointerEvents: 'auto' }}
+              >
+                <FolderOpen className="w-5 h-5" strokeWidth={2} />
+              </button>
+            )}
+            {uiVisibility.toolbar_new_canvas && (
+              <button
+                onClick={handleCreateCanvas}
+                className="obsidian-button icon-only small"
+                title="New Canvas"
+                data-tauri-drag-region="false"
+                style={{ pointerEvents: 'auto' }}
+              >
+                <SquareKanban className="w-5 h-5" strokeWidth={2} />
+              </button>
+            )}
           </div>
 
           {/* Center Section: Responsive Tab Bar */}
@@ -3771,16 +3801,18 @@ function WorkspaceWithScope({ path }) {
 
           {/* Right Section: Split View, Right Sidebar, and New Tab buttons */}
           <div className="flex items-center gap-1">
-            <button
-              onClick={handleToggleSplitView}
-              className={`obsidian-button icon-only small ${useSplitView ? 'active' : ''}`}
-              title={useSplitView ? "Exit Split View" : "Enter Split View"}
-              data-tauri-drag-region="false"
-              data-tour="split-view"
-              style={{ pointerEvents: 'auto' }}
-            >
-              <SquareSplitHorizontal className="w-5 h-5" strokeWidth={2} />
-            </button>
+            {uiVisibility.toolbar_split_view && (
+              <button
+                onClick={handleToggleSplitView}
+                className={`obsidian-button icon-only small ${useSplitView ? 'active' : ''}`}
+                title={useSplitView ? "Exit Split View" : "Enter Split View"}
+                data-tauri-drag-region="false"
+                data-tour="split-view"
+                style={{ pointerEvents: 'auto' }}
+              >
+                <SquareSplitHorizontal className="w-5 h-5" strokeWidth={2} />
+              </button>
+            )}
             <button
               onClick={() => setShowRight(v => !v)}
               className={`obsidian-button icon-only small ${showRight ? 'active' : ''}`}
@@ -3850,106 +3882,116 @@ function WorkspaceWithScope({ path }) {
                 <FolderOpen className="w-5 h-5" style={!showKanban && !showPlugins && !showBases && !showGraphView && showLeft ? { color: 'rgb(var(--accent))' } : {}} />
               </button>
 
-              <button
-                onClick={() => {
-                  setShowKanban(true);
-                  setShowPlugins(false);
-                  setShowBases(false);
-                  setShowGraphView(false);
-                  setShowLeft(true);
-                }}
-                title="Task Board"
-                className="obsidian-button icon-only w-full mb-1"
-                onMouseEnter={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = 'rgb(var(--accent))';
-                }}
-                onMouseLeave={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = (showKanban && !showPlugins && !showBases && !showGraphView) ? 'rgb(var(--accent))' : '';
-                }}
-              >
-                <LayoutGrid className="w-5 h-5" style={showKanban && !showPlugins && !showBases && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
-              </button>
+              {uiVisibility.sidebar_kanban && (
+                <button
+                  onClick={() => {
+                    setShowKanban(true);
+                    setShowPlugins(false);
+                    setShowBases(false);
+                    setShowGraphView(false);
+                    setShowLeft(true);
+                  }}
+                  title="Task Board"
+                  className="obsidian-button icon-only w-full mb-1"
+                  onMouseEnter={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = 'rgb(var(--accent))';
+                  }}
+                  onMouseLeave={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = (showKanban && !showPlugins && !showBases && !showGraphView) ? 'rgb(var(--accent))' : '';
+                  }}
+                >
+                  <LayoutGrid className="w-5 h-5" style={showKanban && !showPlugins && !showBases && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
+                </button>
+              )}
 
-              <button
-                onClick={() => {
-                  setShowPlugins(true);
-                  setShowKanban(false);
-                  setShowBases(false);
-                  setShowGraphView(false);
-                  setShowLeft(true);
-                }}
-                title="Extensions"
-                className="obsidian-button icon-only w-full mb-1"
-                onMouseEnter={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = 'rgb(var(--accent))';
-                }}
-                onMouseLeave={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = (showPlugins && !showKanban && !showBases && !showGraphView) ? 'rgb(var(--accent))' : '';
-                }}
-              >
-                <Puzzle className="w-5 h-5" style={showPlugins && !showKanban && !showBases && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
-              </button>
+              {uiVisibility.sidebar_plugins && (
+                <button
+                  onClick={() => {
+                    setShowPlugins(true);
+                    setShowKanban(false);
+                    setShowBases(false);
+                    setShowGraphView(false);
+                    setShowLeft(true);
+                  }}
+                  title="Extensions"
+                  className="obsidian-button icon-only w-full mb-1"
+                  onMouseEnter={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = 'rgb(var(--accent))';
+                  }}
+                  onMouseLeave={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = (showPlugins && !showKanban && !showBases && !showGraphView) ? 'rgb(var(--accent))' : '';
+                  }}
+                >
+                  <Puzzle className="w-5 h-5" style={showPlugins && !showKanban && !showBases && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
+                </button>
+              )}
 
-              <button
-                onClick={() => {
-                  handleOpenBasesTab();
-                }}
-                title="Bases"
-                data-tour="bases"
-                className="obsidian-button icon-only w-full mb-1"
-                onMouseEnter={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = 'rgb(var(--accent))';
-                }}
-                onMouseLeave={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = (showBases && !showKanban && !showPlugins && !showGraphView) ? 'rgb(var(--accent))' : '';
-                }}
-              >
-                <Database className="w-5 h-5" style={showBases && !showKanban && !showPlugins && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
-              </button>
+              {uiVisibility.sidebar_bases && (
+                <button
+                  onClick={() => {
+                    handleOpenBasesTab();
+                  }}
+                  title="Bases"
+                  data-tour="bases"
+                  className="obsidian-button icon-only w-full mb-1"
+                  onMouseEnter={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = 'rgb(var(--accent))';
+                  }}
+                  onMouseLeave={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = (showBases && !showKanban && !showPlugins && !showGraphView) ? 'rgb(var(--accent))' : '';
+                  }}
+                >
+                  <Database className="w-5 h-5" style={showBases && !showKanban && !showPlugins && !showGraphView ? { color: 'rgb(var(--accent))' } : {}} />
+                </button>
+              )}
 
-              <button
-                onClick={handleOpenGraphView}
-                title="Graph View"
-                data-tour="graph"
-                className="obsidian-button icon-only w-full mb-1"
-                onMouseEnter={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = 'rgb(var(--accent))';
-                }}
-                onMouseLeave={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = '';
-                }}
-              >
-                <Network className="w-5 h-5" />
-              </button>
+              {uiVisibility.sidebar_graph && (
+                <button
+                  onClick={handleOpenGraphView}
+                  title="Graph View"
+                  data-tour="graph"
+                  className="obsidian-button icon-only w-full mb-1"
+                  onMouseEnter={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = 'rgb(var(--accent))';
+                  }}
+                  onMouseLeave={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = '';
+                  }}
+                >
+                  <Network className="w-5 h-5" />
+                </button>
+              )}
 
-              <button
-                onClick={() => {
-                  setShowDailyNotesPanel(!showDailyNotesPanel);
-                  setShowRight(true);
-                  setShowVersionHistory(false);
-                }}
-                title="Daily Notes"
-                className={`obsidian-button icon-only w-full mb-1 ${showDailyNotesPanel ? 'active' : ''}`}
-                data-tour="daily-notes"
-                onMouseEnter={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = 'rgb(var(--accent))';
-                }}
-                onMouseLeave={(e) => {
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = showDailyNotesPanel ? 'rgb(var(--accent))' : '';
-                }}
-              >
-                <Calendar className="w-5 h-5" style={showDailyNotesPanel ? { color: 'rgb(var(--accent))' } : {}} />
-              </button>
+              {uiVisibility.sidebar_daily_notes && (
+                <button
+                  onClick={() => {
+                    setShowDailyNotesPanel(!showDailyNotesPanel);
+                    setShowRight(true);
+                    setShowVersionHistory(false);
+                  }}
+                  title="Daily Notes"
+                  className={`obsidian-button icon-only w-full mb-1 ${showDailyNotesPanel ? 'active' : ''}`}
+                  data-tour="daily-notes"
+                  onMouseEnter={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = 'rgb(var(--accent))';
+                  }}
+                  onMouseLeave={(e) => {
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = showDailyNotesPanel ? 'rgb(var(--accent))' : '';
+                  }}
+                >
+                  <Calendar className="w-5 h-5" style={showDailyNotesPanel ? { color: 'rgb(var(--accent))' } : {}} />
+                </button>
+              )}
 
               {/* Gmail button disabled to improve startup performance */}
               {/* <button
@@ -4421,10 +4463,10 @@ function WorkspaceWithScope({ path }) {
                         </div>
                       </div>
                     ) : (
-                      <div className="h-full flex flex-col">
+                      <div className="h-full flex flex-col overflow-hidden">
                         {/* Modern Welcome Screen - VS Code Inspired */}
-                        <div className="flex-1 flex items-center justify-center p-8">
-                          <div className="max-w-4xl w-full">
+                        <div className="flex-1 overflow-y-auto p-8">
+                          <div className="max-w-4xl w-full mx-auto min-h-full flex flex-col justify-center">
 
                             {/* Header Section */}
                             <div className="text-center mb-10">

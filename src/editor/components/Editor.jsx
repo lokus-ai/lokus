@@ -19,6 +19,7 @@ import * as StrikeExt from "@tiptap/extension-strike";
 import * as HighlightExt from "@tiptap/extension-highlight";
 import * as HorizontalRuleExt from "@tiptap/extension-horizontal-rule";
 import { InputRule, nodeInputRule } from "@tiptap/core";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import MathExt from "../extensions/Math.js";
 import WikiLink from "../extensions/WikiLink.js";
 import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
@@ -152,8 +153,13 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
               find: /!\[([^\]]*)\]\(([^)]+)\)$/,
               type: this.type,
               getAttributes: (match) => {
-                const src = match[2];
+                let src = match[2];
                 const alt = match[1];
+                // Convert local file paths to asset URLs that Tauri can load
+                // URLs and data URIs pass through unchanged
+                if (src && !src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('asset:')) {
+                  src = convertFileSrc(src);
+                }
                 return {
                   src,
                   alt

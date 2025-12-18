@@ -147,6 +147,25 @@ export class WorkspaceManager {
       return false;
     }
   }
+
+  /**
+   * Check if a workspace needs re-authorization
+   * This happens after app updates/re-signing when security-scoped bookmarks become stale
+   * @param {string} path - Path to check
+   * @returns {Promise<boolean>} True if workspace needs re-authorization
+   */
+  static async checkNeedsReauth(path) {
+    // In browser/test mode, never needs reauth
+    if (!isTauriAvailable()) {
+      return false;
+    }
+
+    try {
+      return await invoke("check_workspace_needs_reauth", { path });
+    } catch (error) {
+      return false;
+    }
+  }
 }
 
 /**
