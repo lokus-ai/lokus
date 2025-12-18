@@ -352,35 +352,40 @@ export class PluginLoader {
 
   /**
    * Transform plugin code to handle imports
-   * Rewrites 'lokus-plugin-sdk' imports to use global window.LokusSDK
+   * Rewrites 'lokus-plugin-sdk' and '@lokus/plugin-sdk' imports to use global window.LokusSDK
    */
   transformPluginCode(code, pluginId, mainPath) {
-    // 1. Handle "import { ... } from 'lokus-plugin-sdk'"
-    // Replaces with "const { ... } = window.LokusSDK"
-    let transformed = code.replace(
-      /import\s+\{\s*([^}]+)\s*\}\s+from\s+['"]lokus-plugin-sdk['"];?/g,
-      'const { $1 } = window.LokusSDK;'
-    );
+    // Support both 'lokus-plugin-sdk' and '@lokus/plugin-sdk' package names
+    const sdkPatterns = ['lokus-plugin-sdk', '@lokus/plugin-sdk'];
+    let transformed = code;
 
-    // 2. Handle "import * as SDK from 'lokus-plugin-sdk'"
-    // Replaces with "const SDK = window.LokusSDK"
-    transformed = transformed.replace(
-      /import\s+\*\s+as\s+(\w+)\s+from\s+['"]lokus-plugin-sdk['"];?/g,
-      'const $1 = window.LokusSDK;'
-    );
+    for (const sdkName of sdkPatterns) {
+      const escapedName = sdkName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-    // 3. Handle "import SDK from 'lokus-plugin-sdk'" (default import)
-    // Replaces with "const SDK = window.LokusSDK" (assuming SDK exports itself as default or we want the whole object)
-    transformed = transformed.replace(
-      /import\s+(\w+)\s+from\s+['"]lokus-plugin-sdk['"];?/g,
-      'const $1 = window.LokusSDK;'
-    );
+      // 1. Handle "import { ... } from 'sdk-name'"
+      transformed = transformed.replace(
+        new RegExp(`import\\s+\\{\\s*([^}]+)\\s*\\}\\s+from\\s+['"]${escapedName}['"];?`, 'g'),
+        'const { $1 } = window.LokusSDK;'
+      );
 
-    // 4. Handle side-effect import "import 'lokus-plugin-sdk'"
-    transformed = transformed.replace(
-      /import\s+['"]lokus-plugin-sdk['"];?/g,
-      ''
-    );
+      // 2. Handle "import * as SDK from 'sdk-name'"
+      transformed = transformed.replace(
+        new RegExp(`import\\s+\\*\\s+as\\s+(\\w+)\\s+from\\s+['"]${escapedName}['"];?`, 'g'),
+        'const $1 = window.LokusSDK;'
+      );
+
+      // 3. Handle "import SDK from 'sdk-name'" (default import)
+      transformed = transformed.replace(
+        new RegExp(`import\\s+(\\w+)\\s+from\\s+['"]${escapedName}['"];?`, 'g'),
+        'const $1 = window.LokusSDK;'
+      );
+
+      // 4. Handle side-effect import "import 'sdk-name'"
+      transformed = transformed.replace(
+        new RegExp(`import\\s+['"]${escapedName}['"];?`, 'g'),
+        ''
+      );
+    }
 
     // 5. Rewrite Source Map URLs
     // Blob URLs break relative source maps. We need to make them absolute.
