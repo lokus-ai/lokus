@@ -2,24 +2,24 @@
  * Type definitions for {{pluginName}}
  */
 
-export interface { { pluginNamePascalCase } }Config {
+export interface {{pluginNamePascalCase}}Config {
   enabled: boolean;
-  options: { { pluginNamePascalCase } } Options;
+  options: {{pluginNamePascalCase}}Options;
 }
 
-export interface { { pluginNamePascalCase } }Options {
+export interface {{pluginNamePascalCase}}Options {
   // Define your plugin options here
-  autoActivate ?: boolean;
-  logLevel ?: 'debug' | 'info' | 'warn' | 'error';
+  autoActivate?: boolean;
+  logLevel?: 'debug' | 'info' | 'warn' | 'error';
 }
 
-export interface { { pluginNamePascalCase } }State {
+export interface {{pluginNamePascalCase}}State {
   // Define your plugin state here
   isActive: boolean;
   lastUpdate: Date;
 }
 
-export interface { { pluginNamePascalCase } }Events {
+export interface {{pluginNamePascalCase}}Events {
   // Define your plugin events here
   activated: void;
   deactivated: void;
@@ -27,14 +27,14 @@ export interface { { pluginNamePascalCase } }Events {
 }
 
 // Plugin-specific types
-export type {{ pluginNamePascalCase }}Command = {
+export type {{pluginNamePascalCase}}Command = {
   id: string;
   title: string;
   description?: string;
   keybinding?: string;
 };
 
-export type {{ pluginNamePascalCase }}MenuItem = {
+export type {{pluginNamePascalCase}}MenuItem = {
   id: string;
   label: string;
   command: string;

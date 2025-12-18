@@ -1,6 +1,6 @@
 {
   "name": "lokus-plugin-cli",
-  "version": "2.2.9",
+  "version": "2.3.0",
   "description": "Advanced CLI toolkit for developing Lokus plugins with interactive templates, hot-reload, and comprehensive tooling",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
