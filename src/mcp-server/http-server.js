@@ -26,6 +26,12 @@ import { kanbanTools, executeKanbanTool } from "./tools/kanban.js";
 import { graphTools, executeGraphTool } from "./tools/graph.js";
 import { templatesTools, executeTemplateTool } from "./tools/templates.js";
 import { themeTools, handleThemeTool } from "./tools/themes.js";
+import { dailyNotesTools, executeDailyNotesTool } from "./tools/daily-notes.js";
+import { tasksTools, executeTasksTool } from "./tools/tasks.js";
+import { searchTools, executeSearchTool } from "./tools/search.js";
+
+// Import auto-workspace detection
+import { autoDetectWorkspace } from "./utils/autoWorkspace.js";
 
 // Import resources
 import { markdownSyntaxResources, getMarkdownSyntaxResource } from "./resources/markdownSyntaxProvider.js";
@@ -200,7 +206,10 @@ const getAllTools = () => {
     ...kanbanTools,
     ...graphTools,
     ...templatesTools,
-    ...themeTools
+    ...themeTools,
+    ...dailyNotesTools,
+    ...tasksTools,
+    ...searchTools
   ];
 };
 
@@ -281,6 +290,12 @@ async function handleMCPRequest(request) {
             text: JSON.stringify(themeResult, null, 2)
           }]
         };
+      } else if (dailyNotesTools.some(t => t.name === toolName)) {
+        result = await executeDailyNotesTool(toolName, args, workspace);
+      } else if (tasksTools.some(t => t.name === toolName)) {
+        result = await executeTasksTool(toolName, args, workspace);
+      } else if (searchTools.some(t => t.name === toolName)) {
+        result = await executeSearchTool(toolName, args, workspace);
       } else {
         throw new Error(`Unknown tool: ${toolName}`);
       }

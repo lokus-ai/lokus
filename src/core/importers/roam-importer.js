@@ -369,6 +369,165 @@ export class RoamImporter extends BaseImporter {
   }
 
   /**
+   * Convert Roam JSON export to a new workspace folder
+   * Creates a new folder and puts converted markdown files there
+   * @param {string} jsonFilePath - Path to the Roam JSON export file
+   * @returns {Promise<Object>} Conversion results
+   */
+  async convertInPlace(jsonFilePath) {
+    this.resetStats();
+    this.blockMap = new BlockReferenceMap();
+
+    try {
+      // Step 1: Validate source
+      const validation = await this.validate(jsonFilePath);
+      if (!validation.valid) {
+        throw new Error(`Invalid source: ${validation.errors.join(', ')}`);
+      }
+
+      // Get the parent folder and create a new workspace folder
+      const parentPath = jsonFilePath.substring(0, jsonFilePath.lastIndexOf('/'));
+      const jsonFileName = jsonFilePath.substring(jsonFilePath.lastIndexOf('/') + 1);
+      const workspaceName = jsonFileName.replace(/\.json$/i, '') || 'Roam Import';
+
+      // Create workspace folder
+      const folderPath = `${parentPath}/${workspaceName}`;
+      await invoke('create_directory', { path: folderPath, recursive: true });
+
+      // Step 2: Parse JSON export
+      const pages = await this.parseRoamExport(jsonFilePath);
+      this.stats.totalFiles = pages.length;
+      this.progressTracker.setTotal(pages.length);
+      this.progressTracker.start();
+
+      // Step 3: Build block map (first pass)
+      this.updateProgress(0, pages.length, 'Building block reference map...');
+      this.buildBlockMap(pages);
+
+      // Step 4: Convert all pages
+      const convertedPages = [];
+      for (let i = 0; i < pages.length; i++) {
+        const page = pages[i];
+        try {
+          const title = this.getPageTitle(page);
+          this.updateProgress(i + 1, pages.length, `Converting ${title}`);
+          this.progressTracker.update(title);
+
+          const converted = this.convertPage(page);
+          const fileName = this.sanitizeFileName(converted.title) + '.md';
+
+          convertedPages.push({
+            fileName,
+            ...converted
+          });
+        } catch (error) {
+          this.addError(this.getPageTitle(page), error);
+        }
+      }
+
+      // Step 5: Resolve block references (second pass)
+      for (const page of convertedPages) {
+        try {
+          const { content, unresolvedRefs } = convertBlockReferences(
+            page.content,
+            this.blockMap,
+            page.fileName
+          );
+
+          page.content = content;
+
+          if (unresolvedRefs.length > 0) {
+            this.addWarning(page.fileName, `${unresolvedRefs.length} unresolved block references`);
+          }
+        } catch (error) {
+          this.addError(page.fileName, error);
+        }
+      }
+
+      // Step 6: Write files to the same folder
+      for (const page of convertedPages) {
+        try {
+          const destFilePath = `${folderPath}/${page.fileName}`;
+          await invoke('write_file', {
+            path: destFilePath,
+            content: page.content
+          });
+
+          this.stats.processedFiles++;
+        } catch (error) {
+          this.addError(page.fileName, error);
+        }
+      }
+
+      // Step 7: Create .lokus folder to mark as Lokus workspace
+      await this.createLokusMarker(folderPath);
+
+      // Step 8: Move original JSON to backup folder inside workspace
+      await this.backupJsonFile(jsonFilePath, folderPath);
+
+      this.progressTracker.complete();
+
+      return {
+        success: true,
+        stats: this.getStats(),
+        blockStats: this.blockMap.getStats(),
+        workspacePath: folderPath
+      };
+    } catch (error) {
+      this.progressTracker.error(error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Create .lokus folder to mark as Lokus workspace
+   */
+  async createLokusMarker(folderPath) {
+    const lokusPath = `${folderPath}/.lokus`;
+    try {
+      const exists = await invoke('path_exists', { path: lokusPath });
+      if (!exists) {
+        await invoke('create_directory', { path: lokusPath, recursive: true });
+      }
+
+      // Write a marker file
+      await invoke('write_file', {
+        path: `${lokusPath}/converted.json`,
+        content: JSON.stringify({
+          convertedFrom: 'roam',
+          convertedAt: new Date().toISOString(),
+          version: '1.0'
+        }, null, 2)
+      });
+    } catch (error) {
+      // Non-fatal, just log
+      console.error('Failed to create Lokus marker:', error);
+    }
+  }
+
+  /**
+   * Backup original JSON file to workspace backup folder
+   */
+  async backupJsonFile(jsonFilePath, workspacePath) {
+    try {
+      const date = new Date().toISOString().split('T')[0];
+      const fileName = jsonFilePath.substring(jsonFilePath.lastIndexOf('/') + 1);
+      const backupPath = `${workspacePath}/.lokus-backup-${date}`;
+
+      await invoke('create_directory', { path: backupPath, recursive: true });
+
+      const content = await invoke('read_file_content', { path: jsonFilePath });
+      await invoke('write_file', {
+        path: `${backupPath}/${fileName}`,
+        content
+      });
+    } catch (error) {
+      // Non-fatal
+      console.error('Failed to backup JSON file:', error);
+    }
+  }
+
+  /**
    * Register progress callback for tracker
    */
   onProgress(callback) {

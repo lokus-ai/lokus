@@ -22,6 +22,9 @@ import { homedir } from "os";
 import { constants } from "fs";
 import { fileURLToPath } from 'url';
 
+// Import auto-workspace detection
+import { autoDetectWorkspace, findWorkspaceFromCWD } from "./utils/autoWorkspace.js";
+
 // Import modular tools
 import { notesTools, executeNoteTool } from "./tools/notes.js";
 import { workspaceTools, executeWorkspaceTool } from "./tools/workspace.js";
@@ -32,6 +35,9 @@ import { kanbanTools, executeKanbanTool } from "./tools/kanban.js";
 import { graphTools, executeGraphTool } from "./tools/graph.js";
 import { templatesTools, executeTemplateTool } from "./tools/templates.js";
 import { themeTools, handleThemeTool } from "./tools/themes.js";
+import { dailyNotesTools, executeDailyNotesTool } from "./tools/daily-notes.js";
+import { tasksTools, executeTasksTool } from "./tools/tasks.js";
+import { searchTools, executeSearchTool } from "./tools/search.js";
 
 // Import resources
 import { markdownSyntaxResources, getMarkdownSyntaxResource } from "./resources/markdownSyntaxProvider.js";
@@ -55,80 +61,53 @@ const logger = {
 class WorkspaceDetector {
   constructor() {
     this.currentWorkspace = null;
+    this.workspaceSource = null;
     this.apiAvailable = false;
   }
 
   /**
-   * Get the current workspace path with smart detection
+   * Get the current workspace path with smart auto-detection
+   * Priority: CWD > ENV > API > MCP Context > Config > Default
    */
   async getWorkspace() {
     if (this.currentWorkspace) {
       return this.currentWorkspace;
     }
 
-    // Try 1: Get from running Lokus app via API
-    this.currentWorkspace = await this.getWorkspaceFromAPI();
-    if (this.currentWorkspace) {
-      logger.info('Using workspace from Lokus API:', this.currentWorkspace);
-      this.apiAvailable = true;
+    // Use the new auto-detection with full priority chain
+    const { workspace, source } = await autoDetectWorkspace({
+      apiUrl: CONFIG.apiUrl
+    });
+
+    if (workspace) {
+      this.currentWorkspace = workspace;
+      this.workspaceSource = source;
+      this.apiAvailable = source === 'api';
+
+      const sourceLabels = {
+        cwd: 'current directory',
+        env: 'LOKUS_WORKSPACE env var',
+        api: 'Lokus app API',
+        context: 'MCP context',
+        config: 'last used config',
+        default: 'default location'
+      };
+
+      logger.info(`Workspace auto-detected from ${sourceLabels[source] || source}:`, workspace);
       return this.currentWorkspace;
     }
 
-    // Try 2: Get last workspace from config
-    this.currentWorkspace = await this.getLastWorkspace();
-    if (this.currentWorkspace) {
-      logger.info('Using last workspace from config:', this.currentWorkspace);
-      return this.currentWorkspace;
-    }
-
-    // Try 3: Use default workspace
-    this.currentWorkspace = await this.getDefaultWorkspace();
-    logger.info('Using default workspace:', this.currentWorkspace);
+    // Fallback: create default workspace
+    this.currentWorkspace = await this.createDefaultWorkspace();
+    this.workspaceSource = 'created';
+    logger.info('Created default workspace:', this.currentWorkspace);
     return this.currentWorkspace;
   }
 
   /**
-   * Get workspace from Lokus API server
+   * Create default workspace if none exists
    */
-  async getWorkspaceFromAPI() {
-    try {
-      const fetch = (await import('node-fetch')).default;
-      const response = await fetch(`${CONFIG.apiUrl}/api/workspace`, {
-        timeout: 2000
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data) {
-          return data.data.workspace;
-        }
-      }
-    } catch (e) {
-      // API not available, silent fail
-    }
-    return null;
-  }
-
-  /**
-   * Get last workspace from config file
-   */
-  async getLastWorkspace() {
-    try {
-      const content = await readFile(CONFIG.lastWorkspaceFile, 'utf-8');
-      const data = JSON.parse(content);
-      if (data.workspace && await this.validateWorkspace(data.workspace)) {
-        return data.workspace;
-      }
-    } catch (error) {
-      // File doesn't exist or invalid
-    }
-    return null;
-  }
-
-  /**
-   * Get default workspace, create if needed
-   */
-  async getDefaultWorkspace() {
+  async createDefaultWorkspace() {
     const workspace = CONFIG.defaultWorkspace;
 
     try {
@@ -149,7 +128,7 @@ This is your knowledge workspace. You can:
 - Manage tasks with Kanban boards
 - Explore connections with Graph view
 
-Happy knowledge building! 🚀
+Happy knowledge building!
 `;
         await writeFile(join(workspace, 'Welcome.md'), welcomeNote);
         logger.info('Created default workspace at:', workspace);
@@ -184,6 +163,7 @@ Happy knowledge building! 🚀
         JSON.stringify({
           workspace,
           lastUsed: new Date().toISOString(),
+          source: this.workspaceSource,
           apiAvailable: this.apiAvailable
         })
       );
@@ -198,13 +178,29 @@ Happy knowledge building! 🚀
   async checkAPIStatus() {
     try {
       const fetch = (await import('node-fetch')).default;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1000);
+
       const response = await fetch(`${CONFIG.apiUrl}/api/health`, {
-        timeout: 1000
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
       return response.ok;
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Get info about how the workspace was detected
+   */
+  getDetectionInfo() {
+    return {
+      workspace: this.currentWorkspace,
+      source: this.workspaceSource,
+      apiAvailable: this.apiAvailable
+    };
   }
 }
 
@@ -235,7 +231,10 @@ const getAllTools = () => {
     ...kanbanTools,
     ...graphTools,
     ...templatesTools,
-    ...themeTools
+    ...themeTools,
+    ...dailyNotesTools,  // Daily notes tool
+    ...tasksTools,       // Tasks tool
+    ...searchTools       // Smart search tools
   ];
 };
 
@@ -299,6 +298,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
+    if (dailyNotesTools.some(t => t.name === toolName)) {
+      return await executeDailyNotesTool(toolName, args, workspace);
+    }
+
+    if (tasksTools.some(t => t.name === toolName)) {
+      return await executeTasksTool(toolName, args, workspace);
+    }
+
+    if (searchTools.some(t => t.name === toolName)) {
+      return await executeSearchTool(toolName, args, workspace);
+    }
+
     throw new Error(`Unknown tool: ${toolName}`);
 
   } catch (error) {
@@ -356,9 +367,11 @@ async function main() {
     logger.info('⚠️  Lokus app not running (basic features only)');
   }
 
-  // Get and display workspace
+  // Get and display workspace with detection info
   const workspace = await workspaceDetector.getWorkspace();
-  logger.info('Workspace:', workspace);
+  const { source } = workspaceDetector.getDetectionInfo();
+  logger.info(`Workspace: ${workspace}`);
+  logger.info(`Detection: ${source} (CWD > ENV > API > context > config > default)`);
   logger.info('===========================================');
 }
 

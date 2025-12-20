@@ -70,12 +70,15 @@ export function ResponsiveTabBar({
     };
 
     return (
-      <button
+      <div
         key={tab.path}
+        role="button"
+        tabIndex={0}
         onClick={() => onTabClick?.(tab.path)}
+        onKeyDown={(e) => e.key === 'Enter' && onTabClick?.(tab.path)}
         data-tauri-drag-region="false"
         className={`
-          relative flex items-center gap-2 px-4 h-8 text-xs whitespace-nowrap
+          relative flex items-center gap-2 px-4 h-8 text-xs whitespace-nowrap cursor-pointer
           ${isActive ? 'z-10' : 'z-0'}
         `}
         style={baseStyles}
@@ -110,7 +113,7 @@ export function ResponsiveTabBar({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </span>
-      </button>
+      </div>
     );
   };
 

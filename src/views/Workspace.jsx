@@ -1554,14 +1554,8 @@ function WorkspaceWithScope({ path }) {
     }
   }, [activeFile]);
 
-  useEffect(() => {
-    const sub = listen("workspace:activate", (e) => {
-      const newPath = String(e.payload || "");
-      setPath(newPath);
-      invoke("save_last_workspace", { path: newPath });
-    });
-    return () => { sub.then((un) => un()); };
-  }, []);
+  // Note: workspace:activate events are handled by useWorkspaceActivation in App.jsx
+  // which passes the path down via props to this component
 
   // Open file events from editor (wiki link clicks)
   useEffect(() => {

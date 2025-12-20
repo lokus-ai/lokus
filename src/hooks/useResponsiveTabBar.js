@@ -37,18 +37,10 @@ export function useResponsiveTabBar({
     return 120; // Mobile, with min of 80px enforced by useOverflowDetection
   }, [windowWidth]);
 
-  // Sort tabs to prioritize active tab
+  // Keep tabs in their original order (no reordering on click)
   const sortedTabs = useMemo(() => {
-    if (!activeTabPath) return tabs;
-
-    // Move active tab to the front of visible items
-    const activeIndex = tabs.findIndex(tab => tab.path === activeTabPath);
-    if (activeIndex === -1) return tabs;
-
-    const reordered = [...tabs];
-    const [activeTab] = reordered.splice(activeIndex, 1);
-    return [activeTab, ...reordered];
-  }, [tabs, activeTabPath]);
+    return tabs;
+  }, [tabs]);
 
   // Calculate individual tab widths accounting for overlap
   const calculateTabWidth = useCallback((tab, availableWidth, index) => {

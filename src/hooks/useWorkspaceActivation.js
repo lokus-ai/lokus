@@ -100,8 +100,12 @@ export function useWorkspaceActivation() {
       : Promise.resolve(() => {});
 
     return () => {
-      unlistenWorkspacePromise.then(unlisten => unlisten());
-      unlistenForceWelcomePromise.then(unlisten => unlisten());
+      unlistenWorkspacePromise.then(unlisten => {
+        if (typeof unlisten === 'function') unlisten();
+      }).catch(() => {});
+      unlistenForceWelcomePromise.then(unlisten => {
+        if (typeof unlisten === 'function') unlisten();
+      }).catch(() => {});
     };
   }, []); // Runs once on component mount.
 
