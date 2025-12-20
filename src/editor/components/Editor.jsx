@@ -20,7 +20,7 @@ import * as HighlightExt from "@tiptap/extension-highlight";
 import * as HorizontalRuleExt from "@tiptap/extension-horizontal-rule";
 import { InputRule, nodeInputRule } from "@tiptap/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import MathExt from "../extensions/Math.js";
+import MathExtension from "@aarkue/tiptap-math-extension";
 import WikiLink from "../extensions/WikiLink.js";
 import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
 import BlockId from "../extensions/BlockId.js";
@@ -37,6 +37,7 @@ import TaskCreationTrigger from "../extensions/TaskCreationTrigger.js";
 import CodeBlockIndent from "../extensions/CodeBlockIndent.js";
 import Callout from "../extensions/Callout.js";
 import Folding from "../extensions/Folding.js";
+import SymbolShortcuts from "../extensions/SymbolShortcuts.js";
 import MermaidDiagram from "../extensions/MermaidDiagram.jsx";
 import CanvasLink from '../extensions/CanvasLink.js';
 import PluginCompletion from '../extensions/PluginCompletion.js';
@@ -47,6 +48,7 @@ import TaskCreationModal from "../../components/TaskCreationModal.jsx";
 import ExportModal from "../../views/ExportModal.jsx";
 import ImageInsertModal from "../../components/ImageInsertModal.jsx";
 import MathFormulaModal from "../../components/MathFormulaModal.jsx";
+import SymbolPickerModal from "../../components/SymbolPickerModal.jsx";
 import ReadingModeView from "./ReadingModeView.jsx";
 import PagePreview from "../../components/PagePreview.jsx";
 import { ImageViewerModal } from "../../components/ImageViewer/ImageViewerModal.jsx";
@@ -66,6 +68,8 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
   const [editorSettings, setEditorSettings] = useState(null);
   const [pluginExtensions, setPluginExtensions] = useState([]);
   const [lastPluginUpdate, setLastPluginUpdate] = useState(0);
+  const [customSymbols, setCustomSymbols] = useState({});
+  const [showSymbolPicker, setShowSymbolPicker] = useState(false);
 
   // Reading mode state: 'edit', 'live', 'reading'
   const [editorMode, setEditorMode] = useState(() => {
@@ -141,7 +145,10 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
 
     const exts = [
       StarterKit.configure({
-        // Use default codeBlock
+        // Disable extensions we add separately to avoid duplicates
+        link: false,
+        strike: false,
+        horizontalRule: false,
       })
     ];
     if (Link) exts.push(Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true }));
@@ -237,9 +244,8 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
 
     // Code blocks (basic, StarterKit includes CodeBlock extension)
 
-    // Math (inline + block) – local extension
-    if (Array.isArray(MathExt)) exts.push(...MathExt)
-    else if (MathExt) exts.push(MathExt)
+    // Math (inline + block) – using @aarkue/tiptap-math-extension
+    exts.push(MathExtension.configure({ evaluation: false }))
 
     // Obsidian‑style wikilinks and image embeds
     exts.push(WikiLink);
@@ -278,6 +284,9 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
 
     // Section folding for headings
     exts.push(Folding);
+
+    // Symbol shortcuts (:theta: → θ, :arrow: → →, etc.)
+    exts.push(SymbolShortcuts.configure({ customSymbols }));
 
     // Mermaid diagrams
     exts.push(MermaidDiagram);
@@ -357,7 +366,40 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       setExtensions(exts);
       setLoading(false);
     })()
-  }, [pluginExtensions, lastPluginUpdate]);
+  }, [pluginExtensions, lastPluginUpdate, customSymbols]);
+
+  // Load custom symbols from config and listen for changes
+  useEffect(() => {
+    let unlisten = null;
+
+    const loadCustomSymbols = async () => {
+      try {
+        const { readConfig } = await import('../../core/config/store.js');
+        const cfg = await readConfig();
+        if (cfg?.customSymbols) {
+          setCustomSymbols(cfg.customSymbols);
+        }
+      } catch { }
+    };
+
+    const setupListener = async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        unlisten = await listen('lokus:custom-symbols-changed', (event) => {
+          if (event.payload?.symbols) {
+            setCustomSymbols(event.payload.symbols);
+          }
+        });
+      } catch { }
+    };
+
+    loadCustomSymbols();
+    setupListener();
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
 
   // Persist editor mode changes
   useEffect(() => {
@@ -386,6 +428,19 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
     return () => document.removeEventListener('keydown', handleModeShortcut);
   }, []);
 
+  // Keyboard shortcut for symbol picker (Cmd/Ctrl+;)
+  useEffect(() => {
+    const handleSymbolPickerShortcut = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === ';') {
+        e.preventDefault();
+        setShowSymbolPicker(true);
+      }
+    };
+
+    document.addEventListener('keydown', handleSymbolPickerShortcut);
+    return () => document.removeEventListener('keydown', handleSymbolPickerShortcut);
+  }, []);
+
   // Expose editorMode to parent via window global for sidebar access
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -399,11 +454,11 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
   }
 
   return (
-    <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} editorMode={editorMode} onEditorReady={onEditorReady} isLoading={isLoading} />
+    <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} editorMode={editorMode} onEditorReady={onEditorReady} isLoading={isLoading} showSymbolPicker={showSymbolPicker} setShowSymbolPicker={setShowSymbolPicker} customSymbols={customSymbols} />
   );
 });
 
-const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings, editorMode = 'edit', onEditorReady, isLoading = false }, ref) => {
+const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings, editorMode = 'edit', onEditorReady, isLoading = false, showSymbolPicker = false, setShowSymbolPicker, customSymbols = {} }, ref) => {
   const isSettingRef = useRef(false);
   const [isWikiLinkModalOpen, setIsWikiLinkModalOpen] = useState(false);
   const [isTaskCreationModalOpen, setIsTaskCreationModalOpen] = useState(false);
@@ -721,7 +776,11 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
       isSettingRef.current = true;
       // Content is already processed in Workspace.jsx, just set it directly
       // This prevents double markdown-it processing which corrupts custom HTML tags
-      editor.commands.setContent(content);
+      editor.commands.setContent(content, {
+        parseOptions: {
+          preserveWhitespace: 'full',
+        }
+      });
     }
   }, [content, editor, isLoading]);
 
@@ -1057,6 +1116,18 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         onInsert={(data) => {
           mathFormulaModalState.onInsert?.(data);
           setMathFormulaModalState({ isOpen: false, mode: 'inline', onInsert: null });
+        }}
+      />
+
+      {/* Symbol Picker Modal */}
+      <SymbolPickerModal
+        isOpen={showSymbolPicker}
+        onClose={() => setShowSymbolPicker(false)}
+        customSymbols={customSymbols}
+        onInsert={(symbol) => {
+          if (editor) {
+            editor.chain().focus().insertContent(symbol).run();
+          }
         }}
       />
     </>

@@ -38,7 +38,7 @@ import { useEditor } from '@tiptap/react'
 const mockUseEditor = vi.mocked(useEditor)
 
 // Mock extensions
-vi.mock('../extensions/Math.js', () => ({ default: null }))
+vi.mock('@aarkue/tiptap-math-extension', () => ({ default: { configure: () => ({}) } }))
 vi.mock('../extensions/WikiLink.js', () => ({ default: {} }))
 vi.mock('../lib/WikiLinkSuggest.js', () => ({ default: {} }))
 vi.mock('../extensions/HeadingAltInput.js', () => ({ default: vi.fn() }))

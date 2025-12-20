@@ -132,8 +132,12 @@ export function PluginProvider({ children }) {
 
       return () => {
         window.removeEventListener('plugin-install-from-registry', handleRegistryInstall);
-        unlistenPromise.then(unlisten => unlisten());
-        deepLinkUnlistenPromise.then(unlisten => unlisten());
+        unlistenPromise.then(unlisten => {
+          if (typeof unlisten === 'function') unlisten();
+        }).catch(() => {});
+        deepLinkUnlistenPromise.then(unlisten => {
+          if (typeof unlisten === 'function') unlisten();
+        }).catch(() => {});
       };
     } else {
       const onDom = () => pluginManager.loadPlugins(true);

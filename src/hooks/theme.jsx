@@ -92,7 +92,11 @@ export function ThemeProvider({ children }) {
           setTheme(p.visuals.theme);
         }
       });
-      return () => { unlistenPromise.then(unlisten => unlisten()); };
+      return () => {
+        unlistenPromise.then(unlisten => {
+          if (typeof unlisten === 'function') unlisten();
+        }).catch(() => {});
+      };
     } else {
       const onDom = (e) => {
         const p = (e.detail || {});

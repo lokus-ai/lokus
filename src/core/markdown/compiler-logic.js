@@ -208,11 +208,13 @@ export class MarkdownCompiler {
       // Ensure proper paragraph breaks for multi-line content
       // Replace single line breaks with double line breaks where appropriate
       if (normalizedText.includes('\n') && !normalizedText.includes('\n\n')) {
-        // Check if this looks like structured content (headings, lists, etc.)
-        const hasStructure = /^(#{1,6}\s|[-*+]\s|\d+\.\s|>\s)/m.test(normalizedText)
+        // Check if this looks like structured content (headings, lists, tables, etc.)
+        // Tables (|...|) must NOT have line breaks added or they won't parse
+        const hasStructure = /^(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|\|.*\|)/m.test(normalizedText)
 
         if (hasStructure) {
           // For structured content, add paragraph breaks before headings and after lists
+          // But NOT inside tables - tables need consecutive lines
           normalizedText = normalizedText
             .replace(/\n(#{1,6}\s)/g, '\n\n$1')  // Double break before headings
             .replace(/^(#{1,6}\s.*)\n(?!#{1,6}\s|\n)/gm, '$1\n\n')  // Double break after headings

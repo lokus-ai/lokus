@@ -77,7 +77,9 @@ export default function Launcher() {
       : Promise.resolve(() => {});
 
     return () => {
-      unlistenPromise.then(unlisten => unlisten());
+      unlistenPromise.then(unlisten => {
+        if (typeof unlisten === 'function') unlisten();
+      }).catch(() => {});
     };
   }, []);
 
