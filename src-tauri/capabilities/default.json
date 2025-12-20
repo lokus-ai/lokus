@@ -27,6 +27,12 @@
         },
         {
           "path": "$APP/**"
+        },
+        {
+          "path": "$TEMP/**"
+        },
+        {
+          "path": "$HOME/.lokus/**"
         }
       ]
     },

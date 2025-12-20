@@ -31,12 +31,17 @@ export const AUTH_METHODS = {
 /**
  * Registry API Client
  */
+// Use localhost in development for testing, production URL in builds
+const DEFAULT_REGISTRY_URL = import.meta.env.DEV
+  ? 'http://localhost:3001/api/v1/registry'
+  : 'https://lokusmd.com/api/v1/registry';
+
 export class RegistryAPI extends EventEmitter {
   constructor(config = {}) {
     super()
 
     this.config = {
-      baseUrl: 'https://lokusmd.com/api/v1/registry',
+      baseUrl: DEFAULT_REGISTRY_URL,
       timeout: 30000,
       retryAttempts: 1,
       retryDelay: 500,
@@ -199,8 +204,8 @@ export class RegistryAPI extends EventEmitter {
 
   async downloadPlugin(pluginId, version = 'latest') {
     // My API: /api/v1/registry/download/[id]/[version]
-    // If version is latest, we need to resolve it first or backend handles it
-    // My backend expects specific version for download
+    // If version is latest, we need to resolve it first
+    // The download endpoint redirects to the signed URL, which returns the blob
 
     let targetVersion = version;
     if (version === 'latest') {
@@ -208,22 +213,53 @@ export class RegistryAPI extends EventEmitter {
       targetVersion = plugin.data.latest_version;
     }
 
-    const response = await this.request('GET', `/download/${pluginId}/${targetVersion}`, null, {
-      skipCache: true,
-      responseType: 'json' // My API returns a JSON with signed URL
-    })
+    // Fetch directly - the API redirects to the signed storage URL
+    const url = this.buildUrl(`/download/${pluginId}/${targetVersion}`);
 
-    // Now fetch the actual file from the signed URL
-    if (response.data && response.data.url) {
-      const fileResponse = await fetch(response.data.url);
-      if (!fileResponse.ok) throw new Error('Failed to download file from storage');
-      return {
-        data: await fileResponse.blob(),
-        status: API_STATUS.SUCCESS
-      };
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Lokus-Plugin-Client/1.0'
+        }
+      });
+
+      if (!response.ok) {
+        // Try to parse error message from JSON response
+        const contentType = response.headers.get('content-type');
+        if (contentType?.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Download failed: HTTP ${response.status}`);
+        }
+        throw new Error(`Download failed: HTTP ${response.status}`);
+      }
+
+      // Check content type - could be a blob (file) or JSON with URL
+      const contentType = response.headers.get('content-type');
+
+      if (contentType?.includes('application/json')) {
+        // API returned JSON with signed URL
+        const data = await response.json();
+        if (data.url) {
+          const fileResponse = await fetch(data.url);
+          if (!fileResponse.ok) throw new Error('Failed to download file from storage');
+          return {
+            data: await fileResponse.blob(),
+            status: API_STATUS.SUCCESS
+          };
+        }
+        throw new Error('Invalid download response: missing URL');
+      } else {
+        // Direct blob response (from redirect to storage)
+        return {
+          data: await response.blob(),
+          status: API_STATUS.SUCCESS
+        };
+      }
+    } catch (error) {
+      this.logger.error('Download failed:', error);
+      throw error;
     }
-
-    throw new Error('Invalid download response');
   }
 
   /**

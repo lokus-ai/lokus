@@ -4,6 +4,7 @@
  */
 
 import { EventEmitter } from '../../utils/EventEmitter.js';
+import { permissionEnforcer, PermissionDeniedError, PERMISSION_MAP } from '../security/PermissionEnforcer.js';
 
 import { createBridgedEditorAPI } from './PluginBridge.js';
 import { LanguagesAPI } from './LanguagesAPI.js';
@@ -26,6 +27,31 @@ export class EditorAPI extends EventEmitter {
     super();
     this.bridgedAPI = null;
     this.currentPluginId = null;
+    this.grantedPermissions = new Set();
+  }
+
+  /**
+   * Set permission context for this API
+   * @param {string} pluginId - Plugin identifier
+   * @param {Set<string>} permissions - Granted permissions
+   */
+  _setPermissionContext(pluginId, permissions) {
+    this.currentPluginId = pluginId;
+    this.grantedPermissions = permissions || new Set();
+  }
+
+  /**
+   * Check permission before API call
+   * @param {string} apiMethod - Method name for logging
+   * @param {string} permission - Required permission
+   */
+  _requirePermission(apiMethod, permission) {
+    permissionEnforcer.requirePermission(
+      this.currentPluginId,
+      this.grantedPermissions,
+      permission,
+      apiMethod
+    );
   }
 
   /**
@@ -42,6 +68,8 @@ export class EditorAPI extends EventEmitter {
    * Add a TipTap extension to the editor
    */
   async addExtension({ name, type = 'extension', schema, view, commands, inputRules, keyboardShortcuts }) {
+    this._requirePermission('editor.addExtension', 'editor:write');
+
     if (!this.bridgedAPI) {
       throw new Error('EditorAPI not initialized. Plugin context required.');
     }
@@ -69,6 +97,8 @@ export class EditorAPI extends EventEmitter {
    * Remove an extension
    */
   removeExtension(extensionId) {
+    this._requirePermission('editor.removeExtension', 'editor:write');
+
     if (!this.bridgedAPI) {
       throw new Error('EditorAPI not initialized. Plugin context required.');
     }
@@ -87,6 +117,8 @@ export class EditorAPI extends EventEmitter {
    * Add a slash command
    */
   async addSlashCommand({ name, description, icon, aliases = [], execute }) {
+    this._requirePermission('editor.addSlashCommand', 'editor:write');
+
     if (!this.bridgedAPI) {
       throw new Error('EditorAPI not initialized. Plugin context required.');
     }
@@ -112,6 +144,8 @@ export class EditorAPI extends EventEmitter {
    * Add context menu item
    */
   addContextMenuItem({ id, name, icon, condition, execute }) {
+    this._requirePermission('editor.addContextMenuItem', 'editor:write');
+
     if (!this.bridgedAPI) {
       throw new Error('EditorAPI not initialized. Plugin context required.');
     }
@@ -137,6 +171,8 @@ export class EditorAPI extends EventEmitter {
    * Add drag & drop handler
    */
   addDropHandler({ accept, handler }) {
+    this._requirePermission('editor.addDropHandler', 'editor:write');
+
     if (!this.bridgedAPI) {
       throw new Error('EditorAPI not initialized. Plugin context required.');
     }
@@ -159,6 +195,8 @@ export class EditorAPI extends EventEmitter {
    * Insert a node at current position
    */
   async insertNode(type, attrs = {}, content = '') {
+    this._requirePermission('editor.insertNode', 'editor:write');
+
     if (!this.bridgedAPI) {
       throw new Error('EditorAPI not initialized. Plugin context required.');
     }
@@ -175,6 +213,8 @@ export class EditorAPI extends EventEmitter {
    * Get current selection
    */
   async getSelection() {
+    this._requirePermission('editor.getSelection', 'editor:read');
+
     if (!this.bridgedAPI) {
       throw new Error('EditorAPI not initialized. Plugin context required.');
     }
@@ -191,6 +231,8 @@ export class EditorAPI extends EventEmitter {
    * Replace selection with content
    */
   async replaceSelection(content) {
+    this._requirePermission('editor.replaceSelection', 'editor:write');
+
     if (!this.bridgedAPI) {
       throw new Error('EditorAPI not initialized. Plugin context required.');
     }
@@ -207,6 +249,8 @@ export class EditorAPI extends EventEmitter {
    * Add keyboard shortcut
    */
   addKeyboardShortcut({ key, handler, description }) {
+    this._requirePermission('editor.addKeyboardShortcut', 'editor:write');
+
     if (!this.bridgedAPI) {
       throw new Error('EditorAPI not initialized. Plugin context required.');
     }
@@ -230,6 +274,8 @@ export class EditorAPI extends EventEmitter {
    * Add toolbar item
    */
   addToolbarItem({ id, title, icon, group = 'plugin', handler, isActive, isDisabled }) {
+    this._requirePermission('editor.addToolbarItem', 'editor:write');
+
     if (!this.bridgedAPI) {
       throw new Error('EditorAPI not initialized. Plugin context required.');
     }
@@ -257,6 +303,8 @@ export class EditorAPI extends EventEmitter {
    * Get editor text content
    */
   async getText() {
+    this._requirePermission('editor.getText', 'editor:read');
+
     if (!this.bridgedAPI) {
       throw new Error('EditorAPI not initialized. Plugin context required.');
     }
@@ -267,6 +315,8 @@ export class EditorAPI extends EventEmitter {
    * Subscribe to editor updates
    */
   onUpdate(callback) {
+    this._requirePermission('editor.onUpdate', 'editor:read');
+
     if (!this.bridgedAPI) {
       throw new Error('EditorAPI not initialized. Plugin context required.');
     }
@@ -313,6 +363,31 @@ export class UIAPI extends EventEmitter {
     this.statusItems = new Map();
     this.webviews = new Map();
     this.menus = new Map();
+    this.grantedPermissions = new Set();
+
+    /**
+     * Set permission context for this API
+     * @param {string} pluginId - Plugin identifier
+     * @param {Set<string>} permissions - Granted permissions
+     */
+    this._setPermissionContext = (pluginId, permissions) => {
+      this.currentPluginId = pluginId;
+      this.grantedPermissions = permissions || new Set();
+    };
+
+    /**
+     * Check permission before API call
+     * @param {string} apiMethod - Method name for logging
+     * @param {string} permission - Required permission
+     */
+    this._requirePermission = (apiMethod, permission) => {
+      permissionEnforcer.requirePermission(
+        this.currentPluginId,
+        this.grantedPermissions,
+        permission,
+        apiMethod
+      );
+    };
 
     // Forward output channel manager events to UI events
     if (this.outputChannelManager) {
@@ -346,6 +421,8 @@ export class UIAPI extends EventEmitter {
    * Show information message
    */
   async showInformationMessage(message, ...items) {
+    this._requirePermission('ui.showInformationMessage', 'ui:notifications');
+
     if (this.notificationsAPI) {
       this.notificationsAPI.show({ type: 'info', message, title: 'Info' });
     }
@@ -357,6 +434,8 @@ export class UIAPI extends EventEmitter {
    * Show warning message
    */
   async showWarningMessage(message, ...items) {
+    this._requirePermission('ui.showWarningMessage', 'ui:notifications');
+
     if (this.notificationsAPI) {
       this.notificationsAPI.show({ type: 'warning', message, title: 'Warning' });
     }
@@ -367,6 +446,8 @@ export class UIAPI extends EventEmitter {
    * Show error message
    */
   async showErrorMessage(message, ...items) {
+    this._requirePermission('ui.showErrorMessage', 'ui:notifications');
+
     if (this.notificationsAPI) {
       this.notificationsAPI.show({ type: 'error', message, title: 'Error' });
     }
@@ -377,6 +458,8 @@ export class UIAPI extends EventEmitter {
    * Create output channel
    */
   createOutputChannel(name) {
+    this._requirePermission('ui.createOutputChannel', 'ui:create');
+
     // Use the OutputChannelManager if available
     if (this.outputChannelManager) {
       return this.outputChannelManager.createChannel(name, this.currentPluginId);
@@ -432,6 +515,8 @@ export class UIAPI extends EventEmitter {
    * Show input box
    */
   async showInputBox(options = {}) {
+    this._requirePermission('ui.showInputBox', 'ui:dialogs');
+
     return this.showPrompt({
       title: options.title || 'Input',
       message: options.prompt || '',
@@ -445,6 +530,8 @@ export class UIAPI extends EventEmitter {
    * Register custom panel (SDK alias for addPanel)
    */
   registerPanel(panel) {
+    this._requirePermission('ui.registerPanel', 'ui:create');
+
     const addedPanel = this.addPanel({
       id: panel.id,
       title: panel.title,
@@ -463,6 +550,8 @@ export class UIAPI extends EventEmitter {
    * Add a UI panel
    */
   addPanel({ id, title, position, icon, component, props = {} }) {
+    this._requirePermission('ui.addPanel', 'ui:create');
+
     if (this.panels.has(id)) {
       throw new Error(`Panel '${id}' already exists`);
     }
@@ -528,6 +617,8 @@ export class UIAPI extends EventEmitter {
    * Show a prompt dialog
    */
   async showPrompt({ title, message, placeholder, validate, defaultValue }) {
+    this._requirePermission('ui.showPrompt', 'ui:dialogs');
+
     const id = `prompt_${Date.now()}`;
 
     return new Promise((resolve, reject) => {
@@ -561,6 +652,8 @@ export class UIAPI extends EventEmitter {
    * Show a confirmation dialog
    */
   async showConfirm({ title, message, confirmText = 'OK', cancelText = 'Cancel' }) {
+    this._requirePermission('ui.showConfirm', 'ui:dialogs');
+
     const id = `confirm_${Date.now()}`;
 
     return new Promise((resolve, reject) => {
@@ -593,6 +686,8 @@ export class UIAPI extends EventEmitter {
    * Show quick pick dialog
    */
   async showQuickPick(items, options = {}) {
+    this._requirePermission('ui.showQuickPick', 'ui:dialogs');
+
     const id = `quickpick_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     return new Promise((resolve) => {
@@ -623,6 +718,8 @@ export class UIAPI extends EventEmitter {
    * Show open file/folder dialog
    */
   async showOpenDialog(options = {}) {
+    this._requirePermission('ui.showOpenDialog', 'ui:dialogs');
+
     try {
       // Use Tauri's dialog API
       const { open } = await import('@tauri-apps/plugin-dialog');
@@ -647,6 +744,8 @@ export class UIAPI extends EventEmitter {
    * Show save file dialog
    */
   async showSaveDialog(options = {}) {
+    this._requirePermission('ui.showSaveDialog', 'ui:dialogs');
+
     try {
       const { save } = await import('@tauri-apps/plugin-dialog');
       const result = await save({
@@ -668,6 +767,8 @@ export class UIAPI extends EventEmitter {
    * Show progress indicator while executing a task
    */
   async withProgress(options, task) {
+    this._requirePermission('ui.withProgress', 'ui:create');
+
     const { location = 'notification', title, cancellable = false } = options;
     const progressId = `progress_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -742,6 +843,8 @@ export class UIAPI extends EventEmitter {
    * @returns {Object} Disposable to unregister the provider
    */
   registerTreeDataProvider(viewId, provider, options = {}) {
+    this._requirePermission('ui.registerTreeDataProvider', 'ui:create');
+
     // Dynamic import to avoid circular deps
     import('./TreeDataProvider.js').then(({ TreeDataProviderAdapter }) => {
       import('../registry/TreeViewRegistry.js').then(({ treeViewRegistry }) => {
@@ -789,6 +892,8 @@ export class UIAPI extends EventEmitter {
    * @returns {Object} Status bar item with show/hide/dispose methods
    */
   registerStatusBarItem(definition) {
+    this._requirePermission('ui.registerStatusBarItem', 'ui:create');
+
     // Dynamic import to avoid circular deps
     import('../../hooks/usePluginStatusItems.js').then(({ registerStatusItem, unregisterStatusItem, updateStatusItem }) => {
       const item = {
@@ -855,6 +960,8 @@ export class UIAPI extends EventEmitter {
    * @returns {Promise<string|undefined>} Selected action ID or undefined
    */
   async showNotification(message, type = 'info', actions = []) {
+    this._requirePermission('ui.showNotification', 'ui:notifications');
+
     return new Promise((resolve) => {
       const id = `notification_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -894,6 +1001,8 @@ export class UIAPI extends EventEmitter {
    * @returns {Promise<Object>} Dialog result with buttonId and checkboxChecked
    */
   async showDialog(options) {
+    this._requirePermission('ui.showDialog', 'ui:dialogs');
+
     return new Promise((resolve) => {
       const id = `dialog_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -928,6 +1037,8 @@ export class UIAPI extends EventEmitter {
    * @returns {Object} WebviewPanel object with postMessage and onDidReceiveMessage
    */
   registerWebviewPanel(panel) {
+    this._requirePermission('ui.registerWebviewPanel', 'ui:create');
+
     if (this.webviews.has(panel.id)) {
       throw new Error(`Webview panel '${panel.id}' already exists`);
     }
@@ -991,6 +1102,8 @@ export class UIAPI extends EventEmitter {
    * @returns {Object} Disposable
    */
   registerMenu(menu) {
+    this._requirePermission('ui.registerMenu', 'ui:menus');
+
     if (this.menus.has(menu.id)) {
       throw new Error(`Menu '${menu.id}' already exists`);
     }
@@ -1022,6 +1135,8 @@ export class UIAPI extends EventEmitter {
    * @returns {Object} Disposable
    */
   registerToolbar(toolbar) {
+    this._requirePermission('ui.registerToolbar', 'ui:toolbars');
+
     if (this.toolbars.has(toolbar.id)) {
       throw new Error(`Toolbar '${toolbar.id}' already exists`);
     }
@@ -1052,6 +1167,8 @@ export class UIAPI extends EventEmitter {
    * @returns {Object} Terminal object
    */
   createTerminal(options = {}) {
+    this._requirePermission('ui.createTerminal', 'terminal:create');
+
     // Try to delegate to TerminalAPI if available
     if (this.terminalAPI) {
       return this.terminalAPI.createTerminal(options);
@@ -1194,17 +1311,64 @@ export class UIAPI extends EventEmitter {
 
 /**
  * Filesystem API - Provides safe file system access
+ * All paths are scoped to the workspace directory for security
  */
 export class FilesystemAPI extends EventEmitter {
   constructor(fsManager) {
     super();
     this.fsManager = fsManager;
+    this.grantedPermissions = new Set();
+    this.workspacePath = null;
+  }
+
+  /**
+   * Set permission context for this API
+   * @param {string} pluginId - Plugin identifier
+   * @param {Set<string>} permissions - Granted permissions
+   * @param {string} workspacePath - Current workspace path for scoping
+   */
+  _setPermissionContext(pluginId, permissions, workspacePath) {
+    this.currentPluginId = pluginId;
+    this.grantedPermissions = permissions || new Set();
+    this.workspacePath = workspacePath;
+  }
+
+  /**
+   * Check permission before API call
+   * @param {string} apiMethod - Method name for logging
+   * @param {string} permission - Required permission
+   */
+  _requirePermission(apiMethod, permission) {
+    permissionEnforcer.requirePermission(
+      this.currentPluginId,
+      this.grantedPermissions,
+      permission,
+      apiMethod
+    );
+  }
+
+  /**
+   * Ensure path is within workspace
+   * @param {string} path - Path to check
+   * @param {string} apiMethod - API method for logging
+   */
+  _requirePathInWorkspace(path, apiMethod) {
+    if (this.workspacePath) {
+      permissionEnforcer.requirePathInWorkspace(
+        this.currentPluginId,
+        path,
+        this.workspacePath,
+        apiMethod
+      );
+    }
   }
 
   /**
    * Open file dialog
    */
   async openFileDialog({ accept, multiple = false, title }) {
+    this._requirePermission('fs.openFileDialog', 'filesystem:read');
+
     if (!this.fsManager) {
       throw new Error('Filesystem not available');
     }
@@ -1220,12 +1384,18 @@ export class FilesystemAPI extends EventEmitter {
    * Write file to plugin directory
    */
   async writeFile(relativePath, content) {
+    this._requirePermission('fs.writeFile', 'filesystem:write');
+
     if (!this.fsManager) {
       throw new Error('Filesystem not available');
     }
 
     // Ensure path is within plugin directory
     const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
+
+    // Also verify within workspace if workspace path is set
+    this._requirePathInWorkspace(safePath, 'fs.writeFile');
+
     return this.fsManager.writeFile(safePath, content);
   }
 
@@ -1233,11 +1403,17 @@ export class FilesystemAPI extends EventEmitter {
    * Read file from plugin directory
    */
   async readFile(relativePath) {
+    this._requirePermission('fs.readFile', 'filesystem:read');
+
     if (!this.fsManager) {
       throw new Error('Filesystem not available');
     }
 
     const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
+
+    // Verify within workspace
+    this._requirePathInWorkspace(safePath, 'fs.readFile');
+
     return this.fsManager.readFile(safePath, 'binary');
   }
 
@@ -1245,11 +1421,17 @@ export class FilesystemAPI extends EventEmitter {
    * Ensure directory exists
    */
   async ensureDir(relativePath) {
+    this._requirePermission('fs.ensureDir', 'filesystem:write');
+
     if (!this.fsManager) {
       throw new Error('Filesystem not available');
     }
 
     const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
+
+    // Verify within workspace
+    this._requirePathInWorkspace(safePath, 'fs.ensureDir');
+
     return this.fsManager.ensureDir(safePath);
   }
 
@@ -1257,11 +1439,17 @@ export class FilesystemAPI extends EventEmitter {
    * Check if file exists
    */
   async exists(relativePath) {
+    this._requirePermission('fs.exists', 'filesystem:read');
+
     if (!this.fsManager) {
       throw new Error('Filesystem not available');
     }
 
     const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
+
+    // Verify within workspace
+    this._requirePathInWorkspace(safePath, 'fs.exists');
+
     return this.fsManager.exists(safePath);
   }
 
@@ -1269,11 +1457,17 @@ export class FilesystemAPI extends EventEmitter {
    * Read directory
    */
   async readdir(relativePath) {
+    this._requirePermission('fs.readdir', 'filesystem:read');
+
     if (!this.fsManager) {
       throw new Error('Filesystem not available');
     }
 
     const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
+
+    // Verify within workspace
+    this._requirePathInWorkspace(safePath, 'fs.readdir');
+
     return this.fsManager.readDirectory(safePath);
   }
 
@@ -1281,11 +1475,17 @@ export class FilesystemAPI extends EventEmitter {
    * Create directory
    */
   async mkdir(relativePath) {
+    this._requirePermission('fs.mkdir', 'filesystem:write');
+
     if (!this.fsManager) {
       throw new Error('Filesystem not available');
     }
 
     const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
+
+    // Verify within workspace
+    this._requirePathInWorkspace(safePath, 'fs.mkdir');
+
     return this.fsManager.createFolder(safePath);
   }
 
@@ -1293,11 +1493,17 @@ export class FilesystemAPI extends EventEmitter {
    * Delete file or directory
    */
   async delete(relativePath) {
+    this._requirePermission('fs.delete', 'filesystem:write');
+
     if (!this.fsManager) {
       throw new Error('Filesystem not available');
     }
 
     const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, relativePath);
+
+    // Verify within workspace
+    this._requirePathInWorkspace(safePath, 'fs.delete');
+
     return this.fsManager.deleteFile(safePath);
   }
 
@@ -1305,12 +1511,19 @@ export class FilesystemAPI extends EventEmitter {
    * Rename file or directory
    */
   async rename(oldPath, newPath) {
+    this._requirePermission('fs.rename', 'filesystem:write');
+
     if (!this.fsManager) {
       throw new Error('Filesystem not available');
     }
 
     const safeOldPath = this.fsManager.getPluginFilePath(this.currentPluginId, oldPath);
     const safeNewPath = this.fsManager.getPluginFilePath(this.currentPluginId, newPath);
+
+    // Verify both paths within workspace
+    this._requirePathInWorkspace(safeOldPath, 'fs.rename');
+    this._requirePathInWorkspace(safeNewPath, 'fs.rename');
+
     return this.fsManager.renameFile(safeOldPath, safeNewPath);
   }
 
@@ -1318,12 +1531,19 @@ export class FilesystemAPI extends EventEmitter {
    * Copy file
    */
   async copy(source, destination) {
+    this._requirePermission('fs.copy', 'filesystem:write');
+
     if (!this.fsManager) {
       throw new Error('Filesystem not available');
     }
 
     const safeSource = this.fsManager.getPluginFilePath(this.currentPluginId, source);
     const safeDest = this.fsManager.getPluginFilePath(this.currentPluginId, destination);
+
+    // Verify both paths within workspace
+    this._requirePathInWorkspace(safeSource, 'fs.copy');
+    this._requirePathInWorkspace(safeDest, 'fs.copy');
+
     return this.fsManager.copyFile(safeSource, safeDest);
   }
 
@@ -1331,11 +1551,17 @@ export class FilesystemAPI extends EventEmitter {
    * Get file stats
    */
   async stat(path) {
+    this._requirePermission('fs.stat', 'filesystem:read');
+
     if (!this.fsManager) {
       throw new Error('Filesystem not available');
     }
 
     const safePath = this.fsManager.getPluginFilePath(this.currentPluginId, path);
+
+    // Verify within workspace
+    this._requirePathInWorkspace(safePath, 'fs.stat');
+
     return this.fsManager.stat(safePath);
   }
 }
@@ -1348,8 +1574,33 @@ export class CommandsAPI extends EventEmitter {
     super();
     this.commandManager = commandManager;
     this.commands = new Map();
+    this.grantedPermissions = new Set();
     // Import the command registry singleton
     this._importCommandRegistry();
+  }
+
+  /**
+   * Set permission context for this API
+   * @param {string} pluginId - Plugin identifier
+   * @param {Set<string>} permissions - Granted permissions
+   */
+  _setPermissionContext(pluginId, permissions) {
+    this.currentPluginId = pluginId;
+    this.grantedPermissions = permissions || new Set();
+  }
+
+  /**
+   * Check permission before API call
+   * @param {string} apiMethod - Method name for logging
+   * @param {string} permission - Required permission
+   */
+  _requirePermission(apiMethod, permission) {
+    permissionEnforcer.requirePermission(
+      this.currentPluginId,
+      this.grantedPermissions,
+      permission,
+      apiMethod
+    );
   }
 
   /**
@@ -1369,6 +1620,8 @@ export class CommandsAPI extends EventEmitter {
    * Register a command
    */
   register(arg1, arg2) {
+    this._requirePermission('commands.register', 'commands:register');
+
     let commands = arg1;
 
     // Handle register(id, options) signature
@@ -1443,6 +1696,8 @@ export class CommandsAPI extends EventEmitter {
    * @returns {Promise<any>} Result of command execution
    */
   async execute(commandId, ...args) {
+    this._requirePermission('commands.execute', 'commands:execute');
+
     const command = this.commands.get(commandId);
     if (!command) {
       throw new Error(`Command '${commandId}' not found`);
@@ -1461,6 +1716,8 @@ export class CommandsAPI extends EventEmitter {
    * @returns {Array} Array of all commands
    */
   getAll() {
+    this._requirePermission('commands.getAll', 'commands:list');
+
     return Array.from(this.commands.values()).map(cmd => ({
       id: cmd.id,
       title: cmd.title || cmd.name,
@@ -1556,25 +1813,53 @@ export class CommandsAPI extends EventEmitter {
 
 /**
  * Network API - Safe network access
+ *
+ * SECURITY: All methods are permission-gated
  */
 export class NetworkAPI extends EventEmitter {
   constructor(networkManager, apiInstance) {
     super();
     this.networkManager = networkManager;
     this.apiInstance = apiInstance; // Reference to main API for permission checking
+
+    // Permission context
+    this.currentPluginId = null;
+    this.grantedPermissions = new Set();
+  }
+
+  /**
+   * Set permission context for this API
+   * @param {string} pluginId - Plugin identifier
+   * @param {Set<string>} permissions - Granted permissions
+   */
+  _setPermissionContext(pluginId, permissions) {
+    this.currentPluginId = pluginId;
+    this.grantedPermissions = permissions || new Set();
+  }
+
+  /**
+   * Require a permission - throws if not granted
+   * @param {string} apiMethod - API method name for logging
+   * @param {string} permission - Required permission
+   */
+  _requirePermission(apiMethod, permission) {
+    permissionEnforcer.requirePermission(
+      this.currentPluginId,
+      this.grantedPermissions,
+      permission,
+      apiMethod
+    );
   }
 
   /**
    * Make HTTP request (with permission checking)
    */
   async fetch(url, options = {}) {
+    // Use proper permission enforcement with correct permission string
+    this._requirePermission('network.fetch', 'network:http');
+
     if (!this.networkManager) {
       throw new Error('Network access not available');
-    }
-
-    // Check permissions - COMPLETED TODO: Use proper permission checking
-    if (!this.hasPermission('network')) {
-      throw new Error(`Network permission required for plugin ${this.currentPluginId}`);
     }
 
     return this.networkManager.fetch(url, {
@@ -1582,25 +1867,48 @@ export class NetworkAPI extends EventEmitter {
       pluginId: this.currentPluginId
     });
   }
-
-  hasPermission(permission) {
-    // Use the main API's permission checking
-    return this.apiInstance && this.apiInstance.hasPermission(this.currentPluginId, permission);
-  }
 }
 
 /**
  * Clipboard API - Access to clipboard
+ * HIGH-RISK: clipboard:read can access sensitive data
  */
 export class ClipboardAPI extends EventEmitter {
   constructor() {
     super();
+    this.grantedPermissions = new Set();
+  }
+
+  /**
+   * Set permission context for this API
+   * @param {string} pluginId - Plugin identifier
+   * @param {Set<string>} permissions - Granted permissions
+   */
+  _setPermissionContext(pluginId, permissions) {
+    this.currentPluginId = pluginId;
+    this.grantedPermissions = permissions || new Set();
+  }
+
+  /**
+   * Check permission before API call
+   * @param {string} apiMethod - Method name for logging
+   * @param {string} permission - Required permission
+   */
+  _requirePermission(apiMethod, permission) {
+    permissionEnforcer.requirePermission(
+      this.currentPluginId,
+      this.grantedPermissions,
+      permission,
+      apiMethod
+    );
   }
 
   /**
    * Read from clipboard
    */
   async read() {
+    this._requirePermission('clipboard.read', 'clipboard:read');
+
     if (!navigator.clipboard || !navigator.clipboard.read) {
       throw new Error('Clipboard API not available');
     }
@@ -1612,6 +1920,8 @@ export class ClipboardAPI extends EventEmitter {
    * Write to clipboard
    */
   async writeText(text) {
+    this._requirePermission('clipboard.writeText', 'clipboard:write');
+
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
       throw new Error('Clipboard API not available');
     }
@@ -1714,12 +2024,39 @@ export class DataAPI extends EventEmitter {
     this.dataManager = dataManager;
     this.databases = new Map();
     this._defaultDb = null;
+    this.grantedPermissions = new Set();
+  }
+
+  /**
+   * Set permission context for this API
+   * @param {string} pluginId - Plugin identifier
+   * @param {Set<string>} permissions - Granted permissions
+   */
+  _setPermissionContext(pluginId, permissions) {
+    this.currentPluginId = pluginId;
+    this.grantedPermissions = permissions || new Set();
+  }
+
+  /**
+   * Check permission before API call
+   * @param {string} apiMethod - Method name for logging
+   * @param {string} permission - Required permission
+   */
+  _requirePermission(apiMethod, permission) {
+    permissionEnforcer.requirePermission(
+      this.currentPluginId,
+      this.grantedPermissions,
+      permission,
+      apiMethod
+    );
   }
 
   /**
    * Get a database for the plugin
    */
   async getDatabase(name) {
+    this._requirePermission('storage.getDatabase', 'storage:read');
+
     const dbKey = `${this.currentPluginId}_${name}`;
 
     if (this.databases.has(dbKey)) {
@@ -1762,6 +2099,8 @@ export class DataAPI extends EventEmitter {
    * @returns {Promise<T | undefined>} The value or undefined if not found
    */
   async get(key) {
+    this._requirePermission('storage.get', 'storage:read');
+
     const db = await this._getDefaultDb();
     if (db && typeof db.get === 'function') {
       return db.get(key);
@@ -1783,6 +2122,8 @@ export class DataAPI extends EventEmitter {
    * @returns {Promise<void>}
    */
   async set(key, value) {
+    this._requirePermission('storage.set', 'storage:write');
+
     const db = await this._getDefaultDb();
     if (db && typeof db.set === 'function') {
       return db.set(key, value);
@@ -1798,6 +2139,8 @@ export class DataAPI extends EventEmitter {
    * @returns {Promise<void>}
    */
   async delete(key) {
+    this._requirePermission('storage.delete', 'storage:write');
+
     const db = await this._getDefaultDb();
     if (db && typeof db.delete === 'function') {
       return db.delete(key);
@@ -1812,6 +2155,8 @@ export class DataAPI extends EventEmitter {
    * @returns {Promise<string[]>} Array of all keys
    */
   async keys() {
+    this._requirePermission('storage.keys', 'storage:read');
+
     const db = await this._getDefaultDb();
     if (db && typeof db.keys === 'function') {
       return db.keys();
@@ -1834,6 +2179,8 @@ export class DataAPI extends EventEmitter {
    * @returns {Promise<void>}
    */
   async clear() {
+    this._requirePermission('storage.clear', 'storage:write');
+
     const db = await this._getDefaultDb();
     if (db && typeof db.clear === 'function') {
       return db.clear();
@@ -1952,19 +2299,53 @@ export class LokusPluginAPI extends EventEmitter {
 
   /**
    * Bind plugin context to all sub-APIs
+   * SECURITY: Ensures all APIs have permission context properly set
    */
   bindPluginContext() {
-    const apis = [
-      this.editor, this.ui, this.fs, this.commands,
-      this.network, this.notifications, this.storage,
-      this.clipboard, this.languages, this.config, this.terminal,
-      this.workspace, this.tasks, this.debug, this.themes
+    // List all APIs with names for debugging
+    const apiList = [
+      { name: 'editor', instance: this.editor },
+      { name: 'ui', instance: this.ui },
+      { name: 'fs', instance: this.fs },
+      { name: 'commands', instance: this.commands },
+      { name: 'network', instance: this.network },
+      { name: 'notifications', instance: this.notifications },
+      { name: 'storage', instance: this.storage },
+      { name: 'clipboard', instance: this.clipboard },
+      { name: 'languages', instance: this.languages },
+      { name: 'config', instance: this.config },
+      { name: 'terminal', instance: this.terminal },
+      { name: 'workspace', instance: this.workspace },
+      { name: 'tasks', instance: this.tasks },
+      { name: 'debug', instance: this.debug },
+      { name: 'themes', instance: this.themes }
     ];
 
-    for (const api of apis) {
-      if (api && typeof api === 'object') {
-        api.currentPluginId = this.currentPluginId;
-        api.currentPlugin = this.currentPlugin;
+    // Get the granted permissions for the current plugin
+    const grantedPermissions = this.getPluginPermissions(this.currentPluginId);
+
+    // Get workspace path for filesystem/workspace scoping
+    const workspacePath = this.workspace && typeof this.workspace.rootPath === 'string'
+      ? this.workspace.rootPath
+      : (this.workspace && typeof this.workspace.rootPath === 'function'
+        ? this.workspace.rootPath()
+        : null);
+
+    for (const { name, instance } of apiList) {
+      if (!instance) continue;
+
+      // Set basic plugin context
+      instance.currentPluginId = this.currentPluginId;
+      instance.currentPlugin = this.currentPlugin;
+
+      // Set permission context if the API supports it
+      if (typeof instance._setPermissionContext === 'function') {
+        // All APIs that have _setPermissionContext should receive workspacePath
+        // This is important for APIs that need to scope operations to workspace
+        instance._setPermissionContext(this.currentPluginId, grantedPermissions, workspacePath);
+      } else if (name !== 'notifications') {
+        // Log warning for APIs missing _setPermissionContext (except notifications which is special)
+        console.warn(`SECURITY: ${name}API missing _setPermissionContext method`);
       }
     }
 

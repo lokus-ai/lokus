@@ -1,8 +1,11 @@
 /**
  * Languages API - Language features support
+ *
+ * SECURITY: All methods are permission-gated
  */
 import { EventEmitter } from '../../utils/EventEmitter.js';
 import { Disposable } from '../../utils/Disposable.js';
+import { permissionEnforcer } from '../security/PermissionEnforcer.js';
 
 export class LanguagesAPI extends EventEmitter {
     constructor(languageManager) {
@@ -11,12 +14,45 @@ export class LanguagesAPI extends EventEmitter {
         this.providers = new Map();
         this.languages = new Map();
         this.configurations = new Map();
+
+        // Permission context
+        this.currentPluginId = null;
+        this.grantedPermissions = new Set();
+        this.workspacePath = null;
+    }
+
+    /**
+     * Set permission context for this API instance
+     * @param {string} pluginId - Plugin identifier
+     * @param {Set<string>} permissions - Granted permissions
+     * @param {string} workspacePath - Workspace root path for scoping
+     */
+    _setPermissionContext(pluginId, permissions, workspacePath) {
+        this.currentPluginId = pluginId;
+        this.grantedPermissions = permissions || new Set();
+        this.workspacePath = workspacePath;
+    }
+
+    /**
+     * Require a permission - throws if not granted
+     * @param {string} apiMethod - API method name for logging
+     * @param {string} permission - Required permission
+     */
+    _requirePermission(apiMethod, permission) {
+        permissionEnforcer.requirePermission(
+            this.currentPluginId,
+            this.grantedPermissions,
+            permission,
+            apiMethod
+        );
     }
 
     /**
      * Register completion provider
      */
     registerCompletionProvider(selector, provider, ...triggerCharacters) {
+        this._requirePermission('languages.registerCompletionProvider', 'languages:register');
+
         const id = `completion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         const registration = {
@@ -43,6 +79,8 @@ export class LanguagesAPI extends EventEmitter {
      * Register hover provider
      */
     registerHoverProvider(selector, provider) {
+        this._requirePermission('languages.registerHoverProvider', 'languages:register');
+
         const id = `hover_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         const registration = {
@@ -66,6 +104,8 @@ export class LanguagesAPI extends EventEmitter {
      * Register definition provider
      */
     registerDefinitionProvider(selector, provider) {
+        this._requirePermission('languages.registerDefinitionProvider', 'languages:register');
+
         const id = `definition_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         const registration = {
@@ -89,6 +129,8 @@ export class LanguagesAPI extends EventEmitter {
      * Register code action provider
      */
     registerCodeActionProvider(selector, provider, metadata) {
+        this._requirePermission('languages.registerCodeActionProvider', 'languages:register');
+
         const id = `codeaction_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         const registration = {
@@ -116,6 +158,8 @@ export class LanguagesAPI extends EventEmitter {
      * @returns {Disposable} Disposable to unregister
      */
     registerDocumentFormattingProvider(selector, provider) {
+        this._requirePermission('languages.registerDocumentFormattingProvider', 'languages:register');
+
         const id = `formatting_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         const registration = {
@@ -140,6 +184,8 @@ export class LanguagesAPI extends EventEmitter {
      * @returns {Disposable} Disposable to unregister
      */
     registerRangeFormattingProvider(selector, provider) {
+        this._requirePermission('languages.registerRangeFormattingProvider', 'languages:register');
+
         const id = `rangeformatting_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         const registration = {
@@ -162,6 +208,8 @@ export class LanguagesAPI extends EventEmitter {
      * @returns {Array<Object>} Array of language definitions
      */
     getLanguages() {
+        this._requirePermission('languages.getLanguages', 'languages:read');
+
         return Array.from(this.languages.values()).map(lang => ({
             id: lang.id,
             extensions: lang.extensions,
@@ -182,6 +230,8 @@ export class LanguagesAPI extends EventEmitter {
      * @returns {Disposable} Disposable to unregister
      */
     setLanguageConfiguration(languageId, configuration) {
+        this._requirePermission('languages.setLanguageConfiguration', 'languages:register');
+
         if (!languageId) {
             throw new Error('Language ID is required');
         }
@@ -219,6 +269,8 @@ export class LanguagesAPI extends EventEmitter {
      * @returns {Disposable} Disposable to unregister
      */
     registerLanguage(language) {
+        this._requirePermission('languages.registerLanguage', 'languages:register');
+
         if (!language.id) {
             throw new Error('Language must have an id');
         }
@@ -260,8 +312,11 @@ export class LanguagesAPI extends EventEmitter {
      * @returns {Disposable} Disposable to unsubscribe
      */
     onDidChangeLanguages(listener) {
-        const unsubscribe = this.on('did_change_languages', listener);
-        return new Disposable(unsubscribe);
+        this._requirePermission('languages.onDidChangeLanguages', 'events:listen');
+
+        const handler = () => listener();
+        this.on('did_change_languages', handler);
+        return new Disposable(() => this.off('did_change_languages', handler));
     }
 
     /**

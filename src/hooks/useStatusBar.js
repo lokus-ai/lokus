@@ -11,35 +11,43 @@ export function useStatusBar() {
   const [rightItems, setRightItems] = useState([]);
 
   useEffect(() => {
+    let cleanupFn = () => {};
+    let isMounted = true;
+
     // Listen for status bar events from plugins
     const setupEventListeners = async () => {
       try {
         // Listen for status bar item creation
         const unlistenCreate = await listen('status-bar-item-created', (event) => {
+          if (!isMounted) return;
           const { id, position = 'right', priority = 0, ...itemData } = event.payload;
           addStatusBarItem(id, position, priority, itemData);
         });
 
         // Listen for status bar item disposal
         const unlistenDispose = await listen('status-bar-item-disposed', (event) => {
+          if (!isMounted) return;
           const { id } = event.payload;
           removeStatusBarItem(id);
         });
 
         // Listen for status bar item updates
         const unlistenUpdate = await listen('status-bar-item-updated', (event) => {
+          if (!isMounted) return;
           const { id, ...updateData } = event.payload;
           updateStatusBarItem(id, updateData);
         });
 
         // Listen for plugin activation to register status bar items
         const unlistenActivated = await listen('plugin-runtime-activated', (event) => {
+          if (!isMounted) return;
           const { pluginId } = event.payload;
           registerPluginStatusBarItems(pluginId);
         });
 
         // Listen for plugin deactivation to clean up status bar items
         const unlistenDeactivated = await listen('plugin-runtime-deactivated', (event) => {
+          if (!isMounted) return;
           const { pluginId } = event.payload;
           cleanupPluginStatusBarItems(pluginId);
         });
@@ -50,20 +58,25 @@ export function useStatusBar() {
           registerPluginStatusBarItems(plugin.id);
         });
 
-        // Cleanup function
-        return () => {
-          unlistenCreate();
-          unlistenDispose();
-          unlistenUpdate();
-          unlistenActivated();
-          unlistenDeactivated();
+        // Store cleanup function
+        cleanupFn = () => {
+          if (unlistenCreate) unlistenCreate();
+          if (unlistenDispose) unlistenDispose();
+          if (unlistenUpdate) unlistenUpdate();
+          if (unlistenActivated) unlistenActivated();
+          if (unlistenDeactivated) unlistenDeactivated();
         };
       } catch (error) {
-        return () => { }; // Return empty cleanup function
+        // Silently handle setup errors
       }
     };
 
     setupEventListeners();
+
+    return () => {
+      isMounted = false;
+      cleanupFn();
+    };
   }, []);
 
   // Register status bar items for a newly activated plugin

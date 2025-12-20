@@ -1,8 +1,11 @@
 /**
  * ThemeAPI - Theme registration and management
+ *
+ * SECURITY: All methods are permission-gated
  */
 import { EventEmitter } from '../../utils/EventEmitter.js';
 import { Disposable } from '../../utils/Disposable.js';
+import { permissionEnforcer } from '../security/PermissionEnforcer.js';
 
 export class ThemeAPI extends EventEmitter {
     constructor(themeManager) {
@@ -10,6 +13,37 @@ export class ThemeAPI extends EventEmitter {
         this.themeManager = themeManager;
         this.themes = new Map();
         this.activeThemeId = null;
+
+        // Permission context
+        this.currentPluginId = null;
+        this.grantedPermissions = new Set();
+        this.workspacePath = null;
+    }
+
+    /**
+     * Set permission context for this API instance
+     * @param {string} pluginId - Plugin identifier
+     * @param {Set<string>} permissions - Granted permissions
+     * @param {string} workspacePath - Workspace root path for scoping
+     */
+    _setPermissionContext(pluginId, permissions, workspacePath) {
+        this.currentPluginId = pluginId;
+        this.grantedPermissions = permissions || new Set();
+        this.workspacePath = workspacePath;
+    }
+
+    /**
+     * Require a permission - throws if not granted
+     * @param {string} apiMethod - API method name for logging
+     * @param {string} permission - Required permission
+     */
+    _requirePermission(apiMethod, permission) {
+        permissionEnforcer.requirePermission(
+            this.currentPluginId,
+            this.grantedPermissions,
+            permission,
+            apiMethod
+        );
     }
 
     /**
@@ -24,6 +58,8 @@ export class ThemeAPI extends EventEmitter {
      * @returns {Disposable} Disposable to unregister the theme
      */
     registerTheme(theme) {
+        this._requirePermission('themes.registerTheme', 'themes:register');
+
         if (!theme.id) {
             throw new Error('Theme must have an id');
         }
@@ -73,6 +109,8 @@ export class ThemeAPI extends EventEmitter {
      * @returns {Promise<string>} The active theme ID
      */
     async getActiveTheme() {
+        this._requirePermission('themes.getActiveTheme', 'themes:read');
+
         if (this.themeManager && typeof this.themeManager.getActiveTheme === 'function') {
             return this.themeManager.getActiveTheme();
         }
@@ -85,6 +123,8 @@ export class ThemeAPI extends EventEmitter {
      * @returns {Promise<void>}
      */
     async setActiveTheme(themeId) {
+        this._requirePermission('themes.setActiveTheme', 'themes:set');
+
         if (!this.themes.has(themeId)) {
             throw new Error(`Theme '${themeId}' not found`);
         }
@@ -107,6 +147,8 @@ export class ThemeAPI extends EventEmitter {
      * @returns {Array<Object>} Array of theme contributions
      */
     getThemes() {
+        this._requirePermission('themes.getThemes', 'themes:read');
+
         return Array.from(this.themes.values()).map(theme => ({
             id: theme.id,
             label: theme.label,
@@ -121,6 +163,8 @@ export class ThemeAPI extends EventEmitter {
      * @returns {Object|undefined} Theme contribution or undefined
      */
     getTheme(themeId) {
+        this._requirePermission('themes.getTheme', 'themes:read');
+
         return this.themes.get(themeId);
     }
 
@@ -130,8 +174,11 @@ export class ThemeAPI extends EventEmitter {
      * @returns {Disposable} Disposable to unsubscribe
      */
     onDidChangeActiveTheme(listener) {
-        const unsubscribe = this.on('did_change_active_theme', listener);
-        return new Disposable(unsubscribe);
+        this._requirePermission('themes.onDidChangeActiveTheme', 'events:listen');
+
+        const handler = (event) => listener(event);
+        this.on('did_change_active_theme', handler);
+        return new Disposable(() => this.off('did_change_active_theme', handler));
     }
 
     /**

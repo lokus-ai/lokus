@@ -1,8 +1,11 @@
 /**
  * Workspace API - Workspace management and file events
+ *
+ * SECURITY: All methods are permission-gated
  */
 import { EventEmitter } from '../../utils/EventEmitter.js';
 import { Disposable } from '../../utils/Disposable.js';
+import { permissionEnforcer } from '../security/PermissionEnforcer.js';
 
 export class WorkspaceAPI extends EventEmitter {
     constructor(workspaceManager) {
@@ -10,6 +13,37 @@ export class WorkspaceAPI extends EventEmitter {
         this.workspaceManager = workspaceManager;
         this.rootPath = null;
         this.workspaceFolders = [];
+
+        // Permission context
+        this.currentPluginId = null;
+        this.grantedPermissions = new Set();
+        this.workspacePath = null;
+    }
+
+    /**
+     * Set permission context for this API instance
+     * @param {string} pluginId - Plugin identifier
+     * @param {Set<string>} permissions - Granted permissions
+     * @param {string} workspacePath - Workspace root path for scoping
+     */
+    _setPermissionContext(pluginId, permissions, workspacePath) {
+        this.currentPluginId = pluginId;
+        this.grantedPermissions = permissions || new Set();
+        this.workspacePath = workspacePath;
+    }
+
+    /**
+     * Require a permission - throws if not granted
+     * @param {string} apiMethod - API method name for logging
+     * @param {string} permission - Required permission
+     */
+    _requirePermission(apiMethod, permission) {
+        permissionEnforcer.requirePermission(
+            this.currentPluginId,
+            this.grantedPermissions,
+            permission,
+            apiMethod
+        );
     }
 
     /**
@@ -44,6 +78,8 @@ export class WorkspaceAPI extends EventEmitter {
      * Get configuration
      */
     getConfiguration(section) {
+        this._requirePermission('workspace.getConfiguration', 'config:read');
+
         // Delegate to ConfigurationAPI if available, or return mock
         // This is often accessed via workspace.getConfiguration in VS Code API
         // But in our SDK it might be separate. We'll implement it here for compat.
@@ -61,6 +97,8 @@ export class WorkspaceAPI extends EventEmitter {
      * Open a text document
      */
     async openTextDocument(uriOrOptions) {
+        this._requirePermission('workspace.openTextDocument', 'workspace:read');
+
         const uri = typeof uriOrOptions === 'string'
             ? uriOrOptions
             : uriOrOptions?.content ? 'untitled:new' : null
@@ -137,6 +175,8 @@ export class WorkspaceAPI extends EventEmitter {
      * Apply workspace edit
      */
     async applyEdit(edit) {
+        this._requirePermission('workspace.applyEdit', 'workspace:write');
+
         try {
             this.emit('apply-edit-request', { edit })
             return true
@@ -150,6 +190,8 @@ export class WorkspaceAPI extends EventEmitter {
      * Register text document content provider
      */
     registerTextDocumentContentProvider(scheme, provider) {
+        this._requirePermission('workspace.registerTextDocumentContentProvider', 'workspace:read');
+
         // TODO: Implement content provider registration
         return { dispose: () => { } };
     }
@@ -158,6 +200,8 @@ export class WorkspaceAPI extends EventEmitter {
      * Create file system watcher
      */
     createFileSystemWatcher(globPattern, ignoreCreateEvents, ignoreChangeEvents, ignoreDeleteEvents) {
+        this._requirePermission('workspace.createFileSystemWatcher', 'workspace:read');
+
         const watcher = new EventEmitter()
 
         // Set up file watching (would need Tauri fs watch in real impl)
@@ -193,6 +237,8 @@ export class WorkspaceAPI extends EventEmitter {
      * Find files
      */
     async findFiles(include, exclude, maxResults, token) {
+        this._requirePermission('workspace.findFiles', 'workspace:read');
+
         try {
             // Try using Tauri's file system
             const { readDir } = await import('@tauri-apps/plugin-fs')
@@ -252,6 +298,8 @@ export class WorkspaceAPI extends EventEmitter {
      * Save all dirty files
      */
     async saveAll(includeUntitled = false) {
+        this._requirePermission('workspace.saveAll', 'workspace:write');
+
         this.emit('save-all-request', { includeUntitled })
         return true
     }
@@ -260,6 +308,8 @@ export class WorkspaceAPI extends EventEmitter {
      * Listen to document open events
      */
     onDidOpenTextDocument(listener) {
+        this._requirePermission('workspace.onDidOpenTextDocument', 'events:listen');
+
         const handler = (document) => listener(document)
         this.on('document-opened', handler)
         return new Disposable(() => this.off('document-opened', handler))
@@ -269,6 +319,8 @@ export class WorkspaceAPI extends EventEmitter {
      * Listen to document close events
      */
     onDidCloseTextDocument(listener) {
+        this._requirePermission('workspace.onDidCloseTextDocument', 'events:listen');
+
         const handler = (document) => listener(document)
         this.on('document-closed', handler)
         return new Disposable(() => this.off('document-closed', handler))
@@ -278,6 +330,8 @@ export class WorkspaceAPI extends EventEmitter {
      * Listen to document save events
      */
     onDidSaveTextDocument(listener) {
+        this._requirePermission('workspace.onDidSaveTextDocument', 'events:listen');
+
         const handler = (document) => listener(document)
         this.on('document-saved', handler)
         return new Disposable(() => this.off('document-saved', handler))
@@ -287,6 +341,8 @@ export class WorkspaceAPI extends EventEmitter {
      * Listen to text document changes
      */
     onDidChangeTextDocument(listener) {
+        this._requirePermission('workspace.onDidChangeTextDocument', 'events:listen');
+
         const handler = (event) => listener(event)
         this.on('document-changed', handler)
         return new Disposable(() => this.off('document-changed', handler))
@@ -296,6 +352,8 @@ export class WorkspaceAPI extends EventEmitter {
      * Listen to workspace folder changes
      */
     onDidChangeWorkspaceFolders(listener) {
+        this._requirePermission('workspace.onDidChangeWorkspaceFolders', 'events:listen');
+
         const handler = (event) => listener(event)
         this.on('workspace-folders-changed', handler)
         return new Disposable(() => this.off('workspace-folders-changed', handler))

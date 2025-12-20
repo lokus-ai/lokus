@@ -2,6 +2,7 @@ import { EventEmitter } from '../utils/EventEmitter.js'
 import LokusPluginAPI from './api/LokusPluginAPI.js'
 import { logger } from '../utils/logger.js'
 import { isVersionCompatible } from '../utils/semver.js'
+import { PluginInstaller } from './core/PluginLoader.js'
 
 // Browser compatibility utilities
 function detectTauriEnvironment() {
@@ -736,11 +737,38 @@ export class PluginManager extends EventEmitter {
   }
 
   /**
-   * Install plugin from package
+   * Install plugin from marketplace
+   * @param {string} pluginId - Plugin ID or slug
+   * @param {object} pluginData - Optional plugin metadata
    */
-  async installPlugin(packagePath) {
-    // TODO: Implement plugin installation from zip/tar
-    throw new Error('Plugin installation not yet implemented')
+  async installPlugin(pluginId, pluginData = {}) {
+    const log = this.logger.createScoped('installPlugin')
+    log.info(`Installing plugin: ${pluginId}`)
+
+    // Track installing state
+    this.installingPluginIds = this.installingPluginIds || new Set()
+    this.installingPluginIds.add(pluginId)
+    this.emit('state-changed', { installingPlugins: this.installingPluginIds })
+
+    try {
+      const installer = new PluginInstaller(this)
+      const version = pluginData.version || 'latest'
+
+      await installer.installFromMarketplace(pluginId, version)
+
+      log.info(`Successfully installed plugin: ${pluginId}`)
+
+      // Refresh plugin list
+      await this.initialize()
+
+      return { success: true, pluginId }
+    } catch (error) {
+      log.error(`Failed to install plugin ${pluginId}:`, error)
+      throw error
+    } finally {
+      this.installingPluginIds.delete(pluginId)
+      this.emit('state-changed', { installingPlugins: this.installingPluginIds })
+    }
   }
 
   /**

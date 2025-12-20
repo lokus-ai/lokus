@@ -51,6 +51,7 @@ import analytics from "../services/analytics.js";
 import CreateTemplate from "../components/CreateTemplate.jsx";
 import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
 import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
+import { usePlugins } from "../hooks/usePlugins.jsx";
 import { setGlobalActiveTheme, getSystemPreferredTheme, setupSystemThemeListener, readGlobalVisuals } from "../core/theme/manager.js";
 import { useTheme } from "../hooks/theme.jsx";
 import SplitEditor from "../components/SplitEditor/SplitEditor.jsx";
@@ -1024,6 +1025,7 @@ function WorkspaceWithScope({ path }) {
   const { theme: currentTheme } = useTheme();
   const { filterFileTree, scopeMode, scopedFolders } = useFolderScope();
   const { activeBase } = useBases();
+  const { plugins } = usePlugins();
   const remoteLinks = useRemoteLinks();
   const remoteLinksRef = useRef(remoteLinks);
   const uiVisibility = useUIVisibility();
@@ -1145,6 +1147,8 @@ function WorkspaceWithScope({ path }) {
   const [showTerminalPanel, setShowTerminalPanel] = useState(false);
   const [showOutputPanel, setShowOutputPanel] = useState(false);
   const [bottomPanelTab, setBottomPanelTab] = useState('terminal'); // 'terminal' or 'output'
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(250);
+  const isResizingBottomPanelRef = useRef(false);
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
   const [currentDailyNoteDate, setCurrentDailyNoteDate] = useState(null);
   const [graphData, setGraphData] = useState(null);
@@ -1198,18 +1202,20 @@ function WorkspaceWithScope({ path }) {
   };
 
   // Helper function to get proper display name for special tabs
-  const getTabDisplayName = (tabPath) => {
+  const getTabDisplayName = useCallback((tabPath, pluginsList = []) => {
     if (tabPath === '__graph__') return 'Graph View';
     if (tabPath === '__kanban__') return 'Task Board';
     // if (tabPath === '__gmail__') return 'Gmail'; // Gmail disabled
     if (tabPath === '__bases__') return 'Bases';
-    if (tabPath.startsWith('__plugin_')) {
-      // Extract plugin name from path if possible, otherwise generic name
-      return 'Plugin'; // Will be updated when plugin details load
+    if (tabPath.startsWith('__plugin_') && tabPath.endsWith('__')) {
+      // Extract plugin ID and look up name
+      const pluginId = tabPath.slice(9, -2); // Remove "__plugin_" prefix and "__" suffix
+      const plugin = pluginsList.find(p => p.id === pluginId || p.name === pluginId);
+      return plugin ? plugin.name : 'Plugin';
     }
     // For regular files, extract filename
     return tabPath.split('/').pop();
-  };
+  }, []);
 
   // Load session state on initial mount
   useEffect(() => {
@@ -1222,9 +1228,10 @@ function WorkspaceWithScope({ path }) {
         if (session && session.open_tabs) {
           setExpandedFolders(new Set(session.expanded_folders || []));
 
+          // Reconstruct tabs - plugin tabs will be hydrated when plugins load
           const tabsWithNames = session.open_tabs.map(p => ({
             path: p,
-            name: getTabDisplayName(p)
+            name: getTabDisplayName(p, plugins)
           }));
 
           setOpenTabs(tabsWithNames);
@@ -1255,6 +1262,38 @@ function WorkspaceWithScope({ path }) {
       });
     }
   }, [path]);
+
+  // Rehydrate plugin tabs when plugins become available
+  useEffect(() => {
+    if (plugins.length > 0 && openTabs.length > 0) {
+      setOpenTabs(prevTabs => {
+        const needsUpdate = prevTabs.some(tab =>
+          tab.path.startsWith('__plugin_') && tab.path.endsWith('__') && !tab.plugin
+        );
+
+        if (!needsUpdate) return prevTabs;
+
+        return prevTabs
+          .map(tab => {
+            if (tab.path.startsWith('__plugin_') && tab.path.endsWith('__') && !tab.plugin) {
+              const pluginId = tab.path.slice(9, -2);
+              const plugin = plugins.find(p => p.id === pluginId || p.name === pluginId);
+              if (plugin) {
+                return { ...tab, name: plugin.name, plugin };
+              }
+            }
+            return tab;
+          })
+          .filter(tab => {
+            // Remove plugin tabs where plugin is not found (uninstalled)
+            if (tab.path.startsWith('__plugin_') && tab.path.endsWith('__') && !tab.plugin) {
+              return false;
+            }
+            return true;
+          });
+      });
+    }
+  }, [plugins]);
 
   // Insert images into editor at cursor position
   const insertImagesIntoEditor = useCallback((imagePaths) => {
@@ -3151,6 +3190,34 @@ function WorkspaceWithScope({ path }) {
     setSplitDirection(prev => prev === 'vertical' ? 'horizontal' : 'vertical');
   }, []);
 
+  // Bottom panel resize handlers
+  const handleBottomPanelResizeStart = useCallback((e) => {
+    e.preventDefault();
+    isResizingBottomPanelRef.current = true;
+    const startY = e.clientY;
+    const startHeight = bottomPanelHeight;
+
+    const handleMouseMove = (e) => {
+      if (!isResizingBottomPanelRef.current) return;
+      const deltaY = startY - e.clientY;
+      const newHeight = Math.max(100, Math.min(600, startHeight + deltaY));
+      setBottomPanelHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      isResizingBottomPanelRef.current = false;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [bottomPanelHeight]);
+
   // Synchronized scrolling handlers
   const handleLeftPaneScroll = useCallback((e) => {
     if (!syncScrolling || !rightPaneScrollRef.current) return;
@@ -4963,12 +5030,29 @@ function WorkspaceWithScope({ path }) {
         {/* Bottom Panel with Tabs (Terminal and Output) */}
         {(showTerminalPanel || showOutputPanel) && (
           <div style={{
-            height: '250px',
+            height: `${bottomPanelHeight}px`,
             borderTop: '1px solid rgb(var(--border))',
             backgroundColor: 'rgb(var(--panel))',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            position: 'relative'
           }}>
+            {/* Resize Handle */}
+            <div
+              onMouseDown={handleBottomPanelResizeStart}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: '4px',
+                cursor: 'ns-resize',
+                backgroundColor: 'transparent',
+                zIndex: 10
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(var(--accent), 0.5)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            />
             {/* Bottom Panel Tab Bar */}
             <div style={{
               display: 'flex',

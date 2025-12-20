@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
-import { PluginLoader } from "../../plugins/core/PluginLoader.js";
+import { PluginLoader, PluginInstaller } from "../../plugins/core/PluginLoader.js";
 import { LokusPluginAPI } from "../../plugins/api/LokusPluginAPI.js";
 import { uiManager } from "../ui/UIManager.js";
 import { configManager } from "../config/ConfigManager.js";
@@ -263,11 +263,10 @@ class PluginStateAdapter {
 
         // Convert backend format to frontend format
         const convertedPlugins = pluginInfos.map(pluginInfo => {
-          if (pluginInfo.manifest.id === 'pkmodoro') {
-          }
-          const pluginId = pluginInfo.manifest.id || pluginInfo.path.split('/').pop();
+          const pluginId = pluginInfo.manifest.id || pluginInfo.manifest.name || pluginInfo.path.split('/').pop();
           const pluginName = pluginInfo.manifest.name;
-          const isEnabled = enabledPluginNames.includes(pluginId);
+          // Check enabled by both id and name (backend stores by name)
+          const isEnabled = enabledPluginNames.includes(pluginId) || enabledPluginNames.includes(pluginName);
 
           return {
             id: pluginId,
@@ -284,12 +283,19 @@ class PluginStateAdapter {
             dependencies: pluginInfo.manifest.dependencies || {},
             keywords: pluginInfo.manifest.keywords || [],
             repository: pluginInfo.manifest.repository,
-            homepage: pluginInfo.manifest.homepage,
+            homepage: pluginInfo.manifest.homepage || pluginInfo.homepage,
             license: pluginInfo.manifest.license,
             manifest: pluginInfo.manifest, // Include full manifest
+            // Local metadata from plugin folder (README.md, icon, CHANGELOG.md)
+            readme: pluginInfo.readme || null,
+            changelog: pluginInfo.changelog || null,
+            icon_url: pluginInfo.icon_url || null,
+            // Marketplace metadata
+            slug: pluginInfo.slug || null,
+            downloads: pluginInfo.downloads || 0,
+            rating: pluginInfo.rating || 0,
+            installed_from: pluginInfo.installed_from || null,
             // Default UI properties
-            rating: 0,
-            downloads: 0,
             settings: {},
             conflicts: [],
             ui: {
@@ -330,7 +336,9 @@ class PluginStateAdapter {
 
       // Check if this is a marketplace install
       if (pluginData.fromMarketplace) {
-        await this.pluginLoader.installFromMarketplace(pluginId, pluginData.version);
+        // Use PluginInstaller for marketplace installs
+        const installer = new PluginInstaller(null);
+        await installer.installFromMarketplace(pluginId, pluginData.version);
       } else {
         // Call Tauri backend to install plugin from local path
         await invoke('install_plugin', { path: pluginData.path });

@@ -14,6 +14,7 @@ import { ProgressIndicatorContainer } from "./components/ProgressIndicator";
 import { usePluginProgress } from "./hooks/usePluginProgress";
 import { usePreferenceActivation } from "./hooks/usePreferenceActivation";
 import { useWorkspaceActivation } from "./hooks/useWorkspaceActivation";
+import { useDeepLink } from "./hooks/useDeepLink";
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/shortcuts/registry.js";
 import { PluginProvider } from "./hooks/usePlugins.jsx";
 import pluginStateAdapter from "./core/plugins/PluginStateAdapter.js";
@@ -44,6 +45,9 @@ function App() {
   const { isPrefsWindow } = usePreferenceActivation();
   const activePath = useWorkspaceActivation();
   const progressItems = usePluginProgress();
+
+  // Handle lokus:// deep links for plugin installation
+  useDeepLink();
 
   useEffect(() => {
     if (activePath) {

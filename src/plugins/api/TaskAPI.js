@@ -1,8 +1,11 @@
 /**
  * Task API - Task management and task providers
+ *
+ * SECURITY: All methods are permission-gated
  */
 import { EventEmitter } from '../../utils/EventEmitter.js';
 import { Disposable } from '../../utils/Disposable.js';
+import { permissionEnforcer } from '../security/PermissionEnforcer.js';
 
 export class TaskAPI extends EventEmitter {
     constructor(taskManager) {
@@ -10,12 +13,45 @@ export class TaskAPI extends EventEmitter {
         this.taskManager = taskManager;
         this.taskProviders = new Map();
         this.runningTasks = new Map();
+
+        // Permission context
+        this.currentPluginId = null;
+        this.grantedPermissions = new Set();
+        this.workspacePath = null;
+    }
+
+    /**
+     * Set permission context for this API instance
+     * @param {string} pluginId - Plugin identifier
+     * @param {Set<string>} permissions - Granted permissions
+     * @param {string} workspacePath - Workspace root path for scoping
+     */
+    _setPermissionContext(pluginId, permissions, workspacePath) {
+        this.currentPluginId = pluginId;
+        this.grantedPermissions = permissions || new Set();
+        this.workspacePath = workspacePath;
+    }
+
+    /**
+     * Require a permission - throws if not granted
+     * @param {string} apiMethod - API method name for logging
+     * @param {string} permission - Required permission
+     */
+    _requirePermission(apiMethod, permission) {
+        permissionEnforcer.requirePermission(
+            this.currentPluginId,
+            this.grantedPermissions,
+            permission,
+            apiMethod
+        );
     }
 
     /**
      * Register a task provider
      */
     registerTaskProvider(type, provider) {
+        this._requirePermission('tasks.registerTaskProvider', 'commands:register');
+
         if (this.taskProviders.has(type)) {
             throw new Error(`Task provider for type '${type}' already registered`);
         }
@@ -59,6 +95,8 @@ export class TaskAPI extends EventEmitter {
      * Execute a task
      */
     async executeTask(task) {
+        this._requirePermission('tasks.executeTask', 'commands:execute');
+
         if (!task || !task.name) {
             throw new Error('Task must have a name');
         }
@@ -97,6 +135,8 @@ export class TaskAPI extends EventEmitter {
      * Get all tasks from all providers
      */
     async getTasks() {
+        this._requirePermission('tasks.getTasks', 'commands:list');
+
         const allTasks = [];
 
         for (const [type, providerWrapper] of this.taskProviders) {
@@ -115,14 +155,22 @@ export class TaskAPI extends EventEmitter {
      * Listen for task start events
      */
     onDidStartTask(listener) {
-        return this.on('task-started', listener);
+        this._requirePermission('tasks.onDidStartTask', 'events:listen');
+
+        const handler = (event) => listener(event);
+        this.on('task-started', handler);
+        return new Disposable(() => this.off('task-started', handler));
     }
 
     /**
      * Listen for task end events
      */
     onDidEndTask(listener) {
-        return this.on('task-ended', listener);
+        this._requirePermission('tasks.onDidEndTask', 'events:listen');
+
+        const handler = (event) => listener(event);
+        this.on('task-ended', handler);
+        return new Disposable(() => this.off('task-ended', handler));
     }
 
     /**
