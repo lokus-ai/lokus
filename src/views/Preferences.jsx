@@ -17,7 +17,7 @@ import ConnectionStatus from "../components/ConnectionStatus.jsx";
 import GmailLogin from "../components/gmail/GmailLogin.jsx";
 import { useAuth } from "../core/auth/AuthContext";
 import { User, LogIn, LogOut, Crown, Shield, Settings as SettingsIcon } from "lucide-react";
-import ImportWizard from "../components/ImportWizard.jsx";
+import QuickImport from "../components/QuickImport.jsx";
 
 export default function Preferences() {  const [themes, setThemes] = useState([]);
   const [activeTheme, setActiveTheme] = useState("");
@@ -27,7 +27,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
   const [section, setSection] = useState("Appearance");
   const { isAuthenticated, user, signIn, signOut, isLoading, getAccessToken } = useAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [showImportWizard, setShowImportWizard] = useState(false);
+  const [showQuickImport, setShowQuickImport] = useState(false);
   // Removed mode/accent complexity - themes handle everything now
   const actions = useMemo(() => listActions(), []);
   const [keymap, setKeymap] = useState({});
@@ -39,6 +39,11 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
   const [saveStatus, setSaveStatus] = useState(''); // For showing save feedback
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
   const [markdownSyntax, setMarkdownSyntax] = useState(markdownSyntaxConfig.getAll());
+
+  // Custom symbol shortcuts state
+  const [customSymbols, setCustomSymbols] = useState({});
+  const [newSymbolName, setNewSymbolName] = useState('');
+  const [newSymbolChar, setNewSymbolChar] = useState('');
 
   // Sync state
   const [workspacePath, setWorkspacePath] = useState('');
@@ -145,6 +150,38 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
         liveEditorSettings.updateSetting(key, preset[key]);
       });
     }
+  };
+
+  // Custom symbol shortcuts helpers
+  const saveCustomSymbols = async (symbols) => {
+    try {
+      await updateConfig({ customSymbols: symbols });
+      // Emit event to notify editor to reload symbols
+      const { emit } = await import('@tauri-apps/api/event');
+      await emit('lokus:custom-symbols-changed', { symbols });
+    } catch (e) {
+      console.error('Failed to save custom symbols:', e);
+    }
+  };
+
+  const addCustomSymbol = () => {
+    const name = newSymbolName.trim();
+    const char = newSymbolChar.trim();
+    if (!name || !char) return;
+    if (name.length < 2) return; // Minimum 2 characters for name
+
+    const updated = { ...customSymbols, [name]: char };
+    setCustomSymbols(updated);
+    saveCustomSymbols(updated);
+    setNewSymbolName('');
+    setNewSymbolChar('');
+  };
+
+  const removeCustomSymbol = (name) => {
+    const updated = { ...customSymbols };
+    delete updated[name];
+    setCustomSymbols(updated);
+    saveCustomSymbols(updated);
   };
 
   const toggleSection = (section) => {
@@ -316,6 +353,14 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
             template: cfg.dailyNotes.template || '',
             openOnStartup: cfg.dailyNotes.openOnStartup || false
           });
+        }
+      } catch { }
+
+      // Load custom symbols
+      try {
+        const cfg = await readConfig();
+        if (cfg.customSymbols) {
+          setCustomSymbols(cfg.customSymbols);
         }
       } catch { }
 
@@ -811,7 +856,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
           data-tauri-drag-region
           className="h-12 pl-20 pr-4 flex items-center border-b border-app-border bg-app-panel shrink-0"
         >
-          <div className="font-medium text-sm">Preferences</div>
+          {/* Title shown in window titlebar, no need to duplicate here */}
         </header>
 
       <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: "220px 1fr" }}>
@@ -2338,6 +2383,81 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                   {saveStatus === 'success' ? '✓ Saved!' : saveStatus === 'error' ? '✗ Failed' : 'Save Configuration'}
                 </button>
               </div>
+
+              {/* Custom Symbol Shortcuts */}
+              <div className="mt-8 pt-6 border-t border-app-border">
+                <h3 className="text-lg font-medium mb-2">Symbol Shortcuts</h3>
+                <p className="text-sm text-app-muted mb-4">
+                  Type <code className="px-1.5 py-0.5 bg-app-bg rounded text-xs">:name:</code> to insert symbols.
+                  Built-in: <code className="px-1 py-0.5 bg-app-bg rounded text-xs">:theta:</code> → θ,
+                  <code className="px-1 py-0.5 bg-app-bg rounded text-xs">:arrow:</code> → →,
+                  <code className="px-1 py-0.5 bg-app-bg rounded text-xs">:inf:</code> → ∞
+                </p>
+
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Custom Symbols</h4>
+                    <p className="text-xs text-app-muted mb-3">Add your own shortcuts. These override built-in symbols with the same name.</p>
+
+                    {/* Add new symbol form */}
+                    <div className="flex items-center gap-2 mb-3">
+                      <input
+                        type="text"
+                        placeholder="name (e.g. myarrow)"
+                        className="flex-1 h-9 px-3 text-sm rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent font-mono"
+                        value={newSymbolName}
+                        onChange={(e) => setNewSymbolName(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
+                        onKeyDown={(e) => e.key === 'Enter' && addCustomSymbol()}
+                      />
+                      <span className="text-app-muted">→</span>
+                      <input
+                        type="text"
+                        placeholder="symbol (e.g. ➜)"
+                        className="w-24 h-9 px-3 text-sm text-center rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent"
+                        value={newSymbolChar}
+                        onChange={(e) => setNewSymbolChar(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && addCustomSymbol()}
+                      />
+                      <button
+                        onClick={addCustomSymbol}
+                        disabled={!newSymbolName.trim() || !newSymbolChar.trim() || newSymbolName.trim().length < 2}
+                        className="h-9 px-4 text-sm rounded-md bg-app-accent text-white hover:bg-app-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Add
+                      </button>
+                    </div>
+
+                    {/* List of custom symbols */}
+                    {Object.keys(customSymbols).length > 0 ? (
+                      <div className="rounded-lg border border-app-border overflow-hidden">
+                        <div className="grid grid-cols-12 bg-app-panel/40 px-4 py-2 text-xs text-app-muted">
+                          <div className="col-span-5">Shortcut</div>
+                          <div className="col-span-5">Symbol</div>
+                          <div className="col-span-2"></div>
+                        </div>
+                        <div className="divide-y divide-app-border/60">
+                          {Object.entries(customSymbols).map(([name, symbol]) => (
+                            <div key={name} className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
+                              <div className="col-span-5 font-mono text-sm">:{name}:</div>
+                              <div className="col-span-5 text-lg">{symbol}</div>
+                              <div className="col-span-2 flex justify-end">
+                                <button
+                                  onClick={() => removeCustomSymbol(name)}
+                                  className="text-xs text-app-muted hover:text-red-500 transition-colors"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-app-muted italic">No custom symbols defined.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -3564,80 +3684,81 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                 </p>
               </div>
 
-              <div className="space-y-4">
-                {/* Obsidian */}
-                <div className="p-4 border rounded-lg" style={{borderColor: 'rgb(var(--border))'}}>
-                  <h3 className="font-semibold mb-2" style={{color: 'rgb(var(--text))'}}>
-                    Obsidian
+              {/* Quick Import Card */}
+              <div className="p-6 border rounded-lg" style={{borderColor: 'rgb(var(--border))'}}>
+                <div className="text-center mb-4">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center" style={{background: 'rgb(var(--accent) / 0.1)'}}>
+                    <Upload className="w-8 h-8" style={{color: 'rgb(var(--accent))'}} />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2" style={{color: 'rgb(var(--text))'}}>
+                    Import from Another App
                   </h3>
-                  <p className="text-sm mb-3" style={{color: 'rgb(var(--muted))'}}>
-                    Already compatible! Just open your Obsidian vault folder in Lokus.
+                  <p className="text-sm mb-4" style={{color: 'rgb(var(--muted))'}}>
+                    Select your notes folder and we'll auto-detect the format and convert it for you.
                   </p>
-                  <div className="px-3 py-2 rounded" style={{
-                    background: 'rgb(var(--accent) / 0.1)',
-                    color: 'rgb(var(--accent))',
-                    fontSize: '14px'
-                  }}>
-                    ✨ No import needed - open vault directly!
+                </div>
+
+                <button
+                  onClick={() => setShowQuickImport(true)}
+                  className="w-full px-4 py-3 rounded-lg font-medium hover:opacity-90 transition-opacity"
+                  style={{
+                    background: 'rgb(var(--accent))',
+                    color: 'white'
+                  }}
+                >
+                  Select Folder to Import
+                </button>
+
+                {/* Supported Platforms */}
+                <div className="mt-4 pt-4 border-t" style={{borderColor: 'rgb(var(--border))'}}>
+                  <p className="text-xs text-center mb-2" style={{color: 'rgb(var(--muted))'}}>
+                    Supported platforms
+                  </p>
+                  <div className="flex justify-center gap-4">
+                    <span className="text-sm" style={{color: 'rgb(var(--text))'}}>Logseq</span>
+                    <span className="text-sm" style={{color: 'rgb(var(--text))'}}>Roam</span>
+                    <span className="text-sm" style={{color: 'rgb(var(--text))'}}>Obsidian</span>
                   </div>
                 </div>
+              </div>
 
-                {/* Logseq */}
+              {/* Info Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 border rounded-lg" style={{borderColor: 'rgb(var(--border))'}}>
-                  <h3 className="font-semibold mb-2" style={{color: 'rgb(var(--text))'}}>
-                    Logseq
-                  </h3>
-                  <p className="text-sm mb-3" style={{color: 'rgb(var(--muted))'}}>
-                    Convert your Logseq graph to Lokus format with automatic outline and property conversion.
-                  </p>
-                  <button
-                    onClick={() => setShowImportWizard(true)}
-                    className="px-4 py-2 rounded hover:opacity-90 transition-opacity"
-                    style={{
-                      background: 'rgb(var(--accent))',
-                      color: 'white'
-                    }}
-                  >
-                    Import from Logseq
-                  </button>
+                  <h4 className="font-medium mb-1" style={{color: 'rgb(var(--text))'}}>What gets converted?</h4>
+                  <ul className="text-sm space-y-1" style={{color: 'rgb(var(--muted))'}}>
+                    <li>• Properties to YAML frontmatter</li>
+                    <li>• TODO/DONE to checkboxes</li>
+                    <li>• Block references resolved</li>
+                    <li>• Wiki links preserved</li>
+                  </ul>
                 </div>
-
-                {/* Roam Research */}
                 <div className="p-4 border rounded-lg" style={{borderColor: 'rgb(var(--border))'}}>
-                  <h3 className="font-semibold mb-2" style={{color: 'rgb(var(--text))'}}>
-                    Roam Research
-                  </h3>
-                  <p className="text-sm mb-3" style={{color: 'rgb(var(--muted))'}}>
-                    Import your Roam JSON export with full block reference resolution.
-                  </p>
-                  <button
-                    onClick={() => setShowImportWizard(true)}
-                    className="px-4 py-2 rounded hover:opacity-90 transition-opacity"
-                    style={{
-                      background: 'rgb(var(--accent))',
-                      color: 'white'
-                    }}
-                  >
-                    Import from Roam
-                  </button>
+                  <h4 className="font-medium mb-1" style={{color: 'rgb(var(--text))'}}>Safe conversion</h4>
+                  <ul className="text-sm space-y-1" style={{color: 'rgb(var(--muted))'}}>
+                    <li>• Backup created automatically</li>
+                    <li>• Original files preserved</li>
+                    <li>• Obsidian works as-is</li>
+                    <li>• Undo with backup folder</li>
+                  </ul>
                 </div>
+              </div>
 
-                {/* Documentation Link */}
-                <div className="p-4 border rounded-lg" style={{
-                  borderColor: 'rgb(var(--border))',
-                  background: 'rgb(var(--bg))'
-                }}>
-                  <p className="text-sm" style={{color: 'rgb(var(--muted))'}}>
-                    📚 Read the full <a
-                      href="https://github.com/lokus-ai/lokus/blob/main/docs/migration-guide.md"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{color: 'rgb(var(--accent))', textDecoration: 'underline'}}
-                    >
-                      Migration Guide
-                    </a> for detailed instructions and troubleshooting.
-                  </p>
-                </div>
+              {/* Documentation Link */}
+              <div className="p-4 border rounded-lg" style={{
+                borderColor: 'rgb(var(--border))',
+                background: 'rgb(var(--bg))'
+              }}>
+                <p className="text-sm" style={{color: 'rgb(var(--muted))'}}>
+                  Need help? Read the <a
+                    href="https://github.com/lokus-ai/lokus/blob/main/docs/migration-guide.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{color: 'rgb(var(--accent))', textDecoration: 'underline'}}
+                  >
+                    Migration Guide
+                  </a> for detailed instructions.
+                </p>
               </div>
             </div>
           )}
@@ -3648,11 +3769,14 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
         </main>
       </div>
 
-      {/* Import Wizard Modal */}
-      {showImportWizard && (
-        <ImportWizard
-          onClose={() => setShowImportWizard(false)}
-          initialWorkspacePath={workspacePath}
+      {/* Quick Import Modal */}
+      {showQuickImport && (
+        <QuickImport
+          onClose={() => setShowQuickImport(false)}
+          onWorkspaceOpen={(path) => {
+            // TODO: Navigate to workspace
+            window.dispatchEvent(new CustomEvent('open-workspace', { detail: { path } }));
+          }}
         />
       )}
 

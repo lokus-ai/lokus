@@ -267,6 +267,161 @@ export class LogseqImporter extends BaseImporter {
   }
 
   /**
+   * Convert files in place (modifies original folder)
+   * Creates a backup before conversion
+   * @param {string} folderPath - Path to the Logseq graph folder
+   * @returns {Promise<Object>} Conversion results
+   */
+  async convertInPlace(folderPath) {
+    this.resetStats();
+    this.blockMap = new BlockReferenceMap();
+
+    try {
+      // Step 1: Validate source
+      const validation = await this.validate(folderPath);
+      if (!validation.valid) {
+        throw new Error(`Invalid source: ${validation.errors.join(', ')}`);
+      }
+
+      // Step 2: Create backup
+      const backupPath = await this.createBackup(folderPath);
+      this.updateProgress(0, 100, 'Created backup');
+
+      // Step 3: Find all markdown files
+      const files = await this.findMarkdownFiles(folderPath);
+      this.stats.totalFiles = files.length;
+      this.progressTracker.setTotal(files.length);
+      this.progressTracker.start();
+
+      // Step 4: First pass - Convert all files and build block map
+      const convertedFiles = [];
+      for (let i = 0; i < files.length; i++) {
+        const filePath = files[i];
+        try {
+          const fileName = filePath.split('/').pop();
+          this.updateProgress(i + 1, files.length, `Converting ${fileName}`);
+          this.progressTracker.update(fileName);
+
+          const content = await invoke('read_file_content', { path: filePath });
+          const converted = await this.convertFile(content, filePath);
+
+          convertedFiles.push({
+            originalPath: filePath,
+            fileName,
+            ...converted
+          });
+        } catch (error) {
+          this.addError(filePath, error);
+        }
+      }
+
+      // Step 5: Second pass - Resolve block references
+      for (const file of convertedFiles) {
+        try {
+          const { content, unresolvedRefs } = convertBlockReferences(
+            file.content,
+            this.blockMap,
+            file.originalPath
+          );
+
+          file.content = content;
+
+          if (unresolvedRefs.length > 0) {
+            this.addWarning(file.fileName, `${unresolvedRefs.length} unresolved block references`);
+          }
+        } catch (error) {
+          this.addError(file.fileName, error);
+        }
+      }
+
+      // Step 6: Write converted files back in place
+      for (const file of convertedFiles) {
+        try {
+          await invoke('write_file', {
+            path: file.originalPath,
+            content: file.content
+          });
+
+          this.stats.processedFiles++;
+        } catch (error) {
+          this.addError(file.fileName, error);
+        }
+      }
+
+      // Step 7: Create .lokus folder to mark as Lokus workspace
+      await this.createLokusMarker(folderPath);
+
+      // Step 8: Clean up Logseq-specific folders (optional - keep for reference)
+      // We don't delete logseq folder, just mark as converted
+
+      this.progressTracker.complete();
+
+      return {
+        success: true,
+        stats: this.getStats(),
+        blockStats: this.blockMap.getStats(),
+        backupPath
+      };
+    } catch (error) {
+      this.progressTracker.error(error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Create backup of the folder before conversion
+   */
+  async createBackup(folderPath) {
+    const date = new Date().toISOString().split('T')[0];
+    const backupPath = `${folderPath}/.lokus-backup-${date}`;
+
+    try {
+      await invoke('create_directory', { path: backupPath, recursive: true });
+
+      // Copy markdown files to backup
+      const files = await this.findMarkdownFiles(folderPath);
+      for (const file of files) {
+        const fileName = file.split('/').pop();
+        const content = await invoke('read_file_content', { path: file });
+        await invoke('write_file', {
+          path: `${backupPath}/${fileName}`,
+          content
+        });
+      }
+
+      return backupPath;
+    } catch (error) {
+      throw new Error(`Failed to create backup: ${error.message}`);
+    }
+  }
+
+  /**
+   * Create .lokus folder to mark as Lokus workspace
+   */
+  async createLokusMarker(folderPath) {
+    const lokusPath = `${folderPath}/.lokus`;
+    try {
+      const exists = await invoke('path_exists', { path: lokusPath });
+      if (!exists) {
+        await invoke('create_directory', { path: lokusPath, recursive: true });
+      }
+
+      // Write a marker file
+      await invoke('write_file', {
+        path: `${lokusPath}/converted.json`,
+        content: JSON.stringify({
+          convertedFrom: 'logseq',
+          convertedAt: new Date().toISOString(),
+          version: '1.0'
+        }, null, 2)
+      });
+    } catch (error) {
+      // Non-fatal, just log
+      console.error('Failed to create Lokus marker:', error);
+    }
+  }
+
+  /**
    * Register progress callback for tracker
    */
   onProgress(callback) {
