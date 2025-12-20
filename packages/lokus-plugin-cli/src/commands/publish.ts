@@ -149,19 +149,63 @@ async function getRegistryConfig(options: PublishOptions): Promise<RegistryConfi
 
 // ... checkPluginExists ...
 
-async function preparePackageData(pluginDir: string, manifest: any): Promise<{ metadata: any, archive: any, size: number }> {
+async function preparePackageData(pluginDir: string, manifest: any): Promise<{ metadata: any, archive: any, size: number, iconPath?: string }> {
   const zipPath = path.join(pluginDir, 'package.zip');
   const output = fs.createWriteStream(zipPath);
   const archive = archiver('zip', { zlib: { level: 9 } });
+
+  // Read README.md content if it exists
+  const readmePath = path.join(pluginDir, 'README.md');
+  let readmeContent = '';
+  if (await fs.pathExists(readmePath)) {
+    try {
+      readmeContent = await fs.readFile(readmePath, 'utf-8');
+      logger.info('Including README.md content');
+    } catch (error) {
+      logger.warning('Failed to read README.md');
+    }
+  }
+
+  // Read CHANGELOG.md content if it exists
+  const changelogPath = path.join(pluginDir, 'CHANGELOG.md');
+  let changelogContent = '';
+  if (await fs.pathExists(changelogPath)) {
+    try {
+      changelogContent = await fs.readFile(changelogPath, 'utf-8');
+      logger.info('Including CHANGELOG.md content');
+    } catch (error) {
+      logger.warning('Failed to read CHANGELOG.md');
+    }
+  }
+
+  // Check for icon file
+  let iconPath: string | undefined;
+  const iconExtensions = ['png', 'jpg', 'jpeg', 'svg', 'webp'];
+  for (const ext of iconExtensions) {
+    const possiblePath = path.join(pluginDir, `icon.${ext}`);
+    if (await fs.pathExists(possiblePath)) {
+      iconPath = possiblePath;
+      logger.info(`Including icon: icon.${ext}`);
+      break;
+    }
+  }
+
+  // Enhance manifest with file contents
+  const enhancedManifest = {
+    ...manifest,
+    readme: readmeContent || manifest.readme || '',
+    changelog: changelogContent || manifest.changelog || '',
+  };
 
   return new Promise((resolve, reject) => {
     output.on('close', async () => {
       const size = archive.pointer();
       const fileStream = fs.createReadStream(zipPath);
       resolve({
-        metadata: manifest,
+        metadata: enhancedManifest,
         archive: fileStream,
-        size
+        size,
+        iconPath
       });
     });
 
@@ -185,6 +229,11 @@ async function preparePackageData(pluginDir: string, manifest: any): Promise<{ m
       archive.file(path.join(pluginDir, 'README.md'), { name: 'README.md' });
     }
 
+    // Add CHANGELOG if exists
+    if (fs.existsSync(path.join(pluginDir, 'CHANGELOG.md'))) {
+      archive.file(path.join(pluginDir, 'CHANGELOG.md'), { name: 'CHANGELOG.md' });
+    }
+
     // Add LICENSE if exists
     if (fs.existsSync(path.join(pluginDir, 'LICENSE'))) {
       archive.file(path.join(pluginDir, 'LICENSE'), { name: 'LICENSE' });
@@ -201,7 +250,7 @@ async function preparePackageData(pluginDir: string, manifest: any): Promise<{ m
 
 async function publishToRegistry(
   config: RegistryConfig,
-  packageData: any,
+  packageData: { metadata: any, archive: any, size: number, iconPath?: string },
   options: PublishOptions
 ): Promise<{ url?: string }> {
   const formData = new FormData();
@@ -215,6 +264,24 @@ async function publishToRegistry(
     contentType: 'application/zip',
     knownLength: packageData.size
   });
+
+  // Add icon file if available (Server expects 'icon')
+  if (packageData.iconPath && await fs.pathExists(packageData.iconPath)) {
+    const iconStream = fs.createReadStream(packageData.iconPath);
+    const iconFilename = path.basename(packageData.iconPath);
+    const iconExt = path.extname(packageData.iconPath).toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.svg': 'image/svg+xml',
+      '.webp': 'image/webp'
+    };
+    formData.append('icon', iconStream, {
+      filename: iconFilename,
+      contentType: mimeTypes[iconExt] || 'image/png'
+    });
+  }
 
   // Add publish options
   if (options.tag) {

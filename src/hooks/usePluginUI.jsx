@@ -15,11 +15,14 @@ export function usePluginUI() {
   // Listen for plugin UI updates
   useEffect(() => {
     let unlisten = null;
+    let commandUnlisten = null;
+    let isMounted = true;
 
     const setupListeners = async () => {
       try {
         // Listen for status bar item updates
         unlisten = await listen('status-bar-item-updated', (event) => {
+          if (!isMounted) return;
           const { pluginId, action, item } = event.payload;
 
           setStatusBarItems(prev => {
@@ -42,7 +45,8 @@ export function usePluginUI() {
         });
 
         // Listen for command registrations
-        const commandUnlisten = await listen('command-registered', (event) => {
+        commandUnlisten = await listen('command-registered', (event) => {
+          if (!isMounted) return;
           const { pluginId, command, title } = event.payload;
 
           setCommands(prev => {
@@ -55,20 +59,17 @@ export function usePluginUI() {
             return newCommands;
           });
         });
-
-        return () => {
-          if (unlisten) unlisten();
-          if (commandUnlisten) commandUnlisten();
-        };
       } catch (error) {
-        return () => { };
+        // Silently handle setup errors
       }
     };
 
     setupListeners();
 
     return () => {
+      isMounted = false;
       if (unlisten) unlisten();
+      if (commandUnlisten) commandUnlisten();
     };
   }, []);
 

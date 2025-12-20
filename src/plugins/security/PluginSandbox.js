@@ -25,6 +25,7 @@ export class PluginSandbox extends EventEmitter {
     }
     
     this.worker = null
+    this.workerEnabled = false
     this.isRunning = false
     this.stats = {
       memoryUsage: 0,
@@ -55,20 +56,28 @@ export class PluginSandbox extends EventEmitter {
         await this.verifyCodeSignature()
       }
 
-      // Create isolated worker
-      await this.createWorker()
-      
-      // Set up resource monitoring
+      // Try to create isolated worker (may fail in Tauri/restricted environments)
+      try {
+        await this.createWorker()
+        // Initialize plugin in worker
+        await this.initializePlugin()
+        this.workerEnabled = true
+      } catch (workerError) {
+        // Workers not supported (e.g., Tauri webview with blob URL restrictions)
+        // Continue without worker-based isolation - use lightweight monitoring only
+        console.warn(`[PluginSandbox] Worker creation failed for ${this.pluginId}, using lightweight monitoring:`, workerError.message)
+        this.workerEnabled = false
+        this.worker = null
+      }
+
+      // Set up resource monitoring (works without worker)
       this.startResourceMonitoring()
-      
-      // Initialize plugin in worker
-      await this.initializePlugin()
-      
+
       this.isRunning = true
       this.stats.startTime = Date.now()
-      
-      this.emit('initialized', { pluginId: this.pluginId })
-      
+
+      this.emit('initialized', { pluginId: this.pluginId, workerEnabled: this.workerEnabled })
+
     } catch (error) {
       this.emit('error', { pluginId: this.pluginId, error })
       throw error
@@ -500,8 +509,14 @@ export class PluginSandbox extends EventEmitter {
       throw new Error('Plugin sandbox is not running')
     }
 
+    // If worker is not enabled, we can't execute in sandbox
+    // Return null to indicate the caller should use direct execution
+    if (!this.workerEnabled || !this.worker) {
+      return null
+    }
+
     const requestId = ++this.requestId
-    
+
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(requestId)
@@ -561,7 +576,8 @@ export class PluginSandbox extends EventEmitter {
     return {
       ...this.stats,
       uptime: this.stats.startTime ? Date.now() - this.stats.startTime : 0,
-      quotaExceeded: this.quotaExceeded
+      quotaExceeded: this.quotaExceeded,
+      workerEnabled: this.workerEnabled
     }
   }
 
@@ -570,14 +586,18 @@ export class PluginSandbox extends EventEmitter {
    */
   async terminate() {
     if (this.worker) {
-      // Graceful shutdown
-      this.worker.postMessage({ type: 'deactivate' })
-      
-      // Wait a bit for graceful shutdown
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      // Force terminate
-      this.worker.terminate()
+      try {
+        // Graceful shutdown
+        this.worker.postMessage({ type: 'deactivate' })
+
+        // Wait a bit for graceful shutdown
+        await new Promise(resolve => setTimeout(resolve, 500))
+
+        // Force terminate
+        this.worker.terminate()
+      } catch (e) {
+        // Worker may already be terminated
+      }
       this.worker = null
     }
 
@@ -587,13 +607,14 @@ export class PluginSandbox extends EventEmitter {
     }
 
     // Reject all pending requests
-    for (const [id, request] of this.pendingRequests) {
+    for (const [, request] of this.pendingRequests) {
       clearTimeout(request.timeout)
       request.reject(new Error('Plugin sandbox terminated'))
     }
     this.pendingRequests.clear()
 
     this.isRunning = false
+    this.workerEnabled = false
     this.emit('terminated', { pluginId: this.pluginId })
   }
 }

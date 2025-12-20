@@ -51,6 +51,49 @@ export function PluginProvider({ children }) {
       }
     };
 
+    // Handle plugin installation from registry (triggered by deep links)
+    const handleRegistryInstall = async (event) => {
+      const { slug } = event.detail;
+      if (!slug) return;
+
+      try {
+        toast({
+          title: "Installing Plugin",
+          description: `Fetching ${slug} from registry...`,
+        });
+
+        // Fetch plugin metadata from registry
+        const response = await fetch(`https://lokusmd.com/api/v1/registry/plugin/${slug}`);
+        if (!response.ok) {
+          throw new Error(`Plugin not found: ${slug}`);
+        }
+
+        const plugin = await response.json();
+        console.log('[PluginProvider] Installing from registry:', plugin);
+
+        // Use the existing install method with fromMarketplace flag
+        await pluginManager.installPlugin(plugin.id, {
+          fromMarketplace: true,
+          version: plugin.latest_version
+        });
+
+        toast({
+          title: "Plugin Installed",
+          description: `${plugin.name} v${plugin.latest_version} has been installed.`,
+        });
+
+      } catch (error) {
+        console.error('[PluginProvider] Registry install failed:', error);
+        toast({
+          title: "Installation Failed",
+          description: error.message || 'Failed to install plugin',
+          variant: "destructive"
+        });
+      }
+    };
+
+    window.addEventListener('plugin-install-from-registry', handleRegistryInstall);
+
     if (isTauri) {
       const unlistenPromise = listen("plugins:updated", () => {
         pluginManager.loadPlugins(true); // Force reload on external updates
@@ -88,15 +131,19 @@ export function PluginProvider({ children }) {
       });
 
       return () => {
+        window.removeEventListener('plugin-install-from-registry', handleRegistryInstall);
         unlistenPromise.then(unlisten => unlisten());
         deepLinkUnlistenPromise.then(unlisten => unlisten());
       };
     } else {
       const onDom = () => pluginManager.loadPlugins(true);
       window.addEventListener('plugins:updated', onDom);
-      return () => window.removeEventListener('plugins:updated', onDom);
+      return () => {
+        window.removeEventListener('plugin-install-from-registry', handleRegistryInstall);
+        window.removeEventListener('plugins:updated', onDom);
+      };
     }
-  }, []);
+  }, [toast]);
 
   // Delegate methods to plugin manager
   const loadPlugins = useCallback((forceReload = false) => {

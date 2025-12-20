@@ -82,6 +82,10 @@
   overflow-y: auto;
   padding: 12px;
   background: rgb(var(--bg));
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+  cursor: text;
 }
 
 .output-text {
@@ -93,6 +97,9 @@
   color: rgb(var(--text));
   white-space: pre-wrap;
   word-wrap: break-word;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
 }
 
 .output-empty {

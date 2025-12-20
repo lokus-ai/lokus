@@ -75,6 +75,15 @@ export function TerminalPanel({ isOpen, onClose }) {
     terminalManager.disposeTerminal(terminalId);
   };
 
+  const handleNewTerminal = () => {
+    const id = `terminal-${Date.now()}`;
+    terminalManager.createTerminal({
+      id,
+      name: `Terminal ${terminals.length + 1}`,
+      pluginId: 'lokus-core'
+    });
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -101,6 +110,13 @@ export function TerminalPanel({ isOpen, onClose }) {
               </button>
             </div>
           ))}
+          <button
+            className="terminal-new-btn"
+            onClick={handleNewTerminal}
+            title="New Terminal"
+          >
+            +
+          </button>
         </div>
         <button className="terminal-close" onClick={onClose} title="Close panel">×</button>
       </div>

@@ -97,6 +97,23 @@
   color: #e74c3c;
 }
 
+.terminal-new-btn {
+  padding: 0 12px;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: #cccccc;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.terminal-new-btn:hover {
+  background-color: rgba(0, 122, 204, 0.2);
+  color: #007acc;
+}
+
 .terminal-close {
   padding: 0 12px;
   height: 100%;
@@ -121,6 +138,8 @@
   padding: 8px 12px;
   background-color: #1e1e1e;
   line-height: 1.5;
+  user-select: text;
+  cursor: text;
 }
 
 .terminal-output::-webkit-scrollbar {
@@ -145,6 +164,7 @@
   word-wrap: break-word;
   margin: 0;
   padding: 1px 0;
+  user-select: text;
 }
 
 .terminal-line-input {

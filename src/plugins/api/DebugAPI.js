@@ -1,8 +1,12 @@
 /**
  * Debug API - Debugging and debug adapter management
+ *
+ * SECURITY: All methods are permission-gated
+ * NOTE: debug:session is a HIGH-RISK permission
  */
 import { EventEmitter } from '../../utils/EventEmitter.js';
 import { Disposable } from '../../utils/Disposable.js';
+import { permissionEnforcer } from '../security/PermissionEnforcer.js';
 
 export class DebugAPI extends EventEmitter {
     constructor(debugManager) {
@@ -10,12 +14,45 @@ export class DebugAPI extends EventEmitter {
         this.debugManager = debugManager;
         this.debugAdapterProviders = new Map();
         this.activeSessions = new Map();
+
+        // Permission context
+        this.currentPluginId = null;
+        this.grantedPermissions = new Set();
+        this.workspacePath = null;
+    }
+
+    /**
+     * Set permission context for this API instance
+     * @param {string} pluginId - Plugin identifier
+     * @param {Set<string>} permissions - Granted permissions
+     * @param {string} workspacePath - Workspace root path for scoping
+     */
+    _setPermissionContext(pluginId, permissions, workspacePath) {
+        this.currentPluginId = pluginId;
+        this.grantedPermissions = permissions || new Set();
+        this.workspacePath = workspacePath;
+    }
+
+    /**
+     * Require a permission - throws if not granted
+     * @param {string} apiMethod - API method name for logging
+     * @param {string} permission - Required permission
+     */
+    _requirePermission(apiMethod, permission) {
+        permissionEnforcer.requirePermission(
+            this.currentPluginId,
+            this.grantedPermissions,
+            permission,
+            apiMethod
+        );
     }
 
     /**
      * Start debugging with a configuration
      */
     async startDebugging(config) {
+        this._requirePermission('debug.startDebugging', 'debug:session');
+
         if (!config || !config.type) {
             throw new Error('Debug configuration must have a type');
         }
@@ -58,6 +95,8 @@ export class DebugAPI extends EventEmitter {
      * Stop the active debug session
      */
     async stopDebugging() {
+        this._requirePermission('debug.stopDebugging', 'debug:session');
+
         const activeSession = this.getActiveDebugSession();
         if (!activeSession) {
             return false;
@@ -82,6 +121,8 @@ export class DebugAPI extends EventEmitter {
      * Register a debug adapter provider
      */
     registerDebugAdapterProvider(type, provider) {
+        this._requirePermission('debug.registerDebugAdapterProvider', 'debug:register');
+
         if (this.debugAdapterProviders.has(type)) {
             throw new Error(`Debug adapter provider for type '${type}' already registered`);
         }
@@ -125,6 +166,8 @@ export class DebugAPI extends EventEmitter {
      * Get the active debug session
      */
     getActiveDebugSession() {
+        this._requirePermission('debug.getActiveDebugSession', 'debug:session');
+
         // Return the most recent session
         const sessions = Array.from(this.activeSessions.values());
         if (sessions.length === 0) {
@@ -137,14 +180,22 @@ export class DebugAPI extends EventEmitter {
      * Listen for debug session start events
      */
     onDidStartDebugSession(listener) {
-        return this.on('debug-session-started', listener);
+        this._requirePermission('debug.onDidStartDebugSession', 'events:listen');
+
+        const handler = (event) => listener(event);
+        this.on('debug-session-started', handler);
+        return new Disposable(() => this.off('debug-session-started', handler));
     }
 
     /**
      * Listen for debug session termination events
      */
     onDidTerminateDebugSession(listener) {
-        return this.on('debug-session-terminated', listener);
+        this._requirePermission('debug.onDidTerminateDebugSession', 'events:listen');
+
+        const handler = (event) => listener(event);
+        this.on('debug-session-terminated', handler);
+        return new Disposable(() => this.off('debug-session-terminated', handler));
     }
 
     /**

@@ -7,6 +7,8 @@ import { isVersionCompatible } from '../../utils/semver.js'
 import { RegistryAPI } from '../registry/RegistryAPI.js'
 // Import SDK to expose to plugins
 import * as PluginSDK from '../../../packages/plugin-sdk/src/index.ts'
+// Security - Plugin Security Manager for monitoring and enforcement
+import { PluginSecurityManager } from '../security/PluginSecurityManager.js'
 
 /**
  * Plugin Loading Utilities
@@ -147,6 +149,23 @@ export class PluginSandbox {
   }
 }
 
+// Singleton security manager instance for monitoring all plugins
+let securityManagerInstance = null
+
+/**
+ * Get or create the shared PluginSecurityManager instance
+ */
+export function getSecurityManager() {
+  if (!securityManagerInstance) {
+    securityManagerInstance = new PluginSecurityManager({
+      auditingEnabled: true,
+      quarantineEnabled: true,
+      maxSandboxes: 50
+    })
+  }
+  return securityManagerInstance
+}
+
 /**
  * Plugin Loader Class
  * Handles the loading, validation, and instantiation of plugins
@@ -155,6 +174,16 @@ export class PluginLoader {
   constructor() {
     this.loadedModules = new Map()
     this.logger = logger.createScoped('PluginLoader')
+    this.securityManager = getSecurityManager()
+
+    // Listen for security events
+    this.securityManager.on('security-violation', (event) => {
+      this.logger.error(`SECURITY VIOLATION [${event.pluginId}]:`, event.violationType, event.details)
+    })
+
+    this.securityManager.on('plugin-quarantined', (event) => {
+      this.logger.error(`PLUGIN QUARANTINED [${event.pluginId}]:`, event.reason)
+    })
   }
 
   /**
@@ -302,7 +331,7 @@ export class PluginLoader {
       this.logger.info(`Loading plugin module from Blob URL: ${blobUrl} (original: ${mainPath})`);
 
       try {
-        const pluginModule = await import(blobUrl);
+        const pluginModule = await import(/* @vite-ignore */ blobUrl);
         return pluginModule.default || pluginModule;
       } finally {
         URL.revokeObjectURL(blobUrl); // Cleanup
@@ -454,8 +483,28 @@ export class PluginLoader {
    * Instantiate plugin with security context
    */
   async instantiatePlugin(pluginModule, manifest, pluginAPI, pluginPath) {
+    const pluginId = manifest.id
+
     try {
-      // Create security sandbox
+      // SECURITY: Register with security manager BEFORE plugin executes
+      // This validates the plugin, checks quarantine status, and sets up monitoring
+      let securitySandbox = null
+      try {
+        securitySandbox = await this.securityManager.createSandbox(pluginId, manifest, {
+          workspacePath: pluginPath
+        })
+        this.logger.info(`Security sandbox created for plugin: ${pluginId}`)
+      } catch (securityError) {
+        // Security validation failed - do not proceed with loading
+        this.logger.error(`Security validation failed for ${pluginId}:`, securityError.message)
+        throw new PluginLoadError(
+          `Plugin security validation failed: ${securityError.message}`,
+          pluginId,
+          securityError
+        )
+      }
+
+      // Create execution sandbox (separate from security monitoring sandbox)
       const sandbox = new PluginSandbox(manifest.id, pluginAPI)
 
       // Prepare context data
@@ -479,7 +528,7 @@ export class PluginLoader {
           isDevelopment: true,
           isTesting: false
         },
-        permissions: new Set(),
+        permissions: new Set(manifest.permissions || []),
         subscriptions: [],
         globalState: { get: () => undefined, update: async () => { }, keys: () => [], setKeysForSync: () => { } },
         workspaceState: { get: () => undefined, update: async () => { }, keys: () => [], setKeysForSync: () => { } },
@@ -575,14 +624,30 @@ export class PluginLoader {
       plugin.manifest = manifest
       plugin.api = pluginAPI
       plugin.context = context
+      plugin.securitySandbox = securitySandbox // Store for cleanup
 
       // Call initialization if available
       if (typeof plugin.initialize === 'function') {
         await plugin.initialize(pluginAPI)
       }
 
+      this.logger.info(`Plugin ${pluginId} instantiated successfully with security monitoring`)
       return plugin
     } catch (error) {
+      // Clean up security sandbox if it was created but instantiation failed
+      if (this.securityManager && this.securityManager.getSandbox(pluginId)) {
+        try {
+          const sandbox = this.securityManager.getSandbox(pluginId)
+          if (sandbox && typeof sandbox.terminate === 'function') {
+            await sandbox.terminate()
+          }
+          this.securityManager.sandboxes?.delete(pluginId)
+          this.securityManager.securityPolicies?.delete(pluginId)
+          this.logger.info(`Cleaned up security sandbox for failed plugin: ${pluginId}`)
+        } catch (cleanupError) {
+          this.logger.warn(`Failed to cleanup security sandbox for ${pluginId}:`, cleanupError)
+        }
+      }
       throw new Error(`Failed to instantiate plugin: ${error.message}`)
     }
   }
@@ -641,6 +706,48 @@ export class PluginLoader {
   }
 
   /**
+   * Cleanup security resources for a plugin
+   * Call this when unloading/uninstalling a plugin
+   */
+  async cleanupPluginSecurity(pluginId) {
+    if (!this.securityManager) {
+      return
+    }
+
+    try {
+      const sandbox = this.securityManager.getSandbox(pluginId)
+      if (sandbox) {
+        await sandbox.terminate()
+        this.securityManager.sandboxes?.delete(pluginId)
+        this.securityManager.securityPolicies?.delete(pluginId)
+        this.logger.info(`Security cleanup completed for plugin: ${pluginId}`)
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to cleanup security for ${pluginId}:`, error)
+    }
+  }
+
+  /**
+   * Get security statistics for monitoring
+   */
+  getSecurityStats() {
+    if (!this.securityManager) {
+      return null
+    }
+    return this.securityManager.getSecurityStats()
+  }
+
+  /**
+   * Check if a plugin is quarantined
+   */
+  isPluginQuarantined(pluginId) {
+    if (!this.securityManager) {
+      return false
+    }
+    return this.securityManager.quarantinedPlugins?.has(pluginId) || false
+  }
+
+  /**
    * Activate a plugin
    */
   async activatePlugin(pluginId) {
@@ -678,7 +785,7 @@ export class PluginInstaller {
     try {
       this.logger.info(`Installing plugin from archive: ${archivePath}`)
       const pluginId = await invoke('install_plugin', { path: archivePath })
-      this.logger.success(`Successfully installed plugin: ${pluginId}`)
+      this.logger.info(`Successfully installed plugin: ${pluginId}`)
       return pluginId
     } catch (error) {
       this.logger.error(`Failed to install plugin from archive:`, error)
@@ -704,19 +811,20 @@ export class PluginInstaller {
 
       const registry = new RegistryAPI()
 
-      // 1. Download the plugin blob
+      // 1. Get plugin details (for icon URL and metadata)
+      const pluginDetails = await registry.getPlugin(pluginId)
+      const pluginData = pluginDetails.data
+
+      // 2. Download the plugin blob
       const response = await registry.downloadPlugin(pluginId, version)
       const blob = response.data
 
-      // 2. Save to temporary file
-      // We need to use Tauri's FS API to write the blob to a temp file
-      // Since we can't directly write a Blob, we convert it to ArrayBuffer then Uint8Array
+      // 3. Save to temporary file
       const arrayBuffer = await blob.arrayBuffer()
       const uint8Array = new Uint8Array(arrayBuffer)
 
-      // Import FS dynamically to avoid issues if not available
-      const { writeFile, BaseDirectory, exists, mkdir } = await import('@tauri-apps/plugin-fs')
-      const { tempDir, join } = await import('@tauri-apps/api/path')
+      const { writeFile } = await import('@tauri-apps/plugin-fs')
+      const { tempDir, join, homeDir } = await import('@tauri-apps/api/path')
 
       const tempDirectory = await tempDir()
       const fileName = `${pluginId}-${version || 'latest'}.lokus`
@@ -726,10 +834,38 @@ export class PluginInstaller {
 
       await writeFile(filePath, uint8Array)
 
-      // 3. Install from the local temp file
-      await this.installFromArchive(filePath)
+      // 4. Install from the local temp file
+      const installedName = await this.installFromArchive(filePath)
 
-      this.logger.success(`Successfully installed ${pluginId} from marketplace`)
+      // 5. Download and save icon if available
+      if (pluginData?.icon_url) {
+        try {
+          const home = await homeDir()
+          // Use the installed plugin name (folder name)
+          const pluginName = installedName || pluginData.name || pluginId
+          const pluginPath = await join(home, '.lokus', 'plugins', pluginName)
+
+          // Determine icon extension from URL
+          const iconUrl = pluginData.icon_url
+          const ext = iconUrl.includes('.svg') ? 'svg' : 'png'
+          const iconPath = await join(pluginPath, `icon.${ext}`)
+
+          this.logger.info(`Downloading icon from: ${iconUrl}`)
+
+          const iconResponse = await fetch(iconUrl)
+          if (iconResponse.ok) {
+            const iconBlob = await iconResponse.blob()
+            const iconBuffer = await iconBlob.arrayBuffer()
+            await writeFile(iconPath, new Uint8Array(iconBuffer))
+            this.logger.info(`Saved icon to: ${iconPath}`)
+          }
+        } catch (iconError) {
+          // Icon download is optional, don't fail installation
+          this.logger.warn(`Failed to download icon: ${iconError.message}`)
+        }
+      }
+
+      this.logger.info(`Successfully installed ${pluginId} from marketplace`)
 
     } catch (error) {
       this.logger.error(`Failed to install plugin from marketplace:`, error)

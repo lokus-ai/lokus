@@ -16,6 +16,8 @@ use walkdir;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PluginManifest {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>, // Plugin identifier (defaults to name if not provided)
     pub version: String,
     pub description: String,
     pub author: String,
@@ -36,6 +38,23 @@ pub struct PluginInfo {
     pub enabled: bool,
     pub installed_at: String, // ISO timestamp
     pub size: u64, // Size in bytes
+    // Cached marketplace metadata (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slug: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub readme: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub changelog: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub downloads: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rating: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub homepage: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub installed_from: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -43,6 +62,24 @@ pub struct PluginSettings {
     pub enabled_plugins: Vec<String>,
     pub plugin_permissions: HashMap<String, Vec<String>>,
     pub plugin_settings: HashMap<String, JsonValue>,
+}
+
+/// Cached marketplace metadata (saved alongside plugin)
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MarketplaceMetadata {
+    pub slug: Option<String>,
+    pub icon_url: Option<String>,
+    pub description: Option<String>,
+    pub readme: Option<String>,
+    pub changelog: Option<String>,
+    pub author: Option<String>,
+    pub downloads: Option<u64>,
+    pub rating: Option<f64>,
+    pub homepage: Option<String>,
+    pub repository: Option<String>,
+    pub license: Option<String>,
+    pub installed_at: Option<String>,
+    pub installed_from: Option<String>,
 }
 
 // Removed cache for simpler implementation
@@ -164,24 +201,24 @@ pub fn list_plugins(app: AppHandle) -> Result<Vec<PluginInfo>, String> {
 
 fn load_plugin_info(plugin_path: &Path) -> Result<PluginInfo, String> {
     let manifest_path = plugin_path.join("plugin.json");
-    
+
     if !manifest_path.exists() {
         return Err("plugin.json not found".to_string());
     }
-    
+
     let manifest_content = fs::read_to_string(&manifest_path)
         .map_err(|e| format!("Failed to read plugin.json: {}", e))?;
-    
+
     let manifest: PluginManifest = serde_json::from_str(&manifest_content)
         .map_err(|e| format!("Failed to parse plugin.json: {}", e))?;
-    
+
     // Calculate plugin directory size
     let size = calculate_directory_size(plugin_path)?;
-    
+
     // Get installation timestamp from directory metadata
     let metadata = fs::metadata(plugin_path)
         .map_err(|e| format!("Failed to read plugin metadata: {}", e))?;
-    
+
     let installed_at = metadata.created()
         .or_else(|_| metadata.modified())
         .map(|time| {
@@ -191,19 +228,73 @@ fn load_plugin_info(plugin_path: &Path) -> Result<PluginInfo, String> {
                 .to_rfc3339()
         })
         .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
-    
+
+    // Read local plugin files for metadata
+    // Icon: check for icon.png, icon.svg, or icon field in manifest
+    let icon_url = find_plugin_icon(plugin_path);
+
+    // README: read README.md if exists
+    let readme = read_plugin_metadata_file(plugin_path, "README.md");
+
+    // Changelog: read CHANGELOG.md if exists
+    let changelog = read_plugin_metadata_file(plugin_path, "CHANGELOG.md");
+
     Ok(PluginInfo {
         manifest,
         path: plugin_path.to_string_lossy().to_string(),
         enabled: false, // Will be updated from settings
         installed_at,
         size,
+        icon_url,
+        slug: None, // Could be set from plugin.json id field
+        readme,
+        changelog,
+        downloads: None,
+        rating: None,
+        homepage: None,
+        installed_from: None,
     })
+}
+
+/// Find plugin icon file and return as file:// URL or data URL
+fn find_plugin_icon(plugin_path: &Path) -> Option<String> {
+    // Check for common icon files
+    let icon_files = ["icon.png", "icon.svg", "icon.jpg", "icon.jpeg", "logo.png", "logo.svg"];
+
+    // Folders to check for icons
+    let icon_folders = ["", "assets", "dist", "images", "img"];
+
+    for folder in &icon_folders {
+        for icon_file in &icon_files {
+            let icon_path = if folder.is_empty() {
+                plugin_path.join(icon_file)
+            } else {
+                plugin_path.join(folder).join(icon_file)
+            };
+
+            if icon_path.exists() {
+                // Return as file:// URL for local access
+                return Some(format!("file://{}", icon_path.to_string_lossy()));
+            }
+        }
+    }
+
+    None
+}
+
+/// Read a text file from plugin directory (internal helper)
+fn read_plugin_metadata_file(plugin_path: &Path, filename: &str) -> Option<String> {
+    let file_path = plugin_path.join(filename);
+    if file_path.exists() {
+        fs::read_to_string(&file_path).ok()
+    } else {
+        None
+    }
 }
 
 fn calculate_directory_size(dir: &Path) -> Result<u64, String> {
     let mut size = 0;
-    
+
     for entry in walkdir::WalkDir::new(dir) {
         let entry = entry.map_err(|e| format!("Failed to walk directory: {}", e))?;
         if entry.file_type().is_file() {
@@ -211,8 +302,40 @@ fn calculate_directory_size(dir: &Path) -> Result<u64, String> {
             size += metadata.len();
         }
     }
-    
+
     Ok(size)
+}
+
+/// Resolve plugin name/id to actual folder name
+/// Checks: 1) exact folder match, 2) manifest.id match, 3) manifest.name match
+fn resolve_plugin_name(plugins_dir: &Path, name_or_id: &str) -> Result<String, String> {
+    // 1. Try exact folder name match
+    let direct_path = plugins_dir.join(name_or_id);
+    if direct_path.exists() && direct_path.is_dir() {
+        return Ok(name_or_id.to_string());
+    }
+
+    // 2. Search through plugin folders for matching manifest.id or manifest.name
+    if let Ok(entries) = fs::read_dir(plugins_dir) {
+        for entry in entries.flatten() {
+            let folder_path = entry.path();
+            if !folder_path.is_dir() { continue; }
+
+            let manifest_path = folder_path.join("plugin.json");
+            if let Ok(content) = fs::read_to_string(&manifest_path) {
+                if let Ok(manifest) = serde_json::from_str::<PluginManifest>(&content) {
+                    // Match by id or name
+                    if manifest.id.as_deref() == Some(name_or_id) || manifest.name == name_or_id {
+                        if let Some(folder_name) = folder_path.file_name() {
+                            return Ok(folder_name.to_string_lossy().to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Err(format!("Plugin '{}' not found", name_or_id))
 }
 
 // === Plugin Information ===
@@ -440,19 +563,18 @@ fn copy_directory(src: &Path, dest: &Path) -> std::io::Result<()> {
 #[tauri::command]
 pub fn uninstall_plugin(app: AppHandle, name: String) -> Result<(), String> {
     let plugins_dir = PathBuf::from(get_plugins_directory()?);
-    let plugin_path = plugins_dir.join(&name);
-    
-    if !plugin_path.exists() {
-        return Err(format!("Plugin '{}' is not installed", name));
-    }
-    
+
+    // Resolve name/id to actual folder name
+    let resolved_name = resolve_plugin_name(&plugins_dir, &name)?;
+    let plugin_path = plugins_dir.join(&resolved_name);
+
     // Remove plugin from enabled list and clean up settings
-    cleanup_plugin_settings(&app, &name)?;
-    
+    cleanup_plugin_settings(&app, &resolved_name)?;
+
     // Remove plugin directory
     fs::remove_dir_all(&plugin_path)
         .map_err(|e| format!("Failed to remove plugin directory: {}", e))?;
-    
+
     Ok(())
 }
 
@@ -575,8 +697,8 @@ pub fn validate_plugin_manifest(manifest: String) -> Result<ValidationResult, St
 }
 
 fn is_valid_plugin_name(name: &str) -> bool {
-    // Plugin name should be alphanumeric with hyphens and underscores
-    name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') && !name.is_empty()
+    // Plugin name should be alphanumeric with hyphens, underscores, and spaces
+    name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == ' ') && !name.trim().is_empty()
 }
 
 // Enhanced validation functions
@@ -586,24 +708,16 @@ fn validate_version_format(version: &str) -> Result<Version, String> {
 }
 
 fn is_valid_permission(permission: &str) -> bool {
-    // Define valid permissions for the plugin system
-    const VALID_PERMISSIONS: &[&str] = &[
-        "read:files",
-        "write:files",
-        "read:workspace",
-        "write:workspace",
-        "execute:commands",
-        "network:http",
-        "network:https",
-        "ui:editor",
-        "ui:sidebar",
-        "ui:toolbar",
-        "storage:local",
-        "clipboard:read",
-        "clipboard:write",
+    // Define valid permission patterns for the plugin system
+    // Format: category:action or category:subcategory:action
+    const VALID_PREFIXES: &[&str] = &[
+        "read:", "write:", "execute:", "network:", "ui:", "storage:", "clipboard:",
+        "filesystem:", "files:", "workspace:", "editor:", "commands:", "events:",
+        "notifications:", "settings:", "themes:", "sidebar:", "toolbar:", "statusbar:",
     ];
-    
-    VALID_PERMISSIONS.contains(&permission)
+
+    // Check if permission matches any valid prefix pattern
+    VALID_PREFIXES.iter().any(|prefix| permission.starts_with(prefix))
 }
 
 // === Plugin Storage Operations ===
@@ -778,35 +892,24 @@ fn validate_plugin_settings(settings: &PluginSettings) -> Result<(), String> {
 
 #[tauri::command]
 pub fn enable_plugin(app: AppHandle, name: String) -> Result<(), String> {
-    
-    // Verify plugin exists first
     let plugins_dir = PathBuf::from(get_plugins_directory()?);
-    let plugin_path = plugins_dir.join(&name);
-    if !plugin_path.exists() {
-        return Err(format!("Plugin '{}' not found", name));
-    }
-    
+
+    // Resolve name/id to actual folder name
+    let resolved_name = resolve_plugin_name(&plugins_dir, &name)?;
+
     // Use atomic operation for enabling plugin
-    let result = update_plugin_enabled_state(&app, &name, true);
-    match &result {
-        Ok(_) => {},
-        Err(_e) => {},
-    }
-    
-    result
+    update_plugin_enabled_state(&app, &resolved_name, true)
 }
 
 #[tauri::command]
 pub fn disable_plugin(app: AppHandle, name: String) -> Result<(), String> {
-    
+    let plugins_dir = PathBuf::from(get_plugins_directory()?);
+
+    // Resolve name/id to actual folder name
+    let resolved_name = resolve_plugin_name(&plugins_dir, &name)?;
+
     // Use atomic operation for disabling plugin
-    let result = update_plugin_enabled_state(&app, &name, false);
-    match &result {
-        Ok(_) => {},
-        Err(_e) => {},
-    }
-    
-    result
+    update_plugin_enabled_state(&app, &resolved_name, false)
 }
 
 #[tauri::command]

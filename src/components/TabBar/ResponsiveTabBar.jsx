@@ -86,12 +86,20 @@ export function ResponsiveTabBar({
         {hasUnsavedChanges && (
           <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
         )}
-        <button
+        <span
+          role="button"
+          tabIndex={0}
           onClick={(e) => {
             e.stopPropagation();
             onTabClose?.(tab.path);
           }}
-          className="ml-1 hover:bg-white/10 rounded p-1 flex-shrink-0 transition-opacity"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.stopPropagation();
+              onTabClose?.(tab.path);
+            }
+          }}
+          className="ml-1 hover:bg-white/10 rounded p-1 flex-shrink-0 transition-opacity cursor-pointer"
           style={{
             opacity: isActive || isHovered ? 0.7 : 0,
           }}
@@ -101,7 +109,7 @@ export function ResponsiveTabBar({
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
-        </button>
+        </span>
       </button>
     );
   };
@@ -146,17 +154,25 @@ export function ResponsiveTabBar({
                   {isActive && (
                     <span className="text-xs text-app-muted">Active</span>
                   )}
-                  <button
+                  <span
+                    role="button"
+                    tabIndex={0}
                     onClick={(e) => {
                       e.stopPropagation();
                       onTabClose?.(tab.path);
                     }}
-                    className="hover:bg-white/10 rounded p-1"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.stopPropagation();
+                        onTabClose?.(tab.path);
+                      }
+                    }}
+                    className="hover:bg-white/10 rounded p-1 cursor-pointer"
                   >
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
-                  </button>
+                  </span>
                 </div>
               </DropdownMenuItem>
             );

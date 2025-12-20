@@ -271,7 +271,8 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
 }
 
 /* But allow text selection in editor and input areas */
-.ProseMirror, input, textarea, [contenteditable="true"], .editor-content {
+.ProseMirror, input, textarea, [contenteditable="true"], .editor-content,
+.terminal-output, .terminal-line, .output-content, .output-text {
   -webkit-user-select: text;
   -moz-user-select: text;
   -ms-user-select: text;

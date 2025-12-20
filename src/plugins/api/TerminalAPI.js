@@ -1,13 +1,22 @@
 /**
  * Terminal API - Terminal management
+ *
+ * SECURITY: All methods are permission-gated
  */
 import { EventEmitter } from '../../utils/EventEmitter.js';
+import { Disposable } from '../../utils/Disposable.js';
+import { permissionEnforcer } from '../security/PermissionEnforcer.js';
 
 export class TerminalAPI extends EventEmitter {
     constructor(terminalManager) {
         super();
         this.terminalManager = terminalManager;
         this.terminals = new Map();
+
+        // Permission context
+        this.currentPluginId = null;
+        this.grantedPermissions = new Set();
+        this.workspacePath = null;
 
         // Forward manager events to API events
         if (this.terminalManager) {
@@ -26,9 +35,37 @@ export class TerminalAPI extends EventEmitter {
     }
 
     /**
+     * Set permission context for this API instance
+     * @param {string} pluginId - Plugin identifier
+     * @param {Set<string>} permissions - Granted permissions
+     * @param {string} workspacePath - Workspace root path for scoping
+     */
+    _setPermissionContext(pluginId, permissions, workspacePath) {
+        this.currentPluginId = pluginId;
+        this.grantedPermissions = permissions || new Set();
+        this.workspacePath = workspacePath;
+    }
+
+    /**
+     * Require a permission - throws if not granted
+     * @param {string} apiMethod - API method name for logging
+     * @param {string} permission - Required permission
+     */
+    _requirePermission(apiMethod, permission) {
+        permissionEnforcer.requirePermission(
+            this.currentPluginId,
+            this.grantedPermissions,
+            permission,
+            apiMethod
+        );
+    }
+
+    /**
      * Create a new terminal
      */
     createTerminal(options) {
+        this._requirePermission('terminal.createTerminal', 'terminal:create');
+
         const id = `terminal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         // Handle overload: createTerminal(name, shellPath, shellArgs)
@@ -85,6 +122,8 @@ export class TerminalAPI extends EventEmitter {
      * Send text to a terminal
      */
     sendText(terminalId, text, addNewLine = true) {
+        this._requirePermission('terminal.sendText', 'terminal:write');
+
         if (this.terminalManager) {
             this.terminalManager.sendText(terminalId, text, addNewLine);
         }
@@ -94,6 +133,8 @@ export class TerminalAPI extends EventEmitter {
      * Get active terminal
      */
     getActiveTerminal() {
+        this._requirePermission('terminal.getActiveTerminal', 'terminal:read');
+
         if (this.terminalManager && this.terminalManager.getActiveTerminal) {
             return this.terminalManager.getActiveTerminal();
         }
@@ -111,6 +152,8 @@ export class TerminalAPI extends EventEmitter {
      * Get all terminals
      */
     getTerminals() {
+        this._requirePermission('terminal.getTerminals', 'terminal:read');
+
         if (this.terminalManager && this.terminalManager.getTerminals) {
             return this.terminalManager.getTerminals();
         }
@@ -121,21 +164,33 @@ export class TerminalAPI extends EventEmitter {
      * Listen for terminal open events
      */
     onDidOpenTerminal(listener) {
-        return this.on('terminal-opened', listener);
+        this._requirePermission('terminal.onDidOpenTerminal', 'events:listen');
+
+        const handler = (terminal) => listener(terminal);
+        this.on('terminal-opened', handler);
+        return new Disposable(() => this.off('terminal-opened', handler));
     }
 
     /**
      * Listen for terminal close events
      */
     onDidCloseTerminal(listener) {
-        return this.on('terminal-closed', listener);
+        this._requirePermission('terminal.onDidCloseTerminal', 'events:listen');
+
+        const handler = (data) => listener(data);
+        this.on('terminal-closed', handler);
+        return new Disposable(() => this.off('terminal-closed', handler));
     }
 
     /**
      * Listen for active terminal change events
      */
     onDidChangeActiveTerminal(listener) {
-        return this.on('active-terminal-changed', listener);
+        this._requirePermission('terminal.onDidChangeActiveTerminal', 'events:listen');
+
+        const handler = (terminal) => listener(terminal);
+        this.on('active-terminal-changed', handler);
+        return new Disposable(() => this.off('active-terminal-changed', handler));
     }
 
     /**
