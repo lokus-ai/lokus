@@ -49,6 +49,43 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Setup Apple API Key (macOS only)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          mkdir -p ~/private_keys
+          echo "${{ secrets.APPLE_API_KEY_PATH_BASE64 }}" | base64 --decode > ~/private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8
+
+      - name: Install Apple Certificate (macOS only)
+        if: matrix.platform == 'macos-latest'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          # Create variables
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+
+          # Decode certificate
+          echo "$APPLE_CERTIFICATE" | base64 --decode > $CERTIFICATE_PATH
+
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import certificate to keychain
+          security import $CERTIFICATE_PATH -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          # Allow codesign to access keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Verify certificate was installed
+          security find-identity -v -p codesigning $KEYCHAIN_PATH
+
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
         env:
@@ -63,7 +100,7 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_PATH_BASE64: ${{ secrets.APPLE_API_KEY_PATH_BASE64 }}
+          APPLE_API_KEY_PATH: ~/private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8
           # Crash Reporting (Sentry/GlitchTip)
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
           VITE_ENABLE_CRASH_REPORTS: 'true'
@@ -102,3 +139,113 @@ jobs:
             **Full Changelog**: https://github.com/lokus-ai/lokus/compare/${{ github.event.before }}...${{ github.ref_name }}
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
+
+  # App Store Build - Only runs for stable releases (no beta/alpha/rc)
+  release-appstore:
+    runs-on: macos-latest
+    needs: release
+    if: ${{ !contains(github.ref_name, 'beta') && !contains(github.ref_name, 'alpha') && !contains(github.ref_name, 'rc') }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Sync node version and setup cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Install App Store Certificates
+        env:
+          APPLE_APPSTORE_CERTIFICATE: ${{ secrets.APPLE_APPSTORE_CERTIFICATE }}
+          APPLE_INSTALLER_CERTIFICATE: ${{ secrets.APPLE_INSTALLER_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
+        run: |
+          # Create keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import App Store Application certificate
+          echo "$APPLE_APPSTORE_CERTIFICATE" | base64 --decode > $RUNNER_TEMP/appstore.p12
+          security import $RUNNER_TEMP/appstore.p12 -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+
+          # Import Installer certificate
+          echo "$APPLE_INSTALLER_CERTIFICATE" | base64 --decode > $RUNNER_TEMP/installer.p12
+          security import $RUNNER_TEMP/installer.p12 -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Install provisioning profile
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$APPLE_PROVISIONING_PROFILE" | base64 --decode > \
+            ~/Library/MobileDevice/Provisioning\ Profiles/embedded.provisionprofile
+
+          # Verify certificates
+          security find-identity -v -p codesigning $KEYCHAIN_PATH
+
+      - name: Build App Store Version
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          VITE_AUTH_BASE_URL: https://lokusmd.com
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_ENABLE_CRASH_REPORTS: 'true'
+          VITE_SENTRY_ENVIRONMENT: 'production'
+          VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
+          VITE_UMAMI_API_ENDPOINT: ${{ secrets.VITE_UMAMI_API_ENDPOINT }}
+        run: |
+          npm run build
+          cd src-tauri
+          cargo tauri build --config tauri.appstore.conf.json
+
+      - name: Sign and Package for App Store
+        env:
+          APPLE_APPSTORE_SIGNING_IDENTITY: ${{ secrets.APPLE_APPSTORE_SIGNING_IDENTITY }}
+          APPLE_INSTALLER_SIGNING_IDENTITY: ${{ secrets.APPLE_INSTALLER_SIGNING_IDENTITY }}
+        run: |
+          APP_PATH="src-tauri/target/release/bundle/macos/Lokus.app"
+          PKG_PATH="src-tauri/target/release/Lokus-${{ github.ref_name }}-appstore.pkg"
+
+          # Embed provisioning profile
+          cp ~/Library/MobileDevice/Provisioning\ Profiles/embedded.provisionprofile \
+            "$APP_PATH/Contents/embedded.provisionprofile"
+
+          # Sign the app with App Store identity
+          codesign --deep --force --verify --verbose \
+            --sign "$APPLE_APPSTORE_SIGNING_IDENTITY" \
+            --entitlements src-tauri/entitlements-appstore.plist \
+            "$APP_PATH"
+
+          # Create installer package
+          productbuild --sign "$APPLE_INSTALLER_SIGNING_IDENTITY" \
+            --component "$APP_PATH" /Applications \
+            "$PKG_PATH"
+
+          # Verify the package
+          pkgutil --check-signature "$PKG_PATH"
+
+      - name: Upload App Store Package
+        uses: softprops/action-gh-release@v1
+        with:
+          files: src-tauri/target/release/Lokus-${{ github.ref_name }}-appstore.pkg
+          tag_name: ${{ github.ref_name }}

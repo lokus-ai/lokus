@@ -42,7 +42,7 @@
       "frameworks": [],
       "minimumSystemVersion": "10.15",
       "exceptionDomain": "",
-      "signingIdentity": "-",
+      "signingIdentity": null,
       "hardenedRuntime": true,
       "entitlements": "entitlements.plist",
       "dmg": {
