@@ -165,7 +165,7 @@ pub async fn retrieve_git_credentials(
         let mut credential_ptr: *mut CREDENTIALW = std::ptr::null_mut();
 
         unsafe {
-            CredReadW(windows::core::PCWSTR::from_raw(target_name.as_ptr()), CRED_TYPE_GENERIC, Some(0), &mut credential_ptr)
+            CredReadW(windows::core::PCWSTR::from_raw(target_name.as_ptr()), CRED_TYPE_GENERIC, 0, &mut credential_ptr)
                 .map_err(|e| format!("Credentials not found in Credential Manager: {}", e))?;
 
             if credential_ptr.is_null() {
@@ -257,7 +257,7 @@ pub async fn delete_git_credentials(workspace_id: String) -> Result<(), String> 
             .collect();
 
         unsafe {
-            CredDeleteW(windows::core::PCWSTR::from_raw(target_name.as_ptr()), CRED_TYPE_GENERIC, Some(0))
+            CredDeleteW(windows::core::PCWSTR::from_raw(target_name.as_ptr()), CRED_TYPE_GENERIC, 0)
                 .map_err(|e| format!("Failed to delete credentials from Credential Manager: {}", e))?;
         }
     }
@@ -388,7 +388,7 @@ pub async fn retrieve_iroh_keys(
         let mut credential_ptr: *mut CREDENTIALW = std::ptr::null_mut();
 
         unsafe {
-            CredReadW(windows::core::PCWSTR::from_raw(target_name.as_ptr()), CRED_TYPE_GENERIC, Some(0), &mut credential_ptr)
+            CredReadW(windows::core::PCWSTR::from_raw(target_name.as_ptr()), CRED_TYPE_GENERIC, 0, &mut credential_ptr)
                 .map_err(|e| format!("Iroh keys not found in Credential Manager: {}", e))?;
 
             if credential_ptr.is_null() {
@@ -453,7 +453,7 @@ pub async fn delete_iroh_keys(workspace_id: String) -> Result<(), String> {
             .collect();
 
         unsafe {
-            CredDeleteW(windows::core::PCWSTR::from_raw(target_name.as_ptr()), CRED_TYPE_GENERIC, Some(0))
+            CredDeleteW(windows::core::PCWSTR::from_raw(target_name.as_ptr()), CRED_TYPE_GENERIC, 0)
                 .map_err(|e| format!("Failed to delete iroh keys from Credential Manager: {}", e))?;
         }
     }
