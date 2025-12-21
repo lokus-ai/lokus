@@ -231,7 +231,55 @@ export const MathSnippets = Extension.create({
             return false;
           }
 
-          const { text, placeholders } = parseTemplate(snippet.template);
+          // Check if we're inside a math context - either in a math node or typing after an unmatched $
+          let template = snippet.template;
+          const $pos = state.selection.$from;
+          let insideMath = false;
+
+          // Walk up the node tree to check if we're inside a math node
+          for (let d = $pos.depth; d >= 0; d--) {
+            const node = $pos.node(d);
+            if (node.type.name === 'inlineMath' || node.type.name === 'math') {
+              insideMath = true;
+              break;
+            }
+          }
+
+          // Also check if the parent node indicates math context
+          if (!insideMath) {
+            const parent = $pos.parent;
+            if (parent && (parent.type.name === 'inlineMath' || parent.type.name === 'math')) {
+              insideMath = true;
+            }
+          }
+
+          // Check for unmatched $ in the current text node (user is typing inside $...$)
+          if (!insideMath) {
+            const textBefore = $pos.parent.textBetween(0, $pos.parentOffset, null, '\ufffc');
+            // Count $ signs - odd number means we're inside a math expression
+            const dollarCount = (textBefore.match(/\$/g) || []).length;
+            if (dollarCount % 2 === 1) {
+              insideMath = true;
+            }
+          }
+
+          // If inside math, strip the outer $ or $$ delimiters from the template
+          if (insideMath) {
+            // Remove leading $$ or $
+            if (template.startsWith('$$')) {
+              template = template.slice(2);
+            } else if (template.startsWith('$')) {
+              template = template.slice(1);
+            }
+            // Remove trailing $$ or $
+            if (template.endsWith('$$')) {
+              template = template.slice(0, -2);
+            } else if (template.endsWith('$')) {
+              template = template.slice(0, -1);
+            }
+          }
+
+          const { text, placeholders } = parseTemplate(template);
           const insertPos = range.from;
 
           // Delete the trigger text and insert snippet
