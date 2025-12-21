@@ -102,11 +102,15 @@ backoff = { version = "0.4", features = ["tokio"] }
 sysinfo = "0.32"
 # Delta sync
 rdiff = "0.1"
-# Windows crate for credential management
-windows = { version = "0.57", features = ["Win32_Security_Credentials"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.25"
 objc = "0.2"
 objc-foundation = "0.1"
 security-framework = "2.9"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.57", features = ["Win32_Security_Credentials"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+secret-service = "4.0"

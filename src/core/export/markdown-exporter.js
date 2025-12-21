@@ -238,10 +238,16 @@ export class MarkdownExporter {
 
           // Math (KaTeX) and Canvas Links
           case 'span':
-            const dataMath = child.getAttribute('data-math');
+            // Support both data-math (legacy) and data-latex (@aarkue extension)
+            const dataMath = child.getAttribute('data-math') || child.getAttribute('data-latex');
             const dataType2 = child.getAttribute('data-type');
-            if (dataType2 === 'math-inline' && dataMath) {
-              result += `$${dataMath}$`;
+            const isBlockDisplay = child.getAttribute('data-display') === 'yes';
+            if ((dataType2 === 'math-inline' || dataType2 === 'math') && dataMath) {
+              if (isBlockDisplay) {
+                result += `\n$$${dataMath}$$\n\n`;
+              } else {
+                result += `$${dataMath}$`;
+              }
             } else if (dataType2 === 'math-block' && dataMath) {
               result += `\n$$${dataMath}$$\n\n`;
             } else if (dataType2 === 'canvas-link') {
@@ -256,8 +262,9 @@ export class MarkdownExporter {
           // Div and other block elements
           case 'div':
             const mathType = child.getAttribute('data-type');
-            if (mathType === 'math-block') {
-              const mathContent = child.getAttribute('data-math');
+            if (mathType === 'math-block' || mathType === 'math') {
+              // Support both data-math (legacy) and data-latex (@aarkue extension)
+              const mathContent = child.getAttribute('data-math') || child.getAttribute('data-latex');
               if (mathContent) {
                 result += `\n$$${mathContent}$$\n\n`;
               }
