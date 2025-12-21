@@ -2171,6 +2171,7 @@ function WorkspaceWithScope({ path }) {
 
     let path_to_save = activeFile;
     let needsStateUpdate = false;
+    const saveStartTime = performance.now();
 
     try {
       const currentTab = openTabs.find(t => t.path === activeFile);
@@ -2192,6 +2193,11 @@ function WorkspaceWithScope({ path }) {
       }
 
       await invoke("write_file_content", { path: path_to_save, content: contentToSave });
+
+      // Track save performance
+      const saveDuration = performance.now() - saveStartTime;
+      analytics.trackNoteSavePerformance(saveDuration);
+
       setSavedContent(editorContent);
       setUnsavedChanges(prev => {
         const newSet = new Set(prev);
@@ -2502,7 +2508,9 @@ function WorkspaceWithScope({ path }) {
         await invoke("write_file_content", { path: filePath, content: htmlContent });
 
       }
-    } catch { }
+    } catch (error) {
+      analytics.trackExportError('html');
+    }
   }, []);
 
   const handleExportPdf = useCallback(async () => {
@@ -2683,7 +2691,9 @@ function WorkspaceWithScope({ path }) {
           document.body.removeChild(iframe);
         }, 1000);
       }
-    } catch { }
+    } catch (error) {
+      analytics.trackExportError('pdf');
+    }
   }, []);
 
   const handleOpenWorkspace = useCallback(async () => {
@@ -2727,6 +2737,7 @@ function WorkspaceWithScope({ path }) {
       const newFilePath = await invoke("create_file_in_workspace", { workspacePath: targetPath, name: "Untitled.md" });
       handleRefreshFiles();
       handleFileOpen({ path: newFilePath, name: "Untitled.md", is_directory: false });
+      analytics.trackNoteCreation('blank');
     } catch { }
   };
 
@@ -2736,6 +2747,7 @@ function WorkspaceWithScope({ path }) {
       const newCanvasPath = await canvasManager.createCanvas(targetPath, "Untitled Canvas");
       handleRefreshFiles();
       handleFileOpen({ path: newCanvasPath, name: "Untitled Canvas.canvas", is_directory: false });
+      analytics.trackFeatureUsed('canvas');
     } catch { }
   };
 
@@ -2752,6 +2764,7 @@ function WorkspaceWithScope({ path }) {
       const fileName = "New Board.kanban";
       const boardPath = `${targetPath}/${fileName}`;
       handleFileOpen({ path: boardPath, name: fileName, is_directory: false });
+      analytics.trackFeatureUsed('database');
     } catch { }
   };
 
@@ -2770,8 +2783,8 @@ function WorkspaceWithScope({ path }) {
         handleRefreshFiles();
       }
 
-      // Track daily note access
-      analytics.trackDailyNote();
+      // Track daily note feature usage (rate limited)
+      analytics.trackFeatureUsed('daily_notes');
     } catch { }
   };
 
@@ -2792,8 +2805,8 @@ function WorkspaceWithScope({ path }) {
 
       setShowDatePickerModal(false);
 
-      // Track daily note access
-      analytics.trackDailyNote();
+      // Track daily note feature usage (rate limited)
+      analytics.trackFeatureUsed('daily_notes');
     } catch { }
   };
 
@@ -2985,8 +2998,8 @@ function WorkspaceWithScope({ path }) {
     const graphPath = '__graph__';
     const graphName = 'Graph View';
 
-    // Track graph view opening (defaults to 2D)
-    analytics.trackGraphView('2d');
+    // Track graph feature usage (rate limited to once per session)
+    analytics.trackFeatureUsed('graph');
 
     setOpenTabs(prevTabs => {
       const newTabs = prevTabs.filter(t => t.path !== graphPath);
@@ -3003,8 +3016,8 @@ function WorkspaceWithScope({ path }) {
     const basesPath = '__bases__';
     const basesName = 'Bases';
 
-    // Track database view opening (defaults to table view)
-    analytics.trackDatabaseView('table');
+    // Track database feature usage (rate limited to once per session)
+    analytics.trackFeatureUsed('database');
 
     setOpenTabs(prevTabs => {
       const newTabs = prevTabs.filter(t => t.path !== basesPath);

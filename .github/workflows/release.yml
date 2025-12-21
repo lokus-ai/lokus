@@ -64,6 +64,13 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_PATH_BASE64: ${{ secrets.APPLE_API_KEY_PATH_BASE64 }}
+          # Crash Reporting (Sentry/GlitchTip)
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_ENABLE_CRASH_REPORTS: 'true'
+          VITE_SENTRY_ENVIRONMENT: 'production'
+          # Analytics (Umami)
+          VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
+          VITE_UMAMI_API_ENDPOINT: ${{ secrets.VITE_UMAMI_API_ENDPOINT }}
         with:
           includeUpdaterJson: true
           tagName: ${{ github.ref_name }}

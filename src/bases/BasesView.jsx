@@ -100,10 +100,10 @@ const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
     setRefreshKey(prev => prev + 1);
   };
 
-  // Handle view type change with analytics
+  // Handle view type change with analytics (rate limited)
   const handleViewTypeChange = (type) => {
     setViewType(type);
-    analytics.trackDatabaseView(type);
+    analytics.trackFeatureUsed('database');
   };
 
   // Handle filter rules update from BaseTableView

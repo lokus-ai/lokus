@@ -12,6 +12,7 @@ import {
   X
 } from 'lucide-react';
 import { useTemplates, useTemplateProcessor } from '../hooks/useTemplates.js';
+import analytics from '../services/analytics.js';
 import {
   Dialog,
   DialogContent,
@@ -137,6 +138,9 @@ export default function TemplatePicker({
       const result = await processTemplate(template.id, {}, {
         context: {}
       });
+
+      // Track template feature usage (rate limited to once per session)
+      analytics.trackFeatureUsed('templates');
 
       onSelect?.(template, result.result || result.content || result);
       onClose?.();
