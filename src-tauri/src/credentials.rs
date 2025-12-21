@@ -2,11 +2,11 @@ use serde::{Deserialize, Serialize};
 use tauri::command;
 
 /// Encrypted credential storage using OS-specific secure storage
-/// 
+///
 /// This module provides secure credential storage using:
 /// - macOS: Keychain
 /// - Windows: Credential Manager
-/// - Linux: Secret Service (libsecret)
+/// - Linux: Secret Service via keyring crate
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GitCredentials {
@@ -41,41 +41,41 @@ pub async fn store_git_credentials(
     token: String,
 ) -> Result<(), String> {
     let service_name = format!("lokus.git.{}", workspace_id);
-    
+
     #[cfg(target_os = "macos")]
     {
         use security_framework::passwords::*;
-        
+
         // Store username and token separately
         // Store token with service name
         set_generic_password(&service_name, &username, token.as_bytes())
             .map_err(|e| format!("Failed to store credentials in Keychain: {}", e))?;
-        
+
         // Store username in a separate entry
         let username_service = format!("{}.username", service_name);
         set_generic_password(&username_service, "lokus", username.as_bytes())
             .map_err(|e| format!("Failed to store username in Keychain: {}", e))?;
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         use windows::Win32::Security::Credentials::*;
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
-        
+
         // Store in Windows Credential Manager
         let target_name: Vec<u16> = OsStr::new(&service_name)
             .encode_wide()
             .chain(std::iter::once(0))
             .collect();
-        
+
         let username_wide: Vec<u16> = OsStr::new(&username)
             .encode_wide()
             .chain(std::iter::once(0))
             .collect();
-        
+
         let credential_blob = token.as_bytes();
-        
+
         let credential = CREDENTIALW {
             Flags: CRED_FLAGS(0),
             Type: CRED_TYPE_GENERIC,
@@ -90,39 +90,30 @@ pub async fn store_git_credentials(
             TargetAlias: windows::core::PWSTR::null(),
             UserName: windows::core::PWSTR::from_raw(username_wide.as_ptr() as *mut u16),
         };
-        
+
         unsafe {
             CredWriteW(&credential, 0)
                 .map_err(|e| format!("Failed to store credentials in Credential Manager: {}", e))?;
         }
     }
-    
+
     #[cfg(target_os = "linux")]
     {
-        use secret_service::{SecretService, EncryptionType};
-        use std::collections::HashMap;
-        
-        // Store in Linux Secret Service
-        let ss = SecretService::new(EncryptionType::Dh)
-            .map_err(|e| format!("Failed to connect to Secret Service: {}", e))?;
-        
-        let collection = ss.get_default_collection()
-            .map_err(|e| format!("Failed to get default collection: {}", e))?;
-        
-        let mut attributes = HashMap::new();
-        attributes.insert("service", service_name.as_str());
-        attributes.insert("username", username.as_str());
-        
-        collection.create_item(
-            &format!("Lokus Git Credentials for {}", workspace_id),
-            attributes,
-            token.as_bytes(),
-            true, // Replace existing
-            "text/plain",
-        )
-        .map_err(|e| format!("Failed to store credentials: {}", e))?;
+        use keyring::Entry;
+
+        // Store token
+        let entry = Entry::new(&service_name, &username)
+            .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+        entry.set_password(&token)
+            .map_err(|e| format!("Failed to store credentials: {}", e))?;
+
+        // Store username separately for retrieval
+        let username_entry = Entry::new(&format!("{}.username", service_name), "lokus")
+            .map_err(|e| format!("Failed to create username entry: {}", e))?;
+        username_entry.set_password(&username)
+            .map_err(|e| format!("Failed to store username: {}", e))?;
     }
-    
+
     Ok(())
 }
 
@@ -132,65 +123,65 @@ pub async fn retrieve_git_credentials(
     workspace_id: String,
 ) -> Result<GitCredentials, String> {
     let service_name = format!("lokus.git.{}", workspace_id);
-    
+
     #[cfg(target_os = "macos")]
     {
         use security_framework::passwords::*;
-        
+
         // Retrieve password from macOS Keychain
         let password = get_generic_password(&service_name, &"")
             .map_err(|e| format!("Credentials not found in Keychain: {}", e))?;
-        
+
         let token = String::from_utf8(password)
             .map_err(|e| format!("Invalid token encoding: {}", e))?;
-        
+
         // Retrieve username from separate entry
         let username_service = format!("{}.username", workspace_id);
         let username_bytes = get_generic_password(&username_service, "lokus")
             .map_err(|e| format!("Username not found in Keychain: {}", e))?;
-        
+
         let username = String::from_utf8(username_bytes)
             .map_err(|e| format!("Invalid username encoding: {}", e))?;
-        
+
         return Ok(GitCredentials {
             username,
             token,
         });
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         use windows::Win32::Security::Credentials::*;
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
         use std::slice;
-        
+
         // Retrieve from Windows Credential Manager
         let target_name: Vec<u16> = OsStr::new(&service_name)
             .encode_wide()
             .chain(std::iter::once(0))
             .collect();
-        
+
         let mut credential_ptr: *mut CREDENTIALW = std::ptr::null_mut();
-        
+
         unsafe {
             CredReadW(windows::core::PCWSTR::from_raw(target_name.as_ptr()), CRED_TYPE_GENERIC, Some(0), &mut credential_ptr)
                 .map_err(|e| format!("Credentials not found in Credential Manager: {}", e))?;
-            
+
             if credential_ptr.is_null() {
                 return Err("Credentials not found".to_string());
             }
-            
+
             let credential = &*credential_ptr;
-            
+
             let token_bytes = slice::from_raw_parts(
                 credential.CredentialBlob,
                 credential.CredentialBlobSize as usize,
             );
-            
+
             let token = String::from_utf8(token_bytes.to_vec())
                 .map_err(|e| format!("Invalid token encoding: {}", e))?;
-            
+
             // Get username
             let username_ptr = credential.UserName.as_ptr();
             let username = if !username_ptr.is_null() {
@@ -200,54 +191,33 @@ pub async fn retrieve_git_credentials(
             } else {
                 String::new()
             };
-            
-            // Free credential  
+
+            // Free credential
             CredFree(credential_ptr as *const _);
-            
+
             return Ok(GitCredentials {
                 username,
                 token,
             });
         }
     }
-    
+
     #[cfg(target_os = "linux")]
     {
-        use secret_service::{SecretService, EncryptionType};
-        use std::collections::HashMap;
-        
-        // Retrieve from Linux Secret Service
-        let ss = SecretService::new(EncryptionType::Dh)
-            .map_err(|e| format!("Failed to connect to Secret Service: {}", e))?;
-        
-        let collection = ss.get_default_collection()
-            .map_err(|e| format!("Failed to get default collection: {}", e))?;
-        
-        let mut search_attributes = HashMap::new();
-        search_attributes.insert("service", service_name.as_str());
-        
-        let items = collection.search_items(search_attributes)
-            .map_err(|e| format!("Failed to search credentials: {}", e))?;
-        
-        if items.is_empty() {
-            return Err("Credentials not found".to_string());
-        }
-        
-        let item = &items[0];
-        let secret = item.get_secret()
-            .map_err(|e| format!("Failed to retrieve secret: {}", e))?;
-        
-        let token = String::from_utf8(secret)
-            .map_err(|e| format!("Invalid token encoding: {}", e))?;
-        
-        // Get username from attributes
-        let attributes = item.get_attributes()
-            .map_err(|e| format!("Failed to get attributes: {}", e))?;
-        
-        let username = attributes.get("username")
-            .ok_or("Username not found in attributes")?
-            .to_string();
-        
+        use keyring::Entry;
+
+        // Retrieve username first
+        let username_entry = Entry::new(&format!("{}.username", service_name), "lokus")
+            .map_err(|e| format!("Failed to access keyring: {}", e))?;
+        let username = username_entry.get_password()
+            .map_err(|e| format!("Username not found: {}", e))?;
+
+        // Retrieve token
+        let entry = Entry::new(&service_name, &username)
+            .map_err(|e| format!("Failed to access keyring: {}", e))?;
+        let token = entry.get_password()
+            .map_err(|e| format!("Credentials not found: {}", e))?;
+
         return Ok(GitCredentials {
             username,
             token,
@@ -259,61 +229,54 @@ pub async fn retrieve_git_credentials(
 #[command]
 pub async fn delete_git_credentials(workspace_id: String) -> Result<(), String> {
     let service_name = format!("lokus.git.{}", workspace_id);
-    
+
     #[cfg(target_os = "macos")]
     {
         use security_framework::passwords::*;
-        
+
         // Delete token from macOS Keychain
         delete_generic_password(&service_name, "")
             .map_err(|e| format!("Failed to delete credentials from Keychain: {}", e))?;
-        
+
         // Delete username entry
         let username_service = format!("{}.username", workspace_id);
         let _ = delete_generic_password(&username_service, "lokus");
         // Ignore error if username entry doesn't exist
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         use windows::Win32::Security::Credentials::*;
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
-        
+
         // Delete from Windows Credential Manager
         let target_name: Vec<u16> = OsStr::new(&service_name)
             .encode_wide()
             .chain(std::iter::once(0))
             .collect();
-        
+
         unsafe {
             CredDeleteW(windows::core::PCWSTR::from_raw(target_name.as_ptr()), CRED_TYPE_GENERIC, Some(0))
                 .map_err(|e| format!("Failed to delete credentials from Credential Manager: {}", e))?;
         }
     }
-    
+
     #[cfg(target_os = "linux")]
     {
-        use secret_service::{SecretService, EncryptionType};
-        use std::collections::HashMap;
+        use keyring::Entry;
 
-        // Delete from Linux Secret Service
-        let ss = SecretService::new(EncryptionType::Dh)
-            .map_err(|e| format!("Failed to connect to Secret Service: {}", e))?;
+        // Try to get username first to delete the token entry
+        let username_entry = Entry::new(&format!("{}.username", service_name), "lokus")
+            .map_err(|e| format!("Failed to access keyring: {}", e))?;
 
-        let collection = ss.get_default_collection()
-            .map_err(|e| format!("Failed to get default collection: {}", e))?;
-
-        let mut search_attributes = HashMap::new();
-        search_attributes.insert("service", service_name.as_str());
-
-        let items = collection.search_items(search_attributes)
-            .map_err(|e| format!("Failed to search credentials: {}", e))?;
-
-        for item in items {
-            item.delete()
-                .map_err(|e| format!("Failed to delete credential: {}", e))?;
+        if let Ok(username) = username_entry.get_password() {
+            let entry = Entry::new(&service_name, &username)
+                .map_err(|e| format!("Failed to access keyring: {}", e))?;
+            let _ = entry.delete_credential(); // Ignore error
         }
+
+        let _ = username_entry.delete_credential(); // Ignore error
     }
 
     Ok(())
@@ -376,28 +339,16 @@ pub async fn store_iroh_keys(
 
     #[cfg(target_os = "linux")]
     {
-        use secret_service::{SecretService, EncryptionType};
-        use std::collections::HashMap;
+        use keyring::Entry;
+        use base64::Engine;
 
-        // Store in Linux Secret Service
-        let ss = SecretService::new(EncryptionType::Dh)
-            .map_err(|e| format!("Failed to connect to Secret Service: {}", e))?;
+        // Store as base64 since keyring stores strings
+        let key_b64 = base64::engine::general_purpose::STANDARD.encode(&private_key);
 
-        let collection = ss.get_default_collection()
-            .map_err(|e| format!("Failed to get default collection: {}", e))?;
-
-        let mut attributes = HashMap::new();
-        attributes.insert("service", service_name.as_str());
-        attributes.insert("key-type", "iroh-key");
-
-        collection.create_item(
-            &format!("Lokus Iroh Keys for {}", workspace_id),
-            attributes,
-            &private_key,
-            true, // Replace existing
-            "application/octet-stream",
-        )
-        .map_err(|e| format!("Failed to store iroh keys: {}", e))?;
+        let entry = Entry::new(&service_name, "iroh-key")
+            .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+        entry.set_password(&key_b64)
+            .map_err(|e| format!("Failed to store iroh keys: {}", e))?;
     }
 
     Ok(())
@@ -460,31 +411,18 @@ pub async fn retrieve_iroh_keys(
 
     #[cfg(target_os = "linux")]
     {
-        use secret_service::{SecretService, EncryptionType};
-        use std::collections::HashMap;
+        use keyring::Entry;
+        use base64::Engine;
 
-        // Retrieve from Linux Secret Service
-        let ss = SecretService::new(EncryptionType::Dh)
-            .map_err(|e| format!("Failed to connect to Secret Service: {}", e))?;
+        let entry = Entry::new(&service_name, "iroh-key")
+            .map_err(|e| format!("Failed to access keyring: {}", e))?;
+        let key_b64 = entry.get_password()
+            .map_err(|e| format!("Iroh keys not found: {}", e))?;
 
-        let collection = ss.get_default_collection()
-            .map_err(|e| format!("Failed to get default collection: {}", e))?;
+        let key_bytes = base64::engine::general_purpose::STANDARD.decode(&key_b64)
+            .map_err(|e| format!("Invalid key encoding: {}", e))?;
 
-        let mut search_attributes = HashMap::new();
-        search_attributes.insert("service", service_name.as_str());
-
-        let items = collection.search_items(search_attributes)
-            .map_err(|e| format!("Failed to search iroh keys: {}", e))?;
-
-        if items.is_empty() {
-            return Err("Iroh keys not found".to_string());
-        }
-
-        let item = &items[0];
-        let secret = item.get_secret()
-            .map_err(|e| format!("Failed to retrieve iroh keys: {}", e))?;
-
-        return Ok(secret);
+        return Ok(key_bytes);
     }
 }
 
@@ -522,26 +460,11 @@ pub async fn delete_iroh_keys(workspace_id: String) -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     {
-        use secret_service::{SecretService, EncryptionType};
-        use std::collections::HashMap;
+        use keyring::Entry;
 
-        // Delete from Linux Secret Service
-        let ss = SecretService::new(EncryptionType::Dh)
-            .map_err(|e| format!("Failed to connect to Secret Service: {}", e))?;
-
-        let collection = ss.get_default_collection()
-            .map_err(|e| format!("Failed to get default collection: {}", e))?;
-
-        let mut search_attributes = HashMap::new();
-        search_attributes.insert("service", service_name.as_str());
-
-        let items = collection.search_items(search_attributes)
-            .map_err(|e| format!("Failed to search iroh keys: {}", e))?;
-
-        for item in items {
-            item.delete()
-                .map_err(|e| format!("Failed to delete iroh key: {}", e))?;
-        }
+        let entry = Entry::new(&service_name, "iroh-key")
+            .map_err(|e| format!("Failed to access keyring: {}", e))?;
+        let _ = entry.delete_credential(); // Ignore error if not found
     }
 
     Ok(())
