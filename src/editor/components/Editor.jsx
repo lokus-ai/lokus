@@ -38,6 +38,7 @@ import CodeBlockIndent from "../extensions/CodeBlockIndent.js";
 import Callout from "../extensions/Callout.js";
 import Folding from "../extensions/Folding.js";
 import SymbolShortcuts from "../extensions/SymbolShortcuts.js";
+import MathSnippets from "../extensions/MathSnippets.js";
 import MermaidDiagram from "../extensions/MermaidDiagram.jsx";
 import CanvasLink from '../extensions/CanvasLink.js';
 import PluginCompletion from '../extensions/PluginCompletion.js';
@@ -284,6 +285,10 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
 
     // Section folding for headings
     exts.push(Folding);
+
+    // Math snippets (:mat2: → matrix, :frac: → fraction, etc.)
+    // Must come before SymbolShortcuts to take precedence
+    exts.push(MathSnippets);
 
     // Symbol shortcuts (:theta: → θ, :arrow: → →, etc.)
     exts.push(SymbolShortcuts.configure({ customSymbols }));

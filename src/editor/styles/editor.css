@@ -1370,3 +1370,62 @@ ul[data-type="taskList"] li.task-started {
   }
 }
 
+/* ============================================
+   Math Snippets - Placeholder Styling
+   ============================================ */
+
+/* Base placeholder style */
+.math-snippet-placeholder {
+  background: rgba(var(--accent), 0.15);
+  border-radius: 2px;
+  padding: 1px 2px;
+  margin: 0 1px;
+  transition: background 0.15s ease;
+}
+
+/* Active placeholder - highlighted */
+.math-snippet-placeholder-active {
+  background: rgba(var(--accent), 0.35);
+  outline: 1px solid rgba(var(--accent), 0.5);
+  outline-offset: 0;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .math-snippet-placeholder {
+    background: rgba(var(--accent), 0.2);
+  }
+
+  .math-snippet-placeholder-active {
+    background: rgba(var(--accent), 0.4);
+    outline-color: rgba(var(--accent), 0.6);
+  }
+}
+
+/* Hint text for snippet mode */
+.math-snippet-hint {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(var(--surface), 0.95);
+  border: 1px solid rgba(var(--border), 0.5);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: rgba(var(--text), 0.7);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.math-snippet-hint kbd {
+  background: rgba(var(--text), 0.1);
+  border: 1px solid rgba(var(--border), 0.3);
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  margin: 0 2px;
+}
+
