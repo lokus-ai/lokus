@@ -242,14 +242,16 @@ export class MarkdownExporter {
             const dataMath = child.getAttribute('data-math') || child.getAttribute('data-latex');
             const dataType2 = child.getAttribute('data-type');
             const isBlockDisplay = child.getAttribute('data-display') === 'yes';
-            if ((dataType2 === 'math-inline' || dataType2 === 'math') && dataMath) {
-              if (isBlockDisplay) {
+            // Check for all math type variations:
+            // - 'inlineMath' from @aarkue/tiptap-math-extension
+            // - 'math-inline', 'math' for legacy/custom extensions
+            const isMathType = ['inlineMath', 'math-inline', 'math', 'math-block'].includes(dataType2);
+            if (isMathType && dataMath) {
+              if (isBlockDisplay || dataType2 === 'math-block') {
                 result += `\n$$${dataMath}$$\n\n`;
               } else {
                 result += `$${dataMath}$`;
               }
-            } else if (dataType2 === 'math-block' && dataMath) {
-              result += `\n$$${dataMath}$$\n\n`;
             } else if (dataType2 === 'canvas-link') {
               // Handle canvas links (now using span instead of a)
               const canvasName = child.textContent.trim();
@@ -262,7 +264,9 @@ export class MarkdownExporter {
           // Div and other block elements
           case 'div':
             const mathType = child.getAttribute('data-type');
-            if (mathType === 'math-block' || mathType === 'math') {
+            // Check for all math type variations including @aarkue extension
+            const isDivMathType = ['inlineMath', 'math-block', 'math', 'math-inline'].includes(mathType);
+            if (isDivMathType) {
               // Support both data-math (legacy) and data-latex (@aarkue extension)
               const mathContent = child.getAttribute('data-math') || child.getAttribute('data-latex');
               if (mathContent) {

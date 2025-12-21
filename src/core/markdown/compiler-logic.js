@@ -128,6 +128,55 @@ export class MarkdownCompiler {
   }
 
   /**
+   * Convert markdown-it-texmath output to TipTap math extension format
+   * markdown-it-texmath outputs: <eq><span class="katex">...<annotation>latex</annotation>...</span></eq>
+   * TipTap expects: <span data-type="inlineMath" data-latex="latex">$latex$</span>
+   */
+  convertMathFormat(html) {
+    if (!html.includes('<eq>') && !html.includes('<section>')) {
+      return html
+    }
+
+    // Convert inline math: <eq>...</eq>
+    // Extract latex from <annotation encoding="application/x-tex">...</annotation>
+    html = html.replace(/<eq>([\s\S]*?)<\/eq>/g, (match, content) => {
+      // Extract latex from annotation tag
+      const annotationMatch = content.match(/<annotation[^>]*>([^<]*)<\/annotation>/)
+      if (annotationMatch) {
+        const latex = annotationMatch[1]
+        // Return TipTap-compatible format
+        return `<span data-type="inlineMath" data-latex="${this.escapeHtmlAttr(latex)}">$${latex}$</span>`
+      }
+      // Fallback: return original if no annotation found
+      return match
+    })
+
+    // Convert block math: <section><eqn>...</eqn></section>
+    html = html.replace(/<section[^>]*><eqn>([\s\S]*?)<\/eqn><\/section>/g, (match, content) => {
+      const annotationMatch = content.match(/<annotation[^>]*>([^<]*)<\/annotation>/)
+      if (annotationMatch) {
+        const latex = annotationMatch[1]
+        return `<span data-type="inlineMath" data-latex="${this.escapeHtmlAttr(latex)}" data-display="yes">$$${latex}$$</span>`
+      }
+      return match
+    })
+
+    return html
+  }
+
+  /**
+   * Escape special characters for HTML attributes
+   */
+  escapeHtmlAttr(str) {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+  }
+
+  /**
    * Fix malformed tables that are missing separator rows
    * Detects tables without | --- | separators and adds them
    */
@@ -224,7 +273,12 @@ export class MarkdownCompiler {
         }
       }
 
-      const html = this.md.render(normalizedText)
+      let html = this.md.render(normalizedText)
+
+      // Convert markdown-it-texmath output to TipTap math extension format
+      // markdown-it-texmath outputs: <eq><span class="katex">...<annotation>latex</annotation>...</span></eq>
+      // TipTap expects: <span data-type="inlineMath" data-latex="latex">$latex$</span>
+      html = this.convertMathFormat(html)
 
       // Debug: Check if HTML contains table
       if (hasTableSyntax) {
