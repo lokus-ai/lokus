@@ -30,6 +30,7 @@ import mcpClient from "./core/mcp/client.js";
 // Guard window access in non-Tauri environments
 import { emit } from "@tauri-apps/api/event";
 import * as Sentry from "@sentry/react";
+import analytics from "./services/analytics.js";
 
 // Simple loading spinner for Suspense fallback
 const LoadingFallback = () => (
@@ -79,10 +80,18 @@ function App() {
     }
   }, [isPrefsWindow, activePath]);
 
-  // Initialize markdown syntax config and editor config cache on app startup
+  // Initialize markdown syntax config, editor config cache, and analytics on app startup
   useEffect(() => {
+    const startTime = performance.now();
+
     markdownSyntaxConfig.init();
     editorConfigCache.init(); // Pre-load editor config to eliminate "Loading editor..." delay
+
+    // Initialize analytics and track startup time
+    analytics.initialize().then(() => {
+      const startupTime = performance.now() - startTime;
+      analytics.trackStartupTime(startupTime);
+    });
 
     // Check for updates 3 seconds after startup
     const updateTimer = setTimeout(() => {

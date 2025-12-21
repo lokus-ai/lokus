@@ -7,6 +7,7 @@ import { configManager } from "../config/ConfigManager.js";
 import { filesystemManager } from "../fs/FilesystemManager.js";
 import { PluginFileWatcher } from "./PluginFileWatcher.js";
 import { pluginEventBridge } from "../../plugins/PluginEventBridge.js";
+import analytics from "../../services/analytics.js";
 
 /**
  * PluginStateAdapter - UI State Management Facade for Plugin System
@@ -455,6 +456,9 @@ class PluginStateAdapter {
         const instance = this.pluginInstances.get(pluginId);
         if (instance && typeof instance.activate === 'function') {
           await instance.activate();
+
+          // Track plugin activation
+          analytics.trackPluginActivation(pluginId);
 
           // Emit activation event for UI components (like StatusBar)
           try {

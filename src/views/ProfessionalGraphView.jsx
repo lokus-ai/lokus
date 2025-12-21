@@ -634,8 +634,8 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     setViewMode(mode);
     setIsLayoutRunning(false); // Reset layout when switching modes
 
-    // Track graph view mode change
-    analytics.trackGraphView(mode);
+    // Track graph feature usage (rate limited to once per session)
+    analytics.trackFeatureUsed('graph');
   }, []);
 
   const handleLayoutControl = useCallback((action) => {

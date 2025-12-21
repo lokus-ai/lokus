@@ -43,6 +43,7 @@ import { saveEmailAsNote } from '../utils/emailToNote.js'
 import { invoke } from '@tauri-apps/api/core'
 import { useFolderScope } from '../contexts/FolderScopeContext'
 import { useBases } from '../bases/BasesContext.jsx'
+import analytics from '../services/analytics.js'
 import FolderSelector from './FolderSelector.jsx'
 import { useCommands, useCommandExecute } from '../hooks/useCommands.js'
 
@@ -466,6 +467,9 @@ export default function CommandPalette({
       const result = await processTemplate(template.id, {}, {
         context: {}
       })
+
+      // Track template feature usage (rate limited to once per session)
+      analytics.trackFeatureUsed('templates')
 
       // Call onShowTemplatePicker with processed content
       if (onShowTemplatePicker) {

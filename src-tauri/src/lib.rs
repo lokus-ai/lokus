@@ -759,7 +759,8 @@ pub fn run() {
         let payload = event.payload();
         let _ = app_handle_deep_link.emit("deep-link-received", payload);
         
-        // If this is a plugin-dev link, try to open devtools
+        // If this is a plugin-dev link, try to open devtools (debug only)
+        #[cfg(debug_assertions)]
         if payload.contains("lokus://plugin-dev") {
           if let Some(window) = app_handle_deep_link.get_webview_window("main") {
             window.open_devtools();

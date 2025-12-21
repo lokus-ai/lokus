@@ -15,6 +15,20 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { writeTextFile, BaseDirectory, exists, mkdir } from '@tauri-apps/plugin-fs';
+
+// File logger for production debugging
+const logToFile = async (message, data = {}) => {
+  try {
+    const timestamp = new Date().toISOString();
+    const logLine = `[${timestamp}] ${message} ${JSON.stringify(data)}\n`;
+    // Use AppData directory (Application Support on macOS) which we know exists
+    await writeTextFile('analytics.log', logLine, { baseDir: BaseDirectory.AppData, append: true });
+  } catch (e) {
+    // Fallback to console if file logging fails
+    console.log('[Analytics-FileLog-Error]', e.message, message, data);
+  }
+};
 
 class AnalyticsService {
   constructor() {
@@ -23,6 +37,9 @@ class AnalyticsService {
     this.isDevelopment = import.meta.env.DEV;
     this.websiteId = import.meta.env.VITE_UMAMI_WEBSITE_ID || '';
     this.apiEndpoint = import.meta.env.VITE_UMAMI_API_ENDPOINT || 'https://analytics.lokusmd.com';
+
+    // Session-based rate limiting - track what's been sent this session
+    this.sessionEvents = new Set();
 
     // Performance metrics cache
     this.performanceMetrics = {
@@ -74,67 +91,98 @@ class AnalyticsService {
    * @returns {Promise<void>}
    */
   async initialize() {
+    const initData = {
+      initialized: this.initialized,
+      enabled: this.enabled,
+      websiteId: this.websiteId,
+      isDev: this.isDevelopment
+    };
+    console.log('[Analytics] Initializing...', initData);
+    await logToFile('Initializing analytics', initData);
+
     if (this.initialized) {
+      console.log('[Analytics] Already initialized, skipping');
+      await logToFile('Already initialized, skipping');
       return;
     }
 
     // TEMPORARY: Allow development mode for testing dev-analytics
     if (this.isDevelopment) {
+      console.log('[Analytics] Development mode - continuing initialization');
+      await logToFile('Development mode - continuing initialization');
       // Don't return - continue initialization
     }
 
     // Don't initialize if user has opted out
     if (!this.enabled) {
+      console.log('[Analytics] User opted out, skipping');
+      await logToFile('User opted out, skipping');
       return;
     }
 
     // Check if website ID is configured
     if (!this.websiteId) {
+      console.log('[Analytics] No website ID configured, skipping');
+      await logToFile('No website ID configured, skipping');
       return;
     }
 
     try {
-      // Load Umami tracking script dynamically
-      await this.loadUmamiScript();
+      // No need to load script - we use direct API calls
+      console.log('[Analytics] Using direct API mode');
+      await logToFile('Using direct API mode', { endpoint: this.apiEndpoint });
 
       this.initialized = true;
-
-      // Track app startup
-      this.trackEvent('app_startup', {
-        version: await this.getAppVersion(),
-        platform: await this.getPlatform()
-      });
-    } catch { }
+      console.log('[Analytics] Initialized successfully!');
+      await logToFile('Initialized successfully!');
+      // Note: app_startup is tracked from App.jsx with actual timing data
+    } catch (err) {
+      console.error('[Analytics] Failed to initialize:', err);
+      await logToFile('Failed to initialize', { error: err.message });
+    }
   }
 
   /**
-   * Load Umami tracking script
+   * Send event directly to Umami API (no script loading needed)
    * @private
+   * @param {string} eventName - Event name
+   * @param {Object} eventData - Event data
    * @returns {Promise<void>}
    */
-  loadUmamiScript() {
-    return new Promise((resolve, reject) => {
-      // Check if already loaded
-      if (window.umami) {
-        resolve();
-        return;
+  async sendToUmamiAPI(eventName, eventData = {}) {
+    try {
+      const payload = {
+        type: 'event',
+        payload: {
+          hostname: 'lokus.app',
+          language: navigator.language || 'en-US',
+          referrer: '',
+          screen: `${window.screen.width}x${window.screen.height}`,
+          title: 'Lokus',
+          url: '/',
+          website: this.websiteId,
+          name: eventName,
+          data: eventData
+        }
+      };
+
+      const response = await fetch(`${this.apiEndpoint}/api/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Umami API error: ${response.status}`);
       }
 
-      const script = document.createElement('script');
-      script.async = true;
-      script.defer = true;
-      // Add cache-busting parameter to bypass Cloudflare caching issues
-      script.src = `${this.apiEndpoint}/script.js?v=${Date.now()}`;
-      script.setAttribute('data-website-id', this.websiteId);
-      script.setAttribute('data-domains', 'lokus.app'); // Restrict to Lokus app
-      script.setAttribute('data-do-not-track', 'true'); // Respect DNT
-      script.setAttribute('data-cache', 'true'); // Enable caching
-
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error('Failed to load Umami script'));
-
-      document.head.appendChild(script);
-    });
+      await logToFile('Sent to Umami API successfully', { eventName, status: response.status });
+    } catch (err) {
+      await logToFile('Umami API error', { eventName, error: err.message });
+      throw err;
+    }
   }
 
   /**
@@ -174,7 +222,16 @@ class AnalyticsService {
    * @param {Object} [eventData] - Additional event data (must not contain PII)
    */
   trackEvent(eventName, eventData = {}) {
+    const eventInfo = {
+      isEnabled: this.isEnabled(),
+      initialized: this.initialized
+    };
+    console.log('[Analytics] trackEvent called:', eventName, eventData, eventInfo);
+    logToFile('trackEvent called', { eventName, eventData, ...eventInfo });
+
     if (!this.isEnabled()) {
+      console.log('[Analytics] Not enabled, skipping event');
+      logToFile('Not enabled, skipping event', { eventName });
       return;
     }
 
@@ -182,11 +239,16 @@ class AnalyticsService {
       // Sanitize event data to ensure no PII
       const sanitizedData = this.sanitizeEventData(eventData);
 
-      // Send event to Umami
-      if (window.umami) {
-        window.umami.track(eventName, sanitizedData);
-      }
-    } catch { }
+      // Send event directly to Umami API
+      console.log('[Analytics] Sending to Umami API:', eventName, sanitizedData);
+      logToFile('Sending to Umami API', { eventName, sanitizedData });
+      this.sendToUmamiAPI(eventName, sanitizedData).catch(err => {
+        console.error('[Analytics] Umami API error:', err);
+      });
+    } catch (err) {
+      console.error('[Analytics] Error tracking event:', err);
+      logToFile('Error tracking event', { eventName, error: err.message });
+    }
   }
 
   /**
@@ -214,6 +276,38 @@ class AnalyticsService {
     }
 
     return sanitized;
+  }
+
+  // ===========================================
+  // SESSION-BASED RATE LIMITING
+  // ===========================================
+
+  /**
+   * Track an event only once per session (rate limiting)
+   * @param {string} eventName - Event name
+   * @param {Object} eventData - Event data
+   */
+  trackOncePerSession(eventName, eventData = {}) {
+    if (this.sessionEvents.has(eventName)) {
+      return; // Already tracked this session
+    }
+    this.sessionEvents.add(eventName);
+    this.trackEvent(eventName, eventData);
+  }
+
+  /**
+   * Track feature usage (rate limited to once per session per feature)
+   * @param {string} featureName - Feature name (canvas, graph, templates, search, daily_notes)
+   */
+  trackFeatureUsed(featureName) {
+    const eventKey = `feature_${featureName}`;
+    if (this.sessionEvents.has(eventKey)) {
+      return; // Already tracked this feature this session
+    }
+    this.sessionEvents.add(eventKey);
+    this.trackEvent('feature_used', {
+      feature: featureName
+    });
   }
 
   // ===========================================
@@ -344,7 +438,8 @@ class AnalyticsService {
    */
   trackStartupTime(duration) {
     this.performanceMetrics.startupTime = duration;
-    this.trackEvent('app_startup_time', {
+    // Consolidate into single app_startup event with duration
+    this.trackOncePerSession('app_startup', {
       feature: 'performance',
       action: 'startup',
       duration: Math.round(duration)
