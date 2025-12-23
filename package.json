@@ -1,7 +1,7 @@
 {
   "name": "lokus",
   "private": true,
-  "version": "1.0.0-beta.3",
+  "version": "1.0.0",
   "description": "Local-first markdown note-taking app with database views, 3D knowledge graphs, AI integration, and blazing-fast search. Built with React and Rust (Tauri). Obsidian alternative with 100x faster performance.",
   "keywords": [
     "markdown",
