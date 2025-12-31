@@ -221,8 +221,7 @@ export class WorkspaceManager {
       join(homedir(), 'Documents'),
       join(homedir(), 'Documents', 'Lokus-Workspace'),
       join(homedir(), 'Documents', 'Lokus Workspace'),
-      join(homedir()),
-      '/Users/pratham/Programming/Lokud Dir/Lokus/Lokus-Full-Scale-Test'
+      join(homedir())
     ];
 
     const foundWorkspaces = [];
@@ -247,8 +246,7 @@ export class WorkspaceManager {
     const searchDirs = [
       homedir(),
       join(homedir(), 'Documents'),
-      join(homedir(), 'Programming'),
-      '/Users/pratham/Programming/Lokud Dir/Lokus'
+      join(homedir(), 'Programming')
     ];
 
     for (const searchDir of searchDirs) {
