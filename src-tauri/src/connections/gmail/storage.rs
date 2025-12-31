@@ -5,7 +5,7 @@ use serde_json;
 
 const GMAIL_TOKEN_KEY: &str = "lokus_gmail_token";
 const GMAIL_PROFILE_KEY: &str = "lokus_gmail_profile";
-const SERVICE_NAME: &str = "com.pratham.lokus.gmail";
+const SERVICE_NAME: &str = "com.lokus.app.gmail";
 
 pub struct GmailStorage;
 

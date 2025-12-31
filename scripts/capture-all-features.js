@@ -87,7 +87,9 @@ async function captureAllFeatures() {
       // Try to find and use the workspace path input
       const pathInput = page.locator('input[type="text"]').first();
       if (await pathInput.count() > 0) {
-        await pathInput.fill('/Users/pratham/Desktop/My Knowledge workspace');
+        // Use environment variable or default test workspace path
+        const testWorkspacePath = process.env.TEST_WORKSPACE_PATH || './test-workspace';
+        await pathInput.fill(testWorkspacePath);
         await page.waitForTimeout(1000);
 
         const confirmButton = page.locator('button:has-text("Open")').or(
