@@ -1,0 +1,56 @@
+# Fedora-based Dockerfile for building AppImage
+# This ensures compatibility with modern Linux distributions (Fedora 41+, etc.)
+FROM fedora:41
+
+# Install system dependencies
+RUN dnf update -y && dnf install -y \
+    # Build essentials
+    gcc \
+    gcc-c++ \
+    make \
+    cmake \
+    pkg-config \
+    # GTK and WebKit dependencies
+    gtk3-devel \
+    webkit2gtk4.1-devel \
+    libappindicator-gtk3-devel \
+    librsvg2-devel \
+    # AppImage tools
+    patchelf \
+    file \
+    # Additional dependencies
+    openssl-devel \
+    curl \
+    wget \
+    git \
+    # For AppImage creation
+    fuse \
+    fuse-libs \
+    libxcb \
+    # Audio support
+    alsa-lib-devel \
+    # D-Bus
+    dbus-devel \
+    # Node.js
+    nodejs \
+    npm \
+    && dnf clean all
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install Tauri CLI
+RUN npm install -g @tauri-apps/cli@latest
+
+# Set working directory
+WORKDIR /app
+
+# Copy the project files
+COPY . .
+
+# Install Node.js dependencies
+RUN npm ci
+
+# Build command will be run separately
+CMD ["bash"]

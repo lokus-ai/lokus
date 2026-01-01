@@ -11,21 +11,15 @@ permissions:
 jobs:
   release:
     runs-on: ${{ matrix.platform }}
-    
+
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-latest, ubuntu-22.04, windows-latest]
-        
+        platform: [macos-latest, windows-latest]
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
       - name: Rust setup
         uses: dtolnay/rust-toolchain@stable
@@ -139,6 +133,78 @@ jobs:
             **Full Changelog**: https://github.com/lokus-ai/lokus/compare/${{ github.event.before }}...${{ github.ref_name }}
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
+
+  # Linux Build - Uses Fedora container for modern distro compatibility
+  release-linux:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:41
+      options: --privileged
+
+    steps:
+      - name: Install system dependencies
+        run: |
+          dnf update -y
+          dnf install -y \
+            gcc gcc-c++ make cmake pkg-config \
+            gtk3-devel webkit2gtk4.1-devel \
+            libappindicator-gtk3-devel librsvg2-devel \
+            patchelf file openssl-devel curl wget git \
+            fuse fuse-libs libxcb alsa-lib-devel dbus-devel \
+            nodejs npm squashfs-tools
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli@latest
+
+      - name: Build frontend
+        run: npm run build
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          VITE_AUTH_BASE_URL: https://lokusmd.com
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_ENABLE_CRASH_REPORTS: 'true'
+          VITE_SENTRY_ENVIRONMENT: 'production'
+          VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
+          VITE_UMAMI_API_ENDPOINT: ${{ secrets.VITE_UMAMI_API_ENDPOINT }}
+
+      - name: Build Tauri app
+        run: |
+          source $HOME/.cargo/env
+          NO_STRIP=true cargo tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        working-directory: ./
+
+      - name: List build artifacts
+        run: |
+          echo "=== Bundle contents ==="
+          find src-tauri/target/release/bundle -type f -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" 2>/dev/null || true
+          ls -la src-tauri/target/release/bundle/ || true
+
+      - name: Upload Linux artifacts to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/appimage/*.AppImage.sig
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/rpm/*.rpm
+          tag_name: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # App Store Build - Only runs for stable releases (no beta/alpha/rc)
   release-appstore:

@@ -11,6 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Windows and macOS builds
   build:
     strategy:
       fail-fast: false
@@ -26,14 +27,9 @@ jobs:
             tauri_config: src-tauri/tauri.macos.conf.json
             artifact_name: macos
             artifact_path: src-tauri/target/release/bundle/**/*
-          - name: Linux
-            os: ubuntu-latest
-            tauri_config: src-tauri/tauri.conf.json
-            artifact_name: linux
-            artifact_path: src-tauri/target/release/bundle/**/*
 
     runs-on: ${{ matrix.platform.os }}
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -62,18 +58,6 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-
-      - name: Install Linux dependencies
-        if: matrix.platform.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-dev \
-            libwebkit2gtk-4.0-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libayatana-appindicator3-dev
 
       - name: Install Windows dependencies
         if: matrix.platform.os == 'windows-latest'
@@ -124,6 +108,70 @@ jobs:
             !src-tauri/target/release/bundle/**/*.exe
             !src-tauri/target/release/bundle/**/*.msi
             !src-tauri/target/release/bundle/**/*.dmg
+          retention-days: 1
+          if-no-files-found: warn
+
+  # Linux build - Uses Fedora container for modern distro compatibility
+  build-linux:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:41
+      options: --privileged
+
+    steps:
+      - name: Install system dependencies
+        run: |
+          dnf update -y
+          dnf install -y \
+            gcc gcc-c++ make cmake pkg-config \
+            gtk3-devel webkit2gtk4.1-devel \
+            libappindicator-gtk3-devel librsvg2-devel \
+            patchelf file openssl-devel curl wget git \
+            fuse fuse-libs libxcb alsa-lib-devel dbus-devel \
+            nodejs npm squashfs-tools
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli@latest
+
+      - name: Build application
+        run: |
+          source $HOME/.cargo/env
+          npm run build
+          NO_STRIP=true cargo tauri build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lokus-linux
+          path: |
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/rpm/*.rpm
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload bundle info
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-info-linux
+          path: |
+            src-tauri/target/release/bundle/
             !src-tauri/target/release/bundle/**/*.deb
             !src-tauri/target/release/bundle/**/*.rpm
             !src-tauri/target/release/bundle/**/*.AppImage
@@ -131,10 +179,10 @@ jobs:
           if-no-files-found: warn
 
   build-summary:
-    needs: build
+    needs: [build, build-linux]
     runs-on: ubuntu-latest
     if: always()
-    
+
     steps:
       - name: Build Status Summary
         run: |
@@ -142,14 +190,24 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
-          
+
           if [ "${{ needs.build.result }}" == "success" ]; then
-            echo "| All Platforms | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+            echo "| Windows/macOS | ✅ Success |" >> $GITHUB_STEP_SUMMARY
           elif [ "${{ needs.build.result }}" == "failure" ]; then
-            echo "| Some Platforms | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "| Windows/macOS | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| All Platforms | ⚠️ Cancelled/Skipped |" >> $GITHUB_STEP_SUMMARY
+            echo "| Windows/macOS | ⚠️ Cancelled/Skipped |" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
+          if [ "${{ needs.build-linux.result }}" == "success" ]; then
+            echo "| Linux (Fedora) | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.build-linux.result }}" == "failure" ]; then
+            echo "| Linux (Fedora) | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Linux (Fedora) | ⚠️ Cancelled/Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Artifacts:** Available for download from the Actions page" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Note:** Linux builds use Fedora 41 container for modern distro compatibility (fixes EGL issues on newer distros)" >> $GITHUB_STEP_SUMMARY
