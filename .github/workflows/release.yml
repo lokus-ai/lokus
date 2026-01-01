@@ -167,6 +167,16 @@ jobs:
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli@latest
 
+      - name: Update linuxdeploy to latest version
+        run: |
+          # Use latest linuxdeploy release for better compatibility with modern distros
+          TOOLKIT_PATH="${XDG_CACHE_HOME:-$HOME/.cache}/tauri"
+          mkdir -p "$TOOLKIT_PATH"
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage \
+            -O "$TOOLKIT_PATH/linuxdeploy-x86_64.AppImage"
+          chmod +x "$TOOLKIT_PATH/linuxdeploy-x86_64.AppImage"
+          echo "Updated linuxdeploy to 1-alpha-20251107-1"
+
       - name: Build frontend
         run: npm run build
         env:
@@ -194,14 +204,141 @@ jobs:
           find src-tauri/target/release/bundle -type f -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" 2>/dev/null || true
           ls -la src-tauri/target/release/bundle/ || true
 
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/rpm/*.rpm
+          retention-days: 1
+
+  # Smoke test Linux packages on multiple distros before publishing
+  smoke-test-linux:
+    needs: release-linux
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro:
+          - name: Ubuntu 24.04
+            image: ubuntu:24.04
+            package: deb
+            install_cmd: apt-get update && apt-get install -y
+            deps: libgtk-3-0 libwebkit2gtk-4.1-0 libayatana-appindicator3-1
+          - name: Fedora 41
+            image: fedora:41
+            package: rpm
+            install_cmd: dnf install -y
+            deps: gtk3 webkit2gtk4.1 libappindicator-gtk3
+          - name: Debian 12
+            image: debian:12
+            package: deb
+            install_cmd: apt-get update && apt-get install -y
+            deps: libgtk-3-0 libwebkit2gtk-4.0-0 libayatana-appindicator3-1
+          - name: Arch Linux (AppImage)
+            image: archlinux:latest
+            package: appimage
+            install_cmd: pacman -Syu --noconfirm
+            deps: gtk3 webkit2gtk-4.1 libappindicator-gtk3 fuse2
+
+    steps:
+      - name: Download Linux packages
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-packages
+          path: packages
+
+      - name: List downloaded packages
+        run: find packages -type f | head -20
+
+      - name: Test package on ${{ matrix.distro.name }}
+        run: |
+          docker run --rm --privileged \
+            -v ${{ github.workspace }}/packages:/packages:ro \
+            -e WEBKIT_DISABLE_DMABUF_RENDERER=1 \
+            ${{ matrix.distro.image }} \
+            bash -c '
+              set -e
+              echo "=== Testing on ${{ matrix.distro.name }} ==="
+
+              # Install dependencies
+              ${{ matrix.distro.install_cmd }} ${{ matrix.distro.deps }} xvfb procps || true
+
+              # Find and install/run package
+              if [ "${{ matrix.distro.package }}" = "deb" ]; then
+                DEB_FILE=$(find /packages -name "*.deb" | head -1)
+                echo "Installing: $DEB_FILE"
+                dpkg -i "$DEB_FILE" || apt-get install -f -y
+                APP_PATH=$(which lokus || find /usr -name "lokus" -type f 2>/dev/null | head -1)
+
+              elif [ "${{ matrix.distro.package }}" = "rpm" ]; then
+                RPM_FILE=$(find /packages -name "*.rpm" | head -1)
+                echo "Installing: $RPM_FILE"
+                rpm -i "$RPM_FILE" || dnf install -y "$RPM_FILE"
+                APP_PATH=$(which lokus || find /usr -name "lokus" -type f 2>/dev/null | head -1)
+
+              elif [ "${{ matrix.distro.package }}" = "appimage" ]; then
+                APPIMAGE_FILE=$(find /packages -name "*.AppImage" | head -1)
+                echo "Testing AppImage: $APPIMAGE_FILE"
+                chmod +x "$APPIMAGE_FILE"
+                APP_PATH="$APPIMAGE_FILE"
+              fi
+
+              echo "App path: $APP_PATH"
+
+              # Smoke test: Launch app with virtual display, verify it starts
+              echo "Starting smoke test..."
+              export DISPLAY=:99
+              Xvfb :99 -screen 0 1024x768x24 &
+              sleep 2
+
+              # Run app for 5 seconds, check it does not crash immediately
+              timeout 5s "$APP_PATH" &
+              APP_PID=$!
+              sleep 3
+
+              # Check if process is still running (did not crash)
+              if kill -0 $APP_PID 2>/dev/null; then
+                echo "SUCCESS: App started and is running"
+                kill $APP_PID 2>/dev/null || true
+                exit 0
+              else
+                echo "FAILED: App crashed or exited unexpectedly"
+                exit 1
+              fi
+            '
+
+      - name: Report test result
+        if: always()
+        run: |
+          echo "## Smoke Test: ${{ matrix.distro.name }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "Result: PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Result: FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # Publish Linux packages after smoke tests pass
+  publish-linux:
+    needs: smoke-test-linux
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Linux packages
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-packages
+          path: packages
+
       - name: Upload Linux artifacts to release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            src-tauri/target/release/bundle/appimage/*.AppImage
-            src-tauri/target/release/bundle/appimage/*.AppImage.sig
-            src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/rpm/*.rpm
+            packages/appimage/*.AppImage
+            packages/deb/*.deb
+            packages/rpm/*.rpm
           tag_name: ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
