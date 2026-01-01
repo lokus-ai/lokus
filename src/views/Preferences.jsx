@@ -18,6 +18,7 @@ import GmailLogin from "../components/gmail/GmailLogin.jsx";
 import { useAuth } from "../core/auth/AuthContext";
 import { User, LogIn, LogOut, Crown, Shield, Settings as SettingsIcon } from "lucide-react";
 import QuickImport from "../components/QuickImport.jsx";
+import { getAppVersion } from "../utils/appInfo.js";
 
 export default function Preferences() {  const [themes, setThemes] = useState([]);
   const [activeTheme, setActiveTheme] = useState("");
@@ -94,6 +95,10 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
     template: '',
     openOnStartup: false
   });
+
+  // Update settings state
+  const [appVersion, setAppVersion] = useState('');
+  const [betaUpdates, setBetaUpdates] = useState(false);
 
   // Preset themes for quick styling
   const presets = {
@@ -248,7 +253,26 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
     });
     return unsubscribe;
   }, []);
-  
+
+  // Load app version and update preferences
+  useEffect(() => {
+    const loadUpdateSettings = async () => {
+      try {
+        const version = await getAppVersion();
+        setAppVersion(version);
+
+        // Load beta updates preference from config
+        const config = await readConfig();
+        if (config?.updates?.betaChannel !== undefined) {
+          setBetaUpdates(config.updates.betaChannel);
+        }
+      } catch (error) {
+        console.error('Failed to load update settings:', error);
+      }
+    };
+    loadUpdateSettings();
+  }, []);
+
   // Enhanced Editor Preferences
   const [editorSettings, setEditorSettings] = useState({
     font: {
@@ -3654,7 +3678,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                   <div className="flex items-start justify-between mb-4">
                     <div>
                       <h3 className="font-medium mb-1">Current Version</h3>
-                      <p className="text-2xl font-semibold text-app-accent">v1.3.3</p>
+                      <p className="text-2xl font-semibold text-app-accent">v{appVersion || 'Loading...'}</p>
                     </div>
                   </div>
 
@@ -3668,6 +3692,44 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                   <p className="mt-4 text-sm text-app-muted">
                     Lokus automatically checks for updates in the background. Click the button above to check manually.
                   </p>
+                </div>
+              </section>
+
+              <section>
+                <h2 className="text-sm uppercase tracking-wide text-app-muted mb-4">Update Channel</h2>
+
+                <div className="bg-app-panel rounded-lg p-4 border border-app-border">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium mb-1">Beta Updates</h3>
+                      <p className="text-sm text-app-muted">
+                        Get early access to new features before they're released to everyone.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="sr-only peer"
+                        checked={betaUpdates}
+                        onChange={async (e) => {
+                          const newValue = e.target.checked;
+                          setBetaUpdates(newValue);
+                          try {
+                            await updateConfig({ updates: { betaChannel: newValue } });
+                          } catch (error) {
+                            console.error('Failed to save beta updates preference:', error);
+                          }
+                        }}
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-app-accent rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-app-accent"></div>
+                    </label>
+                  </div>
+
+                  {betaUpdates && (
+                    <p className="mt-3 text-xs text-yellow-600 dark:text-yellow-400">
+                      Beta versions may contain bugs and incomplete features. Use at your own risk.
+                    </p>
+                  )}
                 </div>
               </section>
             </div>

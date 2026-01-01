@@ -1,23 +1,23 @@
 {
-  "version": "1.0.0-beta.3",
-  "notes": "Lokus v1.0.0-beta.3\n\nThis is a beta release. See CHANGELOG.md for details.\n\nWhat's new:\n- Improved auto-updater\n- Bug fixes and performance improvements",
-  "pub_date": "2025-12-21T21:55:01.088Z",
+  "version": "1.0.0",
+  "notes": "Lokus v1.0.0\n\nThis is the first stable release! See CHANGELOG.md for details.\n\nWhat's new:\n- Stable release with all features\n- Auto-updater support\n- Bug fixes and performance improvements",
+  "pub_date": "2026-01-01T06:46:51.921Z",
   "platforms": {
     "linux-x86_64": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbXdVVnYzVU0wckFydnNXb0x5TGcwampmemVQSlowN1N4WXVGdjdCdkpsU1hoK2RQRENWdVZIb1pHNDJ2b0lKMnRqaG5oTjY2bTV4RDdmSjY4eWpUWTVkNitxMXVWbWdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY2MzUzNzc3CWZpbGU6TG9rdXNfMS4wLjAtYmV0YV9hbWQ2NC5BcHBJbWFnZQpFYVZJQ1ZmeWZ0cUV6VFVjQXJRSW54RkZlQWdtUGx1OGJyeVhXVmYzRHdSNUVVTVJOMDFCcllRNjlQcVlSWVpCK2sxTExsSkY5cEtKT0ZUbmZDZ0RDUT09Cg==",
-      "url": "https://github.com/lokus-ai/lokus/releases/download/v1.0.0-beta.3/Lokus_1.0.0-beta_amd64.AppImage"
+      "url": "https://github.com/lokus-ai/lokus/releases/download/v1.0.0/Lokus_1.0.0_amd64.AppImage"
     },
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbXdVVnYzVU0wclBEdE52Ym96UVh4NmNqZVlXeHVJYlhsWXBRQ01CL2t3QjQ2T001UVVWenRhSzU0UmZhQkVVWFA0YTNISmV3bnpDL29DeTRhQURXdzJ0OFhIS3haVXdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY2MzUzOTQwCWZpbGU6TG9rdXMuYXBwLnRhci5negpwKzZSdHpWamdVUlo3ZUpBOVZ6VWdCQk8wR2hzSUxKS0hjd2t4a1dsdk9FUVhoUkdxYmhBc0lGVlAxWjJLYUoxMmVyQmpMOUUwbFVBS1IwMGhjTGJEZz09Cg==",
-      "url": "https://github.com/lokus-ai/lokus/releases/download/v1.0.0-beta.3/Lokus_aarch64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbXdVVnYzVU0wckZ1eWh3VTZENCtURk1UT05NOVJweWpObGpVWWdhbStCY2psNDI0MC9yVWxjRjlFcUVuRzAwRUp3bXdBWGU4Rm1naUhnem43MHd4V0Z6NXlQdTdGendJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY3MjQ5NzYyCWZpbGU6TG9rdXMuYXBwLnRhci5negpEQjVvM0lKYjlIOU5yNlJWSlNacGtINVRhbWlZNVRRWmh3cWxsaGd3YWZobEtXYnNOalBtYm5EZDVWczJaM2RrWHA2Z0ttQ0pjTUlvb1gza05KSU9Bdz09Cg==",
+      "url": "https://github.com/lokus-ai/lokus/releases/download/v1.0.0/Lokus_aarch64.app.tar.gz"
     },
     "darwin-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbXdVVnYzVU0wclBEdE52Ym96UVh4NmNqZVlXeHVJYlhsWXBRQ01CL2t3QjQ2T001UVVWenRhSzU0UmZhQkVVWFA0YTNISmV3bnpDL29DeTRhQURXdzJ0OFhIS3haVXdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY2MzUzOTQwCWZpbGU6TG9rdXMuYXBwLnRhci5negpwKzZSdHpWamdVUlo3ZUpBOVZ6VWdCQk8wR2hzSUxKS0hjd2t4a1dsdk9FUVhoUkdxYmhBc0lGVlAxWjJLYUoxMmVyQmpMOUUwbFVBS1IwMGhjTGJEZz09Cg==",
-      "url": "https://github.com/lokus-ai/lokus/releases/download/v1.0.0-beta.3/Lokus_x64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbXdVVnYzVU0wckZ1eWh3VTZENCtURk1UT05NOVJweWpObGpVWWdhbStCY2psNDI0MC9yVWxjRjlFcUVuRzAwRUp3bXdBWGU4Rm1naUhnem43MHd4V0Z6NXlQdTdGendJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY3MjQ5NzYyCWZpbGU6TG9rdXMuYXBwLnRhci5negpEQjVvM0lKYjlIOU5yNlJWSlNacGtINVRhbWlZNVRRWmh3cWxsaGd3YWZobEtXYnNOalBtYm5EZDVWczJaM2RrWHA2Z0ttQ0pjTUlvb1gza05KSU9Bdz09Cg==",
+      "url": "https://github.com/lokus-ai/lokus/releases/download/v1.0.0/Lokus_x64.app.tar.gz"
     },
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbXdVVnYzVU0wck9KaDJwaEoyQk52T25TaVBTY2F0MVR0SWovaW9tdUN4b3lsVU14SzNDMkg3bUZhZC85Vkl2K29lbFlUNWh5aVk4NmRCb21abW1IVktYaXBlWGhLRlFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY2MzU0MDk4CWZpbGU6TG9rdXNfMS4wLjAtYmV0YV94NjQtc2V0dXAuZXhlCmNWMHRCaDVMcDlpZDBXckU2d2hzeSs0TmRxMUZzK2NuanVjSEJNR05vaHR4V3htSTZqbzdIbnFWQWYvd3JobExmVHVDQmlMeDVGQVNxZjdPWk5BdEFRPT0K",
-      "url": "https://github.com/lokus-ai/lokus/releases/download/v1.0.0-beta.3/Lokus_1.0.0-beta_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbXdVVnYzVU0wck1wQy9CUy9VRElZYzdScHEvclA2Y09KdVdod1NjbXBRN0l2Nmh1NkJvOEw3Uy9qSGJkS05aczkydUcwREw3aXhYKzUvZXI1QUdoRTE2TWV4SXRqOGc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY3MjUwMDA5CWZpbGU6TG9rdXNfMS4wLjAtYmV0YV94NjQtc2V0dXAuZXhlClNaTG9VSDIwMVJuaThDdVNBWXlReUQzSEdlcGVLWEwwejNPZTA3eVI0YzJLWENZcG1tVGNzTzIxOFc4OGdpQlFWcnMxR2tpN2p4TUVqbmk5UE04YkRBPT0K",
+      "url": "https://github.com/lokus-ai/lokus/releases/download/v1.0.0/Lokus_1.0.0_x64-setup.exe"
     }
   }
 }
