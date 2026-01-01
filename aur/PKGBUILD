@@ -1,0 +1,64 @@
+# Maintainer: Your Name <your.email@example.com>
+pkgname=lokus
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Modern knowledge management and writing platform"
+arch=('x86_64')
+url="https://github.com/lokus-ai/lokus"
+license=('BSL-1.1')
+depends=(
+  'gtk3'
+  'webkit2gtk-4.1'
+  'libayatana-appindicator'
+  'librsvg'
+  'openssl'
+)
+makedepends=(
+  'rust'
+  'cargo'
+  'nodejs'
+  'npm'
+  'git'
+  'patchelf'
+)
+source=("$pkgname-$pkgver.tar.gz::https://github.com/lokus-ai/lokus/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+prepare() {
+  cd "$pkgname-$pkgver"
+  npm ci
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+  npm run build
+  cd src-tauri
+  cargo build --release
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+
+  # Install binary
+  install -Dm755 "src-tauri/target/release/lokus" "$pkgdir/usr/bin/lokus"
+
+  # Install desktop file
+  install -Dm644 "src-tauri/icons/128x128.png" "$pkgdir/usr/share/icons/hicolor/128x128/apps/lokus.png"
+  install -Dm644 "src-tauri/icons/32x32.png" "$pkgdir/usr/share/icons/hicolor/32x32/apps/lokus.png"
+
+  # Create desktop entry
+  install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/lokus.desktop" <<EOF
+[Desktop Entry]
+Name=Lokus
+Comment=Modern knowledge management and writing platform
+Exec=lokus
+Icon=lokus
+Terminal=false
+Type=Application
+Categories=Office;TextEditor;Utility;
+Keywords=notes;markdown;writing;knowledge;
+EOF
+
+  # Install license
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

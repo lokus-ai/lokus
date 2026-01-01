@@ -1,0 +1,22 @@
+pkgbase = lokus
+	pkgdesc = Modern knowledge management and writing platform
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/lokus-ai/lokus
+	arch = x86_64
+	license = BSL-1.1
+	makedepends = rust
+	makedepends = cargo
+	makedepends = nodejs
+	makedepends = npm
+	makedepends = git
+	makedepends = patchelf
+	depends = gtk3
+	depends = webkit2gtk-4.1
+	depends = libayatana-appindicator
+	depends = librsvg
+	depends = openssl
+	source = lokus-1.0.0.tar.gz::https://github.com/lokus-ai/lokus/archive/refs/tags/v1.0.0.tar.gz
+	sha256sums = SKIP
+
+pkgname = lokus

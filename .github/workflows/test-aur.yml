@@ -1,0 +1,58 @@
+name: Test AUR PKGBUILD
+
+on:
+  push:
+    paths:
+      - 'aur/**'
+  pull_request:
+    paths:
+      - 'aur/**'
+  workflow_dispatch:
+
+jobs:
+  test-pkgbuild:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --privileged
+
+    steps:
+      - name: Install base dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel git sudo
+
+      - name: Create build user
+        run: |
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PKGBUILD dependencies
+        run: |
+          pacman -S --noconfirm \
+            rust cargo nodejs npm \
+            gtk3 webkit2gtk-4.1 libayatana-appindicator librsvg openssl patchelf
+
+      - name: Test PKGBUILD build
+        run: |
+          cd aur
+          # Update source to use current commit instead of release tag
+          sed -i "s|archive/refs/tags/v\$pkgver.tar.gz|archive/${{ github.sha }}.tar.gz|" PKGBUILD
+          sed -i "s|lokus-\$pkgver|lokus-${{ github.sha }}|g" PKGBUILD
+          chown -R builder:builder .
+          su builder -c "makepkg -sf --noconfirm"
+
+      - name: Test package installation
+        run: |
+          cd aur
+          pacman -U --noconfirm lokus-*.pkg.tar.zst
+
+      - name: Verify installation
+        run: |
+          which lokus
+          lokus --version || echo "No --version flag, but binary exists"
+          test -f /usr/share/applications/lokus.desktop
+          echo "PKGBUILD test passed!"
