@@ -128,7 +128,7 @@ jobs:
             libappindicator-gtk3-devel librsvg2-devel \
             patchelf file openssl-devel curl wget git \
             fuse fuse-libs libxcb alsa-lib-devel dbus-devel \
-            nodejs npm squashfs-tools
+            nodejs npm squashfs-tools xdg-utils
 
       - name: Checkout repository
         uses: actions/checkout@v4
