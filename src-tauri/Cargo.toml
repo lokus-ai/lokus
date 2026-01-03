@@ -76,7 +76,7 @@ parking_lot = "0.12"
 bincode = "1.3"
 thiserror = "2.0"
 axum = "0.7"
-git2 = { version = "0.19", default-features = false, features = ["vendored"] }
+git2 = { version = "0.18", default-features = false, features = ["vendored"] }
 lazy_static = "1.4"
 # Crash reporting
 sentry = { version = "0.34", default-features = false, features = ["backtrace", "contexts", "panic", "rustls", "reqwest"] }
