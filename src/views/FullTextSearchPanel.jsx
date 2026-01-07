@@ -37,7 +37,9 @@ const FullTextSearchPanel = ({ isOpen, onClose, onResultClick, workspacePath }) 
       try {
         const history = JSON.parse(saved);
         setSearchHistory(history);
-      } catch { }
+      } catch (err) {
+        console.error('FullTextSearchPanel: Failed to parse search history', err);
+      }
     }
   }, []);
 
@@ -234,9 +236,8 @@ const FullTextSearchPanel = ({ isOpen, onClose, onResultClick, workspacePath }) 
           <div className="flex items-center gap-4 mt-3">
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 px-3 py-1 rounded text-sm ${
-                showFilters ? 'bg-app-primary text-white' : 'bg-app-hover'
-              }`}
+              className={`flex items-center gap-2 px-3 py-1 rounded text-sm ${showFilters ? 'bg-app-primary text-white' : 'bg-app-hover'
+                }`}
             >
               <Filter className="w-4 h-4" />
               Filters

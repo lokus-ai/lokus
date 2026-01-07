@@ -16,10 +16,10 @@ export class PluginRuntime {
     this.eventListeners = new Map()
     this.commandRegistry = new Map()
     this.statusBarItems = new Map()
-    
+
     // Use the PluginLoader for actual plugin execution
     this.pluginLoader = pluginLoader
-    
+
     this.initializeEventSystem()
   }
 
@@ -28,11 +28,11 @@ export class PluginRuntime {
     await listen('plugin-activated', (event) => {
       this.activatePlugin(event.payload.pluginId)
     })
-    
+
     await listen('plugin-deactivated', (event) => {
       this.deactivatePlugin(event.payload.pluginId)
     })
-    
+
     await listen('plugin-uninstalled', (event) => {
       this.unloadPlugin(event.payload.pluginId)
     })
@@ -45,15 +45,15 @@ export class PluginRuntime {
     try {
       // Delegate to the PluginLoader for actual loading
       await this.pluginLoader.loadPlugin(pluginInfo)
-      
+
       // Keep track in this runtime too for compatibility
       const pluginId = pluginInfo.id || pluginInfo.name
       this.loadedPlugins.set(pluginId, {
         info: pluginInfo,
         loaded: true
       })
-      
-      
+
+
     } catch (error) {
       throw error
     }
@@ -66,22 +66,24 @@ export class PluginRuntime {
     try {
       // Delegate to the PluginLoader for actual activation
       await this.pluginLoader.activatePlugin(pluginId)
-      
+
       // Keep track in this runtime too for compatibility
       const plugin = this.loadedPlugins.get(pluginId)
       if (plugin) {
         this.activePlugins.set(pluginId, plugin)
       }
-      
+
       // Register status bar components for this plugin
       await this.registerPluginStatusBarComponents(pluginId)
-      
+
       // Emit activation event
       try {
         await emit('plugin-runtime-activated', { pluginId })
-      } catch { }
-      
-      
+      } catch (err) {
+        console.error('PluginRuntime: Failed to emit activation event', err)
+      }
+
+
     } catch (error) {
       throw error
     }
@@ -94,20 +96,24 @@ export class PluginRuntime {
     try {
       // Delegate to the PluginLoader for actual deactivation
       await this.pluginLoader.deactivatePlugin(pluginId)
-      
+
       // Remove from active plugins in this runtime
       this.activePlugins.delete(pluginId)
-      
+
       // Cleanup plugin resources
       this.cleanupPluginResources(pluginId)
-      
+
       // Emit deactivation event
       try {
         await emit('plugin-runtime-deactivated', { pluginId })
-      } catch { }
-      
-      
-    } catch { }
+      } catch (err) {
+        console.error('PluginRuntime: Failed to emit deactivation event', err)
+      }
+
+
+    } catch (err) {
+      console.error(`PluginRuntime: Failed to deactivate plugin ${pluginId}`, err)
+    }
   }
 
   /**
@@ -117,20 +123,22 @@ export class PluginRuntime {
     try {
       // Delegate to the PluginLoader for actual unloading
       await this.pluginLoader.unloadPlugin(pluginId)
-      
+
       // Remove from this runtime's tracking
       this.activePlugins.delete(pluginId)
       this.loadedPlugins.delete(pluginId)
-      
+
       // Terminate worker if exists
       const worker = this.pluginWorkers.get(pluginId)
       if (worker) {
         worker.terminate()
         this.pluginWorkers.delete(pluginId)
       }
-      
-      
-    } catch { }
+
+
+    } catch (err) {
+      console.error(`PluginRuntime: Failed to unload plugin ${pluginId}`, err)
+    }
   }
 
   /**
@@ -141,17 +149,17 @@ export class PluginRuntime {
     const workerBlob = new Blob([this.getWorkerScript()], {
       type: 'application/javascript'
     })
-    
+
     const worker = new Worker(URL.createObjectURL(workerBlob))
-    
+
     // Handle messages from worker
     worker.onmessage = (event) => {
       this.handleWorkerMessage(pluginInfo.id, event.data)
     }
-    
+
     worker.onerror = (error) => {
     }
-    
+
     return worker
   }
 
@@ -160,30 +168,30 @@ export class PluginRuntime {
    */
   async handleWorkerMessage(pluginId, message) {
     const { type, data } = message
-    
+
     switch (type) {
       case 'api-call':
         await this.handlePluginApiCall(pluginId, data)
         break
-        
+
       case 'command-register':
         this.registerPluginCommand(pluginId, data)
         break
-        
+
       case 'status-bar-item':
         this.handleStatusBarItem(pluginId, data)
         break
-        
+
       case 'event-emit':
         await emit(data.event, data.payload)
         break
-        
+
       case 'log':
         break
-        
+
       case 'error':
         break
-        
+
       default:
     }
   }
@@ -193,39 +201,39 @@ export class PluginRuntime {
    */
   async handlePluginApiCall(pluginId, apiCall) {
     const { method, args, callId } = apiCall
-    
+
     try {
       let result
-      
+
       switch (method) {
         case 'workspace.getWorkspaceFolders':
           result = await invoke('get_workspace_folders')
           break
-          
+
         case 'workspace.openTextDocument':
           result = await invoke('open_text_document', { path: args[0] })
           break
-          
+
         case 'window.showInformationMessage':
           result = await this.showMessage('info', args[0], args[1])
           break
-          
+
         case 'window.showWarningMessage':
           result = await this.showMessage('warning', args[0], args[1])
           break
-          
+
         case 'window.showErrorMessage':
           result = await this.showMessage('error', args[0], args[1])
           break
-          
+
         case 'commands.executeCommand':
           result = await this.executeCommand(args[0], args.slice(1))
           break
-          
+
         default:
           throw new Error(`Unknown API method: ${method}`)
       }
-      
+
       // Send result back to worker
       const worker = this.pluginWorkers.get(pluginId)
       if (worker) {
@@ -235,7 +243,7 @@ export class PluginRuntime {
           result
         })
       }
-      
+
     } catch (error) {
       // Send error back to worker
       const worker = this.pluginWorkers.get(pluginId)
@@ -272,13 +280,13 @@ export class PluginRuntime {
   registerPluginCommand(pluginId, commandData) {
     const { command, title } = commandData
     const fullCommand = `${pluginId}.${command}`
-    
+
     this.commandRegistry.set(fullCommand, {
       pluginId,
       command,
       title
     })
-    
+
   }
 
   /**
@@ -288,7 +296,7 @@ export class PluginRuntime {
     if (this.commandRegistry.has(command)) {
       const commandInfo = this.commandRegistry.get(command)
       const worker = this.pluginWorkers.get(commandInfo.pluginId)
-      
+
       if (worker) {
         worker.postMessage({
           type: 'execute-command',
@@ -307,7 +315,7 @@ export class PluginRuntime {
    */
   handleStatusBarItem(pluginId, itemData) {
     const { action, itemId, text, tooltip, command } = itemData
-    
+
     if (action === 'create') {
       this.statusBarItems.set(`${pluginId}.${itemId}`, {
         pluginId,
@@ -315,7 +323,7 @@ export class PluginRuntime {
         tooltip,
         command
       })
-      
+
       // Emit event to update status bar in UI
       emit('status-bar-item-created', {
         id: `${pluginId}.${itemId}`,
@@ -325,7 +333,7 @@ export class PluginRuntime {
       })
     } else if (action === 'dispose') {
       this.statusBarItems.delete(`${pluginId}.${itemId}`)
-      
+
       emit('status-bar-item-disposed', {
         id: `${pluginId}.${itemId}`
       })
@@ -357,7 +365,7 @@ export class PluginRuntime {
         this.commandRegistry.delete(command)
       }
     }
-    
+
     // Remove status bar items
     for (const [itemId, item] of this.statusBarItems.entries()) {
       if (item.pluginId === pluginId) {
@@ -365,7 +373,7 @@ export class PluginRuntime {
         emit('status-bar-item-disposed', { id: itemId })
       }
     }
-    
+
     // Remove event listeners
     if (this.eventListeners.has(pluginId)) {
       const listeners = this.eventListeners.get(pluginId)
@@ -386,11 +394,11 @@ export class PluginRuntime {
 
       const manifest = plugin.info;
       const statusBarConfig = manifest.contributes?.statusBar;
-      
+
       if (statusBarConfig) {
         // Get the plugin instance to access its components
         const pluginInstance = this.pluginLoader.getPluginInstance(pluginId);
-        
+
         if (pluginInstance) {
           await this.registerStatusBarComponent(pluginId, statusBarConfig, pluginInstance);
         } else {
@@ -401,14 +409,16 @@ export class PluginRuntime {
               await this.registerStatusBarComponent(pluginId, statusBarConfig, windowPlugin);
             }
           }
-          
+
           // Also check lokusPluginComponents for registered components
           if (typeof window !== 'undefined' && window.lokusPluginComponents && window.lokusPluginComponents[pluginId]) {
             await this.registerStatusBarComponent(pluginId, statusBarConfig, null);
           }
         }
       }
-    } catch { }
+    } catch (err) {
+      console.error(`PluginRuntime: Failed to register status bar components for ${pluginId}`, err)
+    }
   }
 
   /**
@@ -417,7 +427,7 @@ export class PluginRuntime {
   async registerStatusBarComponent(pluginId, config, pluginInstance) {
     try {
       const { component, position = 'right', priority = 0 } = config;
-      
+
       // For TimeTracker plugin, we need to import the component dynamically
       if (pluginId === 'TimeTracker' && component === 'TimeTrackerStatus') {
         // Dynamic import of the TimeTracker component
@@ -425,7 +435,7 @@ export class PluginRuntime {
           // We'll use a different approach since the plugin is already loaded
           // and the component should be available through the plugin instance
           const componentId = `${pluginId}-status-bar`;
-          
+
           // Emit event to register the component
           await emit('status-bar-item-created', {
             id: componentId,
@@ -436,12 +446,14 @@ export class PluginRuntime {
             componentName: component,
             tooltip: 'Time Tracker'
           });
-          
-        } catch { }
+
+        } catch (err) {
+          console.error(`PluginRuntime: Failed to register dynamic status bar component for ${pluginId}`, err)
+        }
       } else {
         // Generic component registration
         const componentId = `${pluginId}-status-bar`;
-        
+
         await emit('status-bar-item-created', {
           id: componentId,
           position,
@@ -452,7 +464,9 @@ export class PluginRuntime {
           tooltip: `${pluginId} status`
         });
       }
-    } catch { }
+    } catch (err) {
+      console.error(`PluginRuntime: Failed to register status bar component for ${pluginId}`, err)
+    }
   }
 
   /**
