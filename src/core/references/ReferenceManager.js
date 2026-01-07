@@ -320,36 +320,47 @@ class ReferenceManager {
         content = content.replace(wikiFullPathPattern, `[[${newRelativeNoExt}$1]]`)
       }
 
-      // Update image embeds: ![[oldName]] -> ![[newName]]
-      const imagePattern = new RegExp(
-        `!\\[\\[${this.escapeRegex(this.basename(oldPath))}\\]\\]`,
-        'g'
-      )
-      content = content.replace(imagePattern, `![[${this.basename(newPath)}]]`)
-
-      // Update image embeds with path
+      // Update image embeds: ![[oldName]] or ![[path/oldName]] -> ![[newPath]]
+      // For wiki-style embeds, use workspace-relative path (no ..) since the
+      // wiki resolver uses suffix matching and doesn't normalize .. segments
       const imagePathPattern = new RegExp(
         `!\\[\\[([^\\]]*/)?${this.escapeRegex(this.basename(oldPath))}\\]\\]`,
         'g'
       )
-      content = content.replace(imagePathPattern, (match, prefix) => {
-        const newImageRelative = this.getRelativePathBetween(sourceDir, newPath)
-        return `![[${newImageRelative}]]`
+      content = content.replace(imagePathPattern, () => {
+        // Use workspace-relative path for wiki-style embeds
+        // (the wiki resolver uses suffix matching and doesn't normalize .. segments)
+        return `![[${newRelative}]]`
       })
 
-      // Update markdown links: [text](oldPath) -> [text](newPath)
-      const mdLinkPattern = new RegExp(
-        `\\[([^\\]]*)\\]\\(${this.escapeRegex(oldRelative)}\\)`,
-        'g'
-      )
-      content = content.replace(mdLinkPattern, `[$1](${newRelativeFromSource})`)
+      // Update markdown links: [text](path) -> [text](newPath)
+      // Need to match various path formats: workspace-relative, ./, ../
+      const oldBasename = this.basename(oldPath)
+      const oldBasenameNoExt = oldBasename.replace(/\.[^.]+$/, '')
 
-      // Also match without .md extension
-      const mdLinkNoExtPattern = new RegExp(
-        `\\[([^\\]]*)\\]\\(${this.escapeRegex(oldRelativeNoExt)}\\)`,
-        'g'
-      )
-      content = content.replace(mdLinkNoExtPattern, `[$1](${newRelativeFromSource.replace(/\.md$/, '')})`)
+      // Calculate what the old relative path from this source file would be
+      const oldRelativeFromSource = this.getRelativePathBetween(sourceDir, oldPath)
+
+      // Match patterns: workspace-relative, relative from source, or basename only
+      const pathsToMatch = [
+        oldRelative,                              // workspace-relative: folder/file.md
+        oldRelativeNoExt,                         // without extension: folder/file
+        oldRelativeFromSource,                    // relative from source: ../folder/file.md
+        oldRelativeFromSource.replace(/\.md$/, ''), // relative without ext
+        './' + oldBasename,                       // explicit current: ./file.md
+        './' + oldBasenameNoExt,                  // explicit current no ext: ./file
+      ]
+
+      // Remove duplicates and empty strings
+      const uniquePaths = [...new Set(pathsToMatch.filter(Boolean))]
+
+      for (const pathToMatch of uniquePaths) {
+        const mdLinkPattern = new RegExp(
+          `\\[([^\\]]*)\\]\\(${this.escapeRegex(pathToMatch)}\\)`,
+          'g'
+        )
+        content = content.replace(mdLinkPattern, `[$1](${newRelativeFromSource})`)
+      }
 
       if (content !== originalContent) {
         await writeTextFile(filePath, content)
