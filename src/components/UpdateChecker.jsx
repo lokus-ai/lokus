@@ -1,65 +1,111 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
+import { toast } from 'sonner';
+import { showEnhancedToast } from './ui/enhanced-toast';
+import { Download, RefreshCw } from 'lucide-react';
 
 export default function UpdateChecker() {
-  const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [downloading, setDownloading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [error, setError] = useState(null);
-  const [showModal, setShowModal] = useState(false);
+  const downloadToastId = useRef(null);
 
   const checkForUpdate = async () => {
     try {
-      setError(null);
       const update = await check();
 
       if (update?.available) {
         setUpdateInfo(update);
-        setUpdateAvailable(true);
-        setShowModal(true);
+        showUpdateAvailableToast(update);
       }
 
       return update;
     } catch (err) {
       // Suppress "Could not fetch" errors - this is expected if latest.json doesn't exist yet
-      // (e.g., first release with updater enabled, or old releases without updater artifacts)
-      if (err.message && err.message.includes('Could not fetch')) {
-      } else {
-        setError(err.message);
+      if (err.message && !err.message.includes('Could not fetch')) {
+        toast.error('Update Check Failed', {
+          description: err.message,
+        });
       }
       return null;
     }
   };
 
-  const downloadAndInstall = async () => {
-    if (!updateInfo) return;
+  const showUpdateAvailableToast = (update) => {
+    showEnhancedToast({
+      id: 'update-available',
+      title: `Update Available: v${update.version}`,
+      message: 'A new version of Lokus is ready to install',
+      variant: 'update',
+      expandedContent: update.body || 'This update includes bug fixes and improvements.',
+      persistent: true,
+      dismissible: true,
+      action: {
+        label: 'Update Now',
+        onClick: () => downloadAndInstall(update),
+      },
+      cancel: {
+        label: 'Later',
+        onClick: () => toast.dismiss('update-available'),
+      },
+    });
+  };
+
+  const downloadAndInstall = async (update) => {
+    const updateData = update || updateInfo;
+    if (!updateData) return;
 
     try {
       setDownloading(true);
-      setError(null);
+      toast.dismiss('update-available');
 
-      await updateInfo.downloadAndInstall((event) => {
+      // Show downloading toast with progress
+      downloadToastId.current = toast.loading('Downloading update...', {
+        id: 'update-download',
+        description: 'Starting download...',
+      });
+
+      await updateData.downloadAndInstall((event) => {
         switch (event.event) {
           case 'Started':
-            setDownloadProgress(0);
+            toast.loading('Downloading update...', {
+              id: 'update-download',
+              description: '0% complete',
+            });
             break;
           case 'Progress':
             if (event.data.contentLength) {
-              const progress = (event.data.chunkLength / event.data.contentLength) * 100;
-              setDownloadProgress(Math.round(progress));
+              const progress = Math.round((event.data.chunkLength / event.data.contentLength) * 100);
+              toast.loading('Downloading update...', {
+                id: 'update-download',
+                description: `${progress}% complete`,
+              });
             }
             break;
           case 'Finished':
-            setDownloadProgress(100);
+            toast.loading('Installing update...', {
+              id: 'update-download',
+              description: 'Preparing to restart...',
+            });
             break;
         }
       });
 
-      await relaunch();
+      toast.success('Update installed!', {
+        id: 'update-download',
+        description: 'Restarting Lokus...',
+      });
+
+      // Small delay to show success message before relaunch
+      setTimeout(async () => {
+        await relaunch();
+      }, 1000);
+
     } catch (err) {
-      setError(err.message);
+      toast.error('Update Failed', {
+        id: 'update-download',
+        description: err.message,
+      });
       setDownloading(false);
     }
   };
@@ -73,65 +119,6 @@ export default function UpdateChecker() {
     return () => window.removeEventListener('check-for-update', handleCheckUpdate);
   }, []);
 
-  if (!showModal) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
-        <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-          {downloading ? 'Downloading Update...' : 'Update Available'}
-        </h2>
-
-        {error ? (
-          <div className="mb-4">
-            <p className="text-red-600 dark:text-red-400">{error}</p>
-          </div>
-        ) : (
-          <div className="mb-4">
-            {downloading ? (
-              <div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mb-2">
-                  <div
-                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
-                    style={{ width: `${downloadProgress}%` }}
-                  ></div>
-                </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {downloadProgress}% complete
-                </p>
-              </div>
-            ) : (
-              <div>
-                <p className="text-gray-700 dark:text-gray-300 mb-2">
-                  Version {updateInfo?.version} is now available
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Would you like to download and install it now?
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="flex gap-3 justify-end">
-          {!downloading && (
-            <>
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-              >
-                Later
-              </button>
-              <button
-                onClick={downloadAndInstall}
-                className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded transition-colors"
-              >
-                Update Now
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  // This component no longer renders a modal - it uses toasts instead
+  return null;
 }
