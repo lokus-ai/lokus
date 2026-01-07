@@ -19,8 +19,6 @@ Local-first. Privacy-focused. Blazing fast.
 
 <br />
 
-<img src="assets/screenshots/hero-screenshot.png" alt="Lokus Screenshot" width="800" />
-
 </div>
 
 <br />
@@ -29,7 +27,7 @@ Local-first. Privacy-focused. Blazing fast.
 
 Most note-taking apps fall into two categories: **powerful but closed-source** (Obsidian) or **open but cloud-dependent** (Notion). Lokus is neither.
 
-- **Truly Open Source** — MIT licensed. Read every line. Fork it. Make it yours.
+- **Truly Open Source** — BSL 1.1 licensed. Read every line. Fork it. Make it yours.
 - **Local-First** — Your notes are markdown files on YOUR device. No proprietary format.
 - **Fast** — Built with Tauri & Rust. ~50MB RAM vs 300MB+ for Electron apps.
 - **No Subscription** — Free forever. No $10/month sync tax.
@@ -105,7 +103,7 @@ Most note-taking apps fall into two categories: **powerful but closed-source** (
 <sub>Intel & Apple Silicon</sub>
 </td>
 <td align="center" width="33%">
-<img src="https://cdn.simpleicons.org/windows/white" width="24" height="24" alt="Windows" />
+
 <br />
 <b>Windows</b>
 <br />
@@ -235,8 +233,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 ## Community
 
 - [GitHub Discussions](https://github.com/lokus-ai/lokus/discussions) — Questions & ideas
-- [Discord](https://discord.gg/lokus) — Real-time chat
-- [Twitter](https://twitter.com/lokusmd) — Updates & news
+- [Discord](https://discord.com/invite/2rauPDEXcs) — Real-time chat
+- [Twitter](https://x.com/LokusMD0) — Updates & news
 
 <br />
 
@@ -266,7 +264,7 @@ The license converts to MIT after 4 years.
 
 <div align="center">
 
-**[Download Lokus](https://github.com/lokus-ai/lokus/releases)** · **[Read the Docs](https://docs.lokusmd.com)** · **[Join Discord](https://discord.gg/lokus)**
+**[Download Lokus](https://github.com/lokus-ai/lokus/releases)** · **[Read the Docs](https://docs.lokusmd.com)** · **[Join Discord](https://discord.com/invite/2rauPDEXcs)**
 
 <sub>Built with care by the Lokus team and contributors.</sub>
 

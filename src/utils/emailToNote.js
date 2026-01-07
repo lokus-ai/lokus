@@ -14,7 +14,7 @@ import { invoke } from '@tauri-apps/api/core';
  */
 function sanitizeFilename(str) {
   if (!str || typeof str !== 'string') return 'untitled';
-  
+
   return str
     .replace(/[<>:"/\\|?*]/g, '') // Remove illegal filename characters
     .replace(/\s+/g, '_') // Replace spaces with underscores
@@ -31,11 +31,11 @@ function sanitizeFilename(str) {
  */
 function formatDate(date) {
   if (!date) return 'Unknown date';
-  
+
   try {
     const dateObj = new Date(date);
     if (isNaN(dateObj.getTime())) return 'Invalid date';
-    
+
     return dateObj.toLocaleString('en-US', {
       year: 'numeric',
       month: 'long',
@@ -56,7 +56,7 @@ function formatDate(date) {
  */
 function extractTextFromHtml(html) {
   if (!html || typeof html !== 'string') return '';
-  
+
   // Basic HTML tag removal and entity decoding
   return html
     .replace(/<style[^>]*>.*?<\/style>/gis, '') // Remove style tags
@@ -81,17 +81,17 @@ function formatAttachments(attachments) {
   if (!attachments || !Array.isArray(attachments) || attachments.length === 0) {
     return '';
   }
-  
+
   const attachmentList = attachments
     .map(attachment => {
       const name = attachment.filename || attachment.name || 'Unknown file';
       const size = attachment.size ? ` (${formatFileSize(attachment.size)})` : '';
       const type = attachment.mimeType || attachment.type || '';
-      
+
       return `- **${name}**${size}${type ? ` - ${type}` : ''}`;
     })
     .join('\n');
-  
+
   return `\n## Attachments\n\n${attachmentList}\n`;
 }
 
@@ -102,7 +102,7 @@ function formatAttachments(attachments) {
  */
 function formatFileSize(bytes) {
   if (!bytes || isNaN(bytes)) return '0 B';
-  
+
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`;
@@ -122,25 +122,25 @@ export function emailToMarkdown(email, options = {}) {
     includeMetadata = true,
     customTemplate = null
   } = options;
-  
+
   if (!email) {
     throw new Error('Email object is required');
   }
-  
+
   // Extract email data with fallbacks
   const subject = email.subject || email.snippet || 'No Subject';
   const from = email.from || email.fromEmail || 'Unknown Sender';
   const to = email.to || email.toEmail || 'Unknown Recipient';
   const date = formatDate(email.date || email.internalDate || email.timestamp);
   const body = email.body || email.textPlain || email.htmlBody || email.snippet || '';
-  
+
   // Use custom template if provided
   if (customTemplate && typeof customTemplate === 'function') {
     return customTemplate(email, options);
   }
-  
+
   let markdown = '';
-  
+
   // Add frontmatter metadata
   if (includeMetadata) {
     markdown += '---\n';
@@ -159,17 +159,17 @@ export function emailToMarkdown(email, options = {}) {
     }
     markdown += '---\n\n';
   }
-  
+
   // Add title
   markdown += `# ${subject}\n\n`;
-  
+
   // Add email headers
   if (includeHeaders) {
     markdown += '## Email Details\n\n';
     markdown += `**From:** ${from}\n`;
     markdown += `**To:** ${to}\n`;
     markdown += `**Date:** ${date}\n`;
-    
+
     if (email.cc) {
       markdown += `**CC:** ${email.cc}\n`;
     }
@@ -179,10 +179,10 @@ export function emailToMarkdown(email, options = {}) {
     if (email.replyTo) {
       markdown += `**Reply-To:** ${email.replyTo}\n`;
     }
-    
+
     markdown += '\n';
   }
-  
+
   // Add thread information
   if (includeThreadInfo && email.threadId) {
     markdown += '## Thread Information\n\n';
@@ -192,10 +192,10 @@ export function emailToMarkdown(email, options = {}) {
     }
     markdown += '\n';
   }
-  
+
   // Add email body
   markdown += '## Content\n\n';
-  
+
   // Process HTML or plain text body
   if (email.htmlBody && body.includes('<')) {
     const textContent = extractTextFromHtml(body);
@@ -203,14 +203,14 @@ export function emailToMarkdown(email, options = {}) {
   } else {
     markdown += body || 'No content available';
   }
-  
+
   markdown += '\n\n';
-  
+
   // Add attachments
   if (includeAttachments && email.attachments) {
     markdown += formatAttachments(email.attachments);
   }
-  
+
   // Add tags based on labels
   if (email.labels && Array.isArray(email.labels) && email.labels.length > 0) {
     markdown += '## Tags\n\n';
@@ -222,11 +222,11 @@ export function emailToMarkdown(email, options = {}) {
       markdown += `${tags}\n\n`;
     }
   }
-  
+
   // Add footer with conversion info
   markdown += '---\n\n';
   markdown += `*Converted from Gmail on ${new Date().toLocaleDateString()}*\n`;
-  
+
   return markdown;
 }
 
@@ -244,27 +244,29 @@ export function generateEmailFilename(email, options = {}) {
     prefix = '',
     suffix = ''
   } = options;
-  
+
   if (!email) {
     return 'email-note.md';
   }
-  
+
   let filename = '';
-  
+
   // Add prefix
   if (prefix) {
     filename += `${sanitizeFilename(prefix)}-`;
   }
-  
+
   // Add date
   if (includeDate && (email.date || email.internalDate)) {
     try {
       const date = new Date(email.date || email.internalDate);
       const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
       filename += `${dateStr}-`;
-    } catch { }
+    } catch (err) {
+      console.error('emailToNote: Failed to format date', err);
+    }
   }
-  
+
   // Add sender info
   if (includeSender && email.from) {
     const senderName = email.from.replace(/<.*?>/, '').trim();
@@ -273,28 +275,28 @@ export function generateEmailFilename(email, options = {}) {
       filename += `${sanitizedSender}-`;
     }
   }
-  
+
   // Add subject
   const subject = email.subject || email.snippet || 'no-subject';
   filename += sanitizeFilename(subject);
-  
+
   // Add suffix
   if (suffix) {
     filename += `-${sanitizeFilename(suffix)}`;
   }
-  
+
   // Ensure .md extension
   if (!filename.endsWith('.md')) {
     filename += '.md';
   }
-  
+
   // Limit length
   if (filename.length > maxLength) {
     const extension = '.md';
     const maxBaseLength = maxLength - extension.length;
     filename = filename.substring(0, maxBaseLength) + extension;
   }
-  
+
   return filename;
 }
 
@@ -312,46 +314,47 @@ export async function saveEmailAsNote(email, workspacePath, options = {}) {
     subfolder = 'emails',
     ...conversionOptions
   } = options;
-  
+
   if (!email) {
     throw new Error('Email object is required');
   }
-  
+
   if (!workspacePath) {
     throw new Error('Workspace path is required');
   }
-  
+
   try {
     // Generate markdown content
     const markdown = emailToMarkdown(email, conversionOptions);
-    
+
     // Determine the file path
     let filePath;
     if (customPath) {
       filePath = customPath;
     } else {
       const filename = customFilename || generateEmailFilename(email, options);
-      
+
       if (subfolder) {
         filePath = `${workspacePath}/${subfolder}/${filename}`;
-        
+
         // Ensure the subfolder exists
         try {
           await invoke('create_directory', { path: `${workspacePath}/${subfolder}` });
         } catch (error) {
-          // Directory might already exist, which is fine
+          // Directory might already exist, which is fine, but log as debug
+          console.debug('emailToNote: Directory creation suppressed error', error);
         }
       } else {
         filePath = `${workspacePath}/${filename}`;
       }
     }
-    
+
     // Save the file
-    await invoke('write_file_content', { 
-      path: filePath, 
-      content: markdown 
+    await invoke('write_file_content', {
+      path: filePath,
+      content: markdown
     });
-    
+
     return filePath;
   } catch (error) {
     throw new Error(`Failed to save email as note: ${error.message}`);
@@ -371,21 +374,21 @@ export async function saveEmailsAsNotes(emails, workspacePath, options = {}) {
     onProgress = null,
     ...saveOptions
   } = options;
-  
+
   if (!Array.isArray(emails) || emails.length === 0) {
     throw new Error('Emails array is required and must not be empty');
   }
-  
+
   const results = [];
   const total = emails.length;
-  
+
   // Process emails in batches to avoid overwhelming the system
   for (let i = 0; i < emails.length; i += batchSize) {
     const batch = emails.slice(i, i + batchSize);
     const batchPromises = batch.map(async (email, index) => {
       try {
         const filePath = await saveEmailAsNote(email, workspacePath, saveOptions);
-        
+
         // Report progress
         if (onProgress) {
           onProgress({
@@ -396,10 +399,10 @@ export async function saveEmailsAsNotes(emails, workspacePath, options = {}) {
             success: true
           });
         }
-        
+
         return { email, filePath, success: true };
       } catch (error) {
-        
+
         // Report progress
         if (onProgress) {
           onProgress({
@@ -410,20 +413,20 @@ export async function saveEmailsAsNotes(emails, workspacePath, options = {}) {
             success: false
           });
         }
-        
+
         return { email, error: error.message, success: false };
       }
     });
-    
+
     const batchResults = await Promise.all(batchPromises);
     results.push(...batchResults);
-    
+
     // Small delay between batches
     if (i + batchSize < emails.length) {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
   }
-  
+
   return results;
 }
 
@@ -435,7 +438,7 @@ export async function saveEmailsAsNotes(emails, workspacePath, options = {}) {
 export function createEmailTemplate(template) {
   return (email, options) => {
     let result = template;
-    
+
     // Replace placeholders
     const replacements = {
       '{{subject}}': email.subject || 'No Subject',
@@ -447,11 +450,11 @@ export function createEmailTemplate(template) {
       '{{threadId}}': email.threadId || '',
       '{{labels}}': (email.labels || []).join(', ')
     };
-    
+
     for (const [placeholder, value] of Object.entries(replacements)) {
       result = result.replace(new RegExp(placeholder, 'g'), value);
     }
-    
+
     return result;
   };
 }

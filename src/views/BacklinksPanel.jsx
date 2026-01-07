@@ -31,7 +31,9 @@ export default function BacklinksPanel({
     try {
       backlinkManagerRef.current = new BacklinkManager(graphData);
       mentionDetectorRef.current = new MentionDetector(graphData);
-    } catch { }
+    } catch (err) {
+      console.error('BacklinksPanel: Failed to initialize link managers', err);
+    }
 
     return () => {
       if (backlinkManagerRef.current) {
@@ -84,13 +86,16 @@ export default function BacklinksPanel({
             title: node.title
           }))
           blockBacklinkManager.indexBlockLinks(fileIndex).catch(err => {
+            console.error('BacklinksPanel: Failed to index block links', err);
           })
         }
 
         const blockLinks = blockBacklinkManager.getFileBlockBacklinks(fileName)
         setBlockBacklinks(blockLinks)
       }
-    } catch { }
+    } catch (err) {
+      console.error('BacklinksPanel: Failed to update backlinks', err);
+    }
   }, [currentNodeId, currentFile, graphData]);
 
   // Filter backlinks by search query

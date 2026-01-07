@@ -25,7 +25,9 @@ async function openWorkspace(path) {
     if (visuals && visuals.theme) {
       await setGlobalActiveTheme(visuals.theme);
     }
-  } catch { }
+  } catch (err) {
+    console.error('Launcher: Failed to read global visuals', err);
+  }
 
   // In test mode or browser mode, transition current window to workspace
   const isTestMode = new URLSearchParams(window.location.search).get('testMode') === 'true';
@@ -72,14 +74,16 @@ export default function Launcher() {
 
     const unlistenPromise = isTauri
       ? listen("lokus:open-workspace", () => {
-          // Already showing the launcher/welcome screen, so just log
-        })
-      : Promise.resolve(() => {});
+        // Already showing the launcher/welcome screen, so just log
+      })
+      : Promise.resolve(() => { });
 
     return () => {
       unlistenPromise.then(unlisten => {
         if (typeof unlisten === 'function') unlisten();
-      }).catch(() => {});
+      }).catch((err) => {
+        console.error('Launcher: Failed to unlisten', err);
+      });
     };
   }, []);
 
@@ -216,7 +220,7 @@ export default function Launcher() {
           </div>
         </div>
       )}
-      
+
       <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="flex flex-col">
           <h2 className="text-lg font-semibold text-app-text mb-4">Recently Opened</h2>
@@ -280,7 +284,7 @@ export default function Launcher() {
                 <div className="text-sm text-app-muted group-hover:text-app-accent-fg/80 mt-1">Start fresh with a new folder for your notes and ideas</div>
               </div>
             </button>
-            
+
             <button
               onClick={handleSelectWorkspace}
               className="w-full text-left p-5 flex items-center gap-4 rounded-xl bg-app-panel hover:bg-app-accent hover:text-app-accent-fg border border-app-border hover:border-app-accent transition-all duration-200 group"

@@ -131,14 +131,18 @@ export default function TemplateManager() {
       await duplicateTemplate(template.id, newId, {
         name: `${template.name} (Copy)`
       });
-    } catch { }
+    } catch (err) {
+      console.error('TemplateManager: Failed to duplicate template', err);
+    }
   };
 
   const handleDelete = async (template) => {
     if (window.confirm(`Are you sure you want to delete "${template.name}"?`)) {
       try {
         await deleteTemplate(template.id);
-      } catch { }
+      } catch (err) {
+        console.error('TemplateManager: Failed to delete template', err);
+      }
     }
   };
 
@@ -152,7 +156,9 @@ export default function TemplateManager() {
       a.download = `${template.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch { }
+    } catch (err) {
+      console.error('TemplateManager: Failed to export template', err);
+    }
   };
 
   const handleImport = () => {
@@ -185,7 +191,9 @@ export default function TemplateManager() {
   const handleRefresh = async () => {
     try {
       await refreshTemplates();
-    } catch { }
+    } catch (err) {
+      console.error('TemplateManager: Failed to refresh templates', err);
+    }
   };
 
   // Handle tag toggle
@@ -217,17 +225,17 @@ export default function TemplateManager() {
   const getTemplateStats = (template) => {
     const stats = template.stats || {};
     const parts = [];
-    
+
     if (stats.variables?.count > 0) {
       parts.push(`${stats.variables.count} vars`);
     }
-    
+
     if (stats.jsBlocks?.count > 0) {
       parts.push(`${stats.jsBlocks.count} blocks`);
     }
-    
+
     parts.push(`${Math.round(template.content.length / 1024 * 10) / 10}KB`);
-    
+
     return parts.join(' • ');
   };
 
@@ -241,7 +249,7 @@ export default function TemplateManager() {
             {template.name}
           </h3>
         </div>
-        
+
         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={() => handlePreview(template)}
@@ -250,7 +258,7 @@ export default function TemplateManager() {
           >
             <Eye size={14} />
           </button>
-          
+
           <button
             onClick={() => handleEdit(template)}
             className="p-1 hover:bg-app-accent/20 rounded text-app-muted hover:text-app-text transition-colors"
@@ -258,7 +266,7 @@ export default function TemplateManager() {
           >
             <Edit size={14} />
           </button>
-          
+
           <button
             onClick={() => handleDuplicate(template)}
             className="p-1 hover:bg-app-accent/20 rounded text-app-muted hover:text-app-text transition-colors"
@@ -266,7 +274,7 @@ export default function TemplateManager() {
           >
             <Copy size={14} />
           </button>
-          
+
           <button
             onClick={() => handleExport(template)}
             className="p-1 hover:bg-app-accent/20 rounded text-app-muted hover:text-app-text transition-colors"
@@ -274,7 +282,7 @@ export default function TemplateManager() {
           >
             <Download size={14} />
           </button>
-          
+
           <button
             onClick={() => handleDelete(template)}
             className="p-1 hover:bg-red-500/20 rounded text-app-muted hover:text-red-500 transition-colors"
@@ -301,7 +309,7 @@ export default function TemplateManager() {
             <Folder size={12} />
             <span className="text-app-muted">{template.category}</span>
           </div>
-          
+
           {template.tags.length > 0 && (
             <div className="flex items-center gap-1">
               <Tag size={12} />
@@ -338,7 +346,7 @@ export default function TemplateManager() {
           {template.content.substring(0, 80)}...
         </div>
       </div>
-      
+
       <div className="flex items-center gap-2 text-xs text-app-muted">
         <span>{template.category}</span>
         <span>•</span>
@@ -346,7 +354,7 @@ export default function TemplateManager() {
         <span>•</span>
         <span>{formatRelativeTime(template.metadata.updatedAt)}</span>
       </div>
-      
+
       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
           onClick={() => handlePreview(template)}
@@ -355,7 +363,7 @@ export default function TemplateManager() {
         >
           <Eye size={14} />
         </button>
-        
+
         <button
           onClick={() => handleEdit(template)}
           className="p-1 hover:bg-app-accent/20 rounded text-app-muted hover:text-app-text transition-colors"
@@ -363,7 +371,7 @@ export default function TemplateManager() {
         >
           <Edit size={14} />
         </button>
-        
+
         <button
           onClick={() => handleDuplicate(template)}
           className="p-1 hover:bg-app-accent/20 rounded text-app-muted hover:text-app-text transition-colors"
@@ -371,7 +379,7 @@ export default function TemplateManager() {
         >
           <Copy size={14} />
         </button>
-        
+
         <button
           onClick={() => handleDelete(template)}
           className="p-1 hover:bg-red-500/20 rounded text-app-muted hover:text-red-500 transition-colors"
@@ -507,17 +515,15 @@ export default function TemplateManager() {
           <div className="flex border border-app-border rounded-md overflow-hidden">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-2 transition-colors ${
-                viewMode === 'grid' ? 'bg-app-accent text-app-accent-fg' : 'hover:bg-app-bg'
-              }`}
+              className={`p-2 transition-colors ${viewMode === 'grid' ? 'bg-app-accent text-app-accent-fg' : 'hover:bg-app-bg'
+                }`}
             >
               <Grid size={16} />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 transition-colors ${
-                viewMode === 'list' ? 'bg-app-accent text-app-accent-fg' : 'hover:bg-app-bg'
-              }`}
+              className={`p-2 transition-colors ${viewMode === 'list' ? 'bg-app-accent text-app-accent-fg' : 'hover:bg-app-bg'
+                }`}
             >
               <List size={16} />
             </button>
@@ -531,11 +537,10 @@ export default function TemplateManager() {
               <button
                 key={tag}
                 onClick={() => toggleTag(tag)}
-                className={`px-2 py-1 text-xs rounded-md border transition-colors ${
-                  selectedTags.includes(tag)
+                className={`px-2 py-1 text-xs rounded-md border transition-colors ${selectedTags.includes(tag)
                     ? 'bg-app-accent text-app-accent-fg border-app-accent'
                     : 'bg-app-bg border-app-border hover:bg-app-panel'
-                }`}
+                  }`}
               >
                 #{tag}
               </button>
@@ -580,7 +585,7 @@ export default function TemplateManager() {
               : 'space-y-2'
           }>
             {filteredTemplates.map(template => (
-              viewMode === 'grid' 
+              viewMode === 'grid'
                 ? <TemplateCard key={template.id} template={template} />
                 : <TemplateRow key={template.id} template={template} />
             ))}

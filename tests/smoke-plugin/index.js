@@ -37,8 +37,8 @@ export default class SmokeTestPlugin {
 
         // Test 4: Workspace API - Relative Path (New)
         try {
-            // Mock a path
-            const rel = this.api.workspace.asRelativePath('/Users/pratham/Programming/Lokud Dir/Lokus-Main/tests/smoke-plugin/index.js');
+            // Mock a path - use a generic example path
+            const rel = this.api.workspace.asRelativePath('/path/to/workspace/tests/smoke-plugin/index.js');
             console.log('✅ Workspace API: asRelativePath passed', rel);
         } catch (e) {
             console.error('❌ Workspace API: asRelativePath failed', e);

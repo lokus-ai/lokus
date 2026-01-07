@@ -27,9 +27,9 @@ export class FileServer {
     try {
       // Ensure base directory exists (in a real implementation, this would be configurable)
       await this.ensureDirectory(this.baseDirectory)
-      
+
       this.isActive = true
-      
+
     } catch (error) {
       throw error
     }
@@ -42,10 +42,10 @@ export class FileServer {
     try {
       const resolvedPath = this.resolvePath(filePath)
       await this.validateFileAccess(resolvedPath, 'read')
-      
+
       const content = await fs.readFile(resolvedPath, encoding)
       const stats = await fs.stat(resolvedPath)
-      
+
       return {
         success: true,
         content,
@@ -56,7 +56,7 @@ export class FileServer {
           encoding
         }
       }
-      
+
     } catch (error) {
       return {
         success: false,
@@ -73,15 +73,15 @@ export class FileServer {
     try {
       const resolvedPath = this.resolvePath(filePath)
       await this.validateFileAccess(resolvedPath, 'write')
-      
+
       if (createDirectories) {
         const directory = path.dirname(resolvedPath)
         await this.ensureDirectory(directory)
       }
-      
+
       await fs.writeFile(resolvedPath, content, encoding)
       const stats = await fs.stat(resolvedPath)
-      
+
       return {
         success: true,
         metadata: {
@@ -91,7 +91,7 @@ export class FileServer {
           bytesWritten: Buffer.byteLength(content, encoding)
         }
       }
-      
+
     } catch (error) {
       return {
         success: false,
@@ -108,21 +108,21 @@ export class FileServer {
     try {
       const resolvedPath = this.resolvePath(dirPath)
       await this.validateFileAccess(resolvedPath, 'read')
-      
+
       const entries = await this.scanDirectory(
-        resolvedPath, 
-        recursive, 
-        includeHidden, 
+        resolvedPath,
+        recursive,
+        includeHidden,
         filter
       )
-      
+
       return {
         success: true,
         path: resolvedPath,
         entries,
         count: entries.length
       }
-      
+
     } catch (error) {
       return {
         success: false,
@@ -139,9 +139,9 @@ export class FileServer {
     try {
       const resolvedPath = this.resolvePath(filePath)
       await this.validateFileAccess(resolvedPath, 'read')
-      
+
       const stats = await fs.stat(resolvedPath)
-      
+
       return {
         success: true,
         path: resolvedPath,
@@ -158,7 +158,7 @@ export class FileServer {
         },
         extension: stats.isFile() ? path.extname(resolvedPath) : null
       }
-      
+
     } catch (error) {
       return {
         success: false,
@@ -175,16 +175,16 @@ export class FileServer {
     try {
       // In a real implementation, this would notify MCP clients
       // about resource changes and update the resource catalog
-      
+
       // Scan base directory for changes
       const entries = await this.scanDirectory(this.baseDirectory, true, false)
-      
+
       return {
         success: true,
         resourcesFound: entries.length,
         lastRefresh: new Date().toISOString()
       }
-      
+
     } catch (error) {
       return {
         success: false,
@@ -215,9 +215,11 @@ export class FileServer {
         if (watcher.close) {
           watcher.close()
         }
-      } catch { }
+      } catch (err) {
+        console.error('FileServer: Failed to close watcher', err)
+      }
     }
-    
+
     this.watchedPaths.clear()
     this.isActive = false
   }
@@ -239,7 +241,7 @@ export class FileServer {
     // Security check: ensure path is within allowed directory
     const normalizedPath = path.normalize(filePath)
     const normalizedBase = path.normalize(this.baseDirectory)
-    
+
     if (!normalizedPath.startsWith(normalizedBase)) {
       throw new Error(`Access denied: path outside allowed directory`)
     }
@@ -280,19 +282,19 @@ export class FileServer {
    */
   async scanDirectory(dirPath, recursive, includeHidden, filter) {
     const entries = []
-    
+
     try {
       const items = await fs.readdir(dirPath, { withFileTypes: true })
-      
+
       for (const item of items) {
         // Skip hidden files if not requested
         if (!includeHidden && item.name.startsWith('.')) {
           continue
         }
-        
+
         const fullPath = path.join(dirPath, item.name)
         const relativePath = path.relative(this.baseDirectory, fullPath)
-        
+
         if (item.isDirectory()) {
           const entry = {
             name: item.name,
@@ -301,32 +303,32 @@ export class FileServer {
             type: 'directory',
             size: 0
           }
-          
+
           entries.push(entry)
-          
+
           // Recurse into subdirectories if requested
           if (recursive) {
             const subEntries = await this.scanDirectory(
-              fullPath, 
-              recursive, 
-              includeHidden, 
+              fullPath,
+              recursive,
+              includeHidden,
               filter
             )
             entries.push(...subEntries)
           }
-          
+
         } else if (item.isFile()) {
           // Apply filter if specified
           if (filter && !item.name.endsWith(filter)) {
             continue
           }
-          
+
           // Check if file type is allowed
           const extension = path.extname(item.name)
           if (extension && !this.allowedExtensions.has(extension)) {
             continue
           }
-          
+
           const stats = await fs.stat(fullPath)
           const entry = {
             name: item.name,
@@ -337,15 +339,15 @@ export class FileServer {
             extension,
             modified: stats.mtime.toISOString()
           }
-          
+
           entries.push(entry)
         }
       }
-      
+
     } catch (error) {
       throw new Error(`Failed to scan directory ${dirPath}: ${error.message}`)
     }
-    
+
     return entries
   }
 }

@@ -145,7 +145,9 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         setGraphData(initialData);
         updateStats(dataManager);
 
-      } catch { }
+      } catch (err) {
+        console.error('ProfessionalGraphView: Failed to initialize data manager', err);
+      }
     };
 
     initializeDataManager();
@@ -171,7 +173,9 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       try {
         const config = await loadGraphConfig(workspacePath);
         setGraphConfig(config);
-      } catch { }
+      } catch (err) {
+        console.error('ProfessionalGraphView: Failed to load graph config', err);
+      }
     };
 
     loadConfig();
@@ -220,7 +224,9 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
 
       // Forces updated - no restart needed to avoid node spreading on UI changes
       // The simulation will naturally adapt to new force values
-    } catch { }
+    } catch (err) {
+      console.error('ProfessionalGraphView: Failed to apply force settings', err);
+    }
   }, [viewMode, graphConfig.repelStrength, graphConfig.linkDistance, graphConfig.linkStrength, graphConfig.centerStrength]);
 
   // Initial warmup: Reheat simulation when graph data first loads
@@ -237,7 +243,9 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         if (simulation) {
           simulation.alpha(1.0).restart(); // Full energy for initial spread
         }
-      } catch { }
+      } catch (err) {
+        console.error('ProfessionalGraphView: Failed to reheat simulation', err);
+      }
     }, 100);
 
     return () => clearTimeout(timer);
@@ -312,7 +320,9 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         setGraphData(updatedData);
         updateStats(graphDataManager);
 
-      } catch { }
+      } catch (err) {
+        console.error('ProfessionalGraphView: Failed to reload data', err);
+      }
     }, 150);
 
     return () => {
@@ -397,7 +407,9 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
                   created: Date.now() // Simplified - could get actual file dates
                 }
               });
-            } catch { }
+            } catch (err) {
+              console.error(`ProfessionalGraphView: Failed to process file ${path}`, err);
+            }
           }
         } catch (error) {
           // Fallback to sequential reading if bulk fails
@@ -508,7 +520,9 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         await dataManager.getOrCreateWikiLinkNode(concept);
       }
 
-    } catch { }
+    } catch (err) {
+      console.error('ProfessionalGraphView: Failed to load sample data', err);
+    }
   };
 
   /**
