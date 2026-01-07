@@ -32,6 +32,14 @@ export function useImageViewer(initialImagePath, allImageFiles, onPathChange) {
       return;
     }
 
+    // Check if imagePath is an external URL (http/https)
+    if (/^https?:\/\//i.test(imagePath)) {
+      // External URL - use directly, browser will load it
+      setImageData(imagePath);
+      setLoading(false);
+      return;
+    }
+
     // File path - load via Rust backend
     invoke('read_image_file', { path: imagePath })
       .then((dataUrl) => {
@@ -46,7 +54,7 @@ export function useImageViewer(initialImagePath, allImageFiles, onPathChange) {
 
   // Extract image info from file
   useEffect(() => {
-    if (!imagePath || !allImageFiles) return;
+    if (!imagePath) return;
 
     // If it's a data URL, set basic info
     if (imagePath.startsWith('data:')) {
@@ -59,6 +67,34 @@ export function useImageViewer(initialImagePath, allImageFiles, onPathChange) {
       });
       return;
     }
+
+    // If it's an external URL, extract info from URL
+    if (/^https?:\/\//i.test(imagePath)) {
+      try {
+        const url = new URL(imagePath);
+        const pathname = url.pathname;
+        const fileName = pathname.split('/').pop() || 'External Image';
+        setImageInfo({
+          name: decodeURIComponent(fileName),
+          path: imagePath,
+          size: null,
+          modified: null,
+          created: null,
+        });
+      } catch {
+        setImageInfo({
+          name: 'External Image',
+          path: imagePath,
+          size: null,
+          modified: null,
+          created: null,
+        });
+      }
+      return;
+    }
+
+    // Local file - find in allImageFiles
+    if (!allImageFiles) return;
 
     const file = allImageFiles.find(f => f.path === imagePath);
     if (file) {
