@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
-import { toast } from './use-toast';
 
 /**
  * Hook to handle lokus:// deep links

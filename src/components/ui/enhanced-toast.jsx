@@ -155,6 +155,11 @@ export function showEnhancedToast({
   onDismiss,
   onAutoClose,
 }) {
+  // Guard: Don't show empty toasts
+  if (!title && !message) {
+    return null;
+  }
+
   // Determine the toast function based on type
   const toastFn = type ? toast[type] || toast : toast;
 

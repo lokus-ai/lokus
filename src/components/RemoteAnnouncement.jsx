@@ -76,6 +76,11 @@ export const RemoteAnnouncement = () => {
             cancel,
         } = config.announcement;
 
+        // 0. Guard: Don't show toast if there's no meaningful content
+        if (!id || (!title && !message)) {
+            return;
+        }
+
         // 1. Check Date Range (Seasonality)
         if (!isWithinDateRange(start_date, end_date, expiresAt)) {
             return;
