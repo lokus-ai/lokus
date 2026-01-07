@@ -84,12 +84,15 @@ export function ExpandableToastContent({
       {expandedContent && (
         <>
           {isExpanded && (
-            <div className="text-sm text-app-muted pl-7 border-l-2 border-app-border ml-2 animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="text-sm text-app-muted pl-7 border-l-2 border-app-border ml-2 max-h-32 overflow-y-auto">
               {expandedContent}
             </div>
           )}
           <button
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded(!isExpanded);
+            }}
             className="flex items-center gap-1 text-xs text-app-accent hover:text-app-accent/80 transition-colors self-start ml-7"
           >
             {isExpanded ? (
@@ -177,7 +180,7 @@ export function showEnhancedToast({
   if (expandedContent || link || variant !== "default") {
     return toast.custom(
       (t) => (
-        <div className="w-full bg-app-panel border border-app-border rounded-lg p-4 shadow-lg">
+        <div className="w-[356px] max-w-[calc(100vw-32px)] bg-app-panel border border-app-border rounded-lg p-4 shadow-lg relative">
           <ExpandableToastContent
             title={title}
             message={message}

@@ -6,13 +6,14 @@ const Toaster = ({ ...props }) => {
       theme="dark"
       className="toaster group"
       position="bottom-right"
-      // Stack behavior: expand=false shows collapsed stack, hover to expand
-      // visibleToasts controls how many are visible at once
+      // Stack toasts, expand on hover
       expand={false}
       visibleToasts={4}
       richColors
       closeButton
       gap={8}
+      // Offset from edge of screen
+      offset={16}
       toastOptions={{
         classNames: {
           toast:
@@ -26,6 +27,10 @@ const Toaster = ({ ...props }) => {
           closeButton:
             "group-[.toast]:bg-app-panel group-[.toast]:border-app-border group-[.toast]:text-app-muted group-[.toast]:hover:text-app-text",
         },
+      }}
+      // Use CSS to ensure toasts stay within viewport
+      style={{
+        '--offset': '16px',
       }}
       {...props}
     />
