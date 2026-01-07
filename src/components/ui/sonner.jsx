@@ -6,9 +6,13 @@ const Toaster = ({ ...props }) => {
       theme="dark"
       className="toaster group"
       position="bottom-right"
-      expand={true}
+      // Stack behavior: expand=false shows collapsed stack, hover to expand
+      // visibleToasts controls how many are visible at once
+      expand={false}
+      visibleToasts={4}
       richColors
       closeButton
+      gap={8}
       toastOptions={{
         classNames: {
           toast:
