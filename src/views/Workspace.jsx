@@ -521,13 +521,17 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       case 'revealInFinder':
         try {
           await invoke('platform_reveal_in_file_manager', { path: file.path });
-        } catch { }
+        } catch (err) {
+          console.error('Workspace: Failed to reveal file in finder', err);
+        }
         break;
       case 'openInTerminal':
         try {
           const terminalPath = file.is_directory ? file.path : file.path.split("/").slice(0, -1).join("/");
           await invoke('platform_open_terminal', { path: terminalPath });
-        } catch { }
+        } catch (err) {
+          console.error('Workspace: Failed to open terminal', err);
+        }
         break;
       case 'cut':
         // Cut file to clipboard
@@ -542,7 +546,9 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       case 'copyPath':
         try {
           await navigator.clipboard.writeText(file.path);
-        } catch { }
+        } catch (err) {
+          console.error('Workspace: Failed to copy path', err);
+        }
         break;
       case 'copyRelativePath':
         try {
@@ -569,7 +575,9 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
             await invoke('delete_file', { path: file.path });
             onRefresh && onRefresh();
           }
-        } catch { }
+        } catch (err) {
+          console.error('Workspace: Failed to delete file', err);
+        }
         break;
       case 'selectForCompare':
         // Select file for comparison
@@ -785,7 +793,9 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
       }
 
       onRefresh();
-    } catch { }
+    } catch (err) {
+      console.error('Workspace: Failed to move file', err);
+    }
   };
 
   return (
@@ -4159,30 +4169,30 @@ function WorkspaceWithScope({ path }) {
                     <ContextMenuTrigger asChild>
                       <div className="p-2 flex-1 overflow-y-auto">
                         <FileTreeView
-                            entries={filteredFileTree}
-                            onFileClick={handleFileOpen}
-                            activeFile={activeFile}
-                            onRefresh={handleRefreshFiles}
-                            data-testid="file-tree"
-                            expandedFolders={expandedFolders}
-                            toggleFolder={toggleFolder}
-                            isCreating={isCreatingFolder}
-                            onCreateConfirm={handleConfirmCreateFolder}
-                            keymap={keymap}
-                            renamingPath={renamingPath}
-                            setRenamingPath={setRenamingPath}
-                            onViewHistory={toggleVersionHistory}
-                            setTagModalFile={setTagModalFile}
-                            setShowTagModal={setShowTagModal}
-                            setUseSplitView={setUseSplitView}
-                            setRightPaneFile={setRightPaneFile}
-                            setRightPaneTitle={setRightPaneTitle}
-                            setRightPaneContent={setRightPaneContent}
-                            isExternalDragActive={isExternalDragActive}
-                            hoveredFolder={hoveredFolder}
-                            setHoveredFolder={setHoveredFolder}
-                            toast={toast}
-                          />
+                          entries={filteredFileTree}
+                          onFileClick={handleFileOpen}
+                          activeFile={activeFile}
+                          onRefresh={handleRefreshFiles}
+                          data-testid="file-tree"
+                          expandedFolders={expandedFolders}
+                          toggleFolder={toggleFolder}
+                          isCreating={isCreatingFolder}
+                          onCreateConfirm={handleConfirmCreateFolder}
+                          keymap={keymap}
+                          renamingPath={renamingPath}
+                          setRenamingPath={setRenamingPath}
+                          onViewHistory={toggleVersionHistory}
+                          setTagModalFile={setTagModalFile}
+                          setShowTagModal={setShowTagModal}
+                          setUseSplitView={setUseSplitView}
+                          setRightPaneFile={setRightPaneFile}
+                          setRightPaneTitle={setRightPaneTitle}
+                          setRightPaneContent={setRightPaneContent}
+                          isExternalDragActive={isExternalDragActive}
+                          hoveredFolder={hoveredFolder}
+                          setHoveredFolder={setHoveredFolder}
+                          toast={toast}
+                        />
                       </div>
                     </ContextMenuTrigger>
                     <ContextMenuContent>

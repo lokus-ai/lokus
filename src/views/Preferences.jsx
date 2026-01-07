@@ -19,7 +19,8 @@ import { useAuth } from "../core/auth/AuthContext";
 import { User, LogIn, LogOut, Crown, Shield, Settings as SettingsIcon } from "lucide-react";
 import QuickImport from "../components/QuickImport.jsx";
 
-export default function Preferences() {  const [themes, setThemes] = useState([]);
+export default function Preferences() {
+  const [themes, setThemes] = useState([]);
   const [activeTheme, setActiveTheme] = useState("");
   const [themeTokens, setThemeTokens] = useState({});
   const [originalTokens, setOriginalTokens] = useState({});
@@ -248,7 +249,7 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
     });
     return unsubscribe;
   }, []);
-  
+
   // Enhanced Editor Preferences
   const [editorSettings, setEditorSettings] = useState({
     font: {
@@ -294,7 +295,9 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
           setThemeTokens(tokens);
           setOriginalTokens(tokens);
           setHasUnsavedChanges(false);
-        } catch { }
+        } catch (err) {
+          console.error('Preferences: Failed to load theme tokens', err);
+        }
       }
 
       // load markdown prefs if present
@@ -312,14 +315,18 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
             appearance: { ...prev.appearance, ...cfg.editor.appearance }
           }));
         }
-      } catch {}
+      } catch (err) {
+        console.error('Preferences: Failed to load editor settings', err);
+      }
       // load markdown shortcut prefs
       try {
         const cfg = await readConfig();
         const hs = cfg.markdownShortcuts?.headingAlt || {};
         if (hs.marker) setHeadingAltMarker(hs.marker);
         if (typeof hs.enabled === 'boolean') setHeadingAltEnabled(hs.enabled);
-      } catch {}
+      } catch (err) {
+        console.error('Preferences: Failed to load markdown shortcuts', err);
+      }
 
       // Load sync settings
       try {
@@ -341,7 +348,9 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
             }
           }
         }
-      } catch { }
+      } catch (err) {
+        console.error('Preferences: Failed to load sync settings', err);
+      }
 
       // Load daily notes settings
       try {
@@ -354,7 +363,9 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
             openOnStartup: cfg.dailyNotes.openOnStartup || false
           });
         }
-      } catch { }
+      } catch (err) {
+        console.error('Preferences: Failed to load daily notes settings', err);
+      }
 
       // Load custom symbols
       try {
@@ -362,7 +373,9 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
         if (cfg.customSymbols) {
           setCustomSymbols(cfg.customSymbols);
         }
-      } catch { }
+      } catch (err) {
+        console.error('Preferences: Failed to load custom symbols', err);
+      }
 
       // Get workspace path from opener, URL params, or backend API
       try {
@@ -386,20 +399,29 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
         if (!foundPath) {
           try {
             const currentWorkspace = await invoke('api_get_current_workspace');
-            if (currentWorkspace) {              setWorkspacePath(currentWorkspace);
+            if (currentWorkspace) {
+              setWorkspacePath(currentWorkspace);
             } else {
               if (import.meta.env.DEV) {
               }
             }
-          } catch { }
+          } catch (err) {
+            console.error('Preferences: Failed to get current workspace from API', err);
+          }
         }
-      } catch { }
+      } catch (err) {
+        console.error('Preferences: Failed to get workspace path', err);
+      }
     }
-    loadData().catch(() => {});
+    loadData().catch((err) => {
+      console.error('Preferences: Failed to load data', err);
+    });
   }, []);
 
   useEffect(() => {
-    getActiveShortcuts().then(setKeymap).catch(() => {});
+    getActiveShortcuts().then(setKeymap).catch((err) => {
+      console.error('Preferences: Failed to get active shortcuts', err);
+    });
   }, []);
 
   // Create debounced save function with useMemo
@@ -491,19 +513,25 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
           try {
             const ticket = await invoke('iroh_get_ticket', { workspacePath: workspacePath });
             setIrohTicket(ticket);
-          } catch { }
+          } catch (err) {
+            console.error('Preferences: Failed to get iroh ticket', err);
+          }
 
           // Fetch peers
           try {
             const peers = await invoke('iroh_list_peers', { workspacePath: workspacePath });
             setIrohPeers(peers || []);
-          } catch { }
+          } catch (err) {
+            console.error('Preferences: Failed to list iroh peers', err);
+          }
 
           // Auto-start auto-sync if it was enabled before
           if (autoSyncEnabled) {
             try {
               await invoke('iroh_start_auto_sync', { workspacePath: workspacePath });
-            } catch { }
+            } catch (err) {
+              console.error('Preferences: Failed to start auto sync', err);
+            }
           }
         } else if (irohDocumentId) {
           // We already have a document ID from React state, verify it
@@ -516,7 +544,9 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
             try {
               const peers = await invoke('iroh_list_peers', { workspacePath: workspacePath });
               setIrohPeers(peers || []);
-            } catch { }
+            } catch (err) {
+              console.error('Preferences: Failed to list peers (initial)', err);
+            }
           } catch (e) {
             setIrohStatus('error');
             setIrohError(String(e));
@@ -542,7 +572,9 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
         try {
           const peers = await invoke('iroh_list_peers', { workspacePath: workspacePath });
           setIrohPeers(peers || []);
-        } catch { }
+        } catch (err) {
+          console.error('Preferences: Failed to list peers (interval)', err);
+        }
       }
     }, 30000);
 
@@ -592,7 +624,9 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
   const handleThemeChange = async (e) => {
     const themeId = e.target.value;
     setActiveTheme(themeId);
-    await setGlobalActiveTheme(themeId).catch(() => {});
+    await setGlobalActiveTheme(themeId).catch((err) => {
+      console.error('Preferences: Failed to set global active theme', err);
+    });
 
     // Load theme tokens for editing
     if (themeId) {
@@ -734,7 +768,9 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
           if (workspacePath && irohDocumentId) {
             invoke('iroh_list_peers', { workspacePath: workspacePath })
               .then(peers => setIrohPeers(peers || []))
-              .catch(() => {});
+              .catch((err) => {
+                console.error('Preferences: Failed to list iroh peers (listener)', err);
+              });
           }
         });
         unlisteners.push(unlisten1);
@@ -752,7 +788,9 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
           setSyncError(null); // Clear errors during active sync
         });
         unlisteners.push(unlisten3);
-      } catch { }
+      } catch (err) {
+        console.error('Preferences: Failed to setup listeners', err);
+      }
     };
 
     setupListeners();
@@ -796,7 +834,9 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
   const saveDailyNotesSettings = async () => {
     try {
       await updateConfig({ dailyNotes: dailyNotesSettings });
-    } catch { }
+    } catch (err) {
+      console.error('Preferences: Failed to update daily notes config', err);
+    }
   };
 
   const resetEditorSettings = () => {
@@ -859,2584 +899,2355 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
           {/* Title shown in window titlebar, no need to duplicate here */}
         </header>
 
-      <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: "220px 1fr" }}>
-        {/* Sidebar */}
-        <aside className="bg-app-panel border-r border-app-border p-3">
-          {[
-            // "General",
-            "Appearance",
-            "Editor",
-            "Daily Notes",
-            "Markdown",
-            "Shortcuts",
-            "Import",
-            "Sync",
-            "Connections",
-            "Account",
-            "AI Assistant",
-            "Updates",
-          ].map((name) => (
-            <button
-              key={name}
-              onClick={() => setSection(name)}
-              className={`w-full text-left px-3 py-2 rounded-md mb-1 transition-colors ${
-                section === name ? "bg-app-accent text-app-accent-fg" : "text-app-text hover:bg-app-bg"
-              }`}
-            >
-              {name}
-            </button>
-          ))}
-        </aside>
+        <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: "220px 1fr" }}>
+          {/* Sidebar */}
+          <aside className="bg-app-panel border-r border-app-border p-3">
+            {[
+              // "General",
+              "Appearance",
+              "Editor",
+              "Daily Notes",
+              "Markdown",
+              "Shortcuts",
+              "Import",
+              "Sync",
+              "Connections",
+              "Account",
+              "AI Assistant",
+              "Updates",
+            ].map((name) => (
+              <button
+                key={name}
+                onClick={() => setSection(name)}
+                className={`w-full text-left px-3 py-2 rounded-md mb-1 transition-colors ${section === name ? "bg-app-accent text-app-accent-fg" : "text-app-text hover:bg-app-bg"
+                  }`}
+              >
+                {name}
+              </button>
+            ))}
+          </aside>
 
-        {/* Content */}
-        <main className="p-6 overflow-auto">
-          {section === "Appearance" && (
-            <div className="space-y-8 max-w-xl">
+          {/* Content */}
+          <main className="p-6 overflow-auto">
+            {section === "Appearance" && (
+              <div className="space-y-8 max-w-xl">
 
-              <section>
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm uppercase tracking-wide text-app-muted">Theme</h2>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={handleUploadTheme}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-app-panel border border-app-border hover:bg-app-bg transition-colors"
-                      title="Upload theme file"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      Upload
-                    </button>
-                    <button
-                      onClick={handleExportTheme}
-                      disabled={!activeTheme}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-app-panel border border-app-border hover:bg-app-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Export current theme"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Export
-                    </button>
+                <section>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-sm uppercase tracking-wide text-app-muted">Theme</h2>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleUploadTheme}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-app-panel border border-app-border hover:bg-app-bg transition-colors"
+                        title="Upload theme file"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        Upload
+                      </button>
+                      <button
+                        onClick={handleExportTheme}
+                        disabled={!activeTheme}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-app-panel border border-app-border hover:bg-app-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Export current theme"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Export
+                      </button>
+                    </div>
                   </div>
-                </div>
 
-                <select
-                  className="h-9 px-3 w-full rounded-md bg-app-panel border border-app-border outline-none mb-4"
-                  value={activeTheme}
-                  onChange={handleThemeChange}
-                >
-                  <option value="">Built-in</option>
-                  {themes.map((theme) => (
-                    <option key={theme.id} value={theme.id}>
-                      {theme.name}
-                    </option>
-                  ))}
-                </select>
+                  <select
+                    className="h-9 px-3 w-full rounded-md bg-app-panel border border-app-border outline-none mb-4"
+                    value={activeTheme}
+                    onChange={handleThemeChange}
+                  >
+                    <option value="">Built-in</option>
+                    {themes.map((theme) => (
+                      <option key={theme.id} value={theme.id}>
+                        {theme.name}
+                      </option>
+                    ))}
+                  </select>
 
-                {/* Theme Editor Table */}
-                {activeTheme && Object.keys(themeTokens).length > 0 && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-app-muted">
-                        Edit colors and save changes to the theme file
-                      </p>
-                      <div className="flex items-center gap-2">
-                        {hasUnsavedChanges && (
+                  {/* Theme Editor Table */}
+                  {activeTheme && Object.keys(themeTokens).length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-app-muted">
+                          Edit colors and save changes to the theme file
+                        </p>
+                        <div className="flex items-center gap-2">
+                          {hasUnsavedChanges && (
+                            <button
+                              onClick={handleResetTheme}
+                              className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md hover:bg-app-panel transition-colors text-app-muted"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              Reset
+                            </button>
+                          )}
                           <button
-                            onClick={handleResetTheme}
-                            className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md hover:bg-app-panel transition-colors text-app-muted"
+                            onClick={handleSaveTheme}
+                            disabled={!hasUnsavedChanges}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-app-accent text-app-accent-fg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            <RotateCcw className="w-3 h-3" />
-                            Reset
+                            <Save className="w-3.5 h-3.5" />
+                            Save Changes
                           </button>
-                        )}
-                        <button
-                          onClick={handleSaveTheme}
-                          disabled={!hasUnsavedChanges}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-app-accent text-app-accent-fg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Save className="w-3.5 h-3.5" />
-                          Save Changes
-                        </button>
+                        </div>
+                      </div>
+
+                      <div className="border border-app-border rounded-md overflow-hidden">
+                        <div className="max-h-96 overflow-y-auto">
+                          <table className="w-full text-sm">
+                            <thead className="bg-app-panel sticky top-0">
+                              <tr>
+                                <th className="text-left px-3 py-2 text-xs font-medium text-app-muted uppercase tracking-wide">Token</th>
+                                <th className="text-left px-3 py-2 text-xs font-medium text-app-muted uppercase tracking-wide w-16">Preview</th>
+                                <th className="text-left px-3 py-2 text-xs font-medium text-app-muted uppercase tracking-wide">Value</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {Object.entries(themeTokens).sort().map(([key, value]) => {
+                                const rgbValue = value.includes(' ') ? `rgb(${value})` : value;
+                                return (
+                                  <tr key={key} className="border-t border-app-border hover:bg-app-panel/50">
+                                    <td className="px-3 py-2 font-mono text-xs text-app-muted">{key}</td>
+                                    <td className="px-3 py-2">
+                                      <div
+                                        className="w-8 h-8 rounded border border-app-border"
+                                        style={{ backgroundColor: rgbValue }}
+                                        title={rgbValue}
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <input
+                                        type="text"
+                                        value={value}
+                                        onChange={(e) => handleTokenChange(key, e.target.value)}
+                                        className="w-full px-2 py-1 text-xs font-mono rounded bg-app-bg border border-app-border outline-none focus:border-app-accent"
+                                        placeholder="e.g., 255 128 0 or #ff8000"
+                                      />
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     </div>
+                  )}
 
-                    <div className="border border-app-border rounded-md overflow-hidden">
-                      <div className="max-h-96 overflow-y-auto">
-                        <table className="w-full text-sm">
-                          <thead className="bg-app-panel sticky top-0">
-                            <tr>
-                              <th className="text-left px-3 py-2 text-xs font-medium text-app-muted uppercase tracking-wide">Token</th>
-                              <th className="text-left px-3 py-2 text-xs font-medium text-app-muted uppercase tracking-wide w-16">Preview</th>
-                              <th className="text-left px-3 py-2 text-xs font-medium text-app-muted uppercase tracking-wide">Value</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {Object.entries(themeTokens).sort().map(([key, value]) => {
-                              const rgbValue = value.includes(' ') ? `rgb(${value})` : value;
-                              return (
-                                <tr key={key} className="border-t border-app-border hover:bg-app-panel/50">
-                                  <td className="px-3 py-2 font-mono text-xs text-app-muted">{key}</td>
-                                  <td className="px-3 py-2">
-                                    <div
-                                      className="w-8 h-8 rounded border border-app-border"
-                                      style={{ backgroundColor: rgbValue }}
-                                      title={rgbValue}
-                                    />
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    <input
-                                      type="text"
-                                      value={value}
-                                      onChange={(e) => handleTokenChange(key, e.target.value)}
-                                      className="w-full px-2 py-1 text-xs font-mono rounded bg-app-bg border border-app-border outline-none focus:border-app-accent"
-                                      placeholder="e.g., 255 128 0 or #ff8000"
-                                    />
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                  {!activeTheme && (
+                    <p className="text-xs text-app-muted mt-2">
+                      Select a theme to edit its colors
+                    </p>
+                  )}
+                </section>
+
+              </div>
+            )}
+
+            {section === "Editor" && (
+              <div className="flex flex-col lg:flex-row gap-6 max-w-7xl">
+                {/* Settings Controls */}
+                <div className="flex-1 space-y-2 min-w-0">
+                  {/* Style Presets */}
+                  <section className="border border-app-border rounded-lg overflow-hidden bg-app-panel/30 hover:border-app-accent/30 transition-all">
+                    <button
+                      onClick={() => toggleSection('presets')}
+                      className="w-full px-4 py-2.5 bg-gradient-to-r from-app-panel/50 to-transparent hover:from-app-panel flex items-center justify-between transition-all group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-app-accent" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z" />
+                        </svg>
+                        <h2 className="text-sm font-semibold">Quick Presets</h2>
                       </div>
-                    </div>
-                  </div>
-                )}
+                      <svg className={`w-4 h-4 transition-transform duration-200 ${expandedSections.presets ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedSections.presets && (
+                      <div className="p-4 bg-app-bg/50 backdrop-blur-sm">
+                        <p className="text-xs text-app-muted mb-3">Choose a preset to quickly apply professional styling</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => applyPreset('minimal')}
+                            className="p-3 rounded-lg border border-app-border hover:border-app-accent hover:bg-app-accent/5 transition-all text-left group"
+                          >
+                            <div className="font-medium text-sm mb-1 group-hover:text-app-accent">Minimal</div>
+                            <div className="text-xs text-app-muted">Clean & simple</div>
+                          </button>
+                          <button
+                            onClick={() => applyPreset('comfortable')}
+                            className="p-3 rounded-lg border border-app-border hover:border-app-accent hover:bg-app-accent/5 transition-all text-left group"
+                          >
+                            <div className="font-medium text-sm mb-1 group-hover:text-app-accent">Comfortable</div>
+                            <div className="text-xs text-app-muted">Balanced & easy</div>
+                          </button>
+                          <button
+                            onClick={() => applyPreset('compact')}
+                            className="p-3 rounded-lg border border-app-border hover:border-app-accent hover:bg-app-accent/5 transition-all text-left group"
+                          >
+                            <div className="font-medium text-sm mb-1 group-hover:text-app-accent">Compact</div>
+                            <div className="text-xs text-app-muted">Dense & efficient</div>
+                          </button>
+                          <button
+                            onClick={() => applyPreset('spacious')}
+                            className="p-3 rounded-lg border border-app-border hover:border-app-accent hover:bg-app-accent/5 transition-all text-left group"
+                          >
+                            <div className="font-medium text-sm mb-1 group-hover:text-app-accent">Spacious</div>
+                            <div className="text-xs text-app-muted">Airy & relaxed</div>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </section>
 
-                {!activeTheme && (
-                  <p className="text-xs text-app-muted mt-2">
-                    Select a theme to edit its colors
-                  </p>
-                )}
-              </section>
-
-            </div>
-          )}
-
-          {section === "Editor" && (
-            <div className="flex flex-col lg:flex-row gap-6 max-w-7xl">
-              {/* Settings Controls */}
-              <div className="flex-1 space-y-2 min-w-0">
-              {/* Style Presets */}
-              <section className="border border-app-border rounded-lg overflow-hidden bg-app-panel/30 hover:border-app-accent/30 transition-all">
-                <button
-                  onClick={() => toggleSection('presets')}
-                  className="w-full px-4 py-2.5 bg-gradient-to-r from-app-panel/50 to-transparent hover:from-app-panel flex items-center justify-between transition-all group"
-                >
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-app-accent" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z" />
-                    </svg>
-                    <h2 className="text-sm font-semibold">Quick Presets</h2>
-                  </div>
-                  <svg className={`w-4 h-4 transition-transform duration-200 ${expandedSections.presets ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {expandedSections.presets && (
-                <div className="p-4 bg-app-bg/50 backdrop-blur-sm">
-                  <p className="text-xs text-app-muted mb-3">Choose a preset to quickly apply professional styling</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  {/* Font Settings - Real-time */}
+                  <section className="border border-app-border rounded-lg overflow-hidden bg-app-panel/30 hover:border-app-accent/30 transition-all">
                     <button
-                      onClick={() => applyPreset('minimal')}
-                      className="p-3 rounded-lg border border-app-border hover:border-app-accent hover:bg-app-accent/5 transition-all text-left group"
+                      onClick={() => toggleSection('font')}
+                      className="w-full px-4 py-2.5 bg-gradient-to-r from-app-panel/50 to-transparent hover:from-app-panel flex items-center justify-between transition-all group"
                     >
-                      <div className="font-medium text-sm mb-1 group-hover:text-app-accent">Minimal</div>
-                      <div className="text-xs text-app-muted">Clean & simple</div>
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-app-accent" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                        </svg>
+                        <h2 className="text-sm font-semibold">Font & Typography</h2>
+                      </div>
+                      <svg className={`w-4 h-4 transition-transform duration-200 ${expandedSections.font ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedSections.font && (
+                      <div className="p-4 space-y-4 bg-app-bg/50 backdrop-blur-sm">
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Font Family</label>
+                          <select
+                            className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none"
+                            value={liveEditorSettings.getSetting('fontFamily')}
+                            onChange={async (e) => {
+                              liveEditorSettings.updateSetting('fontFamily', e.target.value);
+                              await updateConfig({ editor: { ...editorSettings, font: { ...editorSettings.font, family: e.target.value } } });
+                            }}
+                          >
+                            <option value="ui-sans-serif">System UI</option>
+                            <option value="ui-serif">System Serif</option>
+                            <option value="ui-monospace">System Monospace</option>
+                            <option value="Inter">Inter</option>
+                            <option value="Roboto">Roboto</option>
+                            <option value="'Helvetica Neue', Helvetica">Helvetica</option>
+                            <option value="Georgia, serif">Georgia</option>
+                            <option value="'Times New Roman', serif">Times New Roman</option>
+                            <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-xs font-medium text-app-muted uppercase tracking-wide">Font Size</label>
+                            <span className="text-xs font-mono text-app-accent bg-app-accent/10 px-2 py-0.5 rounded">{liveEditorSettings.getSetting('fontSize')}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="12"
+                            max="24"
+                            step="1"
+                            className="w-full h-2 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
+                            value={liveEditorSettings.getSetting('fontSize')}
+                            onChange={(e) => liveEditorSettings.updateSetting('fontSize', parseInt(e.target.value))}
+                          />
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-xs font-medium text-app-muted uppercase tracking-wide">Line Height</label>
+                            <span className="text-xs font-mono text-app-accent bg-app-accent/10 px-2 py-0.5 rounded">{liveEditorSettings.getSetting('lineHeight')}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="1.2"
+                            max="2.5"
+                            step="0.1"
+                            className="w-full h-2 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
+                            value={liveEditorSettings.getSetting('lineHeight')}
+                            onChange={(e) => liveEditorSettings.updateSetting('lineHeight', parseFloat(e.target.value))}
+                          />
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-xs font-medium text-app-muted uppercase tracking-wide">Letter Spacing</label>
+                            <span className="text-xs font-mono text-app-accent bg-app-accent/10 px-2 py-0.5 rounded">{liveEditorSettings.getSetting('letterSpacing')}em</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="-0.05"
+                            max="0.1"
+                            step="0.005"
+                            className="w-full h-2 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
+                            value={liveEditorSettings.getSetting('letterSpacing')}
+                            onChange={(e) => liveEditorSettings.updateSetting('letterSpacing', parseFloat(e.target.value))}
+                          />
+                        </div>
+
+                        <div className="border-t border-app-border/50 pt-4 mt-4">
+                          <h3 className="text-xs font-semibold uppercase tracking-wider text-app-muted mb-3 flex items-center gap-2">
+                            <div className="w-1 h-4 bg-app-accent rounded-full"></div>
+                            Heading Sizes
+                          </h3>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <label className="text-xs font-medium text-app-muted">H1</label>
+                                <span className="text-xs font-mono text-app-accent">{liveEditorSettings.getSetting('h1Size')}em</span>
+                              </div>
+                              <input
+                                type="range"
+                                min="1.5"
+                                max="3.0"
+                                step="0.1"
+                                className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
+                                value={liveEditorSettings.getSetting('h1Size')}
+                                onChange={(e) => liveEditorSettings.updateSetting('h1Size', parseFloat(e.target.value))}
+                              />
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <label className="text-xs font-medium text-app-muted">H2</label>
+                                <span className="text-xs font-mono text-app-accent">{liveEditorSettings.getSetting('h2Size')}em</span>
+                              </div>
+                              <input
+                                type="range"
+                                min="1.2"
+                                max="2.5"
+                                step="0.1"
+                                className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
+                                value={liveEditorSettings.getSetting('h2Size')}
+                                onChange={(e) => liveEditorSettings.updateSetting('h2Size', parseFloat(e.target.value))}
+                              />
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <label className="text-xs font-medium text-app-muted">H3</label>
+                                <span className="text-xs font-mono text-app-accent">{liveEditorSettings.getSetting('h3Size')}em</span>
+                              </div>
+                              <input
+                                type="range"
+                                min="1.0"
+                                max="2.0"
+                                step="0.1"
+                                className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
+                                value={liveEditorSettings.getSetting('h3Size')}
+                                onChange={(e) => liveEditorSettings.updateSetting('h3Size', parseFloat(e.target.value))}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-app-border/50 pt-4 mt-4">
+                          <h3 className="text-xs font-semibold uppercase tracking-wider text-app-muted mb-3 flex items-center gap-2">
+                            <div className="w-1 h-4 bg-app-accent rounded-full"></div>
+                            Font Weights
+                          </h3>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <label className="text-xs font-medium text-app-muted">Normal</label>
+                                <span className="text-xs font-mono text-app-accent">{liveEditorSettings.getSetting('fontWeight')}</span>
+                              </div>
+                              <input type="range" min="100" max="900" step="100"
+                                className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
+                                value={liveEditorSettings.getSetting('fontWeight')}
+                                onChange={(e) => liveEditorSettings.updateSetting('fontWeight', parseInt(e.target.value))}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium mb-1">Bold</label>
+                              <div className="flex items-center gap-2">
+                                <input type="range" min="100" max="900" step="100" className="flex-1"
+                                  value={liveEditorSettings.getSetting('boldWeight')}
+                                  onChange={(e) => liveEditorSettings.updateSetting('boldWeight', parseInt(e.target.value))}
+                                />
+                                <span className="text-xs text-app-muted w-8">{liveEditorSettings.getSetting('boldWeight')}</span>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium mb-1">H1</label>
+                              <div className="flex items-center gap-2">
+                                <input type="range" min="100" max="900" step="100" className="flex-1"
+                                  value={liveEditorSettings.getSetting('h1Weight')}
+                                  onChange={(e) => liveEditorSettings.updateSetting('h1Weight', parseInt(e.target.value))}
+                                />
+                                <span className="text-xs text-app-muted w-8">{liveEditorSettings.getSetting('h1Weight')}</span>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium mb-1">H2</label>
+                              <div className="flex items-center gap-2">
+                                <input type="range" min="100" max="900" step="100" className="flex-1"
+                                  value={liveEditorSettings.getSetting('h2Weight')}
+                                  onChange={(e) => liveEditorSettings.updateSetting('h2Weight', parseInt(e.target.value))}
+                                />
+                                <span className="text-xs text-app-muted w-8">{liveEditorSettings.getSetting('h2Weight')}</span>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium mb-1">H3</label>
+                              <div className="flex items-center gap-2">
+                                <input type="range" min="100" max="900" step="100" className="flex-1"
+                                  value={liveEditorSettings.getSetting('h3Weight')}
+                                  onChange={(e) => liveEditorSettings.updateSetting('h3Weight', parseInt(e.target.value))}
+                                />
+                                <span className="text-xs text-app-muted w-8">{liveEditorSettings.getSetting('h3Weight')}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Spacing Settings */}
+                  <section className="border border-app-border rounded-lg overflow-hidden bg-app-panel/30 hover:border-app-accent/30 transition-all">
+                    <button
+                      onClick={() => toggleSection('spacing')}
+                      className="w-full px-4 py-2.5 bg-gradient-to-r from-app-panel/50 to-transparent hover:from-app-panel flex items-center justify-between transition-all group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-app-accent" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                        </svg>
+                        <h2 className="text-sm font-semibold">Spacing & Layout</h2>
+                      </div>
+                      <svg className={`w-4 h-4 transition-transform duration-200 ${expandedSections.spacing ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedSections.spacing && (
+                      <div className="p-4 space-y-4 bg-app-bg">
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Paragraph Spacing</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="range"
+                              min="0"
+                              max="3"
+                              step="0.25"
+                              className="flex-1"
+                              value={liveEditorSettings.getSetting('paragraphSpacing')}
+                              onChange={(e) => liveEditorSettings.updateSetting('paragraphSpacing', parseFloat(e.target.value))}
+                            />
+                            <span className="text-sm text-app-muted w-12">{liveEditorSettings.getSetting('paragraphSpacing')}rem</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-2">List Item Spacing</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.05"
+                              className="flex-1"
+                              value={liveEditorSettings.getSetting('listSpacing')}
+                              onChange={(e) => liveEditorSettings.updateSetting('listSpacing', parseFloat(e.target.value))}
+                            />
+                            <span className="text-sm text-app-muted w-12">{liveEditorSettings.getSetting('listSpacing')}rem</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Indentation Size</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="range"
+                              min="1"
+                              max="4"
+                              step="0.5"
+                              className="flex-1"
+                              value={liveEditorSettings.getSetting('indentSize')}
+                              onChange={(e) => liveEditorSettings.updateSetting('indentSize', parseFloat(e.target.value))}
+                            />
+                            <span className="text-sm text-app-muted w-12">{liveEditorSettings.getSetting('indentSize')}rem</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* List Symbols */}
+                  <section className="border border-app-border rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => toggleSection('lists')}
+                      className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
+                    >
+                      <h2 className="text-sm font-semibold uppercase tracking-wide">List Symbols</h2>
+                      <svg className={`w-5 h-5 transition-transform ${expandedSections.lists ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedSections.lists && (
+                      <div className="p-4 space-y-4 bg-app-bg">
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Bullet Style</label>
+                          <div className="flex gap-2">
+                            {['•', '◦', '▪', '▸', '►', '○', '●'].map(symbol => (
+                              <button
+                                key={symbol}
+                                onClick={() => liveEditorSettings.updateSetting('bulletStyle', symbol)}
+                                className={`w-10 h-10 flex items-center justify-center rounded border transition-colors ${liveEditorSettings.getSetting('bulletStyle') === symbol
+                                    ? 'border-app-accent bg-app-accent/10 text-app-accent'
+                                    : 'border-app-border hover:border-app-accent/50'
+                                  }`}
+                              >
+                                {symbol}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Checkbox Style</label>
+                          <div className="flex gap-2">
+                            {['☑', '✓', '✔', '☐', '✅'].map(symbol => (
+                              <button
+                                key={symbol}
+                                onClick={() => liveEditorSettings.updateSetting('checkboxStyle', symbol)}
+                                className={`w-10 h-10 flex items-center justify-center rounded border transition-colors ${liveEditorSettings.getSetting('checkboxStyle') === symbol
+                                    ? 'border-app-accent bg-app-accent/10 text-app-accent'
+                                    : 'border-app-border hover:border-app-accent/50'
+                                  }`}
+                              >
+                                {symbol}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Colors */}
+                  <section className="border border-app-border rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => toggleSection('colors')}
+                      className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
+                    >
+                      <h2 className="text-sm font-semibold uppercase tracking-wide">Colors</h2>
+                      <svg className={`w-5 h-5 transition-transform ${expandedSections.colors ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedSections.colors && (
+                      <div className="p-4 bg-app-bg">
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Text</label>
+                            <input
+                              type="color"
+                              className="w-full h-8 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('textColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('textColor')}
+                              onChange={(e) => liveEditorSettings.updateSetting('textColor', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Heading</label>
+                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('headingColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('headingColor')}
+                              onChange={(e) => liveEditorSettings.updateSetting('headingColor', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Link</label>
+                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('linkColor') === '#inherit' ? '#0000ff' : liveEditorSettings.getSetting('linkColor')}
+                              onChange={(e) => liveEditorSettings.updateSetting('linkColor', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Link Hover</label>
+                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('linkHoverColor') === '#inherit' ? '#0000cc' : liveEditorSettings.getSetting('linkHoverColor')}
+                              onChange={(e) => liveEditorSettings.updateSetting('linkHoverColor', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Code</label>
+                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('codeColor') === '#inherit' ? '#e83e8c' : liveEditorSettings.getSetting('codeColor')}
+                              onChange={(e) => liveEditorSettings.updateSetting('codeColor', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Code BG</label>
+                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('codeBackground')}
+                              onChange={(e) => liveEditorSettings.updateSetting('codeBackground', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Quote</label>
+                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('blockquoteColor') === '#inherit' ? '#6c757d' : liveEditorSettings.getSetting('blockquoteColor')}
+                              onChange={(e) => liveEditorSettings.updateSetting('blockquoteColor', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Quote Border</label>
+                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('blockquoteBorder')}
+                              onChange={(e) => liveEditorSettings.updateSetting('blockquoteBorder', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Bold</label>
+                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('boldColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('boldColor')}
+                              onChange={(e) => liveEditorSettings.updateSetting('boldColor', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Italic</label>
+                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('italicColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('italicColor')}
+                              onChange={(e) => liveEditorSettings.updateSetting('italicColor', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Highlight BG</label>
+                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('highlightColor')}
+                              onChange={(e) => liveEditorSettings.updateSetting('highlightColor', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Highlight Text</label>
+                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('highlightTextColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('highlightTextColor')}
+                              onChange={(e) => liveEditorSettings.updateSetting('highlightTextColor', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Selection</label>
+                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('selectionColor').match(/#[0-9a-fA-F]{6}/)?.[0] || '#6366f1'}
+                              onChange={(e) => liveEditorSettings.updateSetting('selectionColor', `rgba(${parseInt(e.target.value.slice(1, 3), 16)}, ${parseInt(e.target.value.slice(3, 5), 16)}, ${parseInt(e.target.value.slice(5, 7), 16)}, 0.2)`)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Code Blocks */}
+                  <section className="border border-app-border rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => toggleSection('codeBlocks')}
+                      className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
+                    >
+                      <h2 className="text-sm font-semibold uppercase tracking-wide">Code Blocks</h2>
+                      <svg className={`w-5 h-5 transition-transform ${expandedSections.codeBlocks ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedSections.codeBlocks && (
+                      <div className="p-4 bg-app-bg">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Background Color</label>
+                            <input
+                              type="color"
+                              className="w-full h-10 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('codeBlockBg')}
+                              onChange={(e) => liveEditorSettings.updateSetting('codeBlockBg', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Border Color</label>
+                            <input
+                              type="color"
+                              className="w-full h-10 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('codeBlockBorder')}
+                              onChange={(e) => liveEditorSettings.updateSetting('codeBlockBorder', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Border Width</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="range"
+                                min="0"
+                                max="5"
+                                step="1"
+                                className="flex-1"
+                                value={liveEditorSettings.getSetting('codeBlockBorderWidth')}
+                                onChange={(e) => liveEditorSettings.updateSetting('codeBlockBorderWidth', parseInt(e.target.value))}
+                              />
+                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('codeBlockBorderWidth')}px</span>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Border Radius</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="range"
+                                min="0"
+                                max="20"
+                                step="1"
+                                className="flex-1"
+                                value={liveEditorSettings.getSetting('codeBlockBorderRadius')}
+                                onChange={(e) => liveEditorSettings.updateSetting('codeBlockBorderRadius', parseInt(e.target.value))}
+                              />
+                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('codeBlockBorderRadius')}px</span>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Padding</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="range"
+                                min="0"
+                                max="32"
+                                step="2"
+                                className="flex-1"
+                                value={liveEditorSettings.getSetting('codeBlockPadding')}
+                                onChange={(e) => liveEditorSettings.updateSetting('codeBlockPadding', parseInt(e.target.value))}
+                              />
+                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('codeBlockPadding')}px</span>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Font Family</label>
+                            <select
+                              className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none"
+                              value={liveEditorSettings.getSetting('codeBlockFont')}
+                              onChange={(e) => liveEditorSettings.updateSetting('codeBlockFont', e.target.value)}
+                            >
+                              <option value="ui-monospace">System Monospace</option>
+                              <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+                              <option value="'Fira Code', monospace">Fira Code</option>
+                              <option value="'Source Code Pro', monospace">Source Code Pro</option>
+                              <option value="Consolas, monospace">Consolas</option>
+                              <option value="Monaco, monospace">Monaco</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Font Size</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="range"
+                                min="10"
+                                max="20"
+                                step="1"
+                                className="flex-1"
+                                value={liveEditorSettings.getSetting('codeBlockFontSize')}
+                                onChange={(e) => liveEditorSettings.updateSetting('codeBlockFontSize', parseInt(e.target.value))}
+                              />
+                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('codeBlockFontSize')}px</span>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Line Height</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="range"
+                                min="1.0"
+                                max="2.0"
+                                step="0.1"
+                                className="flex-1"
+                                value={liveEditorSettings.getSetting('codeBlockLineHeight')}
+                                onChange={(e) => liveEditorSettings.updateSetting('codeBlockLineHeight', parseFloat(e.target.value))}
+                              />
+                              <span className="text-sm text-app-muted w-8">{liveEditorSettings.getSetting('codeBlockLineHeight')}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Links */}
+                  <section className="border border-app-border rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => toggleSection('links')}
+                      className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
+                    >
+                      <h2 className="text-sm font-semibold uppercase tracking-wide">Links</h2>
+                      <svg className={`w-5 h-5 transition-transform ${expandedSections.links ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedSections.links && (
+                      <div className="p-4 bg-app-bg">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Underline Style</label>
+                            <select
+                              className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none"
+                              value={liveEditorSettings.getSetting('linkUnderline')}
+                              onChange={(e) => liveEditorSettings.updateSetting('linkUnderline', e.target.value)}
+                            >
+                              <option value="none">None</option>
+                              <option value="hover">On Hover</option>
+                              <option value="always">Always</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Underline Thickness</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="range"
+                                min="1"
+                                max="4"
+                                step="1"
+                                className="flex-1"
+                                value={liveEditorSettings.getSetting('linkUnderlineThickness')}
+                                onChange={(e) => liveEditorSettings.updateSetting('linkUnderlineThickness', parseInt(e.target.value))}
+                              />
+                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('linkUnderlineThickness')}px</span>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Underline Offset</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="range"
+                                min="0"
+                                max="8"
+                                step="1"
+                                className="flex-1"
+                                value={liveEditorSettings.getSetting('linkUnderlineOffset')}
+                                onChange={(e) => liveEditorSettings.updateSetting('linkUnderlineOffset', parseInt(e.target.value))}
+                              />
+                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('linkUnderlineOffset')}px</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Text Decorations */}
+                  <section className="border border-app-border rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => toggleSection('decorations')}
+                      className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
+                    >
+                      <h2 className="text-sm font-semibold uppercase tracking-wide">Text Decorations</h2>
+                      <svg className={`w-5 h-5 transition-transform ${expandedSections.decorations ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedSections.decorations && (
+                      <div className="p-4 bg-app-bg">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Strikethrough Color</label>
+                            <input
+                              type="color"
+                              className="w-full h-10 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('strikethroughColor')}
+                              onChange={(e) => liveEditorSettings.updateSetting('strikethroughColor', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Strikethrough Thickness</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="range"
+                                min="1"
+                                max="4"
+                                step="1"
+                                className="flex-1"
+                                value={liveEditorSettings.getSetting('strikethroughThickness')}
+                                onChange={(e) => liveEditorSettings.updateSetting('strikethroughThickness', parseInt(e.target.value))}
+                              />
+                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('strikethroughThickness')}px</span>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Underline Color</label>
+                            <input
+                              type="color"
+                              className="w-full h-10 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('underlineColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('underlineColor')}
+                              onChange={(e) => liveEditorSettings.updateSetting('underlineColor', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Underline Thickness</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="range"
+                                min="1"
+                                max="4"
+                                step="1"
+                                className="flex-1"
+                                value={liveEditorSettings.getSetting('underlineThickness')}
+                                onChange={(e) => liveEditorSettings.updateSetting('underlineThickness', parseInt(e.target.value))}
+                              />
+                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('underlineThickness')}px</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Blockquotes */}
+                  <section className="border border-app-border rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => toggleSection('blockquotes')}
+                      className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
+                    >
+                      <h2 className="text-sm font-semibold uppercase tracking-wide">Blockquotes</h2>
+                      <svg className={`w-5 h-5 transition-transform ${expandedSections.blockquotes ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedSections.blockquotes && (
+                      <div className="p-4 bg-app-bg">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Border Width</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="range"
+                                min="1"
+                                max="8"
+                                step="1"
+                                className="flex-1"
+                                value={liveEditorSettings.getSetting('blockquoteBorderWidth')}
+                                onChange={(e) => liveEditorSettings.updateSetting('blockquoteBorderWidth', parseInt(e.target.value))}
+                              />
+                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('blockquoteBorderWidth')}px</span>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Padding</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="range"
+                                min="8"
+                                max="32"
+                                step="2"
+                                className="flex-1"
+                                value={liveEditorSettings.getSetting('blockquotePadding')}
+                                onChange={(e) => liveEditorSettings.updateSetting('blockquotePadding', parseInt(e.target.value))}
+                              />
+                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('blockquotePadding')}px</span>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Border Style</label>
+                            <select
+                              className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none"
+                              value={liveEditorSettings.getSetting('blockquoteStyle')}
+                              onChange={(e) => liveEditorSettings.updateSetting('blockquoteStyle', e.target.value)}
+                            >
+                              <option value="solid">Solid</option>
+                              <option value="dashed">Dashed</option>
+                              <option value="dotted">Dotted</option>
+                              <option value="double">Double</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Tables */}
+                  <section className="border border-app-border rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => toggleSection('tables')}
+                      className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
+                    >
+                      <h2 className="text-sm font-semibold uppercase tracking-wide">Tables</h2>
+                      <svg className={`w-5 h-5 transition-transform ${expandedSections.tables ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedSections.tables && (
+                      <div className="p-4 bg-app-bg">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Border Color</label>
+                            <input
+                              type="color"
+                              className="w-full h-10 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('tableBorder')}
+                              onChange={(e) => liveEditorSettings.updateSetting('tableBorder', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Header Background</label>
+                            <input
+                              type="color"
+                              className="w-full h-10 rounded border border-app-border cursor-pointer"
+                              value={liveEditorSettings.getSetting('tableHeaderBg')}
+                              onChange={(e) => liveEditorSettings.updateSetting('tableHeaderBg', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Border Width</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="range"
+                                min="1"
+                                max="4"
+                                step="1"
+                                className="flex-1"
+                                value={liveEditorSettings.getSetting('tableBorderWidth')}
+                                onChange={(e) => liveEditorSettings.updateSetting('tableBorderWidth', parseInt(e.target.value))}
+                              />
+                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('tableBorderWidth')}px</span>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Cell Padding</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="range"
+                                min="4"
+                                max="20"
+                                step="2"
+                                className="flex-1"
+                                value={liveEditorSettings.getSetting('tableCellPadding')}
+                                onChange={(e) => liveEditorSettings.updateSetting('tableCellPadding', parseInt(e.target.value))}
+                              />
+                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('tableCellPadding')}px</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Save Button */}
+                  <div className="flex justify-end gap-3 pt-4 sticky bottom-0 bg-gradient-to-t from-app-bg via-app-bg to-transparent border-t border-app-border/50 py-4 backdrop-blur-sm">
+                    <button
+                      onClick={resetEditorSettings}
+                      className="px-4 py-2 rounded-lg border border-app-border hover:bg-app-panel hover:border-app-accent/50 transition-all flex items-center gap-2 group"
+                    >
+                      <svg className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Reset
                     </button>
                     <button
-                      onClick={() => applyPreset('comfortable')}
-                      className="p-3 rounded-lg border border-app-border hover:border-app-accent hover:bg-app-accent/5 transition-all text-left group"
+                      onClick={saveEditorSettings}
+                      className={`px-6 py-2 rounded-lg transition-all flex items-center gap-2 font-medium shadow-lg ${saveStatus === 'saving'
+                          ? 'bg-app-muted text-app-bg cursor-wait'
+                          : saveStatus === 'success'
+                            ? 'bg-green-600 text-white shadow-green-600/50'
+                            : saveStatus === 'error'
+                              ? 'bg-red-600 text-white shadow-red-600/50'
+                              : 'bg-app-accent text-white hover:bg-app-accent/90 hover:shadow-app-accent/50'
+                        }`}
                     >
-                      <div className="font-medium text-sm mb-1 group-hover:text-app-accent">Comfortable</div>
-                      <div className="text-xs text-app-muted">Balanced & easy</div>
-                    </button>
-                    <button
-                      onClick={() => applyPreset('compact')}
-                      className="p-3 rounded-lg border border-app-border hover:border-app-accent hover:bg-app-accent/5 transition-all text-left group"
-                    >
-                      <div className="font-medium text-sm mb-1 group-hover:text-app-accent">Compact</div>
-                      <div className="text-xs text-app-muted">Dense & efficient</div>
-                    </button>
-                    <button
-                      onClick={() => applyPreset('spacious')}
-                      className="p-3 rounded-lg border border-app-border hover:border-app-accent hover:bg-app-accent/5 transition-all text-left group"
-                    >
-                      <div className="font-medium text-sm mb-1 group-hover:text-app-accent">Spacious</div>
-                      <div className="text-xs text-app-muted">Airy & relaxed</div>
+                      {saveStatus === 'saving' && (
+                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      )}
+                      {saveStatus === 'success' && (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                      {saveStatus === 'error' && (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      )}
+                      {!saveStatus && (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                        </svg>
+                      )}
+                      {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'success' ? 'Saved!' : saveStatus === 'error' ? 'Failed' : 'Save Settings'}
                     </button>
                   </div>
                 </div>
-                )}
-              </section>
 
-              {/* Font Settings - Real-time */}
-              <section className="border border-app-border rounded-lg overflow-hidden bg-app-panel/30 hover:border-app-accent/30 transition-all">
-                <button
-                  onClick={() => toggleSection('font')}
-                  className="w-full px-4 py-2.5 bg-gradient-to-r from-app-panel/50 to-transparent hover:from-app-panel flex items-center justify-between transition-all group"
-                >
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-app-accent" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                    </svg>
-                    <h2 className="text-sm font-semibold">Font & Typography</h2>
-                  </div>
-                  <svg className={`w-4 h-4 transition-transform duration-200 ${expandedSections.font ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {expandedSections.font && (
-                <div className="p-4 space-y-4 bg-app-bg/50 backdrop-blur-sm">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Font Family</label>
-                    <select
-                      className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none"
-                      value={liveEditorSettings.getSetting('fontFamily')}
-                      onChange={async (e) => {
-                        liveEditorSettings.updateSetting('fontFamily', e.target.value);
-                        await updateConfig({ editor: { ...editorSettings, font: { ...editorSettings.font, family: e.target.value } } });
+                {/* Live Preview - Sticky on the right */}
+                <div className="lg:w-[400px] lg:sticky lg:top-6 self-start">
+                  <div className="border border-app-border rounded-xl p-4 bg-gradient-to-br from-app-panel/50 to-app-bg backdrop-blur-sm shadow-lg">
+                    <div className="flex items-center gap-2 mb-3">
+                      <svg className="w-4 h-4 text-app-accent" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                        <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                      </svg>
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-app-muted">Live Preview</h3>
+                    </div>
+                    <div
+                      className="ProseMirror min-h-[400px] max-h-[600px] overflow-y-auto p-4 bg-app-bg/80 rounded-lg border border-app-border/50 shadow-inner"
+                      style={{
+                        fontFamily: `var(--editor-font-family, ui-sans-serif)`,
+                        fontSize: `var(--editor-font-size, 16px)`,
+                        lineHeight: `var(--editor-line-height, 1.7)`,
+                        letterSpacing: `var(--editor-letter-spacing, 0.003em)`,
+                        color: `var(--editor-text-color, rgb(var(--text)))`
                       }}
                     >
-                      <option value="ui-sans-serif">System UI</option>
-                      <option value="ui-serif">System Serif</option>
-                      <option value="ui-monospace">System Monospace</option>
-                      <option value="Inter">Inter</option>
-                      <option value="Roboto">Roboto</option>
-                      <option value="'Helvetica Neue', Helvetica">Helvetica</option>
-                      <option value="Georgia, serif">Georgia</option>
-                      <option value="'Times New Roman', serif">Times New Roman</option>
-                      <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs font-medium text-app-muted uppercase tracking-wide">Font Size</label>
-                      <span className="text-xs font-mono text-app-accent bg-app-accent/10 px-2 py-0.5 rounded">{liveEditorSettings.getSetting('fontSize')}px</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="12"
-                      max="24"
-                      step="1"
-                      className="w-full h-2 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
-                      value={liveEditorSettings.getSetting('fontSize')}
-                      onChange={(e) => liveEditorSettings.updateSetting('fontSize', parseInt(e.target.value))}
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs font-medium text-app-muted uppercase tracking-wide">Line Height</label>
-                      <span className="text-xs font-mono text-app-accent bg-app-accent/10 px-2 py-0.5 rounded">{liveEditorSettings.getSetting('lineHeight')}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="1.2"
-                      max="2.5"
-                      step="0.1"
-                      className="w-full h-2 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
-                      value={liveEditorSettings.getSetting('lineHeight')}
-                      onChange={(e) => liveEditorSettings.updateSetting('lineHeight', parseFloat(e.target.value))}
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs font-medium text-app-muted uppercase tracking-wide">Letter Spacing</label>
-                      <span className="text-xs font-mono text-app-accent bg-app-accent/10 px-2 py-0.5 rounded">{liveEditorSettings.getSetting('letterSpacing')}em</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="-0.05"
-                      max="0.1"
-                      step="0.005"
-                      className="w-full h-2 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
-                      value={liveEditorSettings.getSetting('letterSpacing')}
-                      onChange={(e) => liveEditorSettings.updateSetting('letterSpacing', parseFloat(e.target.value))}
-                    />
-                  </div>
-
-                  <div className="border-t border-app-border/50 pt-4 mt-4">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-app-muted mb-3 flex items-center gap-2">
-                      <div className="w-1 h-4 bg-app-accent rounded-full"></div>
-                      Heading Sizes
-                    </h3>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-medium text-app-muted">H1</label>
-                          <span className="text-xs font-mono text-app-accent">{liveEditorSettings.getSetting('h1Size')}em</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="1.5"
-                          max="3.0"
-                          step="0.1"
-                          className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
-                          value={liveEditorSettings.getSetting('h1Size')}
-                          onChange={(e) => liveEditorSettings.updateSetting('h1Size', parseFloat(e.target.value))}
-                        />
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-medium text-app-muted">H2</label>
-                          <span className="text-xs font-mono text-app-accent">{liveEditorSettings.getSetting('h2Size')}em</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="1.2"
-                          max="2.5"
-                          step="0.1"
-                          className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
-                          value={liveEditorSettings.getSetting('h2Size')}
-                          onChange={(e) => liveEditorSettings.updateSetting('h2Size', parseFloat(e.target.value))}
-                        />
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-medium text-app-muted">H3</label>
-                          <span className="text-xs font-mono text-app-accent">{liveEditorSettings.getSetting('h3Size')}em</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="1.0"
-                          max="2.0"
-                          step="0.1"
-                          className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
-                          value={liveEditorSettings.getSetting('h3Size')}
-                          onChange={(e) => liveEditorSettings.updateSetting('h3Size', parseFloat(e.target.value))}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-app-border/50 pt-4 mt-4">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-app-muted mb-3 flex items-center gap-2">
-                      <div className="w-1 h-4 bg-app-accent rounded-full"></div>
-                      Font Weights
-                    </h3>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-medium text-app-muted">Normal</label>
-                          <span className="text-xs font-mono text-app-accent">{liveEditorSettings.getSetting('fontWeight')}</span>
-                        </div>
-                        <input type="range" min="100" max="900" step="100"
-                          className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
-                          value={liveEditorSettings.getSetting('fontWeight')}
-                          onChange={(e) => liveEditorSettings.updateSetting('fontWeight', parseInt(e.target.value))}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium mb-1">Bold</label>
-                        <div className="flex items-center gap-2">
-                          <input type="range" min="100" max="900" step="100" className="flex-1"
-                            value={liveEditorSettings.getSetting('boldWeight')}
-                            onChange={(e) => liveEditorSettings.updateSetting('boldWeight', parseInt(e.target.value))}
-                          />
-                          <span className="text-xs text-app-muted w-8">{liveEditorSettings.getSetting('boldWeight')}</span>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium mb-1">H1</label>
-                        <div className="flex items-center gap-2">
-                          <input type="range" min="100" max="900" step="100" className="flex-1"
-                            value={liveEditorSettings.getSetting('h1Weight')}
-                            onChange={(e) => liveEditorSettings.updateSetting('h1Weight', parseInt(e.target.value))}
-                          />
-                          <span className="text-xs text-app-muted w-8">{liveEditorSettings.getSetting('h1Weight')}</span>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium mb-1">H2</label>
-                        <div className="flex items-center gap-2">
-                          <input type="range" min="100" max="900" step="100" className="flex-1"
-                            value={liveEditorSettings.getSetting('h2Weight')}
-                            onChange={(e) => liveEditorSettings.updateSetting('h2Weight', parseInt(e.target.value))}
-                          />
-                          <span className="text-xs text-app-muted w-8">{liveEditorSettings.getSetting('h2Weight')}</span>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium mb-1">H3</label>
-                        <div className="flex items-center gap-2">
-                          <input type="range" min="100" max="900" step="100" className="flex-1"
-                            value={liveEditorSettings.getSetting('h3Weight')}
-                            onChange={(e) => liveEditorSettings.updateSetting('h3Weight', parseInt(e.target.value))}
-                          />
-                          <span className="text-xs text-app-muted w-8">{liveEditorSettings.getSetting('h3Weight')}</span>
-                        </div>
-                      </div>
+                      <h1>Heading 1</h1>
+                      <h2>Heading 2</h2>
+                      <h3>Heading 3</h3>
+                      <p>This is a paragraph with some <strong>bold text</strong> and <em>italic text</em>. You can see how your font settings affect the editor in real-time.</p>
+                      <ul>
+                        <li>Bullet point one</li>
+                        <li>Bullet point two</li>
+                        <li>Nested list:
+                          <ul>
+                            <li>Nested item 1</li>
+                            <li>Nested item 2</li>
+                          </ul>
+                        </li>
+                      </ul>
+                      <p>Here's a <a href="#">link example</a> and some <code>inline code</code>.</p>
+                      <blockquote>
+                        <p>This is a blockquote to test quote styling.</p>
+                      </blockquote>
                     </div>
                   </div>
                 </div>
-                )}
-              </section>
-
-              {/* Spacing Settings */}
-              <section className="border border-app-border rounded-lg overflow-hidden bg-app-panel/30 hover:border-app-accent/30 transition-all">
-                <button
-                  onClick={() => toggleSection('spacing')}
-                  className="w-full px-4 py-2.5 bg-gradient-to-r from-app-panel/50 to-transparent hover:from-app-panel flex items-center justify-between transition-all group"
-                >
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-app-accent" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-                    </svg>
-                    <h2 className="text-sm font-semibold">Spacing & Layout</h2>
-                  </div>
-                  <svg className={`w-4 h-4 transition-transform duration-200 ${expandedSections.spacing ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {expandedSections.spacing && (
-                <div className="p-4 space-y-4 bg-app-bg">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Paragraph Spacing</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="0"
-                        max="3"
-                        step="0.25"
-                        className="flex-1"
-                        value={liveEditorSettings.getSetting('paragraphSpacing')}
-                        onChange={(e) => liveEditorSettings.updateSetting('paragraphSpacing', parseFloat(e.target.value))}
-                      />
-                      <span className="text-sm text-app-muted w-12">{liveEditorSettings.getSetting('paragraphSpacing')}rem</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">List Item Spacing</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        className="flex-1"
-                        value={liveEditorSettings.getSetting('listSpacing')}
-                        onChange={(e) => liveEditorSettings.updateSetting('listSpacing', parseFloat(e.target.value))}
-                      />
-                      <span className="text-sm text-app-muted w-12">{liveEditorSettings.getSetting('listSpacing')}rem</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Indentation Size</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="1"
-                        max="4"
-                        step="0.5"
-                        className="flex-1"
-                        value={liveEditorSettings.getSetting('indentSize')}
-                        onChange={(e) => liveEditorSettings.updateSetting('indentSize', parseFloat(e.target.value))}
-                      />
-                      <span className="text-sm text-app-muted w-12">{liveEditorSettings.getSetting('indentSize')}rem</span>
-                    </div>
-                  </div>
-                </div>
-                )}
-              </section>
-
-              {/* List Symbols */}
-              <section className="border border-app-border rounded-lg overflow-hidden">
-                <button
-                  onClick={() => toggleSection('lists')}
-                  className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
-                >
-                  <h2 className="text-sm font-semibold uppercase tracking-wide">List Symbols</h2>
-                  <svg className={`w-5 h-5 transition-transform ${expandedSections.lists ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {expandedSections.lists && (
-                <div className="p-4 space-y-4 bg-app-bg">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Bullet Style</label>
-                    <div className="flex gap-2">
-                      {['•', '◦', '▪', '▸', '►', '○', '●'].map(symbol => (
-                        <button
-                          key={symbol}
-                          onClick={() => liveEditorSettings.updateSetting('bulletStyle', symbol)}
-                          className={`w-10 h-10 flex items-center justify-center rounded border transition-colors ${
-                            liveEditorSettings.getSetting('bulletStyle') === symbol
-                              ? 'border-app-accent bg-app-accent/10 text-app-accent'
-                              : 'border-app-border hover:border-app-accent/50'
-                          }`}
-                        >
-                          {symbol}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Checkbox Style</label>
-                    <div className="flex gap-2">
-                      {['☑', '✓', '✔', '☐', '✅'].map(symbol => (
-                        <button
-                          key={symbol}
-                          onClick={() => liveEditorSettings.updateSetting('checkboxStyle', symbol)}
-                          className={`w-10 h-10 flex items-center justify-center rounded border transition-colors ${
-                            liveEditorSettings.getSetting('checkboxStyle') === symbol
-                              ? 'border-app-accent bg-app-accent/10 text-app-accent'
-                              : 'border-app-border hover:border-app-accent/50'
-                          }`}
-                        >
-                          {symbol}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                )}
-              </section>
-
-              {/* Colors */}
-              <section className="border border-app-border rounded-lg overflow-hidden">
-                <button
-                  onClick={() => toggleSection('colors')}
-                  className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
-                >
-                  <h2 className="text-sm font-semibold uppercase tracking-wide">Colors</h2>
-                  <svg className={`w-5 h-5 transition-transform ${expandedSections.colors ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {expandedSections.colors && (
-                <div className="p-4 bg-app-bg">
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium mb-1">Text</label>
-                    <input
-                      type="color"
-                      className="w-full h-8 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('textColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('textColor')}
-                      onChange={(e) => liveEditorSettings.updateSetting('textColor', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1">Heading</label>
-                    <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('headingColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('headingColor')}
-                      onChange={(e) => liveEditorSettings.updateSetting('headingColor', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1">Link</label>
-                    <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('linkColor') === '#inherit' ? '#0000ff' : liveEditorSettings.getSetting('linkColor')}
-                      onChange={(e) => liveEditorSettings.updateSetting('linkColor', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1">Link Hover</label>
-                    <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('linkHoverColor') === '#inherit' ? '#0000cc' : liveEditorSettings.getSetting('linkHoverColor')}
-                      onChange={(e) => liveEditorSettings.updateSetting('linkHoverColor', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1">Code</label>
-                    <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('codeColor') === '#inherit' ? '#e83e8c' : liveEditorSettings.getSetting('codeColor')}
-                      onChange={(e) => liveEditorSettings.updateSetting('codeColor', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1">Code BG</label>
-                    <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('codeBackground')}
-                      onChange={(e) => liveEditorSettings.updateSetting('codeBackground', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1">Quote</label>
-                    <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('blockquoteColor') === '#inherit' ? '#6c757d' : liveEditorSettings.getSetting('blockquoteColor')}
-                      onChange={(e) => liveEditorSettings.updateSetting('blockquoteColor', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1">Quote Border</label>
-                    <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('blockquoteBorder')}
-                      onChange={(e) => liveEditorSettings.updateSetting('blockquoteBorder', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1">Bold</label>
-                    <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('boldColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('boldColor')}
-                      onChange={(e) => liveEditorSettings.updateSetting('boldColor', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1">Italic</label>
-                    <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('italicColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('italicColor')}
-                      onChange={(e) => liveEditorSettings.updateSetting('italicColor', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1">Highlight BG</label>
-                    <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('highlightColor')}
-                      onChange={(e) => liveEditorSettings.updateSetting('highlightColor', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1">Highlight Text</label>
-                    <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('highlightTextColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('highlightTextColor')}
-                      onChange={(e) => liveEditorSettings.updateSetting('highlightTextColor', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1">Selection</label>
-                    <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('selectionColor').match(/#[0-9a-fA-F]{6}/)?.[0] || '#6366f1'}
-                      onChange={(e) => liveEditorSettings.updateSetting('selectionColor', `rgba(${parseInt(e.target.value.slice(1,3), 16)}, ${parseInt(e.target.value.slice(3,5), 16)}, ${parseInt(e.target.value.slice(5,7), 16)}, 0.2)`)}
-                    />
-                  </div>
-                </div>
-                </div>
-                )}
-              </section>
-
-              {/* Code Blocks */}
-              <section className="border border-app-border rounded-lg overflow-hidden">
-                <button
-                  onClick={() => toggleSection('codeBlocks')}
-                  className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
-                >
-                  <h2 className="text-sm font-semibold uppercase tracking-wide">Code Blocks</h2>
-                  <svg className={`w-5 h-5 transition-transform ${expandedSections.codeBlocks ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {expandedSections.codeBlocks && (
-                <div className="p-4 bg-app-bg">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Background Color</label>
-                    <input
-                      type="color"
-                      className="w-full h-10 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('codeBlockBg')}
-                      onChange={(e) => liveEditorSettings.updateSetting('codeBlockBg', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Border Color</label>
-                    <input
-                      type="color"
-                      className="w-full h-10 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('codeBlockBorder')}
-                      onChange={(e) => liveEditorSettings.updateSetting('codeBlockBorder', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Border Width</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="0"
-                        max="5"
-                        step="1"
-                        className="flex-1"
-                        value={liveEditorSettings.getSetting('codeBlockBorderWidth')}
-                        onChange={(e) => liveEditorSettings.updateSetting('codeBlockBorderWidth', parseInt(e.target.value))}
-                      />
-                      <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('codeBlockBorderWidth')}px</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Border Radius</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="0"
-                        max="20"
-                        step="1"
-                        className="flex-1"
-                        value={liveEditorSettings.getSetting('codeBlockBorderRadius')}
-                        onChange={(e) => liveEditorSettings.updateSetting('codeBlockBorderRadius', parseInt(e.target.value))}
-                      />
-                      <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('codeBlockBorderRadius')}px</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Padding</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="0"
-                        max="32"
-                        step="2"
-                        className="flex-1"
-                        value={liveEditorSettings.getSetting('codeBlockPadding')}
-                        onChange={(e) => liveEditorSettings.updateSetting('codeBlockPadding', parseInt(e.target.value))}
-                      />
-                      <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('codeBlockPadding')}px</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Font Family</label>
-                    <select
-                      className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none"
-                      value={liveEditorSettings.getSetting('codeBlockFont')}
-                      onChange={(e) => liveEditorSettings.updateSetting('codeBlockFont', e.target.value)}
-                    >
-                      <option value="ui-monospace">System Monospace</option>
-                      <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
-                      <option value="'Fira Code', monospace">Fira Code</option>
-                      <option value="'Source Code Pro', monospace">Source Code Pro</option>
-                      <option value="Consolas, monospace">Consolas</option>
-                      <option value="Monaco, monospace">Monaco</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Font Size</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="10"
-                        max="20"
-                        step="1"
-                        className="flex-1"
-                        value={liveEditorSettings.getSetting('codeBlockFontSize')}
-                        onChange={(e) => liveEditorSettings.updateSetting('codeBlockFontSize', parseInt(e.target.value))}
-                      />
-                      <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('codeBlockFontSize')}px</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Line Height</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="1.0"
-                        max="2.0"
-                        step="0.1"
-                        className="flex-1"
-                        value={liveEditorSettings.getSetting('codeBlockLineHeight')}
-                        onChange={(e) => liveEditorSettings.updateSetting('codeBlockLineHeight', parseFloat(e.target.value))}
-                      />
-                      <span className="text-sm text-app-muted w-8">{liveEditorSettings.getSetting('codeBlockLineHeight')}</span>
-                    </div>
-                  </div>
-                </div>
-                </div>
-                )}
-              </section>
-
-              {/* Links */}
-              <section className="border border-app-border rounded-lg overflow-hidden">
-                <button
-                  onClick={() => toggleSection('links')}
-                  className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
-                >
-                  <h2 className="text-sm font-semibold uppercase tracking-wide">Links</h2>
-                  <svg className={`w-5 h-5 transition-transform ${expandedSections.links ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {expandedSections.links && (
-                <div className="p-4 bg-app-bg">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Underline Style</label>
-                    <select
-                      className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none"
-                      value={liveEditorSettings.getSetting('linkUnderline')}
-                      onChange={(e) => liveEditorSettings.updateSetting('linkUnderline', e.target.value)}
-                    >
-                      <option value="none">None</option>
-                      <option value="hover">On Hover</option>
-                      <option value="always">Always</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Underline Thickness</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="1"
-                        max="4"
-                        step="1"
-                        className="flex-1"
-                        value={liveEditorSettings.getSetting('linkUnderlineThickness')}
-                        onChange={(e) => liveEditorSettings.updateSetting('linkUnderlineThickness', parseInt(e.target.value))}
-                      />
-                      <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('linkUnderlineThickness')}px</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Underline Offset</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="0"
-                        max="8"
-                        step="1"
-                        className="flex-1"
-                        value={liveEditorSettings.getSetting('linkUnderlineOffset')}
-                        onChange={(e) => liveEditorSettings.updateSetting('linkUnderlineOffset', parseInt(e.target.value))}
-                      />
-                      <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('linkUnderlineOffset')}px</span>
-                    </div>
-                  </div>
-                </div>
-                </div>
-                )}
-              </section>
-
-              {/* Text Decorations */}
-              <section className="border border-app-border rounded-lg overflow-hidden">
-                <button
-                  onClick={() => toggleSection('decorations')}
-                  className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
-                >
-                  <h2 className="text-sm font-semibold uppercase tracking-wide">Text Decorations</h2>
-                  <svg className={`w-5 h-5 transition-transform ${expandedSections.decorations ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {expandedSections.decorations && (
-                <div className="p-4 bg-app-bg">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Strikethrough Color</label>
-                    <input
-                      type="color"
-                      className="w-full h-10 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('strikethroughColor')}
-                      onChange={(e) => liveEditorSettings.updateSetting('strikethroughColor', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Strikethrough Thickness</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="1"
-                        max="4"
-                        step="1"
-                        className="flex-1"
-                        value={liveEditorSettings.getSetting('strikethroughThickness')}
-                        onChange={(e) => liveEditorSettings.updateSetting('strikethroughThickness', parseInt(e.target.value))}
-                      />
-                      <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('strikethroughThickness')}px</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Underline Color</label>
-                    <input
-                      type="color"
-                      className="w-full h-10 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('underlineColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('underlineColor')}
-                      onChange={(e) => liveEditorSettings.updateSetting('underlineColor', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Underline Thickness</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="1"
-                        max="4"
-                        step="1"
-                        className="flex-1"
-                        value={liveEditorSettings.getSetting('underlineThickness')}
-                        onChange={(e) => liveEditorSettings.updateSetting('underlineThickness', parseInt(e.target.value))}
-                      />
-                      <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('underlineThickness')}px</span>
-                    </div>
-                  </div>
-                </div>
-                </div>
-                )}
-              </section>
-
-              {/* Blockquotes */}
-              <section className="border border-app-border rounded-lg overflow-hidden">
-                <button
-                  onClick={() => toggleSection('blockquotes')}
-                  className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
-                >
-                  <h2 className="text-sm font-semibold uppercase tracking-wide">Blockquotes</h2>
-                  <svg className={`w-5 h-5 transition-transform ${expandedSections.blockquotes ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {expandedSections.blockquotes && (
-                <div className="p-4 bg-app-bg">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Border Width</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="1"
-                        max="8"
-                        step="1"
-                        className="flex-1"
-                        value={liveEditorSettings.getSetting('blockquoteBorderWidth')}
-                        onChange={(e) => liveEditorSettings.updateSetting('blockquoteBorderWidth', parseInt(e.target.value))}
-                      />
-                      <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('blockquoteBorderWidth')}px</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Padding</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="8"
-                        max="32"
-                        step="2"
-                        className="flex-1"
-                        value={liveEditorSettings.getSetting('blockquotePadding')}
-                        onChange={(e) => liveEditorSettings.updateSetting('blockquotePadding', parseInt(e.target.value))}
-                      />
-                      <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('blockquotePadding')}px</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Border Style</label>
-                    <select
-                      className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none"
-                      value={liveEditorSettings.getSetting('blockquoteStyle')}
-                      onChange={(e) => liveEditorSettings.updateSetting('blockquoteStyle', e.target.value)}
-                    >
-                      <option value="solid">Solid</option>
-                      <option value="dashed">Dashed</option>
-                      <option value="dotted">Dotted</option>
-                      <option value="double">Double</option>
-                    </select>
-                  </div>
-                </div>
-                </div>
-                )}
-              </section>
-
-              {/* Tables */}
-              <section className="border border-app-border rounded-lg overflow-hidden">
-                <button
-                  onClick={() => toggleSection('tables')}
-                  className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
-                >
-                  <h2 className="text-sm font-semibold uppercase tracking-wide">Tables</h2>
-                  <svg className={`w-5 h-5 transition-transform ${expandedSections.tables ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {expandedSections.tables && (
-                <div className="p-4 bg-app-bg">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Border Color</label>
-                    <input
-                      type="color"
-                      className="w-full h-10 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('tableBorder')}
-                      onChange={(e) => liveEditorSettings.updateSetting('tableBorder', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Header Background</label>
-                    <input
-                      type="color"
-                      className="w-full h-10 rounded border border-app-border cursor-pointer"
-                      value={liveEditorSettings.getSetting('tableHeaderBg')}
-                      onChange={(e) => liveEditorSettings.updateSetting('tableHeaderBg', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Border Width</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="1"
-                        max="4"
-                        step="1"
-                        className="flex-1"
-                        value={liveEditorSettings.getSetting('tableBorderWidth')}
-                        onChange={(e) => liveEditorSettings.updateSetting('tableBorderWidth', parseInt(e.target.value))}
-                      />
-                      <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('tableBorderWidth')}px</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Cell Padding</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="4"
-                        max="20"
-                        step="2"
-                        className="flex-1"
-                        value={liveEditorSettings.getSetting('tableCellPadding')}
-                        onChange={(e) => liveEditorSettings.updateSetting('tableCellPadding', parseInt(e.target.value))}
-                      />
-                      <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('tableCellPadding')}px</span>
-                    </div>
-                  </div>
-                </div>
-                </div>
-                )}
-              </section>
-
-              {/* Save Button */}
-              <div className="flex justify-end gap-3 pt-4 sticky bottom-0 bg-gradient-to-t from-app-bg via-app-bg to-transparent border-t border-app-border/50 py-4 backdrop-blur-sm">
-                <button
-                  onClick={resetEditorSettings}
-                  className="px-4 py-2 rounded-lg border border-app-border hover:bg-app-panel hover:border-app-accent/50 transition-all flex items-center gap-2 group"
-                >
-                  <svg className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Reset
-                </button>
-                <button
-                  onClick={saveEditorSettings}
-                  className={`px-6 py-2 rounded-lg transition-all flex items-center gap-2 font-medium shadow-lg ${
-                    saveStatus === 'saving'
-                      ? 'bg-app-muted text-app-bg cursor-wait'
-                      : saveStatus === 'success'
-                      ? 'bg-green-600 text-white shadow-green-600/50'
-                      : saveStatus === 'error'
-                      ? 'bg-red-600 text-white shadow-red-600/50'
-                      : 'bg-app-accent text-white hover:bg-app-accent/90 hover:shadow-app-accent/50'
-                  }`}
-                >
-                  {saveStatus === 'saving' && (
-                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                  )}
-                  {saveStatus === 'success' && (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                  {saveStatus === 'error' && (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  )}
-                  {!saveStatus && (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                    </svg>
-                  )}
-                  {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'success' ? 'Saved!' : saveStatus === 'error' ? 'Failed' : 'Save Settings'}
-                </button>
               </div>
-              </div>
+            )}
 
-              {/* Live Preview - Sticky on the right */}
-              <div className="lg:w-[400px] lg:sticky lg:top-6 self-start">
-                <div className="border border-app-border rounded-xl p-4 bg-gradient-to-br from-app-panel/50 to-app-bg backdrop-blur-sm shadow-lg">
-                  <div className="flex items-center gap-2 mb-3">
-                    <svg className="w-4 h-4 text-app-accent" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                      <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                    </svg>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-app-muted">Live Preview</h3>
-                  </div>
-                  <div
-                    className="ProseMirror min-h-[400px] max-h-[600px] overflow-y-auto p-4 bg-app-bg/80 rounded-lg border border-app-border/50 shadow-inner"
-                    style={{
-                      fontFamily: `var(--editor-font-family, ui-sans-serif)`,
-                      fontSize: `var(--editor-font-size, 16px)`,
-                      lineHeight: `var(--editor-line-height, 1.7)`,
-                      letterSpacing: `var(--editor-letter-spacing, 0.003em)`,
-                      color: `var(--editor-text-color, rgb(var(--text)))`
-                    }}
+            {section === "General" && (
+              <div className="text-app-muted">General settings coming soon.</div>
+            )}
+
+            {section === "Markdown" && (
+              <div className="max-w-3xl space-y-6">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm text-app-muted">Customize markdown syntax characters and behaviors</div>
+                  <button
+                    onClick={() => markdownSyntaxConfig.reset()}
+                    className="h-9 inline-flex items-center gap-2 px-3 rounded-md border border-app-border hover:bg-app-panel text-sm"
                   >
-                    <h1>Heading 1</h1>
-                    <h2>Heading 2</h2>
-                    <h3>Heading 3</h3>
-                    <p>This is a paragraph with some <strong>bold text</strong> and <em>italic text</em>. You can see how your font settings affect the editor in real-time.</p>
-                    <ul>
-                      <li>Bullet point one</li>
-                      <li>Bullet point two</li>
-                      <li>Nested list:
-                        <ul>
-                          <li>Nested item 1</li>
-                          <li>Nested item 2</li>
-                        </ul>
-                      </li>
-                    </ul>
-                    <p>Here's a <a href="#">link example</a> and some <code>inline code</code>.</p>
-                    <blockquote>
-                      <p>This is a blockquote to test quote styling.</p>
-                    </blockquote>
-                  </div>
+                    <RotateCcw className="w-4 h-4" /> Reset All
+                  </button>
                 </div>
-              </div>
-            </div>
-          )}
 
-          {section === "General" && (
-            <div className="text-app-muted">General settings coming soon.</div>
-          )}
-
-          {section === "Markdown" && (
-            <div className="max-w-3xl space-y-6">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-sm text-app-muted">Customize markdown syntax characters and behaviors</div>
-                <button
-                  onClick={() => markdownSyntaxConfig.reset()}
-                  className="h-9 inline-flex items-center gap-2 px-3 rounded-md border border-app-border hover:bg-app-panel text-sm"
-                >
-                  <RotateCcw className="w-4 h-4" /> Reset All
-                </button>
-              </div>
-
-              <div className="rounded-lg border border-app-border overflow-hidden">
-                <div className="grid grid-cols-12 bg-app-panel/40 px-4 py-2 text-xs text-app-muted">
-                  <div className="col-span-5">Syntax</div>
-                  <div className="col-span-3">Marker</div>
-                  <div className="col-span-4 text-right">Enabled</div>
-                </div>
-                <div className="divide-y divide-app-border/60">
-                  {/* Headers */}
-                  <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                    <div className="col-span-5 flex items-center gap-3">
-                      <span className="text-xl w-6 text-center">#</span>
-                      <div>
-                        <div className="text-sm">Headers</div>
-                        <div className="text-xs text-app-muted">Heading marker</div>
-                      </div>
-                    </div>
-                    <div className="col-span-3">
-                      <input
-                        type="text"
-                        maxLength="2"
-                        className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                        value={markdownSyntax.heading?.marker || '#'}
-                        onChange={(e) => markdownSyntaxConfig.set('heading', 'marker', e.target.value)}
-                        disabled={markdownSyntax.heading?.enabled === false}
-                      />
-                    </div>
-                    <div className="col-span-4 flex justify-end">
-                      <button
-                        onClick={() => markdownSyntaxConfig.set('heading', 'enabled', !(markdownSyntax.heading?.enabled !== false))}
-                        className={`w-12 h-6 rounded-full transition-colors relative ${
-                          markdownSyntax.heading?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                        }`}
-                      >
-                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
-                          markdownSyntax.heading?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                        }`}></div>
-                      </button>
-                    </div>
+                <div className="rounded-lg border border-app-border overflow-hidden">
+                  <div className="grid grid-cols-12 bg-app-panel/40 px-4 py-2 text-xs text-app-muted">
+                    <div className="col-span-5">Syntax</div>
+                    <div className="col-span-3">Marker</div>
+                    <div className="col-span-4 text-right">Enabled</div>
                   </div>
-
-                  {/* Bold */}
-                  <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                    <div className="col-span-5 flex items-center gap-3">
-                      <span className="font-bold text-xl w-6 text-center">B</span>
-                      <div>
-                        <div className="text-sm">Bold</div>
-                        <div className="text-xs text-app-muted">Wrapping characters for bold text</div>
+                  <div className="divide-y divide-app-border/60">
+                    {/* Headers */}
+                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
+                      <div className="col-span-5 flex items-center gap-3">
+                        <span className="text-xl w-6 text-center">#</span>
+                        <div>
+                          <div className="text-sm">Headers</div>
+                          <div className="text-xs text-app-muted">Heading marker</div>
+                        </div>
+                      </div>
+                      <div className="col-span-3">
+                        <input
+                          type="text"
+                          maxLength="2"
+                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
+                          value={markdownSyntax.heading?.marker || '#'}
+                          onChange={(e) => markdownSyntaxConfig.set('heading', 'marker', e.target.value)}
+                          disabled={markdownSyntax.heading?.enabled === false}
+                        />
+                      </div>
+                      <div className="col-span-4 flex justify-end">
+                        <button
+                          onClick={() => markdownSyntaxConfig.set('heading', 'enabled', !(markdownSyntax.heading?.enabled !== false))}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.heading?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
+                            }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.heading?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
+                            }`}></div>
+                        </button>
                       </div>
                     </div>
-                    <div className="col-span-3">
-                      <input
-                        type="text"
-                        maxLength="3"
-                        className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                        value={markdownSyntax.bold?.marker || '**'}
-                        onChange={(e) => markdownSyntaxConfig.set('bold', 'marker', e.target.value)}
-                        disabled={markdownSyntax.bold?.enabled === false}
-                      />
-                    </div>
-                    <div className="col-span-4 flex justify-end">
-                      <button
-                        onClick={() => markdownSyntaxConfig.set('bold', 'enabled', !(markdownSyntax.bold?.enabled !== false))}
-                        className={`w-12 h-6 rounded-full transition-colors relative ${
-                          markdownSyntax.bold?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                        }`}
-                      >
-                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
-                          markdownSyntax.bold?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                        }`}></div>
-                      </button>
-                    </div>
-                  </div>
 
-                  {/* Italic */}
-                  <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                    <div className="col-span-5 flex items-center gap-3">
-                      <span className="italic text-xl w-6 text-center">I</span>
-                      <div>
-                        <div className="text-sm">Italic</div>
-                        <div className="text-xs text-app-muted">Wrapping characters for italic text</div>
+                    {/* Bold */}
+                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
+                      <div className="col-span-5 flex items-center gap-3">
+                        <span className="font-bold text-xl w-6 text-center">B</span>
+                        <div>
+                          <div className="text-sm">Bold</div>
+                          <div className="text-xs text-app-muted">Wrapping characters for bold text</div>
+                        </div>
                       </div>
-                    </div>
-                    <div className="col-span-3">
-                      <input
-                        type="text"
-                        maxLength="2"
-                        className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                        value={markdownSyntax.italic?.marker || '*'}
-                        onChange={(e) => markdownSyntaxConfig.set('italic', 'marker', e.target.value)}
-                        disabled={markdownSyntax.italic?.enabled === false}
-                      />
-                    </div>
-                    <div className="col-span-4 flex justify-end">
-                      <button
-                        onClick={() => markdownSyntaxConfig.set('italic', 'enabled', !(markdownSyntax.italic?.enabled !== false))}
-                        className={`w-12 h-6 rounded-full transition-colors relative ${
-                          markdownSyntax.italic?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                        }`}
-                      >
-                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
-                          markdownSyntax.italic?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                        }`}></div>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Inline Code */}
-                  <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                    <div className="col-span-5 flex items-center gap-3">
-                      <span className="font-mono text-app-accent text-xl w-6 text-center">`</span>
-                      <div>
-                        <div className="text-sm">Inline Code</div>
-                        <div className="text-xs text-app-muted">Wrapping character for code</div>
-                      </div>
-                    </div>
-                    <div className="col-span-3">
-                      <input
-                        type="text"
-                        maxLength="2"
-                        className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                        value={markdownSyntax.inlineCode?.marker || '`'}
-                        onChange={(e) => markdownSyntaxConfig.set('inlineCode', 'marker', e.target.value)}
-                        disabled={markdownSyntax.inlineCode?.enabled === false}
-                      />
-                    </div>
-                    <div className="col-span-4 flex justify-end">
-                      <button
-                        onClick={() => markdownSyntaxConfig.set('inlineCode', 'enabled', !(markdownSyntax.inlineCode?.enabled !== false))}
-                        className={`w-12 h-6 rounded-full transition-colors relative ${
-                          markdownSyntax.inlineCode?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                        }`}
-                      >
-                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
-                          markdownSyntax.inlineCode?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                        }`}></div>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Strikethrough */}
-                  <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                    <div className="col-span-5 flex items-center gap-3">
-                      <span className="line-through text-xl w-6 text-center">S</span>
-                      <div>
-                        <div className="text-sm">Strikethrough</div>
-                        <div className="text-xs text-app-muted">Wrapping characters for strikethrough</div>
-                      </div>
-                    </div>
-                    <div className="col-span-3">
-                      <input
-                        type="text"
-                        maxLength="3"
-                        className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                        value={markdownSyntax.strikethrough?.marker || '~~'}
-                        onChange={(e) => markdownSyntaxConfig.set('strikethrough', 'marker', e.target.value)}
-                        disabled={markdownSyntax.strikethrough?.enabled === false}
-                      />
-                    </div>
-                    <div className="col-span-4 flex justify-end">
-                      <button
-                        onClick={() => markdownSyntaxConfig.set('strikethrough', 'enabled', !(markdownSyntax.strikethrough?.enabled !== false))}
-                        className={`w-12 h-6 rounded-full transition-colors relative ${
-                          markdownSyntax.strikethrough?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                        }`}
-                      >
-                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
-                          markdownSyntax.strikethrough?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                        }`}></div>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Highlight */}
-                  <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                    <div className="col-span-5 flex items-center gap-3">
-                      <span className="bg-yellow-200/30 px-1 text-xl w-6 text-center">H</span>
-                      <div>
-                        <div className="text-sm">Highlight</div>
-                        <div className="text-xs text-app-muted">Wrapping characters for highlights</div>
-                      </div>
-                    </div>
-                    <div className="col-span-3">
-                      <input
-                        type="text"
-                        maxLength="3"
-                        className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                        value={markdownSyntax.highlight?.marker || '=='}
-                        onChange={(e) => markdownSyntaxConfig.set('highlight', 'marker', e.target.value)}
-                        disabled={markdownSyntax.highlight?.enabled === false}
-                      />
-                    </div>
-                    <div className="col-span-4 flex justify-end">
-                      <button
-                        onClick={() => markdownSyntaxConfig.set('highlight', 'enabled', !(markdownSyntax.highlight?.enabled !== false))}
-                        className={`w-12 h-6 rounded-full transition-colors relative ${
-                          markdownSyntax.highlight?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                        }`}
-                      >
-                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
-                          markdownSyntax.highlight?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                        }`}></div>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Bullet Lists */}
-                  <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                    <div className="col-span-5 flex items-center gap-3">
-                      <span className="text-xl w-6 text-center">•</span>
-                      <div>
-                        <div className="text-sm">Bullet Lists</div>
-                        <div className="text-xs text-app-muted">Default list marker</div>
-                      </div>
-                    </div>
-                    <div className="col-span-3">
-                      <select
-                        className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                        value={markdownSyntax.bulletList?.defaultMarker || '-'}
-                        onChange={(e) => markdownSyntaxConfig.set('bulletList', 'defaultMarker', e.target.value)}
-                        disabled={markdownSyntax.bulletList?.enabled === false}
-                      >
-                        {(markdownSyntax.bulletList?.markers || ['*', '-', '+']).map(m => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="col-span-4 flex justify-end">
-                      <button
-                        onClick={() => markdownSyntaxConfig.set('bulletList', 'enabled', !(markdownSyntax.bulletList?.enabled !== false))}
-                        className={`w-12 h-6 rounded-full transition-colors relative ${
-                          markdownSyntax.bulletList?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                        }`}
-                      >
-                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
-                          markdownSyntax.bulletList?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                        }`}></div>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Blockquote */}
-                  <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                    <div className="col-span-5 flex items-center gap-3">
-                      <span className="text-app-muted text-xl w-6 text-center">&gt;</span>
-                      <div>
-                        <div className="text-sm">Blockquote</div>
-                        <div className="text-xs text-app-muted">Quote line prefix</div>
-                      </div>
-                    </div>
-                    <div className="col-span-3">
-                      <input
-                        type="text"
-                        maxLength="2"
-                        className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                        value={markdownSyntax.blockquote?.marker || '>'}
-                        onChange={(e) => markdownSyntaxConfig.set('blockquote', 'marker', e.target.value)}
-                        disabled={markdownSyntax.blockquote?.enabled === false}
-                      />
-                    </div>
-                    <div className="col-span-4 flex justify-end">
-                      <button
-                        onClick={() => markdownSyntaxConfig.set('blockquote', 'enabled', !(markdownSyntax.blockquote?.enabled !== false))}
-                        className={`w-12 h-6 rounded-full transition-colors relative ${
-                          markdownSyntax.blockquote?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                        }`}
-                      >
-                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
-                          markdownSyntax.blockquote?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                        }`}></div>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Wiki Links */}
-                  <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                    <div className="col-span-5 flex items-center gap-3">
-                      <span className="text-app-accent w-6 text-center font-mono text-xl">[[</span>
-                      <div>
-                        <div className="text-sm">Wiki Links</div>
-                        <div className="text-xs text-app-muted">Opening/closing brackets</div>
-                      </div>
-                    </div>
-                    <div className="col-span-3">
-                      <div className="flex gap-1">
+                      <div className="col-span-3">
                         <input
                           type="text"
                           maxLength="3"
-                          className="w-9 px-1 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                          value={markdownSyntax.link?.wikiLink?.open || '[['}
-                          onChange={(e) => markdownSyntaxConfig.set('link', { ...markdownSyntax.link, wikiLink: { ...markdownSyntax.link?.wikiLink, open: e.target.value }})}
-                          disabled={markdownSyntax.link?.wikiLink?.enabled === false}
+                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
+                          value={markdownSyntax.bold?.marker || '**'}
+                          onChange={(e) => markdownSyntaxConfig.set('bold', 'marker', e.target.value)}
+                          disabled={markdownSyntax.bold?.enabled === false}
                         />
+                      </div>
+                      <div className="col-span-4 flex justify-end">
+                        <button
+                          onClick={() => markdownSyntaxConfig.set('bold', 'enabled', !(markdownSyntax.bold?.enabled !== false))}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.bold?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
+                            }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.bold?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
+                            }`}></div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Italic */}
+                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
+                      <div className="col-span-5 flex items-center gap-3">
+                        <span className="italic text-xl w-6 text-center">I</span>
+                        <div>
+                          <div className="text-sm">Italic</div>
+                          <div className="text-xs text-app-muted">Wrapping characters for italic text</div>
+                        </div>
+                      </div>
+                      <div className="col-span-3">
+                        <input
+                          type="text"
+                          maxLength="2"
+                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
+                          value={markdownSyntax.italic?.marker || '*'}
+                          onChange={(e) => markdownSyntaxConfig.set('italic', 'marker', e.target.value)}
+                          disabled={markdownSyntax.italic?.enabled === false}
+                        />
+                      </div>
+                      <div className="col-span-4 flex justify-end">
+                        <button
+                          onClick={() => markdownSyntaxConfig.set('italic', 'enabled', !(markdownSyntax.italic?.enabled !== false))}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.italic?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
+                            }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.italic?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
+                            }`}></div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Inline Code */}
+                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
+                      <div className="col-span-5 flex items-center gap-3">
+                        <span className="font-mono text-app-accent text-xl w-6 text-center">`</span>
+                        <div>
+                          <div className="text-sm">Inline Code</div>
+                          <div className="text-xs text-app-muted">Wrapping character for code</div>
+                        </div>
+                      </div>
+                      <div className="col-span-3">
+                        <input
+                          type="text"
+                          maxLength="2"
+                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
+                          value={markdownSyntax.inlineCode?.marker || '`'}
+                          onChange={(e) => markdownSyntaxConfig.set('inlineCode', 'marker', e.target.value)}
+                          disabled={markdownSyntax.inlineCode?.enabled === false}
+                        />
+                      </div>
+                      <div className="col-span-4 flex justify-end">
+                        <button
+                          onClick={() => markdownSyntaxConfig.set('inlineCode', 'enabled', !(markdownSyntax.inlineCode?.enabled !== false))}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.inlineCode?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
+                            }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.inlineCode?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
+                            }`}></div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Strikethrough */}
+                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
+                      <div className="col-span-5 flex items-center gap-3">
+                        <span className="line-through text-xl w-6 text-center">S</span>
+                        <div>
+                          <div className="text-sm">Strikethrough</div>
+                          <div className="text-xs text-app-muted">Wrapping characters for strikethrough</div>
+                        </div>
+                      </div>
+                      <div className="col-span-3">
                         <input
                           type="text"
                           maxLength="3"
-                          className="w-9 px-1 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                          value={markdownSyntax.link?.wikiLink?.close || ']]'}
-                          onChange={(e) => markdownSyntaxConfig.set('link', { ...markdownSyntax.link, wikiLink: { ...markdownSyntax.link?.wikiLink, close: e.target.value }})}
-                          disabled={markdownSyntax.link?.wikiLink?.enabled === false}
+                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
+                          value={markdownSyntax.strikethrough?.marker || '~~'}
+                          onChange={(e) => markdownSyntaxConfig.set('strikethrough', 'marker', e.target.value)}
+                          disabled={markdownSyntax.strikethrough?.enabled === false}
                         />
                       </div>
-                    </div>
-                    <div className="col-span-4 flex justify-end">
-                      <button
-                        onClick={() => markdownSyntaxConfig.set('link', { ...markdownSyntax.link, wikiLink: { ...markdownSyntax.link?.wikiLink, enabled: !(markdownSyntax.link?.wikiLink?.enabled !== false) }})}
-                        className={`w-12 h-6 rounded-full transition-colors relative ${
-                          markdownSyntax.link?.wikiLink?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                        }`}
-                      >
-                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
-                          markdownSyntax.link?.wikiLink?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                        }`}></div>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Images */}
-                  <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                    <div className="col-span-5 flex items-center gap-3">
-                      <span className="text-xl w-6 text-center">🖼</span>
-                      <div>
-                        <div className="text-sm">Images</div>
-                        <div className="text-xs text-app-muted">Image prefix marker</div>
+                      <div className="col-span-4 flex justify-end">
+                        <button
+                          onClick={() => markdownSyntaxConfig.set('strikethrough', 'enabled', !(markdownSyntax.strikethrough?.enabled !== false))}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.strikethrough?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
+                            }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.strikethrough?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
+                            }`}></div>
+                        </button>
                       </div>
                     </div>
-                    <div className="col-span-3">
-                      <input
-                        type="text"
-                        maxLength="2"
-                        className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                        value={markdownSyntax.image?.marker || '!'}
-                        onChange={(e) => markdownSyntaxConfig.set('image', 'marker', e.target.value)}
-                        disabled={markdownSyntax.image?.enabled === false}
-                      />
+
+                    {/* Highlight */}
+                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
+                      <div className="col-span-5 flex items-center gap-3">
+                        <span className="bg-yellow-200/30 px-1 text-xl w-6 text-center">H</span>
+                        <div>
+                          <div className="text-sm">Highlight</div>
+                          <div className="text-xs text-app-muted">Wrapping characters for highlights</div>
+                        </div>
+                      </div>
+                      <div className="col-span-3">
+                        <input
+                          type="text"
+                          maxLength="3"
+                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
+                          value={markdownSyntax.highlight?.marker || '=='}
+                          onChange={(e) => markdownSyntaxConfig.set('highlight', 'marker', e.target.value)}
+                          disabled={markdownSyntax.highlight?.enabled === false}
+                        />
+                      </div>
+                      <div className="col-span-4 flex justify-end">
+                        <button
+                          onClick={() => markdownSyntaxConfig.set('highlight', 'enabled', !(markdownSyntax.highlight?.enabled !== false))}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.highlight?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
+                            }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.highlight?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
+                            }`}></div>
+                        </button>
+                      </div>
                     </div>
-                    <div className="col-span-4 flex justify-end">
-                      <button
-                        onClick={() => markdownSyntaxConfig.set('image', 'enabled', !(markdownSyntax.image?.enabled !== false))}
-                        className={`w-12 h-6 rounded-full transition-colors relative ${
-                          markdownSyntax.image?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                        }`}
-                      >
-                        <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${
-                          markdownSyntax.image?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                        }`}></div>
-                      </button>
+
+                    {/* Bullet Lists */}
+                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
+                      <div className="col-span-5 flex items-center gap-3">
+                        <span className="text-xl w-6 text-center">•</span>
+                        <div>
+                          <div className="text-sm">Bullet Lists</div>
+                          <div className="text-xs text-app-muted">Default list marker</div>
+                        </div>
+                      </div>
+                      <div className="col-span-3">
+                        <select
+                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
+                          value={markdownSyntax.bulletList?.defaultMarker || '-'}
+                          onChange={(e) => markdownSyntaxConfig.set('bulletList', 'defaultMarker', e.target.value)}
+                          disabled={markdownSyntax.bulletList?.enabled === false}
+                        >
+                          {(markdownSyntax.bulletList?.markers || ['*', '-', '+']).map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-span-4 flex justify-end">
+                        <button
+                          onClick={() => markdownSyntaxConfig.set('bulletList', 'enabled', !(markdownSyntax.bulletList?.enabled !== false))}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.bulletList?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
+                            }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.bulletList?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
+                            }`}></div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Blockquote */}
+                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
+                      <div className="col-span-5 flex items-center gap-3">
+                        <span className="text-app-muted text-xl w-6 text-center">&gt;</span>
+                        <div>
+                          <div className="text-sm">Blockquote</div>
+                          <div className="text-xs text-app-muted">Quote line prefix</div>
+                        </div>
+                      </div>
+                      <div className="col-span-3">
+                        <input
+                          type="text"
+                          maxLength="2"
+                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
+                          value={markdownSyntax.blockquote?.marker || '>'}
+                          onChange={(e) => markdownSyntaxConfig.set('blockquote', 'marker', e.target.value)}
+                          disabled={markdownSyntax.blockquote?.enabled === false}
+                        />
+                      </div>
+                      <div className="col-span-4 flex justify-end">
+                        <button
+                          onClick={() => markdownSyntaxConfig.set('blockquote', 'enabled', !(markdownSyntax.blockquote?.enabled !== false))}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.blockquote?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
+                            }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.blockquote?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
+                            }`}></div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Wiki Links */}
+                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
+                      <div className="col-span-5 flex items-center gap-3">
+                        <span className="text-app-accent w-6 text-center font-mono text-xl">[[</span>
+                        <div>
+                          <div className="text-sm">Wiki Links</div>
+                          <div className="text-xs text-app-muted">Opening/closing brackets</div>
+                        </div>
+                      </div>
+                      <div className="col-span-3">
+                        <div className="flex gap-1">
+                          <input
+                            type="text"
+                            maxLength="3"
+                            className="w-9 px-1 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
+                            value={markdownSyntax.link?.wikiLink?.open || '[['}
+                            onChange={(e) => markdownSyntaxConfig.set('link', { ...markdownSyntax.link, wikiLink: { ...markdownSyntax.link?.wikiLink, open: e.target.value } })}
+                            disabled={markdownSyntax.link?.wikiLink?.enabled === false}
+                          />
+                          <input
+                            type="text"
+                            maxLength="3"
+                            className="w-9 px-1 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
+                            value={markdownSyntax.link?.wikiLink?.close || ']]'}
+                            onChange={(e) => markdownSyntaxConfig.set('link', { ...markdownSyntax.link, wikiLink: { ...markdownSyntax.link?.wikiLink, close: e.target.value } })}
+                            disabled={markdownSyntax.link?.wikiLink?.enabled === false}
+                          />
+                        </div>
+                      </div>
+                      <div className="col-span-4 flex justify-end">
+                        <button
+                          onClick={() => markdownSyntaxConfig.set('link', { ...markdownSyntax.link, wikiLink: { ...markdownSyntax.link?.wikiLink, enabled: !(markdownSyntax.link?.wikiLink?.enabled !== false) } })}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.link?.wikiLink?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
+                            }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.link?.wikiLink?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
+                            }`}></div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Images */}
+                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
+                      <div className="col-span-5 flex items-center gap-3">
+                        <span className="text-xl w-6 text-center">🖼</span>
+                        <div>
+                          <div className="text-sm">Images</div>
+                          <div className="text-xs text-app-muted">Image prefix marker</div>
+                        </div>
+                      </div>
+                      <div className="col-span-3">
+                        <input
+                          type="text"
+                          maxLength="2"
+                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
+                          value={markdownSyntax.image?.marker || '!'}
+                          onChange={(e) => markdownSyntaxConfig.set('image', 'marker', e.target.value)}
+                          disabled={markdownSyntax.image?.enabled === false}
+                        />
+                      </div>
+                      <div className="col-span-4 flex justify-end">
+                        <button
+                          onClick={() => markdownSyntaxConfig.set('image', 'enabled', !(markdownSyntax.image?.enabled !== false))}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.image?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
+                            }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.image?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
+                            }`}></div>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => {
+                      const json = markdownSyntaxConfig.export();
+                      navigator.clipboard.writeText(json);
+                      alert('Copied to clipboard!');
+                    }}
+                    className="px-4 py-2 text-sm rounded-lg border border-app-border hover:bg-app-panel transition-colors"
+                  >
+                    Export
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const saved = await markdownSyntaxConfig.save();
+                      setSaveStatus(saved ? 'success' : 'error');
+                      setTimeout(() => setSaveStatus(''), 3000);
+
+                      // Emit event to notify other windows to reload config
+                      if (saved) {
+                        try {
+                          const { emit } = await import('@tauri-apps/api/event');
+                          await emit('lokus:markdown-config-changed', {
+                            config: markdownSyntaxConfig.getAll()
+                          });
+                          if (import.meta.env.DEV) {
+                          }
+                        } catch { }
+                      }
+                    }}
+                    className="px-6 py-2 text-sm rounded-lg bg-app-accent text-white hover:bg-app-accent/90 transition-colors relative"
+                  >
+                    {saveStatus === 'success' ? '✓ Saved!' : saveStatus === 'error' ? '✗ Failed' : 'Save Configuration'}
+                  </button>
+                </div>
+
+                {/* Custom Symbol Shortcuts */}
+                <div className="mt-8 pt-6 border-t border-app-border">
+                  <h3 className="text-lg font-medium mb-2">Symbol Shortcuts</h3>
+                  <p className="text-sm text-app-muted mb-4">
+                    Type <code className="px-1.5 py-0.5 bg-app-bg rounded text-xs">:name:</code> to insert symbols.
+                    Built-in: <code className="px-1 py-0.5 bg-app-bg rounded text-xs">:theta:</code> → θ,
+                    <code className="px-1 py-0.5 bg-app-bg rounded text-xs">:arrow:</code> → →,
+                    <code className="px-1 py-0.5 bg-app-bg rounded text-xs">:inf:</code> → ∞
+                  </p>
+
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">Custom Symbols</h4>
+                      <p className="text-xs text-app-muted mb-3">Add your own shortcuts. These override built-in symbols with the same name.</p>
+
+                      {/* Add new symbol form */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <input
+                          type="text"
+                          placeholder="name (e.g. myarrow)"
+                          className="flex-1 h-9 px-3 text-sm rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent font-mono"
+                          value={newSymbolName}
+                          onChange={(e) => setNewSymbolName(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
+                          onKeyDown={(e) => e.key === 'Enter' && addCustomSymbol()}
+                        />
+                        <span className="text-app-muted">→</span>
+                        <input
+                          type="text"
+                          placeholder="symbol (e.g. ➜)"
+                          className="w-24 h-9 px-3 text-sm text-center rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent"
+                          value={newSymbolChar}
+                          onChange={(e) => setNewSymbolChar(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && addCustomSymbol()}
+                        />
+                        <button
+                          onClick={addCustomSymbol}
+                          disabled={!newSymbolName.trim() || !newSymbolChar.trim() || newSymbolName.trim().length < 2}
+                          className="h-9 px-4 text-sm rounded-md bg-app-accent text-white hover:bg-app-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Add
+                        </button>
+                      </div>
+
+                      {/* List of custom symbols */}
+                      {Object.keys(customSymbols).length > 0 ? (
+                        <div className="rounded-lg border border-app-border overflow-hidden">
+                          <div className="grid grid-cols-12 bg-app-panel/40 px-4 py-2 text-xs text-app-muted">
+                            <div className="col-span-5">Shortcut</div>
+                            <div className="col-span-5">Symbol</div>
+                            <div className="col-span-2"></div>
+                          </div>
+                          <div className="divide-y divide-app-border/60">
+                            {Object.entries(customSymbols).map(([name, symbol]) => (
+                              <div key={name} className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
+                                <div className="col-span-5 font-mono text-sm">:{name}:</div>
+                                <div className="col-span-5 text-lg">{symbol}</div>
+                                <div className="col-span-2 flex justify-end">
+                                  <button
+                                    onClick={() => removeCustomSymbol(name)}
+                                    className="text-xs text-app-muted hover:text-red-500 transition-colors"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-app-muted italic">No custom symbols defined.</div>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
+            )}
 
-              {/* Action Buttons */}
-              <div className="flex gap-2 justify-end">
-                <button
-                  onClick={() => {
-                    const json = markdownSyntaxConfig.export();
-                    navigator.clipboard.writeText(json);
-                    alert('Copied to clipboard!');
-                  }}
-                  className="px-4 py-2 text-sm rounded-lg border border-app-border hover:bg-app-panel transition-colors"
-                >
-                  Export
-                </button>
-                <button
-                  onClick={async () => {
-                    const saved = await markdownSyntaxConfig.save();
-                    setSaveStatus(saved ? 'success' : 'error');
-                    setTimeout(() => setSaveStatus(''), 3000);
+            {section === "General" && (
+              <div className="text-app-muted">General settings coming soon.</div>
+            )}
 
-                    // Emit event to notify other windows to reload config
-                    if (saved) {
-                      try {
-                        const { emit } = await import('@tauri-apps/api/event');
-                        await emit('lokus:markdown-config-changed', {
-                          config: markdownSyntaxConfig.getAll()
-                        });
-                        if (import.meta.env.DEV) {
-                        }
-                      } catch { }
-                    }
-                  }}
-                  className="px-6 py-2 text-sm rounded-lg bg-app-accent text-white hover:bg-app-accent/90 transition-colors relative"
-                >
-                  {saveStatus === 'success' ? '✓ Saved!' : saveStatus === 'error' ? '✗ Failed' : 'Save Configuration'}
-                </button>
-              </div>
-
-              {/* Custom Symbol Shortcuts */}
-              <div className="mt-8 pt-6 border-t border-app-border">
-                <h3 className="text-lg font-medium mb-2">Symbol Shortcuts</h3>
-                <p className="text-sm text-app-muted mb-4">
-                  Type <code className="px-1.5 py-0.5 bg-app-bg rounded text-xs">:name:</code> to insert symbols.
-                  Built-in: <code className="px-1 py-0.5 bg-app-bg rounded text-xs">:theta:</code> → θ,
-                  <code className="px-1 py-0.5 bg-app-bg rounded text-xs">:arrow:</code> → →,
-                  <code className="px-1 py-0.5 bg-app-bg rounded text-xs">:inf:</code> → ∞
-                </p>
+            {section === "Daily Notes" && (
+              <div className="max-w-2xl space-y-6">
+                <div>
+                  <h2 className="text-2xl font-semibold mb-2">Daily Notes</h2>
+                  <p className="text-app-muted">Configure your daily journaling workflow with customizable templates and date formats.</p>
+                </div>
 
                 <div className="space-y-4">
                   <div>
-                    <h4 className="text-sm font-medium mb-2">Custom Symbols</h4>
-                    <p className="text-xs text-app-muted mb-3">Add your own shortcuts. These override built-in symbols with the same name.</p>
-
-                    {/* Add new symbol form */}
-                    <div className="flex items-center gap-2 mb-3">
-                      <input
-                        type="text"
-                        placeholder="name (e.g. myarrow)"
-                        className="flex-1 h-9 px-3 text-sm rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent font-mono"
-                        value={newSymbolName}
-                        onChange={(e) => setNewSymbolName(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
-                        onKeyDown={(e) => e.key === 'Enter' && addCustomSymbol()}
-                      />
-                      <span className="text-app-muted">→</span>
-                      <input
-                        type="text"
-                        placeholder="symbol (e.g. ➜)"
-                        className="w-24 h-9 px-3 text-sm text-center rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent"
-                        value={newSymbolChar}
-                        onChange={(e) => setNewSymbolChar(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && addCustomSymbol()}
-                      />
-                      <button
-                        onClick={addCustomSymbol}
-                        disabled={!newSymbolName.trim() || !newSymbolChar.trim() || newSymbolName.trim().length < 2}
-                        className="h-9 px-4 text-sm rounded-md bg-app-accent text-white hover:bg-app-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        Add
-                      </button>
-                    </div>
-
-                    {/* List of custom symbols */}
-                    {Object.keys(customSymbols).length > 0 ? (
-                      <div className="rounded-lg border border-app-border overflow-hidden">
-                        <div className="grid grid-cols-12 bg-app-panel/40 px-4 py-2 text-xs text-app-muted">
-                          <div className="col-span-5">Shortcut</div>
-                          <div className="col-span-5">Symbol</div>
-                          <div className="col-span-2"></div>
-                        </div>
-                        <div className="divide-y divide-app-border/60">
-                          {Object.entries(customSymbols).map(([name, symbol]) => (
-                            <div key={name} className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                              <div className="col-span-5 font-mono text-sm">:{name}:</div>
-                              <div className="col-span-5 text-lg">{symbol}</div>
-                              <div className="col-span-2 flex justify-end">
-                                <button
-                                  onClick={() => removeCustomSymbol(name)}
-                                  className="text-xs text-app-muted hover:text-red-500 transition-colors"
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-sm text-app-muted italic">No custom symbols defined.</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {section === "General" && (
-            <div className="text-app-muted">General settings coming soon.</div>
-          )}
-
-          {section === "Daily Notes" && (
-            <div className="max-w-2xl space-y-6">
-              <div>
-                <h2 className="text-2xl font-semibold mb-2">Daily Notes</h2>
-                <p className="text-app-muted">Configure your daily journaling workflow with customizable templates and date formats.</p>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Date Format</label>
-                  <input
-                    type="text"
-                    className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent"
-                    value={dailyNotesSettings.format}
-                    onChange={(e) => setDailyNotesSettings({ ...dailyNotesSettings, format: e.target.value })}
-                    onBlur={saveDailyNotesSettings}
-                    placeholder="yyyy-MM-dd"
-                  />
-                  <p className="text-xs text-app-muted mt-1">
-                    Uses date-fns format. Examples: yyyy-MM-dd, MM-dd-yyyy, yyyy/MM/dd
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">Folder Location</label>
-                  <input
-                    type="text"
-                    className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent"
-                    value={dailyNotesSettings.folder}
-                    onChange={(e) => setDailyNotesSettings({ ...dailyNotesSettings, folder: e.target.value })}
-                    onBlur={saveDailyNotesSettings}
-                    placeholder="Daily Notes"
-                  />
-                  <p className="text-xs text-app-muted mt-1">
-                    Folder path relative to your workspace root
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">Daily Note Template</label>
-                  <textarea
-                    className="w-full h-32 px-3 py-2 rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent resize-y font-mono text-sm"
-                    value={dailyNotesSettings.template}
-                    onChange={(e) => setDailyNotesSettings({ ...dailyNotesSettings, template: e.target.value })}
-                    onBlur={saveDailyNotesSettings}
-                    placeholder="# {{date}}&#10;&#10;## Tasks&#10;- &#10;&#10;## Notes&#10;"
-                  />
-                  <div className="text-xs text-app-muted mt-2 space-y-1">
-                    <p className="font-medium">Available template variables:</p>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 pl-2">
-                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{date}}'}</code> - Today's date</div>
-                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{yesterday}}'}</code> - Yesterday's date</div>
-                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{tomorrow}}'}</code> - Tomorrow's date</div>
-                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{day}}'}</code> - Day name (Monday)</div>
-                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{day_short}}'}</code> - Day name (Mon)</div>
-                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{month}}'}</code> - Month name</div>
-                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{week}}'}</code> - Week number</div>
-                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{year}}'}</code> - Year (2025)</div>
-                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{time}}'}</code> - Current time</div>
-                      <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{date:FORMAT}}'}</code> - Custom format</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 py-2">
-                  <input
-                    type="checkbox"
-                    id="openOnStartup"
-                    className="w-4 h-4 rounded border-app-border"
-                    checked={dailyNotesSettings.openOnStartup}
-                    onChange={(e) => {
-                      setDailyNotesSettings({ ...dailyNotesSettings, openOnStartup: e.target.checked });
-                      saveDailyNotesSettings();
-                    }}
-                  />
-                  <label htmlFor="openOnStartup" className="text-sm cursor-pointer">
-                    Open today's daily note on startup
-                  </label>
-                </div>
-
-                <div className="pt-4 border-t border-app-border">
-                  <p className="text-sm text-app-muted mb-2">Quick access:</p>
-                  <ul className="text-sm space-y-1 text-app-muted">
-                    <li>• Press <kbd className="px-2 py-0.5 bg-app-bg border border-app-border rounded text-xs">Cmd/Ctrl + Shift + D</kbd> to open today's note</li>
-                    <li>• Use Command Palette (Cmd/Ctrl + K) → "Open Daily Note"</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {section === "Shortcuts" && (
-            <div className="max-w-3xl space-y-6">
-              <div className="flex items-center justify-between gap-3">
-                <div className="relative flex-1">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-app-muted" />
-                  <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search actions..."
-                    className="w-full pl-8 pr-3 h-9 rounded-md bg-app-bg border border-app-border outline-none focus:ring-2 focus:ring-app-accent/40"
-                  />
-                </div>
-                <button onClick={onResetAll} className="h-9 inline-flex items-center gap-2 px-3 rounded-md border border-app-border hover:bg-app-panel text-sm">
-                  <RotateCcw className="w-4 h-4" /> Reset All
-                </button>
-              </div>
-
-              <div className="rounded-lg border border-app-border overflow-hidden">
-                <div className="grid grid-cols-12 bg-app-panel/40 px-4 py-2 text-xs text-app-muted">
-                  <div className="col-span-7">Action</div>
-                  <div className="col-span-3">Shortcut</div>
-                  <div className="col-span-2 text-right">Edit</div>
-                </div>
-                <div className="divide-y divide-app-border/60">
-                  {actions
-                    .filter(a => a.name.toLowerCase().includes(query.toLowerCase()))
-                    .map(a => {
-                      const accel = keymap[a.id];
-                      const parts = accelParts(accel);
-                      return (
-                        <div key={a.id} className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                          <div className="col-span-7 text-sm">{a.name}</div>
-                          <div className="col-span-3">
-                            {editing === a.id ? (
-                              <div className="inline-flex items-center gap-2">
-                                <span className="text-xs text-app-muted">Press keys…</span>
-                              </div>
-                            ) : (
-                              <div className="flex flex-wrap items-center gap-1">
-                                {parts.length > 0 ? parts.map((p, i) => (
-                                  <Keycap key={i}>{p}</Keycap>
-                                )) : <span className="text-xs text-app-muted">Not set</span>}
-                              </div>
-                            )}
-                          </div>
-                          <div className="col-span-2">
-                            {editing === a.id ? (
-                              <input
-                                autoFocus
-                                onKeyDown={(e) => onKeyCapture(e, a.id)}
-                                onBlur={cancelEdit}
-                                className="w-full h-8 text-center bg-app-bg border border-dashed border-app-border rounded outline-none"
-                                placeholder={formatAccelerator(accel) || "Press keys..."}
-                              />
-                            ) : (
-                              <div className="flex items-center justify-end gap-2">
-                                <button
-                                  onClick={() => beginEdit(a.id)}
-                                  className="h-8 inline-flex items-center gap-2 px-2 rounded-md border border-app-border hover:bg-app-panel text-xs"
-                                >
-                                  <Pencil className="w-3.5 h-3.5" /> Edit
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {section === "Connections" && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-semibold mb-4 text-app-text">Connections</h2>
-                <p className="text-app-text-secondary mb-6">
-                  Connect external services and manage integrations with your workspace.
-                </p>
-              </div>
-
-              {/* Available Connections */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-app-text">Available Services</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Gmail - Real connection */}
-                  <div className="bg-app-panel border border-app-border rounded-lg p-4 hover:bg-app-panel/80 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-red-500 rounded-lg flex items-center justify-center text-white font-semibold">
-                          G
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-app-text">Gmail</h4>
-                          <p className="text-xs text-app-text-secondary">Email integration</p>
-                        </div>
-                      </div>
-                      <ConnectionStatus />
-                    </div>
-                  </div>
-
-                  {/* Outlook - Disabled */}
-                  <div className="bg-app-panel border border-app-border rounded-lg p-4 opacity-50 cursor-not-allowed">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center text-white font-semibold">
-                          O
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-app-text-secondary">Outlook</h4>
-                          <p className="text-xs text-app-text-secondary">Coming soon</p>
-                        </div>
-                      </div>
-                      <div className="w-3 h-3 bg-app-muted rounded-full"></div>
-                    </div>
-                  </div>
-
-                  {/* Jira - Disabled */}
-                  <div className="bg-app-panel border border-app-border rounded-lg p-4 opacity-50 cursor-not-allowed">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-semibold">
-                          J
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-app-text-secondary">Jira</h4>
-                          <p className="text-xs text-app-text-secondary">Coming soon</p>
-                        </div>
-                      </div>
-                      <div className="w-3 h-3 bg-app-muted rounded-full"></div>
-                    </div>
-                  </div>
-
-                  {/* Slack - Disabled */}
-                  <div className="bg-app-panel border border-app-border rounded-lg p-4 opacity-50 cursor-not-allowed">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center text-white font-semibold">
-                          S
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-app-text-secondary">Slack</h4>
-                          <p className="text-xs text-app-text-secondary">Coming soon</p>
-                        </div>
-                      </div>
-                      <div className="w-3 h-3 bg-app-muted rounded-full"></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Gmail Connection Component */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-app-text">Gmail Integration</h3>
-                <GmailLogin />
-              </div>
-            </div>
-          )}
-
-          {section === "Account" && (
-            <div className="space-y-8 max-w-2xl">
-              {/* Account Header */}
-              <div>
-                <h1 className="text-2xl font-bold text-app-text mb-2">Account</h1>
-                <p className="text-app-text-secondary">
-                  Manage your account settings, authentication, and profile.
-                </p>
-              </div>
-
-              {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="w-6 h-6 border-2 border-app-accent border-t-transparent rounded-full animate-spin"></div>
-                </div>
-              ) : !isAuthenticated ? (
-                /* Sign In State */
-                <div className="bg-app-panel border border-app-border rounded-xl p-8">
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-app-accent rounded-full flex items-center justify-center mx-auto mb-6">
-                      <LogIn className="w-8 h-8 text-white" />
-                    </div>
-                    <h2 className="text-xl font-semibold text-app-text mb-3">Sign in to Lokus</h2>
-                    <p className="text-app-text-secondary mb-8 max-w-md mx-auto">
-                      Sync your notes across devices and access your account.
+                    <label className="block text-sm font-medium mb-2">Date Format</label>
+                    <input
+                      type="text"
+                      className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent"
+                      value={dailyNotesSettings.format}
+                      onChange={(e) => setDailyNotesSettings({ ...dailyNotesSettings, format: e.target.value })}
+                      onBlur={saveDailyNotesSettings}
+                      placeholder="yyyy-MM-dd"
+                    />
+                    <p className="text-xs text-app-muted mt-1">
+                      Uses date-fns format. Examples: yyyy-MM-dd, MM-dd-yyyy, yyyy/MM/dd
                     </p>
-                    <button
-                      onClick={async () => {
-                        try {
-                          await signIn();
-                        } catch { }
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Folder Location</label>
+                    <input
+                      type="text"
+                      className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent"
+                      value={dailyNotesSettings.folder}
+                      onChange={(e) => setDailyNotesSettings({ ...dailyNotesSettings, folder: e.target.value })}
+                      onBlur={saveDailyNotesSettings}
+                      placeholder="Daily Notes"
+                    />
+                    <p className="text-xs text-app-muted mt-1">
+                      Folder path relative to your workspace root
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Daily Note Template</label>
+                    <textarea
+                      className="w-full h-32 px-3 py-2 rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent resize-y font-mono text-sm"
+                      value={dailyNotesSettings.template}
+                      onChange={(e) => setDailyNotesSettings({ ...dailyNotesSettings, template: e.target.value })}
+                      onBlur={saveDailyNotesSettings}
+                      placeholder="# {{date}}&#10;&#10;## Tasks&#10;- &#10;&#10;## Notes&#10;"
+                    />
+                    <div className="text-xs text-app-muted mt-2 space-y-1">
+                      <p className="font-medium">Available template variables:</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 pl-2">
+                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{date}}'}</code> - Today's date</div>
+                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{yesterday}}'}</code> - Yesterday's date</div>
+                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{tomorrow}}'}</code> - Tomorrow's date</div>
+                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{day}}'}</code> - Day name (Monday)</div>
+                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{day_short}}'}</code> - Day name (Mon)</div>
+                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{month}}'}</code> - Month name</div>
+                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{week}}'}</code> - Week number</div>
+                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{year}}'}</code> - Year (2025)</div>
+                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{time}}'}</code> - Current time</div>
+                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{date:FORMAT}}'}</code> - Custom format</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 py-2">
+                    <input
+                      type="checkbox"
+                      id="openOnStartup"
+                      className="w-4 h-4 rounded border-app-border"
+                      checked={dailyNotesSettings.openOnStartup}
+                      onChange={(e) => {
+                        setDailyNotesSettings({ ...dailyNotesSettings, openOnStartup: e.target.checked });
+                        saveDailyNotesSettings();
                       }}
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-app-accent text-white font-medium rounded-lg hover:bg-app-accent/90 transition-colors"
-                    >
-                      <LogIn className="w-4 h-4" />
-                      Sign In
-                    </button>
+                    />
+                    <label htmlFor="openOnStartup" className="text-sm cursor-pointer">
+                      Open today's daily note on startup
+                    </label>
+                  </div>
+
+                  <div className="pt-4 border-t border-app-border">
+                    <p className="text-sm text-app-muted mb-2">Quick access:</p>
+                    <ul className="text-sm space-y-1 text-app-muted">
+                      <li>• Press <kbd className="px-2 py-0.5 bg-app-bg border border-app-border rounded text-xs">Cmd/Ctrl + Shift + D</kbd> to open today's note</li>
+                      <li>• Use Command Palette (Cmd/Ctrl + K) → "Open Daily Note"</li>
+                    </ul>
                   </div>
                 </div>
-              ) : (
-                /* Signed In State - Arc-like Dashboard */
-                <div className="space-y-6">
-                  {/* Profile Section */}
-                  <div className="bg-app-panel border border-app-border rounded-xl p-6">
-                    <div className="flex items-center gap-4">
-                      {user?.avatar_url ? (
-                        <img
-                          src={user.avatar_url}
-                          alt="Profile"
-                          className="w-16 h-16 rounded-full border-2 border-app-border"
-                        />
-                      ) : (
-                        <div className="w-16 h-16 bg-app-accent rounded-full flex items-center justify-center">
-                          <User className="w-8 h-8 text-white" />
+              </div>
+            )}
+
+            {section === "Shortcuts" && (
+              <div className="max-w-3xl space-y-6">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-app-muted" />
+                    <input
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Search actions..."
+                      className="w-full pl-8 pr-3 h-9 rounded-md bg-app-bg border border-app-border outline-none focus:ring-2 focus:ring-app-accent/40"
+                    />
+                  </div>
+                  <button onClick={onResetAll} className="h-9 inline-flex items-center gap-2 px-3 rounded-md border border-app-border hover:bg-app-panel text-sm">
+                    <RotateCcw className="w-4 h-4" /> Reset All
+                  </button>
+                </div>
+
+                <div className="rounded-lg border border-app-border overflow-hidden">
+                  <div className="grid grid-cols-12 bg-app-panel/40 px-4 py-2 text-xs text-app-muted">
+                    <div className="col-span-7">Action</div>
+                    <div className="col-span-3">Shortcut</div>
+                    <div className="col-span-2 text-right">Edit</div>
+                  </div>
+                  <div className="divide-y divide-app-border/60">
+                    {actions
+                      .filter(a => a.name.toLowerCase().includes(query.toLowerCase()))
+                      .map(a => {
+                        const accel = keymap[a.id];
+                        const parts = accelParts(accel);
+                        return (
+                          <div key={a.id} className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
+                            <div className="col-span-7 text-sm">{a.name}</div>
+                            <div className="col-span-3">
+                              {editing === a.id ? (
+                                <div className="inline-flex items-center gap-2">
+                                  <span className="text-xs text-app-muted">Press keys…</span>
+                                </div>
+                              ) : (
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {parts.length > 0 ? parts.map((p, i) => (
+                                    <Keycap key={i}>{p}</Keycap>
+                                  )) : <span className="text-xs text-app-muted">Not set</span>}
+                                </div>
+                              )}
+                            </div>
+                            <div className="col-span-2">
+                              {editing === a.id ? (
+                                <input
+                                  autoFocus
+                                  onKeyDown={(e) => onKeyCapture(e, a.id)}
+                                  onBlur={cancelEdit}
+                                  className="w-full h-8 text-center bg-app-bg border border-dashed border-app-border rounded outline-none"
+                                  placeholder={formatAccelerator(accel) || "Press keys..."}
+                                />
+                              ) : (
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => beginEdit(a.id)}
+                                    className="h-8 inline-flex items-center gap-2 px-2 rounded-md border border-app-border hover:bg-app-panel text-xs"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" /> Edit
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {section === "Connections" && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-xl font-semibold mb-4 text-app-text">Connections</h2>
+                  <p className="text-app-text-secondary mb-6">
+                    Connect external services and manage integrations with your workspace.
+                  </p>
+                </div>
+
+                {/* Available Connections */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium text-app-text">Available Services</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Gmail - Real connection */}
+                    <div className="bg-app-panel border border-app-border rounded-lg p-4 hover:bg-app-panel/80 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-red-500 rounded-lg flex items-center justify-center text-white font-semibold">
+                            G
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-app-text">Gmail</h4>
+                            <p className="text-xs text-app-text-secondary">Email integration</p>
+                          </div>
                         </div>
-                      )}
-                      <div className="flex-1">
-                        <h2 className="text-lg font-semibold text-app-text">
-                          {user?.name || 'User'}
-                        </h2>
-                        <p className="text-app-text-secondary text-sm">
-                          {user?.email || 'No email available'}
-                        </p>
+                        <ConnectionStatus />
                       </div>
+                    </div>
+
+                    {/* Outlook - Disabled */}
+                    <div className="bg-app-panel border border-app-border rounded-lg p-4 opacity-50 cursor-not-allowed">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center text-white font-semibold">
+                            O
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-app-text-secondary">Outlook</h4>
+                            <p className="text-xs text-app-text-secondary">Coming soon</p>
+                          </div>
+                        </div>
+                        <div className="w-3 h-3 bg-app-muted rounded-full"></div>
+                      </div>
+                    </div>
+
+                    {/* Jira - Disabled */}
+                    <div className="bg-app-panel border border-app-border rounded-lg p-4 opacity-50 cursor-not-allowed">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-semibold">
+                            J
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-app-text-secondary">Jira</h4>
+                            <p className="text-xs text-app-text-secondary">Coming soon</p>
+                          </div>
+                        </div>
+                        <div className="w-3 h-3 bg-app-muted rounded-full"></div>
+                      </div>
+                    </div>
+
+                    {/* Slack - Disabled */}
+                    <div className="bg-app-panel border border-app-border rounded-lg p-4 opacity-50 cursor-not-allowed">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center text-white font-semibold">
+                            S
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-app-text-secondary">Slack</h4>
+                            <p className="text-xs text-app-text-secondary">Coming soon</p>
+                          </div>
+                        </div>
+                        <div className="w-3 h-3 bg-app-muted rounded-full"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Gmail Connection Component */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium text-app-text">Gmail Integration</h3>
+                  <GmailLogin />
+                </div>
+              </div>
+            )}
+
+            {section === "Account" && (
+              <div className="space-y-8 max-w-2xl">
+                {/* Account Header */}
+                <div>
+                  <h1 className="text-2xl font-bold text-app-text mb-2">Account</h1>
+                  <p className="text-app-text-secondary">
+                    Manage your account settings, authentication, and profile.
+                  </p>
+                </div>
+
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="w-6 h-6 border-2 border-app-accent border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                ) : !isAuthenticated ? (
+                  /* Sign In State */
+                  <div className="bg-app-panel border border-app-border rounded-xl p-8">
+                    <div className="text-center">
+                      <div className="w-16 h-16 bg-app-accent rounded-full flex items-center justify-center mx-auto mb-6">
+                        <LogIn className="w-8 h-8 text-white" />
+                      </div>
+                      <h2 className="text-xl font-semibold text-app-text mb-3">Sign in to Lokus</h2>
+                      <p className="text-app-text-secondary mb-8 max-w-md mx-auto">
+                        Sync your notes across devices and access your account.
+                      </p>
                       <button
                         onClick={async () => {
                           try {
-                            setIsSigningOut(true);
-                            await signOut();
-                          } catch { } finally {
-                            setIsSigningOut(false);
-                          }
+                            await signIn();
+                          } catch { }
                         }}
-                        disabled={isSigningOut}
-                        className="px-4 py-2 text-app-text-secondary hover:text-app-text border border-app-border rounded-lg hover:bg-app-bg transition-colors disabled:opacity-50"
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-app-accent text-white font-medium rounded-lg hover:bg-app-accent/90 transition-colors"
                       >
-                        {isSigningOut ? 'Signing out...' : 'Sign Out'}
+                        <LogIn className="w-4 h-4" />
+                        Sign In
                       </button>
                     </div>
                   </div>
-
-                  {/* Stats Grid */}
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-app-panel border border-app-border rounded-xl p-4 text-center">
-                      <div className="text-2xl font-bold text-app-text">247</div>
-                      <div className="text-sm text-app-text-secondary">Notes</div>
-                    </div>
-                    <div className="bg-app-panel border border-app-border rounded-xl p-4 text-center">
-                      <div className="text-2xl font-bold text-app-text">12</div>
-                      <div className="text-sm text-app-text-secondary">Days</div>
-                    </div>
-                    <div className="bg-app-panel border border-app-border rounded-xl p-4 text-center">
-                      <div className="text-2xl font-bold text-app-text">1.2GB</div>
-                      <div className="text-sm text-app-text-secondary">Storage</div>
-                    </div>
-                  </div>
-
-                  {/* Features */}
-                  <div className="bg-app-panel border border-app-border rounded-xl p-6">
-                    <h3 className="text-lg font-semibold text-app-text mb-4">Account Features</h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 bg-app-accent rounded-full"></div>
-                        <span className="text-app-text">Cross-device sync</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 bg-app-accent rounded-full"></div>
-                        <span className="text-app-text">Cloud backup</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 bg-app-accent rounded-full"></div>
-                        <span className="text-app-text">Collaboration tools</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {section === "Sync" && (
-            <div className="space-y-6 max-w-2xl">
-              <div>
-                <h2 className="text-lg font-semibold mb-2 text-app-text">Workspace Sync</h2>
-                <p className="text-sm text-app-muted mb-6">
-                  Sync your workspace across devices using peer-to-peer or cloud-based Git repositories.
-                </p>
-              </div>
-
-              {/* Provider Selection */}
-              <section className="p-4 bg-app-panel border border-app-border rounded-md">
-                <h3 className="text-sm font-medium text-app-text mb-3">Choose Sync Provider</h3>
-                <div className="space-y-3">
-                  {/* Iroh Option */}
-                  <label className="flex items-start gap-3 p-3 bg-app-bg border border-app-border rounded-md cursor-pointer hover:border-app-accent transition-colors">
-                    <input
-                      type="radio"
-                      name="syncProvider"
-                      value="iroh"
-                      checked={syncProvider === 'iroh'}
-                      onChange={(e) => setSyncProvider(e.target.value)}
-                      className="mt-1 w-4 h-4 text-app-accent focus:ring-app-accent focus:ring-2"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-app-text">Iroh</span>
-                        <span className="text-xs px-2 py-0.5 bg-app-accent text-app-accent-fg rounded-full">Recommended</span>
-                      </div>
-                      <p className="text-xs text-app-muted mt-1">
-                        Peer-to-peer sync with no central server. Fast, secure, and works offline.
-                      </p>
-                    </div>
-                  </label>
-
-                  {/* Git Option */}
-                  <label className="flex items-start gap-3 p-3 bg-app-bg border border-app-border rounded-md cursor-pointer hover:border-app-accent transition-colors">
-                    <input
-                      type="radio"
-                      name="syncProvider"
-                      value="git"
-                      checked={syncProvider === 'git'}
-                      onChange={(e) => setSyncProvider(e.target.value)}
-                      className="mt-1 w-4 h-4 text-app-accent focus:ring-app-accent focus:ring-2"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-app-text">Git</span>
-                        <span className="text-xs px-2 py-0.5 bg-app-bg border border-app-border rounded-full">Advanced</span>
-                      </div>
-                      <p className="text-xs text-app-muted mt-1">
-                        Use GitHub, GitLab, or any Git provider. Requires manual setup and credentials.
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              </section>
-
-              {/* Iroh Configuration Section */}
-              {syncProvider === 'iroh' && (
-                <div className="space-y-4">
-                  {/* Status Card */}
-                  <section className="p-4 bg-app-panel border border-app-border rounded-md">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-medium text-app-text">Iroh Status</h3>
-                      <div className="flex items-center gap-2">
-                        {irohStatus === 'connected' && (
-                          <>
-                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                            <span className="text-xs text-app-muted">Connected</span>
-                          </>
-                        )}
-                        {irohStatus === 'not_configured' && (
-                          <>
-                            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                            <span className="text-xs text-app-muted">Not configured</span>
-                          </>
-                        )}
-                        {irohStatus === 'error' && (
-                          <>
-                            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                            <span className="text-xs text-app-muted">Error</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {irohDocumentId && (
-                      <div className="space-y-2 mb-3">
-                        <div className="text-xs text-app-muted">
-                          <span className="font-medium">Document ID:</span>
-                          <div className="mt-1 p-2 bg-app-bg border border-app-border rounded font-mono text-xs break-all">
-                            {irohDocumentId}
+                ) : (
+                  /* Signed In State - Arc-like Dashboard */
+                  <div className="space-y-6">
+                    {/* Profile Section */}
+                    <div className="bg-app-panel border border-app-border rounded-xl p-6">
+                      <div className="flex items-center gap-4">
+                        {user?.avatar_url ? (
+                          <img
+                            src={user.avatar_url}
+                            alt="Profile"
+                            className="w-16 h-16 rounded-full border-2 border-app-border"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 bg-app-accent rounded-full flex items-center justify-center">
+                            <User className="w-8 h-8 text-white" />
                           </div>
+                        )}
+                        <div className="flex-1">
+                          <h2 className="text-lg font-semibold text-app-text">
+                            {user?.name || 'User'}
+                          </h2>
+                          <p className="text-app-text-secondary text-sm">
+                            {user?.email || 'No email available'}
+                          </p>
                         </div>
-                        {irohPeers.length > 0 && (
-                          <div className="text-xs text-app-muted">
-                            <span className="font-medium">Connected Peers: {irohPeers.length}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {irohError && (
-                      <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-500 mb-3">
-                        {irohError}
-                      </div>
-                    )}
-
-                    {!irohDocumentId ? (
-                      <div className="flex gap-2">
                         <button
                           onClick={async () => {
-                            if (!workspacePath) {
-                              alert('Workspace path not available. Please reopen Preferences from the workspace.');
-                              return;
-                            }
-                            setSyncLoading(true);
-                            setIrohError('');
                             try {
-                              const result = await invoke('iroh_init_document', { workspacePath: workspacePath });
-                              setIrohDocumentId(result.documentId || result);
-                              setIrohStatus('connected');
-                              alert('Iroh document created successfully!');
-                              // Fetch ticket after creation
-                              try {
-                                const ticket = await invoke('iroh_get_ticket', { workspacePath: workspacePath });
-                                setIrohTicket(ticket);
-                              } catch { }
-                            } catch (err) {
-                              setIrohStatus('error');
-                              setIrohError(String(err));
-                              alert('Failed to create Iroh document: ' + err);
+                              setIsSigningOut(true);
+                              await signOut();
+                            } catch { } finally {
+                              setIsSigningOut(false);
                             }
-                            setSyncLoading(false);
                           }}
-                          disabled={syncLoading || !workspacePath}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+                          disabled={isSigningOut}
+                          className="px-4 py-2 text-app-text-secondary hover:text-app-text border border-app-border rounded-lg hover:bg-app-bg transition-colors disabled:opacity-50"
                         >
-                          <CloudUpload className="w-4 h-4" />
-                          Create New Document
-                        </button>
-
-                        <button
-                          onClick={() => setShowJoinModal(true)}
-                          disabled={syncLoading}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
-                        >
-                          <CloudOff className="w-4 h-4" />
-                          Join Existing Document
+                          {isSigningOut ? 'Signing out...' : 'Sign Out'}
                         </button>
                       </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
+                    </div>
+
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-app-panel border border-app-border rounded-xl p-4 text-center">
+                        <div className="text-2xl font-bold text-app-text">247</div>
+                        <div className="text-sm text-app-text-secondary">Notes</div>
+                      </div>
+                      <div className="bg-app-panel border border-app-border rounded-xl p-4 text-center">
+                        <div className="text-2xl font-bold text-app-text">12</div>
+                        <div className="text-sm text-app-text-secondary">Days</div>
+                      </div>
+                      <div className="bg-app-panel border border-app-border rounded-xl p-4 text-center">
+                        <div className="text-2xl font-bold text-app-text">1.2GB</div>
+                        <div className="text-sm text-app-text-secondary">Storage</div>
+                      </div>
+                    </div>
+
+                    {/* Features */}
+                    <div className="bg-app-panel border border-app-border rounded-xl p-6">
+                      <h3 className="text-lg font-semibold text-app-text mb-4">Account Features</h3>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 bg-app-accent rounded-full"></div>
+                          <span className="text-app-text">Cross-device sync</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 bg-app-accent rounded-full"></div>
+                          <span className="text-app-text">Cloud backup</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 bg-app-accent rounded-full"></div>
+                          <span className="text-app-text">Collaboration tools</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {section === "Sync" && (
+              <div className="space-y-6 max-w-2xl">
+                <div>
+                  <h2 className="text-lg font-semibold mb-2 text-app-text">Workspace Sync</h2>
+                  <p className="text-sm text-app-muted mb-6">
+                    Sync your workspace across devices using peer-to-peer or cloud-based Git repositories.
+                  </p>
+                </div>
+
+                {/* Provider Selection */}
+                <section className="p-4 bg-app-panel border border-app-border rounded-md">
+                  <h3 className="text-sm font-medium text-app-text mb-3">Choose Sync Provider</h3>
+                  <div className="space-y-3">
+                    {/* Iroh Option */}
+                    <label className="flex items-start gap-3 p-3 bg-app-bg border border-app-border rounded-md cursor-pointer hover:border-app-accent transition-colors">
+                      <input
+                        type="radio"
+                        name="syncProvider"
+                        value="iroh"
+                        checked={syncProvider === 'iroh'}
+                        onChange={(e) => setSyncProvider(e.target.value)}
+                        className="mt-1 w-4 h-4 text-app-accent focus:ring-app-accent focus:ring-2"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-app-text">Iroh</span>
+                          <span className="text-xs px-2 py-0.5 bg-app-accent text-app-accent-fg rounded-full">Recommended</span>
+                        </div>
+                        <p className="text-xs text-app-muted mt-1">
+                          Peer-to-peer sync with no central server. Fast, secure, and works offline.
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Git Option */}
+                    <label className="flex items-start gap-3 p-3 bg-app-bg border border-app-border rounded-md cursor-pointer hover:border-app-accent transition-colors">
+                      <input
+                        type="radio"
+                        name="syncProvider"
+                        value="git"
+                        checked={syncProvider === 'git'}
+                        onChange={(e) => setSyncProvider(e.target.value)}
+                        className="mt-1 w-4 h-4 text-app-accent focus:ring-app-accent focus:ring-2"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-app-text">Git</span>
+                          <span className="text-xs px-2 py-0.5 bg-app-bg border border-app-border rounded-full">Advanced</span>
+                        </div>
+                        <p className="text-xs text-app-muted mt-1">
+                          Use GitHub, GitLab, or any Git provider. Requires manual setup and credentials.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </section>
+
+                {/* Iroh Configuration Section */}
+                {syncProvider === 'iroh' && (
+                  <div className="space-y-4">
+                    {/* Status Card */}
+                    <section className="p-4 bg-app-panel border border-app-border rounded-md">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-medium text-app-text">Iroh Status</h3>
+                        <div className="flex items-center gap-2">
+                          {irohStatus === 'connected' && (
+                            <>
+                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                              <span className="text-xs text-app-muted">Connected</span>
+                            </>
+                          )}
+                          {irohStatus === 'not_configured' && (
+                            <>
+                              <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                              <span className="text-xs text-app-muted">Not configured</span>
+                            </>
+                          )}
+                          {irohStatus === 'error' && (
+                            <>
+                              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                              <span className="text-xs text-app-muted">Error</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {irohDocumentId && (
+                        <div className="space-y-2 mb-3">
+                          <div className="text-xs text-app-muted">
+                            <span className="font-medium">Document ID:</span>
+                            <div className="mt-1 p-2 bg-app-bg border border-app-border rounded font-mono text-xs break-all">
+                              {irohDocumentId}
+                            </div>
+                          </div>
+                          {irohPeers.length > 0 && (
+                            <div className="text-xs text-app-muted">
+                              <span className="font-medium">Connected Peers: {irohPeers.length}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {irohError && (
+                        <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-500 mb-3">
+                          {irohError}
+                        </div>
+                      )}
+
+                      {!irohDocumentId ? (
+                        <div className="flex gap-2">
                           <button
                             onClick={async () => {
                               if (!workspacePath) {
-                                alert('Workspace path not available.');
+                                alert('Workspace path not available. Please reopen Preferences from the workspace.');
                                 return;
                               }
                               setSyncLoading(true);
                               setIrohError('');
                               try {
-                                // Fetch peer list
-                                const peers = await invoke('iroh_list_peers', { workspacePath: workspacePath });
-                                setIrohPeers(peers || []);
-
-                                // Update status based on peer count
-                                if (peers && peers.length > 0) {
-                                  setIrohStatus('connected');
-                                }
+                                const result = await invoke('iroh_init_document', { workspacePath: workspacePath });
+                                setIrohDocumentId(result.documentId || result);
+                                setIrohStatus('connected');
+                                alert('Iroh document created successfully!');
+                                // Fetch ticket after creation
+                                try {
+                                  const ticket = await invoke('iroh_get_ticket', { workspacePath: workspacePath });
+                                  setIrohTicket(ticket);
+                                } catch { }
                               } catch (err) {
-                                setIrohError('Failed to fetch peers: ' + String(err));
+                                setIrohStatus('error');
+                                setIrohError(String(err));
+                                alert('Failed to create Iroh document: ' + err);
                               }
                               setSyncLoading(false);
                             }}
                             disabled={syncLoading || !workspacePath}
-                            className="flex items-center justify-center gap-2 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
                           >
-                            <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
-                            Refresh Peers
+                            <CloudUpload className="w-4 h-4" />
+                            Create New Document
                           </button>
 
                           <button
+                            onClick={() => setShowJoinModal(true)}
+                            disabled={syncLoading}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
+                          >
+                            <CloudOff className="w-4 h-4" />
+                            Join Existing Document
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              onClick={async () => {
+                                if (!workspacePath) {
+                                  alert('Workspace path not available.');
+                                  return;
+                                }
+                                setSyncLoading(true);
+                                setIrohError('');
+                                try {
+                                  // Fetch peer list
+                                  const peers = await invoke('iroh_list_peers', { workspacePath: workspacePath });
+                                  setIrohPeers(peers || []);
+
+                                  // Update status based on peer count
+                                  if (peers && peers.length > 0) {
+                                    setIrohStatus('connected');
+                                  }
+                                } catch (err) {
+                                  setIrohError('Failed to fetch peers: ' + String(err));
+                                }
+                                setSyncLoading(false);
+                              }}
+                              disabled={syncLoading || !workspacePath}
+                              className="flex items-center justify-center gap-2 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
+                            >
+                              <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
+                              Refresh Peers
+                            </button>
+
+                            <button
+                              onClick={async () => {
+                                if (!confirm('Force sync all files? This will download all files from peers and upload any local files.')) {
+                                  return;
+                                }
+                                setSyncLoading(true);
+                                setIrohError('');
+                                try {
+                                  const result = await invoke('iroh_manual_sync', { workspacePath: workspacePath });
+                                  alert(result);
+                                  // Refresh peer list after sync
+                                  const peers = await invoke('iroh_list_peers', { workspacePath: workspacePath });
+                                  setIrohPeers(peers || []);
+                                } catch (err) {
+                                  setIrohError('Force sync failed: ' + String(err));
+                                }
+                                setSyncLoading(false);
+                              }}
+                              disabled={syncLoading || !workspacePath}
+                              className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-white transition-colors"
+                            >
+                              <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
+                              Force Sync All
+                            </button>
+                          </div>
+
+                          <button
                             onClick={async () => {
-                              if (!confirm('Force sync all files? This will download all files from peers and upload any local files.')) {
+                              if (!confirm('Are you sure you want to leave this document? You will need the ticket to rejoin.')) {
                                 return;
                               }
                               setSyncLoading(true);
                               setIrohError('');
                               try {
-                                const result = await invoke('iroh_manual_sync', { workspacePath: workspacePath });
-                                alert(result);
-                                // Refresh peer list after sync
-                                const peers = await invoke('iroh_list_peers', { workspacePath: workspacePath });
-                                setIrohPeers(peers || []);
+                                // Call backend to clear document and delete ticket file
+                                await invoke('iroh_leave_document');
+
+                                // Clear React state
+                                setIrohDocumentId('');
+                                setIrohTicket('');
+                                setIrohPeers([]);
+                                setIrohStatus('not_configured');
+                                setAutoSyncEnabled(false);
+
+                                // CRITICAL: Wait for auto-save debounce to finish
+                                await new Promise(resolve => setTimeout(resolve, 600));
+
+                                // Explicitly clear config file to prevent restoration
+                                const cfg = await readConfig();
+                                await updateConfig({
+                                  sync: {
+                                    ...cfg.sync,
+                                    iroh: {
+                                      documentId: '',
+                                      ticket: ''
+                                    }
+                                  }
+                                });
+
+                                alert('Left document successfully. You can now create a new document or join a different one.');
                               } catch (err) {
-                                setIrohError('Force sync failed: ' + String(err));
+                                setIrohError('Failed to leave document: ' + String(err));
+                                alert('Failed to leave document: ' + String(err));
                               }
                               setSyncLoading(false);
                             }}
-                            disabled={syncLoading || !workspacePath}
-                            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-white transition-colors"
+                            disabled={syncLoading}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/20 text-red-600 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors"
                           >
-                            <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
-                            Force Sync All
+                            <CloudOff className="w-4 h-4" />
+                            Leave Document
                           </button>
                         </div>
-
-                        <button
-                          onClick={async () => {
-                            if (!confirm('Are you sure you want to leave this document? You will need the ticket to rejoin.')) {
-                              return;
-                            }
-                            setSyncLoading(true);
-                            setIrohError('');
-                            try {
-                              // Call backend to clear document and delete ticket file
-                              await invoke('iroh_leave_document');
-
-                              // Clear React state
-                              setIrohDocumentId('');
-                              setIrohTicket('');
-                              setIrohPeers([]);
-                              setIrohStatus('not_configured');
-                              setAutoSyncEnabled(false);
-
-                              // CRITICAL: Wait for auto-save debounce to finish
-                              await new Promise(resolve => setTimeout(resolve, 600));
-
-                              // Explicitly clear config file to prevent restoration
-                              const cfg = await readConfig();
-                              await updateConfig({
-                                sync: {
-                                  ...cfg.sync,
-                                  iroh: {
-                                    documentId: '',
-                                    ticket: ''
-                                  }
-                                }
-                              });
-
-                              alert('Left document successfully. You can now create a new document or join a different one.');
-                            } catch (err) {
-                              setIrohError('Failed to leave document: ' + String(err));
-                              alert('Failed to leave document: ' + String(err));
-                            }
-                            setSyncLoading(false);
-                          }}
-                          disabled={syncLoading}
-                          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/20 text-red-600 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors"
-                        >
-                          <CloudOff className="w-4 h-4" />
-                          Leave Document
-                        </button>
-                      </div>
-                    )}
-                  </section>
-
-                  {/* Share Section */}
-                  {irohDocumentId && irohTicket && (
-                    <section className="p-4 bg-app-panel border border-app-border rounded-md">
-                      <h3 className="text-sm font-medium text-app-text mb-3">Share Document</h3>
-                      <p className="text-xs text-app-muted mb-2">
-                        Share this ticket with other devices to sync this workspace:
-                      </p>
-                      <div className="space-y-2">
-                        <textarea
-                          value={irohTicket}
-                          readOnly
-                          rows={3}
-                          className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text font-mono text-xs resize-none focus:outline-none focus:ring-2 focus:ring-app-accent"
-                        />
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(irohTicket);
-                            alert('Ticket copied to clipboard!');
-                          }}
-                          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 rounded-md transition-opacity"
-                        >
-                          <Download className="w-4 h-4" />
-                          Copy Ticket
-                        </button>
-                      </div>
+                      )}
                     </section>
-                  )}
 
-                  {/* Connected Peers List */}
-                  {irohDocumentId && irohPeers.length > 0 && (
-                    <section className="p-4 bg-app-panel border border-app-border rounded-md">
-                      <h3 className="text-sm font-medium text-app-text mb-3">Connected Peers</h3>
-                      <div className="space-y-2">
-                        {irohPeers.map((peer, index) => (
-                          <div key={peer.node_id || index} className="p-3 bg-app-bg border border-app-border rounded-md">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <span className={`w-2 h-2 rounded-full ${peer.connected ? 'bg-green-500' : 'bg-gray-400'}`}></span>
-                                <span className="font-mono text-xs text-app-text font-medium">
-                                  {peer.node_id ? peer.node_id.substring(0, 12) + '...' : `Peer ${index + 1}`}
-                                </span>
-                              </div>
-                              {peer.connection_type && (
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide ${
-                                  peer.connection_type === 'direct'
-                                    ? 'bg-green-500/10 text-green-600 border border-green-500/20'
-                                    : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
-                                }`}>
-                                  {peer.connection_type}
-                                </span>
-                              )}
-                            </div>
-                            {peer.addresses && peer.addresses.length > 0 && (
-                              <div className="text-[10px] text-app-muted font-mono mt-1 pl-4">
-                                {peer.addresses.slice(0, 1).map((addr, i) => (
-                                  <div key={i} className="truncate">{addr}</div>
-                                ))}
-                                {peer.addresses.length > 1 && (
-                                  <div className="text-app-muted/60">+{peer.addresses.length - 1} more</div>
+                    {/* Share Section */}
+                    {irohDocumentId && irohTicket && (
+                      <section className="p-4 bg-app-panel border border-app-border rounded-md">
+                        <h3 className="text-sm font-medium text-app-text mb-3">Share Document</h3>
+                        <p className="text-xs text-app-muted mb-2">
+                          Share this ticket with other devices to sync this workspace:
+                        </p>
+                        <div className="space-y-2">
+                          <textarea
+                            value={irohTicket}
+                            readOnly
+                            rows={3}
+                            className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text font-mono text-xs resize-none focus:outline-none focus:ring-2 focus:ring-app-accent"
+                          />
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(irohTicket);
+                              alert('Ticket copied to clipboard!');
+                            }}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 rounded-md transition-opacity"
+                          >
+                            <Download className="w-4 h-4" />
+                            Copy Ticket
+                          </button>
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Connected Peers List */}
+                    {irohDocumentId && irohPeers.length > 0 && (
+                      <section className="p-4 bg-app-panel border border-app-border rounded-md">
+                        <h3 className="text-sm font-medium text-app-text mb-3">Connected Peers</h3>
+                        <div className="space-y-2">
+                          {irohPeers.map((peer, index) => (
+                            <div key={peer.node_id || index} className="p-3 bg-app-bg border border-app-border rounded-md">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-2 h-2 rounded-full ${peer.connected ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+                                  <span className="font-mono text-xs text-app-text font-medium">
+                                    {peer.node_id ? peer.node_id.substring(0, 12) + '...' : `Peer ${index + 1}`}
+                                  </span>
+                                </div>
+                                {peer.connection_type && (
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide ${peer.connection_type === 'direct'
+                                      ? 'bg-green-500/10 text-green-600 border border-green-500/20'
+                                      : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
+                                    }`}>
+                                    {peer.connection_type}
+                                  </span>
                                 )}
                               </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  )}
+                              {peer.addresses && peer.addresses.length > 0 && (
+                                <div className="text-[10px] text-app-muted font-mono mt-1 pl-4">
+                                  {peer.addresses.slice(0, 1).map((addr, i) => (
+                                    <div key={i} className="truncate">{addr}</div>
+                                  ))}
+                                  {peer.addresses.length > 1 && (
+                                    <div className="text-app-muted/60">+{peer.addresses.length - 1} more</div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
 
-                  {/* Auto-Sync Settings */}
-                  {irohDocumentId && (
-                    <section className="p-4 bg-app-panel border border-app-border rounded-md">
-                      <h3 className="text-sm font-medium text-app-text mb-3">Auto-Sync Settings</h3>
+                    {/* Auto-Sync Settings */}
+                    {irohDocumentId && (
+                      <section className="p-4 bg-app-panel border border-app-border rounded-md">
+                        <h3 className="text-sm font-medium text-app-text mb-3">Auto-Sync Settings</h3>
 
-                      <label className="flex items-center gap-2 cursor-pointer mb-3">
-                        <input
-                          type="checkbox"
-                          checked={autoSyncEnabled}
-                          onChange={async (e) => {
-                            const enabled = e.target.checked;
-                            setAutoSyncEnabled(enabled);
+                        <label className="flex items-center gap-2 cursor-pointer mb-3">
+                          <input
+                            type="checkbox"
+                            checked={autoSyncEnabled}
+                            onChange={async (e) => {
+                              const enabled = e.target.checked;
+                              setAutoSyncEnabled(enabled);
 
-                            try {
-                              if (enabled) {
-                                await invoke('iroh_start_auto_sync', { workspacePath: workspacePath });
-                              } else {
-                                await invoke('iroh_stop_auto_sync');
+                              try {
+                                if (enabled) {
+                                  await invoke('iroh_start_auto_sync', { workspacePath: workspacePath });
+                                } else {
+                                  await invoke('iroh_stop_auto_sync');
+                                }
+                              } catch (error) {
+                                setSyncError(String(error));
+                                setAutoSyncEnabled(!enabled); // Revert on error
                               }
-                            } catch (error) {
-                              setSyncError(String(error));
-                              setAutoSyncEnabled(!enabled); // Revert on error
-                            }
-                          }}
-                          className="w-4 h-4 rounded border-app-border bg-app-bg checked:bg-app-accent focus:ring-2 focus:ring-app-accent focus:ring-offset-0 transition-colors"
-                        />
-                        <span className="text-sm text-app-text">Enable Auto-Sync</span>
-                      </label>
-
-                      {syncProgress && (
-                        <div className="p-2 bg-app-bg border border-app-border rounded mb-2">
-                          <div className="flex items-center gap-2 text-xs text-app-text">
-                            <RefreshCw className="w-3 h-3 animate-spin" />
-                            <span>
-                              Syncing: {syncProgress.files_synced || 0} / {syncProgress.total_files || 0} files
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      {lastSyncTime && (
-                        <div className="text-xs text-app-muted mb-2">
-                          Last synced: {new Date(lastSyncTime).toLocaleTimeString()}
-                        </div>
-                      )}
-
-                      {syncError && (
-                        <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-500">
-                          Error: {syncError}
-                        </div>
-                      )}
-                    </section>
-                  )}
-                </div>
-              )}
-
-              {/* Git Configuration Section */}
-              {syncProvider === 'git' && (
-                <>
-                  {/* Check if sync is configured */}
-                  {(!syncRemoteUrl || !syncUsername || !syncToken) ? (
-                /* Setup Mode - Show when not configured */
-                <>
-                  <section className="p-4 bg-app-panel border border-app-border rounded-md">
-                    <h3 className="text-sm font-medium text-app-text mb-2">Setup Instructions</h3>
-                    <ol className="text-xs text-app-muted space-y-2 list-decimal list-inside mb-4">
-                      <li>Create a private repository on GitHub or GitLab</li>
-                      <li>Generate a Personal Access Token with repo permissions</li>
-                      <li>Click "Initialize Git" below, then fill in your repository details</li>
-                    </ol>
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={async () => {
-                          if (!workspacePath) {
-                            alert('Workspace path not available. Please reopen Preferences from the workspace.');
-                            return;
-                          }
-                          setSyncLoading(true);
-                          try {
-                            const result = await invoke('git_init', { workspace_path: workspacePath });
-                            alert(result);
-                          } catch (err) {
-                            alert('Git init failed: ' + err);
-                          }
-                          setSyncLoading(false);
-                        }}
-                        disabled={syncLoading || !workspacePath}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
-                      >
-                        <GitBranch className="w-4 h-4" />
-                        Initialize Git
-                      </button>
-                    </div>
-                  </section>
-
-                  {/* Saving Indicator */}
-                  {syncSaving && (
-                    <div className="flex items-center gap-2 text-xs text-app-muted">
-                      <RefreshCw className="w-3 h-3 animate-spin" />
-                      <span>Saving...</span>
-                    </div>
-                  )}
-
-                  {/* Configuration Form */}
-                  <section className="space-y-4">
-                    {/* Repository Section */}
-                    <div className="p-4 bg-app-panel border border-app-border rounded-md">
-                      <h4 className="text-sm font-semibold mb-3">Repository</h4>
-                      <div>
-                        <label className="block text-sm text-app-muted mb-2">
-                          Remote URL <span className="text-red-500">*</span>
+                            }}
+                            className="w-4 h-4 rounded border-app-border bg-app-bg checked:bg-app-accent focus:ring-2 focus:ring-app-accent focus:ring-offset-0 transition-colors"
+                          />
+                          <span className="text-sm text-app-text">Enable Auto-Sync</span>
                         </label>
-                        <input
-                          type="text"
-                          value={syncRemoteUrl}
-                          onChange={(e) => setSyncRemoteUrl(e.target.value)}
-                          placeholder="https://github.com/username/repo.git"
-                          className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
-                        />
-                        <p className="text-xs text-app-muted mt-1">Example: https://github.com/username/repo.git</p>
-                        {!syncRemoteUrl && (
-                          <p className="text-xs text-red-500 mt-1">Remote URL is required</p>
+
+                        {syncProgress && (
+                          <div className="p-2 bg-app-bg border border-app-border rounded mb-2">
+                            <div className="flex items-center gap-2 text-xs text-app-text">
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              <span>
+                                Syncing: {syncProgress.files_synced || 0} / {syncProgress.total_files || 0} files
+                              </span>
+                            </div>
+                          </div>
                         )}
-                      </div>
-                    </div>
 
-                    {/* Authentication Section */}
-                    <div className="p-4 bg-app-panel border border-app-border rounded-md">
-                      <h4 className="text-sm font-semibold mb-3">Authentication</h4>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm text-app-muted mb-2">
-                            Username <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            value={syncUsername}
-                            onChange={(e) => setSyncUsername(e.target.value)}
-                            placeholder="github-username"
-                            className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
-                          />
-                          <p className="text-xs text-app-muted mt-2">Your GitHub/GitLab username (not display name)</p>
-                          {!syncUsername && (
-                            <p className="text-xs text-red-500 mt-1">Username is required</p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm text-app-muted mb-2">
-                            Personal Access Token <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="password"
-                            value={syncToken}
-                            onChange={(e) => setSyncToken(e.target.value)}
-                            placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                            className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent font-mono text-sm"
-                          />
-                          <p className="text-xs text-app-muted mt-2">
-                            GitHub: Settings → Developer settings → Personal access tokens → Generate new token (classic)<br />
-                            Required scopes: <code className="bg-app-bg px-1 py-0.5 rounded">repo</code>
-                          </p>
-                          {!syncToken && (
-                            <p className="text-xs text-red-500 mt-1">Token is required for Git operations</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Branch Section */}
-                    <div className="p-4 bg-app-panel border border-app-border rounded-md">
-                      <h4 className="text-sm font-semibold mb-3">Branch</h4>
-                      <div>
-                        <label className="block text-sm text-app-muted mb-2">Branch Name</label>
-                        <input
-                          type="text"
-                          value={syncBranch}
-                          onChange={(e) => setSyncBranch(e.target.value)}
-                          placeholder="main"
-                          className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
-                        />
-                        <p className="text-xs text-app-muted mt-1">Auto-detected from Git repository</p>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={async () => {
-                        if (!workspacePath) {
-                          alert('Workspace path not available. Please reopen Preferences from the workspace.');
-                          return;
-                        }
-                        if (!syncRemoteUrl) {
-                          alert('Please enter a remote URL first.');
-                          return;
-                        }
-                        setSyncLoading(true);
-                        try {
-                          const result = await invoke('git_add_remote', {
-                            workspace_path: workspacePath,
-                            remote_name: 'origin',
-                            remote_url: syncRemoteUrl
-                          });
-                          alert(result);
-                        } catch (err) {
-                          alert('Add remote failed: ' + err);
-                        }
-                        setSyncLoading(false);
-                      }}
-                      disabled={syncLoading || !workspacePath || !syncRemoteUrl}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
-                    >
-                      <CloudUpload className="w-4 h-4" />
-                      Connect Remote Repository
-                    </button>
-                  </section>
-                </>
-              ) : (
-                /* Configured Mode - Show cards */
-                <>
-                  {/* Configuration Card */}
-                  <section className="bg-app-panel border border-app-border rounded-lg overflow-hidden">
-                    <button
-                      onClick={() => setSyncConfigExpanded(!syncConfigExpanded)}
-                      className="w-full flex items-center justify-between p-4 hover:bg-app-bg transition-colors text-left"
-                    >
-                      <div className="flex items-center gap-3">
-                        <GitBranch className="w-5 h-5 text-app-accent" />
-                        <div>
-                          <h3 className="text-sm font-medium text-app-text">Git Configuration</h3>
-                          <p className="text-xs text-app-muted mt-0.5">
-                            {syncRemoteUrl.replace('https://', '').replace('.git', '')} • {syncBranch}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-app-muted">{syncConfigExpanded ? 'Collapse' : 'Expand'}</span>
-                        <svg
-                          className={`w-4 h-4 text-app-muted transition-transform ${syncConfigExpanded ? 'rotate-180' : ''}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                    </button>
-
-                    {syncConfigExpanded && (
-                      <div className="px-4 pb-4 space-y-3 border-t border-app-border pt-4">
-                        <div className="grid grid-cols-2 gap-3 text-sm">
-                          <div>
-                            <span className="text-app-muted">Username:</span>
-                            <span className="ml-2 text-app-text">{syncUsername}</span>
+                        {lastSyncTime && (
+                          <div className="text-xs text-app-muted mb-2">
+                            Last synced: {new Date(lastSyncTime).toLocaleTimeString()}
                           </div>
-                          <div>
-                            <span className="text-app-muted">Remote URL:</span>
-                            <span className="ml-2 text-app-text text-xs truncate">{syncRemoteUrl}</span>
-                          </div>
-                          <div className="col-span-2">
-                            <span className="text-app-muted">Access Token:</span>
-                            <span className="ml-2 text-app-text text-xs font-mono">
-                              {syncToken ? `${syncToken.substring(0, 4)}${'•'.repeat(20)}` : 'Not set'}
-                            </span>
-                          </div>
-                          <div className="col-span-2">
-                            <span className="text-app-muted">Author Info:</span>
-                            <span className="ml-2 text-app-text text-xs">
-                              {syncUsername || 'Lokus'} &lt;{syncUsername || 'lokus'}@users.noreply.github.com&gt;
-                            </span>
-                            <p className="text-xs text-app-muted mt-1">Auto-generated from username</p>
-                          </div>
-                        </div>
+                        )}
 
-                        <div className="pt-2 space-y-2">
+                        {syncError && (
+                          <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-500">
+                            Error: {syncError}
+                          </div>
+                        )}
+                      </section>
+                    )}
+                  </div>
+                )}
+
+                {/* Git Configuration Section */}
+                {syncProvider === 'git' && (
+                  <>
+                    {/* Check if sync is configured */}
+                    {(!syncRemoteUrl || !syncUsername || !syncToken) ? (
+                      /* Setup Mode - Show when not configured */
+                      <>
+                        <section className="p-4 bg-app-panel border border-app-border rounded-md">
+                          <h3 className="text-sm font-medium text-app-text mb-2">Setup Instructions</h3>
+                          <ol className="text-xs text-app-muted space-y-2 list-decimal list-inside mb-4">
+                            <li>Create a private repository on GitHub or GitLab</li>
+                            <li>Generate a Personal Access Token with repo permissions</li>
+                            <li>Click "Initialize Git" below, then fill in your repository details</li>
+                          </ol>
+
                           <div className="flex gap-2">
                             <button
                               onClick={async () => {
@@ -3454,397 +3265,601 @@ export default function Preferences() {  const [themes, setThemes] = useState([]
                                 setSyncLoading(false);
                               }}
                               disabled={syncLoading || !workspacePath}
-                              className="flex-1 px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
                             >
+                              <GitBranch className="w-4 h-4" />
                               Initialize Git
                             </button>
+                          </div>
+                        </section>
+
+                        {/* Saving Indicator */}
+                        {syncSaving && (
+                          <div className="flex items-center gap-2 text-xs text-app-muted">
+                            <RefreshCw className="w-3 h-3 animate-spin" />
+                            <span>Saving...</span>
+                          </div>
+                        )}
+
+                        {/* Configuration Form */}
+                        <section className="space-y-4">
+                          {/* Repository Section */}
+                          <div className="p-4 bg-app-panel border border-app-border rounded-md">
+                            <h4 className="text-sm font-semibold mb-3">Repository</h4>
+                            <div>
+                              <label className="block text-sm text-app-muted mb-2">
+                                Remote URL <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={syncRemoteUrl}
+                                onChange={(e) => setSyncRemoteUrl(e.target.value)}
+                                placeholder="https://github.com/username/repo.git"
+                                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
+                              />
+                              <p className="text-xs text-app-muted mt-1">Example: https://github.com/username/repo.git</p>
+                              {!syncRemoteUrl && (
+                                <p className="text-xs text-red-500 mt-1">Remote URL is required</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Authentication Section */}
+                          <div className="p-4 bg-app-panel border border-app-border rounded-md">
+                            <h4 className="text-sm font-semibold mb-3">Authentication</h4>
+                            <div className="space-y-4">
+                              <div>
+                                <label className="block text-sm text-app-muted mb-2">
+                                  Username <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={syncUsername}
+                                  onChange={(e) => setSyncUsername(e.target.value)}
+                                  placeholder="github-username"
+                                  className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
+                                />
+                                <p className="text-xs text-app-muted mt-2">Your GitHub/GitLab username (not display name)</p>
+                                {!syncUsername && (
+                                  <p className="text-xs text-red-500 mt-1">Username is required</p>
+                                )}
+                              </div>
+
+                              <div>
+                                <label className="block text-sm text-app-muted mb-2">
+                                  Personal Access Token <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="password"
+                                  value={syncToken}
+                                  onChange={(e) => setSyncToken(e.target.value)}
+                                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                                  className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent font-mono text-sm"
+                                />
+                                <p className="text-xs text-app-muted mt-2">
+                                  GitHub: Settings → Developer settings → Personal access tokens → Generate new token (classic)<br />
+                                  Required scopes: <code className="bg-app-bg px-1 py-0.5 rounded">repo</code>
+                                </p>
+                                {!syncToken && (
+                                  <p className="text-xs text-red-500 mt-1">Token is required for Git operations</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Branch Section */}
+                          <div className="p-4 bg-app-panel border border-app-border rounded-md">
+                            <h4 className="text-sm font-semibold mb-3">Branch</h4>
+                            <div>
+                              <label className="block text-sm text-app-muted mb-2">Branch Name</label>
+                              <input
+                                type="text"
+                                value={syncBranch}
+                                onChange={(e) => setSyncBranch(e.target.value)}
+                                placeholder="main"
+                                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
+                              />
+                              <p className="text-xs text-app-muted mt-1">Auto-detected from Git repository</p>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={async () => {
+                              if (!workspacePath) {
+                                alert('Workspace path not available. Please reopen Preferences from the workspace.');
+                                return;
+                              }
+                              if (!syncRemoteUrl) {
+                                alert('Please enter a remote URL first.');
+                                return;
+                              }
+                              setSyncLoading(true);
+                              try {
+                                const result = await invoke('git_add_remote', {
+                                  workspace_path: workspacePath,
+                                  remote_name: 'origin',
+                                  remote_url: syncRemoteUrl
+                                });
+                                alert(result);
+                              } catch (err) {
+                                alert('Add remote failed: ' + err);
+                              }
+                              setSyncLoading(false);
+                            }}
+                            disabled={syncLoading || !workspacePath || !syncRemoteUrl}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+                          >
+                            <CloudUpload className="w-4 h-4" />
+                            Connect Remote Repository
+                          </button>
+                        </section>
+                      </>
+                    ) : (
+                      /* Configured Mode - Show cards */
+                      <>
+                        {/* Configuration Card */}
+                        <section className="bg-app-panel border border-app-border rounded-lg overflow-hidden">
+                          <button
+                            onClick={() => setSyncConfigExpanded(!syncConfigExpanded)}
+                            className="w-full flex items-center justify-between p-4 hover:bg-app-bg transition-colors text-left"
+                          >
+                            <div className="flex items-center gap-3">
+                              <GitBranch className="w-5 h-5 text-app-accent" />
+                              <div>
+                                <h3 className="text-sm font-medium text-app-text">Git Configuration</h3>
+                                <p className="text-xs text-app-muted mt-0.5">
+                                  {syncRemoteUrl.replace('https://', '').replace('.git', '')} • {syncBranch}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-app-muted">{syncConfigExpanded ? 'Collapse' : 'Expand'}</span>
+                              <svg
+                                className={`w-4 h-4 text-app-muted transition-transform ${syncConfigExpanded ? 'rotate-180' : ''}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          </button>
+
+                          {syncConfigExpanded && (
+                            <div className="px-4 pb-4 space-y-3 border-t border-app-border pt-4">
+                              <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div>
+                                  <span className="text-app-muted">Username:</span>
+                                  <span className="ml-2 text-app-text">{syncUsername}</span>
+                                </div>
+                                <div>
+                                  <span className="text-app-muted">Remote URL:</span>
+                                  <span className="ml-2 text-app-text text-xs truncate">{syncRemoteUrl}</span>
+                                </div>
+                                <div className="col-span-2">
+                                  <span className="text-app-muted">Access Token:</span>
+                                  <span className="ml-2 text-app-text text-xs font-mono">
+                                    {syncToken ? `${syncToken.substring(0, 4)}${'•'.repeat(20)}` : 'Not set'}
+                                  </span>
+                                </div>
+                                <div className="col-span-2">
+                                  <span className="text-app-muted">Author Info:</span>
+                                  <span className="ml-2 text-app-text text-xs">
+                                    {syncUsername || 'Lokus'} &lt;{syncUsername || 'lokus'}@users.noreply.github.com&gt;
+                                  </span>
+                                  <p className="text-xs text-app-muted mt-1">Auto-generated from username</p>
+                                </div>
+                              </div>
+
+                              <div className="pt-2 space-y-2">
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={async () => {
+                                      if (!workspacePath) {
+                                        alert('Workspace path not available. Please reopen Preferences from the workspace.');
+                                        return;
+                                      }
+                                      setSyncLoading(true);
+                                      try {
+                                        const result = await invoke('git_init', { workspace_path: workspacePath });
+                                        alert(result);
+                                      } catch (err) {
+                                        alert('Git init failed: ' + err);
+                                      }
+                                      setSyncLoading(false);
+                                    }}
+                                    disabled={syncLoading || !workspacePath}
+                                    className="flex-1 px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+                                  >
+                                    Initialize Git
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (!workspacePath) {
+                                        alert('Workspace path not available. Please reopen Preferences from the workspace.');
+                                        return;
+                                      }
+                                      if (!syncRemoteUrl) {
+                                        alert('Please enter a remote URL first.');
+                                        return;
+                                      }
+                                      setSyncLoading(true);
+                                      try {
+                                        const result = await invoke('git_add_remote', {
+                                          workspace_path: workspacePath,
+                                          remote_name: 'origin',
+                                          remote_url: syncRemoteUrl
+                                        });
+                                        alert(result);
+                                      } catch (err) {
+                                        alert('Add remote failed: ' + err);
+                                      }
+                                      setSyncLoading(false);
+                                    }}
+                                    disabled={syncLoading || !workspacePath || !syncRemoteUrl}
+                                    className="flex-1 px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+                                  >
+                                    Connect Remote
+                                  </button>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    // Clear all sync settings
+                                    setSyncRemoteUrl('');
+                                    setSyncUsername('');
+                                    setSyncToken('');
+                                    setSyncConfigExpanded(false);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-sm bg-app-bg border border-app-border hover:border-red-500 hover:text-red-500 rounded-md text-app-text transition-colors"
+                                >
+                                  Delete Configuration
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </section>
+
+                        {/* Quick Sync Card */}
+                        <section className="space-y-4 bg-app-panel border border-app-border rounded-lg p-4">
+                          <div className="flex items-center gap-2">
+                            <CloudUpload className="w-5 h-5 text-app-accent" />
+                            <h3 className="text-sm font-medium text-app-text">Sync Workspace</h3>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm text-app-muted mb-2">Commit Message</label>
+                            <input
+                              type="text"
+                              value={syncMessage}
+                              onChange={(e) => setSyncMessage(e.target.value)}
+                              placeholder="Update workspace"
+                              className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
+                            />
+                          </div>
+
+                          <div className="flex gap-2">
                             <button
                               onClick={async () => {
                                 if (!workspacePath) {
                                   alert('Workspace path not available. Please reopen Preferences from the workspace.');
                                   return;
                                 }
-                                if (!syncRemoteUrl) {
-                                  alert('Please enter a remote URL first.');
+                                if (!syncToken) {
+                                  alert('Please enter your GitHub Personal Access Token in the sync configuration.');
                                   return;
                                 }
                                 setSyncLoading(true);
                                 try {
-                                  const result = await invoke('git_add_remote', {
+                                  await invoke('git_pull', {
                                     workspace_path: workspacePath,
+                                    workspace_id: workspacePath, // Using workspace path as ID for now
                                     remote_name: 'origin',
-                                    remote_url: syncRemoteUrl
+                                    branch_name: syncBranch || 'main'
                                   });
-                                  alert(result);
+                                  alert('Pulled successfully!');
                                 } catch (err) {
-                                  alert('Add remote failed: ' + err);
+                                  const errorMessage = formatErrorMessage(err);
+                                  alert(`Pull failed:\n\n${errorMessage}`);
                                 }
                                 setSyncLoading(false);
                               }}
-                              disabled={syncLoading || !workspacePath || !syncRemoteUrl}
-                              className="flex-1 px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+                              disabled={syncLoading || !workspacePath || !syncToken}
+                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
                             >
-                              Connect Remote
+                              <CloudOff className="w-4 h-4" />
+                              Pull
+                            </button>
+
+                            <button
+                              onClick={async () => {
+                                if (!workspacePath) {
+                                  alert('Workspace path not available. Please reopen Preferences from the workspace.');
+                                  return;
+                                }
+                                if (!syncToken) {
+                                  alert('Please enter your GitHub Personal Access Token in the sync configuration.');
+                                  return;
+                                }
+                                setSyncLoading(true);
+                                try {
+                                  // First commit - auto-generate author info from username
+                                  await invoke('git_commit', {
+                                    workspace_path: workspacePath,
+                                    message: syncMessage || 'Update workspace',
+                                    author_name: syncUsername || 'Lokus',
+                                    author_email: `${syncUsername || 'lokus'}@users.noreply.github.com`
+                                  });
+                                  // Then push
+                                  await invoke('git_push', {
+                                    workspace_path: workspacePath,
+                                    remote_name: 'origin',
+                                    branch_name: syncBranch || 'main',
+                                    username: syncUsername,
+                                    token: syncToken
+                                  });
+                                  alert('Pushed successfully!');
+                                  setSyncMessage('');
+                                } catch (err) {
+                                  const errorMessage = formatErrorMessage(err);
+                                  alert(`Push failed:\n\n${errorMessage}`);
+                                }
+                                setSyncLoading(false);
+                              }}
+                              disabled={syncLoading || !syncMessage || !workspacePath || !syncToken}
+                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+                            >
+                              <CloudUpload className="w-4 h-4" />
+                              Commit & Push
+                            </button>
+
+                            <button
+                              onClick={async () => {
+                                if (!workspacePath) {
+                                  alert('Workspace path not available. Please reopen Preferences from the workspace.');
+                                  return;
+                                }
+                                setSyncLoading(true);
+                                try {
+                                  const status = await invoke('git_status', {
+                                    workspace_path: workspacePath
+                                  });
+                                  setSyncStatus(status);
+                                } catch (err) {
+                                  alert('Status check failed: ' + err);
+                                }
+                                setSyncLoading(false);
+                              }}
+                              disabled={syncLoading || !workspacePath}
+                              className="px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
+                            >
+                              <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
                             </button>
                           </div>
-                          <button
-                            onClick={() => {
-                              // Clear all sync settings
-                              setSyncRemoteUrl('');
-                              setSyncUsername('');
-                              setSyncToken('');
-                              setSyncConfigExpanded(false);
-                            }}
-                            className="w-full px-3 py-1.5 text-sm bg-app-bg border border-app-border hover:border-red-500 hover:text-red-500 rounded-md text-app-text transition-colors"
-                          >
-                            Delete Configuration
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </section>
 
-                  {/* Quick Sync Card */}
-                  <section className="space-y-4 bg-app-panel border border-app-border rounded-lg p-4">
-                    <div className="flex items-center gap-2">
-                      <CloudUpload className="w-5 h-5 text-app-accent" />
-                      <h3 className="text-sm font-medium text-app-text">Sync Workspace</h3>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm text-app-muted mb-2">Commit Message</label>
-                      <input
-                        type="text"
-                        value={syncMessage}
-                        onChange={(e) => setSyncMessage(e.target.value)}
-                        placeholder="Update workspace"
-                        className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent"
-                      />
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={async () => {
-                          if (!workspacePath) {
-                            alert('Workspace path not available. Please reopen Preferences from the workspace.');
-                            return;
-                          }
-                          if (!syncToken) {
-                            alert('Please enter your GitHub Personal Access Token in the sync configuration.');
-                            return;
-                          }
-                          setSyncLoading(true);
-                          try {
-                            await invoke('git_pull', {
-                              workspace_path: workspacePath,
-                              workspace_id: workspacePath, // Using workspace path as ID for now
-                              remote_name: 'origin',
-                              branch_name: syncBranch || 'main'
-                            });
-                            alert('Pulled successfully!');
-                          } catch (err) {
-                            const errorMessage = formatErrorMessage(err);
-                            alert(`Pull failed:\n\n${errorMessage}`);
-                          }
-                          setSyncLoading(false);
-                        }}
-                        disabled={syncLoading || !workspacePath || !syncToken}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
-                      >
-                        <CloudOff className="w-4 h-4" />
-                        Pull
-                      </button>
-
-                      <button
-                        onClick={async () => {
-                          if (!workspacePath) {
-                            alert('Workspace path not available. Please reopen Preferences from the workspace.');
-                            return;
-                          }
-                          if (!syncToken) {
-                            alert('Please enter your GitHub Personal Access Token in the sync configuration.');
-                            return;
-                          }
-                          setSyncLoading(true);
-                          try {
-                            // First commit - auto-generate author info from username
-                            await invoke('git_commit', {
-                              workspace_path: workspacePath,
-                              message: syncMessage || 'Update workspace',
-                              author_name: syncUsername || 'Lokus',
-                              author_email: `${syncUsername || 'lokus'}@users.noreply.github.com`
-                            });
-                            // Then push
-                            await invoke('git_push', {
-                              workspace_path: workspacePath,
-                              remote_name: 'origin',
-                              branch_name: syncBranch || 'main',
-                              username: syncUsername,
-                              token: syncToken
-                            });
-                            alert('Pushed successfully!');
-                            setSyncMessage('');
-                          } catch (err) {
-                            const errorMessage = formatErrorMessage(err);
-                            alert(`Push failed:\n\n${errorMessage}`);
-                          }
-                          setSyncLoading(false);
-                        }}
-                        disabled={syncLoading || !syncMessage || !workspacePath || !syncToken}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
-                      >
-                        <CloudUpload className="w-4 h-4" />
-                        Commit & Push
-                      </button>
-
-                      <button
-                        onClick={async () => {
-                          if (!workspacePath) {
-                            alert('Workspace path not available. Please reopen Preferences from the workspace.');
-                            return;
-                          }
-                          setSyncLoading(true);
-                          try {
-                            const status = await invoke('git_status', {
-                              workspace_path: workspacePath
-                            });
-                            setSyncStatus(status);
-                          } catch (err) {
-                            alert('Status check failed: ' + err);
-                          }
-                          setSyncLoading(false);
-                        }}
-                        disabled={syncLoading || !workspacePath}
-                        className="px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
-                      >
-                        <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
-                      </button>
-                    </div>
-
-                    {syncStatus && (
-                      <div className="p-3 bg-app-bg border border-app-border rounded-md text-sm">
-                        <div className="flex items-center gap-2 mb-2">
-                          <GitBranch className="w-4 h-4 text-app-accent" />
-                          <span className="font-medium text-app-text">Status</span>
-                        </div>
-                        <div className="space-y-1 text-app-muted">
-                          <div>Synced: {syncStatus.is_synced ? '✓' : '✗'}</div>
-                          <div>Changes: {syncStatus.has_changes ? 'Yes' : 'No'}</div>
-                          <div>Ahead: {syncStatus.ahead} | Behind: {syncStatus.behind}</div>
-                          {syncStatus.conflicts.length > 0 && (
-                            <div className="text-red-500">Conflicts: {syncStatus.conflicts.join(', ')}</div>
+                          {syncStatus && (
+                            <div className="p-3 bg-app-bg border border-app-border rounded-md text-sm">
+                              <div className="flex items-center gap-2 mb-2">
+                                <GitBranch className="w-4 h-4 text-app-accent" />
+                                <span className="font-medium text-app-text">Status</span>
+                              </div>
+                              <div className="space-y-1 text-app-muted">
+                                <div>Synced: {syncStatus.is_synced ? '✓' : '✗'}</div>
+                                <div>Changes: {syncStatus.has_changes ? 'Yes' : 'No'}</div>
+                                <div>Ahead: {syncStatus.ahead} | Behind: {syncStatus.behind}</div>
+                                {syncStatus.conflicts.length > 0 && (
+                                  <div className="text-red-500">Conflicts: {syncStatus.conflicts.join(', ')}</div>
+                                )}
+                              </div>
+                            </div>
                           )}
-                        </div>
-                      </div>
+                        </section>
+                      </>
                     )}
-                  </section>
-                </>
-              )}
-                </>
-              )}
-            </div>
-          )}
+                  </>
+                )}
+              </div>
+            )}
 
-          {section === "Updates" && (
-            <div className="space-y-8 max-w-xl">
-              <section>
-                <h2 className="text-sm uppercase tracking-wide text-app-muted mb-4">App Updates</h2>
+            {section === "Updates" && (
+              <div className="space-y-8 max-w-xl">
+                <section>
+                  <h2 className="text-sm uppercase tracking-wide text-app-muted mb-4">App Updates</h2>
 
-                <div className="bg-app-panel rounded-lg p-4 border border-app-border">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="font-medium mb-1">Current Version</h3>
-                      <p className="text-2xl font-semibold text-app-accent">v1.3.3</p>
+                  <div className="bg-app-panel rounded-lg p-4 border border-app-border">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h3 className="font-medium mb-1">Current Version</h3>
+                        <p className="text-2xl font-semibold text-app-accent">v1.3.3</p>
+                      </div>
                     </div>
+
+                    <button
+                      onClick={() => window.dispatchEvent(new Event('check-for-update'))}
+                      className="w-full px-4 py-2 bg-app-accent text-app-accent-fg rounded-md hover:opacity-90 transition-opacity"
+                    >
+                      Check for Updates
+                    </button>
+
+                    <p className="mt-4 text-sm text-app-muted">
+                      Lokus automatically checks for updates in the background. Click the button above to check manually.
+                    </p>
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {section === "Import" && (
+              <div className="space-y-6 max-w-2xl">
+                <div>
+                  <h2 className="text-2xl font-semibold mb-2" style={{ color: 'rgb(var(--text))' }}>
+                    Import Notes
+                  </h2>
+                  <p style={{ color: 'rgb(var(--muted))' }}>
+                    Migrate your notes from other platforms
+                  </p>
+                </div>
+
+                {/* Quick Import Card */}
+                <div className="p-6 border rounded-lg" style={{ borderColor: 'rgb(var(--border))' }}>
+                  <div className="text-center mb-4">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center" style={{ background: 'rgb(var(--accent) / 0.1)' }}>
+                      <Upload className="w-8 h-8" style={{ color: 'rgb(var(--accent))' }} />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2" style={{ color: 'rgb(var(--text))' }}>
+                      Import from Another App
+                    </h3>
+                    <p className="text-sm mb-4" style={{ color: 'rgb(var(--muted))' }}>
+                      Select your notes folder and we'll auto-detect the format and convert it for you.
+                    </p>
                   </div>
 
                   <button
-                    onClick={() => window.dispatchEvent(new Event('check-for-update'))}
-                    className="w-full px-4 py-2 bg-app-accent text-app-accent-fg rounded-md hover:opacity-90 transition-opacity"
+                    onClick={() => setShowQuickImport(true)}
+                    className="w-full px-4 py-3 rounded-lg font-medium hover:opacity-90 transition-opacity"
+                    style={{
+                      background: 'rgb(var(--accent))',
+                      color: 'white'
+                    }}
                   >
-                    Check for Updates
+                    Select Folder to Import
                   </button>
 
-                  <p className="mt-4 text-sm text-app-muted">
-                    Lokus automatically checks for updates in the background. Click the button above to check manually.
-                  </p>
-                </div>
-              </section>
-            </div>
-          )}
-
-          {section === "Import" && (
-            <div className="space-y-6 max-w-2xl">
-              <div>
-                <h2 className="text-2xl font-semibold mb-2" style={{color: 'rgb(var(--text))'}}>
-                  Import Notes
-                </h2>
-                <p style={{color: 'rgb(var(--muted))'}}>
-                  Migrate your notes from other platforms
-                </p>
-              </div>
-
-              {/* Quick Import Card */}
-              <div className="p-6 border rounded-lg" style={{borderColor: 'rgb(var(--border))'}}>
-                <div className="text-center mb-4">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center" style={{background: 'rgb(var(--accent) / 0.1)'}}>
-                    <Upload className="w-8 h-8" style={{color: 'rgb(var(--accent))'}} />
+                  {/* Supported Platforms */}
+                  <div className="mt-4 pt-4 border-t" style={{ borderColor: 'rgb(var(--border))' }}>
+                    <p className="text-xs text-center mb-2" style={{ color: 'rgb(var(--muted))' }}>
+                      Supported platforms
+                    </p>
+                    <div className="flex justify-center gap-4">
+                      <span className="text-sm" style={{ color: 'rgb(var(--text))' }}>Logseq</span>
+                      <span className="text-sm" style={{ color: 'rgb(var(--text))' }}>Roam</span>
+                      <span className="text-sm" style={{ color: 'rgb(var(--text))' }}>Obsidian</span>
+                    </div>
                   </div>
-                  <h3 className="text-lg font-semibold mb-2" style={{color: 'rgb(var(--text))'}}>
-                    Import from Another App
-                  </h3>
-                  <p className="text-sm mb-4" style={{color: 'rgb(var(--muted))'}}>
-                    Select your notes folder and we'll auto-detect the format and convert it for you.
-                  </p>
                 </div>
 
+                {/* Info Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 border rounded-lg" style={{ borderColor: 'rgb(var(--border))' }}>
+                    <h4 className="font-medium mb-1" style={{ color: 'rgb(var(--text))' }}>What gets converted?</h4>
+                    <ul className="text-sm space-y-1" style={{ color: 'rgb(var(--muted))' }}>
+                      <li>• Properties to YAML frontmatter</li>
+                      <li>• TODO/DONE to checkboxes</li>
+                      <li>• Block references resolved</li>
+                      <li>• Wiki links preserved</li>
+                    </ul>
+                  </div>
+                  <div className="p-4 border rounded-lg" style={{ borderColor: 'rgb(var(--border))' }}>
+                    <h4 className="font-medium mb-1" style={{ color: 'rgb(var(--text))' }}>Safe conversion</h4>
+                    <ul className="text-sm space-y-1" style={{ color: 'rgb(var(--muted))' }}>
+                      <li>• Backup created automatically</li>
+                      <li>• Original files preserved</li>
+                      <li>• Obsidian works as-is</li>
+                      <li>• Undo with backup folder</li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Documentation Link */}
+                <div className="p-4 border rounded-lg" style={{
+                  borderColor: 'rgb(var(--border))',
+                  background: 'rgb(var(--bg))'
+                }}>
+                  <p className="text-sm" style={{ color: 'rgb(var(--muted))' }}>
+                    Need help? Read the <a
+                      href="https://github.com/lokus-ai/lokus/blob/main/docs/migration-guide.md"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: 'rgb(var(--accent))', textDecoration: 'underline' }}
+                    >
+                      Migration Guide
+                    </a> for detailed instructions.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {section === "AI Assistant" && (
+              <AIAssistant />
+            )}
+          </main>
+        </div>
+
+        {/* Quick Import Modal */}
+        {showQuickImport && (
+          <QuickImport
+            onClose={() => setShowQuickImport(false)}
+            onWorkspaceOpen={(path) => {
+              // TODO: Navigate to workspace
+              window.dispatchEvent(new CustomEvent('open-workspace', { detail: { path } }));
+            }}
+          />
+        )}
+
+        {/* Join Iroh Document Modal */}
+        {showJoinModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-app-panel border border-app-border rounded-lg p-6 max-w-md w-full mx-4">
+              <h3 className="text-lg font-semibold text-app-text mb-4">Join Existing Document</h3>
+              <p className="text-sm text-app-muted mb-4">
+                Enter the document ticket from another device to sync this workspace:
+              </p>
+              <textarea
+                value={joinTicket}
+                onChange={(e) => setJoinTicket(e.target.value)}
+                placeholder="Paste the Iroh document ticket here..."
+                rows={4}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent font-mono text-xs mb-4"
+              />
+              <div className="flex gap-2">
                 <button
-                  onClick={() => setShowQuickImport(true)}
-                  className="w-full px-4 py-3 rounded-lg font-medium hover:opacity-90 transition-opacity"
-                  style={{
-                    background: 'rgb(var(--accent))',
-                    color: 'white'
-                  }}
-                >
-                  Select Folder to Import
-                </button>
-
-                {/* Supported Platforms */}
-                <div className="mt-4 pt-4 border-t" style={{borderColor: 'rgb(var(--border))'}}>
-                  <p className="text-xs text-center mb-2" style={{color: 'rgb(var(--muted))'}}>
-                    Supported platforms
-                  </p>
-                  <div className="flex justify-center gap-4">
-                    <span className="text-sm" style={{color: 'rgb(var(--text))'}}>Logseq</span>
-                    <span className="text-sm" style={{color: 'rgb(var(--text))'}}>Roam</span>
-                    <span className="text-sm" style={{color: 'rgb(var(--text))'}}>Obsidian</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Info Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 border rounded-lg" style={{borderColor: 'rgb(var(--border))'}}>
-                  <h4 className="font-medium mb-1" style={{color: 'rgb(var(--text))'}}>What gets converted?</h4>
-                  <ul className="text-sm space-y-1" style={{color: 'rgb(var(--muted))'}}>
-                    <li>• Properties to YAML frontmatter</li>
-                    <li>• TODO/DONE to checkboxes</li>
-                    <li>• Block references resolved</li>
-                    <li>• Wiki links preserved</li>
-                  </ul>
-                </div>
-                <div className="p-4 border rounded-lg" style={{borderColor: 'rgb(var(--border))'}}>
-                  <h4 className="font-medium mb-1" style={{color: 'rgb(var(--text))'}}>Safe conversion</h4>
-                  <ul className="text-sm space-y-1" style={{color: 'rgb(var(--muted))'}}>
-                    <li>• Backup created automatically</li>
-                    <li>• Original files preserved</li>
-                    <li>• Obsidian works as-is</li>
-                    <li>• Undo with backup folder</li>
-                  </ul>
-                </div>
-              </div>
-
-              {/* Documentation Link */}
-              <div className="p-4 border rounded-lg" style={{
-                borderColor: 'rgb(var(--border))',
-                background: 'rgb(var(--bg))'
-              }}>
-                <p className="text-sm" style={{color: 'rgb(var(--muted))'}}>
-                  Need help? Read the <a
-                    href="https://github.com/lokus-ai/lokus/blob/main/docs/migration-guide.md"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{color: 'rgb(var(--accent))', textDecoration: 'underline'}}
-                  >
-                    Migration Guide
-                  </a> for detailed instructions.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {section === "AI Assistant" && (
-            <AIAssistant />
-          )}
-        </main>
-      </div>
-
-      {/* Quick Import Modal */}
-      {showQuickImport && (
-        <QuickImport
-          onClose={() => setShowQuickImport(false)}
-          onWorkspaceOpen={(path) => {
-            // TODO: Navigate to workspace
-            window.dispatchEvent(new CustomEvent('open-workspace', { detail: { path } }));
-          }}
-        />
-      )}
-
-      {/* Join Iroh Document Modal */}
-      {showJoinModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-app-panel border border-app-border rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold text-app-text mb-4">Join Existing Document</h3>
-            <p className="text-sm text-app-muted mb-4">
-              Enter the document ticket from another device to sync this workspace:
-            </p>
-            <textarea
-              value={joinTicket}
-              onChange={(e) => setJoinTicket(e.target.value)}
-              placeholder="Paste the Iroh document ticket here..."
-              rows={4}
-              className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-text placeholder-app-muted focus:outline-none focus:ring-2 focus:ring-app-accent font-mono text-xs mb-4"
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  setShowJoinModal(false);
-                  setJoinTicket('');
-                }}
-                className="flex-1 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel rounded-md text-app-text transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  if (!workspacePath) {
-                    alert('Workspace path not available.');
-                    return;
-                  }
-                  if (!joinTicket.trim()) {
-                    alert('Please enter a ticket.');
-                    return;
-                  }
-                  setSyncLoading(true);
-                  setIrohError('');
-                  try {
-                    const result = await invoke('iroh_join_document', {
-                      workspacePath: workspacePath,
-                      ticket: joinTicket.trim()
-                    });
-                    setIrohDocumentId(result.documentId || result);
-                    setIrohTicket(joinTicket.trim());
-                    setIrohStatus('connected');
-                    alert('Successfully joined document!');
+                  onClick={() => {
                     setShowJoinModal(false);
                     setJoinTicket('');
-                  } catch (err) {
-                    setIrohStatus('error');
-                    setIrohError(String(err));
-                    alert('Failed to join document: ' + err);
-                  }
-                  setSyncLoading(false);
-                }}
-                disabled={syncLoading || !joinTicket.trim()}
-                className="flex-1 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
-              >
-                Join
-              </button>
+                  }}
+                  className="flex-1 px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel rounded-md text-app-text transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!workspacePath) {
+                      alert('Workspace path not available.');
+                      return;
+                    }
+                    if (!joinTicket.trim()) {
+                      alert('Please enter a ticket.');
+                      return;
+                    }
+                    setSyncLoading(true);
+                    setIrohError('');
+                    try {
+                      const result = await invoke('iroh_join_document', {
+                        workspacePath: workspacePath,
+                        ticket: joinTicket.trim()
+                      });
+                      setIrohDocumentId(result.documentId || result);
+                      setIrohTicket(joinTicket.trim());
+                      setIrohStatus('connected');
+                      alert('Successfully joined document!');
+                      setShowJoinModal(false);
+                      setJoinTicket('');
+                    } catch (err) {
+                      setIrohStatus('error');
+                      setIrohError(String(err));
+                      alert('Failed to join document: ' + err);
+                    }
+                    setSyncLoading(false);
+                  }}
+                  disabled={syncLoading || !joinTicket.trim()}
+                  className="flex-1 px-4 py-2 bg-app-accent text-app-accent-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-opacity"
+                >
+                  Join
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
     );
   } catch (error) {
     return (
