@@ -264,3 +264,145 @@ export const enhancedToast = {
 };
 
 export { toast };
+
+/**
+ * Demo function to show all toast variations
+ * Call from browser console: window.demoToasts()
+ */
+export function demoAllToasts() {
+  let delay = 0;
+  const interval = 800;
+
+  // Basic Sonner toasts
+  setTimeout(() => {
+    toast("Default Toast", { description: "This is a basic default toast" });
+  }, delay += interval);
+
+  setTimeout(() => {
+    toast.success("Success Toast", { description: "Operation completed successfully!" });
+  }, delay += interval);
+
+  setTimeout(() => {
+    toast.error("Error Toast", { description: "Something went wrong!" });
+  }, delay += interval);
+
+  setTimeout(() => {
+    toast.warning("Warning Toast", { description: "Please be careful!" });
+  }, delay += interval);
+
+  setTimeout(() => {
+    toast.info("Info Toast", { description: "Here's some useful information" });
+  }, delay += interval);
+
+  // Toast with action button
+  setTimeout(() => {
+    toast("Toast with Action", {
+      description: "Click the button to do something",
+      action: {
+        label: "Undo",
+        onClick: () => toast.success("Undo clicked!"),
+      },
+    });
+  }, delay += interval);
+
+  // Enhanced toasts with variants
+  setTimeout(() => {
+    showEnhancedToast({
+      id: "demo-survey",
+      title: "Quick Survey",
+      message: "Help us improve Lokus (2 min)",
+      variant: "survey",
+      link: {
+        url: "https://example.com/survey",
+        text: "Take Survey",
+        external: true,
+      },
+      duration: 15000,
+    });
+  }, delay += interval);
+
+  setTimeout(() => {
+    showEnhancedToast({
+      id: "demo-announcement",
+      title: "New Feature: Graph Export",
+      message: "You can now export your knowledge graph!",
+      variant: "announcement",
+      expandedContent: "Export your graph as SVG for vector graphics or PNG for quick sharing. Access it from the Graph view toolbar. We'd love to hear what you think!",
+      duration: 15000,
+    });
+  }, delay += interval);
+
+  setTimeout(() => {
+    showEnhancedToast({
+      id: "demo-update",
+      title: "v2.0 Available",
+      message: "A new version is ready to install",
+      variant: "update",
+      link: {
+        url: "https://example.com/changelog",
+        text: "View Changelog",
+        external: true,
+      },
+      duration: 15000,
+    });
+  }, delay += interval);
+
+  setTimeout(() => {
+    showEnhancedToast({
+      id: "demo-warning",
+      title: "Breaking Changes",
+      message: "v2.0 has breaking changes",
+      variant: "warning",
+      type: "warning",
+      expandedContent: "Please review the migration guide before updating. Some plugins may need to be updated to work with the new version.",
+      link: {
+        url: "https://example.com/migration",
+        text: "View Migration Guide",
+        external: true,
+      },
+      duration: 15000,
+    });
+  }, delay += interval);
+
+  // Toast with action and cancel buttons
+  setTimeout(() => {
+    showEnhancedToast({
+      id: "demo-actions",
+      title: "Confirm Action",
+      message: "Do you want to proceed with this action?",
+      variant: "default",
+      action: {
+        label: "Confirm",
+        onClick: () => toast.success("Confirmed!"),
+      },
+      cancel: {
+        label: "Cancel",
+        onClick: () => toast.info("Cancelled"),
+      },
+      persistent: true,
+    });
+  }, delay += interval);
+
+  // Loading toast
+  setTimeout(() => {
+    const loadingId = toast.loading("Loading...", { description: "Please wait while we process your request" });
+    setTimeout(() => {
+      toast.success("Done!", { id: loadingId, description: "Processing complete" });
+    }, 2000);
+  }, delay += interval);
+
+  // Promise toast
+  setTimeout(() => {
+    const myPromise = new Promise((resolve) => setTimeout(resolve, 2000));
+    toast.promise(myPromise, {
+      loading: "Saving changes...",
+      success: "Changes saved!",
+      error: "Failed to save",
+    });
+  }, delay += interval);
+}
+
+// Expose to window for console access
+if (typeof window !== 'undefined') {
+  window.demoToasts = demoAllToasts;
+}

@@ -197,10 +197,16 @@ function App() {
           </PluginProvider>
         </AuthProvider>
         <UpdateChecker />
-        <RemoteAnnouncement />
+        {/* Only show announcements/toasts in workspace, not in launcher or preferences */}
+        {activePath && !isPrefsWindow && (
+          <>
+            <RemoteAnnouncement />
+            <TipOfTheDay />
+          </>
+        )}
         <WhatsNew />
-        {activePath && <TipOfTheDay />}
-        <Toaster />
+        {/* Toaster only in workspace */}
+        {activePath && !isPrefsWindow && <Toaster />}
         <PluginDialogContainer />
         <ProgressIndicatorContainer progressItems={progressItems} />
       </div>
