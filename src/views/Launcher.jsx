@@ -7,7 +7,7 @@ import { readRecents, addRecent, removeRecent, shortenPath } from "../lib/recent
 import { WorkspaceManager } from "../core/workspace/manager.js";
 import { readGlobalVisuals, setGlobalActiveTheme } from "../core/theme/manager.js";
 import LokusLogo from "../components/LokusLogo.jsx";
-import { useToast } from "../components/Toast.jsx";
+import { toast } from "sonner";
 
 // --- Reusable Icon Component ---
 const Icon = ({ path, className = "w-5 h-5" }) => (
@@ -57,7 +57,6 @@ export default function Launcher() {
   const [recents, setRecents] = useState([]);
   const [isTestMode, setIsTestMode] = useState(false);
   const [reauthWorkspace, setReauthWorkspace] = useState(null); // { path, name } of workspace needing re-auth
-  const toast = useToast();
 
   useEffect(() => {
     // The ThemeProvider now handles initial theme loading.

@@ -8,7 +8,7 @@ import UpdateChecker from "./components/UpdateChecker";
 import { RemoteAnnouncement } from "./components/RemoteAnnouncement";
 import WhatsNew from "./components/WhatsNew";
 import TipOfTheDay from "./components/TipOfTheDay";
-import { Toaster } from "./components/ui/toaster";
+import { Toaster } from "./components/ui/sonner";
 import { PluginDialogContainer } from "./components/PluginDialogContainer";
 import { ProgressIndicatorContainer } from "./components/ProgressIndicator";
 import { usePluginProgress } from "./hooks/usePluginProgress";
@@ -20,7 +20,6 @@ import { PluginProvider } from "./hooks/usePlugins.jsx";
 import pluginStateAdapter from "./core/plugins/PluginStateAdapter.js";
 import { AuthProvider } from "./core/auth/AuthContext.jsx";
 import platformService from "./services/platform/PlatformService.js";
-import { ToastProvider } from "./components/Toast.jsx";
 import markdownSyntaxConfig from "./core/markdown/syntax-config.js";
 import editorConfigCache from "./core/editor/config-cache.js";
 // Import workspace manager to expose developer utilities
@@ -184,22 +183,20 @@ function App() {
       )}
 
       <div className="app-content">
-        <ToastProvider>
-          <AuthProvider>
-            <PluginProvider>
-              <Suspense fallback={<LoadingFallback />}>
-                {isPrefsWindow ? (
-                  <Preferences />
-                ) : activePath ? (
-                  <Workspace initialPath={activePath} />
-                ) : (
-                  <Launcher />
-                )}
-              </Suspense>
-            </PluginProvider>
-          </AuthProvider>
-          <UpdateChecker />
-        </ToastProvider>
+        <AuthProvider>
+          <PluginProvider>
+            <Suspense fallback={<LoadingFallback />}>
+              {isPrefsWindow ? (
+                <Preferences />
+              ) : activePath ? (
+                <Workspace initialPath={activePath} />
+              ) : (
+                <Launcher />
+              )}
+            </Suspense>
+          </PluginProvider>
+        </AuthProvider>
+        <UpdateChecker />
         <RemoteAnnouncement />
         <WhatsNew />
         {activePath && <TipOfTheDay />}
