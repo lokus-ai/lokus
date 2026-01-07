@@ -172,23 +172,8 @@ export function showEnhancedToast({
     onAutoClose,
   };
 
-  // Add action button if provided
-  if (action) {
-    toastOptions.action = {
-      label: action.label,
-      onClick: action.onClick,
-    };
-  }
-
-  // Add cancel button if provided
-  if (cancel) {
-    toastOptions.cancel = {
-      label: cancel.label,
-      onClick: cancel.onClick,
-    };
-  }
-
   // If we have expandable content or link or variant, use custom component
+  // For custom toasts, we handle action/cancel buttons inside the component
   if (expandedContent || link || variant !== "default") {
     return toast.custom(
       (t) => (
@@ -242,11 +227,27 @@ export function showEnhancedToast({
     );
   }
 
-  // Simple toast with title/description
-  return toastFn(title, {
+  // Simple toast with title/description - add action/cancel for Sonner to render
+  const simpleToastOptions = {
     ...toastOptions,
     description: message,
-  });
+  };
+
+  if (action) {
+    simpleToastOptions.action = {
+      label: action.label,
+      onClick: action.onClick,
+    };
+  }
+
+  if (cancel) {
+    simpleToastOptions.cancel = {
+      label: cancel.label,
+      onClick: cancel.onClick,
+    };
+  }
+
+  return toastFn(title, simpleToastOptions);
 }
 
 // Convenience methods
