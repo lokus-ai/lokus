@@ -5,7 +5,7 @@ const Toaster = ({ ...props }) => {
     <Sonner
       theme="dark"
       className="toaster group"
-      position="bottom-right"
+      position="top-right"
       // Stack toasts, expand on hover
       expand={false}
       visibleToasts={4}

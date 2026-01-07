@@ -83,14 +83,10 @@ export function ExpandableToastContent({
       {/* Expandable content */}
       {expandedContent && (
         <>
-          {isExpanded && (
-            <div className="text-sm text-app-muted pl-7 border-l-2 border-app-border ml-2 max-h-32 overflow-y-auto">
-              {expandedContent}
-            </div>
-          )}
           <button
             onClick={(e) => {
               e.stopPropagation();
+              e.preventDefault();
               setIsExpanded(!isExpanded);
             }}
             className="flex items-center gap-1 text-xs text-app-accent hover:text-app-accent/80 transition-colors self-start ml-7"
@@ -107,6 +103,11 @@ export function ExpandableToastContent({
               </>
             )}
           </button>
+          {isExpanded && (
+            <div className="text-sm text-app-muted pl-7 border-l-2 border-app-border ml-2 mt-2 max-h-24 overflow-y-auto whitespace-pre-wrap">
+              {expandedContent}
+            </div>
+          )}
         </>
       )}
 
