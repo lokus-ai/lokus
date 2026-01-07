@@ -3,7 +3,45 @@ import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { toast } from 'sonner';
 import { showEnhancedToast } from './ui/enhanced-toast';
-import { Download, RefreshCw } from 'lucide-react';
+
+const SNOOZE_STORAGE_KEY = 'lokus_update_snoozed';
+const SNOOZE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * Check if update notification is snoozed for a specific version
+ */
+const isUpdateSnoozed = (version) => {
+  try {
+    const snoozed = JSON.parse(localStorage.getItem(SNOOZE_STORAGE_KEY) || '{}');
+    if (snoozed.version === version && snoozed.until) {
+      const snoozedUntil = new Date(snoozed.until);
+      if (snoozedUntil > new Date()) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Snooze update notification for a specific version for 24 hours
+ */
+const snoozeUpdate = (version) => {
+  const until = new Date(Date.now() + SNOOZE_DURATION_MS);
+  localStorage.setItem(SNOOZE_STORAGE_KEY, JSON.stringify({
+    version,
+    until: until.toISOString(),
+  }));
+};
+
+/**
+ * Clear snooze (e.g., when a new version is available)
+ */
+const clearSnooze = () => {
+  localStorage.removeItem(SNOOZE_STORAGE_KEY);
+};
 
 export default function UpdateChecker() {
   const [updateInfo, setUpdateInfo] = useState(null);
@@ -15,6 +53,12 @@ export default function UpdateChecker() {
       const update = await check();
 
       if (update?.available) {
+        // Check if this version is snoozed
+        if (isUpdateSnoozed(update.version)) {
+          console.log(`[UpdateChecker] Update v${update.version} is snoozed, skipping notification`);
+          return update;
+        }
+
         setUpdateInfo(update);
         showUpdateAvailableToast(update);
       }
@@ -46,7 +90,11 @@ export default function UpdateChecker() {
       },
       cancel: {
         label: 'Later',
-        onClick: () => toast.dismiss('update-available'),
+        onClick: () => {
+          // Snooze for 24 hours
+          snoozeUpdate(update.version);
+          toast.dismiss('update-available');
+        },
       },
     });
   };
@@ -58,6 +106,8 @@ export default function UpdateChecker() {
     try {
       setDownloading(true);
       toast.dismiss('update-available');
+      // Clear snooze since user is updating
+      clearSnooze();
 
       // Show downloading toast with progress
       downloadToastId.current = toast.loading('Downloading update...', {
