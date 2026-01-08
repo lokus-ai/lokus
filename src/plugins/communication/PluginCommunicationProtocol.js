@@ -30,7 +30,7 @@ export const ErrorCode = {
   METHOD_NOT_FOUND: -32601,
   INVALID_PARAMS: -32602,
   INTERNAL_ERROR: -32603,
-  
+
   // Custom error codes
   PERMISSION_DENIED: -32000,
   RATE_LIMIT_EXCEEDED: -32001,
@@ -45,15 +45,15 @@ export const ErrorCode = {
 export class PluginCommunicationProtocol extends EventEmitter {
   constructor(pluginId, securityManager) {
     super()
-    
+
     this.pluginId = pluginId
     this.securityManager = securityManager
-    
+
     // Message tracking
     this.nextRequestId = 1
     this.pendingRequests = new Map() // id -> { resolve, reject, timeout, timestamp }
     this.subscriptions = new Map() // event -> Set of handlers
-    
+
     // Protocol configuration
     this.config = {
       requestTimeout: 30000, // 30 seconds
@@ -63,7 +63,7 @@ export class PluginCommunicationProtocol extends EventEmitter {
       enableCompression: false,
       enableEncryption: false
     }
-    
+
     // Performance monitoring
     this.stats = {
       messagesSent: 0,
@@ -73,10 +73,10 @@ export class PluginCommunicationProtocol extends EventEmitter {
       averageResponseTime: 0,
       errors: []
     }
-    
+
     // Rate limiting
     this.rateLimitWindow = []
-    
+
     // Message handlers
     this.methodHandlers = new Map()
     this.setupDefaultHandlers()
@@ -90,10 +90,10 @@ export class PluginCommunicationProtocol extends EventEmitter {
     this.registerMethodHandler('plugin.activate', this.handleActivate.bind(this))
     this.registerMethodHandler('plugin.deactivate', this.handleDeactivate.bind(this))
     this.registerMethodHandler('plugin.getInfo', this.handleGetInfo.bind(this))
-    
+
     // API forwarding
     this.registerMethodHandler('api.*', this.handleAPICall.bind(this))
-    
+
     // Event system
     this.registerMethodHandler('events.subscribe', this.handleEventSubscribe.bind(this))
     this.registerMethodHandler('events.unsubscribe', this.handleEventUnsubscribe.bind(this))
@@ -123,13 +123,13 @@ export class PluginCommunicationProtocol extends EventEmitter {
 
     const id = this.nextRequestId++
     const request = this.createRequest(id, method, params)
-    
+
     // Security validation
     this.validateOutgoingMessage(request)
-    
+
     const timeout = options.timeout || this.config.requestTimeout
     const startTime = Date.now()
-    
+
     return new Promise((resolve, reject) => {
       // Set up timeout
       const timeoutHandle = setTimeout(() => {
@@ -142,12 +142,12 @@ export class PluginCommunicationProtocol extends EventEmitter {
         resolve: (result) => {
           clearTimeout(timeoutHandle)
           this.pendingRequests.delete(id)
-          
+
           // Update stats
           const responseTime = Date.now() - startTime
           this.updateResponseTimeStats(responseTime)
           this.stats.requestsCompleted++
-          
+
           resolve(result)
         },
         reject: (error) => {
@@ -170,10 +170,10 @@ export class PluginCommunicationProtocol extends EventEmitter {
    */
   sendNotification(method, params = {}) {
     const notification = this.createNotification(method, params)
-    
+
     // Security validation
     this.validateOutgoingMessage(notification)
-    
+
     this.sendMessage(notification)
   }
 
@@ -184,12 +184,12 @@ export class PluginCommunicationProtocol extends EventEmitter {
     if (!this.subscriptions.has(event)) {
       this.subscriptions.set(event, new Set())
     }
-    
+
     this.subscriptions.get(event).add(handler)
-    
+
     // Notify host about subscription
     await this.sendRequest('events.subscribe', { event })
-    
+
     return {
       dispose: () => {
         this.unsubscribe(event, handler)
@@ -204,7 +204,7 @@ export class PluginCommunicationProtocol extends EventEmitter {
     const handlers = this.subscriptions.get(event)
     if (handlers) {
       handlers.delete(handler)
-      
+
       if (handlers.size === 0) {
         this.subscriptions.delete(event)
         // Notify host about unsubscription
@@ -218,12 +218,12 @@ export class PluginCommunicationProtocol extends EventEmitter {
    */
   async handleMessage(rawMessage) {
     this.stats.messagesReceived++
-    
+
     try {
       // Parse and validate message
       const message = this.parseMessage(rawMessage)
       this.validateIncomingMessage(message)
-      
+
       // Route message based on type
       if (this.isRequest(message)) {
         await this.handleIncomingRequest(message)
@@ -234,19 +234,19 @@ export class PluginCommunicationProtocol extends EventEmitter {
       } else {
         throw this.createError(ErrorCode.INVALID_REQUEST, 'Invalid message type')
       }
-      
+
     } catch (error) {
       this.stats.errors.push({
         timestamp: Date.now(),
         error: error.message,
         message: rawMessage
       })
-      
+
       // Send error response if this was a request
       if (rawMessage.id !== undefined) {
         this.sendErrorResponse(rawMessage.id, error)
       }
-      
+
       this.emit('protocol-error', error)
     }
   }
@@ -256,7 +256,7 @@ export class PluginCommunicationProtocol extends EventEmitter {
    */
   async handleIncomingRequest(request) {
     const { id, method, params } = request
-    
+
     try {
       // Find method handler
       const handler = this.findMethodHandler(method)
@@ -266,10 +266,10 @@ export class PluginCommunicationProtocol extends EventEmitter {
 
       // Execute handler
       const result = await handler(params, { method, pluginId: this.pluginId })
-      
+
       // Send success response
       this.sendSuccessResponse(id, result)
-      
+
     } catch (error) {
       // Send error response
       this.sendErrorResponse(id, error)
@@ -282,7 +282,7 @@ export class PluginCommunicationProtocol extends EventEmitter {
   handleIncomingResponse(response) {
     const { id, result, error } = response
     const pendingRequest = this.pendingRequests.get(id)
-    
+
     if (!pendingRequest) {
       return
     }
@@ -299,7 +299,7 @@ export class PluginCommunicationProtocol extends EventEmitter {
    */
   async handleIncomingNotification(notification) {
     const { method, params } = notification
-    
+
     // Handle event notifications
     if (method === 'events.notification') {
       this.handleEventNotification(params)
@@ -311,7 +311,9 @@ export class PluginCommunicationProtocol extends EventEmitter {
     if (handler) {
       try {
         await handler(params, { method, pluginId: this.pluginId })
-      } catch { }
+      } catch (err) {
+        console.error(`PluginCommunicationProtocol: Error in notification handler for ${method}`, err)
+      }
     }
   }
 
@@ -321,12 +323,14 @@ export class PluginCommunicationProtocol extends EventEmitter {
   handleEventNotification(params) {
     const { event, data } = params
     const handlers = this.subscriptions.get(event)
-    
+
     if (handlers) {
       for (const handler of handlers) {
         try {
           handler(data)
-        } catch { }
+        } catch (err) {
+          console.error(`PluginCommunicationProtocol: Error in event handler for ${event}`, err)
+        }
       }
     }
   }
@@ -385,7 +389,7 @@ export class PluginCommunicationProtocol extends EventEmitter {
       id,
       result
     }
-    
+
     this.sendMessage(response)
   }
 
@@ -402,7 +406,7 @@ export class PluginCommunicationProtocol extends EventEmitter {
         data: error.data
       }
     }
-    
+
     this.sendMessage(response)
   }
 
@@ -425,7 +429,7 @@ export class PluginCommunicationProtocol extends EventEmitter {
         throw this.createError(ErrorCode.PARSE_ERROR, 'Parse error')
       }
     }
-    
+
     return rawMessage
   }
 
@@ -471,15 +475,15 @@ export class PluginCommunicationProtocol extends EventEmitter {
   checkRateLimit() {
     const now = Date.now()
     const windowStart = now - this.config.rateLimitWindow
-    
+
     // Remove old entries
     this.rateLimitWindow = this.rateLimitWindow.filter(timestamp => timestamp > windowStart)
-    
+
     // Check limit
     if (this.rateLimitWindow.length >= this.config.rateLimitRequests) {
       return false
     }
-    
+
     // Add current request
     this.rateLimitWindow.push(now)
     return true
@@ -490,7 +494,7 @@ export class PluginCommunicationProtocol extends EventEmitter {
    */
   updateResponseTimeStats(responseTime) {
     const alpha = 0.1 // Exponential moving average factor
-    this.stats.averageResponseTime = 
+    this.stats.averageResponseTime =
       this.stats.averageResponseTime * (1 - alpha) + responseTime * alpha
   }
 
@@ -564,7 +568,7 @@ export class PluginCommunicationProtocol extends EventEmitter {
   async handleAPICall(params, context) {
     const { method } = context
     const apiMethod = method.replace(/^api\./, '')
-    
+
     this.emit('api-call', {
       method: apiMethod,
       params,

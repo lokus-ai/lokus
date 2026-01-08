@@ -372,7 +372,8 @@ export class PluginAPI extends EventEmitter {
       const settings = await invoke('get_plugin_settings', { pluginId: this.pluginId })
       return settings || {}
     } catch (error) {
-      // Settings don't exist yet
+      // Settings don't exist yet - perfectly normal for new plugins
+      this.logger.debug(`Plugin ${this.pluginId} has no settings yet or failed to load`, error)
       return {}
     }
   }
@@ -555,7 +556,10 @@ export class PluginAPIFactory {
     for (const [pluginId, api] of this.apis) {
       try {
         await api.cleanup()
-      } catch { }
+      } catch (err) {
+        // Individual cleanup failure shouldn't stop others
+        console.error(`PluginAPIFactory: Failed to cleanup plugin API for ${pluginId}`, err)
+      }
     }
     this.apis.clear()
   }

@@ -89,6 +89,8 @@ import { copyFiles, cutFiles, getClipboardState, getRelativePath } from "../util
 import "../styles/product-tour.css";
 import TerminalPanel from "../components/TerminalPanel/TerminalPanel.jsx";
 import { OutputPanel } from "../components/OutputPanel/OutputPanel.jsx";
+import referenceManager from "../core/references/ReferenceManager.js";
+import ReferenceUpdateModal from "../components/ReferenceUpdateModal.jsx";
 
 const MAX_OPEN_TABS = 10;
 
@@ -332,7 +334,7 @@ function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
 }
 
 // --- File Entry Component ---
-function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder, toast }) {
+function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences }) {
   const entryRef = useRef(null);
   const hoverTimeoutRef = useRef(null);
 
@@ -438,9 +440,40 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       return;
     }
 
+    const trimmedName = newName.trim();
+    const oldPath = entry.path;
+    const parentDir = oldPath.substring(0, oldPath.lastIndexOf('/'));
+    const newPath = `${parentDir}/${trimmedName}`;
+
+    // Check for references that would need updating
+    if (onCheckReferences) {
+      const affectedFiles = await referenceManager.findAffectedFiles(oldPath);
+      if (affectedFiles.length > 0) {
+        // Show confirmation modal
+        onCheckReferences({
+          oldPath,
+          newPath,
+          affectedFiles,
+          operation: async () => {
+            try {
+              await invoke("rename_file", { path: oldPath, newName: trimmedName });
+              setRenamingPath(null);
+              onRefresh && onRefresh();
+              return true;
+            } catch (e) {
+              toast?.error(`Failed to rename: ${e.message || e}`);
+              setRenamingPath(null);
+              return false;
+            }
+          }
+        });
+        return;
+      }
+    }
+
+    // No references to update, proceed directly
     try {
-      const trimmedName = newName.trim();
-      await invoke("rename_file", { path: entry.path, newName: trimmedName });
+      await invoke("rename_file", { path: oldPath, newName: trimmedName });
       setRenamingPath(null);
       onRefresh && onRefresh();
     } catch (e) {
@@ -525,13 +558,17 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       case 'revealInFinder':
         try {
           await invoke('platform_reveal_in_file_manager', { path: file.path });
-        } catch { }
+        } catch (err) {
+          console.error('Workspace: Failed to reveal file in finder', err);
+        }
         break;
       case 'openInTerminal':
         try {
           const terminalPath = file.is_directory ? file.path : file.path.split("/").slice(0, -1).join("/");
           await invoke('platform_open_terminal', { path: terminalPath });
-        } catch { }
+        } catch (err) {
+          console.error('Workspace: Failed to open terminal', err);
+        }
         break;
       case 'cut':
         // Cut file to clipboard
@@ -546,7 +583,9 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       case 'copyPath':
         try {
           await navigator.clipboard.writeText(file.path);
-        } catch { }
+        } catch (err) {
+          console.error('Workspace: Failed to copy path', err);
+        }
         break;
       case 'copyRelativePath':
         try {
@@ -573,7 +612,9 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
             await invoke('delete_file', { path: file.path });
             onRefresh && onRefresh();
           }
-        } catch { }
+        } catch (err) {
+          console.error('Workspace: Failed to delete file', err);
+        }
         break;
       case 'selectForCompare':
         // Select file for comparison
@@ -718,6 +759,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
                   hoveredFolder={hoveredFolder}
                   setHoveredFolder={setHoveredFolder}
                   toast={toast}
+                  onCheckReferences={onCheckReferences}
                 />
               ))}
             </ul>
@@ -729,7 +771,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 }
 
 // --- File Tree View Component ---
-function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, isExternalDragActive, hoveredFolder, setHoveredFolder, toast }) {
+function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences }) {
   const [activeEntry, setActiveEntry] = useState(null);
   const fileTreeRef = useRef(null);
   const { dropPosition, updatePosition, clearPosition } = useDropPosition();
@@ -761,35 +803,58 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
       return;
     }
 
-    try {
-      // Use dropPosition if available for precise placement
-      if (dropPosition) {
-        const { position, targetPath } = dropPosition;
-
-        if (position === "inside") {
-          // Drop inside folder
-          await invoke("move_file", {
-            sourcePath: sourceEntry.path,
-            destinationDir: targetPath,
-          });
-        } else {
-          // For "before" and "after", move to same parent as target
-          const targetParent = targetPath.substring(0, targetPath.lastIndexOf('/'));
-          await invoke("move_file", {
-            sourcePath: sourceEntry.path,
-            destinationDir: targetParent || targetEntry.path.substring(0, targetEntry.path.lastIndexOf('/')),
-          });
-        }
-      } else if (targetEntry.is_directory) {
-        // Fallback to old behavior (drop inside folder)
-        await invoke("move_file", {
-          sourcePath: sourceEntry.path,
-          destinationDir: targetEntry.path,
-        });
+    // Calculate destination directory and new path
+    let destinationDir;
+    if (dropPosition) {
+      const { position, targetPath } = dropPosition;
+      if (position === "inside") {
+        destinationDir = targetPath;
+      } else {
+        destinationDir = targetPath.substring(0, targetPath.lastIndexOf('/')) ||
+                        targetEntry.path.substring(0, targetEntry.path.lastIndexOf('/'));
       }
+    } else if (targetEntry.is_directory) {
+      destinationDir = targetEntry.path;
+    } else {
+      return; // Can't drop here
+    }
 
-      onRefresh();
-    } catch { }
+    const oldPath = sourceEntry.path;
+    const fileName = oldPath.substring(oldPath.lastIndexOf('/') + 1);
+    const newPath = `${destinationDir}/${fileName}`;
+
+    // Helper function to perform the actual move
+    const performMove = async () => {
+      try {
+        await invoke("move_file", {
+          sourcePath: oldPath,
+          destinationDir: destinationDir,
+        });
+        onRefresh();
+        return true;
+      } catch (err) {
+        console.error('Workspace: Failed to move file', err);
+        return false;
+      }
+    };
+
+    // Check for references that would need updating
+    if (onCheckReferences) {
+      const affectedFiles = await referenceManager.findAffectedFiles(oldPath);
+      if (affectedFiles.length > 0) {
+        // Show confirmation modal
+        onCheckReferences({
+          oldPath,
+          newPath,
+          affectedFiles,
+          operation: performMove
+        });
+        return;
+      }
+    }
+
+    // No references to update, proceed directly
+    await performMove();
   };
 
   return (
@@ -823,6 +888,7 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
               hoveredFolder={hoveredFolder}
               setHoveredFolder={setHoveredFolder}
               toast={toast}
+              onCheckReferences={onCheckReferences}
             />
           ))}
         </ul>
@@ -1157,6 +1223,17 @@ function WorkspaceWithScope({ path }) {
   const [graphData, setGraphData] = useState(null);
   const [isLoadingGraph, setIsLoadingGraph] = useState(false);
 
+  // Reference update modal state
+  const [referenceUpdateModal, setReferenceUpdateModal] = useState({
+    isOpen: false,
+    oldPath: null,
+    newPath: null,
+    affectedFiles: [],
+    isProcessing: false,
+    result: null,
+    pendingOperation: null, // Store the operation to execute after confirmation
+  });
+
   // Image files state for navigation
   const [allImageFiles, setAllImageFiles] = useState([]);
 
@@ -1203,6 +1280,80 @@ function WorkspaceWithScope({ path }) {
     editorTitle,
     savedContent,
   };
+
+  // Handler for checking references before file move/rename
+  const handleCheckReferences = useCallback(({ oldPath, newPath, affectedFiles, operation }) => {
+    setReferenceUpdateModal({
+      isOpen: true,
+      oldPath,
+      newPath,
+      affectedFiles: affectedFiles.map(f => f.filePath),
+      isProcessing: false,
+      result: null,
+      pendingOperation: operation,
+    });
+  }, []);
+
+  // Handler for confirming reference updates
+  const handleConfirmReferenceUpdate = useCallback(async (updateReferences) => {
+    const { oldPath, newPath, pendingOperation } = referenceUpdateModal;
+
+    setReferenceUpdateModal(prev => ({ ...prev, isProcessing: true }));
+
+    try {
+      // First, execute the move/rename operation
+      const operationSuccess = await pendingOperation();
+
+      if (!operationSuccess) {
+        setReferenceUpdateModal(prev => ({
+          ...prev,
+          isProcessing: false,
+          result: { success: false, error: 'Operation failed' }
+        }));
+        return;
+      }
+
+      // If user chose to update references, do it now
+      if (updateReferences) {
+        const result = await referenceManager.updateAllReferences(oldPath, newPath);
+        setReferenceUpdateModal(prev => ({
+          ...prev,
+          isProcessing: false,
+          result: { success: true, updated: result.updated, files: result.files }
+        }));
+      } else {
+        // Just close after successful operation without updating references
+        setReferenceUpdateModal({
+          isOpen: false,
+          oldPath: null,
+          newPath: null,
+          affectedFiles: [],
+          isProcessing: false,
+          result: null,
+          pendingOperation: null,
+        });
+      }
+    } catch (err) {
+      setReferenceUpdateModal(prev => ({
+        ...prev,
+        isProcessing: false,
+        result: { success: false, error: err.message || 'Failed to update references' }
+      }));
+    }
+  }, [referenceUpdateModal]);
+
+  // Handler for closing reference update modal
+  const handleCloseReferenceModal = useCallback(() => {
+    setReferenceUpdateModal({
+      isOpen: false,
+      oldPath: null,
+      newPath: null,
+      affectedFiles: [],
+      isProcessing: false,
+      result: null,
+      pendingOperation: null,
+    });
+  }, []);
 
   // Helper function to get proper display name for special tabs
   const getTabDisplayName = useCallback((tabPath, pluginsList = []) => {
@@ -1299,29 +1450,72 @@ function WorkspaceWithScope({ path }) {
   }, [plugins]);
 
   // Insert images into editor at cursor position
-  const insertImagesIntoEditor = useCallback((imagePaths) => {
+  // Inserts WikiLink nodes directly with pre-resolved src to avoid race conditions
+  const insertImagesIntoEditor = useCallback(async (imagePaths) => {
     if (!editorRef.current) return;
 
     const editor = editorRef.current;
-    const workspaceRoot = path;
 
-    // Build markdown for each image
-    const imageMarkdown = imagePaths.map(imagePath => {
-      // Get relative path from workspace root
-      const relativePath = imagePath.replace(workspaceRoot + '/', '');
-      const fileName = relativePath.split('/').pop();
+    // Import Tauri fs for reading images as data URLs
+    const { readFile } = await import('@tauri-apps/plugin-fs');
 
-      // Use wiki-link style for images in workspace
-      return `![[${fileName}]]`;
-    }).join('\n\n');
+    // Helper to convert extension to MIME type
+    const extToMime = (ext) => {
+      const map = {
+        png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+        gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+        bmp: 'image/bmp', tiff: 'image/tiff', avif: 'image/avif'
+      };
+      return map[ext?.toLowerCase()] || 'application/octet-stream';
+    };
 
-    // Insert at cursor position
-    editor.chain()
-      .focus()
-      .insertContent(imageMarkdown + '\n\n')
-      .run();
+    for (const imagePath of imagePaths) {
+      const fileName = imagePath.split('/').pop();
 
-  }, [path]);
+      // Read image as data URL for immediate rendering
+      let src = '';
+      try {
+        const data = await readFile(imagePath);
+        const ext = fileName.split('.').pop();
+        const mime = extToMime(ext);
+        // Convert Uint8Array to base64
+        let binary = '';
+        for (let i = 0; i < data.length; i++) {
+          binary += String.fromCharCode(data[i]);
+        }
+        src = `data:${mime};base64,${btoa(binary)}`;
+      } catch {
+        // If read fails, src stays empty - image won't render but link will work
+      }
+
+      // Insert WikiLink node directly with pre-resolved src
+      const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+      editor.chain()
+        .focus()
+        .insertContent({
+          type: 'wikiLink',
+          attrs: {
+            id,
+            target: fileName,
+            alt: '',
+            embed: true,
+            href: imagePath,
+            src: src
+          }
+        })
+        .run();
+    }
+
+    // Add a newline after all images
+    editor.chain().focus().insertContent({ type: 'paragraph' }).run();
+
+  }, []);
+
+  // Track hovered folder in a ref to avoid re-registering listeners
+  const hoveredFolderRef = useRef(hoveredFolder);
+  useEffect(() => {
+    hoveredFolderRef.current = hoveredFolder;
+  }, [hoveredFolder]);
 
   // External file drop event listeners (Tauri 2.0 API)
   useEffect(() => {
@@ -1332,18 +1526,21 @@ function WorkspaceWithScope({ path }) {
     let unlistenDrop;
     let unlistenOver;
     let unlistenLeave;
+    let isCleanedUp = false;
 
     const setupFileDropListeners = async () => {
       try {
         // Tauri 2.0: Event names changed from file-drop to drag-drop
         // tauri://drag-drop - Files dropped
         unlistenDrop = await listen('tauri://drag-drop', async (event) => {
+          if (isCleanedUp) return; // Guard against stale listeners
+
           const filePaths = event.payload.paths || event.payload;
           setIsExternalDragActive(false);
 
           try {
-            // Determine destination folder
-            const targetFolder = hoveredFolder || null;
+            // Determine destination folder (use ref to get current value)
+            const targetFolder = hoveredFolderRef.current || null;
 
             // Copy files to workspace
             const result = await invoke('copy_external_files_to_workspace', {
@@ -1370,11 +1567,13 @@ function WorkspaceWithScope({ path }) {
 
         // tauri://drag-over - Files being dragged over window
         unlistenOver = await listen('tauri://drag-over', () => {
+          if (isCleanedUp) return;
           setIsExternalDragActive(true);
         });
 
         // tauri://drag-leave - Drag left window
         unlistenLeave = await listen('tauri://drag-leave', () => {
+          if (isCleanedUp) return;
           setIsExternalDragActive(false);
           setHoveredFolder(null);
         });
@@ -1385,11 +1584,12 @@ function WorkspaceWithScope({ path }) {
     setupFileDropListeners();
 
     return () => {
+      isCleanedUp = true;
       if (unlistenDrop) unlistenDrop();
       if (unlistenOver) unlistenOver();
       if (unlistenLeave) unlistenLeave();
     };
-  }, [path, hoveredFolder, insertImagesIntoEditor]);
+  }, [path, insertImagesIntoEditor]); // Removed hoveredFolder from deps
 
   // Load shortcuts map for hints and keep it fresh
   useEffect(() => {
@@ -1473,6 +1673,10 @@ function WorkspaceWithScope({ path }) {
           };
           walk(tree);
           try { window.__LOKUS_FILE_INDEX__ = flat; } catch { }
+
+          // Initialize reference manager for tracking file links
+          referenceManager.init(path);
+          referenceManager.buildIndex(flat).catch(() => {});
 
           // Extract all image files for image viewer navigation
           const imageFiles = findImageFiles(tree);
@@ -4162,30 +4366,31 @@ function WorkspaceWithScope({ path }) {
                     <ContextMenuTrigger asChild>
                       <div className="p-2 flex-1 overflow-y-auto">
                         <FileTreeView
-                            entries={filteredFileTree}
-                            onFileClick={handleFileOpen}
-                            activeFile={activeFile}
-                            onRefresh={handleRefreshFiles}
-                            data-testid="file-tree"
-                            expandedFolders={expandedFolders}
-                            toggleFolder={toggleFolder}
-                            isCreating={isCreatingFolder}
-                            onCreateConfirm={handleConfirmCreateFolder}
-                            keymap={keymap}
-                            renamingPath={renamingPath}
-                            setRenamingPath={setRenamingPath}
-                            onViewHistory={toggleVersionHistory}
-                            setTagModalFile={setTagModalFile}
-                            setShowTagModal={setShowTagModal}
-                            setUseSplitView={setUseSplitView}
-                            setRightPaneFile={setRightPaneFile}
-                            setRightPaneTitle={setRightPaneTitle}
-                            setRightPaneContent={setRightPaneContent}
-                            isExternalDragActive={isExternalDragActive}
-                            hoveredFolder={hoveredFolder}
-                            setHoveredFolder={setHoveredFolder}
-                            toast={toast}
-                          />
+                          entries={filteredFileTree}
+                          onFileClick={handleFileOpen}
+                          activeFile={activeFile}
+                          onRefresh={handleRefreshFiles}
+                          data-testid="file-tree"
+                          expandedFolders={expandedFolders}
+                          toggleFolder={toggleFolder}
+                          isCreating={isCreatingFolder}
+                          onCreateConfirm={handleConfirmCreateFolder}
+                          keymap={keymap}
+                          renamingPath={renamingPath}
+                          setRenamingPath={setRenamingPath}
+                          onViewHistory={toggleVersionHistory}
+                          setTagModalFile={setTagModalFile}
+                          setShowTagModal={setShowTagModal}
+                          setUseSplitView={setUseSplitView}
+                          setRightPaneFile={setRightPaneFile}
+                          setRightPaneTitle={setRightPaneTitle}
+                          setRightPaneContent={setRightPaneContent}
+                          isExternalDragActive={isExternalDragActive}
+                          hoveredFolder={hoveredFolder}
+                          setHoveredFolder={setHoveredFolder}
+                          toast={toast}
+                          onCheckReferences={handleCheckReferences}
+                        />
                       </div>
                     </ContextMenuTrigger>
                     <ContextMenuContent>
@@ -5035,6 +5240,18 @@ function WorkspaceWithScope({ path }) {
         <AboutDialog
           isOpen={showAboutDialog}
           onClose={() => setShowAboutDialog(false)}
+        />
+
+        {/* Reference Update Modal */}
+        <ReferenceUpdateModal
+          isOpen={referenceUpdateModal.isOpen}
+          oldPath={referenceUpdateModal.oldPath}
+          newPath={referenceUpdateModal.newPath}
+          affectedFiles={referenceUpdateModal.affectedFiles}
+          isProcessing={referenceUpdateModal.isProcessing}
+          result={referenceUpdateModal.result}
+          onConfirm={handleConfirmReferenceUpdate}
+          onClose={handleCloseReferenceModal}
         />
 
         {/* Bottom Panel with Tabs (Terminal and Output) */}
