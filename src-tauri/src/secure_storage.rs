@@ -4,6 +4,7 @@ use serde::{Serialize, Deserialize};
 use aes_gcm::{Aes256Gcm, aead::{Aead, KeyInit}};
 use argon2::{Argon2, password_hash::rand_core::OsRng};
 use rand::RngCore;
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 use machine_uid;
 use thiserror::Error;
 
@@ -65,8 +66,24 @@ impl SecureStorage {
         }
 
         // Get device-specific identifier
+        #[cfg(not(any(target_os = "ios", target_os = "android")))]
         let device_id = machine_uid::get()
             .map_err(|e| SecureStorageError::DeviceId(format!("Failed to get device ID: {}", e)))?;
+
+        // On mobile, use a generated UUID stored in the secure directory
+        #[cfg(any(target_os = "ios", target_os = "android"))]
+        let device_id = {
+            let device_id_path = base_path.join(".device_id");
+            if device_id_path.exists() {
+                fs::read_to_string(&device_id_path)
+                    .map_err(|e| SecureStorageError::DeviceId(format!("Failed to read device ID: {}", e)))?
+            } else {
+                let new_id = uuid::Uuid::new_v4().to_string();
+                fs::write(&device_id_path, &new_id)
+                    .map_err(|e| SecureStorageError::DeviceId(format!("Failed to write device ID: {}", e)))?;
+                new_id
+            }
+        };
 
         Ok(Self {
             base_path,

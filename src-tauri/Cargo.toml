@@ -56,7 +56,6 @@ dotenvy = "0.15"
 aes-gcm = "0.10"
 argon2 = "0.5"
 rand = "0.8"
-machine-uid = "0.4"
 hyper = { version = "1.0", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
@@ -113,3 +112,7 @@ security-framework = "2.9"
 windows = { version = "0.57", features = ["Win32_Security_Credentials"] }
 
 # Linux uses keyring crate (already in main deps) which handles secret-service internally
+
+# Desktop-only dependencies (not available on iOS/Android)
+[target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
+machine-uid = "0.4"
