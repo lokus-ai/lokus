@@ -46,6 +46,11 @@ function compareVersions(v1, v2) {
 // Track if we've already shown the update notification this session
 let hasShownUpdateThisSession = false;
 
+// For testing: reset the session flag
+export function _resetSessionFlag() {
+  hasShownUpdateThisSession = false;
+}
+
 /**
  * Check if update notification is snoozed for a specific version
  */
