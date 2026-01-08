@@ -1,4 +1,6 @@
+#[cfg(desktop)]
 mod window_manager;
+#[cfg(desktop)]
 mod menu;
 mod theme;
 mod handlers;
@@ -24,6 +26,7 @@ mod file_locking;
 #[cfg(target_os = "macos")]
 mod macos;
 
+#[cfg(desktop)]
 use window_manager::{open_workspace_window, open_preferences_window, open_launcher_window};
 use tauri::{Manager, Listener, Emitter};
 use tauri_plugin_store::{StoreBuilder, JsonValue};
@@ -435,21 +438,32 @@ pub fn run() {
     default_panic(panic_info);
   }));
 
-  tauri::Builder::default()
+  let mut builder = tauri::Builder::default()
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_store::Builder::new().build())
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_opener::init())
-    .plugin(tauri_plugin_global_shortcut::Builder::new().build())
     .plugin(tauri_plugin_clipboard_manager::init())
     .plugin(tauri_plugin_deep_link::init())
-    .plugin(tauri_plugin_shell::init())
+    .plugin(tauri_plugin_shell::init());
+
+  // Desktop-only plugins
+  #[cfg(desktop)]
+  {
+    builder = builder.plugin(tauri_plugin_global_shortcut::Builder::new().build());
+  }
+
+  builder
     .invoke_handler(tauri::generate_handler![
       greet,
+      #[cfg(desktop)]
       open_workspace_window,
+      #[cfg(desktop)]
       open_preferences_window,
+      #[cfg(desktop)]
       open_launcher_window,
+      #[cfg(desktop)]
       window_manager::sync_window_theme,
       save_last_workspace,
       clear_last_workspace,
@@ -607,6 +621,7 @@ pub fn run() {
       auth::get_user_profile,
       auth::refresh_auth_token,
       auth::logout,
+      #[cfg(desktop)]
       auth::open_auth_url,
       connections::gmail_initiate_auth,
       connections::gmail_complete_auth,
@@ -638,6 +653,7 @@ pub fn run() {
       api_server::api_get_current_workspace
     ])
     .setup(|app| {
+      #[cfg(desktop)]
       menu::init(&app.handle())?;
 
       // Initialize platform-specific systems with better error handling
@@ -778,35 +794,39 @@ pub fn run() {
         }
       });
 
-      let app_handle = app.handle().clone();
-      let store = StoreBuilder::new(app.handle(), PathBuf::from(".settings.dat")).build().unwrap();
-      let _ = store.reload();
+      // Desktop-only window management
+      #[cfg(desktop)]
+      {
+        let app_handle = app.handle().clone();
+        let store = StoreBuilder::new(app.handle(), PathBuf::from(".settings.dat")).build().unwrap();
+        let _ = store.reload();
 
-      // In development mode, always clear workspace data and show launcher
-      if cfg!(debug_assertions) {
-        clear_all_workspace_data(app.handle().clone());
-        if let Some(main_window) = app.get_webview_window("main") {
-          let _ = main_window.show();
-        }
-      } else {
-        // Production mode - use the validation function to check for valid workspace
-        // Try to restore access via bookmark first (macOS)
-        let mut valid_path = restore_workspace_access(&app.handle());
-
-        // If no bookmark restored, try standard validation (non-macOS or fallback)
-        if valid_path.is_none() {
-             valid_path = get_validated_workspace_path(app.handle().clone());
-        }
-
-        if let Some(path) = valid_path {
-          if let Some(main_window) = app.get_webview_window("main") {
-            let _ = main_window.hide();
-          }
-          let _ = open_workspace_window(app_handle, path);
-        } else {
-          // No valid workspace found, show the launcher
+        // In development mode, always clear workspace data and show launcher
+        if cfg!(debug_assertions) {
+          clear_all_workspace_data(app.handle().clone());
           if let Some(main_window) = app.get_webview_window("main") {
             let _ = main_window.show();
+          }
+        } else {
+          // Production mode - use the validation function to check for valid workspace
+          // Try to restore access via bookmark first (macOS)
+          let mut valid_path = restore_workspace_access(&app.handle());
+
+          // If no bookmark restored, try standard validation (non-macOS or fallback)
+          if valid_path.is_none() {
+               valid_path = get_validated_workspace_path(app.handle().clone());
+          }
+
+          if let Some(path) = valid_path {
+            if let Some(main_window) = app.get_webview_window("main") {
+              let _ = main_window.hide();
+            }
+            let _ = open_workspace_window(app_handle, path);
+          } else {
+            // No valid workspace found, show the launcher
+            if let Some(main_window) = app.get_webview_window("main") {
+              let _ = main_window.show();
+            }
           }
         }
       }

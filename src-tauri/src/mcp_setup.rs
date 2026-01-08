@@ -76,6 +76,12 @@ impl MCPSetup {
         #[cfg(target_os = "linux")]
         let config_path = home.join(".config/Claude/claude_desktop_config.json");
 
+        #[cfg(target_os = "ios")]
+        let config_path = home.join("Documents/.lokus/claude_config.json");
+
+        #[cfg(target_os = "android")]
+        let config_path = home.join(".lokus/claude_config.json");
+
         // Create directory if it doesn't exist
         if let Some(parent) = config_path.parent() {
             fs::create_dir_all(parent)
