@@ -11,16 +11,25 @@ mod kanban;
 mod search;
 mod plugins;
 mod platform;
+#[cfg(desktop)]
 mod mcp;
+#[cfg(desktop)]
 mod mcp_setup;
+#[cfg(desktop)]
 mod mcp_embedded;
+#[cfg(desktop)]
 mod auth;
+#[cfg(desktop)]
 mod connections;
+#[cfg(desktop)]
 mod oauth_server;
 mod secure_storage;
+#[cfg(desktop)]
 mod api_server;
 mod logging;
+#[cfg(desktop)]
 mod sync;
+#[cfg(desktop)]
 mod credentials;
 mod file_locking;
 #[cfg(target_os = "macos")]
@@ -397,46 +406,51 @@ pub fn run() {
 
   tracing::info!("Lokus starting...");
 
-  // Initialize Sentry for crash reporting
-  let sentry_dsn = std::env::var("TAURI_SENTRY_DSN").ok();
-  let sentry_enabled = std::env::var("VITE_ENABLE_CRASH_REPORTS")
-    .unwrap_or_else(|_| "false".to_string())
-    .to_lowercase() == "true";
-  let sentry_environment = std::env::var("VITE_SENTRY_ENVIRONMENT")
-    .unwrap_or_else(|_| "production".to_string());
+  // Initialize Sentry for crash reporting (desktop only)
+  #[cfg(desktop)]
+  let _sentry_guard = {
+    let sentry_dsn = std::env::var("TAURI_SENTRY_DSN").ok();
+    let sentry_enabled = std::env::var("VITE_ENABLE_CRASH_REPORTS")
+      .unwrap_or_else(|_| "false".to_string())
+      .to_lowercase() == "true";
+    let sentry_environment = std::env::var("VITE_SENTRY_ENVIRONMENT")
+      .unwrap_or_else(|_| "production".to_string());
 
-  let _sentry_guard = if let (Some(dsn), true) = (sentry_dsn.as_ref(), sentry_enabled) {
-    let guard = sentry::init((
-      dsn.as_str(),
-      sentry::ClientOptions {
-        release: sentry::release_name!(),
-        environment: Some(sentry_environment.clone().into()),
-        attach_stacktrace: true,
-        ..Default::default()
-      },
-    ));
-    Some(guard)
-  } else {
-    None
-  };
+    let guard = if let (Some(dsn), true) = (sentry_dsn.as_ref(), sentry_enabled) {
+      let g = sentry::init((
+        dsn.as_str(),
+        sentry::ClientOptions {
+          release: sentry::release_name!(),
+          environment: Some(sentry_environment.clone().into()),
+          attach_stacktrace: true,
+          ..Default::default()
+        },
+      ));
+      Some(g)
+    } else {
+      None
+    };
 
-  // Set up panic hook to handle WebView2 cleanup errors gracefully and report to Sentry
-  let default_panic = std::panic::take_hook();
-  std::panic::set_hook(Box::new(move |panic_info| {
-    let payload = panic_info.payload();
-    if let Some(s) = payload.downcast_ref::<&str>() {
-      // Ignore WebView2 window cleanup errors (don't report to Sentry)
-      if s.contains("Failed to unregister class") || s.contains("Chrome_WidgetWin") {
-        return;
+    // Set up panic hook to handle WebView2 cleanup errors gracefully and report to Sentry
+    let default_panic = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+      let payload = panic_info.payload();
+      if let Some(s) = payload.downcast_ref::<&str>() {
+        // Ignore WebView2 window cleanup errors (don't report to Sentry)
+        if s.contains("Failed to unregister class") || s.contains("Chrome_WidgetWin") {
+          return;
+        }
       }
-    }
 
-    // Report panic to Sentry
-    sentry::integrations::panic::panic_handler(panic_info);
+      // Report panic to Sentry
+      sentry::integrations::panic::panic_handler(panic_info);
 
-    // Also print the normal panic message
-    default_panic(panic_info);
-  }));
+      // Also print the normal panic message
+      default_panic(panic_info);
+    }));
+
+    guard
+  };
 
   let mut builder = tauri::Builder::default()
     .plugin(tauri_plugin_updater::Builder::new().build())
@@ -516,40 +530,72 @@ pub fn run() {
       handlers::version_history::get_diff,
       handlers::version_history::restore_version,
       handlers::version_history::cleanup_old_versions,
+      #[cfg(desktop)]
       sync::git_init,
+      #[cfg(desktop)]
       sync::git_add_remote,
+      #[cfg(desktop)]
       sync::git_commit,
+      #[cfg(desktop)]
       sync::git_push,
+      #[cfg(desktop)]
       sync::git_pull,
+      #[cfg(desktop)]
       sync::git_status,
+      #[cfg(desktop)]
       sync::detect_conflicts,
+      #[cfg(desktop)]
       sync::git_get_current_branch,
+      #[cfg(desktop)]
       sync::git_force_push,
+      #[cfg(desktop)]
       sync::git_force_pull,
       // Iroh sync commands
+      #[cfg(desktop)]
       sync::iroh_check_saved_document,
+      #[cfg(desktop)]
       sync::iroh_init_document,
+      #[cfg(desktop)]
       sync::iroh_join_document,
+      #[cfg(desktop)]
       sync::iroh_leave_document,
+      #[cfg(desktop)]
       sync::iroh_get_ticket,
+      #[cfg(desktop)]
       sync::iroh_sync_status,
+      #[cfg(desktop)]
       sync::iroh_list_peers,
+      #[cfg(desktop)]
       sync::iroh_manual_sync,
+      #[cfg(desktop)]
       sync::iroh_start_auto_sync,
+      #[cfg(desktop)]
       sync::iroh_stop_auto_sync,
+      #[cfg(desktop)]
       sync::iroh_notify_file_save,
+      #[cfg(desktop)]
       sync::iroh_force_sync_all,
+      #[cfg(desktop)]
       sync::iroh_get_sync_metrics,
-      // sync::iroh_reset_and_init_with_key,
+      #[cfg(desktop)]
       sync::iroh_get_version,
+      #[cfg(desktop)]
       sync::iroh_migrate_to_v2,
+      #[cfg(desktop)]
       sync::iroh_configure_sync,
+      #[cfg(desktop)]
       sync::iroh_get_metrics,
+      #[cfg(desktop)]
       credentials::store_git_credentials,
+      #[cfg(desktop)]
       credentials::retrieve_git_credentials,
+      #[cfg(desktop)]
       credentials::delete_git_credentials,
+      #[cfg(desktop)]
       credentials::store_iroh_keys,
+      #[cfg(desktop)]
       credentials::retrieve_iroh_keys,
+      #[cfg(desktop)]
       credentials::delete_iroh_keys,
       clipboard::clipboard_write_text,
       clipboard::clipboard_read_text,
@@ -609,47 +655,87 @@ pub fn run() {
       plugins::get_plugin_setting,
       plugins::read_plugin_file,
       plugins::get_plugin_manifest,
+      #[cfg(desktop)]
       mcp::mcp_start,
+      #[cfg(desktop)]
       mcp::mcp_stop,
+      #[cfg(desktop)]
       mcp::mcp_status,
+      #[cfg(desktop)]
       mcp::mcp_restart,
+      #[cfg(desktop)]
       mcp::mcp_health_check,
+      #[cfg(desktop)]
       auth::initiate_oauth_flow,
+      #[cfg(desktop)]
       auth::handle_oauth_callback,
+      #[cfg(desktop)]
       auth::is_authenticated,
+      #[cfg(desktop)]
       auth::get_auth_token,
+      #[cfg(desktop)]
       auth::get_user_profile,
+      #[cfg(desktop)]
       auth::refresh_auth_token,
+      #[cfg(desktop)]
       auth::logout,
       #[cfg(desktop)]
       auth::open_auth_url,
+      #[cfg(desktop)]
       connections::gmail_initiate_auth,
+      #[cfg(desktop)]
       connections::gmail_complete_auth,
+      #[cfg(desktop)]
       connections::gmail_check_auth_callback,
+      #[cfg(desktop)]
       connections::gmail_is_authenticated,
+      #[cfg(desktop)]
       connections::gmail_logout,
+      #[cfg(desktop)]
       connections::gmail_get_profile,
+      #[cfg(desktop)]
       connections::gmail_list_emails,
+      #[cfg(desktop)]
       connections::gmail_search_emails,
+      #[cfg(desktop)]
       connections::gmail_get_email,
+      #[cfg(desktop)]
       connections::gmail_send_email,
+      #[cfg(desktop)]
       connections::gmail_reply_email,
+      #[cfg(desktop)]
       connections::gmail_forward_email,
+      #[cfg(desktop)]
       connections::gmail_mark_as_read,
+      #[cfg(desktop)]
       connections::gmail_mark_as_unread,
+      #[cfg(desktop)]
       connections::gmail_star_emails,
+      #[cfg(desktop)]
       connections::gmail_unstar_emails,
+      #[cfg(desktop)]
       connections::gmail_archive_emails,
+      #[cfg(desktop)]
       connections::gmail_delete_emails,
+      #[cfg(desktop)]
       connections::gmail_get_labels,
+      #[cfg(desktop)]
       connections::gmail_get_queue_stats,
+      #[cfg(desktop)]
       connections::gmail_force_process_queue,
+      #[cfg(desktop)]
       connections::gmail_clear_queue,
+      #[cfg(desktop)]
       mcp_setup::setup_mcp_integration,
+      #[cfg(desktop)]
       mcp_setup::check_mcp_status,
+      #[cfg(desktop)]
       mcp_setup::restart_mcp_server,
+      #[cfg(desktop)]
       api_server::api_set_workspace,
+      #[cfg(desktop)]
       api_server::api_clear_workspace,
+      #[cfg(desktop)]
       api_server::api_get_current_workspace
     ])
     .setup(|app| {
@@ -669,104 +755,108 @@ pub fn run() {
         }
       }
 
-      // Initialize MCP Server Manager
-      let mcp_manager = mcp::MCPServerManager::new(app.handle().clone());
-      app.manage(mcp_manager.clone());
+      // Desktop-only initialization
+      #[cfg(desktop)]
+      {
+        // Initialize MCP Server Manager
+        let mcp_manager = mcp::MCPServerManager::new(app.handle().clone());
+        app.manage(mcp_manager.clone());
 
-      // Auto-start HTTP MCP server for CLI integration
-      let mcp_manager_clone = mcp_manager.clone();
-      tauri::async_runtime::spawn(async move {
-        // Small delay to ensure MCP setup completes first
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        // Auto-start HTTP MCP server for CLI integration
+        let mcp_manager_clone = mcp_manager.clone();
+        tauri::async_runtime::spawn(async move {
+          // Small delay to ensure MCP setup completes first
+          tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
-        match mcp_manager_clone.auto_start() {
-          Ok(_status) => {
+          match mcp_manager_clone.auto_start() {
+            Ok(_status) => {
+            }
+            Err(_e) => {
+            }
           }
-          Err(_e) => {
+        });
+
+        // Initialize auth state
+        let auth_state = auth::SharedAuthState::default();
+        app.manage(auth_state);
+
+        // Initialize Iroh sync provider (V1 or V2 based on configuration)
+        // Initialize Iroh provider synchronously (it will be initialized on first use)
+        let provider = sync::wrapper::IrohProviderWrapper::new(sync::wrapper::SyncProviderConfig::default());
+        let iroh_provider = tokio::sync::Mutex::new(provider);
+        app.manage(iroh_provider);
+
+        // Initialize OAuth Server
+        let oauth_server = oauth_server::OAuthServer::new();
+        app.manage(oauth_server.clone());
+
+        // Start OAuth server after the app is fully initialized
+        let oauth_server_clone = oauth_server.clone();
+        tauri::async_runtime::spawn(async move {
+          match oauth_server_clone.start().await {
+            Ok(_) => {},
+            Err(_e) => {
+            }
           }
-        }
-      });
+        });
 
-      // Initialize auth state
-      let auth_state = auth::SharedAuthState::default();
-      app.manage(auth_state);
+        // Initialize and start API server for MCP integration
+        // Create state readiness notifier to prevent race conditions
+        let api_state_ready = std::sync::Arc::new(tokio::sync::Notify::new());
 
-      // Initialize Iroh sync provider (V1 or V2 based on configuration)
-      // Initialize Iroh provider synchronously (it will be initialized on first use)
-      let provider = sync::wrapper::IrohProviderWrapper::new(sync::wrapper::SyncProviderConfig::default());
-      let iroh_provider = tokio::sync::Mutex::new(provider);
-      app.manage(iroh_provider);
-
-      // Initialize OAuth Server
-      let oauth_server = oauth_server::OAuthServer::new();
-      app.manage(oauth_server.clone());
-
-      // Start OAuth server after the app is fully initialized
-      let oauth_server_clone = oauth_server.clone();
-      tauri::async_runtime::spawn(async move {
-        match oauth_server_clone.start().await {
-          Ok(_) => {},
-          Err(_e) => {
-          }
-        }
-      });
-
-      // Initialize and start API server for MCP integration
-      // Create state readiness notifier to prevent race conditions
-      let api_state_ready = std::sync::Arc::new(tokio::sync::Notify::new());
-
-      let api_state = api_server::ApiState {
-        app_handle: app.handle().clone(),
-        current_workspace: std::sync::Arc::new(tokio::sync::RwLock::new(None)),
-      };
-
-      // Start API server task FIRST (so it can wait for notification)
-      let app_handle_for_api = app.handle().clone();
-      let api_ready_clone = api_state_ready.clone();
-      tauri::async_runtime::spawn(async move {
-        let config = api_server::ApiServerConfig {
-          state_ready: api_ready_clone,
-          max_retries: 5,
-          base_delay_ms: 100,
+        let api_state = api_server::ApiState {
+          app_handle: app.handle().clone(),
+          current_workspace: std::sync::Arc::new(tokio::sync::RwLock::new(None)),
         };
 
-        match api_server::start_api_server(app_handle_for_api, config).await {
-          Ok(port) => {
-            tracing::info!(port, "API server started successfully");
+        // Start API server task FIRST (so it can wait for notification)
+        let app_handle_for_api = app.handle().clone();
+        let api_ready_clone = api_state_ready.clone();
+        tauri::async_runtime::spawn(async move {
+          let config = api_server::ApiServerConfig {
+            state_ready: api_ready_clone,
+            max_retries: 5,
+            base_delay_ms: 100,
+          };
+
+          match api_server::start_api_server(app_handle_for_api, config).await {
+            Ok(port) => {
+              tracing::info!(port, "API server started successfully");
+            }
+            Err(e) => {
+              tracing::error!(error = %e, "Failed to start API server");
+              sentry::capture_message(
+                &format!("API server failed to start: {}", e),
+                sentry::Level::Error
+              );
+            }
           }
-          Err(e) => {
-            tracing::error!(error = %e, "Failed to start API server");
-            sentry::capture_message(
-              &format!("API server failed to start: {}", e),
-              sentry::Level::Error
-            );
+        });
+
+        // Small delay to ensure task is spawned and waiting
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        // THEN manage state and signal
+        app.manage(api_state.clone());
+        api_state_ready.notify_one();
+        tracing::debug!("ApiState registered and notified");
+
+        // Initialize Gmail Connection Manager - always manage even if initialization fails
+        match connections::ConnectionManager::new(app.handle().clone()) {
+          Ok(connection_manager) => {
+            app.manage(connection_manager);
+          }
+          Err(_e) => {
+            // Create a fallback connection manager to prevent "state not managed" errors
+            if let Ok(fallback_manager) = connections::ConnectionManager::new_fallback() {
+              app.manage(fallback_manager);
+            }
           }
         }
-      });
 
-      // Small delay to ensure task is spawned and waiting
-      std::thread::sleep(std::time::Duration::from_millis(10));
-
-      // THEN manage state and signal
-      app.manage(api_state.clone());
-      api_state_ready.notify_one();
-      tracing::debug!("ApiState registered and notified");
-
-      // Initialize Gmail Connection Manager - always manage even if initialization fails
-      match connections::ConnectionManager::new(app.handle().clone()) {
-        Ok(connection_manager) => {
-          app.manage(connection_manager);
-        }
-        Err(_e) => {
-          // Create a fallback connection manager to prevent "state not managed" errors
-          if let Ok(fallback_manager) = connections::ConnectionManager::new_fallback() {
-            app.manage(fallback_manager);
-          }
-        }
+        // Register deep link handler for auth callbacks
+        auth::register_deep_link_handler(&app.handle());
       }
-
-      // Register deep link handler for auth callbacks
-      auth::register_deep_link_handler(&app.handle());
 
       // Register generic deep link handler for plugin dev
       let app_handle_deep_link = app.handle().clone();
@@ -783,16 +873,19 @@ pub fn run() {
         }
       });
 
-      // Auto-setup MCP integration on first launch
-      let app_clone = app.handle().clone();
-      tauri::async_runtime::spawn(async move {
-        let setup = mcp_setup::MCPSetup::new(app_clone);
-        if !setup.is_setup_complete() {
-          if let Err(_e) = setup.setup().await {
+      // Auto-setup MCP integration on first launch (desktop only)
+      #[cfg(desktop)]
+      {
+        let app_clone = app.handle().clone();
+        tauri::async_runtime::spawn(async move {
+          let setup = mcp_setup::MCPSetup::new(app_clone);
+          if !setup.is_setup_complete() {
+            if let Err(_e) = setup.setup().await {
+            }
+          } else {
           }
-        } else {
-        }
-      });
+        });
+      }
 
       // Desktop-only window management
       #[cfg(desktop)]

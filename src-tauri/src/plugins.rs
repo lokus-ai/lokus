@@ -357,18 +357,24 @@ pub fn get_plugin_info(name: String) -> Result<PluginInfo, String> {
 #[tauri::command]
 pub async fn install_plugin(path: String) -> Result<String, String> {
     let plugins_dir = PathBuf::from(create_plugins_directory()?);
-    
-    // Check if it's a URL
+
+    // Check if it's a URL (desktop only - requires reqwest)
+    #[cfg(desktop)]
     if path.starts_with("http://") || path.starts_with("https://") {
         return install_plugin_from_url(&path, &plugins_dir).await;
     }
 
+    #[cfg(not(desktop))]
+    if path.starts_with("http://") || path.starts_with("https://") {
+        return Err("Installing plugins from URLs is not supported on mobile".to_string());
+    }
+
     let source_path = PathBuf::from(&path);
-    
+
     if !source_path.exists() {
         return Err("Source plugin path does not exist".to_string());
     }
-    
+
     // If it's a file, assume it's a zip archive
     if source_path.is_file() {
         install_plugin_from_zip(&source_path, &plugins_dir).await
@@ -379,28 +385,29 @@ pub async fn install_plugin(path: String) -> Result<String, String> {
     }
 }
 
-async fn install_plugin_from_url(url: &str, plugins_dir: &Path) -> Result<String, String> {
+#[cfg(desktop)]
+async fn install_plugin_from_url(url: &str, plugins_dir: &std::path::Path) -> Result<String, String> {
     // Download the file
     let response = reqwest::get(url)
         .await
         .map_err(|e| format!("Failed to download plugin: {}", e))?;
-    
+
     if !response.status().is_success() {
         return Err(format!("Failed to download plugin: HTTP {}", response.status()));
     }
-    
+
     let content = response.bytes()
         .await
         .map_err(|e| format!("Failed to read download content: {}", e))?;
-    
+
     // Save to temporary file
     let temp_dir = tempfile::tempdir()
         .map_err(|e| format!("Failed to create temporary directory: {}", e))?;
     let temp_path = temp_dir.path().join("plugin.zip");
-    
+
     fs::write(&temp_path, content)
         .map_err(|e| format!("Failed to write temporary file: {}", e))?;
-    
+
     // Install from the downloaded zip
     install_plugin_from_zip(&temp_path, plugins_dir).await
 }

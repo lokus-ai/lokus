@@ -1,7 +1,7 @@
 {
-  "identifier": "default",
-  "description": "Permissions for desktop application functionality",
-  "platforms": ["macOS", "windows", "linux"],
+  "identifier": "mobile",
+  "description": "Permissions for mobile application functionality",
+  "platforms": ["iOS", "android"],
   "windows": [
     "*"
   ],
@@ -11,11 +11,7 @@
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:event:allow-emit",
-    "core:window:allow-start-dragging",
-    "core:window:allow-internal-toggle-maximize",
     "core:window:default",
-    "global-shortcut:allow-register",
-    "global-shortcut:allow-unregister-all",
     "dialog:allow-save",
     "dialog:allow-open",
     "dialog:allow-confirm",
