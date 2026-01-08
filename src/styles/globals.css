@@ -1979,3 +1979,52 @@ div:focus-visible,
 .animate-slide-in-right {
   animation: slide-in-right 0.3s ease-out;
 }
+
+/* ========== iOS Safe Area Support ========== */
+
+/* Ensure html and body extend to full viewport including safe areas */
+html, body {
+  background-color: rgb(var(--bg));
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+}
+
+/* Safe area padding utilities */
+.safe-area-inset {
+  padding-top: env(safe-area-inset-top);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+}
+
+.safe-area-inset-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-area-inset-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* For fixed elements that need safe area consideration */
+.safe-area-top {
+  top: env(safe-area-inset-top);
+}
+
+.safe-area-bottom {
+  bottom: env(safe-area-inset-bottom);
+}
+
+/* iOS status bar background - matches app theme */
+@supports (padding-top: env(safe-area-inset-top)) {
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: env(safe-area-inset-top);
+    background-color: rgb(var(--bg));
+    z-index: 9999;
+    pointer-events: none;
+  }
+}
