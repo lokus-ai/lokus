@@ -1,13 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
+import { toast } from 'sonner';
+import { showEnhancedToast } from './ui/enhanced-toast';
 import { readConfig } from '../core/config/store.js';
 import { getAppVersion } from '../utils/appInfo.js';
-import { X, Download, RefreshCw } from 'lucide-react';
 
 // Update endpoints
-const STABLE_ENDPOINT = 'https://config.lokusmd.com/api/updates/latest.json';
 const BETA_ENDPOINT = 'https://config.lokusmd.com/api/updates/beta.json';
+
+const SNOOZE_STORAGE_KEY = 'lokus_update_snoozed';
+const SNOOZE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // Simple semver comparison (handles x.y.z and x.y.z-beta.n formats)
 // Returns: positive if v1 > v2, negative if v1 < v2, 0 if equal
@@ -43,16 +46,52 @@ function compareVersions(v1, v2) {
 // Track if we've already shown the update notification this session
 let hasShownUpdateThisSession = false;
 
+// For testing: reset the session flag
+export function _resetSessionFlag() {
+  hasShownUpdateThisSession = false;
+}
+
+/**
+ * Check if update notification is snoozed for a specific version
+ */
+const isUpdateSnoozed = (version) => {
+  try {
+    const snoozed = JSON.parse(localStorage.getItem(SNOOZE_STORAGE_KEY) || '{}');
+    if (snoozed.version === version && snoozed.until) {
+      const snoozedUntil = new Date(snoozed.until);
+      if (snoozedUntil > new Date()) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Snooze update notification for a specific version for 24 hours
+ */
+const snoozeUpdate = (version) => {
+  const until = new Date(Date.now() + SNOOZE_DURATION_MS);
+  localStorage.setItem(SNOOZE_STORAGE_KEY, JSON.stringify({
+    version,
+    until: until.toISOString(),
+  }));
+};
+
+/**
+ * Clear snooze (e.g., when a new version is available)
+ */
+const clearSnooze = () => {
+  localStorage.removeItem(SNOOZE_STORAGE_KEY);
+};
+
 export default function UpdateChecker() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [downloading, setDownloading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [totalBytes, setTotalBytes] = useState(0);
-  const [downloadedBytes, setDownloadedBytes] = useState(0);
-  const [error, setError] = useState(null);
-  const [showToast, setShowToast] = useState(false);
-  const [isBetaUpdate, setIsBetaUpdate] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const downloadToastId = useRef(null);
 
   const checkForUpdate = async () => {
     // Don't show again if already shown this session or dismissed
@@ -61,8 +100,6 @@ export default function UpdateChecker() {
     }
 
     try {
-      setError(null);
-
       // Get current version first for comparison
       const currentVersion = await getAppVersion();
 
@@ -79,9 +116,15 @@ export default function UpdateChecker() {
 
         // Only show if remote version is actually newer
         if (comparison > 0) {
+          // Check if this version is snoozed
+          if (isUpdateSnoozed(update.version)) {
+            console.log(`[UpdateChecker] Update v${update.version} is snoozed, skipping notification`);
+            return update;
+          }
+
+          const isBeta = update.version.includes('beta') || update.version.includes('alpha');
           setUpdateInfo(update);
-          setIsBetaUpdate(update.version.includes('beta') || update.version.includes('alpha'));
-          setShowToast(true);
+          showUpdateAvailableToast(update, isBeta);
           hasShownUpdateThisSession = true;
           return update;
         }
@@ -95,16 +138,20 @@ export default function UpdateChecker() {
             const betaManifest = await response.json();
 
             if (betaManifest.version && compareVersions(betaManifest.version, currentVersion) > 0) {
-              // For beta, we still use Tauri updater but from beta endpoint
-              // Re-check with the standard updater since we can't easily switch endpoints
-              setUpdateInfo({
+              // Check if this version is snoozed
+              if (isUpdateSnoozed(betaManifest.version)) {
+                console.log(`[UpdateChecker] Update v${betaManifest.version} is snoozed, skipping notification`);
+                return { available: true, version: betaManifest.version };
+              }
+
+              const betaUpdate = {
                 version: betaManifest.version,
                 body: betaManifest.notes,
                 available: true,
                 _isBetaManifest: true
-              });
-              setIsBetaUpdate(true);
-              setShowToast(true);
+              };
+              setUpdateInfo(betaUpdate);
+              showUpdateAvailableToast(betaUpdate, true);
               hasShownUpdateThisSession = true;
               return { available: true, version: betaManifest.version };
             }
@@ -130,52 +177,101 @@ export default function UpdateChecker() {
     }
   };
 
-  const downloadAndInstall = async () => {
-    if (!updateInfo || !updateInfo.downloadAndInstall) {
-      setError('Update not available for automatic installation');
+  const showUpdateAvailableToast = (update, isBeta = false) => {
+    const betaNote = isBeta ? '\n\n⚠️ Beta releases may contain bugs.' : '';
+
+    showEnhancedToast({
+      id: 'update-available',
+      title: `Update Available: v${update.version}`,
+      message: 'A new version of Lokus is ready to install' + (isBeta ? ' (Beta)' : ''),
+      variant: 'update',
+      expandedContent: (update.body || 'This update includes bug fixes and improvements.') + betaNote,
+      persistent: true,
+      dismissible: true,
+      action: {
+        label: 'Update Now',
+        onClick: () => downloadAndInstall(update),
+      },
+      cancel: {
+        label: 'Later',
+        onClick: () => {
+          // Snooze for 24 hours
+          snoozeUpdate(update.version);
+          toast.dismiss('update-available');
+        },
+      },
+    });
+  };
+
+  const downloadAndInstall = async (update) => {
+    const updateData = update || updateInfo;
+    if (!updateData || !updateData.downloadAndInstall) {
+      toast.error('Update not available', {
+        description: 'Automatic installation is not available for this update.',
+      });
       return;
     }
 
     try {
       setDownloading(true);
-      setError(null);
-      setDownloadProgress(0);
-      setDownloadedBytes(0);
+      toast.dismiss('update-available');
+      // Clear snooze since user is updating
+      clearSnooze();
 
-      await updateInfo.downloadAndInstall((event) => {
+      // Show downloading toast with progress
+      downloadToastId.current = toast.loading('Downloading update...', {
+        id: 'update-download',
+        description: 'Starting download...',
+      });
+
+      let totalBytes = 0;
+      let downloadedBytes = 0;
+
+      await updateData.downloadAndInstall((event) => {
         switch (event.event) {
           case 'Started':
-            setTotalBytes(event.data.contentLength || 0);
-            setDownloadProgress(0);
-            break;
-          case 'Progress':
-            setDownloadedBytes(prev => {
-              const newTotal = prev + (event.data.chunkLength || 0);
-              if (totalBytes > 0) {
-                setDownloadProgress(Math.round((newTotal / totalBytes) * 100));
-              }
-              return newTotal;
+            totalBytes = event.data.contentLength || 0;
+            toast.loading('Downloading update...', {
+              id: 'update-download',
+              description: '0% complete',
             });
             break;
+          case 'Progress':
+            downloadedBytes += event.data.chunkLength || 0;
+            if (totalBytes > 0) {
+              const progress = Math.round((downloadedBytes / totalBytes) * 100);
+              toast.loading('Downloading update...', {
+                id: 'update-download',
+                description: `${progress}% complete`,
+              });
+            }
+            break;
           case 'Finished':
-            setDownloadProgress(100);
+            toast.loading('Installing update...', {
+              id: 'update-download',
+              description: 'Preparing to restart...',
+            });
             break;
         }
       });
 
-      // Small delay before relaunch for user to see 100%
-      setTimeout(() => {
-        relaunch();
-      }, 500);
+      toast.success('Update installed!', {
+        id: 'update-download',
+        description: 'Restarting Lokus...',
+      });
+
+      // Small delay to show success message before relaunch
+      setTimeout(async () => {
+        await relaunch();
+      }, 1000);
+
     } catch (err) {
-      setError(err.message || 'Download failed');
+      toast.error('Update Failed', {
+        id: 'update-download',
+        description: err.message,
+      });
       setDownloading(false);
     }
-  };
-
-  const handleDismiss = () => {
-    setShowToast(false);
-    setDismissed(true);
   };
 
   useEffect(() => {
@@ -187,84 +283,6 @@ export default function UpdateChecker() {
     return () => window.removeEventListener('check-for-update', handleCheckUpdate);
   }, [dismissed]);
 
-  if (!showToast) return null;
-
-  // Toast notification in bottom-right corner
-  return (
-    <div className="fixed bottom-4 right-4 z-[9999] max-w-sm animate-in slide-in-from-bottom-4 fade-in duration-300">
-      <div className="bg-app-panel border border-app-border rounded-lg shadow-lg overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-app-border">
-          <div className="flex items-center gap-2">
-            <Download className="w-4 h-4 text-app-accent" />
-            <span className="font-medium text-sm">Update Available</span>
-            {isBetaUpdate && (
-              <span className="px-1.5 py-0.5 text-[10px] font-medium bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 rounded">
-                BETA
-              </span>
-            )}
-          </div>
-          {!downloading && (
-            <button
-              onClick={handleDismiss}
-              className="text-app-muted hover:text-app-text transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Content */}
-        <div className="px-4 py-3">
-          {error ? (
-            <p className="text-sm text-red-500">{error}</p>
-          ) : downloading ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs text-app-muted">
-                <span>Downloading...</span>
-                <span>{downloadProgress}%</span>
-              </div>
-              <div className="w-full bg-app-border rounded-full h-1.5">
-                <div
-                  className="bg-app-accent h-1.5 rounded-full transition-all duration-300"
-                  style={{ width: `${downloadProgress}%` }}
-                />
-              </div>
-              {downloadProgress === 100 && (
-                <p className="text-xs text-app-muted flex items-center gap-1">
-                  <RefreshCw className="w-3 h-3 animate-spin" />
-                  Installing and restarting...
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-sm text-app-text">
-                Version <span className="font-semibold">{updateInfo?.version}</span> is ready
-              </p>
-              {isBetaUpdate && (
-                <p className="text-xs text-yellow-600 dark:text-yellow-400">
-                  Beta releases may contain bugs.
-                </p>
-              )}
-              <div className="flex gap-2">
-                <button
-                  onClick={handleDismiss}
-                  className="flex-1 px-3 py-1.5 text-sm text-app-muted hover:text-app-text hover:bg-app-hover rounded transition-colors"
-                >
-                  Later
-                </button>
-                <button
-                  onClick={downloadAndInstall}
-                  className="flex-1 px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg rounded hover:opacity-90 transition-opacity"
-                >
-                  Update
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  // This component no longer renders a modal - it uses toasts instead
+  return null;
 }

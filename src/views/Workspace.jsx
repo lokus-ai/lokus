@@ -75,7 +75,11 @@ import TagManagementModal from "../components/TagManagementModal.jsx";
 import ProductTour from "../components/ProductTour.jsx";
 import ExternalDropZone from "../components/ExternalDropZone.jsx";
 import { AnimatePresence, motion } from "framer-motion";
-import { useToast } from "../components/Toast.jsx";
+import { toast, demoAllToasts } from "../components/ui/enhanced-toast";
+// Expose demo function to window for console access
+if (typeof window !== 'undefined') {
+  window.demoToasts = demoAllToasts;
+}
 import { useDropPosition } from "../hooks/useDropPosition.js";
 import { useAutoExpand } from "../hooks/useAutoExpand.js";
 import DropIndicator from "../components/FileTree/DropIndicator.jsx";
@@ -1087,7 +1091,6 @@ function EditorDropZone({ children }) {
 
 // --- Inner Workspace Component (with folder scope) ---
 function WorkspaceWithScope({ path }) {
-  const toast = useToast();
   const { theme: currentTheme } = useTheme();
   const { filterFileTree, scopeMode, scopedFolders } = useFolderScope();
   const { activeBase } = useBases();

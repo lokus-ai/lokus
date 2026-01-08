@@ -1,80 +1,132 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useRemoteConfig } from '../hooks/useRemoteConfig';
-import { useToast } from '../hooks/use-toast';
-import { ToastAction } from './ui/toast';
+import { showEnhancedToast, toast } from './ui/enhanced-toast';
+
+const DISMISSED_STORAGE_KEY = 'lokus_dismissed_announcements';
+
+/**
+ * Get dismissed announcement IDs from localStorage
+ */
+const getDismissedIds = () => {
+    try {
+        return JSON.parse(localStorage.getItem(DISMISSED_STORAGE_KEY) || '[]');
+    } catch {
+        return [];
+    }
+};
+
+/**
+ * Save dismissed announcement ID to localStorage
+ */
+const saveDismissedId = (id) => {
+    const currentDismissed = getDismissedIds();
+    if (!currentDismissed.includes(id)) {
+        localStorage.setItem(DISMISSED_STORAGE_KEY, JSON.stringify([...currentDismissed, id]));
+    }
+};
+
+/**
+ * Check if announcement is within valid date range
+ */
+const isWithinDateRange = (startDate, endDate, expiresAt) => {
+    const now = new Date();
+
+    if (startDate && new Date(startDate) > now) {
+        return false;
+    }
+    if (endDate && new Date(endDate) < now) {
+        return false;
+    }
+    if (expiresAt && new Date(expiresAt) < now) {
+        return false;
+    }
+    return true;
+};
 
 export const RemoteAnnouncement = () => {
     const { config, loading } = useRemoteConfig();
-    const { toast } = useToast();
 
     useEffect(() => {
         if (loading || !config?.announcement) return;
 
-        const { id, title, message, action_label, action_url, start_date, end_date } = config.announcement;
+        const {
+            // Core fields
+            id,
+            title,
+            message,
+            // Enhanced fields
+            type = 'info',
+            variant = 'default',
+            expandedContent,
+            link,
+            // Behavior
+            dismissible = true,
+            persistent = false,
+            showOnce = true,
+            duration = 10000,
+            // Date controls
+            start_date,
+            end_date,
+            expiresAt,
+            // Legacy fields (backwards compatible)
+            action_label,
+            action_url,
+            // Actions
+            action,
+            cancel,
+        } = config.announcement;
+
+        // 0. Guard: Don't show toast if there's no meaningful content
+        if (!id || (!title && !message)) {
+            return;
+        }
 
         // 1. Check Date Range (Seasonality)
-        const now = new Date();
-        if (start_date && new Date(start_date) > now) {
-            return;
-        }
-        if (end_date && new Date(end_date) < now) {
+        if (!isWithinDateRange(start_date, end_date, expiresAt)) {
             return;
         }
 
-        // 2. Check if dismissed (Frequency: Once)
-        const dismissedIds = JSON.parse(localStorage.getItem('lokus_dismissed_announcements') || '[]');
-        if (dismissedIds.includes(id)) {
-            return;
+        // 2. Check if dismissed (showOnce)
+        if (showOnce) {
+            const dismissedIds = getDismissedIds();
+            if (dismissedIds.includes(id)) {
+                return;
+            }
         }
 
-        // 3. Show Toast
-        toast({
-            title: title,
-            description: message,
-            action: action_label && action_url ? (
-                <ToastAction altText={action_label} onClick={(e) => {
-                    e.preventDefault(); // Prevent default toast behavior if any
+        // 3. Build link object from legacy or new format
+        const linkObj = link || (action_label && action_url ? {
+            url: action_url,
+            text: action_label,
+            external: true,
+        } : null);
 
-                    const openLink = async () => {
-                        try {
-                            // Ask for confirmation
-                            if (window.__TAURI__) {
-                                const { confirm } = await import('@tauri-apps/plugin-dialog');
-                                const confirmed = await confirm('Do you want to open this link in your external browser?', { title: 'Open Link', kind: 'info' });
-                                if (!confirmed) return;
+        // 4. Handle dismissal callback
+        const handleDismiss = () => {
+            if (id) {
+                saveDismissedId(id);
+            }
+        };
 
-                                const { open } = await import('@tauri-apps/plugin-shell');
-                                await open(action_url);
-                            } else {
-                                // Fallback for web/dev
-                                if (window.confirm('Open external link?')) {
-                                    window.open(action_url, '_blank', 'noopener,noreferrer');
-                                }
-                            }
-                        } catch (err) {
-                            // Ultimate fallback
-                            window.open(action_url, '_blank');
-                        }
-                    };
-
-                    openLink();
-                }}>
-                    {action_label}
-                </ToastAction>
-            ) : undefined,
-            onOpenChange: (open) => {
-                // When toast is dismissed (closed), save ID to localStorage
-                if (!open) {
-                    const currentDismissed = JSON.parse(localStorage.getItem('lokus_dismissed_announcements') || '[]');
-                    if (!currentDismissed.includes(id)) {
-                        localStorage.setItem('lokus_dismissed_announcements', JSON.stringify([...currentDismissed, id]));
-                    }
-                }
-            },
-            duration: 10000, // Show for 10 seconds
+        // 5. Show the toast
+        showEnhancedToast({
+            id,
+            title,
+            message,
+            type,
+            variant,
+            expandedContent,
+            link: linkObj,
+            dismissible,
+            persistent,
+            duration: persistent ? Infinity : duration,
+            action,
+            cancel,
+            onDismiss: handleDismiss,
+            onAutoClose: handleDismiss,
         });
 
-    }, [config, loading, toast]);
+    }, [config, loading]);
 
-    return null; // This component doesn't render anything itself, it just triggers the toast
+    return null; // This component doesn't render anything itself
 };
