@@ -67,10 +67,12 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
       } else {
         setCurrentMatch(0)
       }
-    } catch (error) {
+    } catch (err) {
       setMatches([])
       setTotalMatches(0)
       setCurrentMatch(0)
+      console.log("Failed due to Error:",err)
+      throw err
     }
   }, [editor, query, caseSensitive, wholeWord, useRegex])
 
@@ -86,7 +88,10 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
       const tr = editor.state.tr.setSelection(selection)
       editor.view.dispatch(tr)
       editor.commands.scrollIntoView()
-    } catch { }
+    } catch(err) { 
+      console.log("Failed due to Error:",err)
+      throw err
+    }
   }, [editor, matches])
 
   // Navigate to next match
@@ -118,7 +123,11 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
       
       // Re-search after replacing
       setTimeout(() => performSearch(), 100)
-    } catch { }
+    } catch(err){
+      console.log("Failed due to Error:",err)
+      throw err
+
+     }
   }, [editor, matches, currentMatch, replaceQuery, performSearch])
 
   // Replace all matches
@@ -138,7 +147,10 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
       
       // Re-search after replacing
       setTimeout(() => performSearch(), 100)
-    } catch { }
+    } catch(err) { 
+      console.log("Failed due to Error:",err)
+      throw err
+    }
   }, [editor, matches, replaceQuery, performSearch])
 
   // Handle keyboard shortcuts
