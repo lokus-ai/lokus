@@ -1,5 +1,3 @@
-#![cfg_attr(mobile, tauri::mobile_entry_point)]
-
 mod window_manager;
 mod menu;
 mod theme;
@@ -366,6 +364,7 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   // Load environment variables from .env file if it exists
   // Use proper path resolution instead of hardcoded relative path
