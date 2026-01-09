@@ -1,185 +1,212 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { Search, X, ChevronUp, ChevronDown, Replace, ToggleLeft } from 'lucide-react'
-import { TextSelection } from '@tiptap/pm/state'
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import {
+  Search,
+  X,
+  ChevronUp,
+  ChevronDown,
+  Replace,
+  ToggleLeft,
+} from "lucide-react";
+import { TextSelection } from "@tiptap/pm/state";
+import { toast } from "sonner";
 
 export default function InFileSearch({ editor, isVisible, onClose }) {
-  const [query, setQuery] = useState('')
-  const [replaceQuery, setReplaceQuery] = useState('')
-  const [matches, setMatches] = useState([])
-  const [currentMatch, setCurrentMatch] = useState(0)
-  const [totalMatches, setTotalMatches] = useState(0)
-  const [showReplace, setShowReplace] = useState(false)
-  const [caseSensitive, setCaseSensitive] = useState(false)
-  const [wholeWord, setWholeWord] = useState(false)
-  const [useRegex, setUseRegex] = useState(false)
-  
-  const searchInputRef = useRef(null)
-  const replaceInputRef = useRef(null)
+  const [query, setQuery] = useState("");
+  const [replaceQuery, setReplaceQuery] = useState("");
+  const [matches, setMatches] = useState([]);
+  const [currentMatch, setCurrentMatch] = useState(0);
+  const [totalMatches, setTotalMatches] = useState(0);
+  const [showReplace, setShowReplace] = useState(false);
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [wholeWord, setWholeWord] = useState(false);
+  const [useRegex, setUseRegex] = useState(false);
+
+  const searchInputRef = useRef(null);
+  const replaceInputRef = useRef(null);
 
   // Focus search input when panel becomes visible
   useEffect(() => {
     if (isVisible && searchInputRef.current) {
-      searchInputRef.current.focus()
+      searchInputRef.current.focus();
     }
-  }, [isVisible])
+  }, [isVisible]);
 
   // Perform search
   const performSearch = useCallback(() => {
     if (!editor || !query.trim()) {
-      setMatches([])
-      setTotalMatches(0)
-      setCurrentMatch(0)
-      return
+      setMatches([]);
+      setTotalMatches(0);
+      setCurrentMatch(0);
+      return;
     }
 
     try {
-      const content = editor.state.doc.textContent
-      let flags = 'g'
-      if (!caseSensitive) flags += 'i'
-      
-      let pattern = query
+      const content = editor.state.doc.textContent;
+      let flags = "g";
+      if (!caseSensitive) flags += "i";
+
+      let pattern = query;
       if (!useRegex) {
-        pattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
+        pattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // Escape special regex chars
       }
       if (wholeWord) {
-        pattern = `\\b${pattern}\\b`
+        pattern = `\\b${pattern}\\b`;
       }
 
-      const regex = new RegExp(pattern, flags)
-      const foundMatches = []
-      let match
+      const regex = new RegExp(pattern, flags);
+      const foundMatches = [];
+      let match;
 
       while ((match = regex.exec(content)) !== null) {
-        const from = match.index
-        const to = match.index + match[0].length
-        foundMatches.push({ from, to, text: match[0] })
-        
+        const from = match.index;
+        const to = match.index + match[0].length;
+        foundMatches.push({ from, to, text: match[0] });
+
         // Prevent infinite loop with zero-length matches
-        if (match[0].length === 0) break
+        if (match[0].length === 0) break;
       }
 
-      setMatches(foundMatches)
-      setTotalMatches(foundMatches.length)
-      
+      setMatches(foundMatches);
+      setTotalMatches(foundMatches.length);
+
       if (foundMatches.length > 0) {
-        setCurrentMatch(0)
-        jumpToMatch(0, foundMatches)
+        setCurrentMatch(0);
+        jumpToMatch(0, foundMatches);
       } else {
-        setCurrentMatch(0)
+        setCurrentMatch(0);
       }
-    } catch (err) {
-      setMatches([])
-      setTotalMatches(0)
-      setCurrentMatch(0)
-      console.log("Failed due to Error:",err)
-      throw err
+    } catch (error) {
+      console.error("Failed to search: ", error);
+      toast.error(`Failed to search: ${error.message || "Unknown error"}`);
+      setMatches([]);
+      setTotalMatches(0);
+      setCurrentMatch(0);
     }
-  }, [editor, query, caseSensitive, wholeWord, useRegex])
+  }, [editor, query, caseSensitive, wholeWord, useRegex]);
 
   // Jump to a specific match
-  const jumpToMatch = useCallback((matchIndex, matchList = matches) => {
-    if (!editor || !matchList.length) return
+  const jumpToMatch = useCallback(
+    (matchIndex, matchList = matches) => {
+      if (!editor || !matchList.length) return;
 
-    const match = matchList[matchIndex]
-    if (!match) return
+      const match = matchList[matchIndex];
+      if (!match) return;
 
-    try {
-      const selection = TextSelection.create(editor.state.doc, match.from, match.to)
-      const tr = editor.state.tr.setSelection(selection)
-      editor.view.dispatch(tr)
-      editor.commands.scrollIntoView()
-    } catch(err) { 
-      console.log("Failed due to Error:",err)
-      throw err
-    }
-  }, [editor, matches])
+      try {
+        const selection = TextSelection.create(
+          editor.state.doc,
+          match.from,
+          match.to
+        );
+        const tr = editor.state.tr.setSelection(selection);
+        editor.view.dispatch(tr);
+        editor.commands.scrollIntoView();
+      } catch (error) {
+        console.error("Failed to jump a specific match:", error);
+        toast.error(
+          `Could not jump to a specific match: ${error.message || "Unknown error"}`
+        );
+      }
+    },
+    [editor, matches]
+  );
 
   // Navigate to next match
   const nextMatch = useCallback(() => {
-    if (totalMatches === 0) return
-    const next = (currentMatch + 1) % totalMatches
-    setCurrentMatch(next)
-    jumpToMatch(next)
-  }, [currentMatch, totalMatches, jumpToMatch])
+    if (totalMatches === 0) return;
+    const next = (currentMatch + 1) % totalMatches;
+    setCurrentMatch(next);
+    jumpToMatch(next);
+  }, [currentMatch, totalMatches, jumpToMatch]);
 
   // Navigate to previous match
   const prevMatch = useCallback(() => {
-    if (totalMatches === 0) return
-    const prev = currentMatch === 0 ? totalMatches - 1 : currentMatch - 1
-    setCurrentMatch(prev)
-    jumpToMatch(prev)
-  }, [currentMatch, totalMatches, jumpToMatch])
+    if (totalMatches === 0) return;
+    const prev = currentMatch === 0 ? totalMatches - 1 : currentMatch - 1;
+    setCurrentMatch(prev);
+    jumpToMatch(prev);
+  }, [currentMatch, totalMatches, jumpToMatch]);
 
   // Replace current match
   const replace = useCallback(() => {
-    if (!editor || !matches.length || !replaceQuery) return
+    if (!editor || !matches.length || !replaceQuery) return;
 
-    const match = matches[currentMatch]
-    if (!match) return
+    const match = matches[currentMatch];
+    if (!match) return;
 
     try {
-      const tr = editor.state.tr.replaceWith(match.from, match.to, editor.schema.text(replaceQuery))
-      editor.view.dispatch(tr)
-      
+      const tr = editor.state.tr.replaceWith(
+        match.from,
+        match.to,
+        editor.schema.text(replaceQuery)
+      );
+      editor.view.dispatch(tr);
+      toast.success(`Replaced: "${match.text}" → "${replaceQuery}"`);
       // Re-search after replacing
-      setTimeout(() => performSearch(), 100)
-    } catch(err){
-      console.log("Failed due to Error:",err)
-      throw err
-
-     }
-  }, [editor, matches, currentMatch, replaceQuery, performSearch])
+      setTimeout(() => performSearch(), 100);
+    } catch (error) {
+      console.error("Replace failed:", error);
+      toast.error(`Failed to replace: ${error.message || "Unknown error"}`);
+    }
+  }, [editor, matches, currentMatch, replaceQuery, performSearch]);
 
   // Replace all matches
   const replaceAll = useCallback(() => {
-    if (!editor || !matches.length || !replaceQuery) return
+    if (!editor || !matches.length || !replaceQuery) return;
 
     try {
-      let tr = editor.state.tr
+      let tr = editor.state.tr;
       // Replace from end to start to maintain positions
-      const reversedMatches = [...matches].reverse()
-      
+      const reversedMatches = [...matches].reverse();
+
       for (const match of reversedMatches) {
-        tr = tr.replaceWith(match.from, match.to, editor.schema.text(replaceQuery))
+        tr = tr.replaceWith(
+          match.from,
+          match.to,
+          editor.schema.text(replaceQuery)
+        );
       }
-      
-      editor.view.dispatch(tr)
-      
+
+      editor.view.dispatch(tr);
+      toast.success(`Replaced all ${matches.length} matches`);
       // Re-search after replacing
-      setTimeout(() => performSearch(), 100)
-    } catch(err) { 
-      console.log("Failed due to Error:",err)
-      throw err
+      setTimeout(() => performSearch(), 100);
+    } catch (error) {
+      console.error("Replace all failed:", error);
+      toast.error(`Failed to replace all: ${error.message || "Unknown error"}`);
     }
-  }, [editor, matches, replaceQuery, performSearch])
+  }, [editor, matches, replaceQuery, performSearch]);
 
   // Handle keyboard shortcuts
-  const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Escape') {
-      onClose()
-    } else if (e.key === 'Enter') {
-      if (e.shiftKey) {
-        prevMatch()
-      } else {
-        nextMatch()
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (e.key === "Escape") {
+        onClose();
+      } else if (e.key === "Enter") {
+        if (e.shiftKey) {
+          prevMatch();
+        } else {
+          nextMatch();
+        }
+      } else if (e.key === "F3") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          prevMatch();
+        } else {
+          nextMatch();
+        }
       }
-    } else if (e.key === 'F3') {
-      e.preventDefault()
-      if (e.shiftKey) {
-        prevMatch()
-      } else {
-        nextMatch()
-      }
-    }
-  }, [onClose, nextMatch, prevMatch])
+    },
+    [onClose, nextMatch, prevMatch]
+  );
 
   // Debounced search
   useEffect(() => {
-    const timeoutId = setTimeout(performSearch, 300)
-    return () => clearTimeout(timeoutId)
-  }, [performSearch])
+    const timeoutId = setTimeout(performSearch, 300);
+    return () => clearTimeout(timeoutId);
+  }, [performSearch]);
 
-  if (!isVisible) return null
+  if (!isVisible) return null;
 
   return (
     <div className="fixed top-0 right-0 z-50 bg-app-bg border border-app-border shadow-lg p-3 min-w-80">
@@ -198,14 +225,16 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
               className="w-full pl-8 pr-3 py-1.5 text-sm bg-app-bg border border-app-border rounded focus:outline-none focus:ring-1 focus:ring-app-primary"
             />
           </div>
-          
+
           {/* Match counter */}
           {query.trim() && (
             <span className="text-xs text-app-muted whitespace-nowrap">
-              {totalMatches > 0 ? `${currentMatch + 1} of ${totalMatches}` : 'No matches'}
+              {totalMatches > 0
+                ? `${currentMatch + 1} of ${totalMatches}`
+                : "No matches"}
             </span>
           )}
-          
+
           {/* Navigation buttons */}
           <button
             onClick={prevMatch}
@@ -215,7 +244,7 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
           >
             <ChevronUp className="w-4 h-4" />
           </button>
-          
+
           <button
             onClick={nextMatch}
             disabled={totalMatches === 0}
@@ -224,16 +253,16 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
           >
             <ChevronDown className="w-4 h-4" />
           </button>
-          
+
           {/* Toggle replace button */}
           <button
             onClick={() => setShowReplace(!showReplace)}
             title="Toggle replace (Ctrl+H)"
-            className={`p-1 rounded hover:bg-app-hover ${showReplace ? 'bg-app-hover' : ''}`}
+            className={`p-1 rounded hover:bg-app-hover ${showReplace ? "bg-app-hover" : ""}`}
           >
             <Replace className="w-4 h-4" />
           </button>
-          
+
           {/* Close button */}
           <button
             onClick={onClose}
@@ -259,7 +288,7 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
                 className="w-full pl-8 pr-3 py-1.5 text-sm bg-app-bg border border-app-border rounded focus:outline-none focus:ring-1 focus:ring-app-primary"
               />
             </div>
-            
+
             <button
               onClick={replace}
               disabled={totalMatches === 0 || !replaceQuery}
@@ -268,7 +297,7 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
             >
               Replace
             </button>
-            
+
             <button
               onClick={replaceAll}
               disabled={totalMatches === 0 || !replaceQuery}
@@ -291,7 +320,7 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
             />
             <span title="Match case">Aa</span>
           </label>
-          
+
           <label className="flex items-center gap-1 cursor-pointer hover:text-app-primary">
             <input
               type="checkbox"
@@ -301,7 +330,7 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
             />
             <span title="Whole word">ab</span>
           </label>
-          
+
           <label className="flex items-center gap-1 cursor-pointer hover:text-app-primary">
             <input
               type="checkbox"
@@ -319,5 +348,5 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
         )}
       </div>
     </div>
-  )
+  );
 }
