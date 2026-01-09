@@ -1,6 +1,7 @@
 // Tauri 2.0 mobile entry point configuration
 
 mod window_manager;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod menu;
 mod theme;
 mod handlers;
@@ -443,7 +444,6 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_opener::init())
-    .plugin(tauri_plugin_global_shortcut::Builder::new().build())
     .plugin(tauri_plugin_clipboard_manager::init())
     .plugin(tauri_plugin_deep_link::init())
     .plugin(tauri_plugin_shell::init())
@@ -640,6 +640,8 @@ pub fn run() {
       api_server::api_get_current_workspace
     ])
     .setup(|app| {
+      // Initialize menu only on desktop platforms
+      #[cfg(not(any(target_os = "android", target_os = "ios")))]
       menu::init(&app.handle())?;
 
       // Initialize platform-specific systems with better error handling
@@ -784,33 +786,47 @@ pub fn run() {
       let store = StoreBuilder::new(app.handle(), PathBuf::from(".settings.dat")).build().unwrap();
       let _ = store.reload();
 
-      // In development mode, always clear workspace data and show launcher
-      if cfg!(debug_assertions) {
-        clear_all_workspace_data(app.handle().clone());
-        if let Some(main_window) = app.get_webview_window("main") {
-          let _ = main_window.show();
-        }
-      } else {
-        // Production mode - use the validation function to check for valid workspace
-        // Try to restore access via bookmark first (macOS)
-        let mut valid_path = restore_workspace_access(&app.handle());
-
-        // If no bookmark restored, try standard validation (non-macOS or fallback)
-        if valid_path.is_none() {
-             valid_path = get_validated_workspace_path(app.handle().clone());
-        }
-
-        if let Some(path) = valid_path {
-          if let Some(main_window) = app.get_webview_window("main") {
-            let _ = main_window.hide();
-          }
-          let _ = open_workspace_window(app_handle, path);
-        } else {
-          // No valid workspace found, show the launcher
+      // Desktop platforms: In development mode, always clear workspace data and show launcher
+      #[cfg(not(any(target_os = "android", target_os = "ios")))]
+      {
+        if cfg!(debug_assertions) {
+          clear_all_workspace_data(app.handle().clone());
           if let Some(main_window) = app.get_webview_window("main") {
             let _ = main_window.show();
           }
+        } else {
+          // Production mode - use the validation function to check for valid workspace
+          // Try to restore access via bookmark first (macOS)
+          let mut valid_path = restore_workspace_access(&app.handle());
+
+          // If no bookmark restored, try standard validation (non-macOS or fallback)
+          if valid_path.is_none() {
+               valid_path = get_validated_workspace_path(app.handle().clone());
+          }
+
+          if let Some(path) = valid_path {
+            if let Some(main_window) = app.get_webview_window("main") {
+              let _ = main_window.hide();
+            }
+            let _ = open_workspace_window(app_handle, path);
+          } else {
+            // No valid workspace found, show the launcher
+            if let Some(main_window) = app.get_webview_window("main") {
+              let _ = main_window.show();
+            }
+          }
         }
+      }
+
+      // Mobile platforms: simpler startup - just use the main webview
+      #[cfg(any(target_os = "android", target_os = "ios"))]
+      {
+        // On mobile, check for valid workspace and emit event to navigate
+        let valid_path = get_validated_workspace_path(app.handle().clone());
+        if let Some(path) = valid_path {
+          let _ = open_workspace_window(app_handle, path);
+        }
+        // Otherwise, the app will show the launcher/welcome screen by default
       }
 
       Ok(())

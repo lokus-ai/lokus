@@ -114,6 +114,14 @@ pub async fn store_git_credentials(
             .map_err(|e| format!("Failed to store username: {}", e))?;
     }
 
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        // Mobile platforms don't have traditional keychain access
+        // For now, return an error - future implementation could use Android Keystore or iOS Keychain
+        let _ = (service_name, username, token); // Suppress unused warnings
+        return Err("Git credential storage not available on mobile".to_string());
+    }
+
     Ok(())
 }
 
@@ -223,6 +231,12 @@ pub async fn retrieve_git_credentials(
             token,
         });
     }
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = service_name; // Suppress unused warning
+        return Err("Git credential retrieval not available on mobile".to_string());
+    }
 }
 
 /// Delete git credentials from OS keychain
@@ -277,6 +291,12 @@ pub async fn delete_git_credentials(workspace_id: String) -> Result<(), String> 
         }
 
         let _ = username_entry.delete_credential(); // Ignore error
+    }
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = service_name; // Suppress unused warning
+        // No-op on mobile - credentials aren't stored anyway
     }
 
     Ok(())
@@ -349,6 +369,12 @@ pub async fn store_iroh_keys(
             .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
         entry.set_password(&key_b64)
             .map_err(|e| format!("Failed to store iroh keys: {}", e))?;
+    }
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = (service_name, private_key); // Suppress unused warnings
+        return Err("Iroh key storage not available on mobile".to_string());
     }
 
     Ok(())
@@ -424,6 +450,12 @@ pub async fn retrieve_iroh_keys(
 
         return Ok(key_bytes);
     }
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = service_name; // Suppress unused warning
+        return Err("Iroh key retrieval not available on mobile".to_string());
+    }
 }
 
 /// Delete iroh keys from OS keychain
@@ -465,6 +497,12 @@ pub async fn delete_iroh_keys(workspace_id: String) -> Result<(), String> {
         let entry = Entry::new(&service_name, "iroh-key")
             .map_err(|e| format!("Failed to access keyring: {}", e))?;
         let _ = entry.delete_credential(); // Ignore error if not found
+    }
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = service_name; // Suppress unused warning
+        // No-op on mobile - keys aren't stored anyway
     }
 
     Ok(())

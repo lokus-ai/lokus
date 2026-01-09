@@ -1,4 +1,11 @@
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Emitter, TitleBarStyle};
+//! Window management module
+//!
+//! Provides window creation and management functionality.
+//! Some features are desktop-only (multi-window, focus, show/hide).
+
+use tauri::{AppHandle, Manager, WebviewUrl, Emitter};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use tauri::{WebviewWindow, WebviewWindowBuilder, TitleBarStyle};
 use std::path::Path;
 
 fn base_label_from_path(path: &str) -> String {
@@ -17,10 +24,13 @@ fn base_label_from_path(path: &str) -> String {
   s
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn focus(win: &WebviewWindow) {
   let _ = win.set_focus();
 }
 
+// Desktop implementation - multi-window support
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(), String> {
 
@@ -115,6 +125,26 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
   Ok(())
 }
 
+// Mobile implementation - single window, navigate instead of creating new window
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(), String> {
+  // On mobile, we just emit an event to navigate to the workspace
+  // Mobile apps typically use single-window navigation
+  let _ = app.emit("workspace:activate", workspace_path.clone());
+
+  // Update API server with the workspace
+  let workspace_for_api = workspace_path;
+  let app_handle_for_api = app;
+  tauri::async_runtime::spawn(async move {
+    crate::api_server::update_workspace(&app_handle_for_api, Some(workspace_for_api)).await;
+  });
+
+  Ok(())
+}
+
+// Desktop implementation
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 pub fn open_preferences_window(app: AppHandle, workspace_path: Option<String>) -> Result<(), String> {
   let label = "prefs";
@@ -154,6 +184,17 @@ pub fn open_preferences_window(app: AppHandle, workspace_path: Option<String>) -
   Ok(())
 }
 
+// Mobile implementation - navigate to preferences view
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+pub fn open_preferences_window(app: AppHandle, _workspace_path: Option<String>) -> Result<(), String> {
+  // On mobile, emit event to navigate to preferences
+  let _ = app.emit("lokus:open-preferences", ());
+  Ok(())
+}
+
+// Desktop implementation
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 pub fn open_launcher_window(app: AppHandle) -> Result<(), String> {
   // Generate unique label with timestamp
@@ -187,6 +228,17 @@ pub fn open_launcher_window(app: AppHandle) -> Result<(), String> {
   Ok(())
 }
 
+// Mobile implementation - navigate to welcome/launcher view
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+pub fn open_launcher_window(app: AppHandle) -> Result<(), String> {
+  // On mobile, emit event to show launcher/welcome
+  let _ = app.emit("lokus:show-launcher", ());
+  Ok(())
+}
+
+// Desktop implementation
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 pub fn sync_window_theme(window: tauri::Window, is_dark: bool, _bg_color: String) -> Result<(), String> {
 
@@ -233,5 +285,14 @@ pub fn sync_window_theme(window: tauri::Window, is_dark: bool, _bg_color: String
     // Linux doesn't need titlebar theming as it uses system decorations
   }
 
+  Ok(())
+}
+
+// Mobile implementation - theme is handled by the frontend/system
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+pub fn sync_window_theme(_window: tauri::Window, _is_dark: bool, _bg_color: String) -> Result<(), String> {
+  // Mobile platforms handle themes via system settings
+  // The frontend will respect the system dark/light mode
   Ok(())
 }

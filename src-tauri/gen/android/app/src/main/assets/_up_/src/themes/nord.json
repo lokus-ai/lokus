@@ -1,0 +1,30 @@
+{
+  "name": "Nord",
+  "tokens": {
+    "--app-bg": "#2e3440",
+    "--app-text": "#eceff4",
+    "--app-panel": "#3b4252",
+    "--app-panel-secondary": "#434c5e",
+    "--app-border": "#4c566a",
+    "--app-border-hover": "#5e6a7e",
+    "--app-muted": "#616e88",
+    "--app-text-secondary": "#d8dee9",
+    "--accent": "#88c0d0",
+    "--accent-hover": "#6fa3b0",
+    "--accent-fg": "#2e3440",
+    "--danger": "#bf616a",
+    "--success": "#a3be8c",
+    "--warning": "#ebcb8b",
+    "--info": "#81a1c1",
+    "--canvas-bg": "#3b4252",
+    "--canvas-grid": "rgba(236, 239, 244, 0.15)",
+    "--graph-bg-primary": "#2e3440",
+    "--graph-bg-secondary": "#88c0d0",
+    "--graph-node-document": "#a3be8c",
+    "--graph-node-placeholder": "#4c566a",
+    "--graph-node-tag": "#b48ead",
+    "--graph-node-folder": "#d08770",
+    "--graph-link": "#4c566a",
+    "--graph-link-hover": "#88c0d0"
+  }
+}
