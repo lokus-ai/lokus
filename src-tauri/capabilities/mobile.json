@@ -1,0 +1,53 @@
+{
+  "identifier": "mobile",
+  "description": "Permissions for mobile application functionality",
+  "platforms": ["iOS", "android"],
+  "windows": [
+    "*"
+  ],
+  "permissions": [
+    "core:path:allow-resolve-directory",
+    "core:path:allow-join",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:event:allow-emit",
+    "core:window:default",
+    "dialog:allow-save",
+    "dialog:allow-open",
+    "dialog:allow-confirm",
+    "dialog:allow-message",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "$DOCUMENT/**"
+        },
+        {
+          "path": "$APP/**"
+        },
+        {
+          "path": "$TEMP/**"
+        },
+        {
+          "path": "$HOME/.lokus/**"
+        }
+      ]
+    },
+    "fs:allow-read-file",
+    "fs:allow-write-file",
+    "fs:allow-write-text-file",
+    "fs:allow-read-dir",
+    "fs:allow-create",
+    "fs:allow-remove",
+    "fs:allow-rename",
+    "fs:allow-exists",
+    "fs:allow-appdata-write",
+    "fs:allow-appdata-write-recursive",
+    "updater:default",
+    "updater:allow-check",
+    "updater:allow-download",
+    "updater:allow-install",
+    "updater:allow-download-and-install",
+    "deep-link:default"
+  ]
+}

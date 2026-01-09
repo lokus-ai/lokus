@@ -114,6 +114,13 @@ pub async fn store_git_credentials(
             .map_err(|e| format!("Failed to store username: {}", e))?;
     }
 
+    #[cfg(any(target_os = "ios", target_os = "android"))]
+    {
+        // Mobile platforms use SecureStorage from secure_storage.rs
+        // For now, return an error - credentials should use SecureStorage directly
+        return Err("Mobile credential storage not yet implemented. Use SecureStorage instead.".to_string());
+    }
+
     Ok(())
 }
 
@@ -223,6 +230,11 @@ pub async fn retrieve_git_credentials(
             token,
         });
     }
+
+    #[cfg(any(target_os = "ios", target_os = "android"))]
+    {
+        return Err("Mobile credential retrieval not yet implemented. Use SecureStorage instead.".to_string());
+    }
 }
 
 /// Delete git credentials from OS keychain
@@ -277,6 +289,12 @@ pub async fn delete_git_credentials(workspace_id: String) -> Result<(), String> 
         }
 
         let _ = username_entry.delete_credential(); // Ignore error
+    }
+
+    #[cfg(any(target_os = "ios", target_os = "android"))]
+    {
+        // Mobile platforms - no-op for now
+        let _ = service_name;
     }
 
     Ok(())
@@ -349,6 +367,11 @@ pub async fn store_iroh_keys(
             .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
         entry.set_password(&key_b64)
             .map_err(|e| format!("Failed to store iroh keys: {}", e))?;
+    }
+
+    #[cfg(any(target_os = "ios", target_os = "android"))]
+    {
+        return Err("Mobile iroh key storage not yet implemented. Use SecureStorage instead.".to_string());
     }
 
     Ok(())
@@ -424,6 +447,11 @@ pub async fn retrieve_iroh_keys(
 
         return Ok(key_bytes);
     }
+
+    #[cfg(any(target_os = "ios", target_os = "android"))]
+    {
+        return Err("Mobile iroh key retrieval not yet implemented. Use SecureStorage instead.".to_string());
+    }
 }
 
 /// Delete iroh keys from OS keychain
@@ -465,6 +493,12 @@ pub async fn delete_iroh_keys(workspace_id: String) -> Result<(), String> {
         let entry = Entry::new(&service_name, "iroh-key")
             .map_err(|e| format!("Failed to access keyring: {}", e))?;
         let _ = entry.delete_credential(); // Ignore error if not found
+    }
+
+    #[cfg(any(target_os = "ios", target_os = "android"))]
+    {
+        // Mobile platforms - no-op for now
+        let _ = service_name;
     }
 
     Ok(())
