@@ -48,9 +48,6 @@ export function ResponsiveTabBar({
     const baseStyles = {
       pointerEvents: 'auto',
       marginLeft: index > 0 && isVisible ? '-12px' : '0',
-      width: isVisible ? '180px' : 'auto',
-      minWidth: isVisible ? '80px' : 'auto',
-      maxWidth: isVisible ? '200px' : 'auto',
       flexShrink: 1,
       paddingTop: '6px',
       paddingBottom: '6px',
@@ -78,7 +75,8 @@ export function ResponsiveTabBar({
         onKeyDown={(e) => e.key === 'Enter' && onTabClick?.(tab.path)}
         data-tauri-drag-region="false"
         className={`
-          relative flex items-center gap-2 px-4 h-8 text-xs whitespace-nowrap cursor-pointer
+          relative flex items-center gap-2 px-4 h-8 text-xs whitespace-nowrap cursor-pointer  max-w-[80px] sm:max-w-[100px] md:max-w-[180px]
+          min-w-[60px] sm:min-w-[80px] md:min-w-[120px]
           ${isActive ? 'z-10' : 'z-0'}
         `}
         style={baseStyles}
