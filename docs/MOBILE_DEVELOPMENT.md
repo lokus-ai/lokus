@@ -52,7 +52,57 @@ export PATH="$PATH:$ANDROID_HOME/platform-tools"
 export PATH="$PATH:$ANDROID_HOME/tools/bin"
 ```
 
-## Quick Start
+## Quick Start (Automated Setup)
+
+We have setup scripts that handle everything for you!
+
+### Android Setup (Any OS)
+
+```bash
+git clone https://github.com/lokus-ai/lokus.git
+cd lokus
+npm install
+
+# Run the automated setup script
+npm run setup:android
+```
+
+This script will:
+- Install Rust Android targets
+- Check/configure Android SDK & NDK
+- Set up environment variables
+- Install Tauri CLI
+- Initialize the Android project
+
+### iOS Setup (macOS only)
+
+```bash
+npm run setup:ios
+```
+
+This script will:
+- Check Xcode installation
+- Install Rust iOS targets
+- Install Tauri CLI
+- Initialize the iOS project
+
+### Running the App
+
+After setup, just run:
+
+```bash
+# Android (start emulator first)
+npm run dev:android
+
+# iOS (start simulator first)
+npm run dev:ios
+```
+
+---
+
+## Manual Setup (Alternative)
+
+If you prefer to set things up manually:
 
 ### 1. Clone and Install Dependencies
 
@@ -83,7 +133,7 @@ This creates platform-specific project files in `src-tauri/gen/`.
 # Start an emulator first (via Android Studio AVD Manager)
 # Or connect a physical device with USB debugging enabled
 
-cargo tauri android dev --config src-tauri/tauri.android.conf.json
+npm run dev:android
 ```
 
 **iOS:**
@@ -91,7 +141,7 @@ cargo tauri android dev --config src-tauri/tauri.android.conf.json
 # Start iOS Simulator first
 open -a Simulator
 
-cargo tauri ios dev --config src-tauri/tauri.ios.conf.json
+npm run dev:ios
 ```
 
 ## Setting Up Emulators
