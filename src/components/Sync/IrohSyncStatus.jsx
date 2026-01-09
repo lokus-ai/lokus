@@ -32,6 +32,8 @@ export default function IrohSyncStatus({ workspacePath, onClose }) {
     } catch (err) {
       setErrorMessage('Failed to load sync status');
       setLoading(false);
+      console.log(errorMessage)
+      throw err
     }
   };
 
@@ -39,7 +41,10 @@ export default function IrohSyncStatus({ workspacePath, onClose }) {
     try {
       const peerList = await invoke('iroh_list_peers', { workspacePath: workspacePath });
       setPeers(peerList);
-    } catch { }
+    } catch (err){
+      console.log("Error:",err)
+
+     }
   };
 
   const handleManualSync = async () => {
@@ -53,6 +58,7 @@ export default function IrohSyncStatus({ workspacePath, onClose }) {
       await loadPeers();
     } catch (err) {
       setErrorMessage(String(err));
+      console.log("Error:",errorMessage)
     } finally {
       setSyncing(false);
     }

@@ -56,7 +56,9 @@ export default function MCPServerSettings() {
     try {
       const result = await invoke('mcp_status')
       setStatus(result)
-    } catch { }
+    } catch(err) { 
+      console.log("Failed due to Error: ", err)
+    }
   }
 
   // Start server
@@ -67,6 +69,7 @@ export default function MCPServerSettings() {
       setStatus(result)
       setTestResult(null)
     } catch (error) {
+      console.log("Failed due to Error: ", err)
       setStatus(prev => ({ ...prev, last_error: error.toString() }))
     } finally {
       setLoading(false)
@@ -81,6 +84,7 @@ export default function MCPServerSettings() {
       setStatus(result)
       setTestResult(null)
     } catch (error) {
+      console.log("Failed due to Error: ", err)
       setStatus(prev => ({ ...prev, last_error: error.toString() }))
     } finally {
       setLoading(false)
@@ -95,6 +99,7 @@ export default function MCPServerSettings() {
       setStatus(result)
       setTestResult(null)
     } catch (error) {
+      console.log("Failed due to Error: ", err)
       setStatus(prev => ({ ...prev, last_error: error.toString() }))
     } finally {
       setLoading(false)
@@ -112,6 +117,7 @@ export default function MCPServerSettings() {
         message: result ? 'Server is healthy and responding' : 'Server is not responding'
       })
     } catch (error) {
+      console.log("Failed due to Error: ", err)
       setTestResult({
         success: false,
         message: error.toString()
@@ -132,6 +138,7 @@ export default function MCPServerSettings() {
         message: result
       })
     } catch (error) {
+      console.log("Failed due to Error: ", err)
       setConfigureResult({
         success: false,
         message: error.toString()
