@@ -75,25 +75,20 @@ fi
 echo "✅ Android SDK found at: $ANDROID_SDK"
 echo ""
 
-# Step 4: Install NDK if needed
+# Step 4: Check for any installed NDK
 echo "📦 Step 4: Checking Android NDK..."
-NDK_VERSION="25.2.9519653"
-NDK_PATH="$ANDROID_SDK/ndk/$NDK_VERSION"
 
-if [ -d "$NDK_PATH" ]; then
-    echo "✅ NDK $NDK_VERSION already installed"
+# Find any installed NDK version
+if [ -d "$ANDROID_SDK/ndk" ]; then
+    NDK_VERSION=$(ls -1 "$ANDROID_SDK/ndk" 2>/dev/null | sort -V | tail -n 1)
+fi
+
+if [ -n "$NDK_VERSION" ] && [ -d "$ANDROID_SDK/ndk/$NDK_VERSION" ]; then
+    echo "✅ NDK found: $NDK_VERSION"
 else
-    echo "   Installing NDK $NDK_VERSION..."
-    if [ -f "$ANDROID_SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
-        "$ANDROID_SDK/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION"
-    elif [ -f "$ANDROID_SDK/tools/bin/sdkmanager" ]; then
-        "$ANDROID_SDK/tools/bin/sdkmanager" "ndk;$NDK_VERSION"
-    else
-        echo "❌ sdkmanager not found. Please install NDK manually via Android Studio:"
-        echo "   Android Studio → Settings → SDK Manager → SDK Tools → NDK"
-        exit 1
-    fi
-    echo "✅ NDK installed"
+    echo "❌ No NDK installed. Please install NDK via Android Studio:"
+    echo "   Android Studio → Settings → SDK Manager → SDK Tools → NDK (Side by side)"
+    exit 1
 fi
 echo ""
 
