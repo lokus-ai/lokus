@@ -21,7 +21,7 @@ const CANVAS_CONSTANTS = {
   ERROR_STATE_RESET_DELAY_MS: 3000 // Delay before resetting error state indicator
 };
 
-export default function Canvas({ 
+export default function Canvas({
   canvasPath = null,
   canvasName = null,
   onSave,
@@ -38,23 +38,23 @@ export default function Canvas({
   const [editor, setEditor] = useState(null)
   const [saveState, setSaveState] = useState('idle') // 'idle', 'saving', 'saved', 'error'
   const { theme } = useTheme()
-  
+
   // Save queue system to prevent race conditions
   const saveQueueRef = useRef({
     queue: [],
     isProcessing: false,
     currentOperation: null
   })
-  
+
   // Determine theme mode
   const isDarkMode = theme?.name === 'dark' || theme?.mode === 'dark'
   const currentThemeConfig = isDarkMode ? themeConfigs.dark : themeConfigs.light
 
   // Initialize store
   useEffect(() => {
-    const newStore = createTLStore({ 
-      shapeUtils: defaultShapeUtils, 
-      bindingUtils: defaultBindingUtils 
+    const newStore = createTLStore({
+      shapeUtils: defaultShapeUtils,
+      bindingUtils: defaultBindingUtils
     })
     setStore(newStore)
   }, [])
@@ -62,17 +62,17 @@ export default function Canvas({
   // Load canvas file content with robust handling
   useEffect(() => {
     if (!canvasPath || !store || !editor) return
-    
+
     const loadCanvas = async () => {
       setIsLoading(true)
       setSaveState('idle')
-      
+
       try {
         // Wait for any pending save operations to complete
         while (saveQueueRef.current.isProcessing) {
           await new Promise(resolve => setTimeout(resolve, CANVAS_CONSTANTS.LOAD_WAIT_INTERVAL_MS))
         }
-        
+
         // Load the TLDraw snapshot directly (no conversion needed!)
         const tldrawSnapshot = await canvasManager.loadCanvas(canvasPath)
 
@@ -81,15 +81,17 @@ export default function Canvas({
 
         // Mark as clean after loading
         setIsDirty(false)
-        
+
       } catch (error) {
-        
+
         // Initialize with empty canvas on error
         try {
           const emptyTldrawData = jsonCanvasToTldraw({ nodes: [], edges: [] })
           loadSnapshot(store, emptyTldrawData)
           setIsDirty(false)
-        } catch { }
+        } catch (err) {
+          console.error('Canvas: Failed to initialize empty canvas backup', err);
+        }
       } finally {
         setIsLoading(false)
       }
@@ -101,17 +103,17 @@ export default function Canvas({
   // Process save queue - ensures only one save operation at a time
   const processSaveQueue = useCallback(async () => {
     const queue = saveQueueRef.current
-    
+
     if (queue.isProcessing || queue.queue.length === 0) {
       return
     }
-    
+
     queue.isProcessing = true
-    
+
     while (queue.queue.length > 0) {
       const saveOperation = queue.queue.shift()
       queue.currentOperation = saveOperation
-      
+
       try {
         await saveOperation.execute()
         saveOperation.resolve()
@@ -119,11 +121,11 @@ export default function Canvas({
         saveOperation.reject(error)
       }
     }
-    
+
     queue.isProcessing = false
     queue.currentOperation = null
   }, [])
-  
+
   // Add save operation to queue
   const queueSaveOperation = useCallback((operation) => {
     return new Promise((resolve, reject) => {
@@ -133,38 +135,40 @@ export default function Canvas({
         reject,
         timestamp: Date.now()
       })
-      
+
       // Process queue immediately
       processSaveQueue()
     })
   }, [processSaveQueue])
-  
+
   // Verify file content after save
   const verifyFileSave = useCallback(async (canvasPath, expectedData, maxRetries = CANVAS_CONSTANTS.MAX_SAVE_RETRIES) => {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         // Wait a bit for filesystem flush
         await new Promise(resolve => setTimeout(resolve, 50 * attempt))
-        
+
         const content = await invoke('read_file_content', { path: canvasPath })
         const savedData = JSON.parse(content)
-        
+
         // Compare node and edge counts
         const expectedNodes = expectedData.nodes?.length || 0
         const expectedEdges = expectedData.edges?.length || 0
         const savedNodes = savedData.nodes?.length || 0
         const savedEdges = savedData.edges?.length || 0
-        
+
         if (expectedNodes === savedNodes && expectedEdges === savedEdges) {
           return true
         } else {
         }
-      } catch { }
+      } catch (err) {
+        console.warn(`Canvas: Verification attempt ${attempt} failed`, err);
+      }
     }
-    
+
     return false
   }, [])
-  
+
   // Save canvas content with robust error handling
   const handleSave = useCallback(async () => {
     if (!canvasPath || !editor) {
@@ -174,13 +178,13 @@ export default function Canvas({
     return queueSaveOperation(async () => {
       setSaveState('saving')
       setIsLoading(true)
-      
+
       try {
         // Validate canvas path
         if (!isValidFilePath(canvasPath)) {
           throw new Error('Invalid canvas file path')
         }
-        
+
         // Get current TLDraw snapshot
         const rawSnapshot = getSnapshot(editor.store)        // Save exactly what TLDraw gives us
         await canvasManager.saveCanvas(canvasPath, rawSnapshot)
@@ -190,25 +194,25 @@ export default function Canvas({
         if (!isVerified) {
           throw new Error('File verification failed - data may not have been saved correctly')
         }
-        
+
         // Call onSave callback
         if (onSave) {
           await onSave(canvasData)
         }
-        
+
         // Update state
         setLastSaved(new Date())
         setIsDirty(false)
         setSaveState('saved')
-        
+
 
         // Reset save state after a delay
         setTimeout(() => setSaveState('idle'), CANVAS_CONSTANTS.SAVE_STATE_RESET_DELAY_MS)
-        
+
       } catch (error) {
         setSaveState('error')
         setIsDirty(true)
-        
+
         // More specific error messages
         let userMessage = 'Failed to save canvas'
         if (error.message.includes('permission')) {
@@ -222,11 +226,11 @@ export default function Canvas({
         } else {
           userMessage = `Save failed: ${error.message}`
         }
-        
+
 
         // Reset error state after delay
         setTimeout(() => setSaveState('idle'), CANVAS_CONSTANTS.ERROR_STATE_RESET_DELAY_MS)
-        
+
         throw error // Re-throw for queue handling
       } finally {
         setIsLoading(false)
@@ -237,11 +241,11 @@ export default function Canvas({
   // Auto-save on changes (only real content changes)
   useEffect(() => {
     if (!editor) return
-    
+
     let initialSnapshot = null
     let changeTimeout = null
     let saveTimeout = null
-    
+
     const handleStoreChange = () => {
       // Clear any pending timeouts
       if (changeTimeout) {
@@ -250,29 +254,31 @@ export default function Canvas({
       if (saveTimeout) {
         clearTimeout(saveTimeout)
       }
-      
+
       // Reduced debounce for more responsive detection
       changeTimeout = setTimeout(() => {
-        
+
         // Use proper tldraw v3 API to get current state
         const currentSnapshot = getSnapshot(editor.store)
         const allRecords = editor.store.allRecords()
-        
+
         // Use the method that gives us data
         const finalCurrentSnapshot = currentSnapshot.records?.length > 0 ? currentSnapshot : { records: allRecords }
-        
+
         // Compare with initial snapshot to detect real changes
         if (initialSnapshot && hasRealChanges(initialSnapshot, finalCurrentSnapshot)) {
           setIsDirty(true)
-          
+
           // Call onContentChange if provided
           if (onContentChange) {
             try {
               const canvasData = tldrawToJsonCanvas(finalCurrentSnapshot)
               onContentChange(canvasData)
-            } catch { }
+            } catch (err) {
+              console.error('Canvas: Failed to process content change', err);
+            }
           }
-          
+
           // Auto-save immediately when real changes are detected
           if (canvasPath) {
             handleSave()
@@ -295,7 +301,7 @@ export default function Canvas({
     setTimeout(captureInitialSnapshot, 100)
 
     const unsubscribe = editor.store.listen(handleStoreChange)
-    
+
     return () => {
       unsubscribe()
       if (changeTimeout) {
@@ -306,54 +312,54 @@ export default function Canvas({
       }
     }
   }, [editor, onContentChange, canvasPath, isDirty])
-  
+
   // Helper to detect real content changes vs just mouse moves/viewport changes
   const hasRealChanges = (oldSnapshot, newSnapshot) => {
     if (!oldSnapshot || !newSnapshot) return false
-    
-    
-    
+
+
+
     const oldRecords = oldSnapshot.records || []
     const newRecords = newSnapshot.records || []
-    
+
     // Get shapes only (exclude camera, document, page, instance records)
     const oldShapes = oldRecords.filter(r => r.typeName === 'shape')
     const newShapes = newRecords.filter(r => r.typeName === 'shape')
-    
-    
+
+
     // Check if number of shapes changed
     if (oldShapes.length !== newShapes.length) {
       return true
     }
-    
+
     // Check if any shape properties changed (excluding position updates from drags)
     for (const oldShape of oldShapes) {
       const newShape = newShapes.find(s => s.id === oldShape.id)
-      
+
       if (!newShape) {
         return true
       }
-      
+
       // Compare type changes (shape converted to different type)
       if (oldShape.type !== newShape.type) {
         return true
       }
-      
+
       // Compare props but exclude volatile properties that change during interaction
       const oldProps = { ...oldShape.props }
       const newProps = { ...newShape.props }
-      
+
       // Remove properties that change during normal interaction but aren't "real" edits
       delete oldProps.scale // Scale changes during zoom
       delete newProps.scale
-      
+
       // For geo shapes, text changes are meaningful
       if (oldShape.type === 'geo' || oldShape.type === 'text') {
         if (oldProps.text !== newProps.text) {
           return true
         }
       }
-      
+
       // Compare other meaningful properties
       const meaningfulOldProps = JSON.stringify({
         text: oldProps.text,
@@ -367,7 +373,7 @@ export default function Canvas({
         dash: oldProps.dash,
         geo: oldProps.geo
       })
-      
+
       const meaningfulNewProps = JSON.stringify({
         text: newProps.text,
         color: newProps.color,
@@ -380,30 +386,30 @@ export default function Canvas({
         dash: newProps.dash,
         geo: newProps.geo
       })
-      
+
       if (meaningfulOldProps !== meaningfulNewProps) {
         return true
       }
-      
+
       // Check position changes that are more than just small drags (threshold for actual moves)
       const oldX = oldShape.x || 0
       const oldY = oldShape.y || 0
       const newX = newShape.x || 0
       const newY = newShape.y || 0
-      
+
       const positionDiff = Math.sqrt(Math.pow(newX - oldX, 2) + Math.pow(newY - oldY, 2))
       if (positionDiff > CANVAS_CONSTANTS.POSITION_CHANGE_THRESHOLD) {
         return true
       }
     }
-    
+
     // Check for new shapes
     for (const newShape of newShapes) {
       if (!oldShapes.find(s => s.id === newShape.id)) {
         return true
       }
     }
-    
+
     return false
   }
 
@@ -437,7 +443,7 @@ export default function Canvas({
             <div className="text-app-muted">Loading canvas...</div>
           </div>
         )}
-        
+
         {store && (
           <Tldraw
             store={store}
@@ -454,7 +460,7 @@ export default function Canvas({
             }}
           />
         )}
-        
+
         {/* Enhanced save state indicator */}
         {saveState === 'saving' && (
           <div className="absolute top-4 right-4 bg-blue-100 dark:bg-blue-900 border border-blue-300 dark:border-blue-700 rounded px-2 py-1 text-xs text-blue-800 dark:text-blue-200 z-20 flex items-center gap-1">
@@ -462,19 +468,19 @@ export default function Canvas({
             Saving...
           </div>
         )}
-        
+
         {saveState === 'saved' && lastSaved && (
           <div className="absolute top-4 right-4 bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700 rounded px-2 py-1 text-xs text-green-800 dark:text-green-200 z-20">
             ✅ Saved at {lastSaved.toLocaleTimeString()}
           </div>
         )}
-        
+
         {saveState === 'error' && (
           <div className="absolute top-4 right-4 bg-red-100 dark:bg-red-900 border border-red-300 dark:border-red-700 rounded px-2 py-1 text-xs text-red-800 dark:text-red-200 z-20">
             ❌ Save failed
           </div>
         )}
-        
+
         {isDirty && saveState === 'idle' && (
           <div className="absolute top-4 right-4 bg-yellow-100 dark:bg-yellow-900 border border-yellow-300 dark:border-yellow-700 rounded px-2 py-1 text-xs text-yellow-800 dark:text-yellow-200 z-20">
             • Unsaved changes

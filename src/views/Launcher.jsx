@@ -7,7 +7,7 @@ import { readRecents, addRecent, removeRecent, shortenPath } from "../lib/recent
 import { WorkspaceManager } from "../core/workspace/manager.js";
 import { readGlobalVisuals, setGlobalActiveTheme } from "../core/theme/manager.js";
 import LokusLogo from "../components/LokusLogo.jsx";
-import { useToast } from "../components/Toast.jsx";
+import { toast } from "sonner";
 import { isMobile, isDesktop } from "../platform/index.js";
 
 // --- Reusable Icon Component ---
@@ -26,7 +26,9 @@ async function openWorkspace(path) {
     if (visuals && visuals.theme) {
       await setGlobalActiveTheme(visuals.theme);
     }
-  } catch { }
+  } catch (err) {
+    console.error('Launcher: Failed to read global visuals', err);
+  }
 
   // In test mode or browser mode, transition current window to workspace
   const isTestMode = new URLSearchParams(window.location.search).get('testMode') === 'true';
@@ -59,7 +61,6 @@ export default function Launcher() {
   const [recents, setRecents] = useState([]);
   const [isTestMode, setIsTestMode] = useState(false);
   const [reauthWorkspace, setReauthWorkspace] = useState(null); // { path, name } of workspace needing re-auth
-  const toast = useToast();
 
   useEffect(() => {
     // The ThemeProvider now handles initial theme loading.
@@ -74,14 +75,16 @@ export default function Launcher() {
 
     const unlistenPromise = isTauri
       ? listen("lokus:open-workspace", () => {
-          // Already showing the launcher/welcome screen, so just log
-        })
-      : Promise.resolve(() => {});
+        // Already showing the launcher/welcome screen, so just log
+      })
+      : Promise.resolve(() => { });
 
     return () => {
       unlistenPromise.then(unlisten => {
         if (typeof unlisten === 'function') unlisten();
-      }).catch(() => {});
+      }).catch((err) => {
+        console.error('Launcher: Failed to unlisten', err);
+      });
     };
   }, []);
 

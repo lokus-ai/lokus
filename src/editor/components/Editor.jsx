@@ -48,6 +48,7 @@ import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import TaskCreationModal from "../../components/TaskCreationModal.jsx";
 import ExportModal from "../../views/ExportModal.jsx";
 import ImageInsertModal from "../../components/ImageInsertModal.jsx";
+import ImageUrlModal from "./ImageUrlModal.jsx";
 import MathFormulaModal from "../../components/MathFormulaModal.jsx";
 import SymbolPickerModal from "../../components/SymbolPickerModal.jsx";
 import ReadingModeView from "./ReadingModeView.jsx";
@@ -470,6 +471,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [imageViewerState, setImageViewerState] = useState({ isOpen: false, imagePath: null });
   const [imageInsertModalState, setImageInsertModalState] = useState({ isOpen: false, onInsert: null });
+  const [imageUrlModalState, setImageUrlModalState] = useState({ isOpen: false, onSubmit: null });
   const [mathFormulaModalState, setMathFormulaModalState] = useState({ isOpen: false, mode: 'inline', onInsert: null });
 
   // Page preview state
@@ -530,6 +532,24 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     editorProps: {
       attributes: { class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none tiptap-area obsidian-editor" },
       handleDOMEvents: {
+        // Prevent browser's default drop handling - Tauri handles external file drops
+        drop: (view, event) => {
+          // Check if this is an external file drop (has files in dataTransfer)
+          if (event.dataTransfer?.files?.length > 0) {
+            event.preventDefault();
+            event.stopPropagation();
+            return true; // Tauri's tauri://drag-drop handles this
+          }
+          return false; // Allow internal editor drops (e.g., text selection drag)
+        },
+        dragover: (view, event) => {
+          // Prevent default to allow drop, but let Tauri handle it
+          if (event.dataTransfer?.types?.includes('Files')) {
+            event.preventDefault();
+            return true;
+          }
+          return false;
+        },
         click: (view, event) => {
           const t = event.target;
           if (!(t instanceof Element)) return false;
@@ -743,6 +763,12 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
       setImageInsertModalState({ isOpen: true, onInsert });
     };
 
+    // Listen for image URL modal event (from ![[ dropdown)
+    const handleImageUrlModalEvent = (event) => {
+      const { onSubmit } = event.detail;
+      setImageUrlModalState({ isOpen: true, onSubmit });
+    };
+
     // Listen for math formula modal event
     const handleMathFormulaModalEvent = (event) => {
       const { mode, onInsert } = event.detail;
@@ -754,6 +780,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     window.addEventListener('wiki-link-hover', handleWikiLinkHover);
     window.addEventListener('wiki-link-hover-end', handleWikiLinkHoverEnd);
     window.addEventListener('open-image-insert-modal', handleImageInsertModalEvent);
+    window.addEventListener('lokus:open-image-url-modal', handleImageUrlModalEvent);
     window.addEventListener('open-math-formula-modal', handleMathFormulaModalEvent);
 
     return () => {
@@ -762,6 +789,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
       window.removeEventListener('wiki-link-hover', handleWikiLinkHover);
       window.removeEventListener('wiki-link-hover-end', handleWikiLinkHoverEnd);
       window.removeEventListener('open-image-insert-modal', handleImageInsertModalEvent);
+      window.removeEventListener('lokus:open-image-url-modal', handleImageUrlModalEvent);
       window.removeEventListener('open-math-formula-modal', handleMathFormulaModalEvent);
     };
   }, [editor]);
@@ -912,13 +940,8 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         }
         break;
       case 'insertImage':
-        // Open image insert modal
-        setImageInsertModalState({
-          isOpen: true,
-          onInsert: ({ src, alt }) => {
-            editor.commands.setImage({ src, alt });
-          }
-        });
+        // Insert ![[ to trigger image autocomplete dropdown
+        editor.chain().focus().insertContent('![[').run();
         break;
       case 'exportMarkdown':
       case 'exportHTML':
@@ -1111,6 +1134,16 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           setImageInsertModalState({ isOpen: false, onInsert: null });
         }}
         workspacePath={globalThis.__LOKUS_WORKSPACE_PATH__}
+      />
+
+      {/* Image URL Modal - for importing images from URL via ![[ dropdown */}
+      <ImageUrlModal
+        isOpen={imageUrlModalState.isOpen}
+        onClose={() => setImageUrlModalState({ isOpen: false, onSubmit: null })}
+        onSubmit={(url) => {
+          imageUrlModalState.onSubmit?.(url);
+          setImageUrlModalState({ isOpen: false, onSubmit: null });
+        }}
       />
 
       {/* Math Formula Modal */}

@@ -115,7 +115,9 @@ export default function SyncStatus() {
           if (currentWorkspace) {
             path = currentWorkspace;
           }
-        } catch { }
+        } catch(err) {
+          console.log("Error:",err)
+         }
       }
 
       if (!path) return;
@@ -141,7 +143,9 @@ export default function SyncStatus() {
         }
         setIsConfigured(configured);
       }
-    } catch { }
+    } catch (err){
+          console.log("Error:",err)
+     }
   };
 
   const checkSyncStatus = async () => {
@@ -157,6 +161,7 @@ export default function SyncStatus() {
       }
     } catch (e) {
       // Ignore errors if not initialized
+          console.log("Error:",e)
     }
   };
 
@@ -175,6 +180,7 @@ export default function SyncStatus() {
       }
     } catch (e) {
       // Not a structured error, return as-is
+          console.log(e)
     }
 
     // Fallback: return error as string
@@ -235,6 +241,7 @@ export default function SyncStatus() {
         setErrorType('');
       }, 3000);
     } catch (err) {
+        console.log("Error:",err)
 
       // Parse structured error
       const gitError = parseGitError(err);
@@ -322,6 +329,7 @@ export default function SyncStatus() {
         }, 3000);
       }
     } catch (err) {
+          console.log("Error:",err)
 
       // Parse structured error
       const gitError = parseGitError(err);
@@ -387,6 +395,7 @@ export default function SyncStatus() {
         setSyncStatus('idle');
       }, 2000);
     } catch (err) {
+          console.log("Error:",err)
       setSyncStatus('error');
       setTimeout(() => {
         setSyncStatus('idle');
@@ -431,6 +440,7 @@ export default function SyncStatus() {
         setSyncStatus('idle');
       }, 2000);
     } catch (err) {
+          console.log("Error:",err)
       setSyncStatus('error');
       setTimeout(() => {
         setSyncStatus('idle');
@@ -462,6 +472,7 @@ export default function SyncStatus() {
         setErrorType('');
       }, 3000);
     } catch (err) {
+          console.log("Error:",err)
       setErrorMessage(String(err));
       setSyncStatus('error');
 

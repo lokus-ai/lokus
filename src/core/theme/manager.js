@@ -40,8 +40,10 @@ const BUILT_IN_THEME_TOKENS = {
 };
 
 // NEW: High-quality, professional default themes
-const DEFAULT_THEMES = ["dracula", "nord", "one-dark-pro", "minimal-light", "neon-dark"];
+// Lokus Dark is the default theme and should be first in the list
+const DEFAULT_THEMES = ["lokus-dark", "dracula", "nord", "one-dark-pro", "minimal-light", "neon-dark"];
 const DEFAULT_THEME_CONTENT = {
+  "lokus-dark": `{"name": "Lokus Dark", "tokens": {"--bg": "#0f172a", "--text": "#f1f5f9", "--panel": "#1e293b", "--border": "#334155", "--muted": "#94a3b8", "--accent": "#8b5cf6", "--accent-fg": "#ffffff", "--task-todo": "#64748b", "--task-progress": "#3b82f6", "--task-urgent": "#ef4444", "--task-question": "#f59e0b", "--task-completed": "#10b981", "--task-cancelled": "#64748b", "--task-delegated": "#8b5cf6", "--danger": "#ef4444", "--success": "#10b981", "--warning": "#f59e0b", "--info": "#3b82f6", "--editor-placeholder": "#64748b"}}`,
   "dracula": `{"name": "Dracula", "tokens": {"--bg": "#282a36", "--text": "#f8f8f2", "--panel": "#21222c", "--border": "#44475a", "--muted": "#6272a4", "--accent": "#bd93f9", "--accent-fg": "#ffffff", "--task-todo": "#6272a4", "--task-progress": "#8be9fd", "--task-urgent": "#ff5555", "--task-question": "#f1fa8c", "--task-completed": "#50fa7b", "--task-cancelled": "#6272a4", "--task-delegated": "#bd93f9", "--danger": "#ff5555", "--success": "#50fa7b", "--warning": "#f1fa8c", "--info": "#8be9fd", "--editor-placeholder": "#6272a4"}}`,
   "nord": `{"name": "Nord", "tokens": {"--bg": "#2E3440", "--text": "#ECEFF4", "--panel": "#3B4252", "--border": "#4C566A", "--muted": "#D8DEE9", "--accent": "#88C0D0", "--accent-fg": "#2E3440", "--task-todo": "#4C566A", "--task-progress": "#5E81AC", "--task-urgent": "#BF616A", "--task-question": "#EBCB8B", "--task-completed": "#A3BE8C", "--task-cancelled": "#4C566A", "--task-delegated": "#B48EAD", "--danger": "#BF616A", "--success": "#A3BE8C", "--warning": "#EBCB8B", "--info": "#5E81AC", "--editor-placeholder": "#4C566A"}}`,
   "one-dark-pro": `{"name": "One Dark Pro", "tokens": {"--bg": "#282c34", "--text": "#abb2bf", "--panel": "#21252b", "--border": "#3a3f4b", "--muted": "#5c6370", "--accent": "#61afef", "--accent-fg": "#ffffff", "--task-todo": "#5c6370", "--task-progress": "#61afef", "--task-urgent": "#e06c75", "--task-question": "#d19a66", "--task-completed": "#98c379", "--task-cancelled": "#5c6370", "--task-delegated": "#c678dd", "--danger": "#e06c75", "--success": "#98c379", "--warning": "#d19a66", "--info": "#61afef", "--editor-placeholder": "#5c6370"}}`,
@@ -274,6 +276,10 @@ export async function loadThemeForWorkspace(workspacePath) {
     const globalCfg = await readGlobalVisuals();
     id = globalCfg.theme;
   }
+  // Default to Lokus Dark if no theme is set
+  if (!id) {
+    id = 'lokus-dark';
+  }
   const manifest = await loadThemeManifestById(id);
   let tokensToApply = manifest?.tokens || BUILT_IN_THEME_TOKENS;
 
@@ -285,6 +291,11 @@ export async function loadThemeForWorkspace(workspacePath) {
 
 export async function applyInitialTheme() {
   let { theme } = await readGlobalVisuals();
+
+  // Default to Lokus Dark if no theme is set
+  if (!theme) {
+    theme = 'lokus-dark';
+  }
 
   // Check if we should sync with system dark mode
   if (theme === 'system' || theme === 'auto') {

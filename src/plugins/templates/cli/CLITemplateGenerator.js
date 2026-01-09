@@ -27,7 +27,7 @@ export class CLITemplateGenerator {
    */
   async generateProject(templateType, options = {}) {
     this.spinner = ora('Initializing template generator...').start()
-    
+
     try {
       // Validate template type
       const template = this.templateGenerator.getTemplate(templateType)
@@ -39,11 +39,11 @@ export class CLITemplateGenerator {
 
       // Get project details if not provided
       const projectOptions = await this.getProjectOptions(template, options)
-      
+
       // Validate project directory
       const projectPath = path.resolve(projectOptions.projectDirectory || projectOptions.pluginId)
       const validation = await this.validateProjectDirectory(projectPath)
-      
+
       if (!validation.valid) {
         throw new Error(validation.message)
       }
@@ -224,7 +224,7 @@ export class CLITemplateGenerator {
     }
 
     const answers = await prompts(questions)
-    
+
     return {
       ...providedOptions,
       ...answers,
@@ -239,7 +239,7 @@ export class CLITemplateGenerator {
   async validateProjectDirectory(directory) {
     try {
       await fs.access(directory)
-      
+
       // Directory exists, check if it's empty
       const files = await fs.readdir(directory)
       if (files.length > 0) {
@@ -249,13 +249,13 @@ export class CLITemplateGenerator {
           message: `Directory "${directory}" is not empty. Continue anyway?`,
           initial: false
         })
-        
+
         if (!proceed.overwrite) {
           return { valid: false, message: 'Operation cancelled by user' }
         }
       }
     } catch (error) {
-      // Directory doesn't exist, which is fine
+      // Directory doesn't exist, which is fine - we'll create it
     }
 
     return { valid: true }
@@ -276,7 +276,7 @@ export class CLITemplateGenerator {
     for (const [filePath, content] of structure.files) {
       const fullPath = path.join(projectPath, filePath)
       const dir = path.dirname(fullPath)
-      
+
       await fs.mkdir(dir, { recursive: true })
       await fs.writeFile(fullPath, content)
     }
@@ -286,7 +286,7 @@ export class CLITemplateGenerator {
       for (const [fileName, content] of Object.entries(structure.documentation)) {
         const fullPath = path.join(projectPath, fileName)
         const dir = path.dirname(fullPath)
-        
+
         await fs.mkdir(dir, { recursive: true })
         await fs.writeFile(fullPath, content)
       }
@@ -313,7 +313,9 @@ export class CLITemplateGenerator {
     if (options.initGit !== false) {
       try {
         await this.initializeGit(projectPath)
-      } catch { }
+      } catch (err) {
+        if (this.spinner) this.spinner.warn('Failed to initialize git repository')
+      }
     }
 
     // Install dependencies if package.json was created
@@ -351,9 +353,9 @@ export class CLITemplateGenerator {
     if (!installChoice.install) return
 
     const packageManager = await this.detectPackageManager(projectPath)
-    
+
     this.spinner = ora(`Installing dependencies with ${packageManager}...`).start()
-    
+
     try {
       const { execFile } = await import('child_process')
       const { promisify } = await import('util')
@@ -371,20 +373,20 @@ export class CLITemplateGenerator {
    */
   async detectPackageManager(projectPath) {
     const packageManagers = ['npm', 'yarn', 'pnpm']
-    
+
     for (const pm of packageManagers) {
       try {
         const { execFile } = await import('child_process')
         const { promisify } = await import('util')
         const exec = promisify(execFile)
-        
+
         await exec(pm, ['--version'])
         return pm
       } catch (error) {
         // Package manager not available
       }
     }
-    
+
     return 'npm' // fallback
   }
 
@@ -393,12 +395,12 @@ export class CLITemplateGenerator {
    */
   displaySuccessMessage(projectPath, structure) {
     const projectName = path.basename(projectPath)
-    
-    
+
+
     if (structure.metadata.useTypeScript) {
     } else {
     }
-    
+
   }
 
   /**
@@ -417,7 +419,7 @@ export class CLITemplateGenerator {
     }
 
     if (filter.features && filter.features.length > 0) {
-      filteredTemplates = filteredTemplates.filter(t => 
+      filteredTemplates = filteredTemplates.filter(t =>
         filter.features.some(feature => t.features?.includes(feature))
       )
     }
@@ -431,11 +433,11 @@ export class CLITemplateGenerator {
     }
 
     for (const [category, templates] of Object.entries(categories)) {
-      
+
       for (const template of templates) {
         const complexity = template.complexity ? chalk.gray(`(${template.complexity})`) : ''
         const features = template.features ? chalk.dim(`[${template.features.slice(0, 3).join(', ')}${template.features.length > 3 ? '...' : ''}]`) : ''
-        
+
       }
     }
 
@@ -446,15 +448,15 @@ export class CLITemplateGenerator {
    */
   showTemplate(templateType) {
     const template = this.templateGenerator.getTemplate(templateType)
-    
+
     if (!template) {
       return
     }
 
-    
+
     if (template.author) {
     }
-    
+
     if (template.features && template.features.length > 0) {
       for (const feature of template.features) {
       }
@@ -494,7 +496,7 @@ export class CLITemplateGenerator {
 
     // Get templates in selected category
     const templates = this.templateGenerator.getTemplatesByCategory(categoryChoice.category)
-    
+
     if (templates.length === 0) {
       return
     }

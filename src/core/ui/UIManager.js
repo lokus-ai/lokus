@@ -1,4 +1,4 @@
-import { toast } from "../../hooks/use-toast";
+import { toast } from "sonner";
 import { EventEmitter } from "../../utils/EventEmitter";
 import { startProgress, updateProgress, endProgress } from "../../hooks/usePluginProgress";
 
@@ -40,15 +40,13 @@ class UIManager extends EventEmitter {
 
     /**
      * Show a notification
-     * @param {string} message 
-     * @param {string} type 'info' | 'warning' | 'error'
+     * @param {string} message
+     * @param {string} type 'info' | 'warning' | 'error' | 'success'
      */
     showNotification(message, type = 'info') {
-        toast({
-            title: type.charAt(0).toUpperCase() + type.slice(1),
-            description: message,
-            variant: type === 'error' ? 'destructive' : 'default',
-        });
+        const title = type.charAt(0).toUpperCase() + type.slice(1);
+        const toastFn = toast[type] || toast.info;
+        toastFn(title, { description: message });
     }
 
     /**

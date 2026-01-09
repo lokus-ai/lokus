@@ -1,6 +1,6 @@
 import { Extension } from '@tiptap/core'
 import * as suggestionMod from '@tiptap/suggestion'
-import { PluginKey } from '@tiptap/pm/state'
+import { PluginKey, Plugin } from '@tiptap/pm/state'
 const suggestion = suggestionMod.default ?? suggestionMod
 const WIKI_SUGGESTION_KEY = new PluginKey('wikiLinkSuggestion')
 import { ReactRenderer } from '@tiptap/react'
@@ -116,7 +116,85 @@ const debouncedFilter = debounce((query, activePath, callback) => {
 const WikiLinkSuggest = Extension.create({
   name: 'wikiLinkSuggest',
   addProseMirrorPlugins() {
+    const editor = this.editor
+
     return [
+      // Plugin 0: Handle paste of URLs inside ![[ ]] - intercept and insert as image directly
+      new Plugin({
+        key: new PluginKey('imageUrlPasteHandler'),
+        props: {
+          handlePaste: (view, event, slice) => {
+            // Get pasted text first - if not a URL, bail early
+            const pastedText = event.clipboardData?.getData('text/plain')?.trim()
+            if (!pastedText) return false
+
+            // Check if it's a URL
+            if (!/^https?:\/\//i.test(pastedText) && !pastedText.startsWith('data:')) {
+              return false
+            }
+
+            const { state } = view
+            const { selection } = state
+            const $pos = selection.$from
+
+            // Get text before cursor - look in current paragraph first
+            let textBefore = state.doc.textBetween($pos.start(), $pos.pos)
+            let lastOpen = textBefore.lastIndexOf('![[')
+
+            // If not found in current paragraph, search further back
+            if (lastOpen === -1) {
+              const searchStart = Math.max(0, $pos.pos - 100)
+              textBefore = state.doc.textBetween(searchStart, $pos.pos)
+              lastOpen = textBefore.lastIndexOf('![[')
+            }
+
+            if (lastOpen === -1) return false
+
+            // Make sure there's no ]] between ![[ and cursor
+            const afterOpen = textBefore.slice(lastOpen + 3)
+            if (afterOpen.includes(']]')) return false
+
+            // It's a URL pasted inside ![[ - handle it specially
+            event.preventDefault()
+
+            // Find the ![[ position
+            const from = $pos.pos - (textBefore.length - lastOpen)
+
+            // Check if ]] exists after cursor - search across paragraph boundaries
+            let to = $pos.pos
+            try {
+              const searchEnd = Math.min($pos.pos + 50, state.doc.content.size)
+              const textAfter = state.doc.textBetween($pos.pos, searchEnd)
+              const closingIdx = textAfter.indexOf(']]')
+              if (closingIdx !== -1) {
+                to = $pos.pos + closingIdx + 2
+              }
+            } catch (e) {}
+
+            // Delete ![[ ... ]] and insert wikiLink node with the URL
+            const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
+
+            editor.chain()
+              .focus()
+              .deleteRange({ from, to })
+              .insertContent({
+                type: 'wikiLink',
+                attrs: {
+                  id,
+                  target: pastedText,
+                  alt: '',
+                  embed: true,
+                  href: pastedText,
+                  src: pastedText
+                }
+              })
+              .run()
+
+            return true // We handled the paste
+          }
+        }
+      }),
+
       // Plugin 1: Handle [[ for file suggestions
       suggestion({
         pluginKey: WIKI_SUGGESTION_KEY,
@@ -528,59 +606,348 @@ const WikiLinkSuggest = Extension.create({
         },
       }),
 
-      // Plugin 2: Handle ![ for canvas file suggestions
+      // Plugin 2: Handle ![[ for image embed suggestions
       suggestion({
-        pluginKey: new PluginKey('canvasLinkSuggestion'),
+        pluginKey: new PluginKey('imageEmbedSuggestion'),
         editor: this.editor,
-        char: '![',
+        char: '[',
         allowSpaces: true,
         startOfLine: false,
-        allowedPrefixes: [' ', null],  // Allow after space or start of line
-        allow: ({ state, range }) => {
+        allowedPrefixes: ['!'],  // Only trigger after !
+        allow: ({ state, range, query }) => {
           const $pos = state.selection.$from
-          const parentNode = $pos.node($pos.depth)
-          const isInList = parentNode.type.name === 'listItem' || parentNode.type.name === 'taskItem'
-          return !isInList
+          const pos = state.selection.from
+
+          // First check: Did we just type ![[ (initial trigger)?
+          const parentStart = $pos.start()
+          const textBefore3 = state.doc.textBetween(Math.max(parentStart, pos - 3), pos)
+          const isAfterImageBracket = textBefore3.endsWith('![[')
+
+          if (isAfterImageBracket) {
+            const parentNode = $pos.node($pos.depth)
+            const isInList = parentNode.type.name === 'listItem' || parentNode.type.name === 'taskItem'
+            return !isInList
+          }
+
+          // Second check: Are we in the middle of typing/pasting in an existing ![[...]] context?
+          // Look back further to find ![[ (for long URLs that were pasted)
+          if (query && query.length > 0) {
+            const searchStart = Math.max(0, pos - 600)
+            const textBeforeLong = state.doc.textBetween(searchStart, pos)
+            // Check if there's an unclosed ![[ before us
+            const lastOpen = textBeforeLong.lastIndexOf('![[')
+            if (lastOpen !== -1) {
+              // Make sure there's no ]] between ![[ and cursor
+              const afterOpen = textBeforeLong.slice(lastOpen + 3)
+              if (!afterOpen.includes(']]')) {
+                return true
+              }
+            }
+          }
+
+          return false
         },
         items: async ({ query }) => {
           const active = (globalThis.__LOKUS_ACTIVE_FILE__ || '')
           const idx = getIndex()
-          const canvasFiles = idx.filter(f => f.path.endsWith('.canvas'))
 
-          // For empty query, show all canvas files
-          if (!query) {
-            return canvasFiles.sort((a,b) => scoreItem(b, '', active) - scoreItem(a, '', active)).slice(0, 30)
+          // Image file extensions
+          const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.avif']
+          const imageFiles = idx.filter(f => imageExts.some(ext => f.path.toLowerCase().endsWith(ext)))
+
+          // Clean query - remove leading [ if present, and trim whitespace/newlines
+          let cleanQuery = query.startsWith('[') ? query.slice(1) : query
+          cleanQuery = cleanQuery.replace(/[\n\r]/g, '').trim()
+
+          // Check if query looks like a URL (be more lenient with URL detection)
+          const isUrl = /^https?:\/\//i.test(cleanQuery) || cleanQuery.startsWith('data:')
+
+          let results = []
+
+          // If it's a URL, add URL insert option first (and make it prominent)
+          if (isUrl) {
+            results.push({
+              type: 'url',
+              title: 'Insert image from URL',
+              path: cleanQuery.length > 50 ? cleanQuery.slice(0, 50) + '...' : cleanQuery,
+              url: cleanQuery
+            })
           }
 
-          // Filter and score - prioritize prefix matches
-          const q = query.toLowerCase()
-          const scored = canvasFiles.map(f => {
-            const fileName = f.title.toLowerCase().replace('.canvas', '')
-            let score = -1
+          // Filter and score image files (only if not a URL)
+          if (!isUrl) {
+            const q = cleanQuery.toLowerCase()
+            const scored = imageFiles.map(f => {
+              const fileName = f.title.toLowerCase()
+              let score = 0
 
-            if (fileName.startsWith(q)) score = 1000
-            else if (fileName.includes(q)) score = 100
-            else if (f.path.toLowerCase().includes(q)) score = 10
+              if (!q) score = 100
+              else if (fileName.startsWith(q)) score = 1000
+              else if (fileName.includes(q)) score = 100
+              else if (f.path.toLowerCase().includes(q)) score = 10
+              else score = -1
+
+              // Boost same folder
+              try {
+                if (dirname(active) === dirname(f.path)) score += 50
+              } catch {}
+
+              return { ...f, type: 'image', score }
+            })
+
+            const filtered = scored.filter(f => f.score >= 0).sort((a, b) => b.score - a.score).slice(0, 20)
+            results = results.concat(filtered)
+          }
+
+          return results
+        },
+        command: async ({ editor, range, props }) => {
+          const { state } = editor
+          const $pos = state.selection.$from
+
+          // Look for ![[ - try current paragraph first, then expand search
+          let textBefore = state.doc.textBetween($pos.start(), $pos.pos)
+          let openBracketPos = textBefore.lastIndexOf('![[')
+          let from
+
+          if (openBracketPos !== -1) {
+            from = $pos.pos - (textBefore.length - openBracketPos)
+          } else {
+            // Try looking further back (up to 500 chars) for ![[ in case of multi-line paste
+            const searchStart = Math.max(0, $pos.pos - 500)
+            textBefore = state.doc.textBetween(searchStart, $pos.pos)
+            openBracketPos = textBefore.lastIndexOf('![[')
+            if (openBracketPos === -1) return
+            from = $pos.pos - (textBefore.length - openBracketPos)
+          }
+
+          const to = range?.to ?? state.selection.to
+
+          // Check if ]] already exists after cursor (look a bit further for multi-line)
+          const textAfter = state.doc.textBetween($pos.pos, Math.min($pos.pos + 20, state.doc.content.size))
+          const closingMatch = textAfter.match(/^\s*\]\]/)
+          const hasClosingBrackets = closingMatch !== null
+          const deleteEnd = hasClosingBrackets ? $pos.pos + closingMatch[0].length : to
+
+          if (props.type === 'url') {
+            // URL mode - insert image with URL as src
+            const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
+            editor.chain()
+              .focus()
+              .deleteRange({ from, to: deleteEnd })
+              .insertContent({
+                type: 'wikiLink',
+                attrs: {
+                  id,
+                  target: props.url,
+                  alt: '',
+                  embed: true,
+                  href: props.url,
+                  src: props.url
+                }
+              })
+              .run()
+          } else {
+            // Image file mode - read file and insert with data URL
+            const fileName = props.title || props.path.split('/').pop()
+            const fullPath = props.path || ''
+
+            // Read image as data URL
+            let src = ''
+            try {
+              const { readFile } = await import('@tauri-apps/plugin-fs')
+              const data = await readFile(fullPath)
+              const ext = fileName.split('.').pop()?.toLowerCase()
+              const mimeMap = {
+                png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+                gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+                bmp: 'image/bmp', avif: 'image/avif'
+              }
+              const mime = mimeMap[ext] || 'application/octet-stream'
+              let binary = ''
+              for (let i = 0; i < data.length; i++) binary += String.fromCharCode(data[i])
+              src = `data:${mime};base64,${btoa(binary)}`
+            } catch {}
+
+            const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
+            editor.chain()
+              .focus()
+              .deleteRange({ from, to: deleteEnd })
+              .insertContent({
+                type: 'wikiLink',
+                attrs: {
+                  id,
+                  target: fileName,
+                  alt: '',
+                  embed: true,
+                  href: fullPath,
+                  src: src
+                }
+              })
+              .run()
+          }
+        },
+        render: () => {
+          let component
+          let container
+          const place = (rect) => {
+            if (!container || !rect) return
+            const dialogWidth = 384
+            const padding = 16
+            const viewportWidth = window.innerWidth
+            const viewportHeight = window.innerHeight
+
+            let left = rect.left
+            let top = rect.bottom + 6
+
+            if (left + dialogWidth + padding > viewportWidth) {
+              left = viewportWidth - dialogWidth - padding
+            }
+            if (left < padding) left = padding
+
+            const containerHeight = container.offsetHeight || 300
+            if (top + containerHeight + padding > viewportHeight) {
+              top = rect.top - containerHeight - 6
+              if (top < padding) top = padding
+            }
+
+            container.style.left = `${left}px`
+            container.style.top = `${top}px`
+            container.style.width = `${dialogWidth}px`
+          }
+          return {
+            onStart: (props) => {
+              // Auto-insert ]] after ![[
+              try {
+                const pos = props.editor.state.selection.from
+                const textAfter = props.editor.state.doc.textBetween(pos, Math.min(pos + 2, props.editor.state.doc.content.size))
+                if (textAfter !== ']]') {
+                  props.editor.chain().focus().insertContent(']]').setTextSelection(pos).run()
+                }
+              } catch {}
+
+              component = new ReactRenderer(WikiLinkList, { props: { ...props, isImageMode: true }, editor: props.editor })
+              container = document.createElement('div')
+              container.style.position = 'fixed'
+              container.style.zIndex = '2147483647'
+              container.style.pointerEvents = 'auto'
+              container.style.maxHeight = '60vh'
+              container.style.overflow = 'hidden'
+              container.appendChild(component.element)
+              document.body.appendChild(container)
+              if (props.clientRect) place(props.clientRect())
+            },
+            onUpdate: (props) => {
+              component.updateProps({ ...props, isImageMode: true })
+              if (props.clientRect) place(props.clientRect())
+            },
+            onKeyDown: (props) => {
+              if (props.event.key === 'Escape') {
+                if (container?.parentNode) container.parentNode.removeChild(container)
+                container = null
+                return true
+              }
+              if (!component || !component.ref) return false
+              return component.ref.onKeyDown(props)
+            },
+            onExit: () => {
+              try { if (container?.parentNode) container.parentNode.removeChild(container) } catch {}
+              container = null
+              if (component) component.destroy()
+            },
+          }
+        },
+      }),
+
+      // Plugin 3: Handle ![ for canvas suggestions (single bracket - NOT double ![[)
+      suggestion({
+        pluginKey: new PluginKey('canvasSuggestion'),
+        editor: this.editor,
+        char: '[',
+        allowSpaces: true,
+        startOfLine: false,
+        allowedPrefixes: ['!'],  // Only trigger after !
+        allow: ({ state, range, query }) => {
+          // If query starts with [, user typed ![[ not ![ - let image plugin handle it
+          if (query && query.startsWith('[')) {
+            return false
+          }
+
+          const $pos = state.selection.$from
+          const pos = state.selection.from
+          const parentStart = $pos.start()
+
+          // Check for ![ pattern (canvas) but NOT ![[ (image embed)
+          const textBefore = state.doc.textBetween(Math.max(parentStart, pos - 3), pos)
+
+          // Must be ![ but NOT ![[
+          const isAfterCanvasBracket = textBefore.endsWith('![') && !textBefore.endsWith('![[')
+
+          const parentNode = $pos.node($pos.depth)
+          const isInList = parentNode.type.name === 'listItem' || parentNode.type.name === 'taskItem'
+
+          return isAfterCanvasBracket && !isInList
+        },
+        items: async ({ query }) => {
+          const active = (globalThis.__LOKUS_ACTIVE_FILE__ || '')
+          const idx = getIndex()
+
+          // Filter to only canvas files
+          const canvasFiles = idx.filter(f => f.path.endsWith('.canvas'))
+
+          // Clean query
+          const cleanQuery = query.toLowerCase()
+
+          // Score and filter
+          const scored = canvasFiles.map(f => {
+            const name = f.title.toLowerCase()
+            let score = 0
+
+            if (!cleanQuery) score = 100
+            else if (name.startsWith(cleanQuery)) score = 1000
+            else if (name.includes(cleanQuery)) score = 100
+            else if (f.path.toLowerCase().includes(cleanQuery)) score = 10
+            else score = -1
+
+            // Boost same folder
+            try {
+              if (dirname(active) === dirname(f.path)) score += 50
+            } catch {}
 
             return { ...f, score }
           })
 
-          return scored.filter(f => f.score >= 0).sort((a, b) => b.score - a.score).slice(0, 30)
+          return scored.filter(f => f.score >= 0).sort((a, b) => b.score - a.score).slice(0, 20)
         },
-        command: ({ editor, range, props }) => {
-          const from = range.from
-          const to = range.to
-          const fileName = props.title?.replace('.canvas', '') || props.title
+        command: async ({ editor, range, props }) => {
+          const { state } = editor
+          const $pos = state.selection.$from
+          const textBefore = state.doc.textBetween($pos.start(), $pos.pos)
+
+          // Find where ![ starts
+          const openBracketPos = textBefore.lastIndexOf('![')
+          if (openBracketPos === -1) return
+
+          const from = $pos.pos - (textBefore.length - openBracketPos)
+          const to = range?.to ?? state.selection.to
+
+          // Check if ] already exists after cursor
+          const textAfter = state.doc.textBetween($pos.pos, Math.min($pos.pos + 2, state.doc.content.size))
+          const hasClosingBracket = textAfter.startsWith(']')
+          const deleteEnd = hasClosingBracket ? to + 1 : to
+
+          const fileName = props.title || props.path.split('/').pop()?.replace('.canvas', '')
           const fullPath = props.path || ''
 
-          // Delete ![ and query, insert canvasLink node
+          // Delete ![...] and insert CanvasLink node
+          const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
           editor.chain()
             .focus()
-            .deleteRange({ from, to })
+            .deleteRange({ from, to: deleteEnd })
             .insertContent({
               type: 'canvasLink',
               attrs: {
-                id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+                id,
                 canvasName: fileName,
                 canvasPath: fullPath,
                 thumbnailUrl: '',
@@ -594,12 +961,34 @@ const WikiLinkSuggest = Extension.create({
           let container
           const place = (rect) => {
             if (!container || !rect) return
-            container.style.left = `${Math.max(8, rect.left)}px`
-            container.style.top = `${Math.min(window.innerHeight - 16, rect.bottom + 6)}px`
-            container.style.width = '384px'
+            const dialogWidth = 384
+            const padding = 16
+            const viewportWidth = window.innerWidth
+            const viewportHeight = window.innerHeight
+
+            let left = rect.left
+            let top = rect.bottom + 6
+
+            if (left + dialogWidth + padding > viewportWidth) {
+              left = viewportWidth - dialogWidth - padding
+            }
+            if (left < padding) left = padding
+
+            const containerHeight = container.offsetHeight || 300
+            if (top + containerHeight + padding > viewportHeight) {
+              top = rect.top - containerHeight - 6
+              if (top < padding) top = padding
+            }
+
+            container.style.left = `${left}px`
+            container.style.top = `${top}px`
+            container.style.width = `${dialogWidth}px`
           }
           return {
             onStart: (props) => {
+              // Don't auto-insert ] for canvas - user might be typing ![[ for image embed
+              // The ] will be handled in the command when user selects a canvas
+
               component = new ReactRenderer(WikiLinkList, { props, editor: props.editor })
               container = document.createElement('div')
               container.style.position = 'fixed'
@@ -633,7 +1022,7 @@ const WikiLinkSuggest = Extension.create({
         },
       }),
 
-      // Plugin 3: Handle ^ for block suggestions
+      // Plugin 4: Handle ^ for block suggestions
       suggestion({
         pluginKey: new PluginKey('blockSuggestion'),
         editor: this.editor,

@@ -19,7 +19,7 @@ import {
 import { useTemplates, useTemplateValidation, useBuiltinVariables } from '../hooks/useTemplates.js';
 import TemplatePreview from '../components/TemplatePreview.jsx';
 
-export default function TemplateEditor({ 
+export default function TemplateEditor({
   template = null, // null for new template
   onSave,
   onCancel,
@@ -84,7 +84,9 @@ export default function TemplateEditor({
       setCategories(getCategories());
       setAllTags(getTags());
       setBuiltinVariables(getVariablesByCategory());
-    } catch { }
+    } catch (err) {
+      console.error('TemplateEditor: Failed to load template data', err);
+    }
   }, [getCategories, getTags, getVariablesByCategory]);
 
   // Validate template content
@@ -92,7 +94,7 @@ export default function TemplateEditor({
     if (formData.content) {
       const validationResult = validate(formData.content);
       setValidation(validationResult);
-      
+
       const stats = getStatistics(formData.content);
       setStatistics(stats);
     } else {
@@ -181,9 +183,9 @@ export default function TemplateEditor({
       const before = formData.content.substring(0, start);
       const after = formData.content.substring(end);
       const newContent = before + `{{${variableName}}}` + after;
-      
+
       handleChange('content', newContent);
-      
+
       // Set cursor position after insertion
       setTimeout(() => {
         textarea.focus();
@@ -201,9 +203,9 @@ export default function TemplateEditor({
       const before = formData.content.substring(0, start);
       const after = formData.content.substring(end);
       const newContent = before + snippet + after;
-      
+
       handleChange('content', newContent);
-      
+
       setTimeout(() => {
         textarea.focus();
         textarea.setSelectionRange(start + snippet.length, start + snippet.length);
@@ -239,9 +241,8 @@ export default function TemplateEditor({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowHelp(!showHelp)}
-            className={`p-2 rounded-md transition-colors ${
-              showHelp ? 'bg-app-accent text-app-accent-fg' : 'hover:bg-app-bg'
-            }`}
+            className={`p-2 rounded-md transition-colors ${showHelp ? 'bg-app-accent text-app-accent-fg' : 'hover:bg-app-bg'
+              }`}
             title="Help"
           >
             <HelpCircle size={16} />
@@ -249,9 +250,8 @@ export default function TemplateEditor({
 
           <button
             onClick={() => setShowVariables(!showVariables)}
-            className={`flex items-center gap-2 px-3 py-1 border border-app-border rounded-md transition-colors ${
-              showVariables ? 'bg-app-accent text-app-accent-fg' : 'hover:bg-app-bg'
-            }`}
+            className={`flex items-center gap-2 px-3 py-1 border border-app-border rounded-md transition-colors ${showVariables ? 'bg-app-accent text-app-accent-fg' : 'hover:bg-app-bg'
+              }`}
           >
             <Variable size={16} />
             Variables
@@ -290,7 +290,7 @@ export default function TemplateEditor({
           <div className="w-80 border-r border-app-border bg-app-panel/50 flex flex-col">
             <div className="p-4 border-b border-app-border">
               <h3 className="font-medium mb-3">Built-in Variables</h3>
-              
+
               {Object.entries(builtinVariables).map(([category, vars]) => (
                 <div key={category} className="mb-4">
                   <h4 className="text-sm font-medium text-app-muted uppercase tracking-wide mb-2">
@@ -344,7 +344,7 @@ export default function TemplateEditor({
             <div className="p-4 border-b border-app-border">
               <h3 className="font-medium mb-3">Template Syntax Help</h3>
             </div>
-            
+
             <div className="flex-1 overflow-auto p-4 space-y-4">
               <div>
                 <h4 className="font-medium mb-2">Variables</h4>
@@ -453,7 +453,7 @@ export default function TemplateEditor({
                     Add
                   </button>
                 </div>
-                
+
                 {/* Current Tags */}
                 {formData.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2">

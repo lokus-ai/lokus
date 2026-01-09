@@ -14,7 +14,7 @@ export class EventEmitter {
       this.events.set(event, [])
     }
     this.events.get(event).push(listener)
-    
+
     // Return unsubscribe function
     return () => this.off(event, listener)
   }
@@ -37,13 +37,13 @@ export class EventEmitter {
     if (!this.events.has(event)) {
       return
     }
-    
+
     const listeners = this.events.get(event)
     const index = listeners.indexOf(listener)
     if (index !== -1) {
       listeners.splice(index, 1)
     }
-    
+
     // Clean up empty event arrays
     if (listeners.length === 0) {
       this.events.delete(event)
@@ -57,14 +57,16 @@ export class EventEmitter {
     if (!this.events.has(event)) {
       return false
     }
-    
+
     const listeners = this.events.get(event).slice() // Clone to prevent issues with modifications during emit
     for (const listener of listeners) {
       try {
         listener(...args)
-      } catch { }
+      } catch (err) {
+        console.error(`EventEmitter: Error in listener for event '${event}'`, err);
+      }
     }
-    
+
     return true
   }
 
