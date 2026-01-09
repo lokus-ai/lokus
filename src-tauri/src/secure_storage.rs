@@ -4,8 +4,11 @@ use serde::{Serialize, Deserialize};
 use aes_gcm::{Aes256Gcm, aead::{Aead, KeyInit}};
 use argon2::{Argon2, password_hash::rand_core::OsRng};
 use rand::RngCore;
-use machine_uid;
 use thiserror::Error;
+
+// machine-uid only available on desktop platforms
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use machine_uid;
 
 #[derive(Error, Debug)]
 pub enum SecureStorageError {
@@ -42,6 +45,31 @@ pub struct SecureStorage {
 }
 
 impl SecureStorage {
+    /// Get device ID - uses machine-uid on desktop, persistent UUID on mobile
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn get_device_id(_base_path: &PathBuf) -> Result<String, SecureStorageError> {
+        machine_uid::get()
+            .map_err(|e| SecureStorageError::DeviceId(format!("Failed to get device ID: {}", e)))
+    }
+
+    /// Get device ID - on mobile, generate and persist a UUID
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    fn get_device_id(base_path: &PathBuf) -> Result<String, SecureStorageError> {
+        let device_id_file = base_path.join(".device_id");
+
+        if device_id_file.exists() {
+            // Read existing device ID
+            fs::read_to_string(&device_id_file)
+                .map(|s| s.trim().to_string())
+                .map_err(SecureStorageError::Io)
+        } else {
+            // Generate new device ID
+            let device_id = uuid::Uuid::new_v4().to_string();
+            fs::write(&device_id_file, &device_id)?;
+            Ok(device_id)
+        }
+    }
+
     pub fn new() -> Result<Self, SecureStorageError> {
         let home_dir = dirs::home_dir().ok_or_else(|| {
             SecureStorageError::Io(std::io::Error::new(
@@ -65,8 +93,7 @@ impl SecureStorage {
         }
 
         // Get device-specific identifier
-        let device_id = machine_uid::get()
-            .map_err(|e| SecureStorageError::DeviceId(format!("Failed to get device ID: {}", e)))?;
+        let device_id = Self::get_device_id(&base_path)?;
 
         Ok(Self {
             base_path,
