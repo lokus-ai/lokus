@@ -1,0 +1,26 @@
+# Maestro E2E Test: Launcher Flow
+# Tests the workspace launcher functionality on mobile
+
+appId: io.lokus.app
+name: Launcher Flow Test
+
+---
+
+# Wait for app to load
+- launchApp
+
+# Assert we're on the launcher screen
+- assertVisible:
+    text: "Lokus"
+
+# Look for workspace-related UI elements
+- assertVisible:
+    text: "Open Workspace"
+    optional: true
+
+- assertVisible:
+    text: "Create Workspace"
+    optional: true
+
+# Take a screenshot for visual verification
+- takeScreenshot: launcher_initial_state

@@ -1,0 +1,168 @@
+name: Mobile Builds
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Android Build
+  # ─────────────────────────────────────────────────────────────
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Android NDK
+        run: |
+          sdkmanager "ndk;25.2.9519653"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
+          echo "NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          cache-on-failure: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0"
+
+      - name: Initialize Android project
+        run: cargo tauri android init
+        working-directory: ./
+
+      - name: Build Android (Debug APK)
+        run: cargo tauri android build --debug --config src-tauri/tauri.android.conf.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Android APK (Debug)
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-debug
+          path: |
+            src-tauri/gen/android/app/build/outputs/apk/universal/debug/*.apk
+            src-tauri/gen/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+          if-no-files-found: warn
+
+  # ─────────────────────────────────────────────────────────────
+  # iOS Build
+  # ─────────────────────────────────────────────────────────────
+  build-ios:
+    runs-on: macos-14  # M1 runner for faster builds
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.4'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          cache-on-failure: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0"
+
+      - name: Initialize iOS project
+        run: cargo tauri ios init
+        working-directory: ./
+
+      - name: Build iOS (Simulator - no signing required)
+        run: cargo tauri ios build --debug --config src-tauri/tauri.ios.conf.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload iOS App (Debug)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-app-debug
+          path: |
+            src-tauri/gen/apple/build/
+          retention-days: 7
+          if-no-files-found: warn
+
+  # ─────────────────────────────────────────────────────────────
+  # Build Summary
+  # ─────────────────────────────────────────────────────────────
+  mobile-build-summary:
+    needs: [build-android, build-ios]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Build Summary
+        run: |
+          echo "## Mobile Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.build-android.result }}" == "success" ]; then
+            echo "| Android | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.build-android.result }}" == "failure" ]; then
+            echo "| Android | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Android | ⚠️ Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.build-ios.result }}" == "success" ]; then
+            echo "| iOS | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.build-ios.result }}" == "failure" ]; then
+            echo "| iOS | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| iOS | ⚠️ Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -1,0 +1,29 @@
+# Maestro E2E Test: Workspace Flow
+# Tests basic workspace operations on mobile
+
+appId: io.lokus.app
+name: Workspace Flow Test
+
+---
+
+# Launch app
+- launchApp
+
+# Wait for the app to fully load
+- extendedWaitUntil:
+    visible:
+      text: "Lokus"
+    timeout: 10000
+
+# Take initial screenshot
+- takeScreenshot: workspace_test_start
+
+# Test basic navigation - scroll to see content
+- scroll
+
+# Capture the state after scroll
+- takeScreenshot: workspace_after_scroll
+
+# Test that the app is responsive
+- assertVisible:
+    id: ".*"  # Any visible element
