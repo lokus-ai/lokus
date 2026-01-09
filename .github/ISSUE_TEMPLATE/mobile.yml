@@ -1,0 +1,115 @@
+name: 📱 Mobile Issue
+description: Report a mobile-specific bug or request a mobile feature
+title: "[Mobile]: "
+labels: ["mobile", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Lokus on mobile! 📱
+
+        > **Note for contributors:** Always wrap mobile-specific changes in `isMobile()` checks to avoid breaking the desktop app. Import from `src/platform/index.js`.
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Issue Type
+      description: Is this a bug or a feature request?
+      options:
+        - 🐛 Bug - Something doesn't work on mobile
+        - ✨ Feature - New mobile functionality needed
+        - 🎨 UI/UX - Mobile layout or design issue
+        - ♿ Accessibility - Touch targets, readability, etc.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Mobile Platform
+      description: Which mobile platform is this for?
+      options:
+        - iOS
+        - Android
+        - Both iOS and Android
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the issue or feature request
+      placeholder: |
+        What's the problem or what feature is needed?
+    validations:
+      required: true
+
+  - type: textarea
+    id: files
+    attributes:
+      label: Files to Modify
+      description: List the files that need to be changed (if known)
+      placeholder: |
+        - src/components/StatusBar.jsx
+        - src/views/Workspace.jsx
+    validations:
+      required: false
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How should this be fixed or implemented?
+      placeholder: |
+        ```jsx
+        // Example code change
+        if (isMobile()) {
+          // Mobile-specific behavior
+        }
+        ```
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: How do we know when this is done?
+      placeholder: |
+        - [ ] Works on iOS simulator
+        - [ ] Desktop layout unchanged
+        - [ ] Touch targets are 44px minimum
+    validations:
+      required: false
+
+  - type: dropdown
+    id: difficulty
+    attributes:
+      label: Difficulty
+      description: How hard is this to implement?
+      options:
+        - 🟢 Good First Issue - Simple, isolated change
+        - 🟡 Medium - Some refactoring needed
+        - 🔴 Hard - Architectural changes required
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Contributor Checklist
+      description: For contributors working on this issue
+      options:
+        - label: I will wrap mobile changes in `isMobile()` checks
+        - label: I will test on both mobile and desktop
+        - label: I will not break existing desktop functionality
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our Code of Conduct
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true
