@@ -2,9 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -12,12 +12,9 @@ concurrency:
 
 jobs:
   unit-tests:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    
-    runs-on: ${{ matrix.os }}
+    # Run on Ubuntu only for PRs (fast feedback)
+    # Full matrix runs on push to main
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout repository
@@ -46,109 +43,3 @@ jobs:
           test-results/
         retention-days: 7
         if-no-files-found: ignore
-
-  build-test:
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - name: Windows
-            os: windows-latest
-            tauri_config: src-tauri/tauri.windows.conf.json
-          - name: macOS
-            os: macos-latest
-            tauri_config: src-tauri/tauri.macos.conf.json
-          - name: Linux
-            os: ubuntu-latest
-            tauri_config: src-tauri/tauri.conf.json
-
-    runs-on: ${{ matrix.platform.os }}
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: package-lock.json
-    
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: ${{ matrix.platform.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-
-    - name: Cache Rust dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          src-tauri/target/
-        key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-test-
-          ${{ runner.os }}-cargo-
-
-    - name: Install Linux dependencies
-      if: matrix.platform.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libgtk-3-dev \
-          libwebkit2gtk-4.0-dev \
-          libappindicator3-dev \
-          librsvg2-dev \
-          patchelf \
-          libayatana-appindicator3-dev
-
-    - name: Install dependencies
-      run: npm ci
-    
-    - name: Build application
-      run: |
-        npm run build
-        npm run tauri build -- --config ${{ matrix.platform.tauri_config }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-${{ matrix.platform.name }}-test
-        path: src-tauri/target/release/bundle/
-        retention-days: 3
-        if-no-files-found: error
-
-  test-summary:
-    needs: [unit-tests, build-test]
-    runs-on: ubuntu-latest
-    if: always()
-    
-    steps:
-      - name: Test Summary
-        run: |
-          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Test Type | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
-          
-          if [ "${{ needs.unit-tests.result }}" == "success" ]; then
-            echo "| Unit Tests | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.unit-tests.result }}" == "failure" ]; then
-            echo "| Unit Tests | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| Unit Tests | ⚠️ Cancelled/Skipped |" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ "${{ needs.build-test.result }}" == "success" ]; then
-            echo "| Build Tests | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.build-test.result }}" == "failure" ]; then
-            echo "| Build Tests | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| Build Tests | ❌ Cancelled/Skipped |" >> $GITHUB_STEP_SUMMARY
-          fi

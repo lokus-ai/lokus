@@ -1,10 +1,9 @@
 name: E2E Tests
 
+# E2E tests are slow and expensive - only run on main or manually
 on:
   workflow_dispatch:
   push:
-    branches: [main, develop]
-  pull_request:
     branches: [main]
 
 concurrency:

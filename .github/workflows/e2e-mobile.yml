@@ -1,9 +1,8 @@
 name: Mobile E2E Tests
 
+# Mobile E2E is very expensive - only run on main push or manually
 on:
   push:
-    branches: [main, develop]
-  pull_request:
     branches: [main]
   workflow_dispatch:
 
