@@ -1,0 +1,7 @@
+{
+  "name": "@lokus/mcp-server",
+  "version": "1.0.0",
+  "main": "mcp-server.js",
+  "type": "commonjs",
+  "description": "Lokus MCP Server - Bundled for production"
+}

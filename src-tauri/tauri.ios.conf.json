@@ -1,0 +1,68 @@
+{
+  "$schema": "https://schema.tauri.app/config/2.0.0",
+  "productName": "Lokus",
+  "version": "1.0.0",
+  "identifier": "io.lokus.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Lokus",
+        "width": 390,
+        "height": 844,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' asset: https://asset.localhost blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob: asset: https://asset.localhost; font-src 'self' data:; connect-src 'self' https: wss: asset: https://asset.localhost; media-src 'self' data: blob: asset: https://asset.localhost; object-src 'none'; frame-src 'self' blob:; base-uri 'self'; form-action 'none';",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$DOCUMENT/**", "$DOWNLOAD/**"]
+      }
+    },
+    "withGlobalTauri": false
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/ios/AppIcon-20x20@1x.png",
+      "icons/ios/AppIcon-20x20@2x.png",
+      "icons/ios/AppIcon-29x29@1x.png",
+      "icons/ios/AppIcon-29x29@2x.png",
+      "icons/ios/AppIcon-40x40@1x.png",
+      "icons/ios/AppIcon-40x40@2x.png",
+      "icons/ios/AppIcon-60x60@2x.png",
+      "icons/ios/AppIcon-60x60@3x.png",
+      "icons/ios/AppIcon-76x76@1x.png",
+      "icons/ios/AppIcon-76x76@2x.png",
+      "icons/ios/AppIcon-83.5x83.5@2x.png",
+      "icons/ios/AppIcon-512@2x.png"
+    ],
+    "iOS": {
+      "developmentTeam": null,
+      "minimumSystemVersion": "13.0"
+    }
+  },
+  "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false
+    },
+    "clipboardManager": {
+      "all": true,
+      "writeText": true,
+      "readText": true
+    },
+    "deepLink": {
+      "mobile": ["lokus"],
+      "desktop": {
+        "schemes": ["lokus"]
+      }
+    }
+  }
+}

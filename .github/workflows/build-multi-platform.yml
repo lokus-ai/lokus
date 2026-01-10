@@ -1,10 +1,11 @@
 name: Multi-Platform Build
 
+# Only run on push to main (for releases) or manual trigger
+# PRs don't need full builds - they get tested, not released
 on:
   push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

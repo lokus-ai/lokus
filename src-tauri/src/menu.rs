@@ -1,5 +1,9 @@
-// Menu is desktop-only - mobile platforms don't support native menus
-#![cfg(desktop)]
+//! Desktop menu module - only available on desktop platforms
+//!
+//! Mobile platforms don't have traditional menus, so this entire module
+//! is conditionally compiled only for desktop targets.
+
+#![cfg(not(any(target_os = "android", target_os = "ios")))]
 
 use tauri::{
   AppHandle,

@@ -114,13 +114,15 @@ pub async fn store_git_credentials(
             .map_err(|e| format!("Failed to store username: {}", e))?;
     }
 
-    #[cfg(any(target_os = "ios", target_os = "android"))]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
-        // Mobile platforms use SecureStorage from secure_storage.rs
-        // For now, return an error - credentials should use SecureStorage directly
-        return Err("Mobile credential storage not yet implemented. Use SecureStorage instead.".to_string());
+        // Mobile platforms don't have traditional keychain access
+        // For now, return an error - future implementation could use Android Keystore or iOS Keychain
+        let _ = (service_name, username, token); // Suppress unused warnings
+        Err("Git credential storage not available on mobile".to_string())
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Ok(())
 }
 
@@ -231,9 +233,10 @@ pub async fn retrieve_git_credentials(
         });
     }
 
-    #[cfg(any(target_os = "ios", target_os = "android"))]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
-        return Err("Mobile credential retrieval not yet implemented. Use SecureStorage instead.".to_string());
+        let _ = service_name; // Suppress unused warning
+        return Err("Git credential retrieval not available on mobile".to_string());
     }
 }
 
@@ -291,10 +294,10 @@ pub async fn delete_git_credentials(workspace_id: String) -> Result<(), String> 
         let _ = username_entry.delete_credential(); // Ignore error
     }
 
-    #[cfg(any(target_os = "ios", target_os = "android"))]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
-        // Mobile platforms - no-op for now
-        let _ = service_name;
+        let _ = service_name; // Suppress unused warning
+        // No-op on mobile - credentials aren't stored anyway
     }
 
     Ok(())
@@ -369,11 +372,13 @@ pub async fn store_iroh_keys(
             .map_err(|e| format!("Failed to store iroh keys: {}", e))?;
     }
 
-    #[cfg(any(target_os = "ios", target_os = "android"))]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
-        return Err("Mobile iroh key storage not yet implemented. Use SecureStorage instead.".to_string());
+        let _ = (service_name, private_key); // Suppress unused warnings
+        Err("Iroh key storage not available on mobile".to_string())
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Ok(())
 }
 
@@ -448,9 +453,10 @@ pub async fn retrieve_iroh_keys(
         return Ok(key_bytes);
     }
 
-    #[cfg(any(target_os = "ios", target_os = "android"))]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
-        return Err("Mobile iroh key retrieval not yet implemented. Use SecureStorage instead.".to_string());
+        let _ = service_name; // Suppress unused warning
+        return Err("Iroh key retrieval not available on mobile".to_string());
     }
 }
 
@@ -495,10 +501,10 @@ pub async fn delete_iroh_keys(workspace_id: String) -> Result<(), String> {
         let _ = entry.delete_credential(); // Ignore error if not found
     }
 
-    #[cfg(any(target_os = "ios", target_os = "android"))]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
-        // Mobile platforms - no-op for now
-        let _ = service_name;
+        let _ = service_name; // Suppress unused warning
+        // No-op on mobile - keys aren't stored anyway
     }
 
     Ok(())

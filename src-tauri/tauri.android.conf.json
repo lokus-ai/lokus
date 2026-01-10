@@ -1,0 +1,60 @@
+{
+  "$schema": "https://schema.tauri.app/config/2.0.0",
+  "productName": "Lokus",
+  "version": "1.0.0",
+  "identifier": "io.lokus.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Lokus",
+        "width": 360,
+        "height": 800,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' asset: https://asset.localhost blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob: asset: https://asset.localhost; font-src 'self' data:; connect-src 'self' https: wss: asset: https://asset.localhost; media-src 'self' data: blob: asset: https://asset.localhost; object-src 'none'; frame-src 'self' blob:; base-uri 'self'; form-action 'none';",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$DOCUMENT/**", "$DOWNLOAD/**"]
+      }
+    },
+    "withGlobalTauri": false
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/android/mipmap-hdpi/ic_launcher.png",
+      "icons/android/mipmap-mdpi/ic_launcher.png",
+      "icons/android/mipmap-xhdpi/ic_launcher.png",
+      "icons/android/mipmap-xxhdpi/ic_launcher.png",
+      "icons/android/mipmap-xxxhdpi/ic_launcher.png"
+    ],
+    "android": {
+      "minSdkVersion": 24
+    }
+  },
+  "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false
+    },
+    "clipboardManager": {
+      "all": true,
+      "writeText": true,
+      "readText": true
+    },
+    "deepLink": {
+      "mobile": ["lokus"],
+      "desktop": {
+        "schemes": ["lokus"]
+      }
+    }
+  }
+}

@@ -76,19 +76,21 @@ impl MCPSetup {
         #[cfg(target_os = "linux")]
         let config_path = home.join(".config/Claude/claude_desktop_config.json");
 
-        #[cfg(target_os = "ios")]
-        let config_path = home.join("Documents/.lokus/claude_config.json");
-
-        #[cfg(target_os = "android")]
-        let config_path = home.join(".lokus/claude_config.json");
-
-        // Create directory if it doesn't exist
-        if let Some(parent) = config_path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create config directory: {}", e))?;
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        {
+            // MCP server integration is not available on mobile
+            return Err("MCP server configuration not available on mobile".to_string());
         }
 
-        Ok(config_path)
+        // Create directory if it doesn't exist (desktop only)
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            if let Some(parent) = config_path.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("Failed to create config directory: {}", e))?;
+            }
+            Ok(config_path)
+        }
     }
 
 

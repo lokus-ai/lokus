@@ -249,3 +249,201 @@ jobs:
         with:
           files: src-tauri/target/release/Lokus-${{ github.ref_name }}-appstore.pkg
           tag_name: ${{ github.ref_name }}
+
+  # ─────────────────────────────────────────────────────────────
+  # Android Release Build
+  # ─────────────────────────────────────────────────────────────
+  release-android:
+    runs-on: ubuntu-latest
+    needs: release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Android NDK
+        run: |
+          sdkmanager "ndk;25.2.9519653"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
+          echo "NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Sync node version and setup cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0"
+
+      - name: Initialize Android project
+        run: cargo tauri android init
+
+      - name: Decode Android Keystore
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > $RUNNER_TEMP/keystore.jks
+
+      - name: Build Android Release
+        run: cargo tauri android build --config src-tauri/tauri.android.conf.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          VITE_AUTH_BASE_URL: https://lokusmd.com
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_ENABLE_CRASH_REPORTS: 'true'
+          VITE_SENTRY_ENVIRONMENT: 'production'
+          VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
+          VITE_UMAMI_API_ENDPOINT: ${{ secrets.VITE_UMAMI_API_ENDPOINT }}
+
+      - name: Sign APK
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          # Find and sign the APK
+          APK_PATH=$(find src-tauri/gen/android -name "*.apk" -type f | head -1)
+          if [ -n "$APK_PATH" ]; then
+            # Align the APK first
+            zipalign -v 4 "$APK_PATH" "$APK_PATH.aligned"
+            mv "$APK_PATH.aligned" "$APK_PATH"
+
+            # Sign with apksigner
+            apksigner sign --ks $RUNNER_TEMP/keystore.jks \
+              --ks-key-alias "${{ secrets.ANDROID_KEY_ALIAS }}" \
+              --ks-pass pass:"${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+              --key-pass pass:"${{ secrets.ANDROID_KEY_PASSWORD }}" \
+              "$APK_PATH"
+          fi
+
+      - name: Upload Android APK to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
+            src-tauri/gen/android/app/build/outputs/apk/release/*.apk
+          tag_name: ${{ github.ref_name }}
+
+  # ─────────────────────────────────────────────────────────────
+  # iOS Release Build
+  # ─────────────────────────────────────────────────────────────
+  release-ios:
+    runs-on: macos-14
+    needs: release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.4'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Sync node version and setup cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0"
+
+      - name: Initialize iOS project
+        run: cargo tauri ios init
+
+      - name: Setup Apple API Key
+        run: |
+          mkdir -p ~/private_keys
+          echo "${{ secrets.APPLE_API_KEY_PATH_BASE64 }}" | base64 --decode > ~/private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8
+
+      - name: Install iOS Distribution Certificate
+        env:
+          APPLE_IOS_CERTIFICATE: ${{ secrets.APPLE_IOS_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          echo "$APPLE_IOS_CERTIFICATE" | base64 --decode > $RUNNER_TEMP/ios_certificate.p12
+          security import $RUNNER_TEMP/ios_certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+      - name: Install iOS Provisioning Profile
+        if: ${{ secrets.IOS_PROVISIONING_PROFILE != '' }}
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 --decode > \
+            ~/Library/MobileDevice/Provisioning\ Profiles/lokus_ios.mobileprovision
+
+      - name: Build iOS Release
+        run: cargo tauri ios build --config src-tauri/tauri.ios.conf.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          VITE_AUTH_BASE_URL: https://lokusmd.com
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_ENABLE_CRASH_REPORTS: 'true'
+          VITE_SENTRY_ENVIRONMENT: 'production'
+          VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
+          VITE_UMAMI_API_ENDPOINT: ${{ secrets.VITE_UMAMI_API_ENDPOINT }}
+
+      - name: Upload iOS IPA to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: src-tauri/gen/apple/build/**/*.ipa
+          tag_name: ${{ github.ref_name }}
+
+      # Optional: Upload to TestFlight
+      - name: Upload to TestFlight
+        if: ${{ secrets.APPLE_API_KEY != '' && !contains(github.ref_name, 'beta') && !contains(github.ref_name, 'alpha') }}
+        run: |
+          IPA_PATH=$(find src-tauri/gen/apple/build -name "*.ipa" -type f | head -1)
+          if [ -n "$IPA_PATH" ]; then
+            xcrun altool --upload-app \
+              --type ios \
+              --file "$IPA_PATH" \
+              --apiKey "${{ secrets.APPLE_API_KEY }}" \
+              --apiIssuer "${{ secrets.APPLE_API_ISSUER }}"
+          fi

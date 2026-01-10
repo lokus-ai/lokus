@@ -1,0 +1,41 @@
+# Maestro E2E Test: Smoke Test
+# Basic smoke test to verify the app launches and is functional
+
+appId: io.lokus.app
+name: Mobile Smoke Test
+
+---
+
+# Launch the app
+- launchApp
+
+# Wait for app to initialize (WebView can take a moment)
+- extendedWaitUntil:
+    visible:
+      text: ".*"  # Any text visible
+    timeout: 15000
+
+# Verify the app rendered something
+- assertVisible:
+    text: ".*"
+
+# Take screenshot of initial state
+- takeScreenshot: smoke_test_initial
+
+# Try a simple tap interaction (if there's a tappable element)
+- tapOn:
+    point: "50%,50%"
+    optional: true
+
+# Wait a moment for any response
+- extendedWaitUntil:
+    visible:
+      text: ".*"
+    timeout: 3000
+
+# Final screenshot
+- takeScreenshot: smoke_test_final
+
+# Test passes if app didn't crash
+- assertVisible:
+    text: ".*"
