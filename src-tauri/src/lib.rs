@@ -206,10 +206,8 @@ fn check_workspace_needs_reauth(_app: tauri::AppHandle, path: String) -> bool {
     {
         // On non-macOS, just check if path exists
         let workspace_path = std::path::Path::new(&path);
-        return !workspace_path.exists();
+        !workspace_path.exists()
     }
-
-    false
 }
 
 fn restore_workspace_access(_app: &tauri::AppHandle) -> Option<String> {

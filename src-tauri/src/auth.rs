@@ -666,7 +666,6 @@ pub fn logout() -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(desktop)]
 #[tauri::command]
 pub async fn open_auth_url(auth_url: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
@@ -693,6 +692,14 @@ pub async fn open_auth_url(auth_url: String) -> Result<(), String> {
             .map_err(|e| format!("Failed to open URL: {}", e))?;
     }
 
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        // On mobile, we can't open URLs the same way - this should be handled by the frontend
+        let _ = auth_url;
+        Err("Use mobile browser or in-app browser for authentication".to_string())
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Ok(())
 }
 

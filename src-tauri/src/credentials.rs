@@ -119,9 +119,10 @@ pub async fn store_git_credentials(
         // Mobile platforms don't have traditional keychain access
         // For now, return an error - future implementation could use Android Keystore or iOS Keychain
         let _ = (service_name, username, token); // Suppress unused warnings
-        return Err("Git credential storage not available on mobile".to_string());
+        Err("Git credential storage not available on mobile".to_string())
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Ok(())
 }
 
@@ -374,9 +375,10 @@ pub async fn store_iroh_keys(
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         let _ = (service_name, private_key); // Suppress unused warnings
-        return Err("Iroh key storage not available on mobile".to_string());
+        Err("Iroh key storage not available on mobile".to_string())
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Ok(())
 }
 
