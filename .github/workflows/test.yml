@@ -12,10 +12,13 @@ concurrency:
 
 jobs:
   unit-tests:
-    # Run on Ubuntu only for PRs (fast feedback)
-    # Full matrix runs on push to main
-    runs-on: ubuntu-latest
-    
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -26,10 +29,10 @@ jobs:
         node-version: '20'
         cache: 'npm'
         cache-dependency-path: package-lock.json
-    
+
     - name: Install dependencies
       run: npm ci
-    
+
     - name: Run unit tests
       run: npm test
 
