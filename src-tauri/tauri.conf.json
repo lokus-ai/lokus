@@ -55,6 +55,9 @@
       "minimumSystemVersion": "10.13",
       "signingIdentity": null,
       "providerShortName": null
+    },
+    "iOS": {
+      "minimumSystemVersion": "13.0"
     }
   },
   "plugins": {

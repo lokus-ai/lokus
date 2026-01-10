@@ -666,6 +666,7 @@ pub fn logout() -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn open_auth_url(auth_url: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
@@ -675,7 +676,7 @@ pub async fn open_auth_url(auth_url: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("Failed to open URL: {}", e))?;
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
@@ -683,7 +684,7 @@ pub async fn open_auth_url(auth_url: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("Failed to open URL: {}", e))?;
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         std::process::Command::new("xdg-open")
@@ -691,7 +692,7 @@ pub async fn open_auth_url(auth_url: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("Failed to open URL: {}", e))?;
     }
-    
+
     Ok(())
 }
 

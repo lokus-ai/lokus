@@ -1,6 +1,7 @@
 {
   "identifier": "default",
-  "description": "Permissions for the main application functionality",
+  "description": "Permissions for desktop application functionality",
+  "platforms": ["macOS", "windows", "linux"],
   "windows": [
     "*"
   ],

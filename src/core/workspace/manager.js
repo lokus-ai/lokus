@@ -25,6 +25,26 @@ function isTestMode() {
   }
 }
 
+// Check if running on mobile (iOS/Android)
+function isMobilePlatform() {
+  try {
+    const userAgent = navigator.userAgent.toLowerCase();
+    const platform = navigator.platform?.toLowerCase() || '';
+
+    // iOS detection
+    if (/iphone|ipad|ipod/.test(userAgent) || (platform === 'macintel' && navigator.maxTouchPoints > 1)) {
+      return true;
+    }
+    // Android detection
+    if (userAgent.includes('android')) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Workspace Manager - Handles workspace validation and management
  */
@@ -39,6 +59,23 @@ export class WorkspaceManager {
     // This enables E2E testing with Playwright
     if (!isTauriAvailable() && isTestMode()) {
       return path && typeof path === 'string' && path.length > 0;
+    }
+
+    // On mobile, use filesystem plugin to validate instead of Rust command
+    // The desktop validation uses macOS security-scoped bookmarks which don't exist on iOS
+    if (isMobilePlatform()) {
+      try {
+        const { exists, stat } = await import("@tauri-apps/plugin-fs");
+        const pathExists = await exists(path);
+        if (!pathExists) return false;
+
+        const pathStat = await stat(path);
+        return pathStat.isDirectory;
+      } catch (error) {
+        console.error("Mobile workspace validation error:", error);
+        // If we can't check, assume it's valid (we created it)
+        return path && typeof path === 'string' && path.length > 0;
+      }
     }
 
     try {
@@ -72,10 +109,17 @@ export class WorkspaceManager {
       if (!isValid) {
         throw new Error("Invalid workspace path");
       }
-      
+
+      // On mobile, we don't need to call the Rust save command
+      // The recents list in localStorage is sufficient
+      if (isMobilePlatform()) {
+        return true;
+      }
+
       await invoke("save_last_workspace", { path });
       return true;
     } catch (error) {
+      console.error("Save workspace path error:", error);
       return false;
     }
   }
@@ -157,6 +201,11 @@ export class WorkspaceManager {
   static async checkNeedsReauth(path) {
     // In browser/test mode, never needs reauth
     if (!isTauriAvailable()) {
+      return false;
+    }
+
+    // On mobile, we don't use security-scoped bookmarks, so never needs reauth
+    if (isMobilePlatform()) {
       return false;
     }
 

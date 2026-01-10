@@ -13,7 +13,7 @@ Local-first. Privacy-focused. Blazing fast.
 ---
 
 [![GitHub Stars](https://img.shields.io/github/stars/lokus-ai/lokus?style=flat&logo=github&labelColor=1a1a2e&color=6366f1)](https://github.com/lokus-ai/lokus/stargazers)
-[![License](https://img.shields.io/badge/License-BSL_1.1-blue?style=flat&labelColor=1a1a2e&color=6366f1)](LICENSE)
+[![License](https://img.shields.io/badge/License-FCL_1.0-blue?style=flat&labelColor=1a1a2e&color=6366f1)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/lokus-ai/lokus?include_prereleases&style=flat&labelColor=1a1a2e&color=6366f1)](https://github.com/lokus-ai/lokus/releases)
 [![Downloads](https://img.shields.io/github/downloads/lokus-ai/lokus/total?style=flat&labelColor=1a1a2e&color=6366f1)](https://github.com/lokus-ai/lokus/releases)
 
@@ -27,7 +27,7 @@ Local-first. Privacy-focused. Blazing fast.
 
 Most note-taking apps fall into two categories: **powerful but closed-source** (Obsidian) or **open but cloud-dependent** (Notion). Lokus is neither.
 
-- **Truly Open Source** — BSL 1.1 licensed. Read every line. Fork it. Make it yours.
+- **Fair Source** — FCL 1.0 licensed. Read every line. Fork it. Make it yours.
 - **Local-First** — Your notes are markdown files on YOUR device. No proprietary format.
 - **Fast** — Built with Tauri & Rust. ~50MB RAM vs 300MB+ for Electron apps.
 - **No Subscription** — Free forever. No $10/month sync tax.
@@ -250,13 +250,13 @@ If you find Lokus useful, consider:
 
 ## License
 
-Lokus is licensed under the [Business Source License 1.1](LICENSE).
+Lokus is licensed under the [Fair Core License 1.0 (FCL-1.0-MIT)](LICENSE).
 
 - **Free for personal use** — Always
-- **Free for small teams** — Under 10 users
-- **Enterprise licensing** — Contact us for larger deployments
+- **Free for education & research** — Non-commercial
+- **Commercial licensing** — Required for competing products/services
 
-The license converts to MIT after 4 years.
+The license automatically converts to MIT after 2 years. [Learn more about FCL](https://fcl.dev/)
 
 <br />
 

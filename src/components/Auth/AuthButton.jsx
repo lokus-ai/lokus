@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User, LogIn, LogOut, Settings } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 import { useAuth } from '../../core/auth/AuthContext';
 
 export default function AuthButton() {
@@ -13,6 +14,7 @@ export default function AuthButton() {
     try {
       await signIn();
     } catch (error) {
+      console.log("Error:", error)
       // You could show a toast notification here
     }
   };
@@ -22,7 +24,9 @@ export default function AuthButton() {
       setIsSigningOut(true);
       await signOut();
       setShowDropdown(false);
-    } catch { } finally {
+    } catch (error) {
+      console.log("Error:", error)
+    } finally {
       setIsSigningOut(false);
     }
   };
@@ -56,9 +60,9 @@ export default function AuthButton() {
         title={user?.name || user?.email || 'Account'}
       >
         {user?.avatar_url ? (
-          <img 
-            src={user.avatar_url} 
-            alt="Profile" 
+          <img
+            src={user.avatar_url}
+            alt="Profile"
             className="w-6 h-6 rounded-full"
           />
         ) : (
@@ -74,11 +78,11 @@ export default function AuthButton() {
       {showDropdown && (
         <>
           {/* Backdrop */}
-          <div 
-            className="fixed inset-0 z-10" 
+          <div
+            className="fixed inset-0 z-10"
             onClick={() => setShowDropdown(false)}
           />
-          
+
           {/* Dropdown menu */}
           <div className="absolute right-0 top-full mt-1 w-48 bg-app-panel border border-app-border rounded-md shadow-lg z-20">
             <div className="p-3 border-b border-app-border">
@@ -89,20 +93,20 @@ export default function AuthButton() {
                 {user?.email || 'No email'}
               </div>
             </div>
-            
+
             <div className="py-1">
-              <button 
+              <button
                 className="w-full px-3 py-2 text-left text-sm text-app-text hover:bg-app-bg flex items-center gap-2"
                 onClick={() => {
                   setShowDropdown(false);
-                  // TODO: Open account settings
+                  invoke('open_preferences_window', { workspacePath: window.__WORKSPACE_PATH__ || null });
                 }}
               >
                 <Settings className="w-4 h-4" />
                 Account Settings
               </button>
-              
-              <button 
+
+              <button
                 className="w-full px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-app-bg flex items-center gap-2 disabled:opacity-50"
                 onClick={handleSignOut}
                 disabled={isSigningOut}
