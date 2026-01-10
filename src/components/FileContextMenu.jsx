@@ -44,6 +44,7 @@ import {
   Clock,
 } from 'lucide-react';
 import platformService from '../services/platform/PlatformService';
+import { isDesktop } from '../services/platform/PlatformService';
 
 export default function FileContextMenu({
   children,
@@ -287,7 +288,7 @@ export default function FileContextMenu({
         )}
 
         {/* Compare Operations */}
-        {file && isFile && (
+        {isDesktop() && file && isFile && (
           <>
             <ContextMenuSub>
               <ContextMenuSubTrigger>
