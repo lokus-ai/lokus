@@ -87,6 +87,7 @@ import Breadcrumbs from "../components/FileTree/Breadcrumbs.jsx";
 import AboutDialog from "../components/AboutDialog.jsx";
 import { copyFiles, cutFiles, getClipboardState, getRelativePath } from "../utils/clipboard.js";
 import "../styles/product-tour.css";
+import { isDesktop } from '../platform/index.js';
 import TerminalPanel from "../components/TerminalPanel/TerminalPanel.jsx";
 import { OutputPanel } from "../components/OutputPanel/OutputPanel.jsx";
 import referenceManager from "../core/references/ReferenceManager.js";
@@ -3501,8 +3502,8 @@ function WorkspaceWithScope({ path }) {
         return;
       }
 
-      // Ctrl/Cmd+`: Toggle terminal panel
-      if ((e.metaKey || e.ctrlKey) && e.key === '`' && !e.shiftKey && !e.altKey) {
+      // Ctrl/Cmd+`: Toggle terminal panel (desktop only)
+      if ((e.metaKey || e.ctrlKey) && e.key === '`' && !e.shiftKey && !e.altKey && isDesktop()) {
         e.preventDefault();
         setShowTerminalPanel(prev => !prev);
         return;
@@ -5254,8 +5255,8 @@ function WorkspaceWithScope({ path }) {
           onClose={handleCloseReferenceModal}
         />
 
-        {/* Bottom Panel with Tabs (Terminal and Output) */}
-        {(showTerminalPanel || showOutputPanel) && (
+        {/* Bottom Panel with Tabs (Terminal and Output) - Desktop only */}
+        {isDesktop() && (showTerminalPanel || showOutputPanel) && (
           <div style={{
             height: `${bottomPanelHeight}px`,
             borderTop: '1px solid rgb(var(--border))',
@@ -5288,26 +5289,29 @@ function WorkspaceWithScope({ path }) {
               backgroundColor: 'rgb(var(--panel))',
               height: '32px'
             }}>
-              <button
-                onClick={() => {
-                  setBottomPanelTab('terminal');
-                  setShowTerminalPanel(true);
-                  setShowOutputPanel(false);
-                }}
-                style={{
-                  padding: '0 12px',
-                  height: '100%',
-                  border: 'none',
-                  background: bottomPanelTab === 'terminal' ? 'rgb(var(--app-panel))' : 'transparent',
-                  color: bottomPanelTab === 'terminal' ? 'rgb(var(--text))' : 'rgb(var(--text-muted))',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  borderBottom: bottomPanelTab === 'terminal' ? '2px solid rgb(var(--accent))' : 'none',
-                  fontWeight: bottomPanelTab === 'terminal' ? '500' : 'normal'
-                }}
-              >
-                Terminal
-              </button>
+              {/* Terminal Tab - Desktop only */}
+              {isDesktop() && (
+                <button
+                  onClick={() => {
+                    setBottomPanelTab('terminal');
+                    setShowTerminalPanel(true);
+                    setShowOutputPanel(false);
+                  }}
+                  style={{
+                    padding: '0 12px',
+                    height: '100%',
+                    border: 'none',
+                    background: bottomPanelTab === 'terminal' ? 'rgb(var(--app-panel))' : 'transparent',
+                    color: bottomPanelTab === 'terminal' ? 'rgb(var(--text))' : 'rgb(var(--text-muted))',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    borderBottom: bottomPanelTab === 'terminal' ? '2px solid rgb(var(--accent))' : 'none',
+                    fontWeight: bottomPanelTab === 'terminal' ? '500' : 'normal'
+                  }}
+                >
+                  Terminal
+                </button>
+              )}
               <button
                 onClick={() => {
                   setBottomPanelTab('output');
@@ -5351,7 +5355,8 @@ function WorkspaceWithScope({ path }) {
 
             {/* Panel Content */}
             <div style={{ flex: 1, overflow: 'hidden' }}>
-              {bottomPanelTab === 'terminal' && showTerminalPanel && (
+              {/* Terminal Panel - Desktop only */}
+              {isDesktop() && bottomPanelTab === 'terminal' && showTerminalPanel && (
                 <TerminalPanel
                   isOpen={showTerminalPanel}
                   onClose={() => {
@@ -5379,12 +5384,14 @@ function WorkspaceWithScope({ path }) {
           unsavedChanges={unsavedChanges}
           openTabs={openTabs}
           editor={editor}
-          showTerminal={showTerminalPanel}
+          showTerminal={isDesktop() ? showTerminalPanel : false}
           onToggleTerminal={() => {
-            setShowTerminalPanel(prev => !prev);
-            if (!showTerminalPanel) {
-              setBottomPanelTab('terminal');
-              setShowOutputPanel(false);
+            if (isDesktop()) {
+              setShowTerminalPanel(prev => !prev);
+              if (!showTerminalPanel) {
+                setBottomPanelTab('terminal');
+                setShowOutputPanel(false);
+              }
             }
           }}
           showOutput={showOutputPanel}

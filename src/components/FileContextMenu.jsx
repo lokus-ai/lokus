@@ -173,10 +173,12 @@ export default function FileContextMenu({
               <ContextMenuShortcut>{isWindows ? 'Alt+R' : '⌥R'}</ContextMenuShortcut>
             </ContextMenuItem>
 
-            <ContextMenuItem onClick={() => handleAction('openInTerminal')}>
-              <Terminal className="mr-2 h-4 w-4" />
-              Open in {isWindows ? 'Command Prompt' : isMac ? 'Terminal' : 'Terminal'}
-            </ContextMenuItem>
+            {isDesktop() && (
+              <ContextMenuItem onClick={() => handleAction('openInTerminal')}>
+                <Terminal className="mr-2 h-4 w-4" />
+                Open in {isWindows ? 'Command Prompt' : isMac ? 'Terminal' : 'Terminal'}
+              </ContextMenuItem>
+            )}
 
             <ContextMenuSeparator />
           </>
