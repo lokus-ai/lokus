@@ -292,7 +292,9 @@ export default function Extensions({ onSelectExtension }) {
   const handleInstallPlugin = async (plugin) => {
     try {
       await installPlugin(plugin.id, plugin);
-    } catch { }
+    } catch (err) {
+      console.error('Extensions: Failed to install plugin', err);
+    }
   };
 
   const handleTogglePlugin = async (pluginId, newEnabledState) => {
@@ -306,7 +308,9 @@ export default function Extensions({ onSelectExtension }) {
       await togglePlugin(pluginId, newEnabledState);
 
       // PluginStateAdapter handles runtime updates now
-    } catch { }
+    } catch (err) {
+      console.error(`Extensions: Failed to toggle plugin ${pluginId}`, err);
+    }
   };
 
   const handleUninstallPlugin = async (plugin) => {
@@ -316,7 +320,9 @@ export default function Extensions({ onSelectExtension }) {
 
       await uninstallPlugin(plugin.id);
 
-    } catch { }
+    } catch (err) {
+      console.error('Extensions: Failed to uninstall plugin', err);
+    }
   };
 
   const SectionHeader = ({ title, count, sectionKey, icon: Icon }) => (

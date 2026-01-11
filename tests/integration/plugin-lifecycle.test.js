@@ -26,13 +26,22 @@ describe('Plugin Lifecycle Integration', () => {
       outputChannel: outputChannelManager
     });
 
-    // Set plugin context
+    // Set plugin context with all permissions for testing
     api.setPluginContext(pluginId, {
       id: pluginId,
       manifest: {
         name: 'Test Plugin',
         version: '1.0.0',
-        permissions: ['terminal', 'ui']
+        permissions: [
+          'terminal:create', 'terminal:write', 'terminal:read',
+          'ui:create', 'ui:dialogs', 'ui:notifications', 'ui:menus', 'ui:toolbars',
+          'commands:register', 'commands:execute', 'commands:list',
+          'editor:read', 'editor:write',
+          'storage:read', 'storage:write',
+          'workspace:read', 'workspace:write',
+          'config:read', 'config:write',
+          'events:listen', 'events:emit'
+        ]
       }
     });
   });

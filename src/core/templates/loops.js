@@ -158,6 +158,22 @@ export class TemplateLoops {
       return match;
     });
 
+    // Replace {{#each this.property}} with actual nested array reference for nested loops
+    // This allows nested loops to reference the current item's properties
+    if (typeof item === 'object' && item !== null) {
+      result = result.replace(/\{\{#each this\.([^}]+)\}\}/g, (match, property) => {
+        const value = this.getVariableValue(property, item);
+        if (value !== undefined && value !== null) {
+          // Store the resolved array in a temporary variable and use a unique identifier
+          const tempKey = `__nested_${property.replace(/\./g, '_')}_${index}__`;
+          this._nestedContext = this._nestedContext || {};
+          this._nestedContext[tempKey] = value;
+          return `{{#each ${tempKey}}}`;
+        }
+        return match;
+      });
+    }
+
     // Replace {{this}} with the entire item
     if (typeof item === 'object' && item !== null) {
       // Don't replace {{this.property}} yet, just {{this}}
@@ -210,8 +226,14 @@ export class TemplateLoops {
     // Parse the loop declaration
     const loopInfo = this.parseLoop(block.arrayPath);
 
-    // Get the array to iterate over
-    const array = this.getVariableValue(loopInfo.arrayPath, variables);
+    // Check nested context first (for resolved this.property arrays)
+    let array;
+    if (this._nestedContext && this._nestedContext[loopInfo.arrayPath]) {
+      array = this._nestedContext[loopInfo.arrayPath];
+    } else {
+      // Get the array to iterate over from variables
+      array = this.getVariableValue(loopInfo.arrayPath, variables);
+    }
 
     // Handle non-array values
     if (array === undefined || array === null) {
@@ -276,6 +298,9 @@ export class TemplateLoops {
     if (template === '') {
       return '';
     }
+
+    // Clear nested context from previous processing
+    this._nestedContext = {};
 
     try {
       // Process recursively to handle nested loops
@@ -407,12 +432,27 @@ export class TemplateLoops {
       const allLoops = this.countAllLoops(template);
       const blocks = this.findLoopBlocks(template);
 
+      // Calculate max nesting depth by tracking loop tags
       let maxDepth = 0;
+      let currentDepth = 0;
+      const pattern = /\{\{#each\s+[^}]+\}\}|\{\{\/each\}\}/g;
+      let match;
+      while ((match = pattern.exec(template)) !== null) {
+        if (match[0].startsWith('{{#each')) {
+          currentDepth++;
+          // maxNestingDepth is 0 for flat loops, 1 for one level of nesting, etc.
+          // So if we have 2 levels, the nesting depth is 1 (the second level is nested 1 deep)
+          if (currentDepth > 1) {
+            maxDepth = Math.max(maxDepth, currentDepth - 1);
+          }
+        } else {
+          currentDepth--;
+        }
+      }
+
       let totalIterationVars = 0;
 
       for (const block of blocks) {
-        maxDepth = Math.max(maxDepth, block.depth);
-
         // Count special loop variables used in this block and nested blocks
         const fullContent = block.content;
         const specialVars = ['@index', '@first', '@last', '@key', '@length'];

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { useToast } from "./use-toast";
+import { toast } from "sonner";
 import pluginManager from "../core/plugins/PluginStateAdapter.js";
 
 const PluginContext = createContext(null);
@@ -11,7 +11,6 @@ export function PluginProvider({ children }) {
   const [error, setError] = useState(pluginManager.currentError);
   const [installingPlugins, setInstallingPlugins] = useState(pluginManager.installingPluginIds);
   const [enabledPlugins, setEnabledPlugins] = useState(pluginManager.enabledPluginIds);
-  const { toast } = useToast();
 
   // Subscribe to plugin manager state changes
   useEffect(() => {
@@ -57,8 +56,7 @@ export function PluginProvider({ children }) {
       if (!slug) return;
 
       try {
-        toast({
-          title: "Installing Plugin",
+        toast.info("Installing Plugin", {
           description: `Fetching ${slug} from registry...`,
         });
 
@@ -77,17 +75,14 @@ export function PluginProvider({ children }) {
           version: plugin.latest_version
         });
 
-        toast({
-          title: "Plugin Installed",
+        toast.success("Plugin Installed", {
           description: `${plugin.name} v${plugin.latest_version} has been installed.`,
         });
 
       } catch (error) {
         console.error('[PluginProvider] Registry install failed:', error);
-        toast({
-          title: "Installation Failed",
+        toast.error("Installation Failed", {
           description: error.message || 'Failed to install plugin',
-          variant: "destructive"
         });
       }
     };
@@ -107,24 +102,19 @@ export function PluginProvider({ children }) {
             const urlObj = new URL(urlStr);
             const devUrl = urlObj.searchParams.get('url');
             if (devUrl) {
-              toast({
-                title: "Loading Dev Plugin",
+              toast.info("Loading Dev Plugin", {
                 description: `Connecting to ${devUrl}...`,
               });
 
               await pluginManager.loadDevPlugin(devUrl);
 
-              toast({
-                title: "Plugin Loaded",
+              toast.success("Plugin Loaded", {
                 description: "Development plugin loaded successfully.",
-                variant: "success" // Assuming success variant exists, or default
               });
             }
           } catch (error) {
-            toast({
-              title: "Plugin Load Failed",
+            toast.error("Plugin Load Failed", {
               description: error.message,
-              variant: "destructive"
             });
           }
         }
@@ -147,7 +137,7 @@ export function PluginProvider({ children }) {
         window.removeEventListener('plugins:updated', onDom);
       };
     }
-  }, [toast]);
+  }, []);
 
   // Delegate methods to plugin manager
   const loadPlugins = useCallback((forceReload = false) => {

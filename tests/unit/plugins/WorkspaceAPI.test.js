@@ -22,6 +22,14 @@ describe('WorkspaceAPI', () => {
     };
 
     workspaceAPI = new WorkspaceAPI(mockWorkspaceManager);
+    // Grant workspace permissions for testing
+    const allPermissions = new Set([
+      'workspace:read',
+      'workspace:write',
+      'events:listen',
+      'events:emit'
+    ]);
+    workspaceAPI._setPermissionContext('test-plugin', allPermissions);
   });
 
   describe('findFiles()', () => {

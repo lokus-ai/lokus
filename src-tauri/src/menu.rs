@@ -1,3 +1,6 @@
+// Menu is desktop-only - mobile platforms don't support native menus
+#![cfg(desktop)]
+
 use tauri::{
   AppHandle,
   menu::{MenuBuilder, SubmenuBuilder, PredefinedMenuItem, MenuItemBuilder, CheckMenuItemBuilder},

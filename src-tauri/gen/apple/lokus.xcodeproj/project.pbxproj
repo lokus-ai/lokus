@@ -1,0 +1,624 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		175AE19E020790E68A9CC552 /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A1F8F35A39E1D5F61C3B530 /* libapp.a */; };
+		2CAFF044AF4DA893C726E546 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = 7A7F1A449AD9DE5C7A9F3579 /* assets */; };
+		502FFC8A0733BB2BC7DADA36 /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 766BA6C4DE8360B824E737D0 /* main.mm */; };
+		5D429FCD6211609FC8A27D63 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E5EB297EEF306986D629BEFB /* QuartzCore.framework */; };
+		868B1E3AD6B0AA241F5EA919 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 21C5DE0994EDF16F08423865 /* WebKit.framework */; };
+		924E17B29D9CE39C422A7D7A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3B57527D131D0EE40F863737 /* Assets.xcassets */; };
+		93846949B68D9D98E2679C8C /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 312C1A7586D5719B14FB0650 /* Security.framework */; };
+		9B0D393F7867658D59D26871 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C9D64F463AA50FD4E118DC55 /* UIKit.framework */; };
+		C8069F26A520E5BE0342DA05 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9C14C183DEFA4BECF65DB3FD /* CoreGraphics.framework */; };
+		C98AAC0F9BA12638C4B36CFC /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D316485745FB477BE7A10CEB /* Metal.framework */; };
+		E28DF3E5AB5CDAC19DE6EC3C /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 109AC7DE395C62994C1CE4DC /* MetalKit.framework */; };
+		E83EF4BF3A3006FEA88B6D45 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 060D055AE8F134AD4CC78D32 /* LaunchScreen.storyboard */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		00A2CEA5DC358C72F02F9BD6 /* clipboard.rs */ = {isa = PBXFileReference; path = clipboard.rs; sourceTree = "<group>"; };
+		02D4D33C15C856AC7D3E7708 /* iroh_v2_minimal.rs */ = {isa = PBXFileReference; path = iroh_v2_minimal.rs; sourceTree = "<group>"; };
+		04FB5B474AA2763244BD941F /* mcp_setup.rs */ = {isa = PBXFileReference; path = mcp_setup.rs; sourceTree = "<group>"; };
+		05ABCA1197B10C690C936BB7 /* windows.rs */ = {isa = PBXFileReference; path = windows.rs; sourceTree = "<group>"; };
+		060D055AE8F134AD4CC78D32 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		109AC7DE395C62994C1CE4DC /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		111E3CE900F0A76AFEFA808A /* version_history.rs */ = {isa = PBXFileReference; path = version_history.rs; sourceTree = "<group>"; };
+		1331C53988A38097BD2C25E7 /* window_manager.rs */ = {isa = PBXFileReference; path = window_manager.rs; sourceTree = "<group>"; };
+		14262660FC0CFFFA6B312090 /* credentials.rs */ = {isa = PBXFileReference; path = credentials.rs; sourceTree = "<group>"; };
+		17477DF92354C2B6CD0E29E5 /* clipboard_platform.rs */ = {isa = PBXFileReference; path = clipboard_platform.rs; sourceTree = "<group>"; };
+		1A6A0EE7FCB7F10D0721F150 /* main.rs */ = {isa = PBXFileReference; path = main.rs; sourceTree = "<group>"; };
+		1B0E368C84C4BD9E859E7817 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		1E881B40EC959B5DDF0060EC /* system_info.rs */ = {isa = PBXFileReference; path = system_info.rs; sourceTree = "<group>"; };
+		21C5DE0994EDF16F08423865 /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
+		2364EEF587BCFF3787115C48 /* files.rs */ = {isa = PBXFileReference; path = files.rs; sourceTree = "<group>"; };
+		26F264C2ED2DA42DCCA1B175 /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
+		312C1A7586D5719B14FB0650 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		316F685F34C174AA969BE9AC /* clipboard.rs */ = {isa = PBXFileReference; path = clipboard.rs; sourceTree = "<group>"; };
+		35D87BEDB6054D44470A3512 /* secure_storage.rs */ = {isa = PBXFileReference; path = secure_storage.rs; sourceTree = "<group>"; };
+		36AF8180775B04E950543682 /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
+		37C6BEAABC7470200B082689 /* examples.rs */ = {isa = PBXFileReference; path = examples.rs; sourceTree = "<group>"; };
+		3B57527D131D0EE40F863737 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		3D07EF4C6D6870C1608369AE /* lib.rs */ = {isa = PBXFileReference; path = lib.rs; sourceTree = "<group>"; };
+		3DB218CD3DE028E8312A772E /* wrapper 2.rs */ = {isa = PBXFileReference; path = "wrapper 2.rs"; sourceTree = "<group>"; };
+		42DD04EB269DF3DA58E67D61 /* api_server.rs */ = {isa = PBXFileReference; path = api_server.rs; sourceTree = "<group>"; };
+		4E718E1B29732F54A3CC54F2 /* api.rs */ = {isa = PBXFileReference; path = api.rs; sourceTree = "<group>"; };
+		53A69266ACB3AE7B3FCC75D2 /* auth.rs */ = {isa = PBXFileReference; path = auth.rs; sourceTree = "<group>"; };
+		58BF5C852B7E1088367B637F /* models.rs */ = {isa = PBXFileReference; path = models.rs; sourceTree = "<group>"; };
+		5954B2BFEFC287609C56AC21 /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
+		59DD075063E4444D6065F443 /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
+		5D4FAC77F4B5B93F96F2357F /* platform_files.rs */ = {isa = PBXFileReference; path = platform_files.rs; sourceTree = "<group>"; };
+		5DA59D44BC0AA838D3B85B8F /* git.rs */ = {isa = PBXFileReference; path = git.rs; sourceTree = "<group>"; };
+		64FEE2EF6B0FE72235786D39 /* search.test.rs */ = {isa = PBXFileReference; path = search.test.rs; sourceTree = "<group>"; };
+		6781A522399F27910D78336B /* iroh.rs */ = {isa = PBXFileReference; path = iroh.rs; sourceTree = "<group>"; };
+		689ECF6DE63C5B71CFDC86F8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		6C9D329F10F5D0969ED0738B /* storage.rs */ = {isa = PBXFileReference; path = storage.rs; sourceTree = "<group>"; };
+		766BA6C4DE8360B824E737D0 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
+		78CE33381494ABDE1187AB0F /* tasks.rs */ = {isa = PBXFileReference; path = tasks.rs; sourceTree = "<group>"; };
+		7A3E1209F3E125E449E967B9 /* errors.rs */ = {isa = PBXFileReference; path = errors.rs; sourceTree = "<group>"; };
+		7A59F0A8464E2B7C178C5FAD /* provider.rs */ = {isa = PBXFileReference; path = provider.rs; sourceTree = "<group>"; };
+		7A7F1A449AD9DE5C7A9F3579 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
+		7EF1B500E6E37954C9E59CF9 /* kanban.rs */ = {isa = PBXFileReference; path = kanban.rs; sourceTree = "<group>"; };
+		81151DAA296AC13052514826 /* lokus_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = lokus_iOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		81D6C366D8ABC3198EED6BAB /* logging.rs */ = {isa = PBXFileReference; path = logging.rs; sourceTree = "<group>"; };
+		8A1F8F35A39E1D5F61C3B530 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
+		904385B66CA03989C3D7BFAA /* bookmarks.rs */ = {isa = PBXFileReference; path = bookmarks.rs; sourceTree = "<group>"; };
+		967D2BE603B609B9BA700607 /* commands.rs */ = {isa = PBXFileReference; path = commands.rs; sourceTree = "<group>"; };
+		9AA4FF5CC23ED3F360331E92 /* IROH_V2_ARCHITECTURE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = IROH_V2_ARCHITECTURE.md; sourceTree = "<group>"; };
+		9C14C183DEFA4BECF65DB3FD /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
+		9D4C8A3DEA9E57AED515E188 /* oauth_server.rs */ = {isa = PBXFileReference; path = oauth_server.rs; sourceTree = "<group>"; };
+		9E64BCBFFC11A72AF116C417 /* linux.rs */ = {isa = PBXFileReference; path = linux.rs; sourceTree = "<group>"; };
+		AFAC165CEFE6E3BAA0E1767D /* queue.rs */ = {isa = PBXFileReference; path = queue.rs; sourceTree = "<group>"; };
+		B8FFCAD5D27D8216A7F1149B /* mcp.rs */ = {isa = PBXFileReference; path = mcp.rs; sourceTree = "<group>"; };
+		B9D436C10CB1C57AB7CD17B2 /* manager.rs */ = {isa = PBXFileReference; path = manager.rs; sourceTree = "<group>"; };
+		BAB73D9DE01A7161FAEF22A6 /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
+		BFAC89B16361B6A60C07A376 /* lokus_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = lokus_iOS.entitlements; sourceTree = "<group>"; };
+		C1D02F0F40736D1EAC4AE259 /* file_watcher.rs */ = {isa = PBXFileReference; path = file_watcher.rs; sourceTree = "<group>"; };
+		C24A8EB9F99385604D9FF06E /* file_locking.rs */ = {isa = PBXFileReference; path = file_locking.rs; sourceTree = "<group>"; };
+		C681C3E7FA9A11D9A1A38557 /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
+		C6DF40C74A71BCDF9BD54765 /* theme.rs */ = {isa = PBXFileReference; path = theme.rs; sourceTree = "<group>"; };
+		C9D64F463AA50FD4E118DC55 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
+		D011FF72B03FFE3E9A1112DC /* plugins.rs */ = {isa = PBXFileReference; path = plugins.rs; sourceTree = "<group>"; };
+		D316485745FB477BE7A10CEB /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		D46F69251AC73CFABEF2A8F1 /* search.rs */ = {isa = PBXFileReference; path = search.rs; sourceTree = "<group>"; };
+		D4FC875509E0C693D3BA5EC3 /* iroh_v2_enterprise.rs */ = {isa = PBXFileReference; path = iroh_v2_enterprise.rs; sourceTree = "<group>"; };
+		D541F4A732265577A08BB1ED /* V2_QUICKSTART.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = V2_QUICKSTART.md; sourceTree = "<group>"; };
+		D762A4C420397E4053A87DF5 /* manager.rs */ = {isa = PBXFileReference; path = manager.rs; sourceTree = "<group>"; };
+		DB904D52E2AFFA98BE915111 /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
+		DB9E5CAA8009D10E2D2843F1 /* commands_simple.rs */ = {isa = PBXFileReference; path = commands_simple.rs; sourceTree = "<group>"; };
+		DEE39D107E4E92ABED4EE5FA /* wrapper.rs */ = {isa = PBXFileReference; path = wrapper.rs; sourceTree = "<group>"; };
+		E5EB297EEF306986D629BEFB /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		E826FC78BBDD5DE2EB5ED21B /* network_monitor.rs */ = {isa = PBXFileReference; path = network_monitor.rs; sourceTree = "<group>"; };
+		EEA39AE39C4D6868A01D1C87 /* menu.rs */ = {isa = PBXFileReference; path = menu.rs; sourceTree = "<group>"; };
+		EF7C00A3F317903BBCDE903E /* retry_utils.rs */ = {isa = PBXFileReference; path = retry_utils.rs; sourceTree = "<group>"; };
+		F40E3F749CF288F8F19E5071 /* mcp_embedded.rs */ = {isa = PBXFileReference; path = mcp_embedded.rs; sourceTree = "<group>"; };
+		F841EAC1E863B2E7C4F74A07 /* macos.rs */ = {isa = PBXFileReference; path = macos.rs; sourceTree = "<group>"; };
+		FA4F0D338D76C6BA0262A84D /* auth.rs */ = {isa = PBXFileReference; path = auth.rs; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		8F9D8D3B6C1C4C1D9422C354 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				175AE19E020790E68A9CC552 /* libapp.a in Frameworks */,
+				C8069F26A520E5BE0342DA05 /* CoreGraphics.framework in Frameworks */,
+				C98AAC0F9BA12638C4B36CFC /* Metal.framework in Frameworks */,
+				E28DF3E5AB5CDAC19DE6EC3C /* MetalKit.framework in Frameworks */,
+				5D429FCD6211609FC8A27D63 /* QuartzCore.framework in Frameworks */,
+				93846949B68D9D98E2679C8C /* Security.framework in Frameworks */,
+				9B0D393F7867658D59D26871 /* UIKit.framework in Frameworks */,
+				868B1E3AD6B0AA241F5EA919 /* WebKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		099B1C2F5ABFC5A3D4F1D6A8 /* Externals */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Externals;
+			sourceTree = "<group>";
+		};
+		2C72BFDA7A1A36D1AC5B4461 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				7C10EFDF7D197F0E886ED8B2 /* lokus */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		37B38344229BC15EC906DA89 /* sync */ = {
+			isa = PBXGroup;
+			children = (
+				DB9E5CAA8009D10E2D2843F1 /* commands_simple.rs */,
+				C1D02F0F40736D1EAC4AE259 /* file_watcher.rs */,
+				5DA59D44BC0AA838D3B85B8F /* git.rs */,
+				9AA4FF5CC23ED3F360331E92 /* IROH_V2_ARCHITECTURE.md */,
+				D4FC875509E0C693D3BA5EC3 /* iroh_v2_enterprise.rs */,
+				02D4D33C15C856AC7D3E7708 /* iroh_v2_minimal.rs */,
+				6781A522399F27910D78336B /* iroh.rs */,
+				D762A4C420397E4053A87DF5 /* manager.rs */,
+				26F264C2ED2DA42DCCA1B175 /* mod.rs */,
+				E826FC78BBDD5DE2EB5ED21B /* network_monitor.rs */,
+				7A59F0A8464E2B7C178C5FAD /* provider.rs */,
+				EF7C00A3F317903BBCDE903E /* retry_utils.rs */,
+				D541F4A732265577A08BB1ED /* V2_QUICKSTART.md */,
+				3DB218CD3DE028E8312A772E /* wrapper 2.rs */,
+				DEE39D107E4E92ABED4EE5FA /* wrapper.rs */,
+			);
+			path = sync;
+			sourceTree = "<group>";
+		};
+		3ABC3CC11C240C107D93C540 /* connections */ = {
+			isa = PBXGroup;
+			children = (
+				967D2BE603B609B9BA700607 /* commands.rs */,
+				B9D436C10CB1C57AB7CD17B2 /* manager.rs */,
+				5954B2BFEFC287609C56AC21 /* mod.rs */,
+				E17D2C636AB77C04886E8C5E /* gmail */,
+			);
+			path = connections;
+			sourceTree = "<group>";
+		};
+		435253953FE047012C03A5A8 = {
+			isa = PBXGroup;
+			children = (
+				7A7F1A449AD9DE5C7A9F3579 /* assets */,
+				3B57527D131D0EE40F863737 /* Assets.xcassets */,
+				060D055AE8F134AD4CC78D32 /* LaunchScreen.storyboard */,
+				099B1C2F5ABFC5A3D4F1D6A8 /* Externals */,
+				581BD084D6F6EC9178B64EEA /* lokus_iOS */,
+				2C72BFDA7A1A36D1AC5B4461 /* Sources */,
+				D7F05650D186426931F8AD12 /* src */,
+				E3A410A32FE805063EE32052 /* Frameworks */,
+				95D4D39D46A510DE1A33BF7C /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		581BD084D6F6EC9178B64EEA /* lokus_iOS */ = {
+			isa = PBXGroup;
+			children = (
+				689ECF6DE63C5B71CFDC86F8 /* Info.plist */,
+				BFAC89B16361B6A60C07A376 /* lokus_iOS.entitlements */,
+			);
+			path = lokus_iOS;
+			sourceTree = "<group>";
+		};
+		7460D803C9C736264E834102 /* bindings */ = {
+			isa = PBXGroup;
+			children = (
+				BAB73D9DE01A7161FAEF22A6 /* bindings.h */,
+			);
+			path = bindings;
+			sourceTree = "<group>";
+		};
+		7C10EFDF7D197F0E886ED8B2 /* lokus */ = {
+			isa = PBXGroup;
+			children = (
+				766BA6C4DE8360B824E737D0 /* main.mm */,
+				7460D803C9C736264E834102 /* bindings */,
+			);
+			path = lokus;
+			sourceTree = "<group>";
+		};
+		92BB39AA427DAC2BDC42B800 /* handlers */ = {
+			isa = PBXGroup;
+			children = (
+				2364EEF587BCFF3787115C48 /* files.rs */,
+				59DD075063E4444D6065F443 /* mod.rs */,
+				5D4FAC77F4B5B93F96F2357F /* platform_files.rs */,
+				111E3CE900F0A76AFEFA808A /* version_history.rs */,
+			);
+			path = handlers;
+			sourceTree = "<group>";
+		};
+		95D4D39D46A510DE1A33BF7C /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				81151DAA296AC13052514826 /* lokus_iOS.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D7F05650D186426931F8AD12 /* src */ = {
+			isa = PBXGroup;
+			children = (
+				42DD04EB269DF3DA58E67D61 /* api_server.rs */,
+				53A69266ACB3AE7B3FCC75D2 /* auth.rs */,
+				17477DF92354C2B6CD0E29E5 /* clipboard_platform.rs */,
+				316F685F34C174AA969BE9AC /* clipboard.rs */,
+				14262660FC0CFFFA6B312090 /* credentials.rs */,
+				C24A8EB9F99385604D9FF06E /* file_locking.rs */,
+				7EF1B500E6E37954C9E59CF9 /* kanban.rs */,
+				3D07EF4C6D6870C1608369AE /* lib.rs */,
+				81D6C366D8ABC3198EED6BAB /* logging.rs */,
+				1A6A0EE7FCB7F10D0721F150 /* main.rs */,
+				F40E3F749CF288F8F19E5071 /* mcp_embedded.rs */,
+				04FB5B474AA2763244BD941F /* mcp_setup.rs */,
+				B8FFCAD5D27D8216A7F1149B /* mcp.rs */,
+				EEA39AE39C4D6868A01D1C87 /* menu.rs */,
+				9D4C8A3DEA9E57AED515E188 /* oauth_server.rs */,
+				D011FF72B03FFE3E9A1112DC /* plugins.rs */,
+				D46F69251AC73CFABEF2A8F1 /* search.rs */,
+				64FEE2EF6B0FE72235786D39 /* search.test.rs */,
+				35D87BEDB6054D44470A3512 /* secure_storage.rs */,
+				78CE33381494ABDE1187AB0F /* tasks.rs */,
+				C6DF40C74A71BCDF9BD54765 /* theme.rs */,
+				1331C53988A38097BD2C25E7 /* window_manager.rs */,
+				3ABC3CC11C240C107D93C540 /* connections */,
+				92BB39AA427DAC2BDC42B800 /* handlers */,
+				E890BC11C7F0CADBEFAB7B87 /* macos */,
+				F09B6214D95541185574C6AF /* platform */,
+				37B38344229BC15EC906DA89 /* sync */,
+			);
+			name = src;
+			path = ../../src;
+			sourceTree = "<group>";
+		};
+		E17D2C636AB77C04886E8C5E /* gmail */ = {
+			isa = PBXGroup;
+			children = (
+				4E718E1B29732F54A3CC54F2 /* api.rs */,
+				FA4F0D338D76C6BA0262A84D /* auth.rs */,
+				36AF8180775B04E950543682 /* mod.rs */,
+				58BF5C852B7E1088367B637F /* models.rs */,
+				AFAC165CEFE6E3BAA0E1767D /* queue.rs */,
+				6C9D329F10F5D0969ED0738B /* storage.rs */,
+			);
+			path = gmail;
+			sourceTree = "<group>";
+		};
+		E3A410A32FE805063EE32052 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				9C14C183DEFA4BECF65DB3FD /* CoreGraphics.framework */,
+				8A1F8F35A39E1D5F61C3B530 /* libapp.a */,
+				D316485745FB477BE7A10CEB /* Metal.framework */,
+				109AC7DE395C62994C1CE4DC /* MetalKit.framework */,
+				E5EB297EEF306986D629BEFB /* QuartzCore.framework */,
+				312C1A7586D5719B14FB0650 /* Security.framework */,
+				C9D64F463AA50FD4E118DC55 /* UIKit.framework */,
+				21C5DE0994EDF16F08423865 /* WebKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		E890BC11C7F0CADBEFAB7B87 /* macos */ = {
+			isa = PBXGroup;
+			children = (
+				904385B66CA03989C3D7BFAA /* bookmarks.rs */,
+				DB904D52E2AFFA98BE915111 /* mod.rs */,
+			);
+			path = macos;
+			sourceTree = "<group>";
+		};
+		F09B6214D95541185574C6AF /* platform */ = {
+			isa = PBXGroup;
+			children = (
+				00A2CEA5DC358C72F02F9BD6 /* clipboard.rs */,
+				7A3E1209F3E125E449E967B9 /* errors.rs */,
+				37C6BEAABC7470200B082689 /* examples.rs */,
+				9E64BCBFFC11A72AF116C417 /* linux.rs */,
+				F841EAC1E863B2E7C4F74A07 /* macos.rs */,
+				C681C3E7FA9A11D9A1A38557 /* mod.rs */,
+				1B0E368C84C4BD9E859E7817 /* README.md */,
+				1E881B40EC959B5DDF0060EC /* system_info.rs */,
+				05ABCA1197B10C690C936BB7 /* windows.rs */,
+			);
+			path = platform;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		EB3FDE0EBEF98C036735C9B6 /* lokus_iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 23D4407F277FB5B041FBC9FC /* Build configuration list for PBXNativeTarget "lokus_iOS" */;
+			buildPhases = (
+				981665280DEEC1694D99C6E5 /* Build Rust Code */,
+				084F7DDB81B646719943877D /* Sources */,
+				31D8C7791E86F435D78A311C /* Resources */,
+				8F9D8D3B6C1C4C1D9422C354 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = lokus_iOS;
+			packageProductDependencies = (
+			);
+			productName = lokus_iOS;
+			productReference = 81151DAA296AC13052514826 /* lokus_iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		FFE40A08B4C1823F9931D758 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+			};
+			buildConfigurationList = 4B30774BC8E08E871B8332AA /* Build configuration list for PBXProject "lokus" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 435253953FE047012C03A5A8;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				EB3FDE0EBEF98C036735C9B6 /* lokus_iOS */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		31D8C7791E86F435D78A311C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				924E17B29D9CE39C422A7D7A /* Assets.xcassets in Resources */,
+				E83EF4BF3A3006FEA88B6D45 /* LaunchScreen.storyboard in Resources */,
+				2CAFF044AF4DA893C726E546 /* assets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		981665280DEEC1694D99C6E5 /* Build Rust Code */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Rust Code";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Externals/x86_64/${CONFIGURATION}/libapp.a",
+				"$(SRCROOT)/Externals/arm64/${CONFIGURATION}/libapp.a",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "npm run -- tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		084F7DDB81B646719943877D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				502FFC8A0733BB2BC7DADA36 /* main.mm in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		0EE250E851024EC7ACE3F50A /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = release;
+		};
+		7DDF999C07F2BADDD924D9B3 /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ARCHS = (
+					arm64,
+				);
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = lokus_iOS/lokus_iOS.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_BITCODE = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\".\"",
+				);
+				INFOPLIST_FILE = lokus_iOS/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = io.lokus.app;
+				PRODUCT_NAME = "Lokus";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALID_ARCHS = arm64;
+			};
+			name = release;
+		};
+		BEAC4E6B47C680FB2B399707 /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ARCHS = (
+					arm64,
+				);
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = lokus_iOS/lokus_iOS.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_BITCODE = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\".\"",
+				);
+				INFOPLIST_FILE = lokus_iOS/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = io.lokus.app;
+				PRODUCT_NAME = "Lokus";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALID_ARCHS = arm64;
+			};
+			name = debug;
+		};
+		BF70B2D49DF296C1C07DB5A5 /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		23D4407F277FB5B041FBC9FC /* Build configuration list for PBXNativeTarget "lokus_iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BEAC4E6B47C680FB2B399707 /* debug */,
+				7DDF999C07F2BADDD924D9B3 /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
+		4B30774BC8E08E871B8332AA /* Build configuration list for PBXProject "lokus" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BF70B2D49DF296C1C07DB5A5 /* debug */,
+				0EE250E851024EC7ACE3F50A /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = FFE40A08B4C1823F9931D758 /* Project object */;
+}

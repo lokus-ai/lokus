@@ -9,7 +9,9 @@ vi.mock('../services/platform/PlatformService', () => ({
     isWindows: () => false,
     isMacOS: () => true,
     isLinux: () => false
-  }
+  },
+  isDesktop: () => true,
+  isMobile: () => false
 }))
 
 // Mock context menu UI components

@@ -94,6 +94,7 @@ updatedAt: 2025-11-06T00:00:00.000Z
         }
       };
 
+      exists.mockResolvedValue(true); // Directory exists and file exists after write
       writeTextFile.mockResolvedValue(undefined);
 
       const result = await storage.saveTemplate(template);
@@ -122,6 +123,7 @@ updatedAt: 2025-11-06T00:00:00.000Z
         }
       };
 
+      exists.mockResolvedValue(true); // Directory exists and file exists after write
       writeTextFile.mockResolvedValue(undefined);
 
       await storage.saveTemplate(template);
@@ -148,6 +150,7 @@ updatedAt: 2025-11-06T00:00:00.000Z
         tags: []
       };
 
+      exists.mockResolvedValue(true); // Directory exists and file exists after write
       writeTextFile.mockResolvedValue(undefined);
 
       await storage.saveTemplate(template);
@@ -168,7 +171,7 @@ updatedAt: 2025-11-06T00:00:00.000Z
         { name: 'not-markdown.txt', isFile: true },
         { name: 'folder', isFile: false }
       ]);
-      readTextFile.mockResolvedValue(`---
+      readTextFile.mockResolvedValueOnce(`---
 id: template1
 name: "Template 1"
 category: Personal
@@ -178,6 +181,16 @@ updatedAt: 2025-11-06T00:00:00.000Z
 ---
 
 Content`);
+      readTextFile.mockResolvedValueOnce(`---
+id: template2
+name: "Template 2"
+category: Work
+tags: []
+createdAt: 2025-11-06T00:00:00.000Z
+updatedAt: 2025-11-06T00:00:00.000Z
+---
+
+Content 2`);
 
       const result = await storage.load();
 

@@ -10,6 +10,33 @@ const DEFAULT_CONFIG = {
     // Announcements
     announcements: [],
 
+    // Server-pushed announcement (enhanced toast)
+    announcement: {
+        id: null,
+        title: null,
+        message: null,
+        // Type: "info" | "success" | "warning" | "error"
+        type: 'info',
+        // Variant: "default" | "survey" | "announcement" | "warning" | "update"
+        variant: 'default',
+        // Expandable content (shown when user clicks "Show more")
+        expandedContent: null,
+        // Link button: { url, text, external }
+        link: null,
+        // Behavior
+        dismissible: true,
+        persistent: false,
+        showOnce: true,
+        duration: 10000,
+        // Date controls
+        start_date: null,
+        end_date: null,
+        expiresAt: null,
+        // Action buttons: { label, onClick } - onClick is client-side only
+        action: null,
+        cancel: null,
+    },
+
     // External links (can be updated without app release)
     links: {
         documentation: 'https://docs.lokus.dev',
@@ -264,4 +291,10 @@ export const useUIStrings = () => {
 export const useLayoutDefaults = () => {
     const { config } = useRemoteConfig();
     return config.layout_defaults;
+};
+
+// Announcement hook
+export const useAnnouncement = () => {
+    const { config } = useRemoteConfig();
+    return config.announcement;
 };

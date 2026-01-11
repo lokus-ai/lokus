@@ -125,18 +125,71 @@ export const WikiLink = Node.create({
   },
   addNodeView() {
     return ({ node }) => {
+      const { embed, src, alt, target, href } = node.attrs;
+
+      // If this is an image embed with a src, render as <img>
+      if (embed && src) {
+        const isExternalUrl = /^https?:\/\//i.test(src);
+
+        const dom = document.createElement('img');
+        dom.classList.add('wiki-image');
+        dom.setAttribute('data-type', 'wiki-link');
+        dom.setAttribute('src', src);
+        dom.setAttribute('alt', alt || target);
+
+        // For external URLs, set crossorigin to help with CORS
+        if (isExternalUrl) {
+          dom.setAttribute('crossorigin', 'anonymous');
+          dom.setAttribute('referrerpolicy', 'no-referrer');
+        }
+
+        // Handle load errors for external images
+        dom.onerror = () => {
+          if (isExternalUrl) {
+            // Replace with error placeholder
+            dom.style.display = 'none';
+
+            const errorContainer = document.createElement('div');
+            errorContainer.className = 'wiki-image-error';
+            errorContainer.style.cssText = 'display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bg-secondary, #f5f5f5); border: 1px solid var(--border-primary, #e0e0e0); border-radius: 6px; color: var(--text-secondary, #666); font-size: 12px;';
+
+            const icon = document.createElement('span');
+            icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>';
+
+            const text = document.createElement('span');
+            text.textContent = 'Image failed to load';
+
+            const link = document.createElement('a');
+            link.href = src;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = 'Open URL';
+            link.style.cssText = 'color: var(--text-accent, #0066cc); text-decoration: underline;';
+
+            errorContainer.appendChild(icon);
+            errorContainer.appendChild(text);
+            errorContainer.appendChild(link);
+
+            dom.parentNode?.insertBefore(errorContainer, dom.nextSibling);
+          }
+        };
+
+        return { dom };
+      }
+
+      // Otherwise render as link
       const dom = document.createElement('a');
       dom.classList.add('wiki-link');
       dom.setAttribute('data-type', 'wiki-link');
-      dom.setAttribute('href', node.attrs.href || node.attrs.target);
+      dom.setAttribute('href', href || target);
 
       // Format display text
       // Priority: alt attribute, or alias from target (after |), or target itself
-      let displayText = node.attrs.alt
-      if (!displayText && node.attrs.target) {
+      let displayText = alt
+      if (!displayText && target) {
         // Extract alias from target if format is "path|alias"
-        const parts = node.attrs.target.split('|')
-        displayText = parts.length > 1 ? parts[parts.length - 1] : node.attrs.target
+        const parts = target.split('|')
+        displayText = parts.length > 1 ? parts[parts.length - 1] : target
       }
 
       // Check if this is a block reference (contains ^)
@@ -153,7 +206,7 @@ export const WikiLink = Node.create({
         displayText = `${cleanFilename} › ${blockText}`
       }
 
-      dom.textContent = displayText || node.attrs.target
+      dom.textContent = displayText || target
 
       let hoverTimeout = null;
 
@@ -163,7 +216,7 @@ export const WikiLink = Node.create({
           // Dispatch custom event with wiki link details
           window.dispatchEvent(new CustomEvent('wiki-link-hover', {
             detail: {
-              target: node.attrs.target,
+              target: target,
               position: {
                 x: event.clientX + 10, // Offset from cursor
                 y: event.clientY + 10

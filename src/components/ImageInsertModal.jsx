@@ -255,12 +255,13 @@ export default function ImageInsertModal({
                     No images found in workspace
                   </div>
                 ) : (
-                  <div className="grid grid-cols-3 gap-3 max-h-64 overflow-y-auto p-1">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', maxHeight: '256px', overflowY: 'auto', padding: '8px' }}>
                     {imageFiles.map((file, index) => (
                       <button
                         key={index}
                         onClick={() => handleFileSelect(file)}
-                        className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all hover:scale-105 ${
+                        style={{ aspectRatio: '1/1', position: 'relative' }}
+                        className={`rounded-lg overflow-hidden border-2 transition-colors ${
                           selectedFile === file
                             ? 'border-app-accent ring-2 ring-app-accent'
                             : 'border-app-border hover:border-app-accent/50'
@@ -269,7 +270,7 @@ export default function ImageInsertModal({
                         <img
                           src={convertFileSrc(file)}
                           alt={file.split('/').pop()}
-                          className="w-full h-full object-cover"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                         {selectedFile === file && (
                           <div className="absolute inset-0 bg-app-accent/20 flex items-center justify-center">

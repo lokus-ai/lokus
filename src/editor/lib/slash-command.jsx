@@ -691,23 +691,15 @@ const commandItems = [
       },
       {
         title: "Image",
-        description: "Insert an image by URL.",
+        description: "Insert image from workspace or URL.",
         icon: <ImageIcon size={18} />,
         command: ({ editor, range }) => {
-          // Dispatch event to open image insert modal
-          window.dispatchEvent(new CustomEvent('open-image-insert-modal', {
-            detail: {
-              editor,
-              range,
-              onInsert: ({ src, alt }) => {
-                if (editor?.commands?.setImage) {
-                  editor.chain().focus().deleteRange(range).setImage({ src, alt }).run();
-                } else {
-                  editor.chain().focus().deleteRange(range).insertContent(`<img src="${src}" alt="${alt || ''}" />`).run();
-                }
-              }
-            }
-          }));
+          // Delete the slash command and insert ![[ to trigger image autocomplete
+          editor.chain()
+            .focus()
+            .deleteRange(range)
+            .insertContent('![[')
+            .run();
         },
       },
       {

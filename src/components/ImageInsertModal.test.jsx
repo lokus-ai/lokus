@@ -3,9 +3,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import ImageInsertModal from './ImageInsertModal'
 import { invoke } from '@tauri-apps/api/core'
 
-// Mock Tauri invoke
+// Mock Tauri invoke and convertFileSrc
 vi.mock('@tauri-apps/api/core', () => ({
-    invoke: vi.fn()
+    invoke: vi.fn(),
+    convertFileSrc: vi.fn((path) => `asset://${path}`)
 }))
 
 describe('ImageInsertModal Component', () => {
@@ -77,8 +78,9 @@ describe('ImageInsertModal Component', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Insert Image' }))
 
+        // The component uses convertFileSrc which transforms the path to asset:// protocol
         expect(defaultProps.onInsert).toHaveBeenCalledWith({
-            src: '/test/workspace/img1.png',
+            src: 'asset:///test/workspace/img1.png',
             alt: 'img1'
         })
     })

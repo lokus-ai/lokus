@@ -10,10 +10,18 @@ export const getPlatform = () => {
   if (typeof window === 'undefined') {
     return 'unknown';
   }
-  
+
   const platform = window.navigator.platform?.toLowerCase() || '';
   const userAgent = window.navigator.userAgent?.toLowerCase() || '';
-  
+
+  // Check for iOS first (before mac check since iOS also contains 'mac' in some cases)
+  if (/iphone|ipad|ipod/.test(userAgent) || (platform === 'macintel' && navigator.maxTouchPoints > 1)) {
+    return 'ios';
+  }
+  // Check for Android
+  if (userAgent.includes('android')) {
+    return 'android';
+  }
   if (platform.includes('win') || userAgent.includes('windows')) {
     return 'windows';
   }
@@ -23,13 +31,17 @@ export const getPlatform = () => {
   if (platform.includes('linux') || userAgent.includes('linux')) {
     return 'linux';
   }
-  
+
   return 'unknown';
 };
 
 export const isWindows = () => getPlatform() === 'windows';
 export const isMacOS = () => getPlatform() === 'macos';
 export const isLinux = () => getPlatform() === 'linux';
+export const isIOS = () => getPlatform() === 'ios';
+export const isAndroid = () => getPlatform() === 'android';
+export const isMobile = () => isIOS() || isAndroid();
+export const isDesktop = () => isWindows() || isMacOS() || isLinux();
 
 // Platform-specific key modifiers
 export const getModifierKey = () => isMacOS() ? 'Cmd' : 'Ctrl';
@@ -53,7 +65,9 @@ export const platformCapabilities = {
     contextMenus: true,
     registryAccess: true,
     windowsNotifications: true,
-    darkModeSync: true
+    darkModeSync: true,
+    fileDialog: true,
+    multiWindow: true
   },
   macos: {
     quickLook: true,
@@ -61,12 +75,30 @@ export const platformCapabilities = {
     continuity: true,
     spotlight: true,
     finderIntegration: true,
-    darkModeSync: true
+    darkModeSync: true,
+    fileDialog: true,
+    multiWindow: true
   },
   linux: {
     desktopIntegration: true,
     contextMenus: true,
-    darkModeSync: false
+    darkModeSync: false,
+    fileDialog: true,
+    multiWindow: true
+  },
+  ios: {
+    touchSupport: true,
+    darkModeSync: true,
+    fileDialog: false,
+    multiWindow: false,
+    hapticFeedback: true
+  },
+  android: {
+    touchSupport: true,
+    darkModeSync: true,
+    fileDialog: false,
+    multiWindow: false,
+    hapticFeedback: true
   }
 };
 

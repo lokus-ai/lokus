@@ -13,7 +13,7 @@ import { EventEmitter } from '../../utils/EventEmitter.js'
 export class PluginSandbox extends EventEmitter {
   constructor(pluginId, manifest, options = {}) {
     super()
-    
+
     this.pluginId = pluginId
     this.manifest = manifest
     this.options = {
@@ -23,7 +23,7 @@ export class PluginSandbox extends EventEmitter {
       maxFileSize: 10 * 1024 * 1024, // 10MB max file access
       ...options
     }
-    
+
     this.worker = null
     this.workerEnabled = false
     this.isRunning = false
@@ -35,12 +35,12 @@ export class PluginSandbox extends EventEmitter {
       errors: 0,
       startTime: null
     }
-    
+
     this.permissions = new Set(manifest.permissions || [])
     this.messageHandlers = new Map()
     this.pendingRequests = new Map()
     this.requestId = 0
-    
+
     // Resource monitoring
     this.resourceMonitor = null
     this.quotaExceeded = false
@@ -92,7 +92,7 @@ export class PluginSandbox extends EventEmitter {
     const workerCode = this.generateSecureWorkerCode()
     const blob = new Blob([workerCode], { type: 'application/javascript' })
     const workerUrl = URL.createObjectURL(blob)
-    
+
     this.worker = new Worker(workerUrl, {
       type: 'module',
       credentials: 'same-origin'
@@ -314,20 +314,20 @@ export class PluginSandbox extends EventEmitter {
       case 'api-request':
         this.handleAPIRequest(id, method, params)
         break
-        
+
       case 'initialized':
         this.emit('plugin-initialized', { pluginId: this.pluginId })
         break
-        
+
       case 'execution-result':
         this.resolveRequest(id, result)
         break
-        
+
       case 'error':
         this.stats.errors++
         this.rejectRequest(id, error)
         break
-        
+
       case 'deactivated':
         this.emit('plugin-deactivated', { pluginId: this.pluginId })
         break
@@ -350,17 +350,17 @@ export class PluginSandbox extends EventEmitter {
       }
 
       this.stats.apiCalls++
-      
+
       // Route API call to appropriate handler
       const result = await this.executeAPICall(method, params)
-      
+
       // Send response back to worker
       this.worker.postMessage({
         type: 'api-response',
         id: requestId,
         result
       })
-      
+
     } catch (error) {
       this.worker.postMessage({
         type: 'api-response',
@@ -412,7 +412,7 @@ export class PluginSandbox extends EventEmitter {
   async initializePlugin() {
     // Load plugin code (would be from file system)
     const pluginCode = await this.loadPluginCode()
-    
+
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Plugin initialization timeout'))
@@ -431,7 +431,7 @@ export class PluginSandbox extends EventEmitter {
       }
 
       this.worker.addEventListener('message', handler)
-      
+
       this.worker.postMessage({
         type: 'initialize',
         data: { code: pluginCode }
@@ -475,7 +475,7 @@ export class PluginSandbox extends EventEmitter {
       // Monitor memory usage (approximation)
       if (performance.memory) {
         this.stats.memoryUsage = performance.memory.usedJSHeapSize
-        
+
         if (this.stats.memoryUsage > this.options.memoryLimit) {
           this.quotaExceeded = true
           this.emit('quota-exceeded', {
@@ -498,7 +498,9 @@ export class PluginSandbox extends EventEmitter {
         })
       }
 
-    } catch { }
+    } catch (err) {
+      console.error('PluginSandbox: Resource check failed', err);
+    }
   }
 
   /**
@@ -596,7 +598,8 @@ export class PluginSandbox extends EventEmitter {
         // Force terminate
         this.worker.terminate()
       } catch (e) {
-        // Worker may already be terminated
+        // Worker may already be terminated - safe to ignore, but logging for debug
+        console.debug('PluginSandbox: Worker termination warning', e);
       }
       this.worker = null
     }

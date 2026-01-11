@@ -37,7 +37,7 @@ export default function Gmail({ workspacePath }) {
       setLoading(true);
       const authenticated = await gmailAuth.isAuthenticated();
       setIsAuthenticated(authenticated);
-      
+
       if (authenticated) {
         const profile = await gmailAuth.getUserProfile();
         setUserProfile(profile);
@@ -53,7 +53,7 @@ export default function Gmail({ workspacePath }) {
     try {
       setRefreshing(true);
       let emailList = [];
-      
+
       switch (currentView) {
         case 'inbox':
           emailList = await gmailEmails.getInbox();
@@ -70,7 +70,7 @@ export default function Gmail({ workspacePath }) {
         default:
           emailList = await gmailEmails.getEmailsByLabel(currentView);
       }
-      
+
       setEmails(emailList);
       // Clear selected email if it's not in the new list
       if (selectedEmail && !emailList.find(e => e.id === selectedEmail.id)) {
@@ -94,7 +94,9 @@ export default function Gmail({ workspacePath }) {
       const results = await gmailEmails.searchEmails(query);
       setEmails(results);
       setSearchQuery(query);
-    } catch { } finally {
+    } catch (err) {
+      console.error('Gmail: Failed to search emails', err);
+    } finally {
       setRefreshing(false);
     }
   };
@@ -111,7 +113,9 @@ export default function Gmail({ workspacePath }) {
     setSelectedEmail(email);
     // Mark as read if unread
     if (!email.isRead) {
-      gmailEmails.markAsRead(email.id).catch(() => {});
+      gmailEmails.markAsRead(email.id).catch((err) => {
+        console.error('Gmail: Failed to mark email as read', err);
+      });
     }
   };
 
@@ -120,7 +124,7 @@ export default function Gmail({ workspacePath }) {
 
     try {
       const emailIds = Array.from(selectedEmails);
-      
+
       switch (action) {
         case 'archive':
           await gmailEmails.archiveEmails(emailIds);
@@ -135,10 +139,12 @@ export default function Gmail({ workspacePath }) {
           await gmailEmails.markEmailsAsUnread(emailIds);
           break;
       }
-      
+
       setSelectedEmails(new Set());
       loadEmails(); // Refresh the list
-    } catch { }
+    } catch (err) {
+      console.error('Gmail: Failed to perform bulk action', err);
+    }
   };
 
   const handleLogout = async () => {
@@ -149,7 +155,9 @@ export default function Gmail({ workspacePath }) {
       setEmails([]);
       setSelectedEmail(null);
       setSelectedEmails(new Set());
-    } catch { }
+    } catch (err) {
+      console.error('Gmail: Failed to logout', err);
+    }
   };
 
   if (loading) {

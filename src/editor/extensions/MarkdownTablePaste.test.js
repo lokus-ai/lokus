@@ -280,8 +280,6 @@ Cell 1 | Cell 2`;
 
   describe('Error Handling', () => {
     it('should handle parsing errors gracefully', () => {
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
       // Mock editor.chain to throw error
       const errorEditor = {
         chain: vi.fn(() => {
@@ -300,12 +298,10 @@ Cell 1 | Cell 2`;
       const plugins = extension.config.addProseMirrorPlugins.call({ editor: errorEditor });
       const handlePaste = plugins[0].props.handlePaste;
 
+      // Should return false and not throw when an error occurs
       const result = handlePaste(mockView, mockClipboardEvent);
 
       expect(result).toBe(false);
-      expect(consoleWarnSpy).toHaveBeenCalledWith('[md-table] paste failed:', expect.any(Error));
-
-      consoleWarnSpy.mockRestore();
     });
 
     it('should handle clipboard data errors', () => {

@@ -4,7 +4,6 @@
  * Provides access to app version and metadata
  */
 
-import { invoke } from '@tauri-apps/api/core';
 import { getName, getVersion, getTauriVersion } from '@tauri-apps/api/app';
 
 let cachedAppInfo = null;
@@ -15,16 +14,16 @@ let cachedAppInfo = null;
  */
 export async function getAppVersion() {
   try {
-    // Try Tauri API first
+    // Try Tauri API first - this reads from tauri.conf.json
     const version = await getVersion();
     return version;
   } catch (error) {
     // Fallback to package.json version in development
     const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
     if (isDev) {
-      return '1.3.5-dev';
+      return '1.0.0-dev';
     }
-    return '1.3.5';
+    return '1.0.0';
   }
 }
 
@@ -62,7 +61,7 @@ export async function getAppInfo() {
     const mode = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.MODE : process.env.NODE_ENV || 'production';
     return {
       name: 'Lokus',
-      version: '1.3.5',
+      version: '1.0.0',
       tauriVersion: 'unknown',
       environment: mode,
       isDev: isDev
