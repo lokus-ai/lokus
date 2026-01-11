@@ -25,7 +25,12 @@ describe('StorageAPI', () => {
     };
 
     storageAPI = new DataAPI(mockDataManager);
-    storageAPI.currentPluginId = 'test-plugin';
+    // Grant storage permissions for testing
+    const allPermissions = new Set([
+      'storage:read',
+      'storage:write'
+    ]);
+    storageAPI._setPermissionContext('test-plugin', allPermissions);
 
     // Clear localStorage before each test
     localStorage.clear();

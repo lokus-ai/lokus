@@ -17,7 +17,12 @@ describe('TaskAPI', () => {
             terminateTask: vi.fn()
         };
         taskAPI = new TaskAPI(mockTaskManager);
-        taskAPI.currentPluginId = 'test-plugin';
+        // Grant task permissions for testing
+        const allPermissions = new Set([
+            'tasks:register',
+            'tasks:execute'
+        ]);
+        taskAPI._setPermissionContext('test-plugin', allPermissions);
     });
 
     describe('registerTaskProvider()', () => {

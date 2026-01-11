@@ -319,7 +319,13 @@ describe('CommandsAPI', () => {
       unregisterCommand: vi.fn()
     };
     commandsAPI = new CommandsAPI(mockCommandManager);
-    commandsAPI.currentPluginId = 'test-plugin';
+    // Grant commands permissions for testing
+    const allPermissions = new Set([
+      'commands:register',
+      'commands:execute',
+      'commands:list'
+    ]);
+    commandsAPI._setPermissionContext('test-plugin', allPermissions);
   });
 
   afterEach(() => {

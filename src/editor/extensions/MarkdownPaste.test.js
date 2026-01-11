@@ -57,16 +57,14 @@ describe('MarkdownPaste Extension', () => {
     });
 
     it('should have onCreate method', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
       const extension = MarkdownPaste;
 
-      // Simulate extension creation
-      if (extension.config.onCreate) {
-        extension.config.onCreate();
-        expect(consoleSpy).toHaveBeenCalledWith('[MarkdownPaste] Extension created successfully');
-      }
+      // Verify onCreate exists and is callable
+      expect(extension.config.onCreate).toBeDefined();
+      expect(typeof extension.config.onCreate).toBe('function');
 
-      consoleSpy.mockRestore();
+      // Calling onCreate should not throw
+      expect(() => extension.config.onCreate()).not.toThrow();
     });
   });
 
@@ -295,28 +293,25 @@ describe('MarkdownPaste Extension', () => {
     });
   });
 
-  describe('Console Logging', () => {
-    it('should log paste events for debugging', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
-
+  describe('Plugin Creation', () => {
+    it('should create ProseMirror plugin successfully', () => {
       const extension = MarkdownPaste;
       const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
 
-      expect(consoleSpy).toHaveBeenCalledWith('[MarkdownPaste] Adding ProseMirror plugin');
-
-      consoleSpy.mockRestore();
+      // Verify plugin is created and has the expected structure
+      expect(plugins).toHaveLength(1);
+      expect(plugins[0]).toBeDefined();
+      expect(plugins[0].props).toBeDefined();
+      expect(plugins[0].props.handlePaste).toBeInstanceOf(Function);
     });
 
-    it('should log conversion details', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+    it('should have proper plugin structure', () => {
+      const extension = MarkdownPaste;
+      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
 
-      // Test successful conversion logging
-      // Test error logging
-      // These would be tested in integration tests with actual paste events
-
-      consoleSpy.mockRestore();
-      consoleErrorSpy.mockRestore();
+      // Verify plugin structure for proper integration
+      const plugin = plugins[0];
+      expect(plugin.props.handlePaste).toBeDefined();
     });
   });
 });

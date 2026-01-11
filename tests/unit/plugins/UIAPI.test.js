@@ -24,7 +24,16 @@ describe('UIAPI', () => {
     };
 
     uiAPI = new UIAPI(null, mockNotificationsAPI);
-    uiAPI.currentPluginId = 'test-plugin';
+    // Grant all UI permissions for testing
+    const allPermissions = new Set([
+      'ui:create',
+      'ui:dialogs',
+      'ui:notifications',
+      'ui:menus',
+      'ui:toolbars',
+      'terminal:create'
+    ]);
+    uiAPI._setPermissionContext('test-plugin', allPermissions);
   });
 
   describe('createOutputChannel', () => {

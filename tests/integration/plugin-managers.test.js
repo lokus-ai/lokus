@@ -27,7 +27,15 @@ describe('Plugin Manager Integration', () => {
       manifest: {
         name: 'Test Plugin Manager',
         version: '1.0.0',
-        permissions: ['terminal', 'ui']
+        permissions: [
+          'terminal:create', 'terminal:write', 'terminal:read',
+          'ui:create', 'ui:dialogs', 'ui:notifications', 'ui:menus', 'ui:toolbars',
+          'commands:register', 'commands:execute',
+          'editor:read', 'editor:write',
+          'storage:read', 'storage:write',
+          'workspace:read', 'workspace:write',
+          'events:listen', 'events:emit'
+        ]
       }
     });
   });

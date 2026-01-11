@@ -11,7 +11,15 @@ describe('Manager Integration', () => {
         api = new LokusPluginAPI({});
         api.setPluginContext('test-plugin', {
             id: 'test-plugin',
-            manifest: { permissions: [] }
+            manifest: {
+                permissions: [
+                    'terminal:create', 'terminal:write', 'terminal:read',
+                    'ui:create', 'ui:dialogs', 'ui:notifications',
+                    'commands:register', 'commands:execute',
+                    'storage:read', 'storage:write',
+                    'events:listen', 'events:emit'
+                ]
+            }
         });
     });
 
