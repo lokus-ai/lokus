@@ -2028,3 +2028,39 @@ html, body {
     pointer-events: none;
   }
 }
+
+/* ========== Touch Device Styles ========== */
+
+/* Target devices without hover capability (touch screens) */
+@media (hover: none) {
+  /* Remove hover-only effects */
+  .hover-only {
+    display: none;
+  }
+  
+  /* Make hover effects work on active/tap */
+  .hover\\:bg-app-panel:active {
+    background-color: rgb(var(--panel));
+  }
+}
+
+/* Target devices with coarse pointer (touch) */
+@media (pointer: coarse) {
+  /* Increase touch targets */
+  button, 
+  [role="button"],
+  .clickable {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Add more padding to interactive elements */
+  .interactive {
+    padding: 12px;
+  }
+}
+
+/* Combine for definitely-touch devices */
+@media (hover: none) and (pointer: coarse) {
+  /* Styles for pure touch devices (phones, tablets) */
+}
