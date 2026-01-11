@@ -426,6 +426,10 @@ ul[data-type="taskList"] li.task-started {
     line-height: var(--editor-code-block-line-height, 1.5) !important;
     position: relative;
     color: rgb(var(--text)) !important;
+    /* Preserve indentation and whitespace in code blocks */
+    white-space: pre !important;
+    tab-size: 2 !important;
+    -moz-tab-size: 2 !important;
     /* Reset any external stylesheet interference */
     box-shadow: none !important;
     text-shadow: none !important;
@@ -442,6 +446,9 @@ ul[data-type="taskList"] li.task-started {
     color: inherit !important;
     font-family: inherit !important;
     line-height: inherit !important;
+    /* Preserve whitespace and indentation */
+    white-space: inherit !important;
+    tab-size: inherit !important;
     /* Prevent highlight.js or other external styling */
     text-shadow: none !important;
     box-shadow: none !important;
@@ -461,6 +468,8 @@ ul[data-type="taskList"] li.task-started {
     font-family: inherit !important;
     font-size: inherit !important;
     line-height: inherit !important;
+    /* Ensure whitespace is preserved in syntax highlighting spans */
+    white-space: inherit !important;
 }
 
 /* Override any global .obsidian-editor code/pre styles within ProseMirror */
@@ -472,6 +481,8 @@ ul[data-type="taskList"] li.task-started {
     padding: 1rem !important;
     margin: 1rem 0 !important;
     color: rgb(var(--text)) !important;
+    white-space: pre !important;
+    tab-size: 2 !important;
 }
 
 .ProseMirror.obsidian-editor pre code,
@@ -480,6 +491,7 @@ ul[data-type="taskList"] li.task-started {
     padding: 0 !important;
     color: inherit !important;
     border: none !important;
+    white-space: inherit !important;
 }
 
 /* Block external highlight.js or other syntax highlighting interference */
@@ -1015,6 +1027,10 @@ ul[data-type="taskList"] li.task-started {
   font-size: 14px;
   line-height: 1.5;
   overflow-x: auto;
+  /* Preserve indentation and whitespace */
+  white-space: pre;
+  tab-size: 2;
+  -moz-tab-size: 2;
 }
 
 .ProseMirror pre code {
@@ -1022,6 +1038,7 @@ ul[data-type="taskList"] li.task-started {
   color: inherit;
   font-size: inherit;
   padding: 0;
+  white-space: inherit;
 }
 
 /* Syntax Highlighting Tokens */
