@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { useStatusBar } from '../../hooks/useStatusBar';
 import { useResponsiveStatusBar, STATUS_BAR_PRIORITY } from '../../hooks/useResponsiveStatusBar';
 import SyncStatus from '../Auth/SyncStatus.jsx';
+import { isDesktop } from '../../platform/index.js';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -359,8 +360,8 @@ export default function ResponsiveStatusBar({
           </React.Fragment>
         ))}
 
-        {/* Terminal Toggle (if callback provided) */}
-        {onToggleTerminal && (
+        {/* Terminal Toggle (if callback provided) - Desktop only */}
+        {onToggleTerminal && isDesktop() && (
           <>
             <div className="obsidian-status-bar-separator" />
             <div
