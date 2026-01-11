@@ -19,6 +19,14 @@ const MarkdownPaste = Extension.create({
             const clipboardData = event.clipboardData
             if (!clipboardData) return false
 
+            // Don't intercept paste inside code blocks - let plain text paste through
+            const { state } = view
+            const { $from } = state.selection
+            if ($from.parent.type.name === 'codeBlock') {
+              // Let ProseMirror handle paste as plain text in code blocks
+              return false
+            }
+
             const text = clipboardData.getData('text/plain')
             const html = clipboardData.getData('text/html')
 
