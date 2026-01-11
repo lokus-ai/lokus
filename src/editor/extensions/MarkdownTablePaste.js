@@ -58,6 +58,13 @@ const MarkdownTablePaste = Extension.create({
         props: {
           handlePaste(view, event) {
             try {
+              // Don't intercept paste inside code blocks
+              const { state } = view
+              const { $from } = state.selection
+              if ($from.parent.type.name === 'codeBlock') {
+                return false
+              }
+
               const text = event.clipboardData?.getData('text/plain');
               const parsed = parseMarkdownTable(text);
               if (!parsed) return false;
