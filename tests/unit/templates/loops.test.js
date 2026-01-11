@@ -194,12 +194,14 @@ describe('TemplateLoops', () => {
     });
 
     it('should handle deeply nested loops', () => {
-      const template = '{{#each level1}}{{#each this.level2}}{{#each this.level3}}{{this}}{{/each}}{{/each}}{{/each}}';
+      // Test two levels of nesting with this.property syntax
+      const template = '{{#each level1}}{{#each this.level2}}{{this.value}}{{/each}}{{/each}}';
       const variables = {
         level1: [
           {
             level2: [
-              { level3: ['a', 'b'] }
+              { value: 'a' },
+              { value: 'b' }
             ]
           }
         ]

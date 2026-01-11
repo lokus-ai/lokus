@@ -17,7 +17,14 @@ describe('DebugAPI', () => {
             unregisterDebugAdapterProvider: vi.fn()
         };
         debugAPI = new DebugAPI(mockDebugManager);
-        debugAPI.currentPluginId = 'test-plugin';
+        // Grant debug permissions for testing
+        const allPermissions = new Set([
+            'debug:session',
+            'debug:register',
+            'events:listen',
+            'events:emit'
+        ]);
+        debugAPI._setPermissionContext('test-plugin', allPermissions);
     });
 
     describe('startDebugging()', () => {

@@ -17,7 +17,15 @@ describe('LanguagesAPI', () => {
     };
 
     languagesAPI = new LanguagesAPI(mockLanguageManager);
-    languagesAPI.currentPluginId = 'test-plugin';
+    // Grant languages permissions for testing
+    const allPermissions = new Set([
+      'languages:register',
+      'languages:diagnostics',
+      'languages:read',
+      'events:listen',
+      'events:emit'
+    ]);
+    languagesAPI._setPermissionContext('test-plugin', allPermissions);
   });
 
   afterEach(() => {

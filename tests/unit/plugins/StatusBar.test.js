@@ -294,7 +294,13 @@ describe('UIAPI - registerStatusBarItem', () => {
 
   beforeEach(() => {
     uiAPI = new UIAPI(null, null);
-    uiAPI.currentPluginId = 'test-plugin';
+    // Grant UI permissions for testing
+    const allPermissions = new Set([
+      'ui:create',
+      'ui:dialogs',
+      'ui:notifications'
+    ]);
+    uiAPI._setPermissionContext('test-plugin', allPermissions);
   });
 
   afterEach(() => {

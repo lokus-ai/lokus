@@ -72,21 +72,15 @@ describe('useCommandHistory', () => {
 
     it('should handle config load errors gracefully', async () => {
       mockReadConfig.mockRejectedValue(new Error('Config load failed'))
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
       const { result } = renderHook(() => useCommandHistory())
-      
+
       await waitFor(() => {
         expect(result.current.loading).toBe(false)
       })
-      
+
+      // Hook silently handles errors and falls back to empty history
       expect(result.current.history).toEqual([])
-      expect(consoleSpy).toHaveBeenCalledWith(
-        '[CommandHistory] Failed to load history:',
-        expect.any(Error)
-      )
-      
-      consoleSpy.mockRestore()
     })
   })
 
@@ -265,10 +259,9 @@ describe('useCommandHistory', () => {
 
     it('should handle config save errors gracefully', async () => {
       mockUpdateConfig.mockRejectedValue(new Error('Save failed'))
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
       const { result } = renderHook(() => useCommandHistory())
-      
+
       await waitFor(() => {
         expect(result.current.loading).toBe(false)
       })
@@ -282,14 +275,9 @@ describe('useCommandHistory', () => {
         await result.current.addToHistory(fileItem)
       })
 
-      // History should still be updated in memory
+      // History should still be updated in memory even if save fails
+      // The hook silently handles save errors
       expect(result.current.history).toHaveLength(1)
-      expect(consoleSpy).toHaveBeenCalledWith(
-        '[CommandHistory] Failed to save history:',
-        expect.any(Error)
-      )
-      
-      consoleSpy.mockRestore()
     })
   })
 

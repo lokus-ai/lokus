@@ -32,6 +32,13 @@ describe('ConfigurationAPI', () => {
     };
 
     configAPI = new ConfigurationAPI(mockConfigManager);
+    // Grant configuration permissions for testing
+    const allPermissions = new Set([
+      'config:read',
+      'config:write',
+      'events:listen'
+    ]);
+    configAPI._setPermissionContext('test-plugin', allPermissions);
   });
 
   afterEach(() => {

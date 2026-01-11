@@ -20,7 +20,15 @@ describe('TerminalAPI', () => {
             on: vi.fn() // Add mock for event listener registration
         };
         terminalAPI = new TerminalAPI(mockTerminalManager);
-        terminalAPI.currentPluginId = 'test-plugin';
+        // Grant terminal permissions for testing
+        const allPermissions = new Set([
+            'terminal:create',
+            'terminal:write',
+            'terminal:read',
+            'events:listen',
+            'events:emit'
+        ]);
+        terminalAPI._setPermissionContext('test-plugin', allPermissions);
     });
 
     describe('createTerminal()', () => {

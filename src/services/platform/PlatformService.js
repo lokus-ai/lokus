@@ -10,11 +10,16 @@ import {
   isWindows,
   isMacOS,
   isLinux,
+  isDesktop,
+  isMobile,
   getPlatformModule,
   hasCapability,
   getModifierKey,
   getPathSeparator
 } from '../../platform/index.js';
+
+// Re-export for convenience
+export { isDesktop, isMobile };
 
 class PlatformService {
   constructor() {

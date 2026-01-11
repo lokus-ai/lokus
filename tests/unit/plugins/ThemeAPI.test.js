@@ -17,7 +17,13 @@ describe('ThemeAPI', () => {
     };
 
     themeAPI = new ThemeAPI(mockThemeManager);
-    themeAPI.currentPluginId = 'test-plugin';
+    // Grant theme permissions for testing
+    const allPermissions = new Set([
+      'theme:read',
+      'theme:write',
+      'theme:register'
+    ]);
+    themeAPI._setPermissionContext('test-plugin', allPermissions);
   });
 
   afterEach(() => {
