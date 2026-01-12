@@ -87,7 +87,7 @@ import Breadcrumbs from "../components/FileTree/Breadcrumbs.jsx";
 import AboutDialog from "../components/AboutDialog.jsx";
 import { copyFiles, cutFiles, getClipboardState, getRelativePath } from "../utils/clipboard.js";
 import "../styles/product-tour.css";
-import { isDesktop } from '../platform/index.js';
+import { isDesktop, isMobile } from '../platform/index.js';
 import TerminalPanel from "../components/TerminalPanel/TerminalPanel.jsx";
 import { OutputPanel } from "../components/OutputPanel/OutputPanel.jsx";
 import referenceManager from "../core/references/ReferenceManager.js";
@@ -4009,7 +4009,7 @@ function WorkspaceWithScope({ path }) {
 
   return (
     <PanelManager>
-      <div className="h-full bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select relative">
+      <div className={`h-full bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select relative ${isMobile() ? 'safe-area-inset-top' : ''}`}>
         {/* Product Tour */}
         <ProductTour autoStart={true} delay={1500} />
 
