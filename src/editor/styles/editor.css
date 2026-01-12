@@ -425,7 +425,6 @@ ul[data-type="taskList"] li.task-started {
     font-size: var(--editor-code-block-font-size, 14px) !important;
     line-height: var(--editor-code-block-line-height, 1.5) !important;
     position: relative;
-    color: rgb(var(--text)) !important;
     /* Preserve indentation and whitespace in code blocks */
     white-space: pre !important;
     tab-size: 2 !important;
@@ -443,7 +442,6 @@ ul[data-type="taskList"] li.task-started {
     border-radius: 0 !important;
     border: none !important;
     font-size: inherit !important;
-    color: inherit !important;
     font-family: inherit !important;
     line-height: inherit !important;
     /* Preserve whitespace and indentation */
@@ -480,7 +478,6 @@ ul[data-type="taskList"] li.task-started {
     border-radius: 0.5rem !important;
     padding: 1rem !important;
     margin: 1rem 0 !important;
-    color: rgb(var(--text)) !important;
     white-space: pre !important;
     tab-size: 2 !important;
 }
@@ -489,7 +486,6 @@ ul[data-type="taskList"] li.task-started {
 .obsidian-editor .ProseMirror pre code {
     background: transparent !important;
     padding: 0 !important;
-    color: inherit !important;
     border: none !important;
     white-space: inherit !important;
 }
@@ -500,7 +496,6 @@ ul[data-type="taskList"] li.task-started {
 .ProseMirror pre .hljs *,
 .ProseMirror pre code .hljs * {
     background: transparent !important;
-    color: inherit !important;
     text-shadow: none !important;
     font-weight: inherit !important;
 }
@@ -520,7 +515,6 @@ ul[data-type="taskList"] li.task-started {
 .ProseMirror pre span,
 .ProseMirror pre div {
     background: rgb(var(--panel)) !important;
-    color: rgb(var(--text)) !important;
     text-shadow: none !important;
     box-shadow: none !important;
     filter: none !important;
@@ -551,7 +545,7 @@ ul[data-type="taskList"] li.task-started {
 .ProseMirror pre .hljs-meta,
 .ProseMirror pre [class*="hljs-"] {
     background: transparent !important;
-    color: inherit !important;
+    /* color: inherit !important; */
     text-shadow: none !important;
     font-weight: inherit !important;
     font-style: inherit !important;
@@ -571,7 +565,7 @@ ul[data-type="taskList"] li.task-started {
 .ProseMirror pre .token.punctuation,
 .ProseMirror pre [class*="token"] {
     background: transparent !important;
-    color: inherit !important;
+    /* color: inherit !important; */
     text-shadow: none !important;
     font-weight: inherit !important;
     font-style: inherit !important;
