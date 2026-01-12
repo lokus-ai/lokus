@@ -34,6 +34,7 @@ import SimpleTask from "../extensions/SimpleTask.js";
 import TaskSyntaxHighlight from "../extensions/TaskSyntaxHighlight.js";
 import TaskMentionSuggest from "../extensions/TaskMentionSuggest.js";
 import TaskCreationTrigger from "../extensions/TaskCreationTrigger.js";
+import CustomCodeBlock from "../extensions/CustomCodeBlock.js";
 import CodeBlockIndent from "../extensions/CodeBlockIndent.js";
 import Callout from "../extensions/Callout.js";
 import Folding from "../extensions/Folding.js";
@@ -151,8 +152,12 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
         link: false,
         strike: false,
         horizontalRule: false,
+        codeBlock: false,
       })
     ];
+    
+    exts.push(CustomCodeBlock);
+
     if (Link) exts.push(Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true }));
     if (TaskList && TaskItem) exts.push(TaskList, TaskItem);
     if (Image) {
