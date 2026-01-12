@@ -76,6 +76,7 @@ import ProductTour from "../components/ProductTour.jsx";
 import ExternalDropZone from "../components/ExternalDropZone.jsx";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast, demoAllToasts } from "../components/ui/enhanced-toast";
+import { PullToRefresh } from "../components/mobile";
 // Expose demo function to window for console access
 if (typeof window !== 'undefined') {
   window.demoToasts = demoAllToasts;
@@ -4366,32 +4367,34 @@ function WorkspaceWithScope({ path }) {
                   <ContextMenu>
                     <ContextMenuTrigger asChild>
                       <div className="p-2 flex-1 overflow-y-auto">
-                        <FileTreeView
-                          entries={filteredFileTree}
-                          onFileClick={handleFileOpen}
-                          activeFile={activeFile}
-                          onRefresh={handleRefreshFiles}
-                          data-testid="file-tree"
-                          expandedFolders={expandedFolders}
-                          toggleFolder={toggleFolder}
-                          isCreating={isCreatingFolder}
-                          onCreateConfirm={handleConfirmCreateFolder}
-                          keymap={keymap}
-                          renamingPath={renamingPath}
-                          setRenamingPath={setRenamingPath}
-                          onViewHistory={toggleVersionHistory}
-                          setTagModalFile={setTagModalFile}
-                          setShowTagModal={setShowTagModal}
-                          setUseSplitView={setUseSplitView}
-                          setRightPaneFile={setRightPaneFile}
-                          setRightPaneTitle={setRightPaneTitle}
-                          setRightPaneContent={setRightPaneContent}
-                          isExternalDragActive={isExternalDragActive}
-                          hoveredFolder={hoveredFolder}
-                          setHoveredFolder={setHoveredFolder}
-                          toast={toast}
-                          onCheckReferences={handleCheckReferences}
-                        />
+                        <PullToRefresh onRefresh={handleRefreshFiles}>
+                          <FileTreeView
+                            entries={filteredFileTree}
+                            onFileClick={handleFileOpen}
+                            activeFile={activeFile}
+                            onRefresh={handleRefreshFiles}
+                            data-testid="file-tree"
+                            expandedFolders={expandedFolders}
+                            toggleFolder={toggleFolder}
+                            isCreating={isCreatingFolder}
+                            onCreateConfirm={handleConfirmCreateFolder}
+                            keymap={keymap}
+                            renamingPath={renamingPath}
+                            setRenamingPath={setRenamingPath}
+                            onViewHistory={toggleVersionHistory}
+                            setTagModalFile={setTagModalFile}
+                            setShowTagModal={setShowTagModal}
+                            setUseSplitView={setUseSplitView}
+                            setRightPaneFile={setRightPaneFile}
+                            setRightPaneTitle={setRightPaneTitle}
+                            setRightPaneContent={setRightPaneContent}
+                            isExternalDragActive={isExternalDragActive}
+                            hoveredFolder={hoveredFolder}
+                            setHoveredFolder={setHoveredFolder}
+                            toast={toast}
+                            onCheckReferences={handleCheckReferences}
+                          />
+                        </PullToRefresh>
                       </div>
                     </ContextMenuTrigger>
                     <ContextMenuContent>
