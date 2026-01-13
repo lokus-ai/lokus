@@ -2064,3 +2064,12 @@ html, body {
 @media (hover: none) and (pointer: coarse) {
   /* Styles for pure touch devices (phones, tablets) */
 }
+
+/* Mobile font size adjustments */
+@media (pointer: coarse) {
+  :root {
+    --text-xs: 13px;
+    --text-sm: 15px;
+    --text-base: 16px;
+  }
+}
