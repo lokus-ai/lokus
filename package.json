@@ -175,7 +175,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@playwright/test": "^1.55.0",
+    "@playwright/test": "^1.57.0",
     "@tailwindcss/typography": "^0.5.16",
     "@tauri-apps/cli": "^2",
     "@testing-library/dom": "^10.4.1",
