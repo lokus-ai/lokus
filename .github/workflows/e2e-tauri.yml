@@ -42,11 +42,12 @@ jobs:
       - name: Build Tauri app
         run: |
           source /root/.cargo/env
-          # Build frontend first
-          npm run build
-          # Build only the binary (skip bundling deb/rpm/appimage - much faster)
-          cd src-tauri
-          cargo build
+          # Use cargo-tauri to build with bundled frontend (but skip deb/rpm/appimage)
+          # This ensures the frontend is embedded in the binary
+          npx tauri build --debug --no-bundle
+        env:
+          # Skip bundling - we just need the binary
+          TAURI_SKIP_DEVSERVER_CHECK: 'true'
 
       - name: Create test workspace
         run: |
