@@ -46,7 +46,7 @@ jobs:
           npm run build
           # Build only the binary (skip bundling deb/rpm/appimage - much faster)
           cd src-tauri
-          cargo build --features custom-protocol
+          cargo build
 
       - name: Create test workspace
         run: |
