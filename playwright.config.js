@@ -3,22 +3,23 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * E2E Test Configuration for Lokus
  *
- * Tests run against the real Tauri app (not just Vite).
- * This ensures all Rust backend functionality works correctly.
+ * Tests run in browser against Vite dev server with testMode=true.
+ * This bypasses Tauri validation since browsers don't have access to Tauri APIs.
+ *
+ * The app detects testMode and skips Tauri backend calls, allowing
+ * browser-based E2E testing of the UI.
  *
  * Prerequisites:
- * - Rust toolchain installed
  * - Run `npm install` first
  *
- * The global setup creates a real temp workspace with test files.
- * Tests navigate to /?workspacePath=<temp-workspace> to open it.
+ * The global setup creates a temp workspace with test files.
+ * Tests navigate to /?testMode=true&workspacePath=<temp-workspace> to open it.
  */
 export default defineConfig({
   testDir: './tests/e2e',
 
-  // Run tests in parallel, but limit workers since Tauri app is heavier
   fullyParallel: true,
-  workers: process.env.CI ? 1 : 2,
+  workers: process.env.CI ? 1 : 4,
 
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -28,10 +29,9 @@ export default defineConfig({
     ['list']
   ],
 
-  // Longer timeouts for Tauri app (Rust compilation on first run)
-  timeout: 60000,
+  timeout: 30000,
   expect: {
-    timeout: 10000,
+    timeout: 5000,
   },
 
   use: {
@@ -40,9 +40,8 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
 
-    // Longer timeouts for Tauri app
-    actionTimeout: 15000,
-    navigationTimeout: 45000,
+    actionTimeout: 10000,
+    navigationTimeout: 30000,
   },
 
   /* Global setup creates temp workspace, teardown cleans it up */
@@ -62,14 +61,10 @@ export default defineConfig({
   ],
 
   webServer: {
-    // Run real Tauri app - this gives us full Rust backend functionality
-    command: 'npm run tauri dev',
+    // Use Vite dev server - tests run in browser with testMode bypass
+    command: 'npm run dev',
     url: 'http://localhost:1420',
     reuseExistingServer: !process.env.CI,
-    // Longer timeout for Tauri (Rust compilation can take 5+ minutes first time)
-    timeout: 600 * 1000,
-    // Capture stdout/stderr for debugging
-    stdout: 'pipe',
-    stderr: 'pipe',
+    timeout: 120 * 1000,
   },
 });

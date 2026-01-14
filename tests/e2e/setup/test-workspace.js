@@ -54,8 +54,9 @@ export const test = base.extend({
    * A page that's already navigated to the workspace with editor ready
    */
   workspacePage: async ({ page, workspacePath }, use) => {
-    // Navigate to workspace using URL parameter
-    const url = `/?workspacePath=${encodeURIComponent(workspacePath)}`;
+    // Navigate to workspace using URL parameter with testMode for E2E bypass
+    // testMode=true tells the app to skip Tauri validation (needed for browser-based tests)
+    const url = `/?testMode=true&workspacePath=${encodeURIComponent(workspacePath)}`;
 
     // Retry navigation multiple times - Tauri backend might not be ready yet
     let workspaceLoaded = false;

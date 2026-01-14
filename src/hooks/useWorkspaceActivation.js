@@ -2,6 +2,20 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { WorkspaceManager } from "../core/workspace/manager.js";
 
+// Check if Tauri APIs are available (only true in native Tauri webview, not browser)
+function isTauriAvailable() {
+  try {
+    const w = window;
+    return !!(
+      (w.__TAURI_INTERNALS__ && typeof w.__TAURI_INTERNALS__.invoke === 'function') ||
+      w.__TAURI_METADATA__ ||
+      (navigator?.userAgent || '').includes('Tauri')
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * For `ws-*` windows, this hook is responsible for determining the workspace path.
  *
@@ -11,6 +25,7 @@ import { WorkspaceManager } from "../core/workspace/manager.js";
  * 2. If no URL parameter, checks for a saved workspace and validates it.
  * 3. It ALSO listens for `workspace:activate` events for subsequent activations.
  * 4. All workspace paths are validated before being used.
+ * 5. In testMode (for E2E tests in browser), skip Tauri validation and trust the path.
  */
 export function useWorkspaceActivation() {
   const [path, setPath] = useState(null);
@@ -21,11 +36,12 @@ export function useWorkspaceActivation() {
       // Try multiple times with increasing delays
       for (let attempt = 0; attempt < 3; attempt++) {
         await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
-        
+
         // Strategy 1: Check URL on initial load
         const params = new URLSearchParams(window.location.search);
         const forceWelcome = params.get("forceWelcome");
         const workspacePath = params.get("workspacePath");
+        const testMode = params.get("testMode") === "true";
 
         // If forceWelcome is set, skip workspace loading and show launcher
         if (forceWelcome === "true") {
@@ -36,7 +52,17 @@ export function useWorkspaceActivation() {
 
         if (workspacePath) {
           const decodedPath = decodeURIComponent(workspacePath);
-          // Validate the URL parameter workspace path
+
+          // E2E Test Mode: When running in browser without Tauri, skip validation
+          // This allows Playwright tests to open workspaces without Tauri backend
+          if (testMode && !isTauriAvailable()) {
+            console.log('[E2E Test Mode] Bypassing Tauri validation for workspace:', decodedPath);
+            setPath(decodedPath);
+            setIsInitialized(true);
+            return;
+          }
+
+          // Normal mode: Validate the URL parameter workspace path
           const isValid = await WorkspaceManager.validatePath(decodedPath);
           if (isValid) {
             setPath(decodedPath);

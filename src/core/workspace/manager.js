@@ -21,6 +21,20 @@ function isMobilePlatform() {
   }
 }
 
+// Check if Tauri APIs are available
+function isTauriAvailable() {
+  try {
+    const w = window;
+    return !!(
+      (w.__TAURI_INTERNALS__ && typeof w.__TAURI_INTERNALS__.invoke === 'function') ||
+      w.__TAURI_METADATA__ ||
+      (navigator?.userAgent || '').includes('Tauri')
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Workspace Manager - Handles workspace validation and management
  */
