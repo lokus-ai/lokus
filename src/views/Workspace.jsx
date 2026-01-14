@@ -87,11 +87,12 @@ import Breadcrumbs from "../components/FileTree/Breadcrumbs.jsx";
 import AboutDialog from "../components/AboutDialog.jsx";
 import { copyFiles, cutFiles, getClipboardState, getRelativePath } from "../utils/clipboard.js";
 import "../styles/product-tour.css";
-import { isDesktop } from '../platform/index.js';
+import { isDesktop, isMobile } from '../platform/index.js';
 import TerminalPanel from "../components/TerminalPanel/TerminalPanel.jsx";
 import { OutputPanel } from "../components/OutputPanel/OutputPanel.jsx";
 import referenceManager from "../core/references/ReferenceManager.js";
 import ReferenceUpdateModal from "../components/ReferenceUpdateModal.jsx";
+import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
 
 const MAX_OPEN_TABS = 10;
 
@@ -812,7 +813,7 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
         destinationDir = targetPath;
       } else {
         destinationDir = targetPath.substring(0, targetPath.lastIndexOf('/')) ||
-                        targetEntry.path.substring(0, targetEntry.path.lastIndexOf('/'));
+          targetEntry.path.substring(0, targetEntry.path.lastIndexOf('/'));
       }
     } else if (targetEntry.is_directory) {
       destinationDir = targetEntry.path;
@@ -1202,6 +1203,8 @@ function WorkspaceWithScope({ path }) {
   const [showCreateTemplate, setShowCreateTemplate] = useState(false);
   const [createTemplateContent, setCreateTemplateContent] = useState('');
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  // Starts the app with the Editor tab highlighted
+  const [currentView, setCurrentView] = useState('editor');
   const [showKanban, setShowKanban] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
   const [showBases, setShowBases] = useState(false);
@@ -1677,7 +1680,7 @@ function WorkspaceWithScope({ path }) {
 
           // Initialize reference manager for tracking file links
           referenceManager.init(path);
-          referenceManager.buildIndex(flat).catch(() => {});
+          referenceManager.buildIndex(flat).catch(() => { });
 
           // Extract all image files for image viewer navigation
           const imageFiles = findImageFiles(tree);
@@ -5376,6 +5379,14 @@ function WorkspaceWithScope({ path }) {
               )}
             </div>
           </div>
+        )}
+
+      {/* Mobile bottom Navigation */}
+        {isMobile() && (
+          <MobileBottomNav
+            activeTab={currentView}
+            onTabChange={setCurrentView}
+          />
         )}
 
         {/* Responsive Pluginable Status Bar with overflow menu */}
