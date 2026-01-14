@@ -65,6 +65,7 @@ jobs:
           export DISPLAY=:99
           npm run test:e2e:tauri
         env:
+          CI: 'true'
           DISPLAY: ':99'
           LOKUS_E2E_WORKSPACE: '/tmp/lokus-e2e-workspace'
 

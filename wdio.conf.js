@@ -18,15 +18,32 @@ import { join } from 'path';
 // Keep track of tauri-driver process
 let tauriDriver;
 
+// Get binary path for Tauri app
+const binaryPath = join(
+  process.cwd(),
+  'src-tauri',
+  'target',
+  // Use debug build in CI (workflow builds debug), release locally
+  process.env.CI ? 'debug' : 'release',
+  process.platform === 'win32' ? 'lokus.exe' : 'lokus'
+);
+
 export const config = {
   specs: ['./tests/e2e-tauri/**/*.spec.js'],
   exclude: [],
 
   maxInstances: 1, // Tauri app is single instance
 
+  // Connect to tauri-driver on port 4444
+  hostname: 'localhost',
+  port: 4444,
+  path: '/',
+
   capabilities: [{
     maxInstances: 1,
-    browserName: 'wry', // Tauri's WebView
+    'tauri:options': {
+      application: binaryPath,
+    },
   }],
 
   logLevel: 'info',
@@ -48,15 +65,20 @@ export const config = {
 
   // Start tauri-driver before tests
   onPrepare: function () {
-    // Build the app first (release mode for faster startup)
-    console.log('Building Tauri app...');
-    const buildResult = spawnSync('cargo', ['build', '--release'], {
-      cwd: join(process.cwd(), 'src-tauri'),
-      stdio: 'inherit',
-    });
+    // In CI, the app is already built by the workflow
+    // Locally, we build it here
+    if (!process.env.CI) {
+      console.log('Building Tauri app...');
+      const buildResult = spawnSync('cargo', ['build', '--release'], {
+        cwd: join(process.cwd(), 'src-tauri'),
+        stdio: 'inherit',
+      });
 
-    if (buildResult.status !== 0) {
-      throw new Error('Failed to build Tauri app');
+      if (buildResult.status !== 0) {
+        throw new Error('Failed to build Tauri app');
+      }
+    } else {
+      console.log('CI mode: skipping build (already built by workflow)');
     }
 
     // Start tauri-driver on port 4444
@@ -85,21 +107,5 @@ export const config = {
       console.log('Stopping tauri-driver...');
       tauriDriver.kill();
     }
-  },
-
-  // Configure WebDriver to use tauri-driver
-  beforeSession: function (config, capabilities) {
-    // Point to the built Tauri binary
-    const binaryPath = join(
-      process.cwd(),
-      'src-tauri',
-      'target',
-      'release',
-      process.platform === 'win32' ? 'lokus.exe' : 'lokus'
-    );
-
-    capabilities['tauri:options'] = {
-      application: binaryPath,
-    };
   },
 };
