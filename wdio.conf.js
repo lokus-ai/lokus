@@ -19,10 +19,10 @@ import { join } from 'path';
 let tauriDriver;
 
 // Get binary path for Tauri app
+// In CI, use CARGO_TARGET_DIR (shared cache), otherwise use local target dir
+const targetDir = process.env.CARGO_TARGET_DIR || join(process.cwd(), 'src-tauri', 'target');
 const binaryPath = join(
-  process.cwd(),
-  'src-tauri',
-  'target',
+  targetDir,
   // Use debug build in CI (workflow builds debug), release locally
   process.env.CI ? 'debug' : 'release',
   process.platform === 'win32' ? 'lokus.exe' : 'lokus'
