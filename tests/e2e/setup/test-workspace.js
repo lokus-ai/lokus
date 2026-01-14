@@ -1,200 +1,173 @@
 /**
- * Test Workspace Setup for E2E Testing
- * This handles creating and managing test workspaces for Playwright tests
+ * Test Fixtures for Lokus E2E Tests
+ *
+ * Provides:
+ * - workspacePath: The path to the test workspace (created by global-setup.js)
+ * - workspacePage: A page that's already navigated to the workspace
+ *
+ * Usage in tests:
+ *   import { test, expect } from '../setup/test-workspace.js';
+ *
+ *   test('my test', async ({ workspacePage }) => {
+ *     // workspacePage is already at the workspace, editor ready
+ *     const editor = workspacePage.locator('.ProseMirror');
+ *     await editor.click();
+ *   });
  */
 
+import { test as base, expect } from '@playwright/test';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { test as base } from '@playwright/test';
 
-// Extend Playwright test with workspace setup
-export const test = base.extend({
-  // Create a test workspace for each test
-  testWorkspace: async ({}, use) => {
-    const workspaceDir = join(tmpdir(), `lokus-test-${Date.now()}-${Math.random().toString(36).substring(7)}`);
-    
-    // Create workspace directory
-    await fs.mkdir(workspaceDir, { recursive: true });
-    
-    // Create sample files for testing
-    const testFiles = {
-      'README.md': '# Test Workspace\n\nThis is a test workspace for E2E testing.',
-      'notes.md': '# Notes\n\n- Test note 1\n- Test note 2',
-      'todo.md': '# Todo\n\n- [ ] Task 1\n- [x] Completed task',
-      'test.canvas': JSON.stringify({
-        nodes: [
-          {
-            id: 'test-node-1',
-            x: 100,
-            y: 100,
-            width: 200,
-            height: 100,
-            type: 'text',
-            text: 'Test Canvas Node'
-          }
-        ],
-        edges: [],
-        metadata: {
-          version: '1.0',
-          created: new Date().toISOString(),
-          modified: new Date().toISOString(),
-          createdWith: 'Lokus Test'
-        }
-      }, null, 2)
-    };
+// Path where global-setup.js stores the workspace path
+const WORKSPACE_PATH_FILE = join(tmpdir(), 'lokus-e2e-workspace-path.txt');
 
-    // Write test files
-    for (const [filename, content] of Object.entries(testFiles)) {
-      await fs.writeFile(join(workspaceDir, filename), content);
-    }
-
-    // Create subdirectories
-    await fs.mkdir(join(workspaceDir, 'projects'), { recursive: true });
-    await fs.writeFile(
-      join(workspaceDir, 'projects', 'project1.md'), 
-      '# Project 1\n\nProject details here.'
+/**
+ * Read the workspace path created by global-setup.js
+ */
+async function getWorkspacePath() {
+  try {
+    const path = await fs.readFile(WORKSPACE_PATH_FILE, 'utf-8');
+    return path.trim();
+  } catch (error) {
+    throw new Error(
+      `Could not read workspace path from ${WORKSPACE_PATH_FILE}. ` +
+      `Make sure global-setup.js ran successfully. Error: ${error.message}`
     );
-
-    // Pass workspace path to test
-    await use(workspaceDir);
-
-    // Cleanup after test
-    try {
-      await fs.rm(workspaceDir, { recursive: true, force: true });
-    } catch (error) {
-      console.warn('Failed to cleanup test workspace:', error);
-    }
-  },
-
-  // Auto-navigate to workspace in each test
-  workspacePage: async ({ page, testWorkspace }, use) => {
-    // Set test workspace path as environment variable for the app
-    await page.addInitScript((workspacePath) => {
-      window.TEST_WORKSPACE_PATH = workspacePath;
-    }, testWorkspace);
-
-    // Navigate to app
-    await page.goto('http://localhost:1420');
-    
-    // Wait for app to load
-    await page.waitForLoadState('networkidle');
-    
-    // Inject workspace selection if needed
-    await page.evaluate((workspacePath) => {
-      // Store workspace path for the app to use
-      if (window.localStorage) {
-        window.localStorage.setItem('lokus-test-workspace', workspacePath);
-      }
-    }, testWorkspace);
-
-    await use(page);
-  }
-});
-
-export { expect } from '@playwright/test';
-
-// Helper functions for E2E tests
-export class TestWorkspaceHelper {
-  constructor(workspacePath) {
-    this.workspacePath = workspacePath;
-  }
-
-  async createFile(filename, content = '') {
-    const filePath = join(this.workspacePath, filename);
-    await fs.writeFile(filePath, content);
-    return filePath;
-  }
-
-  async createCanvas(filename, canvasData = null) {
-    const defaultCanvas = {
-      nodes: [],
-      edges: [],
-      metadata: {
-        version: '1.0',
-        created: new Date().toISOString(),
-        modified: new Date().toISOString(),
-        createdWith: 'Lokus Test'
-      }
-    };
-
-    const content = JSON.stringify(canvasData || defaultCanvas, null, 2);
-    return await this.createFile(filename.endsWith('.canvas') ? filename : `${filename}.canvas`, content);
-  }
-
-  async readFile(filename) {
-    const filePath = join(this.workspacePath, filename);
-    return await fs.readFile(filePath, 'utf8');
-  }
-
-  async fileExists(filename) {
-    try {
-      const filePath = join(this.workspacePath, filename);
-      await fs.access(filePath);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async listFiles() {
-    return await fs.readdir(this.workspacePath);
   }
 }
 
-// Workspace configuration for different test scenarios
-export const testWorkspaceConfigs = {
-  empty: {
-    files: {}
+/**
+ * Extended Playwright test with workspace fixtures
+ */
+export const test = base.extend({
+  /**
+   * The path to the test workspace (shared across all tests)
+   */
+  workspacePath: async ({}, use) => {
+    const path = await getWorkspacePath();
+    await use(path);
   },
-  
-  basic: {
-    files: {
-      'README.md': '# Basic Workspace',
-      'notes.md': '# Notes\n\nTest notes here.'
-    }
+
+  /**
+   * A page that's already navigated to the workspace with editor ready
+   */
+  workspacePage: async ({ page, workspacePath }, use) => {
+    // Navigate to workspace using URL parameter
+    const url = `/?workspacePath=${encodeURIComponent(workspacePath)}`;
+    await page.goto(url);
+
+    // Wait for app to fully load
+    await page.waitForLoadState('networkidle');
+
+    // Wait for workspace to be ready (file tree or editor visible)
+    await page.waitForSelector(
+      '.file-tree, .file-explorer, [data-testid="file-tree"], .ProseMirror',
+      { timeout: 15000 }
+    ).catch(() => {
+      // If workspace didn't load, it might still be on launcher
+      console.warn('Workspace may not have loaded - check if file tree is visible');
+    });
+
+    // Small delay for UI to stabilize
+    await page.waitForTimeout(500);
+
+    await use(page);
   },
-  
-  withCanvas: {
-    files: {
-      'README.md': '# Canvas Workspace',
-      'diagram.canvas': JSON.stringify({
-        nodes: [
-          { id: '1', x: 0, y: 0, width: 100, height: 50, type: 'text', text: 'Node 1' },
-          { id: '2', x: 200, y: 0, width: 100, height: 50, type: 'text', text: 'Node 2' }
-        ],
-        edges: [
-          { id: 'e1', fromNode: '1', toNode: '2', color: 'black' }
-        ]
-      }, null, 2)
-    }
+
+  /**
+   * A page at the launcher (for testing launcher-specific features)
+   */
+  launcherPage: async ({ page }, use) => {
+    // Navigate without workspace parameter to get launcher
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Wait for launcher to be visible
+    await page.waitForSelector(
+      'text=Open Workspace, text=Recently Opened, text=Create Workspace',
+      { timeout: 10000 }
+    ).catch(() => {
+      // Launcher should be visible
+    });
+
+    await use(page);
   },
-  
-  large: {
-    files: {
-      'README.md': '# Large Workspace',
-      'notes/personal.md': '# Personal Notes',
-      'notes/work.md': '# Work Notes', 
-      'projects/project-a.md': '# Project A',
-      'projects/project-b.md': '# Project B',
-      'archive/old-notes.md': '# Archived Notes'
+});
+
+export { expect };
+
+/**
+ * Helper to get the editor element
+ */
+export async function getEditor(page) {
+  const editor = page.locator('.ProseMirror').first();
+  await editor.waitFor({ state: 'visible', timeout: 10000 });
+  return editor;
+}
+
+/**
+ * Helper to open a specific file in the workspace
+ */
+export async function openFile(page, filename) {
+  // Find the file in the file tree
+  const fileItem = page.locator(`text=${filename}`).first();
+  await fileItem.waitFor({ state: 'visible', timeout: 5000 });
+  await fileItem.dblclick();
+
+  // Wait for editor to load
+  await page.waitForTimeout(500);
+  return getEditor(page);
+}
+
+/**
+ * Helper to create a new file
+ */
+export async function createNewFile(page, filename) {
+  // Look for new file button
+  const newBtn = page.locator('button:has-text("New"), [title*="New"], [aria-label*="New"]').first();
+  await newBtn.click();
+
+  // If a dialog appears, enter filename
+  const input = page.locator('input[placeholder*="name"], input[type="text"]').first();
+  if (await input.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await input.fill(filename);
+    await input.press('Enter');
+  }
+
+  await page.waitForTimeout(500);
+  return getEditor(page);
+}
+
+/**
+ * Helper to wait for file tree to be ready
+ */
+export async function waitForFileTree(page) {
+  await page.waitForSelector(
+    '.file-tree, .file-explorer, [data-testid="file-tree"]',
+    { timeout: 10000 }
+  );
+}
+
+/**
+ * Helper to dismiss any tour/onboarding dialogs
+ */
+export async function dismissTour(page) {
+  // Try various ways to dismiss tour
+  const dismissSelectors = [
+    'button:has-text("Skip")',
+    'button:has-text("Close")',
+    'button:has-text("Got it")',
+    '.driver-overlay',
+    'dialog button:has-text("×")',
+  ];
+
+  for (const selector of dismissSelectors) {
+    const element = page.locator(selector).first();
+    if (await element.isVisible({ timeout: 500 }).catch(() => false)) {
+      await element.click().catch(() => {});
+      await page.waitForTimeout(200);
     }
   }
-};
-
-// Function to create workspace with specific config
-export async function createConfiguredWorkspace(config = testWorkspaceConfigs.basic) {
-  const workspaceDir = join(tmpdir(), `lokus-configured-${Date.now()}`);
-  await fs.mkdir(workspaceDir, { recursive: true });
-
-  for (const [filePath, content] of Object.entries(config.files)) {
-    const fullPath = join(workspaceDir, filePath);
-    const dir = join(fullPath, '..');
-    
-    // Create directory if it doesn't exist
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(fullPath, content);
-  }
-
-  return workspaceDir;
 }

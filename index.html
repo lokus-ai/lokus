@@ -60,52 +60,6 @@
   </head>
   <body>
     <div id="root"></div>
-    <!-- E2E Test Mode: Install Tauri mock before React loads -->
-    <script>
-      if (window.location.search.includes('testMode=true')) {
-        // In-memory filesystem for mock
-        const mockFileSystem = new Map();
-        const mockDirectories = new Set(['/tmp/lokus-e2e-test']);
-
-        // Initialize test files
-        const wp = '/tmp/lokus-e2e-test';
-        mockDirectories.add(wp);
-        mockDirectories.add(`${wp}/.lokus`);
-        mockDirectories.add(`${wp}/notes`);
-        mockFileSystem.set(`${wp}/README.md`, '# Test Workspace\n\nThis is for E2E testing.');
-        mockFileSystem.set(`${wp}/test-note.md`, '# Test Note\n\nHello World!');
-        mockFileSystem.set(`${wp}/.lokus/config.json`, '{"theme":"light"}');
-
-        // Mock Tauri commands
-        const mockCommands = {
-          validate_workspace_path: async () => true,
-          get_validated_workspace_path: async () => wp,
-          save_last_workspace: async () => true,
-          read_workspace_files: async () => [
-            { name: 'README.md', path: `${wp}/README.md`, is_directory: false, is_file: true },
-            { name: 'test-note.md', path: `${wp}/test-note.md`, is_directory: false, is_file: true },
-            { name: 'notes', path: `${wp}/notes`, is_directory: true, is_file: false, children: [] }
-          ],
-          read_file_content: async ({ path }) => mockFileSystem.get(path) || '',
-          write_file_content: async ({ path, content }) => { mockFileSystem.set(path, content); return true; },
-          load_session_state: async () => ({ openTabs: [`${wp}/test-note.md`], expandedFolders: [wp], recentFiles: [] }),
-          save_session_state: async () => true,
-          is_development_mode: async () => true,
-          list_kanban_boards: async () => [],
-          gmail_is_authenticated: async () => false,
-        };
-
-        window.__TAURI_INTERNALS__ = {
-          invoke: async (cmd, args = {}) => {
-            if (mockCommands[cmd]) return mockCommands[cmd](args);
-            console.warn('[Test Mock] Unknown command:', cmd);
-            return null;
-          }
-        };
-        window.__TAURI_METADATA__ = { test: true };
-        console.log('[Test Mode] Tauri mock installed');
-      }
-    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
