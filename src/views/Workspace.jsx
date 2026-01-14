@@ -4012,7 +4012,7 @@ function WorkspaceWithScope({ path }) {
 
   return (
     <PanelManager>
-      <div className="h-full bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select relative">
+      <div className={`h-full bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select relative ${isMobile() ? 'safe-area-inset-top' : ''}`}>
         {/* Product Tour */}
         <ProductTour autoStart={true} delay={1500} />
 
