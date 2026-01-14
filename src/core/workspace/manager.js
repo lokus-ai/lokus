@@ -55,9 +55,9 @@ export class WorkspaceManager {
    * @returns {Promise<boolean>} True if valid workspace
    */
   static async validatePath(path) {
-    // In browser/test mode without Tauri, accept any non-empty path
-    // This enables E2E testing with Playwright
-    if (!isTauriAvailable() && isTestMode()) {
+    // In test mode, accept any non-empty path
+    // This enables E2E testing with Playwright (mock sets __TAURI_INTERNALS__)
+    if (isTestMode()) {
       return path && typeof path === 'string' && path.length > 0;
     }
 
