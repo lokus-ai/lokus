@@ -89,8 +89,17 @@ export const test = base.extend({
       }
     }
 
+    // FAIL HARD if workspace didn't load - don't let tests silently skip
     if (!workspaceLoaded) {
-      console.warn('Workspace may not have loaded after 5 attempts - check if Tauri is running');
+      // Take a screenshot for debugging
+      await page.screenshot({ path: 'test-results/workspace-load-failure.png' }).catch(() => {});
+
+      throw new Error(
+        `WORKSPACE FAILED TO LOAD after 5 attempts!\n` +
+        `URL: ${url}\n` +
+        `This test cannot proceed without a loaded workspace.\n` +
+        `Check that testMode bypass is working in useWorkspaceActivation.js`
+      );
     }
 
     // Small delay for UI to stabilize
