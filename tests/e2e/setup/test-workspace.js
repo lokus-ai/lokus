@@ -56,19 +56,41 @@ export const test = base.extend({
   workspacePage: async ({ page, workspacePath }, use) => {
     // Navigate to workspace using URL parameter
     const url = `/?workspacePath=${encodeURIComponent(workspacePath)}`;
-    await page.goto(url);
 
-    // Wait for app to fully load
-    await page.waitForLoadState('networkidle');
+    // Retry navigation multiple times - Tauri backend might not be ready yet
+    let workspaceLoaded = false;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      if (attempt > 0) {
+        console.log(`Workspace not ready, retrying (attempt ${attempt + 1}/5)...`);
+        await page.waitForTimeout(3000); // Wait 3s between retries
+      }
 
-    // Wait for workspace to be ready (file tree or editor visible)
-    await page.waitForSelector(
-      '.file-tree, .file-explorer, [data-testid="file-tree"], .ProseMirror',
-      { timeout: 15000 }
-    ).catch(() => {
-      // If workspace didn't load, it might still be on launcher
-      console.warn('Workspace may not have loaded - check if file tree is visible');
-    });
+      await page.goto(url);
+      await page.waitForLoadState('networkidle');
+
+      // Wait a bit for React to render and Tauri to respond
+      await page.waitForTimeout(1000);
+
+      // Check if workspace loaded (file tree visible) or still on launcher
+      const fileTree = page.locator('.file-tree, .file-explorer, [data-testid="file-tree"], .space-y-1');
+      const launcher = page.locator('text=Open Workspace, text=Recently Opened');
+
+      try {
+        await fileTree.first().waitFor({ state: 'visible', timeout: 5000 });
+        workspaceLoaded = true;
+        break;
+      } catch {
+        // Check if we're on launcher - might need to wait for Tauri
+        const isOnLauncher = await launcher.first().isVisible().catch(() => false);
+        if (isOnLauncher) {
+          console.log('Still on launcher - Tauri backend may not be ready');
+        }
+      }
+    }
+
+    if (!workspaceLoaded) {
+      console.warn('Workspace may not have loaded after 5 attempts - check if Tauri is running');
+    }
 
     // Small delay for UI to stabilize
     await page.waitForTimeout(500);

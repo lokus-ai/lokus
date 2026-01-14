@@ -66,8 +66,8 @@ export default defineConfig({
     command: 'npm run tauri dev',
     url: 'http://localhost:1420',
     reuseExistingServer: !process.env.CI,
-    // Longer timeout for Tauri (Rust compilation can take a while first time)
-    timeout: 300 * 1000,
+    // Longer timeout for Tauri (Rust compilation can take 5+ minutes first time)
+    timeout: 600 * 1000,
     // Capture stdout/stderr for debugging
     stdout: 'pipe',
     stderr: 'pipe',
