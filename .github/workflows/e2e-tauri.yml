@@ -1,7 +1,7 @@
 name: E2E Tests (Tauri App)
 
-# Runs E2E tests against REAL Tauri application on Linux only
-# Uses tauri-driver + WebdriverIO to control the native app
+# Runs E2E tests against REAL Tauri application
+# Uses self-hosted runner on Proxmox with pre-built Tauri binary
 
 on:
   workflow_dispatch:
@@ -15,55 +15,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e-tauri-linux:
-    name: Tauri E2E (Linux)
-    runs-on: ubuntu-22.04
-    timeout-minutes: 90
+  e2e-tauri:
+    name: Tauri E2E Tests
+    runs-on: [self-hosted, tauri-e2e]
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'npm'
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
-          cache-on-failure: true
-
-      - name: Install Linux dependencies
+      - name: Setup environment
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            webkit2gtk-driver \
-            xvfb
-
-      - name: Install tauri-driver
-        run: cargo install tauri-driver --locked
+          echo "Setting up environment..."
+          source /root/.cargo/env
+          node --version
+          rustc --version
 
       - name: Install npm dependencies
         run: npm ci
 
       - name: Build Tauri app
-        run: npm run tauri build -- --debug
+        run: |
+          source /root/.cargo/env
+          npm run tauri build -- --debug
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
 
       - name: Create test workspace
         run: |
+          rm -rf /tmp/lokus-e2e-workspace
           mkdir -p /tmp/lokus-e2e-workspace/.lokus
           echo '{"version":"1.0"}' > /tmp/lokus-e2e-workspace/.lokus/config.json
           echo '# Test Note' > /tmp/lokus-e2e-workspace/test-note.md
@@ -71,10 +51,11 @@ jobs:
 
       - name: Run Tauri E2E tests
         run: |
-          # Start Xvfb (virtual framebuffer)
+          source /root/.cargo/env
+          # Start Xvfb
           Xvfb :99 -screen 0 1920x1080x24 &
-          export DISPLAY=:99
           sleep 3
+          export DISPLAY=:99
           npm run test:e2e:tauri
         env:
           DISPLAY: ':99'
@@ -89,3 +70,9 @@ jobs:
             test-results/
             *.png
           retention-days: 7
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf /tmp/lokus-e2e-workspace
+          pkill -f Xvfb || true
