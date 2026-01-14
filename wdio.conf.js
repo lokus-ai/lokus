@@ -19,15 +19,17 @@ import { join } from 'path';
 let tauriDriver;
 
 // Get binary path for Tauri app
-// tauri build always outputs to src-tauri/target (ignores CARGO_TARGET_DIR)
+// In CI with CARGO_TARGET_DIR, the binary goes there; otherwise local target dir
+const targetDir = process.env.CARGO_TARGET_DIR || join(process.cwd(), 'src-tauri', 'target');
 const binaryPath = join(
-  process.cwd(),
-  'src-tauri',
-  'target',
+  targetDir,
   // Use debug build in CI (workflow builds --debug), release locally
   process.env.CI ? 'debug' : 'release',
   process.platform === 'win32' ? 'lokus.exe' : 'lokus'
 );
+
+console.log('Binary path:', binaryPath);
+console.log('CARGO_TARGET_DIR:', process.env.CARGO_TARGET_DIR);
 
 export const config = {
   specs: ['./tests/e2e-tauri/**/*.spec.js'],
