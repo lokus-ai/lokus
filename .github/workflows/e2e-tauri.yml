@@ -1,7 +1,7 @@
 name: E2E Tests (Tauri App)
 
 # Runs E2E tests against REAL Tauri application
-# Uses self-hosted runner on Proxmox with pre-built Tauri binary
+# Uses self-hosted runner on Proxmox with shared Rust cache
 
 on:
   workflow_dispatch:
@@ -18,7 +18,11 @@ jobs:
   e2e-tauri:
     name: Tauri E2E Tests
     runs-on: [self-hosted, tauri-e2e]
-    timeout-minutes: 60
+    timeout-minutes: 30
+
+    env:
+      # Use shared Rust target directory for caching between runs
+      CARGO_TARGET_DIR: /root/.cargo-target
 
     steps:
       - name: Checkout repository
@@ -26,10 +30,11 @@ jobs:
 
       - name: Setup environment
         run: |
-          echo "Setting up environment..."
           source /root/.cargo/env
-          node --version
-          rustc --version
+          echo "Node: $(node --version)"
+          echo "Rust: $(rustc --version)"
+          echo "Cargo target: $CARGO_TARGET_DIR"
+          mkdir -p $CARGO_TARGET_DIR
 
       - name: Install npm dependencies
         run: npm ci
