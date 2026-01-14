@@ -398,7 +398,7 @@ window.__installTauriMock = installTauriMock;
 window.__mockFileSystem = mockFileSystem;
 window.__mockDirectories = mockDirectories;
 
-// Auto-install if in test mode
-if (window.location.search.includes('testMode=true')) {
-  installTauriMock();
-}
+// Always install when loaded as an init script (via addInitScript)
+// The testMode check happens at navigation time, but this script runs BEFORE navigation
+// so window.location.search would be empty. Install unconditionally.
+installTauriMock();
