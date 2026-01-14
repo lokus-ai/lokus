@@ -42,9 +42,11 @@ jobs:
       - name: Build Tauri app
         run: |
           source /root/.cargo/env
-          npm run tauri build -- --debug
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ""
+          # Build frontend first
+          npm run build
+          # Build only the binary (skip bundling deb/rpm/appimage - much faster)
+          cd src-tauri
+          cargo build --features custom-protocol
 
       - name: Create test workspace
         run: |
