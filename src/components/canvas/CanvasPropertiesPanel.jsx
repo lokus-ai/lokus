@@ -46,6 +46,7 @@ export default function CanvasPropertiesPanel({
         <button
           onClick={handleToggle}
           className="p-1 rounded text-app-muted hover:bg-app-bg hover:text-app-text transition-colors"
+          title="Close"
         >
           <X className="w-4 h-4" />
         </button>

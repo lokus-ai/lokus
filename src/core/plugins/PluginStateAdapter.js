@@ -603,7 +603,7 @@ class PluginStateAdapter {
         const blob = new Blob([code], { type: 'text/javascript' });
         const blobUrl = URL.createObjectURL(blob);
         try {
-          pluginModule = await import(blobUrl);
+          pluginModule = await import(/* @vite-ignore */ blobUrl);
           pluginModule = pluginModule.default || pluginModule;
         } finally {
           URL.revokeObjectURL(blobUrl);
