@@ -77,7 +77,8 @@
     "test:failures": "node scripts/test-failures.js",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:tauri": "wdio run wdio.conf.js"
   },
   "dependencies": {
     "@aarkue/tiptap-math-extension": "^1.4.0",
@@ -184,6 +185,10 @@
     "@testing-library/user-event": "^14.6.1",
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^3.2.4",
+    "@wdio/cli": "^9.23.0",
+    "@wdio/local-runner": "^9.23.0",
+    "@wdio/mocha-framework": "^9.23.0",
+    "@wdio/spec-reporter": "^9.20.0",
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
