@@ -1,217 +1,136 @@
-import { test, expect } from '@playwright/test';
-import { injectTauriMock, disableTour, dismissTourOverlay } from './helpers/test-utils.js';
-
 /**
  * Task system tests
  * Tests checkbox/task functionality in the editor
  */
+import { test, expect, openFile, dismissTour } from './setup/test-workspace.js';
 
 test.describe('Task System', () => {
-  test.beforeEach(async ({ page }) => {
-    // Inject Tauri mock for filesystem operations
-    await injectTauriMock(page);
-    await disableTour(page);
-    
-    // Navigate to app in test mode
-    await page.goto('/?testMode=true');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
-    
-    // Dismiss any tour overlay
-    await dismissTourOverlay(page);
+  test.beforeEach(async ({ workspacePage }) => {
+    await dismissTour(workspacePage);
   });
 
-  test('app loads successfully', async ({ page }) => {
-    const appRoot = page.locator('#root');
+  test('app loads successfully', async ({ workspacePage }) => {
+    const appRoot = workspacePage.locator('#root');
     await expect(appRoot).toBeVisible({ timeout: 10000 });
   });
 
-  test('can type task syntax in editor', async ({ page }) => {
-    const testFile = page.locator('text=/test-note|README|notes/i').first();
-    
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type task/checkbox syntax
-        await editor.type('- [ ] This is a task');
-        await page.keyboard.press('Enter');
-        await editor.type('- [x] This task is complete');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toBeTruthy();
-      }
-    }
-    
-    expect(true).toBe(true);
+  test('can type task syntax in editor', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'daily-notes.md');
+    await editor.click();
+    await workspacePage.keyboard.press('End');
+
+    // Type task/checkbox syntax
+    await workspacePage.keyboard.type('\n\n- [ ] This is a task');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.type('- [x] This task is complete');
+    await workspacePage.waitForTimeout(200);
+
+    const content = await editor.textContent();
+    expect(content).toContain('This is a task');
   });
 
-  test('can create multiple tasks', async ({ page }) => {
-    const testFile = page.locator('text=/test-note|README|notes/i').first();
-    
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type multiple tasks
-        await editor.type('## Task List');
-        await page.keyboard.press('Enter');
-        await editor.type('- [ ] First task');
-        await page.keyboard.press('Enter');
-        await editor.type('- [ ] Second task');
-        await page.keyboard.press('Enter');
-        await editor.type('- [ ] Third task');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('Task');
-      }
-    }
-    
-    expect(true).toBe(true);
+  test('can create multiple tasks', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'daily-notes.md');
+    await editor.click();
+    await workspacePage.keyboard.press('End');
+
+    // Type multiple tasks
+    await workspacePage.keyboard.type('\n\n## Task List');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.type('- [ ] First task');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.type('- [ ] Second task');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.type('- [ ] Third task');
+    await workspacePage.waitForTimeout(200);
+
+    const content = await editor.textContent();
+    expect(content).toContain('First task');
+    expect(content).toContain('Second task');
   });
 
-  test('tasks persist in editor content', async ({ page }) => {
-    const testFile = page.locator('text=/test-note|README|notes/i').first();
-    
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type a task
-        await editor.type('- [ ] Remember to test');
-        await page.waitForTimeout(300);
-        
-        const content = await editor.textContent();
-        expect(content).toBeTruthy();
-      }
-    }
-    
-    expect(true).toBe(true);
+  test('tasks persist in editor content', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'daily-notes.md');
+    await editor.click();
+    await workspacePage.keyboard.press('End');
+
+    // Type a task
+    await workspacePage.keyboard.type('\n\n- [ ] Remember to test');
+    await workspacePage.waitForTimeout(300);
+
+    const content = await editor.textContent();
+    expect(content).toContain('Remember to test');
   });
 
-  test('can create nested task list', async ({ page }) => {
-    const testFile = page.locator('text=/test-note|README|notes/i').first();
-    
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type nested tasks
-        await editor.type('- [ ] Main task');
-        await page.keyboard.press('Enter');
-        await page.keyboard.press('Tab');
-        await editor.type('- [ ] Subtask 1');
-        await page.keyboard.press('Enter');
-        await editor.type('- [ ] Subtask 2');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('Main');
-      }
-    }
-    
-    expect(true).toBe(true);
+  test('can create nested task list', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'daily-notes.md');
+    await editor.click();
+    await workspacePage.keyboard.press('End');
+
+    // Type nested tasks
+    await workspacePage.keyboard.type('\n\n- [ ] Main task');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.press('Tab');
+    await workspacePage.keyboard.type('- [ ] Subtask 1');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.type('- [ ] Subtask 2');
+    await workspacePage.waitForTimeout(200);
+
+    const content = await editor.textContent();
+    expect(content).toContain('Main task');
   });
 
-  test('can mix tasks with regular list items', async ({ page }) => {
-    const testFile = page.locator('text=/test-note|README|notes/i').first();
-    
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type mixed list
-        await editor.type('Shopping list:');
-        await page.keyboard.press('Enter');
-        await editor.type('- [ ] Buy groceries');
-        await page.keyboard.press('Enter');
-        await editor.type('- Milk');
-        await page.keyboard.press('Enter');
-        await editor.type('- Bread');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('Shopping');
-      }
-    }
-    
-    expect(true).toBe(true);
+  test('can mix tasks with regular list items', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'daily-notes.md');
+    await editor.click();
+    await workspacePage.keyboard.press('End');
+
+    // Type mixed list
+    await workspacePage.keyboard.type('\n\nShopping list:');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.type('- [ ] Buy groceries');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.type('- Milk');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.type('- Bread');
+    await workspacePage.waitForTimeout(200);
+
+    const content = await editor.textContent();
+    expect(content).toContain('Shopping');
   });
 
-  test('task with description text', async ({ page }) => {
-    const testFile = page.locator('text=/test-note|README|notes/i').first();
-    
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type task with detailed description
-        await editor.type('- [ ] Complete project documentation');
-        await page.keyboard.press('Enter');
-        await editor.type('  This includes API docs and user guide');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('documentation');
-      }
-    }
-    
-    expect(true).toBe(true);
+  test('task with description text', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'daily-notes.md');
+    await editor.click();
+    await workspacePage.keyboard.press('End');
+
+    // Type task with detailed description
+    await workspacePage.keyboard.type('\n\n- [ ] Complete project documentation');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.type('  This includes API docs and user guide');
+    await workspacePage.waitForTimeout(200);
+
+    const content = await editor.textContent();
+    expect(content).toContain('documentation');
   });
 
-  test('can create task list under heading', async ({ page }) => {
-    const testFile = page.locator('text=/test-note|README|notes/i').first();
-    
-    if (await testFile.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await testFile.click();
-      await page.waitForTimeout(500);
-      
-      const editor = page.locator('.ProseMirror');
-      if (await editor.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await editor.click();
-        
-        // Type heading followed by tasks
-        await editor.type('## Today\'s Tasks');
-        await page.keyboard.press('Enter');
-        await page.keyboard.press('Enter');
-        await editor.type('- [ ] Morning standup');
-        await page.keyboard.press('Enter');
-        await editor.type('- [ ] Code review');
-        await page.keyboard.press('Enter');
-        await editor.type('- [ ] Deploy to staging');
-        await page.waitForTimeout(200);
-        
-        const content = await editor.textContent();
-        expect(content).toContain('Today');
-      }
-    }
-    
-    expect(true).toBe(true);
+  test('can create task list under heading', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'daily-notes.md');
+    await editor.click();
+    await workspacePage.keyboard.press('End');
+
+    // Type heading followed by tasks
+    await workspacePage.keyboard.type('\n\n## Today\'s Tasks');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.type('- [ ] Morning standup');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.type('- [ ] Code review');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.type('- [ ] Deploy to staging');
+    await workspacePage.waitForTimeout(200);
+
+    const content = await editor.textContent();
+    expect(content).toContain('Today');
   });
 });
