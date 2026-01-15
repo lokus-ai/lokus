@@ -85,9 +85,14 @@ export const config = {
     }
 
     // Start tauri-driver on port 4444
+    // Pass environment variables to tauri-driver so they're available to the Tauri app
     console.log('Starting tauri-driver...');
+    console.log('LOKUS_E2E_WORKSPACE:', process.env.LOKUS_E2E_WORKSPACE);
     tauriDriver = spawn('tauri-driver', [], {
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env, // Pass all parent env vars including LOKUS_E2E_WORKSPACE
+      },
     });
 
     tauriDriver.stdout.on('data', (data) => {
