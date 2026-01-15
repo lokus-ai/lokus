@@ -1701,6 +1701,7 @@ function WorkspaceWithScope({ path }) {
       try { window.__LOKUS_ACTIVE_FILE__ = activeFile; } catch { }
 
       // Skip loading content for special views and binary files
+      // but clear editor state to prevent stale content from being used
       if (
         activeFile.startsWith('__') ||
         activeFile.endsWith('.canvas') ||
@@ -1708,6 +1709,8 @@ function WorkspaceWithScope({ path }) {
         activeFile.endsWith('.pdf') ||
         isImageFile(activeFile)
       ) {
+        setEditorContent("");
+        setEditorTitle("");
         return;
       }
 
