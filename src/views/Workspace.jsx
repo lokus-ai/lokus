@@ -93,6 +93,7 @@ import { OutputPanel } from "../components/OutputPanel/OutputPanel.jsx";
 import referenceManager from "../core/references/ReferenceManager.js";
 import ReferenceUpdateModal from "../components/ReferenceUpdateModal.jsx";
 import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
+import { fileSystemEvents } from "../core/fs/FileSystemEvents.js";
 
 const MAX_OPEN_TABS = 10;
 
@@ -459,6 +460,8 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
           operation: async () => {
             try {
               await invoke("rename_file", { path: oldPath, newName: trimmedName });
+              // Emit file renamed event so tabs, breadcrumbs, etc. can react
+              fileSystemEvents.emitFileRenamed(oldPath, newPath);
               setRenamingPath(null);
               onRefresh && onRefresh();
               return true;
@@ -476,6 +479,8 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
     // No references to update, proceed directly
     try {
       await invoke("rename_file", { path: oldPath, newName: trimmedName });
+      // Emit file renamed event so tabs, breadcrumbs, etc. can react
+      fileSystemEvents.emitFileRenamed(oldPath, newPath);
       setRenamingPath(null);
       onRefresh && onRefresh();
     } catch (e) {
@@ -612,6 +617,8 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
           const confirmed = await confirm(`Are you sure you want to delete "${file.name}"?`);
           if (confirmed) {
             await invoke('delete_file', { path: file.path });
+            // Emit file deleted event so tabs, breadcrumbs, etc. can react
+            fileSystemEvents.emitFileDeleted(file.path);
             onRefresh && onRefresh();
           }
         } catch (err) {
@@ -832,6 +839,8 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
           sourcePath: oldPath,
           destinationDir: destinationDir,
         });
+        // Emit file moved event so tabs, breadcrumbs, etc. can react
+        fileSystemEvents.emitFileMoved(oldPath, newPath);
         onRefresh();
         return true;
       } catch (err) {
@@ -1765,6 +1774,136 @@ function WorkspaceWithScope({ path }) {
     }
   }, [activeFile]);
 
+  // Subscribe to file system events (delete, rename, move) to update tabs, active file, and split pane
+  useEffect(() => {
+    // Handle file deletion - remove from tabs and clear if active
+    const handleFileDeleted = ({ path: deletedPath }) => {
+      setOpenTabs(prevTabs => {
+        const newTabs = prevTabs.filter(tab =>
+          tab.path !== deletedPath && !tab.path.startsWith(deletedPath + '/')
+        );
+
+        // If active file was deleted, switch to another tab
+        if (stateRef.current.activeFile === deletedPath ||
+            stateRef.current.activeFile?.startsWith(deletedPath + '/')) {
+          if (newTabs.length > 0) {
+            setActiveFile(newTabs[0].path);
+          } else {
+            setActiveFile(null);
+          }
+        }
+
+        return newTabs;
+      });
+
+      // Clear right pane if deleted file was showing there
+      setRightPaneFile(prev => {
+        if (prev === deletedPath || prev?.startsWith(deletedPath + '/')) {
+          return null;
+        }
+        return prev;
+      });
+
+      // Clear version history if showing deleted file
+      setVersionHistoryFile(prev => {
+        if (prev === deletedPath || prev?.startsWith(deletedPath + '/')) {
+          return null;
+        }
+        return prev;
+      });
+
+      // Clear unsaved changes for deleted file
+      setUnsavedChanges(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(deletedPath);
+        // Also clear any children if folder was deleted
+        for (const p of prev) {
+          if (p.startsWith(deletedPath + '/')) {
+            newSet.delete(p);
+          }
+        }
+        return newSet;
+      });
+    };
+
+    // Handle file rename/move - update tab paths
+    const handleFileRenamed = ({ oldPath, newPath }) => {
+      setOpenTabs(prevTabs =>
+        prevTabs.map(tab => {
+          if (tab.path === oldPath) {
+            // Direct match - update path and name
+            const newName = newPath.split('/').pop();
+            return { path: newPath, name: newName };
+          }
+          if (tab.path.startsWith(oldPath + '/')) {
+            // Child of renamed folder - update path prefix
+            const updatedPath = newPath + tab.path.slice(oldPath.length);
+            return { ...tab, path: updatedPath };
+          }
+          return tab;
+        })
+      );
+
+      // Update active file if it was renamed/moved
+      if (stateRef.current.activeFile === oldPath) {
+        setActiveFile(newPath);
+      } else if (stateRef.current.activeFile?.startsWith(oldPath + '/')) {
+        const updatedPath = newPath + stateRef.current.activeFile.slice(oldPath.length);
+        setActiveFile(updatedPath);
+      }
+
+      // Update right pane file if it was renamed/moved
+      setRightPaneFile(prev => {
+        if (prev === oldPath) {
+          return newPath;
+        }
+        if (prev?.startsWith(oldPath + '/')) {
+          return newPath + prev.slice(oldPath.length);
+        }
+        return prev;
+      });
+
+      // Update version history file if it was renamed/moved
+      setVersionHistoryFile(prev => {
+        if (prev === oldPath) {
+          return newPath;
+        }
+        if (prev?.startsWith(oldPath + '/')) {
+          return newPath + prev.slice(oldPath.length);
+        }
+        return prev;
+      });
+
+      // Update unsaved changes tracking
+      setUnsavedChanges(prev => {
+        const newSet = new Set(prev);
+        if (prev.has(oldPath)) {
+          newSet.delete(oldPath);
+          newSet.add(newPath);
+        }
+        // Handle children for folder renames
+        for (const p of prev) {
+          if (p.startsWith(oldPath + '/')) {
+            newSet.delete(p);
+            newSet.add(newPath + p.slice(oldPath.length));
+          }
+        }
+        return newSet;
+      });
+    };
+
+    // Subscribe to events
+    const unsubDeleted = fileSystemEvents.on('file:deleted', handleFileDeleted);
+    const unsubRenamed = fileSystemEvents.on('file:renamed', handleFileRenamed);
+    const unsubMoved = fileSystemEvents.on('file:moved', handleFileRenamed); // Move is same as rename for tabs
+
+    return () => {
+      unsubDeleted();
+      unsubRenamed();
+      unsubMoved();
+    };
+  }, []);
+
   // Note: workspace:activate events are handled by useWorkspaceActivation in App.jsx
   // which passes the path down via props to this component
 
@@ -2391,6 +2530,8 @@ function WorkspaceWithScope({ path }) {
       if (editorTitle !== currentName && editorTitle.trim() !== "") {
         const newFileName = `${editorTitle.trim()}.md`;
         const newPath = await invoke("rename_file", { path: activeFile, newName: newFileName });
+        // Emit file renamed event so connected components can react
+        fileSystemEvents.emitFileRenamed(activeFile, newPath);
         path_to_save = newPath;
         needsStateUpdate = true;
       }
