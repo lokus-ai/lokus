@@ -1,0 +1,87 @@
+name: E2E Tests (Tauri App)
+
+# Runs E2E tests against REAL Tauri application
+# Uses self-hosted runner on Proxmox with shared Rust cache
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: tauri-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-tauri:
+    name: Tauri E2E Tests
+    runs-on: [self-hosted, tauri-e2e]
+    timeout-minutes: 30
+
+    env:
+      # Use shared Rust target directory for caching between runs
+      CARGO_TARGET_DIR: /root/.cargo-target
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup environment
+        run: |
+          source /root/.cargo/env
+          echo "Node: $(node --version)"
+          echo "Rust: $(rustc --version)"
+          echo "Cargo target: $CARGO_TARGET_DIR"
+          mkdir -p $CARGO_TARGET_DIR
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        run: |
+          source /root/.cargo/env
+          # Use cargo-tauri to build with bundled frontend (but skip deb/rpm/appimage)
+          # This ensures the frontend is embedded in the binary
+          npx tauri build --debug --no-bundle
+        env:
+          # Skip bundling - we just need the binary
+          TAURI_SKIP_DEVSERVER_CHECK: 'true'
+
+      - name: Create test workspace
+        run: |
+          rm -rf /tmp/lokus-e2e-workspace
+          mkdir -p /tmp/lokus-e2e-workspace/.lokus
+          echo '{"version":"1.0"}' > /tmp/lokus-e2e-workspace/.lokus/config.json
+          echo '# Test Note' > /tmp/lokus-e2e-workspace/test-note.md
+          echo '# README' > /tmp/lokus-e2e-workspace/README.md
+
+      - name: Run Tauri E2E tests
+        run: |
+          source /root/.cargo/env
+          # Start Xvfb
+          Xvfb :99 -screen 0 1920x1080x24 &
+          sleep 3
+          export DISPLAY=:99
+          npm run test:e2e:tauri
+        env:
+          CI: 'true'
+          DISPLAY: ':99'
+          LOKUS_E2E_WORKSPACE: '/tmp/lokus-e2e-workspace'
+
+      - name: Upload screenshots on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: tauri-e2e-screenshots
+          path: |
+            test-results/
+            *.png
+          retention-days: 7
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf /tmp/lokus-e2e-workspace
+          pkill -f Xvfb || true

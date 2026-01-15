@@ -894,8 +894,17 @@ pub fn run() {
         let store = StoreBuilder::new(app.handle(), PathBuf::from(".settings.dat")).build().unwrap();
         let _ = store.reload();
 
+        // E2E Test mode: Check for LOKUS_E2E_WORKSPACE env var first
+        // This allows automated tests to open a specific workspace on startup
+        if let Ok(e2e_workspace) = std::env::var("LOKUS_E2E_WORKSPACE") {
+          tracing::info!("E2E test mode: opening workspace {}", e2e_workspace);
+          if let Some(main_window) = app.get_webview_window("main") {
+            let _ = main_window.hide();
+          }
+          let _ = open_workspace_window(app_handle, e2e_workspace);
+        }
         // In development mode, always clear workspace data and show launcher
-        if cfg!(debug_assertions) {
+        else if cfg!(debug_assertions) {
           clear_all_workspace_data(app.handle().clone());
           if let Some(main_window) = app.get_webview_window("main") {
             let _ = main_window.show();

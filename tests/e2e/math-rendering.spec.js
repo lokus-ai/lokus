@@ -1,166 +1,113 @@
-import { test, expect } from '@playwright/test';
-import { injectTauriMock, disableTour, dismissTourOverlay } from './helpers/test-utils.js';
-
 /**
  * Math rendering tests
  * Tests LaTeX/KaTeX math rendering in the editor
  */
+import { test, expect, openFile, dismissTour } from './setup/test-workspace.js';
 
 test.describe('Math Rendering', () => {
-  test.beforeEach(async ({ page }) => {
-    // Inject Tauri mock for filesystem operations
-    await injectTauriMock(page);
-    await disableTour(page);
-    
-    // Navigate to app in test mode
-    await page.goto('/?testMode=true');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
-    
-    // Dismiss any tour overlay
-    await dismissTourOverlay(page);
+  test.beforeEach(async ({ workspacePage }) => {
+    await dismissTour(workspacePage);
   });
 
-  test('app loads successfully', async ({ page }) => {
-    const appRoot = page.locator('#root');
+  test('app loads successfully', async ({ workspacePage }) => {
+    const appRoot = workspacePage.locator('#root');
     await expect(appRoot).toBeVisible({ timeout: 10000 });
   });
 
-  test('can type inline math syntax', async ({ page }) => {
-    const testFile = page.locator('text=/test-note|README|notes/i').first();
-    await expect(testFile).toBeVisible({ timeout: 5000 });
-    await testFile.click();
-    await page.waitForTimeout(500);
-    
-    const editor = page.locator('.ProseMirror');
-    await expect(editor).toBeVisible({ timeout: 5000 });
+  test('can type inline math syntax', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'test-note.md');
     await editor.click();
-    
-    await editor.type('The equation $x^2$ represents a square');
-    await page.waitForTimeout(200);
-    
+    await workspacePage.keyboard.press('End');
+
+    await workspacePage.keyboard.type('\n\nThe equation $x^2$ represents a square');
+    await workspacePage.waitForTimeout(200);
+
     const content = await editor.textContent();
     expect(content).toContain('equation');
   });
 
-  test('can type block math syntax', async ({ page }) => {
-    const testFile = page.locator('text=/test-note|README|notes/i').first();
-    await expect(testFile).toBeVisible({ timeout: 5000 });
-    await testFile.click();
-    await page.waitForTimeout(500);
-    
-    const editor = page.locator('.ProseMirror');
-    await expect(editor).toBeVisible({ timeout: 5000 });
+  test('can type block math syntax', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'test-note.md');
     await editor.click();
-    
-    await editor.type('$$');
-    await page.keyboard.press('Enter');
-    await editor.type('E = mc^2');
-    await page.keyboard.press('Enter');
-    await editor.type('$$');
-    await page.waitForTimeout(200);
-    
+    await workspacePage.keyboard.press('End');
+
+    await workspacePage.keyboard.type('\n\n$$');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.type('E = mc^2');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.type('$$');
+    await workspacePage.waitForTimeout(200);
+
     await expect(editor).toBeVisible();
   });
 
-  test('editor handles special LaTeX characters', async ({ page }) => {
-    const testFile = page.locator('text=/test-note|README|notes/i').first();
-    await expect(testFile).toBeVisible({ timeout: 5000 });
-    await testFile.click();
-    await page.waitForTimeout(500);
-    
-    const editor = page.locator('.ProseMirror');
-    await expect(editor).toBeVisible({ timeout: 5000 });
+  test('editor handles special LaTeX characters', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'test-note.md');
     await editor.click();
-    
-    await editor.type('Sum: $\\sum_{i=1}^{n} x_i$');
-    await page.waitForTimeout(200);
-    
-    // Should not crash - editor still visible
+    await workspacePage.keyboard.press('End');
+
+    await workspacePage.keyboard.type('\n\nSum: $\\sum_{i=1}^{n} x_i$');
+    await workspacePage.waitForTimeout(200);
+
     await expect(editor).toBeVisible();
   });
 
-  test('can type Greek letters in math', async ({ page }) => {
-    const testFile = page.locator('text=/test-note|README|notes/i').first();
-    await expect(testFile).toBeVisible({ timeout: 5000 });
-    await testFile.click();
-    await page.waitForTimeout(500);
-    
-    const editor = page.locator('.ProseMirror');
-    await expect(editor).toBeVisible({ timeout: 5000 });
+  test('can type Greek letters in math', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'test-note.md');
     await editor.click();
-    
-    await editor.type('Greek: $\\alpha + \\beta = \\gamma$');
-    await page.waitForTimeout(200);
-    
+    await workspacePage.keyboard.press('End');
+
+    await workspacePage.keyboard.type('\n\nGreek: $\\alpha + \\beta = \\gamma$');
+    await workspacePage.waitForTimeout(200);
+
     const content = await editor.textContent();
     expect(content).toContain('Greek');
   });
 
-  test('can type fractions in math', async ({ page }) => {
-    const testFile = page.locator('text=/test-note|README|notes/i').first();
-    await expect(testFile).toBeVisible({ timeout: 5000 });
-    await testFile.click();
-    await page.waitForTimeout(500);
-    
-    const editor = page.locator('.ProseMirror');
-    await expect(editor).toBeVisible({ timeout: 5000 });
+  test('can type fractions in math', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'test-note.md');
     await editor.click();
-    
-    await editor.type('Fraction: $\\frac{1}{2}$');
-    await page.waitForTimeout(200);
-    
+    await workspacePage.keyboard.press('End');
+
+    await workspacePage.keyboard.type('\n\nFraction: $\\frac{1}{2}$');
+    await workspacePage.waitForTimeout(200);
+
     const content = await editor.textContent();
     expect(content).toContain('Fraction');
   });
 
-  test('can type square root in math', async ({ page }) => {
-    const testFile = page.locator('text=/test-note|README|notes/i').first();
-    await expect(testFile).toBeVisible({ timeout: 5000 });
-    await testFile.click();
-    await page.waitForTimeout(500);
-    
-    const editor = page.locator('.ProseMirror');
-    await expect(editor).toBeVisible({ timeout: 5000 });
+  test('can type square root in math', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'test-note.md');
     await editor.click();
-    
-    await editor.type('Root: $\\sqrt{x^2 + y^2}$');
-    await page.waitForTimeout(200);
-    
+    await workspacePage.keyboard.press('End');
+
+    await workspacePage.keyboard.type('\n\nRoot: $\\sqrt{x^2 + y^2}$');
+    await workspacePage.waitForTimeout(200);
+
     const content = await editor.textContent();
     expect(content).toContain('Root');
   });
 
-  test('can type integral in math', async ({ page }) => {
-    const testFile = page.locator('text=/test-note|README|notes/i').first();
-    await expect(testFile).toBeVisible({ timeout: 5000 });
-    await testFile.click();
-    await page.waitForTimeout(500);
-    
-    const editor = page.locator('.ProseMirror');
-    await expect(editor).toBeVisible({ timeout: 5000 });
+  test('can type integral in math', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'test-note.md');
     await editor.click();
-    
-    await editor.type('Integral: $\\int_0^1 x dx$');
-    await page.waitForTimeout(200);
-    
+    await workspacePage.keyboard.press('End');
+
+    await workspacePage.keyboard.type('\n\nIntegral: $\\int_0^1 x dx$');
+    await workspacePage.waitForTimeout(200);
+
     const content = await editor.textContent();
     expect(content).toContain('Integral');
   });
 
-  test('math does not break with empty delimiters', async ({ page }) => {
-    const testFile = page.locator('text=/test-note|README|notes/i').first();
-    await expect(testFile).toBeVisible({ timeout: 5000 });
-    await testFile.click();
-    await page.waitForTimeout(500);
-    
-    const editor = page.locator('.ProseMirror');
-    await expect(editor).toBeVisible({ timeout: 5000 });
+  test('math does not break with empty delimiters', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'test-note.md');
     await editor.click();
-    
-    await editor.type('Empty: $$ and more text');
-    await page.waitForTimeout(200);
-    
+    await workspacePage.keyboard.press('End');
+
+    await workspacePage.keyboard.type('\n\nEmpty: $$ and more text');
+    await workspacePage.waitForTimeout(200);
+
     const content = await editor.textContent();
     expect(content).toContain('Empty');
   });

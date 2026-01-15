@@ -16,7 +16,7 @@ jobs:
     name: E2E Tests (Linux)
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright:v1.56.0-noble
+      image: mcr.microsoft.com/playwright:v1.57.0-noble
       options: --user 1001
     timeout-minutes: 30
 

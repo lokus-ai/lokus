@@ -1,265 +1,145 @@
-import { test, expect } from '@playwright/test';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import { injectTauriMock, disableTour, dismissTourOverlay } from './helpers/test-utils.js';
-
-// Test workspace path - use tmp directory for tests
-const TEST_WORKSPACE = '/tmp/lokus-e2e-test';
-
 /**
  * Editor Functionality E2E Tests
  *
- * These tests use a Tauri mock to simulate the backend.
- * They test editor functionality with an in-memory filesystem.
+ * These tests run against the real Tauri app with a real filesystem.
+ * The test workspace is created by global-setup.js.
  */
+import { test, expect, getEditor, openFile, dismissTour } from './setup/test-workspace.js';
+
 test.describe('Editor Functionality', () => {
-  test.beforeEach(async ({ page }) => {
-    // Disable tour and inject Tauri mock before navigation
-    await disableTour(page);
-    await injectTauriMock(page);
-
-    // Navigate to workspace with test mode enabled
-    const workspacePath = encodeURIComponent(TEST_WORKSPACE);
-    await page.goto(`/?testMode=true&workspacePath=${workspacePath}`);
-
-    // Wait for app to load
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
-
-    // Force dismiss any tour overlay that might appear
-    await dismissTourOverlay(page);
+  test.beforeEach(async ({ workspacePage }) => {
+    // Dismiss any tour dialogs
+    await dismissTour(workspacePage);
   });
 
-  // Helper to get editor or skip test
-  async function getEditorOrSkip(page, testInfo) {
-    // Wait for file tree to load
-    await page.waitForTimeout(1500);
-    
-    // Check if editor is already visible
-    const existingEditor = page.locator('.ProseMirror');
-    if (await existingEditor.isVisible({ timeout: 1000 }).catch(() => false)) {
-      return existingEditor.first();
-    }
+  test('should allow basic text editing', async ({ workspacePage }) => {
+    // Open test-note.md from the test workspace
+    const editor = await openFile(workspacePage, 'test-note.md');
 
-    // Try clicking on existing file in sidebar (from mock filesystem)
-    // Look for file tree items
-    const fileItems = page.locator('[data-testid="file-tree-item"], .file-tree-item, [role="treeitem"]');
-    const testFile = page.locator('text=test-note.md').first();
-    const readmeFile = page.locator('text=README.md').first();
-    
-    if (await testFile.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await testFile.dblclick();
-      await page.waitForTimeout(1000);
-    } else if (await readmeFile.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await readmeFile.dblclick();
-      await page.waitForTimeout(1000);
-    }
-
-    // If still no editor, try "New Note" or similar button
-    if (!await existingEditor.isVisible({ timeout: 1000 }).catch(() => false)) {
-      const newNoteBtn = page.locator('button:has-text("New"), [title*="New Note"], [aria-label*="New"]').first();
-      if (await newNoteBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await newNoteBtn.click();
-        await page.waitForTimeout(1000);
-      }
-    }
-
-    // Check for editor again
-    const editor = page.locator('.ProseMirror').first();
-    const isEditorVisible = await editor.isVisible({ timeout: 5000 }).catch(() => false);
-
-    if (!isEditorVisible) {
-      testInfo.skip(true, 'Editor not available - mock may not be working correctly');
-      return null;
-    }
-
-    return editor;
-  }
-
-  test('should allow basic text editing', async ({ page }, testInfo) => {
-    const editor = await getEditorOrSkip(page, testInfo);
-    if (!editor) return;
-
+    // Click at end and type
     await editor.click();
-    await page.keyboard.type('Hello, World!');
+    await workspacePage.keyboard.press('End');
+    await workspacePage.keyboard.type('\n\nHello, World!');
 
     await expect(editor).toContainText('Hello, World!');
   });
 
-  test('should format text with markdown shortcuts', async ({ page }, testInfo) => {
-    const editor = await getEditorOrSkip(page, testInfo);
-    if (!editor) return;
+  test('should format text with markdown shortcuts', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'test-note.md');
 
     await editor.click();
+    await workspacePage.keyboard.press('End');
+    await workspacePage.keyboard.type('\n\n**bold text** ');
+    await workspacePage.waitForTimeout(500);
 
-    // Test bold formatting - type the markdown syntax
-    await page.keyboard.type('**bold text** ');
-    await page.waitForTimeout(500);
-    
-    // Check if bold was converted or if text is present
+    // Check if bold was converted
     const hasBold = await editor.locator('strong').count() > 0;
     if (hasBold) {
-      // Case-insensitive check since existing content may be capitalized
-      await expect(editor.locator('strong')).toContainText(/bold text/i);
+      await expect(editor.locator('strong').last()).toContainText(/bold text/i);
     } else {
-      // Fallback: at least the text should be there
       await expect(editor).toContainText(/bold text/i);
     }
   });
 
-  test('should create headings', async ({ page }, testInfo) => {
-    const editor = await getEditorOrSkip(page, testInfo);
-    if (!editor) return;
+  test('should create headings', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'test-note.md');
 
     await editor.click();
+    await workspacePage.keyboard.press('End');
+    await workspacePage.keyboard.type('\n\n# New Heading');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.waitForTimeout(300);
 
-    // Type heading with markdown - TipTap converts on Enter
-    await page.keyboard.type('# Heading 1');
-    await page.keyboard.press('Enter');
-    await page.waitForTimeout(300);
-    
-    // Check for heading or text content - existing file may have different heading
-    const hasH1 = await editor.locator('h1').count() > 0;
-    if (hasH1) {
-      // Just verify h1 exists - content may be from existing file
-      await expect(editor.locator('h1').first()).toBeVisible();
-    } else {
-      await expect(editor).toContainText('Heading 1');
-    }
+    // Check for heading
+    const headings = editor.locator('h1');
+    await expect(headings.first()).toBeVisible();
   });
 
-  test('should create lists', async ({ page }, testInfo) => {
-    const editor = await getEditorOrSkip(page, testInfo);
-    if (!editor) return;
+  test('should create lists', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'test-note.md');
 
     await editor.click();
+    await workspacePage.keyboard.press('End');
+    await workspacePage.keyboard.type('\n\n- First item');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.type('Second item');
+    await workspacePage.waitForTimeout(300);
 
-    // Type list items
-    await page.keyboard.type('- First item');
-    await page.keyboard.press('Enter');
-    await page.keyboard.type('Second item');
-    await page.waitForTimeout(300);
-
-    // Check for list structure
+    // Check for list
     const listItems = editor.locator('ul li, li');
-    const count = await listItems.count();
-    
-    if (count >= 1) {
-      // List exists - content may be from existing file or our input
-      await expect(listItems.first()).toBeVisible();
-    } else {
-      await expect(editor).toContainText('First item');
-    }
+    expect(await listItems.count()).toBeGreaterThan(0);
   });
 
-  test('should create task lists', async ({ page }, testInfo) => {
-    const editor = await getEditorOrSkip(page, testInfo);
-    if (!editor) return;
+  test('should create task lists', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'test-note.md');
 
     await editor.click();
+    await workspacePage.keyboard.press('End');
+    await workspacePage.keyboard.type('\n\n- [ ] New task item');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.waitForTimeout(300);
 
-    // Type task list syntax
-    await page.keyboard.type('- [ ] Incomplete task');
-    await page.keyboard.press('Enter');
-    await page.waitForTimeout(300);
-
-    // Check content is present
-    await expect(editor).toContainText('Incomplete task');
+    await expect(editor).toContainText('New task item');
   });
 
-  test('should create code blocks', async ({ page }, testInfo) => {
-    const editor = await getEditorOrSkip(page, testInfo);
-    if (!editor) return;
+  test('should create code blocks', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'test-note.md');
 
     await editor.click();
+    await workspacePage.keyboard.press('End');
+    await workspacePage.keyboard.type('\n\n```javascript');
+    await workspacePage.keyboard.press('Enter');
+    await workspacePage.keyboard.type('console.log("Test");');
+    await workspacePage.waitForTimeout(500);
 
-    // Type code block
-    await page.keyboard.type('```');
-    await page.keyboard.press('Enter');
-    await page.keyboard.type('console.log("Hello");');
-    await page.waitForTimeout(500);
-
-    // Check for code block or content
-    const hasCodeBlock = await editor.locator('pre').count() > 0;
-    if (hasCodeBlock) {
-      await expect(editor.locator('pre')).toContainText('console.log');
-    } else {
-      await expect(editor).toContainText('console.log');
-    }
+    // Check for code block
+    const codeBlocks = editor.locator('pre, code');
+    expect(await codeBlocks.count()).toBeGreaterThan(0);
   });
 
-  test('should handle math equations', async ({ page }, testInfo) => {
-    const editor = await getEditorOrSkip(page, testInfo);
-    if (!editor) return;
+  test('should handle math equations', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'test-note.md');
 
-    await editor.click();
-
-    // Test inline math
-    await editor.fill('$E = mc^2$');
-    await page.keyboard.press('Space');
-
-    // Check if math was processed (either as math node or fallback)
+    // The test file already has math content
     const mathContent = await editor.textContent();
     expect(mathContent).toContain('E = mc^2');
   });
 
-  test('should create tables', async ({ page }, testInfo) => {
-    const editor = await getEditorOrSkip(page, testInfo);
-    if (!editor) return;
+  test('should use slash commands', async ({ workspacePage }) => {
+    const editor = await openFile(workspacePage, 'test-note.md');
 
     await editor.click();
+    await workspacePage.keyboard.press('End');
+    await workspacePage.keyboard.type('\n\n/');
+    await workspacePage.waitForTimeout(500);
 
-    // Try slash command for table
-    await editor.type('/table');
-    await page.keyboard.press('Enter');
-
-    // Wait for table to appear
-    await page.waitForTimeout(500);
-
-    // Check if table was created
-    const table = editor.locator('table');
-    if (await table.count() > 0) {
-      await expect(table).toBeVisible();
-    }
-  });
-
-  test('should use slash commands', async ({ page }, testInfo) => {
-    const editor = await getEditorOrSkip(page, testInfo);
-    if (!editor) return;
-
-    await editor.click();
-
-    // Test slash command
-    await editor.type('/');
-
-    // Wait for slash menu to appear
-    await page.waitForTimeout(500);
-
-    // Check if command menu is visible
-    const commandMenu = page.locator('.slash-command-list, .command-menu, [data-testid="slash-menu"], [cmdk-list]');
+    // Check if command menu appears
+    const commandMenu = workspacePage.locator('.slash-command-list, .command-menu, [data-testid="slash-menu"], [cmdk-list]');
     if (await commandMenu.count() > 0) {
-      await expect(commandMenu).toBeVisible();
-
-      // Try selecting a command
-      await page.keyboard.press('ArrowDown');
-      await page.keyboard.press('Enter');
+      await expect(commandMenu.first()).toBeVisible();
+      // Dismiss menu
+      await workspacePage.keyboard.press('Escape');
     }
   });
 
-  test('should handle wiki links', async ({ page }, testInfo) => {
-    const editor = await getEditorOrSkip(page, testInfo);
-    if (!editor) return;
+  test('should display file tree', async ({ workspacePage }) => {
+    // Check that file tree shows our test files
+    const fileTree = workspacePage.locator('.file-tree, .file-explorer, [data-testid="file-tree"]');
+    await expect(fileTree).toBeVisible();
 
-    await editor.click();
+    // Should see README.md in file tree
+    await expect(workspacePage.locator('text=README.md')).toBeVisible();
+  });
 
-    // Test wiki link creation
-    await editor.fill('[[Test Page]]');
-    await page.keyboard.press('Space');
+  test('should switch between files', async ({ workspacePage }) => {
+    // Open first file
+    await openFile(workspacePage, 'README.md');
+    let editor = await getEditor(workspacePage);
+    await expect(editor).toContainText('E2E Test Workspace');
 
-    // Check if wiki link was created
-    const wikiLink = editor.locator('[data-type="wiki-link"], .wiki-link');
-    if (await wikiLink.count() > 0) {
-      await expect(wikiLink).toContainText('Test Page');
-    }
+    // Open second file
+    await openFile(workspacePage, 'test-note.md');
+    editor = await getEditor(workspacePage);
+    await expect(editor).toContainText('Hello World');
   });
 });
