@@ -102,6 +102,7 @@ export default function ImageUrlModal({ isOpen, onClose, onSubmit, position }) {
           <button
             onClick={onClose}
             className="ml-auto p-1 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+            title="Close"
           >
             <X className="w-4 h-4" />
           </button>

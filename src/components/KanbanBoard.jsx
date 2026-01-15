@@ -133,6 +133,7 @@ function TaskCard({ task, onUpdate, onDelete, isDragging }) {
           {...attributes}
           {...listeners}
           className="cursor-grab active:cursor-grabbing mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Drag to reorder"
         >
           <GripVertical className="w-4 h-4 text-app-muted" />
         </div>
@@ -160,6 +161,7 @@ function TaskCard({ task, onUpdate, onDelete, isDragging }) {
           <button
             onClick={() => setShowMenu(!showMenu)}
             className="p-1 rounded hover:bg-app-hover text-app-muted hover:text-app-text opacity-0 group-hover:opacity-100 transition-opacity"
+            title="Task options"
           >
             <MoreHorizontal className="w-3.5 h-3.5" />
           </button>

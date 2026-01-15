@@ -260,6 +260,7 @@ export default function TemplatePicker({
               variant="ghost"
               onClick={(e) => handlePreview(template, e)}
               className="h-7 w-7"
+              title="Preview template"
             >
               <Eye className="h-3.5 w-3.5" />
             </Button>
@@ -270,6 +271,7 @@ export default function TemplatePicker({
               variant="ghost"
               onClick={(e) => handleEdit(template, e)}
               className="h-7 w-7"
+              title="Edit template"
             >
               <Edit className="h-3.5 w-3.5" />
             </Button>
@@ -280,6 +282,7 @@ export default function TemplatePicker({
               variant="ghost"
               onClick={(e) => handleDuplicate(template, e)}
               className="h-7 w-7"
+              title="Duplicate template"
             >
               <Copy className="h-3.5 w-3.5" />
             </Button>
@@ -290,6 +293,7 @@ export default function TemplatePicker({
               variant="ghost"
               onClick={(e) => handleDelete(template, e)}
               className="h-7 w-7 text-red-500 hover:bg-red-500/10"
+              title="Delete template"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
