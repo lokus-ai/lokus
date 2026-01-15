@@ -3,13 +3,14 @@
  *
  * Provides:
  * - workspacePath: The path to the test workspace (created by global-setup.js)
- * - workspacePage: A page that's already navigated to the workspace
+ * - workspacePage: A page that's already navigated to the workspace with Tauri mocks
  *
  * Usage in tests:
  *   import { test, expect } from '../setup/test-workspace.js';
  *
  *   test('my test', async ({ workspacePage }) => {
  *     // workspacePage is already at the workspace, editor ready
+ *     // Tauri IPC calls are mocked automatically
  *     const editor = workspacePage.locator('.ProseMirror');
  *     await editor.click();
  *   });
@@ -19,6 +20,7 @@ import { test as base, expect } from '@playwright/test';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { setupTauriMocks, clearTauriMocks } from '../helpers/tauri-mocks.js';
 
 // Path where global-setup.js stores the workspace path
 const WORKSPACE_PATH_FILE = join(tmpdir(), 'lokus-e2e-workspace-path.txt');

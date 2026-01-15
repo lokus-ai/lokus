@@ -60,6 +60,18 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- E2E Testing: Load mockIPC when running Playwright tests -->
+    <script type="module">
+      if (import.meta.env.VITE_PLAYWRIGHT === 'true') {
+        const { mockIPC, mockWindows, clearMocks } = await import('@tauri-apps/api/mocks');
+
+        // Expose mocking functions to window for Playwright tests
+        window.__tauriMocks = { mockIPC, mockWindows, clearMocks };
+        window.__e2eTestMode = true;
+
+        console.log('[E2E] Tauri mocks loaded and ready');
+      }
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

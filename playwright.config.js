@@ -61,10 +61,13 @@ export default defineConfig({
   ],
 
   webServer: {
-    // Use Vite dev server - tests run in browser with testMode bypass
+    // Use Vite dev server with VITE_PLAYWRIGHT to enable mockIPC
     command: 'npm run dev',
     url: 'http://localhost:1420',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
+    env: {
+      VITE_PLAYWRIGHT: 'true',
+    },
   },
 });
