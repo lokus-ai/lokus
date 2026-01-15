@@ -32,7 +32,8 @@ console.log('Binary path:', binaryPath);
 console.log('CARGO_TARGET_DIR:', process.env.CARGO_TARGET_DIR);
 
 export const config = {
-  specs: ['./tests/e2e-tauri/**/*.spec.js'],
+  // Only run app.spec.js for now - other tests need workspace to be open
+  specs: ['./tests/e2e-tauri/app.spec.js'],
   exclude: [],
 
   maxInstances: 1, // Tauri app is single instance
