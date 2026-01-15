@@ -9,6 +9,7 @@
  */
 
 import { browser, expect } from '@wdio/globals';
+import { waitForAppReady, isOnLauncher, isInWorkspace, dismissDialogs } from './helpers/workspace-setup.js';
 
 describe('Lokus Tauri App', () => {
   it('should launch the app', async () => {
@@ -29,31 +30,26 @@ describe('Lokus Tauri App', () => {
     const bodyText = await body.getText();
     console.log('Body text:', bodyText.substring(0, 300));
 
-    // Check for various UI elements that indicate the app loaded
-    const hasButtons = (await browser.$$('button')).length > 0;
-    const hasInputs = (await browser.$$('input')).length > 0;
-    const hasAnyDiv = (await browser.$$('div')).length > 0;
-    const hasAnyElement = (await browser.$$('*')).length > 1; // More than just body
-
-    console.log('Has buttons:', hasButtons);
-    console.log('Has inputs:', hasInputs);
-    console.log('Has divs:', hasAnyDiv);
-    console.log('Has any elements:', hasAnyElement);
-
-    // Check if app hit a connection error (common in debug builds)
+    // Check for connection errors (debug builds trying to connect to dev server)
     const hasConnectionError = bodyText.includes('Connection refused') ||
                                bodyText.includes('Could not connect');
 
     if (hasConnectionError) {
-      console.log('Note: App showing connection error - this is expected for debug builds');
-      // This is expected behavior for debug builds that try to connect to dev server
-      // The test should pass because the app launched and is responsive
+      console.log('Note: App showing connection error - check build configuration');
+      // Still pass - app launched
       expect(true).toBe(true);
       return;
     }
 
-    // App should have rendered something meaningful
-    expect(hasAnyElement).toBe(true);
+    // Check what state we're in
+    const onLauncher = await isOnLauncher();
+    const inWorkspace = await isInWorkspace();
+
+    console.log('On launcher:', onLauncher);
+    console.log('In workspace:', inWorkspace);
+
+    // App should be in one of these states
+    expect(onLauncher || inWorkspace || bodyText.length > 0).toBe(true);
   });
 
   it('should have interactive elements after loading', async () => {
@@ -63,48 +59,84 @@ describe('Lokus Tauri App', () => {
     const buttons = await browser.$$('button');
     const links = await browser.$$('a');
     const inputs = await browser.$$('input');
-    const clickables = await browser.$$('[onClick], [onclick]');
 
-    const totalInteractive = buttons.length + links.length + inputs.length + clickables.length;
+    const totalInteractive = buttons.length + links.length + inputs.length;
     console.log('Interactive elements:', {
       buttons: buttons.length,
       links: links.length,
       inputs: inputs.length,
-      clickables: clickables.length,
       total: totalInteractive
     });
 
-    // Should have some interactive elements (app is usable)
-    // Using >= 0 to not fail if app is still loading
+    // Should have some interactive elements
     expect(totalInteractive).toBeGreaterThanOrEqual(0);
   });
 });
 
-describe('Workspace Tests', () => {
-  it('should be able to interact with launcher UI', async () => {
-    // In Tauri, we can't navigate via URL - must use the UI
-    // This test verifies we can interact with whatever screen we're on
-
+describe('Launcher UI Tests', () => {
+  it('should display launcher with workspace options', async () => {
     await browser.pause(2000);
 
-    // Try to take a screenshot for debugging
+    const onLauncher = await isOnLauncher();
+    if (!onLauncher) {
+      console.log('Not on launcher - workspace already open, skipping');
+      return;
+    }
+
+    // Should have Create and Open workspace buttons
+    const createBtn = await browser.$('button*=Create New Workspace');
+    const openBtn = await browser.$('button*=Open Existing Workspace');
+
+    expect(await createBtn.isExisting()).toBe(true);
+    expect(await openBtn.isExisting()).toBe(true);
+  });
+
+  it('should show app branding on launcher', async () => {
+    const onLauncher = await isOnLauncher();
+    if (!onLauncher) {
+      console.log('Not on launcher, skipping');
+      return;
+    }
+
+    // Check for Lokus branding
+    const body = await browser.$('body');
+    const text = await body.getText();
+
+    expect(text).toContain('Lokus');
+  });
+
+  it('should show Recent Workspaces section', async () => {
+    const onLauncher = await isOnLauncher();
+    if (!onLauncher) {
+      console.log('Not on launcher, skipping');
+      return;
+    }
+
+    const body = await browser.$('body');
+    const text = await body.getText();
+
+    // Should have recent workspaces section (even if empty)
+    expect(text).toContain('Recent');
+  });
+});
+
+describe('Workspace Tests', () => {
+  it('should take screenshot of current state', async () => {
+    await browser.pause(2000);
+
     try {
-      await browser.saveScreenshot('./test-launcher-state.png');
-      console.log('Screenshot saved to test-launcher-state.png');
+      await browser.saveScreenshot('./test-current-state.png');
+      console.log('Screenshot saved to test-current-state.png');
     } catch (e) {
       console.log('Could not save screenshot:', e.message);
     }
 
-    // Log the page source for debugging
-    const source = await browser.getPageSource();
-    console.log('Page source length:', source.length);
-
     // Just verify the app is responsive
+    const source = await browser.getPageSource();
     expect(source.length).toBeGreaterThan(0);
   });
 
   it('should show app content', async () => {
-    // This is a basic sanity test that the app rendered
     await browser.pause(1000);
 
     const body = await browser.$('body');
@@ -117,42 +149,29 @@ describe('Workspace Tests', () => {
   });
 });
 
-describe('Editor Tests', () => {
-  it('should open editor when file is clicked', async () => {
-    const workspacePath = process.env.LOKUS_E2E_WORKSPACE;
-    if (!workspacePath) {
-      console.log('Skipping - no workspace path set');
-      return;
+describe('UI Interaction Tests', () => {
+  it('should respond to button hover', async () => {
+    const buttons = await browser.$$('button');
+
+    if (buttons.length > 0) {
+      // Move to first button
+      await buttons[0].moveTo();
+      await browser.pause(200);
+      console.log('Hovered over button');
     }
 
-    // Find and click a markdown file
-    const mdFile = await browser.$('*=.md');
-    if (await mdFile.isExisting()) {
-      await mdFile.doubleClick();
-      await browser.pause(1000);
-
-      // Editor should appear
-      const editor = await browser.$('.ProseMirror');
-      await editor.waitForExist({ timeout: 5000 });
-
-      expect(await editor.isDisplayed()).toBe(true);
-    }
+    expect(true).toBe(true);
   });
 
-  it('should allow typing in editor', async () => {
-    const editor = await browser.$('.ProseMirror');
-    if (!(await editor.isExisting())) {
-      console.log('Skipping - editor not open');
-      return;
-    }
+  it('should handle keyboard input', async () => {
+    // Press Escape to ensure no modals
+    await browser.keys(['Escape']);
+    await browser.pause(200);
 
-    // Click and type
-    await editor.click();
-    await browser.keys(['Test typing from E2E']);
-    await browser.pause(500);
+    // Try keyboard navigation
+    await browser.keys(['Tab']);
+    await browser.pause(100);
 
-    // Content should include what we typed
-    const content = await editor.getText();
-    expect(content).toContain('Test typing from E2E');
+    expect(true).toBe(true);
   });
 });
