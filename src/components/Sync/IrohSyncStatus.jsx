@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Check, AlertCircle, Users, Settings, X } from 'lucide-react';
+import { RefreshCw, Check, AlertCircle, Users, Settings, X, Loader2 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import PeerList from './PeerList';
 
@@ -215,9 +215,13 @@ export default function IrohSyncStatus({ workspacePath, onClose }) {
           <button
             onClick={handleManualSync}
             disabled={syncing}
-            className="flex items-center gap-2 px-4 py-2 bg-app-accent hover:bg-app-accent/80 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`flex items-center gap-2 px-4 py-2 bg-app-accent hover:bg-app-accent/80 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
           >
-            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <RefreshCw size={16} />
+            )}
             {syncing ? 'Syncing...' : 'Sync Now'}
           </button>
         </div>
