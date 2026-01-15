@@ -2380,6 +2380,9 @@ function WorkspaceWithScope({ path }) {
     const { activeFile, openTabs, editorContent, editorTitle } = stateRef.current;
     if (!activeFile) return;
 
+    // Only save markdown files - other file types (kanban, canvas, etc.) have their own save mechanisms
+    if (!activeFile.endsWith('.md')) return;
+
     let path_to_save = activeFile;
     let needsStateUpdate = false;
     const saveStartTime = performance.now();
