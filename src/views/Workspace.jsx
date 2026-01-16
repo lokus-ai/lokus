@@ -296,41 +296,36 @@ function NewFolderInput({ onConfirm, level }) {
 }
 
 // --- Inline Rename Input Component ---
-function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
+export default function InlineRenameInput({
+  initialValue,
+  onSubmit,
+  onCancel,
+}) {
   const [value, setValue] = useState(initialValue);
   const inputRef = useRef(null);
 
   useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, []);
+    if (!inputRef.current) return;
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      onSubmit(value);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      onCancel();
-    }
-  };
+    const name = initialValue;
+    const dotIndex = name.lastIndexOf(".");
+    const endIndex = dotIndex > 0 ? dotIndex : name.length;
 
-  const handleBlur = () => {
-    onSubmit(value);
-  };
+    inputRef.current.focus();
+    inputRef.current.setSelectionRange(0, endIndex);
+  }, [initialValue]);
 
   return (
     <input
       ref={inputRef}
-      type="text"
       value={value}
       onChange={(e) => setValue(e.target.value)}
-      onKeyDown={handleKeyDown}
-      onBlur={handleBlur}
+      onBlur={() => onSubmit(value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onSubmit(value);
+        if (e.key === "Escape") onCancel();
+      }}
       className="inline-rename-input"
-      onClick={(e) => e.stopPropagation()}
     />
   );
 }
