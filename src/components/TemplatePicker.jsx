@@ -9,7 +9,8 @@ import {
   Copy,
   Trash2,
   Edit,
-  X
+  X,
+  Loader2
 } from 'lucide-react';
 import { useTemplates, useTemplateProcessor } from '../hooks/useTemplates.js';
 import analytics from '../services/analytics.js';
