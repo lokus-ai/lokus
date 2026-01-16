@@ -88,7 +88,7 @@ code .
 ```
 
 **That's it!** The container will automatically:
-- Download and install Node.js 20
+- Download and install Node.js 22
 - Install Rust toolchain and Tauri CLI
 - Install all system dependencies
 - Run `npm install`
@@ -181,9 +181,9 @@ rustc --version
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
 
 # Restart terminal, then install Node.js
-nvm install 18
-nvm use 18
-nvm alias default 18
+nvm install 22
+nvm use 22
+nvm alias default 22
 ```
 
 **For Windows (nvm-windows):**
@@ -191,12 +191,12 @@ nvm alias default 18
 2. Install and restart terminal
 3. Run:
    ```cmd
-   nvm install 18.17.0
-   nvm use 18.17.0
+   nvm install 22
+   nvm use 22
    ```
 
 **Alternative: Direct installation**
-- Download from [nodejs.org](https://nodejs.org/) (LTS version 18+)
+- Download from [nodejs.org](https://nodejs.org/) (LTS version 22+)
 
 #### 3. Install Git 🌿
 - **Windows**: [Git for Windows](https://gitforwindows.org/)
@@ -372,7 +372,7 @@ rustup target add x86_64-unknown-linux-gnu # Linux
 
 **Version conflicts**
 ```bash
-# Check Node version (should be 18+)
+# Check Node version (should be 22+)
 node --version
 npm --version
 
@@ -505,7 +505,7 @@ Get-AppxPackage -Name "Microsoft.WebView2"
 **Windows Setup Verification**
 ```powershell
 # Check all required tools
-node --version     # Should be 18+
+node --version     # Should be 22+
 npm --version      # Should be 8+
 cargo --version    # Should be recent
 rustc --version    # Should be recent
@@ -519,7 +519,7 @@ cargo check --manifest-path=src-tauri/Cargo.toml
 **macOS Setup Verification**
 ```bash
 # Check all required tools
-node --version     # Should be 18+
+node --version     # Should be 22+
 npm --version      # Should be 8+
 cargo --version    # Should be recent
 rustc --version    # Should be recent
@@ -572,7 +572,7 @@ cargo install:
 
 After setup, verify everything works:
 
-- [ ] `node --version` shows v18+
+- [ ] `node --version` shows v22+
 - [ ] `npm --version` shows recent version
 - [ ] `cargo --version` shows recent Rust version
 - [ ] `npm install` completes without errors
@@ -606,7 +606,7 @@ RUN apt-get update && apt-get install -y \
     libappindicator3-dev librsvg2-dev patchelf
 
 # Install Node.js and Rust
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -629,7 +629,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node-version: [18, 20]
+        node-version: [22]
     
     runs-on: ${{ matrix.os }}
     

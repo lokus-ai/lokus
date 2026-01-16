@@ -132,6 +132,7 @@ export default function EmailList({
         <button
           onClick={(e) => handleEmailSelection(email.id, e)}
           className="flex-shrink-0 p-1 hover:bg-app-bg rounded"
+          title="Select email"
         >
           {isSelected ? (
             <CheckSquare className="w-4 h-4 text-app-accent" />
@@ -147,6 +148,7 @@ export default function EmailList({
             // TODO: Implement star toggle
           }}
           className="flex-shrink-0 p-1 hover:bg-app-bg rounded"
+          title={email.isStarred ? "Unstar email" : "Star email"}
         >
           <Star 
             className={`w-4 h-4 ${
@@ -247,6 +249,7 @@ export default function EmailList({
           <button
             onClick={handleSelectAll}
             className="flex-shrink-0 p-1 hover:bg-app-bg rounded"
+            title={selectAll ? "Deselect all" : "Select all"}
           >
             {selectAll ? (
               <CheckSquare className="w-4 h-4 text-app-accent" />
