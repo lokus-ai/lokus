@@ -9,7 +9,8 @@ import {
   Copy,
   Trash2,
   Edit,
-  X
+  X,
+  Loader2
 } from 'lucide-react';
 import { useTemplates, useTemplateProcessor } from '../hooks/useTemplates.js';
 import analytics from '../services/analytics.js';
@@ -62,6 +63,7 @@ export default function TemplatePicker({
   const [filteredTemplates, setFilteredTemplates] = useState([]);
   const [categories, setCategories] = useState([]);
   const [tags, setTags] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Load categories and tags
   useEffect(() => {
@@ -135,6 +137,7 @@ export default function TemplatePicker({
 
   const handleSelect = async (template) => {
     try {
+      setIsLoading(template.id);
       const result = await processTemplate(template.id, {}, {
         context: {}
       });
@@ -147,6 +150,9 @@ export default function TemplatePicker({
     } catch (err) {
       onSelect?.(template, template.content);
       onClose?.();
+    }
+    finally {      
+      setIsLoading(null);
     }
   };
 
@@ -164,11 +170,15 @@ export default function TemplatePicker({
     event.stopPropagation();
 
     try {
+      setIsLoading(template.id);
       const newId = `${template.id}_copy_${Date.now()}`;
       await duplicateTemplate(template.id, newId, {
         name: `${template.name} (Copy)`
       });
     } catch { }
+    finally {
+      setIsLoading(null);
+    }
   };
 
   const handleDelete = async (template, event) => {
@@ -176,8 +186,12 @@ export default function TemplatePicker({
 
     if (window.confirm(`Are you sure you want to delete "${template.name}"?`)) {
       try {
+        setIsLoading(template.id);
         await deleteTemplate(template.id);
       } catch { }
+      finally {
+        setIsLoading(null);
+      }
     }
   };
 
@@ -233,105 +247,123 @@ export default function TemplatePicker({
     return firstSentence || `A ${template.category.toLowerCase()} template`;
   };
 
-  const renderTemplateCard = (template) => (
-    <div
-      key={template.id}
-      onClick={() => handleSelect(template)}
-      className="group relative bg-app-panel border border-app-border rounded-lg p-4 hover:border-app-accent cursor-pointer transition-all"
-    >
-      <div className="flex items-start gap-3 mb-3">
-        <div className="p-2 bg-app-bg border border-app-border rounded-md shrink-0">
-          <FileText className="h-4 w-4 text-app-muted" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-medium text-app-text truncate mb-1">
-            {template.name}
-          </h3>
-          <p className="text-xs text-app-muted">
-            {template.category}
-          </p>
+  const renderTemplateCard = (template) => {
+    const isLoadingThis = isLoading === template.id;
+
+    return (
+      <div
+        key={template.id}
+        onClick={() => !isLoadingThis && handleSelect(template)}
+        className={`group relative bg-app-panel border border-app-border rounded-lg p-4 hover:border-app-accent transition-all ${
+          isLoadingThis ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+        }`}
+      >
+        <div className="flex items-start gap-3 mb-3">
+          <div className="p-2 bg-app-bg border border-app-border rounded-md shrink-0">
+            {isLoadingThis ? (
+              <Loader2 className="h-4 w-4 text-app-muted animate-spin" />
+            ) : (
+              <FileText className="h-4 w-4 text-app-muted" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-medium text-app-text truncate mb-1">
+              {template.name}
+            </h3>
+            <p className="text-xs text-app-muted">
+              {template.category}
+            </p>
+          </div>
+
+          {/* Action buttons */}
+          <div className={`flex gap-1 ${isLoadingThis ? 'opacity-50' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
+            {showPreview && (
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={(e) => handlePreview(template, e)}
+                className="h-7 w-7"
+                disabled={isLoadingThis}
+              >
+                <Eye className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            {allowEdit && (
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={(e) => handleEdit(template, e)}
+                className="h-7 w-7"
+                disabled={isLoadingThis}
+              >
+                <Edit className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            {allowDuplicate && (
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={(e) => handleDuplicate(template, e)}
+                className="h-7 w-7"
+                disabled={isLoadingThis}
+              >
+                {isLoadingThis ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            )}
+            {allowDelete && (
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={(e) => handleDelete(template, e)}
+                className="h-7 w-7 text-red-500 hover:bg-red-500/10"
+                disabled={isLoadingThis}
+              >
+                {isLoadingThis ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            )}
+          </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {showPreview && (
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={(e) => handlePreview(template, e)}
-              className="h-7 w-7"
-              title="Preview template"
-            >
-              <Eye className="h-3.5 w-3.5" />
-            </Button>
-          )}
-          {allowEdit && (
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={(e) => handleEdit(template, e)}
-              className="h-7 w-7"
-              title="Edit template"
-            >
-              <Edit className="h-3.5 w-3.5" />
-            </Button>
-          )}
-          {allowDuplicate && (
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={(e) => handleDuplicate(template, e)}
-              className="h-7 w-7"
-              title="Duplicate template"
-            >
-              <Copy className="h-3.5 w-3.5" />
-            </Button>
-          )}
-          {allowDelete && (
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={(e) => handleDelete(template, e)}
-              className="h-7 w-7 text-red-500 hover:bg-red-500/10"
-              title="Delete template"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          )}
+        {/* Description */}
+        <p className="text-sm text-app-muted line-clamp-2 mb-3">
+          {getDescription(template)}
+        </p>
+
+        {/* Tags */}
+        {template.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-3">
+            {template.tags.slice(0, 3).map(tag => (
+              <Badge key={tag} variant="outline" className="text-xs">
+                {tag}
+              </Badge>
+            ))}
+            {template.tags.length > 3 && (
+              <Badge variant="outline" className="text-xs">
+                +{template.tags.length - 3}
+              </Badge>
+            )}
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="flex items-center justify-between text-xs text-app-muted pt-2 border-t border-app-border">
+          <div className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            <span>{formatRelativeTime(template.metadata.updatedAt)}</span>
+          </div>
+          <span>{(template.content.length / 1024).toFixed(1)}KB</span>
         </div>
       </div>
-
-      {/* Description */}
-      <p className="text-sm text-app-muted line-clamp-2 mb-3">
-        {getDescription(template)}
-      </p>
-
-      {/* Tags */}
-      {template.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3">
-          {template.tags.slice(0, 3).map(tag => (
-            <Badge key={tag} variant="outline" className="text-xs">
-              {tag}
-            </Badge>
-          ))}
-          {template.tags.length > 3 && (
-            <Badge variant="outline" className="text-xs">
-              +{template.tags.length - 3}
-            </Badge>
-          )}
-        </div>
-      )}
-
-      {/* Footer */}
-      <div className="flex items-center justify-between text-xs text-app-muted pt-2 border-t border-app-border">
-        <div className="flex items-center gap-1">
-          <Clock className="h-3 w-3" />
-          <span>{formatRelativeTime(template.metadata.updatedAt)}</span>
-        </div>
-        <span>{(template.content.length / 1024).toFixed(1)}KB</span>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderEmptyState = () => (
     <div className="flex flex-col items-center justify-center py-16 text-center">
