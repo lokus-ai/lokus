@@ -1031,6 +1031,18 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           } catch { }
         })()
         break;
+      case 'copyCode': {
+        const { state } = editor;
+        const {$from} = state.selection;
+
+        const node = $from.node($from.depth)
+
+        if (node.type.name === 'codeBlock') {
+          const codeText = node.textContent;
+          navigator.clipboard.writeText(codeText);
+        }
+        break;
+      }
       default:
     }
   };
