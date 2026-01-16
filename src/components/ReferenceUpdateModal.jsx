@@ -89,6 +89,7 @@ export default function ReferenceUpdateModal({
             <button
               onClick={onClose}
               className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+              title="Close"
             >
               <X className="w-4 h-4" />
             </button>

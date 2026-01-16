@@ -128,6 +128,7 @@ export default function ExportModal({
           <button
             onClick={onClose}
             className="p-2 rounded-md hover:bg-app-bg transition-colors"
+            title="Close"
           >
             <X className="w-5 h-5 text-app-muted" />
           </button>

@@ -18,7 +18,7 @@ Complete guide for building Lokus across all supported platforms with step-by-st
 
 | Tool | Windows | macOS | Linux | Notes |
 |------|---------|-------|-------|-------|
-| **Node.js** | 18.0+ | 18.0+ | 18.0+ | LTS version recommended |
+| **Node.js** | 22.0+ | 22.0+ | 22.0+ | LTS version recommended |
 | **npm** | 8.0+ | 8.0+ | 8.0+ | Comes with Node.js |
 | **Rust** | 1.70+ | 1.70+ | 1.70+ | Latest stable recommended |
 | **Cargo** | 1.70+ | 1.70+ | 1.70+ | Comes with Rust |
@@ -712,7 +712,7 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: 18
+        node-version: 22
         cache: 'npm'
     
     - name: Setup Rust

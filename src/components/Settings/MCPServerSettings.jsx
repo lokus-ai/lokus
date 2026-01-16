@@ -23,7 +23,8 @@ import {
   ChevronUp,
   CheckCircle,
   XCircle,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from 'lucide-react'
 
 export default function MCPServerSettings() {
@@ -43,6 +44,7 @@ export default function MCPServerSettings() {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [autoStart, setAutoStart] = useState(false)
   const [portInput, setPortInput] = useState(3456)
+  const [statusLoading, setStatusLoading] = useState(false)
 
   // Load initial status
   useEffect(() => {
@@ -54,10 +56,13 @@ export default function MCPServerSettings() {
   // Load server status
   const loadStatus = async () => {
     try {
+      setStatusLoading(true)
       const result = await invoke('mcp_status')
       setStatus(result)
     } catch(err) { 
       console.log("Failed due to Error: ", err)
+    } finally {
+      setStatusLoading(false)
     }
   }
 
@@ -196,7 +201,11 @@ export default function MCPServerSettings() {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <StatusIndicator running={status.is_running} />
+            {statusLoading ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <StatusIndicator running={status.is_running} />
+            )}
             <div>
               <div style={{ fontSize: '18px', fontWeight: '600' }}>
                 {status.is_running ? 'Running' : 'Stopped'}
@@ -441,6 +450,11 @@ export default function MCPServerSettings() {
                 background: configureResult.success ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
                 color: configureResult.success ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)'
               }}>
+                {configureResult.success ? (
+                  <Check size={14} />
+                ) : (
+                  <AlertCircle size={14} />
+                )}
                 {configureResult.message}
               </div>
             )}

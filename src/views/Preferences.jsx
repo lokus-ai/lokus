@@ -3655,6 +3655,7 @@ export default function Preferences() {
                               }}
                               disabled={syncLoading || !workspacePath}
                               className="px-4 py-2 bg-app-bg border border-app-border hover:bg-app-panel disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-app-text transition-colors"
+                              title="Check sync status"
                             >
                               <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
                             </button>
