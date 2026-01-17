@@ -52,6 +52,7 @@ import CreateTemplate from "../components/CreateTemplate.jsx";
 import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
 import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
 import { usePlugins } from "../hooks/usePlugins.jsx";
+import { editorAPI } from "../plugins/api/EditorAPI.js";
 import { setGlobalActiveTheme, getSystemPreferredTheme, setupSystemThemeListener, readGlobalVisuals } from "../core/theme/manager.js";
 import { useTheme } from "../hooks/theme.jsx";
 import SplitEditor from "../components/SplitEditor/SplitEditor.jsx";
@@ -3489,6 +3490,19 @@ function WorkspaceWithScope({ path }) {
   // Direct keyboard event listener as a bulletproof backup for critical shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Cmd/Ctrl+K: Open command palette (backup for menu accelerator)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k' && !e.shiftKey && !e.altKey) {
+        console.log('Workspace: Ctrl+K pressed, opening command palette');
+        e.preventDefault();
+        // Don't open command palette when graph view is active
+        const isGraphActive = stateRef.current.activeFile === '__graph__' ||
+          stateRef.current.activeFile?.startsWith('__graph__');
+        if (!isGraphActive) {
+          setShowCommandPalette(true);
+        }
+        return;
+      }
+
       // Cmd/Ctrl+S: Save file
       if ((e.metaKey || e.ctrlKey) && e.key === 's' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
@@ -3517,7 +3531,7 @@ function WorkspaceWithScope({ path }) {
     return () => {
       document.removeEventListener('keydown', handleKeyDown, { capture: true });
     };
-  }, [handleSave, activeFile, toggleVersionHistory]);
+  }, [handleSave, activeFile, toggleVersionHistory, setShowCommandPalette, stateRef]);
 
   useEffect(() => {
     let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch { }
@@ -5034,55 +5048,94 @@ function WorkspaceWithScope({ path }) {
           onShowTemplatePicker={(templateSelection) => {
             // Handle direct template selection from Command Palette
             if (templateSelection && templateSelection.template && templateSelection.processedContent) {
-              const { template, processedContent } = templateSelection;
+              console.log('Workspace: onShowTemplatePicker called with template:', templateSelection.template.name);
 
-              if (editorRef.current && processedContent) {
-                // Process template content through markdown compiler
-                const compiler = getMarkdownCompiler()
+              // Close the command palette first to release focus
+              setShowCommandPalette(false);
 
-                // Process template content through markdown compiler
-                const processedWithMarkdown = compiler.processTemplate(processedContent)
+              // Wrap in setTimeout to ensure Command Palette has time to close and return focus to editor
+              // Increased timeout to 200ms to ensure proper focus restoration and DOM updates
+              setTimeout(() => {
+                const { processedContent } = templateSelection;
 
-                // Smart template insertion with cursor positioning
-                const insertTemplateContent = (content) => {
-                  // Check if content has {{cursor}} placeholder
-                  const cursorIndex = content.indexOf('{{cursor}}');
+                // Use editor state directly instead of ref which might be null
+                // Also try getting from editorAPI as a fallback for when command palette focus might interfere
+                const editorInstance = editor || editorRef.current || editorAPI.getEditor();
 
-                  if (cursorIndex !== -1) {
-                    // Split content at cursor position
-                    const beforeCursor = content.substring(0, cursorIndex);
-                    const afterCursor = content.substring(cursorIndex + 10); // 10 = '{{cursor}}'.length
+                console.log('Workspace: Editor instance available:', !!editorInstance);
+                console.log('Workspace: Has processed content:', !!processedContent);
 
-                    // Insert content in parts to position cursor correctly
-                    return editorRef.current.chain()
-                      .focus()
-                      .insertContent(beforeCursor)
-                      .insertContent(afterCursor)
-                      .setTextSelection(beforeCursor.length + editorRef.current.state.selection.from)
-                      .run();
-                  } else {
-                    // No cursor placeholder, just insert normally
-                    return editorRef.current.chain()
-                      .focus()
-                      .insertContent(content)
-                      .run();
-                  }
-                };
+                if (!editorInstance) {
+                  console.error('Workspace: Failed to get editor instance for template insertion');
+                  return;
+                }
+
+                if (!processedContent) {
+                  console.error('Workspace: No processed content available for template insertion');
+                  return;
+                }
 
                 try {
-                  insertTemplateContent(processedWithMarkdown);
-                } catch { }
-              }
+                  // Ensure editor has focus by clicking the editor view
+                  const editorView = editorInstance.view;
+                  if (editorView && editorView.dom) {
+                    console.log('Workspace: Focusing editor DOM element');
+                    editorView.dom.focus();
+                  }
+
+                  // Process template content through markdown compiler
+                  const compiler = getMarkdownCompiler()
+
+                  // Process template content through markdown compiler
+                  const processedWithMarkdown = compiler.processTemplate(processedContent)
+                  console.log('Workspace: Template content processed, length:', processedWithMarkdown.length);
+
+                  // Smart template insertion with cursor positioning
+                  const insertTemplateContent = (content) => {
+                    // Check if content has {{cursor}} placeholder
+                    const cursorIndex = content.indexOf('{{cursor}}');
+
+                    if (cursorIndex !== -1) {
+                      // Split content at cursor position
+                      const beforeCursor = content.substring(0, cursorIndex);
+                      const afterCursor = content.substring(cursorIndex + 10); // 10 = '{{cursor}}'.length
+
+                      console.log('Workspace: Inserting template with cursor placeholder');
+                      // Insert content in parts to position cursor correctly
+                      return editorInstance.chain()
+                        .focus()
+                        .insertContent(beforeCursor)
+                        .insertContent(afterCursor)
+                        .setTextSelection(beforeCursor.length + editorInstance.state.selection.from)
+                        .run();
+                    } else {
+                      // No cursor placeholder, just insert normally
+                      console.log('Workspace: Inserting template without cursor placeholder');
+                      return editorInstance.chain()
+                        .focus()
+                        .insertContent(content)
+                        .run();
+                    }
+                  };
+
+                  const result = insertTemplateContent(processedWithMarkdown);
+                  console.log('Workspace: Template insertion result:', result);
+                } catch (error) {
+                  console.error('Workspace: Error inserting template from command palette:', error);
+                  console.error('Error stack:', error.stack);
+                }
+              }, 200);
               return;
             }
 
             // Fall back to opening template picker modal
             setShowTemplatePicker(true);
             setTemplatePickerData({
-              editorState: { editor: editorRef.current },
+              editorState: { editor: editor || editorRef.current || editorAPI.getEditor() },
               onSelect: (template, processedContent) => {
+                const editorInstance = editor || editorRef.current || editorAPI.getEditor();
 
-                if (editorRef.current && processedContent) {
+                if (editorInstance && processedContent) {
                   try {
 
                     // Process template content through markdown compiler
@@ -5102,15 +5155,15 @@ function WorkspaceWithScope({ path }) {
                         const afterCursor = content.substring(cursorIndex + 10); // 10 = '{{cursor}}'.length
 
                         // Insert content in parts to position cursor correctly
-                        return editorRef.current.chain()
+                        return editorInstance.chain()
                           .focus()
                           .insertContent(beforeCursor)
                           .insertContent(afterCursor)
-                          .setTextSelection(beforeCursor.length + editorRef.current.state.selection.from)
+                          .setTextSelection(beforeCursor.length + editorInstance.state.selection.from)
                           .run();
                       } else {
                         // No cursor placeholder, just insert normally
-                        return editorRef.current.chain()
+                        return editorInstance.chain()
                           .focus()
                           .insertContent(content)
                           .run();
@@ -5123,20 +5176,20 @@ function WorkspaceWithScope({ path }) {
                       () => insertTemplateContent(processedWithMarkdown),
 
                       // Method 2: Standard chain operation (markdown processed)
-                      () => editorRef.current.chain().focus().insertContent(processedWithMarkdown).run(),
+                      () => editorInstance.chain().focus().insertContent(processedWithMarkdown).run(),
 
                       // Method 3: Simple commands (markdown processed)
                       () => {
-                        editorRef.current.commands.focus();
-                        return editorRef.current.commands.insertContent(processedWithMarkdown);
+                        editorInstance.commands.focus();
+                        return editorInstance.commands.insertContent(processedWithMarkdown);
                       },
 
                       // Method 4: Direct content insertion (markdown processed)
-                      () => editorRef.current.commands.insertContent(processedWithMarkdown),
+                      () => editorInstance.commands.insertContent(processedWithMarkdown),
 
                       // Method 5: Manual transaction (fallback, clean content)
                       () => {
-                        const { view } = editorRef.current;
+                        const { view } = editorInstance;
                         const { state } = view;
                         const { tr } = state;
                         const pos = state.selection.from;
@@ -5381,7 +5434,7 @@ function WorkspaceWithScope({ path }) {
           </div>
         )}
 
-      {/* Mobile bottom Navigation */}
+        {/* Mobile bottom Navigation */}
         {isMobile() && (
           <MobileBottomNav
             activeTab={currentView}

@@ -461,6 +461,7 @@ export default function CommandPalette({
 
   // Handle template selection
   const handleTemplateSelect = React.useCallback(async (template) => {
+    console.log('CommandPalette: Template selected:', template?.name);
 
     try {
       // Process the template with built-in variables
@@ -478,19 +479,26 @@ export default function CommandPalette({
           template,
           processedContent: result.result || result.content || result
         }
+        console.log('CommandPalette: Calling onShowTemplatePicker with processed content');
         onShowTemplatePicker(mockSelection)
+      } else {
+        console.warn('CommandPalette: onShowTemplatePicker callback not available');
       }
 
       // Close command palette
       setOpen(false)
     } catch (err) {
+      console.error('CommandPalette: Error processing template, using fallback:', err);
       // Fallback to raw template content
       if (onShowTemplatePicker) {
         const mockSelection = {
           template,
           processedContent: template.content
         }
+        console.log('CommandPalette: Calling onShowTemplatePicker with fallback content');
         onShowTemplatePicker(mockSelection)
+      } else {
+        console.warn('CommandPalette: onShowTemplatePicker callback not available for fallback');
       }
       setOpen(false)
     }

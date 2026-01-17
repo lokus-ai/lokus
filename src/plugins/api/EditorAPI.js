@@ -1520,6 +1520,13 @@ export class EditorPluginAPI extends EventEmitter {
   // === EDITOR INTEGRATION ===
 
   /**
+   * Get the editor instance
+   */
+  getEditor() {
+    return this.editorInstance
+  }
+
+  /**
    * Set the editor instance for hot reloading
    */
   setEditorInstance(editor) {
