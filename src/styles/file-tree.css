@@ -74,9 +74,12 @@
 }
 
 @keyframes pulseExpand {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.6;
     background-color: rgb(var(--accent) / 0.1);
@@ -196,4 +199,15 @@
 
 .file-tree-container::-webkit-scrollbar-thumb:hover {
   background: rgb(var(--muted));
+}
+
+.obsidian-file-item.selected {
+  background-color: rgb(var(--panel-secondary) / 0.7);
+  outline: 1px solid rgb(var(--border-hover));
+  outline-offset: -1px;
+}
+
+.obsidian-file-item.selected.active {
+  background-color: rgb(var(--accent) / 0.18);
+  outline: 1px solid rgb(var(--accent) / 0.4);
 }
