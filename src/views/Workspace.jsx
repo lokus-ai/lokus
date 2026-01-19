@@ -4010,6 +4010,45 @@ function WorkspaceWithScope({ path }) {
     return getBaseAwareFileTree(fileTree);
   }, [fileTree, activeBase?.sourceFolder, openTabs, scopeMode, scopedFolders, filterFileTree]);
 
+  useEffect(() => {
+    const handleInsertTemplate = (event) => {
+      const { content } = event.detail;
+      
+      if (editorRef?.current && content) {
+        // Get the editor instance
+        const editor = editorRef.current;
+        
+        // This searches backwards from cursor to find the last "/" and removes everything after it
+        const { state } = editor;
+        const { from } = state.selection;
+        
+        // Search backwards for the "/" character
+        let slashPos = from;
+        const textBefore = state.doc.textBetween(Math.max(0, from - 50), from);
+        const lastSlashIndex = textBefore.lastIndexOf('/');
+        
+        if (lastSlashIndex !== -1) {
+          slashPos = from - (textBefore.length - lastSlashIndex);
+          
+          // Delete the "/templatename" text first
+          editor
+            .chain()
+            .focus()
+            .deleteRange({ from: slashPos, to: from })
+            .insertContent(content)
+            .run();
+        } else {
+          // No slash found, just insert at cursor
+          editor.chain().focus().insertContent(content).run();
+        }
+      }
+  };
+
+  window.addEventListener('lokus:insert-template', handleInsertTemplate);
+  return () => {
+    window.removeEventListener('lokus:insert-template', handleInsertTemplate);
+  };
+}, []);
   return (
     <PanelManager>
       <div className={`h-full bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select relative ${isMobile() ? 'safe-area-inset-top' : ''}`}>
