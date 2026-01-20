@@ -264,36 +264,40 @@ function useDragColumns({ minLeft = 220, maxLeft = 500, minRight = 220, maxRight
   return { leftW, rightW, startLeftDrag, startRightDrag };
 }
 
-// --- New Folder Input ---
-function NewFolderInput({ onConfirm, level }) {
-  const [name, setName] = useState("");
-  const inputRef = useRef(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") onConfirm(name);
-    else if (e.key === "Escape") onConfirm(null);
-  };
-
-  return (
-    <li style={{ paddingLeft: `${level * 1.25}rem` }} className="flex items-center gap-2 px-2 py-1">
-      <Icon path="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" className="w-4 h-4" />
-      <input
-        ref={inputRef}
-        type="text"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onBlur={() => onConfirm(name)}
-        className="bg-app-bg text-sm text-app-text outline-none w-full"
-        placeholder="New folder..."
-      />
-    </li>
-  );
-}
+// --- New Item Input ---
+function NewItemInput({ type, onConfirm, level }) {                                                                                                                    
+  const [name, setName] = useState("");                                                                                                                                
+  const inputRef = useRef(null);                                                                                                                                       
+                                                                                                                                                                        
+  useEffect(() => {                                                                                                                                                    
+    inputRef.current?.focus();                                                                                                                                         
+  }, []);                                                                                                                                                              
+                                                                                                                                                                        
+  const handleKeyDown = (e) => {                                                                                                                                       
+    if (e.key === "Enter") onConfirm(name);                                                                                                                            
+    else if (e.key === "Escape") onConfirm(null);                                                                                                                      
+  };                                                                                                                                                                   
+                                                                                                                                                                        
+  const icon = type === 'folder'                                                                                                                                       
+    ? "M2.25 12.75V12A2.25..."                                                                                                                        
+    : "M19.5 14.25v-2.625...";                                                                                                                        
+                                                                                                                                                                        
+  return (                                                                                                                                                             
+    <li style={{ paddingLeft: `${level * 1.25}rem` }} className="flex items-center gap-2 px-2 py-1">                                                                   
+      <Icon path={icon} className="w-4 h-4" />                                                                                                                         
+      <input                                                                                                                                                           
+        ref={inputRef}                                                                                                                                                 
+        type="text"                                                                                                                                                    
+        value={name}                                                                                                                                                   
+        onChange={(e) => setName(e.target.value)}                                                                                                                      
+        onKeyDown={handleKeyDown}                                                                                                                                      
+        onBlur={() => onConfirm(name)}                                                                                                                                 
+        className="bg-app-bg text-sm text-app-text outline-none w-full"                                                                                                
+        placeholder={type === 'folder' ? "New folder..." : "New file..."}                                                                                              
+      />                                                                                                                                                               
+    </li>                                                                                                                                                              
+  );                                                                                                                                                                   
+}                  
 
 // --- Inline Rename Input Component ---
 function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
@@ -336,7 +340,7 @@ function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
 }
 
 // --- File Entry Component ---
-function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences }) {
+function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, selectedPath, setSelectedPath, creatingItem, onCreateConfirm, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences }) {
   const entryRef = useRef(null);
   const hoverTimeoutRef = useRef(null);
 
@@ -411,6 +415,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
   const fileCount = entry.is_directory && entry.children ? entry.children.length : null;
 
   const handleClick = () => {
+    setSelectedPath(entry.path);
     if (entry.is_directory) {
       toggleFolder(entry.path);
     } else {
@@ -737,6 +742,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
             <ul className="space-y-1 mt-1">
               {entry.children.map(child => (
                 <FileEntryComponent
+                  className={`obsidian-file-item ${activeFile === entry.path ? 'active' : ''} ${selectedPath === entry.path ? 'selected' : ''}`}   
                   key={child.path}
                   entry={child}
                   level={level + 1}
@@ -746,6 +752,10 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
                   toggleFolder={toggleFolder}
                   onRefresh={onRefresh}
                   keymap={keymap}
+                  selectedPath={selectedPath}
+                  setSelectedPath={setSelectedPath}
+                  creatingItem={creatingItem}                                                                                                                                            
+                  onCreateConfirm={onCreateConfirm}
                   renamingPath={renamingPath}
                   setRenamingPath={setRenamingPath}
                   onViewHistory={onViewHistory}
@@ -767,13 +777,20 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
             </ul>
           </motion.div>
         )}
+        {creatingItem && creatingItem.targetPath === entry.path && (
+          <NewItemInput
+            type={creatingItem.type}
+            level={level + 1}
+            onConfirm={onCreateConfirm}
+          />
+        )}
       </AnimatePresence>
     </li>
   );
 }
 
 // --- File Tree View Component ---
-function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences }) {
+function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, creatingItem, onCreateConfirm, keymap, selectedPath, setSelectedPath, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences, workspacePath }) {
   const [activeEntry, setActiveEntry] = useState(null);
   const fileTreeRef = useRef(null);
   const { dropPosition, updatePosition, clearPosition } = useDropPosition();
@@ -863,9 +880,16 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div ref={fileTreeRef} className="file-tree-container">
         <ul className="space-y-1">
-          {isCreating && <NewFolderInput onConfirm={onCreateConfirm} level={0} />}
+          {creatingItem && creatingItem.targetPath === workspacePath && (
+            <NewItemInput
+              type={creatingItem.type}
+              level={0}
+              onConfirm={onCreateConfirm}
+            />
+          )}
           {entries.map(entry => (
             <FileEntryComponent
+              className={`obsidian-file-item ${activeFile === entry.path ? 'active' : ''} ${selectedPath === entry.path ? 'selected' : ''}`}   
               key={entry.path}
               entry={entry}
               level={0}
@@ -875,6 +899,10 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
               toggleFolder={toggleFolder}
               onRefresh={onRefresh}
               keymap={keymap}
+              selectedPath={selectedPath}
+              setSelectedPath={setSelectedPath}
+              creatingItem={creatingItem}
+              onCreateConfirm={onCreateConfirm}
               renamingPath={renamingPath}
               setRenamingPath={setRenamingPath}
               onViewHistory={onViewHistory}
@@ -1137,10 +1165,10 @@ function WorkspaceWithScope({ path }) {
       setShowVersionHistory(prev => !prev);
     }
   }, []);
-
+  const [selectedPath, setSelectedPath] = useState(null);
   const [fileTree, setFileTree] = useState([]);
   const [expandedFolders, setExpandedFolders] = useState(new Set());
-  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [creatingItem, setCreatingItem] = useState(null); 
   const [renamingPath, setRenamingPath] = useState(null);
 
   // External file drop state
@@ -2927,12 +2955,45 @@ function WorkspaceWithScope({ path }) {
   // Priority: 1. Bases folder, 2. Local scope folder, 3. Workspace root
   const getTargetPath = useCallback(() => {
     // Priority 1: If bases tab is open and has an active base
+    const findEntry = (entries, targetPath) => {
+        for (const entry of entries) {
+          if (entry.path === targetPath) {
+            return entry;
+          }
+          if (entry.is_directory && entry.children) {
+            const found = findEntry(entry.children, targetPath);
+            if (found) return found;
+          }
+        }
+        return null;
+      }
+
+
+    if (selectedPath) {                                                                                                                                                  
+      const selectedEntry = findEntry(fileTree, selectedPath);                                                                                                           
+      if (selectedEntry) {                                                                                                                                               
+        if (selectedEntry.is_directory) {                                                                                                                                
+          return selectedEntry.path;                                                                                                                                     
+        } else {                                                                                                                                                         
+          return selectedPath.split('/').slice(0, -1).join('/') || path;                                                                                                 
+        }                                                                                                                                                                
+      }                                                                                                                                                                  
+    }  
+
     const hasBasesTab = openTabs.some(tab => tab.path === '__bases__');
     if (hasBasesTab && activeBase?.sourceFolder) {
       return activeBase.sourceFolder;
     }
 
     // Priority 2: If in local scope mode with folders selected
+    if (expandedFolders.size > 0) {
+      const expandedArray = Array.from(expandedFolders);
+      const deepestFolder = expandedArray.reduce((deepest, current) => {
+        return current.length > deepest.length ? current : deepest;
+      }, expandedArray[0]);
+      return deepestFolder;
+    }
+
     if (scopeMode === 'local' && scopedFolders.length > 0) {
       // Use the first scoped folder as the default target
       return scopedFolders[0];
@@ -2940,16 +3001,14 @@ function WorkspaceWithScope({ path }) {
 
     // Priority 3: Workspace root
     return path;
-  }, [openTabs, activeBase, scopeMode, scopedFolders, path]);
+  }, [selectedPath, fileTree, expandedFolders, openTabs, activeBase, scopeMode, scopedFolders, path]);
 
-  const handleCreateFile = async () => {
-    try {
-      const targetPath = getTargetPath();
-      const newFilePath = await invoke("create_file_in_workspace", { workspacePath: targetPath, name: "Untitled.md" });
-      handleRefreshFiles();
-      handleFileOpen({ path: newFilePath, name: "Untitled.md", is_directory: false });
-      analytics.trackNoteCreation('blank');
-    } catch { }
+  const handleCreateFile = () => {
+    const targetPath = getTargetPath();
+    if (targetPath !== path) {
+      setExpandedFolders(prev => new Set([...prev, targetPath]));
+    }
+    setCreatingItem({ type: 'file', targetPath });
   };
 
   const handleCreateCanvas = async () => {
@@ -3045,19 +3104,42 @@ function WorkspaceWithScope({ path }) {
   };
 
   const handleCreateFolder = () => {
-    setIsCreatingFolder(true);
+    const targetPath = getTargetPath();
+    if (targetPath !== path) {
+      setExpandedFolders(prev => new Set([...prev, targetPath]));
+    }
+    setCreatingItem({type: 'folder', targetPath});
   };
 
-  const handleConfirmCreateFolder = async (name) => {
-    if (name) {
-      try {
-        const targetPath = getTargetPath();
-        await invoke("create_folder_in_workspace", { workspacePath: targetPath, name });
+  const handleConfirmCreate = async (name) => {                                                                                                                          
+    if (!creatingItem || !name) {                                                                                                                                        
+      setCreatingItem(null);                                                                                                                                             
+      return;                                                                                                                                                            
+    }                                                                                                                                                                    
+                                                                                                                                                                          
+    try {
+      if (creatingItem.type === 'file') {
+        const fileName = name.endsWith('.md') ? name : `${name}.md`;
+        const newPath = await invoke("create_file_in_workspace", {
+          workspacePath: creatingItem.targetPath,
+          name: fileName
+        });
         handleRefreshFiles();
-      } catch { }
-    }
-    setIsCreatingFolder(false);
-  };
+        handleFileOpen({ path: newPath, name: fileName, is_directory: false });
+        analytics.trackNoteCreation('blank');
+      } else {
+        await invoke("create_folder_in_workspace", {
+          workspacePath: creatingItem.targetPath,
+          name
+        });
+        handleRefreshFiles();
+      }
+    } catch (e) {
+      console.error('Failed to create:', e);
+    }                                                                                                                                                                    
+                                                                                                                                                                          
+    setCreatingItem(null);                                                                                                                                               
+  }; 
 
   const handleCreateTemplate = useCallback(() => {
     // Get content from editor - extract HTML for proper markdown conversion
@@ -3531,7 +3613,7 @@ function WorkspaceWithScope({ path }) {
       if (stateRef.current.activeFile) handleTabClose(stateRef.current.activeFile);
     }));
     const unlistenNewFile = isTauri ? listen("lokus:new-file", handleCreateFile) : Promise.resolve(addDom('lokus:new-file', handleCreateFile));
-    const unlistenNewFolder = isTauri ? listen("lokus:new-folder", () => setIsCreatingFolder(true)) : Promise.resolve(addDom('lokus:new-folder', () => setIsCreatingFolder(true)));
+    const unlistenNewFolder = isTauri ? listen("lokus:new-folder", handleCreateFolder) : Promise.resolve(addDom('lokus:new-folder', handleCreateFolder));
     const unlistenToggleSidebar = isTauri ? listen("lokus:toggle-sidebar", () => setShowLeft(v => !v)) : Promise.resolve(addDom('lokus:toggle-sidebar', () => setShowLeft(v => !v)));
     const unlistenCommandPalette = isTauri ? listen("lokus:command-palette", () => {
       // Don't open command palette when graph view is active
@@ -4416,9 +4498,11 @@ function WorkspaceWithScope({ path }) {
                           data-testid="file-tree"
                           expandedFolders={expandedFolders}
                           toggleFolder={toggleFolder}
-                          isCreating={isCreatingFolder}
-                          onCreateConfirm={handleConfirmCreateFolder}
+                          creatingItem={creatingItem}                                                                                                                                            
+                          onCreateConfirm={handleConfirmCreate}
                           keymap={keymap}
+                          selectedPath={selectedPath}
+                          setSelectedPath={setSelectedPath}
                           renamingPath={renamingPath}
                           setRenamingPath={setRenamingPath}
                           onViewHistory={toggleVersionHistory}
@@ -4433,6 +4517,7 @@ function WorkspaceWithScope({ path }) {
                           setHoveredFolder={setHoveredFolder}
                           toast={toast}
                           onCheckReferences={handleCheckReferences}
+                          workspacePath={path}
                         />
                       </div>
                     </ContextMenuTrigger>
@@ -5041,7 +5126,7 @@ function WorkspaceWithScope({ path }) {
           openFiles={openTabs}
           onFileOpen={handleFileOpen}
           onCreateFile={handleCreateFile}
-          onCreateFolder={() => setIsCreatingFolder(true)}
+          onCreateFolder={handleCreateFolder}
           onSave={handleSave}
           onOpenPreferences={() => {
             const openPreferences = () => {
