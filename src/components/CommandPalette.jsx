@@ -46,6 +46,9 @@ import { useBases } from '../bases/BasesContext.jsx'
 import analytics from '../services/analytics.js'
 import FolderSelector from './FolderSelector.jsx'
 import { useCommands, useCommandExecute } from '../hooks/useCommands.js'
+import { getMarkdownCompiler } from '../core/markdown/compiler.js'
+
+const markdownCompiler = getMarkdownCompiler()
 
 export default function CommandPalette({
   open,
@@ -467,6 +470,9 @@ export default function CommandPalette({
         context: {}
       })
 
+      const markdownContent = result.result || result.content || result;
+      const htmlContent = await markdownCompiler.compile(markdownContent)
+
       // Track template feature usage
       analytics.trackFeatureUsed('templates')
 
@@ -474,7 +480,7 @@ export default function CommandPalette({
       window.dispatchEvent(new CustomEvent('lokus:insert-template', {
         detail: {
           template,
-          content: result.result || result.content || result
+          content: htmlContent
         }
       }))
 
