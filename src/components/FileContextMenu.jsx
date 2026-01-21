@@ -54,15 +54,21 @@ export default function FileContextMenu({
   canCopy = false,
   canPaste = false,
   isFavorite = false,
+  selectedPaths = new Set(),
+  isSelected = false,
 }) {
   const isFile = file?.type === 'file';
   const isFolder = file?.type === 'folder';
   const isWindows = platformService.isWindows();
   const isMac = platformService.isMacOS();
 
+  // Check if we're in multi-select mode (more than 1 item selected and current item is selected)
+  const isMultiSelect = selectedPaths.size > 1 && isSelected;
+  const selectedCount = selectedPaths.size;
+
   const handleAction = (action, data = {}) => {
     if (onAction) {
-      onAction(action, { ...data, file });
+      onAction(action, { ...data, file, selectedPaths, isMultiSelect });
     }
   };
 
@@ -95,6 +101,63 @@ export default function FileContextMenu({
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent className="w-72">
+        {/* Multi-select bulk operations */}
+        {isMultiSelect && (
+          <>
+            <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+              {selectedCount} items selected
+            </div>
+            <ContextMenuSeparator />
+
+            <ContextMenuItem onClick={() => handleAction('deleteSelected')}>
+              <Trash2 className="mr-2 h-4 w-4 text-red-500" />
+              <span className="text-red-500">Delete {selectedCount} Items</span>
+              <ContextMenuShortcut>{isWindows ? 'Del' : '⌫'}</ContextMenuShortcut>
+            </ContextMenuItem>
+
+            <ContextMenuSeparator />
+
+            <ContextMenuItem onClick={() => handleAction('cutSelected')}>
+              <Scissors className="mr-2 h-4 w-4" />
+              Cut {selectedCount} Items
+              <ContextMenuShortcut>{isWindows ? 'Ctrl+X' : '⌘X'}</ContextMenuShortcut>
+            </ContextMenuItem>
+
+            <ContextMenuItem onClick={() => handleAction('copySelected')}>
+              <Copy className="mr-2 h-4 w-4" />
+              Copy {selectedCount} Items
+              <ContextMenuShortcut>{isWindows ? 'Ctrl+C' : '⌘C'}</ContextMenuShortcut>
+            </ContextMenuItem>
+
+            <ContextMenuItem onClick={() => handleAction('duplicateSelected')}>
+              <Files className="mr-2 h-4 w-4" />
+              Duplicate {selectedCount} Items
+            </ContextMenuItem>
+
+            <ContextMenuSeparator />
+
+            <ContextMenuItem onClick={() => handleAction('moveSelected')}>
+              <FolderOpen className="mr-2 h-4 w-4" />
+              Move to...
+            </ContextMenuItem>
+
+            <ContextMenuSeparator />
+
+            <ContextMenuItem onClick={() => handleAction('exportSelected')}>
+              <Download className="mr-2 h-4 w-4" />
+              Export {selectedCount} Items...
+            </ContextMenuItem>
+
+            <ContextMenuItem onClick={() => handleAction('archiveSelected')}>
+              <Archive className="mr-2 h-4 w-4" />
+              Create Archive...
+            </ContextMenuItem>
+          </>
+        )}
+
+        {/* Single item operations - only show when not in multi-select mode */}
+        {!isMultiSelect && (
+          <>
         {/* New File/Folder */}
         {isFolder && (
           <>
@@ -409,6 +472,8 @@ export default function FileContextMenu({
               Properties
               <ContextMenuShortcut>{isWindows ? 'Alt+Enter' : '⌘I'}</ContextMenuShortcut>
             </ContextMenuItem>
+          </>
+        )}
           </>
         )}
       </ContextMenuContent>
