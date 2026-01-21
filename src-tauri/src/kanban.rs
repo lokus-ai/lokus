@@ -216,8 +216,14 @@ fn scan_directory_for_boards<'a>(
             if path.is_file() {
                 if path.extension().and_then(|s| s.to_str()) == Some("kanban") {
                     if let Ok(board) = load_board_from_file(&path).await {
+                        // Use filename (without extension) as the display name
+                        let display_name = path
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or(&board.name)
+                            .to_string();
                         boards.push(BoardInfo {
-                            name: board.name.clone(),
+                            name: display_name,
                             path: path.to_string_lossy().to_string(),
                             card_count: board.get_total_card_count(),
                             column_count: board.columns.len(),
