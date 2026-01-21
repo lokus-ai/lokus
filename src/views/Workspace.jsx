@@ -340,7 +340,7 @@ function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
 }
 
 // --- File Entry Component ---
-function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, selectedPath, setSelectedPath, creatingItem, onCreateConfirm, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences }) {
+function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences, onSelectEntry, isSelected, selectedPaths, creatingItem, onCreateConfirm }) {
   const entryRef = useRef(null);
   const hoverTimeoutRef = useRef(null);
 
@@ -414,8 +414,9 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
   // Calculate file count for folders
   const fileCount = entry.is_directory && entry.children ? entry.children.length : null;
 
-  const handleClick = () => {
-    setSelectedPath(entry.path);
+  const handleClick = (e) => {
+    onSelectEntry?.(entry, e)
+    if (e.metaKey || e.ctrlKey || e.shiftKey) return;
     if (entry.is_directory) {
       toggleFolder(entry.path);
     } else {
@@ -425,6 +426,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 
   const baseClasses = "obsidian-file-item";
   const stateClasses = activeFile === entry.path ? 'active' : '';
+  const selectedClasses = isSelected ? 'selected' : '';
   const dropTargetClasses = isDropTarget ? 'drop-target-inside' : '';
   const draggingClasses = isDragging ? 'dragging' : '';
   const willExpandClasses = willAutoExpand ? 'will-expand-indicator' : '';
@@ -705,7 +707,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
               onClick={handleClick}
               onDragEnter={handleExternalDragEnter}
               onDragLeave={handleExternalDragLeave}
-              className={`${baseClasses} ${stateClasses} ${dropTargetClasses} ${draggingClasses} ${willExpandClasses} ${externalDropTargetClasses} file-entry-item`}
+              className={`${baseClasses} ${stateClasses} ${selectedClasses} ${dropTargetClasses} ${draggingClasses} ${willExpandClasses} ${externalDropTargetClasses} file-entry-item`}
             >
               <ColoredFileIcon
                 fileName={entry.name}
@@ -772,6 +774,9 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
                   setHoveredFolder={setHoveredFolder}
                   toast={toast}
                   onCheckReferences={onCheckReferences}
+                  onSelectEntry={onSelectEntry}
+                  isSelected={selectedPaths.has(child.path) || false}
+                  selectedPaths={selectedPaths}
                 />
               ))}
             </ul>
@@ -794,6 +799,78 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
   const [activeEntry, setActiveEntry] = useState(null);
   const fileTreeRef = useRef(null);
   const { dropPosition, updatePosition, clearPosition } = useDropPosition();
+  const [selectedPaths, setSelectedPaths] = useState(new Set());
+  const [lastSelectedPath, setLastSelectedPath] = useState(null);
+  const flatEntries = useMemo(() => {
+    const list = [];
+    const walk = (nodes) => {
+      nodes.forEach((n) => {
+        list.push(n);
+        if (n.children?.length) walk(n.children);
+      });
+    };
+    walk(entries || []);
+    return list;
+  }, [entries]);
+
+  const indexByPath = useMemo(() => {
+    const map = new Map();
+    flatEntries.forEach((n, i) => map.set(n.path, i));
+    return map;
+  }, [flatEntries]);
+
+   const handleSelectEntry = useCallback((entry, event) => {
+    setSelectedPaths((prev) => {
+      const next = new Set(prev);
+      const path = entry.path;
+      const isToggle = event.metaKey || event.ctrlKey;
+      const isRange = event.shiftKey && lastSelectedPath && indexByPath.has(lastSelectedPath);
+
+      if (isRange) {
+        const start = indexByPath.get(lastSelectedPath);
+        const end = indexByPath.get(path);
+        if (start !== undefined && end !== undefined) {
+          const [lo, hi] = start < end ? [start, end] : [end, start];
+          for (let i = lo; i <= hi; i++) {
+            next.add(flatEntries[i].path);
+          }
+        }
+      } else if (isToggle) {
+        if (next.has(path)) next.delete(path);
+        else next.add(path);
+      } else {
+        next.clear();
+        next.add(path);
+      }
+
+      return next;
+    });
+    setLastSelectedPath(entry.path);
+  }, [indexByPath, flatEntries, lastSelectedPath]);
+
+  // Delete & Select-All shortcuts (tree scoped)
+  useEffect(() => {
+    const onKeyDown = async (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+        e.preventDefault();
+        setSelectedPaths(new Set(flatEntries.map((n) => n.path)));
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedPaths.size > 0) {
+        e.preventDefault();
+        const confirmed = await confirm(`Delete ${selectedPaths.size} item${selectedPaths.size > 1 ? 's' : ''}?`);
+        if (confirmed) {
+          for (const p of selectedPaths) {
+            try { await invoke('delete_file', { path: p }); } catch {}
+          }
+          setSelectedPaths(new Set());
+          onRefresh?.();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [flatEntries, onRefresh, selectedPaths]);
+
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -919,6 +996,9 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
               setHoveredFolder={setHoveredFolder}
               toast={toast}
               onCheckReferences={onCheckReferences}
+              onSelectEntry={handleSelectEntry}
+              isSelected={selectedPaths.has(entry.path)}
+              selectedPaths={selectedPaths}
             />
           ))}
         </ul>
