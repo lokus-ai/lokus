@@ -46,6 +46,9 @@ import { useBases } from '../bases/BasesContext.jsx'
 import analytics from '../services/analytics.js'
 import FolderSelector from './FolderSelector.jsx'
 import { useCommands, useCommandExecute } from '../hooks/useCommands.js'
+import { getMarkdownCompiler } from '../core/markdown/compiler.js'
+
+const markdownCompiler = getMarkdownCompiler()
 
 export default function CommandPalette({
   open,
@@ -463,38 +466,37 @@ export default function CommandPalette({
   const handleTemplateSelect = React.useCallback(async (template) => {
 
     try {
-      // Process the template with built-in variables
       const result = await processTemplate(template.id, {}, {
         context: {}
       })
 
-      // Track template feature usage (rate limited to once per session)
+      const markdownContent = result.result || result.content || result;
+      const htmlContent = await markdownCompiler.compile(markdownContent)
+
+      // Track template feature usage
       analytics.trackFeatureUsed('templates')
 
-      // Call onShowTemplatePicker with processed content
-      if (onShowTemplatePicker) {
-        // Create a mock event that mimics the TemplatePicker selection
-        const mockSelection = {
+      // Dispatch event to insert template into editor
+      window.dispatchEvent(new CustomEvent('lokus:insert-template', {
+        detail: {
           template,
-          processedContent: result.result || result.content || result
+          content: htmlContent
         }
-        onShowTemplatePicker(mockSelection)
-      }
+      }))
 
       // Close command palette
       setOpen(false)
     } catch (err) {
       // Fallback to raw template content
-      if (onShowTemplatePicker) {
-        const mockSelection = {
+      window.dispatchEvent(new CustomEvent('lokus:insert-template', {
+        detail: {
           template,
-          processedContent: template.content
+          content: template.content
         }
-        onShowTemplatePicker(mockSelection)
-      }
+      }))
       setOpen(false)
     }
-  }, [processTemplate, onShowTemplatePicker, setOpen])
+  }, [processTemplate, setOpen])
 
   // Parse Gmail commands from input
   const [inputValue, setInputValue] = React.useState('')

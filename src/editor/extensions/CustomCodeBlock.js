@@ -25,35 +25,35 @@ import sql from 'highlight.js/lib/languages/sql';
 import markdown from 'highlight.js/lib/languages/markdown';
 
 // Register languages with lowlight
-lowlight.register('javascript', javascript);
-lowlight.register('js', javascript);
-lowlight.register('typescript', typescript);
-lowlight.register('ts', typescript);
-lowlight.register('python', python);
-lowlight.register('py', python);
-lowlight.register('java', java);
-lowlight.register('cpp', cpp);
-lowlight.register('c', c);
-lowlight.register('csharp', csharp);
-lowlight.register('cs', csharp);
-lowlight.register('go', go);
-lowlight.register('rust', rust);
-lowlight.register('php', php);
-lowlight.register('ruby', ruby);
-lowlight.register('swift', swift);
-lowlight.register('kotlin', kotlin);
-lowlight.register('css', css);
-lowlight.register('html', html);
-lowlight.register('xml', html);
-lowlight.register('json', json);
-lowlight.register('yaml', yaml);
-lowlight.register('yml', yaml);
-lowlight.register('bash', bash);
-lowlight.register('sh', bash);
-lowlight.register('shell', bash);
-lowlight.register('sql', sql);
-lowlight.register('markdown', markdown);
-lowlight.register('md', markdown);
+lowlight.registerLanguage('javascript', javascript);
+lowlight.registerLanguage('js', javascript);
+lowlight.registerLanguage('typescript', typescript);
+lowlight.registerLanguage('ts', typescript);
+lowlight.registerLanguage('python', python);
+lowlight.registerLanguage('py', python);
+lowlight.registerLanguage('java', java);
+lowlight.registerLanguage('cpp', cpp);
+lowlight.registerLanguage('c', c);
+lowlight.registerLanguage('csharp', csharp);
+lowlight.registerLanguage('cs', csharp);
+lowlight.registerLanguage('go', go);
+lowlight.registerLanguage('rust', rust);
+lowlight.registerLanguage('php', php);
+lowlight.registerLanguage('ruby', ruby);
+lowlight.registerLanguage('swift', swift);
+lowlight.registerLanguage('kotlin', kotlin);
+lowlight.registerLanguage('css', css);
+lowlight.registerLanguage('html', html);
+lowlight.registerLanguage('xml', html);
+lowlight.registerLanguage('json', json);
+lowlight.registerLanguage('yaml', yaml);
+lowlight.registerLanguage('yml', yaml);
+lowlight.registerLanguage('bash', bash);
+lowlight.registerLanguage('sh', bash);
+lowlight.registerLanguage('shell', bash);
+lowlight.registerLanguage('sql', sql);
+lowlight.registerLanguage('markdown', markdown);
+lowlight.registerLanguage('md', markdown);
 
 /**
  * Custom CodeBlock Extension with Syntax Highlighting
@@ -63,13 +63,15 @@ lowlight.register('md', markdown);
  */
 export const CustomCodeBlock = CodeBlockLowlight
   .extend({
-    name: 'codeBlock',
+      
+    // name: 'codeBlock',
 
     priority: 1000, // High priority to override other extensions
 
     isolating: true, // Prevent content from leaving the block
 
     addOptions() {
+
       return {
         ...this.parent?.(),
         lowlight,

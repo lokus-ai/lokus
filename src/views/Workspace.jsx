@@ -3,11 +3,11 @@ import { useRemoteLinks, useUIVisibility, useLayoutDefaults } from "../contexts/
 import ServiceStatus from "../components/ServiceStatus";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { confirm, save } from "@tauri-apps/plugin-dialog";
+import { confirm, save, open as openDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, /* Mail, */ Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, FoldVertical, SquareSplitHorizontal, FilePlus as FilePlusCorner, SquareKanban, RefreshCw, Terminal } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, /* Mail, */ Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, FoldVertical, SquareSplitHorizontal, FilePlus as FilePlusCorner, SquareKanban, RefreshCw, Terminal, Trash2, X, Copy, Scissors, Check } from "lucide-react";
 import { ColoredFileIcon } from "../components/FileIcon.jsx";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
@@ -264,74 +264,125 @@ function useDragColumns({ minLeft = 220, maxLeft = 500, minRight = 220, maxRight
   return { leftW, rightW, startLeftDrag, startRightDrag };
 }
 
-// --- New Folder Input ---
-function NewFolderInput({ onConfirm, level }) {
-  const [name, setName] = useState("");
-  const inputRef = useRef(null);
+// --- New Item Input ---
+function NewItemInput({ type, onConfirm, level }) {                                                                                                                    
+  const [name, setName] = useState("");                                                                                                                                
+  const inputRef = useRef(null);                                                                                                                                       
+                                                                                                                                                                        
+  useEffect(() => {                                                                                                                                                    
+    inputRef.current?.focus();                                                                                                                                         
+  }, []);                                                                                                                                                              
+                                                                                                                                                                        
+  const handleKeyDown = (e) => {                                                                                                                                       
+    if (e.key === "Enter") onConfirm(name);                                                                                                                            
+    else if (e.key === "Escape") onConfirm(null);                                                                                                                      
+  };                                                                                                                                                                   
+                                                                                                                                                                        
+  const icon = type === 'folder'                                                                                                                                       
+    ? "M2.25 12.75V12A2.25..."                                                                                                                        
+    : "M19.5 14.25v-2.625...";                                                                                                                        
+                                                                                                                                                                        
+  return (                                                                                                                                                             
+    <li style={{ paddingLeft: `${level * 1.25}rem` }} className="flex items-center gap-2 px-2 py-1">                                                                   
+      <Icon path={icon} className="w-4 h-4" />                                                                                                                         
+      <input                                                                                                                                                           
+        ref={inputRef}                                                                                                                                                 
+        type="text"                                                                                                                                                    
+        value={name}                                                                                                                                                   
+        onChange={(e) => setName(e.target.value)}                                                                                                                      
+        onKeyDown={handleKeyDown}                                                                                                                                      
+        onBlur={() => onConfirm(name)}                                                                                                                                 
+        className="bg-app-bg text-sm text-app-text outline-none w-full"                                                                                                
+        placeholder={type === 'folder' ? "New folder..." : "New file..."}                                                                                              
+      />                                                                                                                                                               
+    </li>                                                                                                                                                              
+  );                                                                                                                                                                   
+}                  
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+// Helper to get filename without extension
+function getNameWithoutExtension(filename) {
+  const lastDotIndex = filename.lastIndexOf('.');
+  if (lastDotIndex > 0) {
+    return filename.substring(0, lastDotIndex);
+  }
+  return filename;
+}
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") onConfirm(name);
-    else if (e.key === "Escape") onConfirm(null);
-  };
-
-  return (
-    <li style={{ paddingLeft: `${level * 1.25}rem` }} className="flex items-center gap-2 px-2 py-1">
-      <Icon path="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" className="w-4 h-4" />
-      <input
-        ref={inputRef}
-        type="text"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onBlur={() => onConfirm(name)}
-        className="bg-app-bg text-sm text-app-text outline-none w-full"
-        placeholder="New folder..."
-      />
-    </li>
-  );
+// Helper to get extension (including the dot)
+function getExtension(filename) {
+  const lastDotIndex = filename.lastIndexOf('.');
+  if (lastDotIndex > 0) {
+    return filename.substring(lastDotIndex);
+  }
+  return '';
 }
 
 // --- Inline Rename Input Component ---
+function getExtension(name) {
+  const dotIndex = name.lastIndexOf(".");
+  return dotIndex > 0 ? name.slice(dotIndex) : "";
+}
+
+function getNameWithoutExtension(name) {
+  const dotIndex = name.lastIndexOf(".");
+  return dotIndex > 0 ? name.slice(0, dotIndex) : name;
+}
+
 export default function InlineRenameInput({
   initialValue,
   onSubmit,
   onCancel,
 }) {
-  const [value, setValue] = useState(initialValue);
+  const extension = getExtension(initialValue);
+  const nameOnly = getNameWithoutExtension(initialValue);
+
+  const [value, setValue] = useState(nameOnly);
   const inputRef = useRef(null);
 
   useEffect(() => {
-    if (!inputRef.current) return;
+    const input = inputRef.current;
+    if (!input) return;
 
-    const name = initialValue;
-    const dotIndex = name.lastIndexOf(".");
-    const endIndex = dotIndex > 0 ? dotIndex : name.length;
+    input.focus();
+    requestAnimationFrame(() => {
+      if (document.activeElement === input) {
+        input.select();
+      }
+    });
+  }, []);
 
-    inputRef.current.focus();
-    inputRef.current.setSelectionRange(0, endIndex);
-  }, [initialValue]);
+  const handleKeyDown = (e) => {
+    e.stopPropagation();
+
+    if (e.key === "Enter") {
+      e.preventDefault();
+      onSubmit(value + extension);
+    }
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      onCancel();
+    }
+  };
+
+  const handleBlur = () => {
+    onSubmit(value + extension);
+  };
 
   return (
     <input
       ref={inputRef}
       value={value}
       onChange={(e) => setValue(e.target.value)}
-      onBlur={() => onSubmit(value)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") onSubmit(value);
-        if (e.key === "Escape") onCancel();
-      }}
+      onKeyDown={handleKeyDown}
+      onBlur={handleBlur}
       className="inline-rename-input"
     />
   );
 }
 
 // --- File Entry Component ---
-function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences }) {
+function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences, onSelectEntry, isSelected, selectedPaths, setSelectedPaths, creatingItem, onCreateConfirm }) {
   const entryRef = useRef(null);
   const hoverTimeoutRef = useRef(null);
 
@@ -405,7 +456,9 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
   // Calculate file count for folders
   const fileCount = entry.is_directory && entry.children ? entry.children.length : null;
 
-  const handleClick = () => {
+  const handleClick = (e) => {
+    onSelectEntry?.(entry, e)
+    if (e.metaKey || e.ctrlKey || e.shiftKey) return;
     if (entry.is_directory) {
       toggleFolder(entry.path);
     } else {
@@ -415,6 +468,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 
   const baseClasses = "obsidian-file-item";
   const stateClasses = activeFile === entry.path ? 'active' : '';
+  const selectedClasses = isSelected ? 'selected' : '';
   const dropTargetClasses = isDropTarget ? 'drop-target-inside' : '';
   const draggingClasses = isDragging ? 'dragging' : '';
   const willExpandClasses = willAutoExpand ? 'will-expand-indicator' : '';
@@ -653,6 +707,130 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
           setShowTagModal(true);
         }
         break;
+
+      // Bulk operations for multi-select
+      case 'deleteSelected':
+        if (data.selectedPaths && data.selectedPaths.size > 0) {
+          const count = data.selectedPaths.size;
+          const confirmed = await confirm(`Delete ${count} item${count > 1 ? 's' : ''}?`);
+          if (confirmed) {
+            for (const p of data.selectedPaths) {
+              try {
+                await invoke('delete_file', { path: p });
+              } catch (err) {
+                console.error(`Failed to delete ${p}:`, err);
+              }
+            }
+            setSelectedPaths(new Set());
+            onRefresh?.();
+            toast.success(`Deleted ${count} item${count > 1 ? 's' : ''}`);
+          }
+        }
+        break;
+      case 'cutSelected':
+        if (data.selectedPaths && data.selectedPaths.size > 0) {
+          const filesToCut = Array.from(data.selectedPaths).map(p => ({ path: p }));
+          cutFiles(filesToCut);
+          toast.success(`Cut ${data.selectedPaths.size} item${data.selectedPaths.size > 1 ? 's' : ''}`);
+        }
+        break;
+      case 'copySelected':
+        if (data.selectedPaths && data.selectedPaths.size > 0) {
+          const filesToCopy = Array.from(data.selectedPaths).map(p => ({ path: p }));
+          copyFiles(filesToCopy);
+          toast.success(`Copied ${data.selectedPaths.size} item${data.selectedPaths.size > 1 ? 's' : ''}`);
+        }
+        break;
+      case 'duplicateSelected':
+        if (data.selectedPaths && data.selectedPaths.size > 0) {
+          let duplicatedCount = 0;
+          for (const p of data.selectedPaths) {
+            try {
+              // Read content and write to new file with " copy" suffix
+              const content = await invoke('read_file_content', { path: p });
+              const pathParts = p.split('/');
+              const fileName = pathParts.pop();
+              const dirPath = pathParts.join('/');
+              const ext = fileName.includes('.') ? '.' + fileName.split('.').pop() : '';
+              const baseName = ext ? fileName.slice(0, -ext.length) : fileName;
+              const newName = `${baseName} copy${ext}`;
+              const newPath = `${dirPath}/${newName}`;
+              await invoke('write_file', { path: newPath, content });
+              duplicatedCount++;
+            } catch (err) {
+              console.error(`Failed to duplicate ${p}:`, err);
+            }
+          }
+          onRefresh?.();
+          toast.success(`Duplicated ${duplicatedCount} item${duplicatedCount > 1 ? 's' : ''}`);
+        }
+        break;
+      case 'moveSelected':
+        if (data.selectedPaths && data.selectedPaths.size > 0) {
+          try {
+            const selectedFolder = await openDialog({
+              directory: true,
+              multiple: false,
+              title: `Move ${data.selectedPaths.size} item${data.selectedPaths.size > 1 ? 's' : ''} to...`,
+            });
+            if (selectedFolder) {
+              let movedCount = 0;
+              for (const p of data.selectedPaths) {
+                try {
+                  await invoke('move_file', {
+                    sourcePath: p,
+                    destinationDir: selectedFolder,
+                  });
+                  movedCount++;
+                } catch (err) {
+                  console.error(`Failed to move ${p}:`, err);
+                }
+              }
+              setSelectedPaths(new Set());
+              onRefresh?.();
+              toast.success(`Moved ${movedCount} item${movedCount > 1 ? 's' : ''}`);
+            }
+          } catch (err) {
+            console.error('Move dialog error:', err);
+          }
+        }
+        break;
+      case 'exportSelected':
+        if (data.selectedPaths && data.selectedPaths.size > 0) {
+          try {
+            const exportFolder = await openDialog({
+              directory: true,
+              multiple: false,
+              title: `Export ${data.selectedPaths.size} item${data.selectedPaths.size > 1 ? 's' : ''} to...`,
+            });
+            if (exportFolder) {
+              let exportedCount = 0;
+              for (const p of data.selectedPaths) {
+                try {
+                  // Read file content and write to new location
+                  const content = await invoke('read_file_content', { path: p });
+                  const fileName = p.substring(p.lastIndexOf('/') + 1);
+                  const destPath = `${exportFolder}/${fileName}`;
+                  await invoke('write_file', { path: destPath, content });
+                  exportedCount++;
+                } catch (err) {
+                  console.error(`Failed to export ${p}:`, err);
+                }
+              }
+              toast.success(`Exported ${exportedCount} item${exportedCount > 1 ? 's' : ''}`);
+            }
+          } catch (err) {
+            console.error('Export dialog error:', err);
+          }
+        }
+        break;
+      case 'archiveSelected':
+        if (data.selectedPaths && data.selectedPaths.size > 0) {
+          // Archive feature requires backend support - show info message
+          toast.info(`Archive feature coming soon. For now, use Export to copy ${data.selectedPaths.size} item${data.selectedPaths.size > 1 ? 's' : ''}.`);
+        }
+        break;
+
       default:
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -688,6 +866,8 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
           <FileContextMenu
             file={{ ...entry, type: entry.is_directory ? 'folder' : 'file' }}
             onAction={handleFileContextAction}
+            selectedPaths={selectedPaths}
+            isSelected={isSelected}
           >
             <button
               {...listeners}
@@ -695,7 +875,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
               onClick={handleClick}
               onDragEnter={handleExternalDragEnter}
               onDragLeave={handleExternalDragLeave}
-              className={`${baseClasses} ${stateClasses} ${dropTargetClasses} ${draggingClasses} ${willExpandClasses} ${externalDropTargetClasses} file-entry-item`}
+              className={`${baseClasses} ${stateClasses} ${selectedClasses} ${dropTargetClasses} ${draggingClasses} ${willExpandClasses} ${externalDropTargetClasses} file-entry-item`}
             >
               <ColoredFileIcon
                 fileName={entry.name}
@@ -711,7 +891,9 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
                   onCancel={handleRenameCancel}
                 />
               ) : (
-                <span className="truncate">{entry.name}</span>
+                <span className="truncate">
+                  {entry.is_directory ? entry.name : getNameWithoutExtension(entry.name)}
+                </span>
               )}
               {fileCount !== null && (
                 <span className="file-count-badge">({fileCount})</span>
@@ -741,6 +923,8 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
                   toggleFolder={toggleFolder}
                   onRefresh={onRefresh}
                   keymap={keymap}
+                  creatingItem={creatingItem}                                                                                                                                            
+                  onCreateConfirm={onCreateConfirm}
                   renamingPath={renamingPath}
                   setRenamingPath={setRenamingPath}
                   onViewHistory={onViewHistory}
@@ -757,10 +941,21 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
                   setHoveredFolder={setHoveredFolder}
                   toast={toast}
                   onCheckReferences={onCheckReferences}
+                  onSelectEntry={onSelectEntry}
+                  isSelected={selectedPaths.has(child.path) || false}
+                  selectedPaths={selectedPaths}
+                  setSelectedPaths={setSelectedPaths}
                 />
               ))}
             </ul>
           </motion.div>
+        )}
+        {creatingItem && creatingItem.targetPath === entry.path && (
+          <NewItemInput
+            type={creatingItem.type}
+            level={level + 1}
+            onConfirm={onCreateConfirm}
+          />
         )}
       </AnimatePresence>
     </li>
@@ -768,10 +963,112 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 }
 
 // --- File Tree View Component ---
-function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, isCreating, onCreateConfirm, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences }) {
+function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, creatingItem, onCreateConfirm, keymap, selectedPath, setSelectedPath, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences, workspacePath }) {
   const [activeEntry, setActiveEntry] = useState(null);
+  const [draggedPaths, setDraggedPaths] = useState(new Set()); // Track paths being dragged (for multi-select)
   const fileTreeRef = useRef(null);
   const { dropPosition, updatePosition, clearPosition } = useDropPosition();
+  const [selectedPaths, setSelectedPaths] = useState(new Set());
+  const [lastSelectedPath, setLastSelectedPath] = useState(null);
+  const flatEntries = useMemo(() => {
+    const list = [];
+    const walk = (nodes) => {
+      nodes.forEach((n) => {
+        list.push(n);
+        if (n.children?.length) walk(n.children);
+      });
+    };
+    walk(entries || []);
+    return list;
+  }, [entries]);
+
+  const indexByPath = useMemo(() => {
+    const map = new Map();
+    flatEntries.forEach((n, i) => map.set(n.path, i));
+    return map;
+  }, [flatEntries]);
+
+   const handleSelectEntry = useCallback((entry, event) => {
+    setSelectedPaths((prev) => {
+      const next = new Set(prev);
+      const path = entry.path;
+      const isToggle = event.metaKey || event.ctrlKey;
+      const isRange = event.shiftKey && lastSelectedPath && indexByPath.has(lastSelectedPath);
+
+      if (isRange) {
+        const start = indexByPath.get(lastSelectedPath);
+        const end = indexByPath.get(path);
+        if (start !== undefined && end !== undefined) {
+          const [lo, hi] = start < end ? [start, end] : [end, start];
+          for (let i = lo; i <= hi; i++) {
+            next.add(flatEntries[i].path);
+          }
+        }
+      } else if (isToggle) {
+        if (next.has(path)) next.delete(path);
+        else next.add(path);
+      } else {
+        next.clear();
+        next.add(path);
+      }
+
+      return next;
+    });
+    setLastSelectedPath(entry.path);
+  }, [indexByPath, flatEntries, lastSelectedPath]);
+
+  // Keyboard shortcuts (tree scoped) - Escape, Delete, Select All
+  useEffect(() => {
+    const onKeyDown = async (e) => {
+      // Skip if user is typing in an input field
+      const activeEl = document.activeElement;
+      const isTyping = activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA' || activeEl?.isContentEditable;
+      if (isTyping) return;
+
+      // Only handle if file tree has focus
+      const fileTreeHasFocus = fileTreeRef.current?.contains(document.activeElement);
+      if (!fileTreeHasFocus) return;
+
+      // Escape - clear selection
+      if (e.key === 'Escape' && selectedPaths.size > 0) {
+        e.preventDefault();
+        setSelectedPaths(new Set());
+        return;
+      }
+
+      // Cmd/Ctrl+A - select all
+      if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+        e.preventDefault();
+        setSelectedPaths(new Set(flatEntries.map((n) => n.path)));
+        return;
+      }
+
+      // Delete/Backspace - delete selected
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedPaths.size > 0) {
+        e.preventDefault();
+        const count = selectedPaths.size;
+        const confirmed = await confirm(`Delete ${count} item${count > 1 ? 's' : ''}?`);
+        if (confirmed) {
+          for (const p of selectedPaths) {
+            try { await invoke('delete_file', { path: p }); } catch {}
+          }
+          setSelectedPaths(new Set());
+          onRefresh?.();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [flatEntries, onRefresh, selectedPaths]);
+
+  // Click on empty space in file tree clears selection
+  const handleContainerClick = useCallback((e) => {
+    // Only clear if clicking directly on the container or the ul, not on a file entry
+    if (e.target === e.currentTarget || e.target.tagName === 'UL') {
+      setSelectedPaths(new Set());
+    }
+  }, []);
+
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -784,11 +1081,22 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
   const handleDragStart = (event) => {
     const sourceEntry = event.active.data.current?.entry;
     setActiveEntry(sourceEntry);
+
+    // Check if dragged item is part of multi-selection
+    if (sourceEntry && selectedPaths.has(sourceEntry.path) && selectedPaths.size > 1) {
+      // Dragging multiple selected items
+      setDraggedPaths(new Set(selectedPaths));
+    } else {
+      // Dragging single item (not part of selection or only item selected)
+      setDraggedPaths(new Set([sourceEntry?.path].filter(Boolean)));
+    }
   };
 
   const handleDragEnd = async (event) => {
     const { over, active } = event;
     setActiveEntry(null);
+    const pathsToMove = new Set(draggedPaths);
+    setDraggedPaths(new Set());
     clearPosition();
 
     if (!over || !active) return;
@@ -800,7 +1108,7 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
       return;
     }
 
-    // Calculate destination directory and new path
+    // Calculate destination directory
     let destinationDir;
     if (dropPosition) {
       const { position, targetPath } = dropPosition;
@@ -816,49 +1124,71 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
       return; // Can't drop here
     }
 
-    const oldPath = sourceEntry.path;
-    const fileName = oldPath.substring(oldPath.lastIndexOf('/') + 1);
-    const newPath = `${destinationDir}/${fileName}`;
-
-    // Helper function to perform the actual move
-    const performMove = async () => {
-      try {
-        await invoke("move_file", {
-          sourcePath: oldPath,
-          destinationDir: destinationDir,
-        });
-        onRefresh();
-        return true;
-      } catch (err) {
-        console.error('Workspace: Failed to move file', err);
-        return false;
-      }
-    };
-
-    // Check for references that would need updating
-    if (onCheckReferences) {
-      const affectedFiles = await referenceManager.findAffectedFiles(oldPath);
-      if (affectedFiles.length > 0) {
-        // Show confirmation modal
-        onCheckReferences({
-          oldPath,
-          newPath,
-          affectedFiles,
-          operation: performMove
-        });
+    // Don't allow dropping into itself (for folders)
+    for (const p of pathsToMove) {
+      if (destinationDir.startsWith(p + '/') || destinationDir === p) {
+        toast?.error("Cannot move a folder into itself");
         return;
       }
     }
 
-    // No references to update, proceed directly
-    await performMove();
+    // Helper function to perform the actual move for multiple files
+    const performMoveAll = async () => {
+      let movedCount = 0;
+      for (const oldPath of pathsToMove) {
+        try {
+          await invoke("move_file", {
+            sourcePath: oldPath,
+            destinationDir: destinationDir,
+          });
+          movedCount++;
+        } catch (err) {
+          console.error(`Failed to move ${oldPath}:`, err);
+        }
+      }
+      setSelectedPaths(new Set());
+      onRefresh();
+      if (pathsToMove.size > 1) {
+        toast?.success(`Moved ${movedCount} item${movedCount > 1 ? 's' : ''}`);
+      }
+      return movedCount > 0;
+    };
+
+    // For single file moves, check references
+    if (pathsToMove.size === 1) {
+      const oldPath = sourceEntry.path;
+      const fileName = oldPath.substring(oldPath.lastIndexOf('/') + 1);
+      const newPath = `${destinationDir}/${fileName}`;
+
+      if (onCheckReferences) {
+        const affectedFiles = await referenceManager.findAffectedFiles(oldPath);
+        if (affectedFiles.length > 0) {
+          onCheckReferences({
+            oldPath,
+            newPath,
+            affectedFiles,
+            operation: performMoveAll
+          });
+          return;
+        }
+      }
+    }
+
+    // No references to update (or multiple files), proceed directly
+    await performMoveAll();
   };
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div ref={fileTreeRef} className="file-tree-container">
+      <div ref={fileTreeRef} className="file-tree-container" tabIndex={0} onClick={handleContainerClick}>
         <ul className="space-y-1">
-          {isCreating && <NewFolderInput onConfirm={onCreateConfirm} level={0} />}
+          {creatingItem && creatingItem.targetPath === workspacePath && (
+            <NewItemInput
+              type={creatingItem.type}
+              level={0}
+              onConfirm={onCreateConfirm}
+            />
+          )}
           {entries.map(entry => (
             <FileEntryComponent
               key={entry.path}
@@ -870,6 +1200,8 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
               toggleFolder={toggleFolder}
               onRefresh={onRefresh}
               keymap={keymap}
+              creatingItem={creatingItem}
+              onCreateConfirm={onCreateConfirm}
               renamingPath={renamingPath}
               setRenamingPath={setRenamingPath}
               onViewHistory={onViewHistory}
@@ -886,6 +1218,10 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
               setHoveredFolder={setHoveredFolder}
               toast={toast}
               onCheckReferences={onCheckReferences}
+              onSelectEntry={handleSelectEntry}
+              isSelected={selectedPaths.has(entry.path)}
+              selectedPaths={selectedPaths}
+              setSelectedPaths={setSelectedPaths}
             />
           ))}
         </ul>
@@ -908,6 +1244,11 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
               size={16}
             />
             <span>{activeEntry.name}</span>
+            {draggedPaths.size > 1 && (
+              <span className="drag-count-badge">
+                +{draggedPaths.size - 1}
+              </span>
+            )}
           </div>
         ) : null}
       </DragOverlay>
@@ -1132,10 +1473,10 @@ function WorkspaceWithScope({ path }) {
       setShowVersionHistory(prev => !prev);
     }
   }, []);
-
+  const [selectedPath, setSelectedPath] = useState(null);
   const [fileTree, setFileTree] = useState([]);
   const [expandedFolders, setExpandedFolders] = useState(new Set());
-  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [creatingItem, setCreatingItem] = useState(null); 
   const [renamingPath, setRenamingPath] = useState(null);
 
   // External file drop state
@@ -2922,12 +3263,45 @@ function WorkspaceWithScope({ path }) {
   // Priority: 1. Bases folder, 2. Local scope folder, 3. Workspace root
   const getTargetPath = useCallback(() => {
     // Priority 1: If bases tab is open and has an active base
+    const findEntry = (entries, targetPath) => {
+        for (const entry of entries) {
+          if (entry.path === targetPath) {
+            return entry;
+          }
+          if (entry.is_directory && entry.children) {
+            const found = findEntry(entry.children, targetPath);
+            if (found) return found;
+          }
+        }
+        return null;
+      }
+
+
+    if (selectedPath) {                                                                                                                                                  
+      const selectedEntry = findEntry(fileTree, selectedPath);                                                                                                           
+      if (selectedEntry) {                                                                                                                                               
+        if (selectedEntry.is_directory) {                                                                                                                                
+          return selectedEntry.path;                                                                                                                                     
+        } else {                                                                                                                                                         
+          return selectedPath.split('/').slice(0, -1).join('/') || path;                                                                                                 
+        }                                                                                                                                                                
+      }                                                                                                                                                                  
+    }  
+
     const hasBasesTab = openTabs.some(tab => tab.path === '__bases__');
     if (hasBasesTab && activeBase?.sourceFolder) {
       return activeBase.sourceFolder;
     }
 
     // Priority 2: If in local scope mode with folders selected
+    if (expandedFolders.size > 0) {
+      const expandedArray = Array.from(expandedFolders);
+      const deepestFolder = expandedArray.reduce((deepest, current) => {
+        return current.length > deepest.length ? current : deepest;
+      }, expandedArray[0]);
+      return deepestFolder;
+    }
+
     if (scopeMode === 'local' && scopedFolders.length > 0) {
       // Use the first scoped folder as the default target
       return scopedFolders[0];
@@ -2935,16 +3309,14 @@ function WorkspaceWithScope({ path }) {
 
     // Priority 3: Workspace root
     return path;
-  }, [openTabs, activeBase, scopeMode, scopedFolders, path]);
+  }, [selectedPath, fileTree, expandedFolders, openTabs, activeBase, scopeMode, scopedFolders, path]);
 
-  const handleCreateFile = async () => {
-    try {
-      const targetPath = getTargetPath();
-      const newFilePath = await invoke("create_file_in_workspace", { workspacePath: targetPath, name: "Untitled.md" });
-      handleRefreshFiles();
-      handleFileOpen({ path: newFilePath, name: "Untitled.md", is_directory: false });
-      analytics.trackNoteCreation('blank');
-    } catch { }
+  const handleCreateFile = () => {
+    const targetPath = getTargetPath();
+    if (targetPath !== path) {
+      setExpandedFolders(prev => new Set([...prev, targetPath]));
+    }
+    setCreatingItem({ type: 'file', targetPath });
   };
 
   const handleCreateCanvas = async () => {
@@ -2972,6 +3344,71 @@ function WorkspaceWithScope({ path }) {
       handleFileOpen({ path: boardPath, name: fileName, is_directory: false });
       analytics.trackFeatureUsed('database');
     } catch { }
+  };
+
+  const handleKanbanBoardAction = async (action, board, refreshBoards) => {
+    switch (action) {
+      case 'revealInFinder':
+        try {
+          await invoke('platform_reveal_in_file_manager', { path: board.path });
+        } catch (err) {
+          console.error('Failed to reveal board in finder', err);
+          toast.error('Failed to reveal in finder');
+        }
+        break;
+      case 'copyPath':
+        try {
+          await navigator.clipboard.writeText(board.path);
+          toast.success('Board path copied');
+        } catch (err) {
+          toast.error('Failed to copy path');
+        }
+        break;
+      case 'duplicate':
+        try {
+          const content = await invoke('read_file_content', { path: board.path });
+          const dirPath = board.path.split('/').slice(0, -1).join('/');
+          const baseName = board.name.replace(/\.kanban$/, '');
+          const newName = `${baseName} copy.kanban`;
+          const newPath = `${dirPath}/${newName}`;
+          await invoke('write_file_content', { path: newPath, content });
+          refreshBoards?.();
+          toast.success(`Duplicated: ${newName}`);
+        } catch (err) {
+          toast.error('Failed to duplicate board');
+        }
+        break;
+      case 'export':
+        try {
+          const content = await invoke('read_file_content', { path: board.path });
+          const blob = new Blob([content], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${board.name}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+          toast.success('Board exported');
+        } catch (err) {
+          toast.error('Failed to export board');
+        }
+        break;
+      // rename is handled locally in KanbanList with inline input
+      case 'delete':
+        try {
+          const confirmed = await confirm(`Are you sure you want to delete "${board.name}"?`);
+          if (confirmed) {
+            await invoke('delete_file', { path: board.path });
+            refreshBoards?.();
+            toast.success(`Deleted: ${board.name}`);
+          }
+        } catch (err) {
+          toast.error('Failed to delete board');
+        }
+        break;
+      default:
+        break;
+    }
   };
 
   const handleOpenDailyNote = async () => {
@@ -3040,19 +3477,42 @@ function WorkspaceWithScope({ path }) {
   };
 
   const handleCreateFolder = () => {
-    setIsCreatingFolder(true);
+    const targetPath = getTargetPath();
+    if (targetPath !== path) {
+      setExpandedFolders(prev => new Set([...prev, targetPath]));
+    }
+    setCreatingItem({type: 'folder', targetPath});
   };
 
-  const handleConfirmCreateFolder = async (name) => {
-    if (name) {
-      try {
-        const targetPath = getTargetPath();
-        await invoke("create_folder_in_workspace", { workspacePath: targetPath, name });
+  const handleConfirmCreate = async (name) => {                                                                                                                          
+    if (!creatingItem || !name) {                                                                                                                                        
+      setCreatingItem(null);                                                                                                                                             
+      return;                                                                                                                                                            
+    }                                                                                                                                                                    
+                                                                                                                                                                          
+    try {
+      if (creatingItem.type === 'file') {
+        const fileName = name.endsWith('.md') ? name : `${name}.md`;
+        const newPath = await invoke("create_file_in_workspace", {
+          workspacePath: creatingItem.targetPath,
+          name: fileName
+        });
         handleRefreshFiles();
-      } catch { }
-    }
-    setIsCreatingFolder(false);
-  };
+        handleFileOpen({ path: newPath, name: fileName, is_directory: false });
+        analytics.trackNoteCreation('blank');
+      } else {
+        await invoke("create_folder_in_workspace", {
+          workspacePath: creatingItem.targetPath,
+          name
+        });
+        handleRefreshFiles();
+      }
+    } catch (e) {
+      console.error('Failed to create:', e);
+    }                                                                                                                                                                    
+                                                                                                                                                                          
+    setCreatingItem(null);                                                                                                                                               
+  }; 
 
   const handleCreateTemplate = useCallback(() => {
     // Get content from editor - extract HTML for proper markdown conversion
@@ -3526,7 +3986,7 @@ function WorkspaceWithScope({ path }) {
       if (stateRef.current.activeFile) handleTabClose(stateRef.current.activeFile);
     }));
     const unlistenNewFile = isTauri ? listen("lokus:new-file", handleCreateFile) : Promise.resolve(addDom('lokus:new-file', handleCreateFile));
-    const unlistenNewFolder = isTauri ? listen("lokus:new-folder", () => setIsCreatingFolder(true)) : Promise.resolve(addDom('lokus:new-folder', () => setIsCreatingFolder(true)));
+    const unlistenNewFolder = isTauri ? listen("lokus:new-folder", handleCreateFolder) : Promise.resolve(addDom('lokus:new-folder', handleCreateFolder));
     const unlistenToggleSidebar = isTauri ? listen("lokus:toggle-sidebar", () => setShowLeft(v => !v)) : Promise.resolve(addDom('lokus:toggle-sidebar', () => setShowLeft(v => !v)));
     const unlistenCommandPalette = isTauri ? listen("lokus:command-palette", () => {
       // Don't open command palette when graph view is active
@@ -4005,6 +4465,45 @@ function WorkspaceWithScope({ path }) {
     return getBaseAwareFileTree(fileTree);
   }, [fileTree, activeBase?.sourceFolder, openTabs, scopeMode, scopedFolders, filterFileTree]);
 
+  useEffect(() => {
+    const handleInsertTemplate = (event) => {
+      const { content } = event.detail;
+      
+      if (editorRef?.current && content) {
+        // Get the editor instance
+        const editor = editorRef.current;
+        
+        // This searches backwards from cursor to find the last "/" and removes everything after it
+        const { state } = editor;
+        const { from } = state.selection;
+        
+        // Search backwards for the "/" character
+        let slashPos = from;
+        const textBefore = state.doc.textBetween(Math.max(0, from - 50), from);
+        const lastSlashIndex = textBefore.lastIndexOf('/');
+        
+        if (lastSlashIndex !== -1) {
+          slashPos = from - (textBefore.length - lastSlashIndex);
+          
+          // Delete the "/templatename" text first
+          editor
+            .chain()
+            .focus()
+            .deleteRange({ from: slashPos, to: from })
+            .insertContent(content)
+            .run();
+        } else {
+          // No slash found, just insert at cursor
+          editor.chain().focus().insertContent(content).run();
+        }
+      }
+  };
+
+  window.addEventListener('lokus:insert-template', handleInsertTemplate);
+  return () => {
+    window.removeEventListener('lokus:insert-template', handleInsertTemplate);
+  };
+}, []);
   return (
     <PanelManager>
       <div className={`h-full bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select relative ${isMobile() ? 'safe-area-inset-top' : ''}`}>
@@ -4321,6 +4820,7 @@ function WorkspaceWithScope({ path }) {
                     workspacePath={path}
                     onBoardOpen={handleFileOpen}
                     onCreateBoard={handleCreateKanban}
+                    onBoardAction={handleKanbanBoardAction}
                   />
                 </div>
               ) : showGraphView ? (
@@ -4372,9 +4872,11 @@ function WorkspaceWithScope({ path }) {
                           data-testid="file-tree"
                           expandedFolders={expandedFolders}
                           toggleFolder={toggleFolder}
-                          isCreating={isCreatingFolder}
-                          onCreateConfirm={handleConfirmCreateFolder}
+                          creatingItem={creatingItem}                                                                                                                                            
+                          onCreateConfirm={handleConfirmCreate}
                           keymap={keymap}
+                          selectedPath={selectedPath}
+                          setSelectedPath={setSelectedPath}
                           renamingPath={renamingPath}
                           setRenamingPath={setRenamingPath}
                           onViewHistory={toggleVersionHistory}
@@ -4389,6 +4891,7 @@ function WorkspaceWithScope({ path }) {
                           setHoveredFolder={setHoveredFolder}
                           toast={toast}
                           onCheckReferences={handleCheckReferences}
+                          workspacePath={path}
                         />
                       </div>
                     </ContextMenuTrigger>
@@ -4997,7 +5500,7 @@ function WorkspaceWithScope({ path }) {
           openFiles={openTabs}
           onFileOpen={handleFileOpen}
           onCreateFile={handleCreateFile}
-          onCreateFolder={() => setIsCreatingFolder(true)}
+          onCreateFolder={handleCreateFolder}
           onSave={handleSave}
           onOpenPreferences={() => {
             const openPreferences = () => {
