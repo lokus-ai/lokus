@@ -201,6 +201,39 @@ export const events = {
   },
 
   /**
+   * Get deduplicated events from all visible calendars
+   * Returns events with also_in info for duplicates and read-only status
+   * @param {Date|string} start - Start date/time
+   * @param {Date|string} end - End date/time
+   * @returns {Promise<Array>} - Array of deduplicated event objects
+   */
+  async getAllEventsDeduplicated(start, end) {
+    try {
+      const startStr = start instanceof Date ? start.toISOString() : start;
+      const endStr = end instanceof Date ? end.toISOString() : end;
+
+      console.log('[calendarService] getAllEventsDeduplicated invoking backend:', startStr, 'to', endStr);
+      const eventList = await invoke('get_all_events_deduplicated', {
+        start: startStr,
+        end: endStr
+      });
+      console.log('[calendarService] getAllEventsDeduplicated result:', eventList.length, 'events');
+      return eventList;
+    } catch (error) {
+      console.error('[calendarService] getAllEventsDeduplicated error:', error);
+      logger.error('Calendar', 'Failed to get deduplicated events:', error);
+      // Fallback to regular getAllEvents
+      const fallback = await this.getAllEvents(start, end);
+      return fallback.map(event => ({
+        event,
+        also_in: [],
+        is_read_only: false,
+        fingerprint: ''
+      }));
+    }
+  },
+
+  /**
    * Create a new event
    * @param {string} calendarId - Calendar ID
    * @param {Object} event - Event data
@@ -233,9 +266,10 @@ export const events = {
    * @param {string} calendarId - Calendar ID
    * @param {string} eventId - Event ID
    * @param {Object} updates - Event updates
+   * @param {string} [etag] - Optional ETag for CalDAV concurrency
    * @returns {Promise<Object>} - Updated event
    */
-  async updateEvent(calendarId, eventId, updates) {
+  async updateEvent(calendarId, eventId, updates, etag = null) {
     try {
       const updatedEvent = await invoke('update_event', {
         calendarId,
@@ -250,7 +284,8 @@ export const events = {
           attendees: updates.attendees,
           recurrence_rule: updates.recurrenceRule,
           status: updates.status
-        }
+        },
+        etag
       });
       return updatedEvent;
     } catch (error) {
@@ -263,11 +298,12 @@ export const events = {
    * Delete an event
    * @param {string} calendarId - Calendar ID
    * @param {string} eventId - Event ID
+   * @param {string} [etag] - Optional ETag for CalDAV concurrency
    * @returns {Promise<void>}
    */
-  async deleteEvent(calendarId, eventId) {
+  async deleteEvent(calendarId, eventId, etag = null) {
     try {
-      await invoke('delete_event', { calendarId, eventId });
+      await invoke('delete_event', { calendarId, eventId, etag });
     } catch (error) {
       logger.error('Calendar', 'Failed to delete event:', error);
       throw new Error(`Failed to delete event: ${error}`);
@@ -303,6 +339,74 @@ export const sync = {
       logger.error('Calendar', 'Failed to sync calendars:', error);
       throw new Error(`Failed to sync calendars: ${error}`);
     }
+  },
+
+  /**
+   * Perform a full bidirectional sync with deduplication
+   * @returns {Promise<Object>} - Full sync result
+   */
+  async fullSync() {
+    try {
+      const result = await invoke('sync_calendars_full');
+      return result;
+    } catch (error) {
+      logger.error('Calendar', 'Failed to perform full sync:', error);
+      throw new Error(`Failed to perform full sync: ${error}`);
+    }
+  },
+
+  /**
+   * Get sync configuration
+   * @returns {Promise<Object>} - Sync config
+   */
+  async getConfig() {
+    try {
+      const config = await invoke('get_sync_config');
+      return config;
+    } catch (error) {
+      logger.error('Calendar', 'Failed to get sync config:', error);
+      return {
+        enabled: true,
+        deduplication_enabled: true,
+        conflict_resolution: 'last_modified_wins',
+        sync_pairs: [],
+        auto_sync_interval_minutes: 15
+      };
+    }
+  },
+
+  /**
+   * Set sync configuration
+   * @param {Object} config - Sync config to save
+   * @returns {Promise<void>}
+   */
+  async setConfig(config) {
+    try {
+      await invoke('set_sync_config', { config });
+    } catch (error) {
+      logger.error('Calendar', 'Failed to set sync config:', error);
+      throw new Error(`Failed to set sync config: ${error}`);
+    }
+  },
+
+  /**
+   * Get sync state
+   * @returns {Promise<Object>} - Sync state
+   */
+  async getState() {
+    try {
+      const state = await invoke('get_sync_state');
+      return state;
+    } catch (error) {
+      logger.error('Calendar', 'Failed to get sync state:', error);
+      return {
+        last_full_sync: null,
+        last_incremental_sync: null,
+        sync_in_progress: false,
+        pending_changes: 0,
+        last_error: null
+      };
+    }
   }
 };
 
@@ -333,6 +437,309 @@ export const calendarEvents = {
    */
   async onSyncComplete(callback) {
     return await listen('calendar-sync-complete', callback);
+  },
+
+  /**
+   * Listen for CalDAV connected events
+   * @param {Function} callback - Callback function
+   * @returns {Promise<Function>} - Unsubscribe function
+   */
+  async onCaldavConnected(callback) {
+    return await listen('caldav-connected', callback);
+  }
+};
+
+// iCal subscription operations
+export const ical = {
+  /**
+   * Add an iCal subscription from URL
+   * @param {string} url - iCal/webcal URL
+   * @param {string} [name] - Optional display name
+   * @param {string} [color] - Optional color (hex)
+   * @returns {Promise<Object>} - Subscription object
+   */
+  async addSubscription(url, name = null, color = null) {
+    try {
+      const subscription = await invoke('ical_add_subscription', { url, name, color });
+      return subscription;
+    } catch (error) {
+      logger.error('iCal', 'Failed to add subscription:', error);
+      throw new Error(`Failed to add iCal subscription: ${error}`);
+    }
+  },
+
+  /**
+   * Import iCal from local file
+   * @param {string} path - File path
+   * @param {string} [name] - Optional display name
+   * @param {string} [color] - Optional color (hex)
+   * @returns {Promise<Object>} - Subscription object
+   */
+  async importFile(path, name = null, color = null) {
+    try {
+      const subscription = await invoke('ical_import_file', { path, name, color });
+      return subscription;
+    } catch (error) {
+      logger.error('iCal', 'Failed to import file:', error);
+      throw new Error(`Failed to import iCal file: ${error}`);
+    }
+  },
+
+  /**
+   * Remove an iCal subscription
+   * @param {string} subscriptionId - Subscription ID
+   * @returns {Promise<void>}
+   */
+  async removeSubscription(subscriptionId) {
+    try {
+      await invoke('ical_remove_subscription', { subscriptionId });
+    } catch (error) {
+      logger.error('iCal', 'Failed to remove subscription:', error);
+      throw new Error(`Failed to remove iCal subscription: ${error}`);
+    }
+  },
+
+  /**
+   * Get all iCal subscriptions
+   * @returns {Promise<Array>} - Array of subscription objects
+   */
+  async getSubscriptions() {
+    try {
+      const subscriptions = await invoke('ical_get_subscriptions');
+      return subscriptions;
+    } catch (error) {
+      logger.error('iCal', 'Failed to get subscriptions:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Sync a single iCal subscription
+   * @param {string} subscriptionId - Subscription ID
+   * @returns {Promise<Object>} - Updated subscription
+   */
+  async syncSubscription(subscriptionId) {
+    try {
+      const subscription = await invoke('ical_sync_subscription', { subscriptionId });
+      return subscription;
+    } catch (error) {
+      logger.error('iCal', 'Failed to sync subscription:', error);
+      throw new Error(`Failed to sync iCal subscription: ${error}`);
+    }
+  },
+
+  /**
+   * Sync all iCal subscriptions
+   * @returns {Promise<Array>} - Updated subscriptions
+   */
+  async syncAll() {
+    try {
+      const subscriptions = await invoke('ical_sync_all');
+      return subscriptions;
+    } catch (error) {
+      logger.error('iCal', 'Failed to sync all subscriptions:', error);
+      throw new Error(`Failed to sync iCal subscriptions: ${error}`);
+    }
+  },
+
+  /**
+   * Update iCal subscription settings
+   * @param {string} subscriptionId - Subscription ID
+   * @param {Object} updates - Updates (name, color, enabled, sync_interval_minutes)
+   * @returns {Promise<Object>} - Updated subscription
+   */
+  async updateSubscription(subscriptionId, updates) {
+    try {
+      const subscription = await invoke('ical_update_subscription', {
+        subscriptionId,
+        ...updates
+      });
+      return subscription;
+    } catch (error) {
+      logger.error('iCal', 'Failed to update subscription:', error);
+      throw new Error(`Failed to update iCal subscription: ${error}`);
+    }
+  },
+
+  /**
+   * Get events from an iCal subscription
+   * @param {string} subscriptionId - Subscription ID
+   * @returns {Promise<Array>} - Array of events
+   */
+  async getEvents(subscriptionId) {
+    try {
+      const events = await invoke('ical_get_events', { subscriptionId });
+      return events;
+    } catch (error) {
+      logger.error('iCal', 'Failed to get events:', error);
+      return [];
+    }
+  }
+};
+
+// CalDAV operations (iCloud/Apple Calendar)
+export const caldav = {
+  /**
+   * Connect to a CalDAV server (e.g., iCloud)
+   * @param {string} serverUrl - CalDAV server URL
+   * @param {string} username - Username (e.g., Apple ID email)
+   * @param {string} password - App-specific password
+   * @param {string} [displayName] - Optional display name
+   * @returns {Promise<Object>} - Account object with discovered calendars
+   */
+  async connect(serverUrl, username, password, displayName = null) {
+    try {
+      const account = await invoke('caldav_connect', { serverUrl, username, password, displayName });
+      return account;
+    } catch (error) {
+      logger.error('CalDAV', 'Failed to connect:', error);
+      throw new Error(`Failed to connect to CalDAV: ${error}`);
+    }
+  },
+
+  /**
+   * Check if CalDAV is connected
+   * @returns {Promise<boolean>}
+   */
+  async isConnected() {
+    try {
+      return await invoke('caldav_is_connected');
+    } catch (error) {
+      logger.error('CalDAV', 'Failed to check connection:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Get connected CalDAV account
+   * @returns {Promise<Object|null>}
+   */
+  async getAccount() {
+    try {
+      return await invoke('caldav_get_account');
+    } catch (error) {
+      logger.error('CalDAV', 'Failed to get account:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Disconnect CalDAV account
+   * @returns {Promise<void>}
+   */
+  async disconnect() {
+    try {
+      await invoke('caldav_disconnect');
+    } catch (error) {
+      logger.error('CalDAV', 'Failed to disconnect:', error);
+      throw new Error(`Failed to disconnect CalDAV: ${error}`);
+    }
+  },
+
+  /**
+   * Refresh calendars from CalDAV server
+   * @returns {Promise<Array>} - Array of calendars
+   */
+  async refreshCalendars() {
+    try {
+      return await invoke('caldav_refresh_calendars');
+    } catch (error) {
+      logger.error('CalDAV', 'Failed to refresh calendars:', error);
+      throw new Error(`Failed to refresh CalDAV calendars: ${error}`);
+    }
+  },
+
+  /**
+   * Get events from a CalDAV calendar
+   * @param {string} calendarUrl - Calendar URL
+   * @param {Date|string} start - Start date
+   * @param {Date|string} end - End date
+   * @returns {Promise<Array>} - Array of events
+   */
+  async getEvents(calendarUrl, start, end) {
+    try {
+      const startStr = start instanceof Date ? start.toISOString() : start;
+      const endStr = end instanceof Date ? end.toISOString() : end;
+      return await invoke('caldav_get_events', { calendarUrl, start: startStr, end: endStr });
+    } catch (error) {
+      logger.error('CalDAV', 'Failed to get events:', error);
+      throw new Error(`Failed to get CalDAV events: ${error}`);
+    }
+  },
+
+  /**
+   * Create an event on CalDAV calendar
+   * @param {string} calendarUrl - Calendar URL
+   * @param {Object} event - Event data
+   * @returns {Promise<Object>} - Created event
+   */
+  async createEvent(calendarUrl, event) {
+    try {
+      return await invoke('caldav_create_event', {
+        calendarUrl,
+        event: {
+          title: event.title,
+          description: event.description || null,
+          start: event.start instanceof Date ? event.start.toISOString() : event.start,
+          end: event.end instanceof Date ? event.end.toISOString() : event.end,
+          all_day: event.allDay || false,
+          location: event.location || null,
+          attendees: event.attendees || null,
+          recurrence_rule: event.recurrenceRule || null
+        }
+      });
+    } catch (error) {
+      logger.error('CalDAV', 'Failed to create event:', error);
+      throw new Error(`Failed to create CalDAV event: ${error}`);
+    }
+  },
+
+  /**
+   * Update an event on CalDAV calendar
+   * @param {string} calendarUrl - Calendar URL
+   * @param {string} eventId - Event ID
+   * @param {Object} updates - Event updates
+   * @param {string} [etag] - Optional ETag for concurrency
+   * @returns {Promise<Object>} - Updated event
+   */
+  async updateEvent(calendarUrl, eventId, updates, etag = null) {
+    try {
+      return await invoke('caldav_update_event', {
+        calendarUrl,
+        eventId,
+        updates: {
+          title: updates.title,
+          description: updates.description,
+          start: updates.start instanceof Date ? updates.start.toISOString() : updates.start,
+          end: updates.end instanceof Date ? updates.end.toISOString() : updates.end,
+          all_day: updates.allDay,
+          location: updates.location,
+          attendees: updates.attendees,
+          recurrence_rule: updates.recurrenceRule,
+          status: updates.status
+        },
+        etag
+      });
+    } catch (error) {
+      logger.error('CalDAV', 'Failed to update event:', error);
+      throw new Error(`Failed to update CalDAV event: ${error}`);
+    }
+  },
+
+  /**
+   * Delete an event from CalDAV calendar
+   * @param {string} calendarUrl - Calendar URL
+   * @param {string} eventId - Event ID
+   * @param {string} [etag] - Optional ETag for concurrency
+   * @returns {Promise<void>}
+   */
+  async deleteEvent(calendarUrl, eventId, etag = null) {
+    try {
+      await invoke('caldav_delete_event', { calendarUrl, eventId, etag });
+    } catch (error) {
+      logger.error('CalDAV', 'Failed to delete event:', error);
+      throw new Error(`Failed to delete CalDAV event: ${error}`);
+    }
   }
 };
 
@@ -342,6 +749,8 @@ export const calendarService = {
   calendars,
   events,
   sync,
+  ical,
+  caldav,
   listeners: calendarEvents
 };
 

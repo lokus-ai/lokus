@@ -771,7 +771,54 @@ pub fn run() {
       #[cfg(desktop)]
       calendar::sync_calendars,
       #[cfg(desktop)]
-      calendar::update_calendar_visibility
+      calendar::update_calendar_visibility,
+      // iCal commands
+      #[cfg(desktop)]
+      calendar::ical_add_subscription,
+      #[cfg(desktop)]
+      calendar::ical_import_file,
+      #[cfg(desktop)]
+      calendar::ical_remove_subscription,
+      #[cfg(desktop)]
+      calendar::ical_get_subscriptions,
+      #[cfg(desktop)]
+      calendar::ical_sync_subscription,
+      #[cfg(desktop)]
+      calendar::ical_sync_all,
+      #[cfg(desktop)]
+      calendar::ical_update_subscription,
+      #[cfg(desktop)]
+      calendar::ical_get_events,
+      // CalDAV commands
+      #[cfg(desktop)]
+      calendar::caldav_connect,
+      #[cfg(desktop)]
+      calendar::caldav_is_connected,
+      #[cfg(desktop)]
+      calendar::caldav_get_account,
+      #[cfg(desktop)]
+      calendar::caldav_disconnect,
+      #[cfg(desktop)]
+      calendar::caldav_refresh_calendars,
+      #[cfg(desktop)]
+      calendar::caldav_get_events,
+      #[cfg(desktop)]
+      calendar::caldav_create_event,
+      #[cfg(desktop)]
+      calendar::caldav_update_event,
+      #[cfg(desktop)]
+      calendar::caldav_delete_event,
+      // Sync commands
+      #[cfg(desktop)]
+      calendar::get_all_events_deduplicated,
+      #[cfg(desktop)]
+      calendar::sync_calendars_full,
+      #[cfg(desktop)]
+      calendar::get_sync_config,
+      #[cfg(desktop)]
+      calendar::set_sync_config,
+      #[cfg(desktop)]
+      calendar::get_sync_state
     ])
     .setup(|app| {
       #[cfg(desktop)]

@@ -14,29 +14,67 @@ export function useCalendarAuth() {
     isAuthenticated: false,
     account: null,
     isLoading: true,
-    error: null
+    error: null,
+    providers: {
+      google: false,
+      caldav: false
+    }
   });
 
   const checkAuthStatus = useCallback(async () => {
     try {
       setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
 
-      const isAuth = await calendarService.auth.isGoogleAuthenticated();
+      // Check Google Calendar auth
+      const isGoogleAuth = await calendarService.auth.isGoogleAuthenticated();
+      console.log('[useCalendarAuth] isGoogleAuth:', isGoogleAuth);
+
+      // Check CalDAV auth
+      let isCaldavAuth = false;
+      try {
+        isCaldavAuth = await calendarService.caldav.isConnected();
+        console.log('[useCalendarAuth] isCaldavAuth:', isCaldavAuth);
+      } catch (caldavErr) {
+        console.error('[useCalendarAuth] CalDAV check failed:', caldavErr);
+      }
+
+      // Consider authenticated if ANY provider is connected
+      const isAuth = isGoogleAuth || isCaldavAuth;
+      console.log('[useCalendarAuth] isAuth:', isAuth);
 
       if (isAuth) {
-        const account = await calendarService.auth.getGoogleAccount();
+        // Get account info from whichever is connected
+        let account = null;
+        let provider = null;
+
+        if (isGoogleAuth) {
+          account = await calendarService.auth.getGoogleAccount();
+          provider = 'google';
+        } else if (isCaldavAuth) {
+          account = await calendarService.caldav.getAccount();
+          provider = 'caldav';
+        }
+
         setAuthState({
           isAuthenticated: true,
-          account,
+          account: account ? { ...account, provider } : null,
           isLoading: false,
-          error: null
+          error: null,
+          providers: {
+            google: isGoogleAuth,
+            caldav: isCaldavAuth
+          }
         });
       } else {
         setAuthState({
           isAuthenticated: false,
           account: null,
           isLoading: false,
-          error: null
+          error: null,
+          providers: {
+            google: false,
+            caldav: false
+          }
         });
       }
     } catch (error) {
@@ -44,7 +82,11 @@ export function useCalendarAuth() {
         isAuthenticated: false,
         account: null,
         isLoading: false,
-        error: error.message
+        error: error.message,
+        providers: {
+          google: false,
+          caldav: false
+        }
       });
     }
   }, []);
@@ -58,6 +100,7 @@ export function useCalendarAuth() {
   useEffect(() => {
     let unsubscribeSuccess = null;
     let unsubscribeDisconnect = null;
+    let unsubscribeCaldavConnected = null;
 
     const setupListeners = async () => {
       try {
@@ -65,12 +108,36 @@ export function useCalendarAuth() {
           checkAuthStatus();
         });
 
-        unsubscribeDisconnect = await calendarService.listeners.onDisconnected(() => {
-          setAuthState({
-            isAuthenticated: false,
-            account: null,
-            isLoading: false,
-            error: null
+        // Listen for CalDAV connection
+        unsubscribeCaldavConnected = await calendarService.listeners.onCaldavConnected(() => {
+          console.log('[useCalendarAuth] CalDAV connected, refreshing auth status');
+          checkAuthStatus();
+        });
+
+        unsubscribeDisconnect = await calendarService.listeners.onDisconnected((event) => {
+          // Get the provider from the event if available
+          const provider = event?.payload?.provider;
+
+          setAuthState(prev => {
+            const newProviders = { ...prev.providers };
+            if (provider) {
+              newProviders[provider] = false;
+            } else {
+              // If no provider specified, assume all disconnected
+              newProviders.google = false;
+              newProviders.caldav = false;
+            }
+
+            // Check if any provider is still connected
+            const stillConnected = Object.values(newProviders).some(v => v);
+
+            return {
+              isAuthenticated: stillConnected,
+              account: stillConnected ? prev.account : null,
+              isLoading: false,
+              error: null,
+              providers: newProviders
+            };
           });
         });
       } catch (err) {
@@ -83,6 +150,7 @@ export function useCalendarAuth() {
     return () => {
       if (unsubscribeSuccess) unsubscribeSuccess();
       if (unsubscribeDisconnect) unsubscribeDisconnect();
+      if (unsubscribeCaldavConnected) unsubscribeCaldavConnected();
     };
   }, [checkAuthStatus]);
 
@@ -166,17 +234,33 @@ export function useCalendarAuth() {
 
   const disconnect = useCallback(async (provider = 'google') => {
     try {
+      console.log('[useCalendarAuth] Disconnecting provider:', provider);
       setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
 
       await calendarService.auth.disconnect(provider);
 
-      setAuthState({
-        isAuthenticated: false,
-        account: null,
-        isLoading: false,
-        error: null
+      // Update provider state
+      setAuthState(prev => {
+        const newProviders = {
+          ...prev.providers,
+          [provider]: false
+        };
+        // Check if any provider is still connected
+        const stillConnected = Object.values(newProviders).some(v => v);
+
+        return {
+          isAuthenticated: stillConnected,
+          account: stillConnected ? prev.account : null,
+          isLoading: false,
+          error: null,
+          providers: newProviders
+        };
       });
+
+      // Re-check auth status to get accurate state
+      setTimeout(() => checkAuthStatus(), 500);
     } catch (error) {
+      console.error('[useCalendarAuth] Disconnect failed:', error);
       setAuthState(prev => ({
         ...prev,
         isLoading: false,
@@ -184,7 +268,7 @@ export function useCalendarAuth() {
       }));
       throw error;
     }
-  }, []);
+  }, [checkAuthStatus]);
 
   return {
     ...authState,
@@ -336,9 +420,9 @@ export function useCalendarEvents(initialDateRange = null) {
     }
   }, []);
 
-  const updateEvent = useCallback(async (calendarId, eventId, updates) => {
+  const updateEvent = useCallback(async (calendarId, eventId, updates, etag = null) => {
     try {
-      const updatedEvent = await calendarService.events.updateEvent(calendarId, eventId, updates);
+      const updatedEvent = await calendarService.events.updateEvent(calendarId, eventId, updates, etag);
 
       // Update local state
       setEventState(prev => ({
@@ -354,9 +438,9 @@ export function useCalendarEvents(initialDateRange = null) {
     }
   }, []);
 
-  const deleteEvent = useCallback(async (calendarId, eventId) => {
+  const deleteEvent = useCallback(async (calendarId, eventId, etag = null) => {
     try {
-      await calendarService.events.deleteEvent(calendarId, eventId);
+      await calendarService.events.deleteEvent(calendarId, eventId, etag);
 
       // Remove from local state
       setEventState(prev => ({
@@ -494,9 +578,11 @@ export function useUpcomingEvents(days = 7) {
   const loadUpcomingEvents = useCallback(async () => {
     try {
       console.log('[useUpcomingEvents] Loading upcoming events...');
-      // Check if authenticated first
-      const isAuth = await calendarService.auth.isGoogleAuthenticated();
-      console.log('[useUpcomingEvents] isAuthenticated:', isAuth);
+      // Check if authenticated with ANY provider (Google OR CalDAV)
+      const isGoogleAuth = await calendarService.auth.isGoogleAuthenticated();
+      const isCaldavAuth = await calendarService.caldav.isConnected();
+      const isAuth = isGoogleAuth || isCaldavAuth;
+      console.log('[useUpcomingEvents] isAuthenticated:', isAuth, '(google:', isGoogleAuth, ', caldav:', isCaldavAuth, ')');
       if (!isAuth) {
         setState({ events: [], isLoading: false, error: null });
         return [];
@@ -590,6 +676,172 @@ function getDefaultDateRange() {
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
   return { start, end };
+}
+
+/**
+ * Deduplicated Events Hook
+ *
+ * Fetches events with deduplication, showing primary event
+ * and tracking which other calendars have duplicates.
+ */
+export function useDeduplicatedEvents(initialDateRange = null) {
+  const [state, setState] = useState({
+    events: [], // Array of { event, also_in, is_read_only, fingerprint }
+    isLoading: false,
+    error: null
+  });
+
+  const [dateRange, setDateRange] = useState(initialDateRange || getDefaultDateRange());
+
+  const loadEvents = useCallback(async (start, end) => {
+    try {
+      setState(prev => ({ ...prev, isLoading: true, error: null }));
+
+      const deduplicatedEvents = await calendarService.events.getAllEventsDeduplicated(start, end);
+
+      setState({
+        events: deduplicatedEvents,
+        isLoading: false,
+        error: null
+      });
+
+      return deduplicatedEvents;
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: error.message
+      }));
+      throw error;
+    }
+  }, []);
+
+  const refreshEvents = useCallback(() => {
+    if (dateRange) {
+      return loadEvents(dateRange.start, dateRange.end);
+    }
+  }, [dateRange, loadEvents]);
+
+  // Load events when date range changes
+  useEffect(() => {
+    if (dateRange) {
+      loadEvents(dateRange.start, dateRange.end);
+    }
+  }, [dateRange, loadEvents]);
+
+  // Listen for sync events
+  useEffect(() => {
+    let unsubscribe = null;
+
+    const setupListener = async () => {
+      try {
+        unsubscribe = await calendarService.listeners.onSyncComplete(() => {
+          refreshEvents();
+        });
+      } catch (err) {
+        console.error('useDeduplicatedEvents: Failed to set up sync listener', err);
+      }
+    };
+
+    setupListener();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [refreshEvents]);
+
+  // Get events grouped by fingerprint for easy duplicate lookup
+  const eventsByFingerprint = useMemo(() => {
+    const grouped = {};
+    state.events.forEach(dedupEvent => {
+      grouped[dedupEvent.fingerprint] = dedupEvent;
+    });
+    return grouped;
+  }, [state.events]);
+
+  // Get count of events that have duplicates
+  const duplicateCount = useMemo(() => {
+    return state.events.filter(e => e.also_in && e.also_in.length > 0).length;
+  }, [state.events]);
+
+  // Get count of read-only events
+  const readOnlyCount = useMemo(() => {
+    return state.events.filter(e => e.is_read_only).length;
+  }, [state.events]);
+
+  return {
+    ...state,
+    dateRange,
+    setDateRange,
+    loadEvents,
+    refreshEvents,
+    eventsByFingerprint,
+    duplicateCount,
+    readOnlyCount,
+    // Helper to get raw events (unwrap from deduplicated format)
+    rawEvents: state.events.map(e => e.event)
+  };
+}
+
+/**
+ * Sync Configuration Hook
+ *
+ * Manages sync settings (deduplication, conflict resolution, sync pairs)
+ */
+export function useSyncConfig() {
+  const [config, setConfig] = useState({
+    enabled: true,
+    deduplication_enabled: true,
+    conflict_resolution: 'last_modified_wins',
+    sync_pairs: [],
+    auto_sync_interval_minutes: 15
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const loadConfig = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const loadedConfig = await calendarService.sync.getConfig();
+      setConfig(loadedConfig);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const saveConfig = useCallback(async (newConfig) => {
+    try {
+      await calendarService.sync.setConfig(newConfig);
+      setConfig(newConfig);
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  }, []);
+
+  const updateConfig = useCallback(async (updates) => {
+    const newConfig = { ...config, ...updates };
+    await saveConfig(newConfig);
+  }, [config, saveConfig]);
+
+  useEffect(() => {
+    loadConfig();
+  }, [loadConfig]);
+
+  return {
+    config,
+    isLoading,
+    error,
+    loadConfig,
+    saveConfig,
+    updateConfig,
+    setDeduplicationEnabled: (enabled) => updateConfig({ deduplication_enabled: enabled }),
+    setConflictResolution: (resolution) => updateConfig({ conflict_resolution: resolution }),
+    setSyncEnabled: (enabled) => updateConfig({ enabled })
+  };
 }
 
 // Default export

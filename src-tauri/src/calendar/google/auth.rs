@@ -293,10 +293,29 @@ impl GoogleCalendarAuth {
             .send()
             .await?;
 
-        // Delete local storage regardless of revocation result
+        // Delete Google-specific storage only (not CalDAV/iCal)
         CalendarStorage::delete_google_token()?;
         CalendarStorage::delete_google_account()?;
-        CalendarStorage::delete_calendars()?;
+        // Note: Don't call delete_calendars() - that deletes ALL providers!
+        // The caller should handle removing only Google calendars from the list
+
+        Ok(())
+    }
+
+    /// Revoke token with Google without touching local storage
+    /// Used by disconnect flow which handles storage deletion separately
+    pub async fn revoke_token_only(&self, token: &str) -> Result<(), CalendarError> {
+        let client = Client::new();
+        let response = client
+            .post("https://oauth2.googleapis.com/revoke")
+            .form(&[("token", token)])
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            // Log but don't fail - local cleanup is what matters
+            println!("[Calendar] Token revocation returned status: {}", response.status());
+        }
 
         Ok(())
     }

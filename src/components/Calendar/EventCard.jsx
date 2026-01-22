@@ -1,13 +1,28 @@
 import React from 'react';
-import { Clock, MapPin, Users, ExternalLink } from 'lucide-react';
+import { Clock, MapPin, Users, ExternalLink, Lock, Copy, Layers } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
 /**
  * Event Card Component
  *
  * Displays a calendar event with title, time, location, and attendees
+ * Supports deduplicated events with also_in indicator and read-only badges
+ *
+ * @param {Object} event - The calendar event
+ * @param {boolean} compact - Whether to show compact view
+ * @param {Function} onClick - Click handler
+ * @param {Array} alsoIn - Array of CalendarProviderInfo for duplicates
+ * @param {boolean} isReadOnly - Whether the event is read-only (iCal)
+ * @param {string} fingerprint - Event fingerprint for deduplication
  */
-export default function EventCard({ event, compact = false, onClick }) {
+export default function EventCard({
+  event,
+  compact = false,
+  onClick,
+  alsoIn = [],
+  isReadOnly = false,
+  fingerprint = null
+}) {
   const formatEventTime = () => {
     if (event.all_day) {
       return 'All day';
@@ -29,6 +44,13 @@ export default function EventCard({ event, compact = false, onClick }) {
     }
   };
 
+  // Format the "also in" tooltip
+  const getAlsoInTooltip = () => {
+    if (!alsoIn || alsoIn.length === 0) return null;
+    const names = alsoIn.map(info => info.calendar_name).join(', ');
+    return `Also in: ${names}`;
+  };
+
   if (compact) {
     return (
       <div
@@ -40,7 +62,20 @@ export default function EventCard({ event, compact = false, onClick }) {
         onClick={onClick}
       >
         <div className="flex-1 min-w-0">
-          <div className="text-sm truncate">{event.title}</div>
+          <div className="flex items-center gap-1.5 text-sm">
+            <span className="truncate">{event.title}</span>
+            {/* Read-only badge */}
+            {isReadOnly && (
+              <Lock className="w-3 h-3 text-app-muted flex-shrink-0" title="Read-only (iCal)" />
+            )}
+            {/* Duplicate indicator */}
+            {alsoIn && alsoIn.length > 0 && (
+              <Layers
+                className="w-3 h-3 text-app-muted flex-shrink-0"
+                title={getAlsoInTooltip()}
+              />
+            )}
+          </div>
           <div className="text-xs text-app-muted">{formatEventTime()}</div>
         </div>
       </div>
@@ -57,13 +92,21 @@ export default function EventCard({ event, compact = false, onClick }) {
       onClick={onClick}
     >
       {/* Title */}
-      <div className="font-medium text-app-text mb-1">
-        {event.title}
+      <div className="font-medium text-app-text mb-1 flex items-center gap-2">
+        <span>{event.title}</span>
+        {/* Status indicators */}
         {event.status === 'tentative' && (
-          <span className="ml-2 text-xs text-yellow-500">(Tentative)</span>
+          <span className="text-xs text-yellow-500">(Tentative)</span>
         )}
         {event.status === 'cancelled' && (
-          <span className="ml-2 text-xs text-red-500">(Cancelled)</span>
+          <span className="text-xs text-red-500">(Cancelled)</span>
+        )}
+        {/* Read-only badge */}
+        {isReadOnly && (
+          <span className="inline-flex items-center gap-1 text-xs text-app-muted bg-app-bg px-1.5 py-0.5 rounded" title="Read-only calendar">
+            <Lock className="w-3 h-3" />
+            Read-only
+          </span>
         )}
       </div>
 
@@ -111,6 +154,21 @@ export default function EventCard({ event, compact = false, onClick }) {
           Open in Google Calendar
         </a>
       )}
+
+      {/* Also In indicator (duplicates across calendars) */}
+      {alsoIn && alsoIn.length > 0 && (
+        <div className="flex items-center gap-1.5 text-xs text-app-muted mt-2 pt-2 border-t border-app-border">
+          <Layers className="w-3.5 h-3.5" />
+          <span>
+            Also in: {alsoIn.map((info, i) => (
+              <span key={info.event_id}>
+                {i > 0 && ', '}
+                <span className="text-app-text-secondary">{info.calendar_name}</span>
+              </span>
+            ))}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -119,8 +177,15 @@ export default function EventCard({ event, compact = false, onClick }) {
  * Event List Component
  *
  * Displays a list of events with optional grouping
+ * Supports both regular events and deduplicated events
+ *
+ * @param {Array} events - Array of events or deduplicated event objects
+ * @param {string} title - Optional section title
+ * @param {string} emptyMessage - Message when no events
+ * @param {Function} onEventClick - Click handler
+ * @param {boolean} deduplicated - Whether events are in deduplicated format
  */
-export function EventList({ events, title, emptyMessage = 'No events', onEventClick }) {
+export function EventList({ events, title, emptyMessage = 'No events', onEventClick, deduplicated = false }) {
   if (events.length === 0) {
     return (
       <div className="text-sm text-app-muted text-center py-4">
@@ -137,13 +202,24 @@ export function EventList({ events, title, emptyMessage = 'No events', onEventCl
         </h3>
       )}
       <div className="space-y-2">
-        {events.map(event => (
-          <EventCard
-            key={event.id}
-            event={event}
-            onClick={() => onEventClick?.(event)}
-          />
-        ))}
+        {events.map(item => {
+          // Handle both regular events and deduplicated event objects
+          const event = deduplicated ? item.event : item;
+          const alsoIn = deduplicated ? item.also_in : [];
+          const isReadOnly = deduplicated ? item.is_read_only : false;
+          const fingerprint = deduplicated ? item.fingerprint : null;
+
+          return (
+            <EventCard
+              key={event.id}
+              event={event}
+              alsoIn={alsoIn}
+              isReadOnly={isReadOnly}
+              fingerprint={fingerprint}
+              onClick={() => onEventClick?.(event)}
+            />
+          );
+        })}
       </div>
     </div>
   );
