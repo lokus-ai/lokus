@@ -116,20 +116,27 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
 }
 
 #[tauri::command]
-pub fn open_preferences_window(app: AppHandle, workspace_path: Option<String>) -> Result<(), String> {
+pub fn open_preferences_window(app: AppHandle, workspace_path: Option<String>, section: Option<String>) -> Result<(), String> {
   let label = "prefs";
   if let Some(win) = app.get_webview_window(label) {
     focus(&win);
+    // If section is provided, emit event to navigate to that section
+    if let Some(s) = section {
+      let _ = win.emit("preferences:navigate", s);
+    }
     return Ok(());
   }
   // Pass a query param so the frontend can render the Preferences view immediately
-  // Also pass workspace path if available
-  let url_string = if let Some(path) = workspace_path {
+  // Also pass workspace path and section if available
+  let mut url_string = "index.html?view=prefs".to_string();
+  if let Some(path) = workspace_path {
     let encoded_path = urlencoding::encode(&path);
-    format!("index.html?view=prefs&workspacePath={}", encoded_path)
-  } else {
-    "index.html?view=prefs".to_string()
-  };
+    url_string = format!("{}&workspacePath={}", url_string, encoded_path);
+  }
+  if let Some(s) = section {
+    let encoded_section = urlencoding::encode(&s);
+    url_string = format!("{}&section={}", url_string, encoded_section);
+  }
   let url = WebviewUrl::App(url_string.into());
 
   // Build window with platform-specific titlebar style to match main window

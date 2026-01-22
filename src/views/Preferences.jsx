@@ -15,6 +15,7 @@ import markdownSyntaxConfig from "../core/markdown/syntax-config.js";
 import AIAssistant from "./preferences/AIAssistant.jsx";
 import ConnectionStatus from "../components/ConnectionStatus.jsx";
 import GmailLogin from "../components/gmail/GmailLogin.jsx";
+import { CalendarSettings, CalendarConnectionStatus } from "../components/Calendar/index.js";
 import { useAuth } from "../core/auth/AuthContext";
 import { User, LogIn, LogOut, Crown, Shield, Settings as SettingsIcon } from "lucide-react";
 import QuickImport from "../components/QuickImport.jsx";
@@ -405,13 +406,19 @@ export default function Preferences() {
       try {
         let foundPath = false;
 
-        // Try to get from window.opener first (if opened from workspace)
+        // Always check URL params for section
+        const params = new URLSearchParams(window.location.search);
+        const sectionParam = params.get('section');
+        if (sectionParam) {
+          setSection(decodeURIComponent(sectionParam));
+        }
+
+        // Try to get workspace path from window.opener first (if opened from workspace)
         if (window.opener && window.opener.__WORKSPACE_PATH__) {
           setWorkspacePath(window.opener.__WORKSPACE_PATH__);
           foundPath = true;
         } else {
           // Try from URL params
-          const params = new URLSearchParams(window.location.search);
           const path = params.get('workspacePath');
           if (path) {
             setWorkspacePath(decodeURIComponent(path));
@@ -446,6 +453,27 @@ export default function Preferences() {
     getActiveShortcuts().then(setKeymap).catch((err) => {
       console.error('Preferences: Failed to get active shortcuts', err);
     });
+  }, []);
+
+  // Listen for section navigation events (when window is already open)
+  useEffect(() => {
+    let unlisten = null;
+    const setupListener = async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        unlisten = await listen('preferences:navigate', (event) => {
+          if (event.payload) {
+            setSection(event.payload);
+          }
+        });
+      } catch (e) {
+        console.error('Failed to set up preferences:navigate listener', e);
+      }
+    };
+    setupListener();
+    return () => {
+      if (unlisten) unlisten();
+    };
   }, []);
 
   // Create debounced save function with useMemo
@@ -2698,6 +2726,22 @@ export default function Preferences() {
                       </div>
                     </div>
 
+                    {/* Google Calendar - Real connection */}
+                    <div className="bg-app-panel border border-app-border rounded-lg p-4 hover:bg-app-panel/80 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-green-500 rounded-lg flex items-center justify-center text-white font-semibold">
+                            C
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-app-text">Google Calendar</h4>
+                            <p className="text-xs text-app-text-secondary">Calendar sync</p>
+                          </div>
+                        </div>
+                        <CalendarConnectionStatus />
+                      </div>
+                    </div>
+
                     {/* Outlook - Disabled */}
                     <div className="bg-app-panel border border-app-border rounded-lg p-4 opacity-50 cursor-not-allowed">
                       <div className="flex items-center justify-between">
@@ -2752,6 +2796,12 @@ export default function Preferences() {
                 <div className="space-y-4">
                   <h3 className="text-lg font-medium text-app-text">Gmail Integration</h3>
                   <GmailLogin />
+                </div>
+
+                {/* Calendar Connection Component */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium text-app-text">Calendar Integration</h3>
+                  <CalendarSettings />
                 </div>
               </div>
             )}
