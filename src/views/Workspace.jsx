@@ -7,7 +7,7 @@ import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
-import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, /* Mail, */ Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, FoldVertical, SquareSplitHorizontal, FilePlus as FilePlusCorner, SquareKanban, RefreshCw, Terminal } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, /* Mail, */ Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, CalendarDays, FoldVertical, SquareSplitHorizontal, FilePlus as FilePlusCorner, SquareKanban, RefreshCw, Terminal } from "lucide-react";
 import { ColoredFileIcon } from "../components/FileIcon.jsx";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
@@ -67,6 +67,7 @@ import GraphSidebar from "../components/GraphSidebar.jsx";
 import VersionHistoryPanel from "../components/VersionHistoryPanel.jsx";
 import BacklinksPanel from "./BacklinksPanel.jsx";
 import { DailyNotesPanel, NavigationButtons, DatePickerModal } from "../components/DailyNotes/index.js";
+import { CalendarWidget, CalendarView } from "../components/Calendar/index.js";
 import { ImageViewerTab } from "../components/ImageViewer/ImageViewerTab.jsx";
 import { isImageFile, findImageFiles } from "../utils/imageUtils.js";
 import CanvasPreviewPopup from '../components/CanvasPreviewPopup.jsx';
@@ -1325,6 +1326,7 @@ function WorkspaceWithScope({ path }) {
   // Graph view now opens as a tab instead of sidebar panel
   const [showGraphView, setShowGraphView] = useState(false);
   const [showDailyNotesPanel, setShowDailyNotesPanel] = useState(false);
+  const [showCalendarPanel, setShowCalendarPanel] = useState(false);
   const [showTerminalPanel, setShowTerminalPanel] = useState(false);
   const [showOutputPanel, setShowOutputPanel] = useState(false);
   const [bottomPanelTab, setBottomPanelTab] = useState('terminal'); // 'terminal' or 'output'
@@ -4472,6 +4474,7 @@ function WorkspaceWithScope({ path }) {
                 <button
                   onClick={() => {
                     setShowDailyNotesPanel(!showDailyNotesPanel);
+                    setShowCalendarPanel(false);
                     setShowRight(true);
                     setShowVersionHistory(false);
                   }}
@@ -4490,6 +4493,28 @@ function WorkspaceWithScope({ path }) {
                   <Calendar className="w-5 h-5" style={showDailyNotesPanel ? { color: 'rgb(var(--accent))' } : {}} />
                 </button>
               )}
+
+              {/* Calendar Integration button */}
+              <button
+                onClick={() => {
+                  setShowCalendarPanel(!showCalendarPanel);
+                  setShowDailyNotesPanel(false);
+                  setShowRight(true);
+                  setShowVersionHistory(false);
+                }}
+                title="Calendar"
+                className={`obsidian-button icon-only w-full mb-1 ${showCalendarPanel ? 'active' : ''}`}
+                onMouseEnter={(e) => {
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = 'rgb(var(--accent))';
+                }}
+                onMouseLeave={(e) => {
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = showCalendarPanel ? 'rgb(var(--accent))' : '';
+                }}
+              >
+                <CalendarDays className="w-5 h-5" style={showCalendarPanel ? { color: 'rgb(var(--accent))' } : {}} />
+              </button>
 
               {/* Gmail button disabled to improve startup performance */}
               {/* <button
@@ -4856,6 +4881,24 @@ function WorkspaceWithScope({ path }) {
                     <div className="flex-1 h-full overflow-hidden">
                       <BasesView isVisible={true} onFileOpen={handleFileOpen} />
                     </div>
+                  ) : activeFile === '__calendar__' ? (
+                    <div className="flex-1 h-full overflow-hidden">
+                      <CalendarView
+                        onClose={() => {
+                          const remaining = openTabs.filter(t => t.path !== '__calendar__');
+                          setOpenTabs(remaining);
+                          setActiveFile(remaining[0]?.path || null);
+                        }}
+                        onOpenSettings={async () => {
+                          try {
+                            const { invoke } = await import('@tauri-apps/api/core');
+                            await invoke('open_preferences_window', { workspacePath: path, section: 'Connections' });
+                          } catch (e) {
+                            console.error('Failed to open preferences:', e);
+                          }
+                        }}
+                      />
+                    </div>
                   ) : /* activeFile === '__gmail__' ? (
             <div className="flex-1 h-full overflow-hidden">
               <Gmail workspacePath={path} />
@@ -5128,6 +5171,31 @@ function WorkspaceWithScope({ path }) {
                     workspacePath={path}
                     onOpenDailyNote={handleOpenDailyNoteByDate}
                     currentDate={currentDailyNoteDate}
+                  />
+                ) : showCalendarPanel ? (
+                  <CalendarWidget
+                    onOpenCalendarView={() => {
+                      // Open Calendar view as a special tab
+                      const calendarPath = '__calendar__';
+                      const calendarName = 'Calendar';
+
+                      setOpenTabs(prevTabs => {
+                        const newTabs = prevTabs.filter(t => t.path !== calendarPath);
+                        newTabs.unshift({ path: calendarPath, name: calendarName });
+                        if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
+                        return newTabs;
+                      });
+                      setActiveFile(calendarPath);
+                    }}
+                    onOpenSettings={async () => {
+                      // Open preferences with calendar section
+                      try {
+                        const { invoke } = await import('@tauri-apps/api/core');
+                        await invoke('open_preferences_window', { workspacePath: path, section: 'Connections' });
+                      } catch (e) {
+                        console.error('Failed to open preferences:', e);
+                      }
+                    }}
                   />
                 ) : activeFile === '__graph__' ? (
                   <GraphSidebar

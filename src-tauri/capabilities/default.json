@@ -52,6 +52,7 @@
     "updater:allow-download",
     "updater:allow-install",
     "updater:allow-download-and-install",
-    "deep-link:default"
+    "deep-link:default",
+    "shell:allow-open"
   ]
 }
