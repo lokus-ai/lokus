@@ -227,7 +227,15 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       }));
     }
     if (Table && TableRow && TableHeader && TableCell) {
-      exts.push(Table.configure({ resizable: true }), TableRow, TableHeader, TableCell);
+      // Extend TableCell and TableHeader to allow empty cells
+      // This prevents "Invalid content for node tableCell: <>" errors
+      const CustomTableCell = TableCell.extend({
+        content: 'block*',  // Allow zero or more blocks (instead of requiring at least one)
+      });
+      const CustomTableHeader = TableHeader.extend({
+        content: 'block*',  // Allow zero or more blocks (instead of requiring at least one)
+      });
+      exts.push(Table.configure({ resizable: true }), TableRow, CustomTableHeader, CustomTableCell);
     }
 
     // Additional formatting extensions

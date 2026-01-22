@@ -3,11 +3,12 @@ import { useRemoteLinks, useUIVisibility, useLayoutDefaults } from "../contexts/
 import ServiceStatus from "../components/ServiceStatus";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { confirm, save } from "@tauri-apps/plugin-dialog";
+import { confirm, save, open as openDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import { DraggableTab } from "./DraggableTab";
 import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, /* Mail, */ Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, CalendarDays, FoldVertical, SquareSplitHorizontal, FilePlus as FilePlusCorner, SquareKanban, RefreshCw, Terminal } from "lucide-react";
+import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, /* Mail, */ Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, FoldVertical, SquareSplitHorizontal, FilePlus as FilePlusCorner, SquareKanban, RefreshCw, Terminal, Trash2, X, Copy, Scissors, Check } from "lucide-react";
 import { ColoredFileIcon } from "../components/FileIcon.jsx";
 import LokusLogo from "../components/LokusLogo.jsx";
 import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
@@ -300,22 +301,54 @@ function NewItemInput({ type, onConfirm, level }) {
   );                                                                                                                                                                   
 }                  
 
+// Helper to get filename without extension
+function getNameWithoutExtension(filename) {
+  const lastDotIndex = filename.lastIndexOf('.');
+  if (lastDotIndex > 0) {
+    return filename.substring(0, lastDotIndex);
+  }
+  return filename;
+}
+
+// Helper to get extension (including the dot)
+function getExtension(filename) {
+  const lastDotIndex = filename.lastIndexOf('.');
+  if (lastDotIndex > 0) {
+    return filename.substring(lastDotIndex);
+  }
+  return '';
+}
+
 // --- Inline Rename Input Component ---
 function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
-  const [value, setValue] = useState(initialValue);
+  // Store only the name without extension
+  const extension = getExtension(initialValue);
+  const nameOnly = getNameWithoutExtension(initialValue);
+  const [value, setValue] = useState(nameOnly);
   const inputRef = useRef(null);
 
   useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
+    const input = inputRef.current;
+    if (input) {
+      input.focus();
+      // Use requestAnimationFrame to ensure selection happens after DOM paint
+      const rafId = requestAnimationFrame(() => {
+        if (inputRef.current && document.activeElement === inputRef.current) {
+          inputRef.current.select();
+        }
+      });
+      return () => cancelAnimationFrame(rafId);
     }
   }, []);
 
   const handleKeyDown = (e) => {
+    // Stop propagation for ALL keys to prevent file tree shortcuts from firing
+    e.stopPropagation();
+
     if (e.key === 'Enter') {
       e.preventDefault();
-      onSubmit(value);
+      // Add extension back when submitting
+      onSubmit(value + extension);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       onCancel();
@@ -323,7 +356,8 @@ function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
   };
 
   const handleBlur = () => {
-    onSubmit(value);
+    // Add extension back when submitting
+    onSubmit(value + extension);
   };
 
   return (
@@ -341,7 +375,7 @@ function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
 }
 
 // --- File Entry Component ---
-function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences, onSelectEntry, isSelected, selectedPaths, creatingItem, onCreateConfirm }) {
+function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences, onSelectEntry, isSelected, selectedPaths, setSelectedPaths, creatingItem, onCreateConfirm }) {
   const entryRef = useRef(null);
   const hoverTimeoutRef = useRef(null);
 
@@ -666,6 +700,130 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
           setShowTagModal(true);
         }
         break;
+
+      // Bulk operations for multi-select
+      case 'deleteSelected':
+        if (data.selectedPaths && data.selectedPaths.size > 0) {
+          const count = data.selectedPaths.size;
+          const confirmed = await confirm(`Delete ${count} item${count > 1 ? 's' : ''}?`);
+          if (confirmed) {
+            for (const p of data.selectedPaths) {
+              try {
+                await invoke('delete_file', { path: p });
+              } catch (err) {
+                console.error(`Failed to delete ${p}:`, err);
+              }
+            }
+            setSelectedPaths(new Set());
+            onRefresh?.();
+            toast.success(`Deleted ${count} item${count > 1 ? 's' : ''}`);
+          }
+        }
+        break;
+      case 'cutSelected':
+        if (data.selectedPaths && data.selectedPaths.size > 0) {
+          const filesToCut = Array.from(data.selectedPaths).map(p => ({ path: p }));
+          cutFiles(filesToCut);
+          toast.success(`Cut ${data.selectedPaths.size} item${data.selectedPaths.size > 1 ? 's' : ''}`);
+        }
+        break;
+      case 'copySelected':
+        if (data.selectedPaths && data.selectedPaths.size > 0) {
+          const filesToCopy = Array.from(data.selectedPaths).map(p => ({ path: p }));
+          copyFiles(filesToCopy);
+          toast.success(`Copied ${data.selectedPaths.size} item${data.selectedPaths.size > 1 ? 's' : ''}`);
+        }
+        break;
+      case 'duplicateSelected':
+        if (data.selectedPaths && data.selectedPaths.size > 0) {
+          let duplicatedCount = 0;
+          for (const p of data.selectedPaths) {
+            try {
+              // Read content and write to new file with " copy" suffix
+              const content = await invoke('read_file_content', { path: p });
+              const pathParts = p.split('/');
+              const fileName = pathParts.pop();
+              const dirPath = pathParts.join('/');
+              const ext = fileName.includes('.') ? '.' + fileName.split('.').pop() : '';
+              const baseName = ext ? fileName.slice(0, -ext.length) : fileName;
+              const newName = `${baseName} copy${ext}`;
+              const newPath = `${dirPath}/${newName}`;
+              await invoke('write_file', { path: newPath, content });
+              duplicatedCount++;
+            } catch (err) {
+              console.error(`Failed to duplicate ${p}:`, err);
+            }
+          }
+          onRefresh?.();
+          toast.success(`Duplicated ${duplicatedCount} item${duplicatedCount > 1 ? 's' : ''}`);
+        }
+        break;
+      case 'moveSelected':
+        if (data.selectedPaths && data.selectedPaths.size > 0) {
+          try {
+            const selectedFolder = await openDialog({
+              directory: true,
+              multiple: false,
+              title: `Move ${data.selectedPaths.size} item${data.selectedPaths.size > 1 ? 's' : ''} to...`,
+            });
+            if (selectedFolder) {
+              let movedCount = 0;
+              for (const p of data.selectedPaths) {
+                try {
+                  await invoke('move_file', {
+                    sourcePath: p,
+                    destinationDir: selectedFolder,
+                  });
+                  movedCount++;
+                } catch (err) {
+                  console.error(`Failed to move ${p}:`, err);
+                }
+              }
+              setSelectedPaths(new Set());
+              onRefresh?.();
+              toast.success(`Moved ${movedCount} item${movedCount > 1 ? 's' : ''}`);
+            }
+          } catch (err) {
+            console.error('Move dialog error:', err);
+          }
+        }
+        break;
+      case 'exportSelected':
+        if (data.selectedPaths && data.selectedPaths.size > 0) {
+          try {
+            const exportFolder = await openDialog({
+              directory: true,
+              multiple: false,
+              title: `Export ${data.selectedPaths.size} item${data.selectedPaths.size > 1 ? 's' : ''} to...`,
+            });
+            if (exportFolder) {
+              let exportedCount = 0;
+              for (const p of data.selectedPaths) {
+                try {
+                  // Read file content and write to new location
+                  const content = await invoke('read_file_content', { path: p });
+                  const fileName = p.substring(p.lastIndexOf('/') + 1);
+                  const destPath = `${exportFolder}/${fileName}`;
+                  await invoke('write_file', { path: destPath, content });
+                  exportedCount++;
+                } catch (err) {
+                  console.error(`Failed to export ${p}:`, err);
+                }
+              }
+              toast.success(`Exported ${exportedCount} item${exportedCount > 1 ? 's' : ''}`);
+            }
+          } catch (err) {
+            console.error('Export dialog error:', err);
+          }
+        }
+        break;
+      case 'archiveSelected':
+        if (data.selectedPaths && data.selectedPaths.size > 0) {
+          // Archive feature requires backend support - show info message
+          toast.info(`Archive feature coming soon. For now, use Export to copy ${data.selectedPaths.size} item${data.selectedPaths.size > 1 ? 's' : ''}.`);
+        }
+        break;
+
       default:
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -701,6 +859,8 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
           <FileContextMenu
             file={{ ...entry, type: entry.is_directory ? 'folder' : 'file' }}
             onAction={handleFileContextAction}
+            selectedPaths={selectedPaths}
+            isSelected={isSelected}
           >
             <button
               {...listeners}
@@ -724,7 +884,9 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
                   onCancel={handleRenameCancel}
                 />
               ) : (
-                <span className="truncate">{entry.name}</span>
+                <span className="truncate">
+                  {entry.is_directory ? entry.name : getNameWithoutExtension(entry.name)}
+                </span>
               )}
               {fileCount !== null && (
                 <span className="file-count-badge">({fileCount})</span>
@@ -745,7 +907,6 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
             <ul className="space-y-1 mt-1">
               {entry.children.map(child => (
                 <FileEntryComponent
-                  className={`obsidian-file-item ${activeFile === entry.path ? 'active' : ''} ${selectedPath === entry.path ? 'selected' : ''}`}   
                   key={child.path}
                   entry={child}
                   level={level + 1}
@@ -755,8 +916,6 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
                   toggleFolder={toggleFolder}
                   onRefresh={onRefresh}
                   keymap={keymap}
-                  selectedPath={selectedPath}
-                  setSelectedPath={setSelectedPath}
                   creatingItem={creatingItem}                                                                                                                                            
                   onCreateConfirm={onCreateConfirm}
                   renamingPath={renamingPath}
@@ -778,6 +937,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
                   onSelectEntry={onSelectEntry}
                   isSelected={selectedPaths.has(child.path) || false}
                   selectedPaths={selectedPaths}
+                  setSelectedPaths={setSelectedPaths}
                 />
               ))}
             </ul>
@@ -798,6 +958,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 // --- File Tree View Component ---
 function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, creatingItem, onCreateConfirm, keymap, selectedPath, setSelectedPath, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences, workspacePath }) {
   const [activeEntry, setActiveEntry] = useState(null);
+  const [draggedPaths, setDraggedPaths] = useState(new Set()); // Track paths being dragged (for multi-select)
   const fileTreeRef = useRef(null);
   const { dropPosition, updatePosition, clearPosition } = useDropPosition();
   const [selectedPaths, setSelectedPaths] = useState(new Set());
@@ -849,16 +1010,37 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
     setLastSelectedPath(entry.path);
   }, [indexByPath, flatEntries, lastSelectedPath]);
 
-  // Delete & Select-All shortcuts (tree scoped)
+  // Keyboard shortcuts (tree scoped) - Escape, Delete, Select All
   useEffect(() => {
     const onKeyDown = async (e) => {
+      // Skip if user is typing in an input field
+      const activeEl = document.activeElement;
+      const isTyping = activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA' || activeEl?.isContentEditable;
+      if (isTyping) return;
+
+      // Only handle if file tree has focus
+      const fileTreeHasFocus = fileTreeRef.current?.contains(document.activeElement);
+      if (!fileTreeHasFocus) return;
+
+      // Escape - clear selection
+      if (e.key === 'Escape' && selectedPaths.size > 0) {
+        e.preventDefault();
+        setSelectedPaths(new Set());
+        return;
+      }
+
+      // Cmd/Ctrl+A - select all
       if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
         e.preventDefault();
         setSelectedPaths(new Set(flatEntries.map((n) => n.path)));
+        return;
       }
+
+      // Delete/Backspace - delete selected
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedPaths.size > 0) {
         e.preventDefault();
-        const confirmed = await confirm(`Delete ${selectedPaths.size} item${selectedPaths.size > 1 ? 's' : ''}?`);
+        const count = selectedPaths.size;
+        const confirmed = await confirm(`Delete ${count} item${count > 1 ? 's' : ''}?`);
         if (confirmed) {
           for (const p of selectedPaths) {
             try { await invoke('delete_file', { path: p }); } catch {}
@@ -872,6 +1054,14 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [flatEntries, onRefresh, selectedPaths]);
 
+  // Click on empty space in file tree clears selection
+  const handleContainerClick = useCallback((e) => {
+    // Only clear if clicking directly on the container or the ul, not on a file entry
+    if (e.target === e.currentTarget || e.target.tagName === 'UL') {
+      setSelectedPaths(new Set());
+    }
+  }, []);
+
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -884,11 +1074,22 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
   const handleDragStart = (event) => {
     const sourceEntry = event.active.data.current?.entry;
     setActiveEntry(sourceEntry);
+
+    // Check if dragged item is part of multi-selection
+    if (sourceEntry && selectedPaths.has(sourceEntry.path) && selectedPaths.size > 1) {
+      // Dragging multiple selected items
+      setDraggedPaths(new Set(selectedPaths));
+    } else {
+      // Dragging single item (not part of selection or only item selected)
+      setDraggedPaths(new Set([sourceEntry?.path].filter(Boolean)));
+    }
   };
 
   const handleDragEnd = async (event) => {
     const { over, active } = event;
     setActiveEntry(null);
+    const pathsToMove = new Set(draggedPaths);
+    setDraggedPaths(new Set());
     clearPosition();
 
     if (!over || !active) return;
@@ -900,7 +1101,7 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
       return;
     }
 
-    // Calculate destination directory and new path
+    // Calculate destination directory
     let destinationDir;
     if (dropPosition) {
       const { position, targetPath } = dropPosition;
@@ -916,47 +1117,63 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
       return; // Can't drop here
     }
 
-    const oldPath = sourceEntry.path;
-    const fileName = oldPath.substring(oldPath.lastIndexOf('/') + 1);
-    const newPath = `${destinationDir}/${fileName}`;
-
-    // Helper function to perform the actual move
-    const performMove = async () => {
-      try {
-        await invoke("move_file", {
-          sourcePath: oldPath,
-          destinationDir: destinationDir,
-        });
-        onRefresh();
-        return true;
-      } catch (err) {
-        console.error('Workspace: Failed to move file', err);
-        return false;
-      }
-    };
-
-    // Check for references that would need updating
-    if (onCheckReferences) {
-      const affectedFiles = await referenceManager.findAffectedFiles(oldPath);
-      if (affectedFiles.length > 0) {
-        // Show confirmation modal
-        onCheckReferences({
-          oldPath,
-          newPath,
-          affectedFiles,
-          operation: performMove
-        });
+    // Don't allow dropping into itself (for folders)
+    for (const p of pathsToMove) {
+      if (destinationDir.startsWith(p + '/') || destinationDir === p) {
+        toast?.error("Cannot move a folder into itself");
         return;
       }
     }
 
-    // No references to update, proceed directly
-    await performMove();
+    // Helper function to perform the actual move for multiple files
+    const performMoveAll = async () => {
+      let movedCount = 0;
+      for (const oldPath of pathsToMove) {
+        try {
+          await invoke("move_file", {
+            sourcePath: oldPath,
+            destinationDir: destinationDir,
+          });
+          movedCount++;
+        } catch (err) {
+          console.error(`Failed to move ${oldPath}:`, err);
+        }
+      }
+      setSelectedPaths(new Set());
+      onRefresh();
+      if (pathsToMove.size > 1) {
+        toast?.success(`Moved ${movedCount} item${movedCount > 1 ? 's' : ''}`);
+      }
+      return movedCount > 0;
+    };
+
+    // For single file moves, check references
+    if (pathsToMove.size === 1) {
+      const oldPath = sourceEntry.path;
+      const fileName = oldPath.substring(oldPath.lastIndexOf('/') + 1);
+      const newPath = `${destinationDir}/${fileName}`;
+
+      if (onCheckReferences) {
+        const affectedFiles = await referenceManager.findAffectedFiles(oldPath);
+        if (affectedFiles.length > 0) {
+          onCheckReferences({
+            oldPath,
+            newPath,
+            affectedFiles,
+            operation: performMoveAll
+          });
+          return;
+        }
+      }
+    }
+
+    // No references to update (or multiple files), proceed directly
+    await performMoveAll();
   };
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div ref={fileTreeRef} className="file-tree-container">
+      <div ref={fileTreeRef} className="file-tree-container" tabIndex={0} onClick={handleContainerClick}>
         <ul className="space-y-1">
           {creatingItem && creatingItem.targetPath === workspacePath && (
             <NewItemInput
@@ -967,7 +1184,6 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
           )}
           {entries.map(entry => (
             <FileEntryComponent
-              className={`obsidian-file-item ${activeFile === entry.path ? 'active' : ''} ${selectedPath === entry.path ? 'selected' : ''}`}   
               key={entry.path}
               entry={entry}
               level={0}
@@ -977,8 +1193,6 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
               toggleFolder={toggleFolder}
               onRefresh={onRefresh}
               keymap={keymap}
-              selectedPath={selectedPath}
-              setSelectedPath={setSelectedPath}
               creatingItem={creatingItem}
               onCreateConfirm={onCreateConfirm}
               renamingPath={renamingPath}
@@ -1000,6 +1214,7 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
               onSelectEntry={handleSelectEntry}
               isSelected={selectedPaths.has(entry.path)}
               selectedPaths={selectedPaths}
+              setSelectedPaths={setSelectedPaths}
             />
           ))}
         </ul>
@@ -1022,6 +1237,11 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
               size={16}
             />
             <span>{activeEntry.name}</span>
+            {draggedPaths.size > 1 && (
+              <span className="drag-count-badge">
+                +{draggedPaths.size - 1}
+              </span>
+            )}
           </div>
         ) : null}
       </DragOverlay>
@@ -3120,6 +3340,71 @@ function WorkspaceWithScope({ path }) {
     } catch { }
   };
 
+  const handleKanbanBoardAction = async (action, board, refreshBoards) => {
+    switch (action) {
+      case 'revealInFinder':
+        try {
+          await invoke('platform_reveal_in_file_manager', { path: board.path });
+        } catch (err) {
+          console.error('Failed to reveal board in finder', err);
+          toast.error('Failed to reveal in finder');
+        }
+        break;
+      case 'copyPath':
+        try {
+          await navigator.clipboard.writeText(board.path);
+          toast.success('Board path copied');
+        } catch (err) {
+          toast.error('Failed to copy path');
+        }
+        break;
+      case 'duplicate':
+        try {
+          const content = await invoke('read_file_content', { path: board.path });
+          const dirPath = board.path.split('/').slice(0, -1).join('/');
+          const baseName = board.name.replace(/\.kanban$/, '');
+          const newName = `${baseName} copy.kanban`;
+          const newPath = `${dirPath}/${newName}`;
+          await invoke('write_file_content', { path: newPath, content });
+          refreshBoards?.();
+          toast.success(`Duplicated: ${newName}`);
+        } catch (err) {
+          toast.error('Failed to duplicate board');
+        }
+        break;
+      case 'export':
+        try {
+          const content = await invoke('read_file_content', { path: board.path });
+          const blob = new Blob([content], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${board.name}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+          toast.success('Board exported');
+        } catch (err) {
+          toast.error('Failed to export board');
+        }
+        break;
+      // rename is handled locally in KanbanList with inline input
+      case 'delete':
+        try {
+          const confirmed = await confirm(`Are you sure you want to delete "${board.name}"?`);
+          if (confirmed) {
+            await invoke('delete_file', { path: board.path });
+            refreshBoards?.();
+            toast.success(`Deleted: ${board.name}`);
+          }
+        } catch (err) {
+          toast.error('Failed to delete board');
+        }
+        break;
+      default:
+        break;
+    }
+  };
+
   const handleOpenDailyNote = async () => {
     try {
       const result = await dailyNotesManager.openToday();
@@ -4552,6 +4837,7 @@ function WorkspaceWithScope({ path }) {
                     workspacePath={path}
                     onBoardOpen={handleFileOpen}
                     onCreateBoard={handleCreateKanban}
+                    onBoardAction={handleKanbanBoardAction}
                   />
                 </div>
               ) : showGraphView ? (

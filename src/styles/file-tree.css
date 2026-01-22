@@ -60,6 +60,21 @@
   flex-shrink: 0;
 }
 
+.drag-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  margin-left: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: white;
+  background-color: rgb(var(--accent));
+  border-radius: 10px;
+}
+
 /* Drop Target Highlighting */
 .drop-target-inside {
   background-color: rgb(var(--accent) / 0.15) !important;
@@ -200,13 +215,23 @@
   background: rgb(var(--muted));
 }
 
+/* Multi-select styling - VS Code style */
 .obsidian-file-item.selected {
-  background-color: rgb(var(--panel-secondary) / 0.7);
-  outline: 1px solid rgb(var(--border-hover));
-  outline-offset: -1px;
+  background-color: rgb(var(--accent) / 0.12);
+  position: relative;
+}
+
+.obsidian-file-item.selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background-color: rgb(var(--accent));
 }
 
 .obsidian-file-item.selected.active {
-  background-color: rgb(var(--accent) / 0.18);
-  outline: 1px solid rgb(var(--accent) / 0.4);
+  background-color: rgb(var(--accent) / 0.2);
 }
+
