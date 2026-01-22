@@ -94,14 +94,21 @@ export function CalendarProvider({ children }) {
         });
         listeners.push(disconnectListener);
 
+        // Listen for CalDAV connected
+        const caldavListener = await calendarService.listeners.onCaldavConnected(async () => {
+          console.log('[CalendarContext] CalDAV connected, refreshing data');
+          await calendarsHook.loadCalendars(true);
+          await upcomingEventsHook.refreshEvents();
+        });
+        listeners.push(caldavListener);
+
       } catch (err) {
         console.error('CalendarContext: Failed to set up event listeners', err);
       }
     };
 
-    if (auth.isAuthenticated) {
-      setupEventListeners();
-    }
+    // Always set up listeners - we need to catch caldav-connected even when not yet authenticated
+    setupEventListeners();
 
     return () => {
       listeners.forEach(unsubscribe => {
@@ -110,7 +117,7 @@ export function CalendarProvider({ children }) {
         }
       });
     };
-  }, [auth.isAuthenticated]);
+  }, []); // Empty deps - set up once on mount
 
   // Load calendars when authenticated, then load events
   useEffect(() => {
@@ -229,6 +236,7 @@ export function CalendarProvider({ children }) {
     account: auth.account,
     authLoading: auth.isLoading,
     authError: auth.error,
+    providers: auth.providers,  // { google: boolean, caldav: boolean }
     connectGoogle: auth.connectGoogle,
     disconnect: auth.disconnect,
 

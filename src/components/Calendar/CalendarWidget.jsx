@@ -54,13 +54,20 @@ export default function CalendarWidget({ onOpenCalendarView, onOpenSettings }) {
     }
   };
 
-  // Handle disconnect
+  // Handle disconnect - disconnect the active provider
   const handleDisconnect = async () => {
     try {
-      await disconnect('google');
+      const provider = account?.provider || 'google';
+      await disconnect(provider);
     } catch (error) {
       console.error('Failed to disconnect:', error);
     }
+  };
+
+  // Get the provider name for display
+  const getProviderName = () => {
+    if (account?.provider === 'caldav') return 'iCloud Calendar';
+    return 'Google Calendar';
   };
 
   // Format event time
@@ -85,6 +92,24 @@ export default function CalendarWidget({ onOpenCalendarView, onOpenSettings }) {
     return Object.keys(eventsByDate).sort((a, b) => new Date(a) - new Date(b));
   }, [eventsByDate]);
 
+  // Loading state - show spinner while checking auth
+  if (authLoading) {
+    return (
+      <div className="flex flex-col h-full bg-app-panel">
+        {/* Header */}
+        <div className="px-3 py-2 border-b border-app-border">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-app-accent" />
+            <h2 className="text-sm font-semibold">Calendar</h2>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-app-muted" />
+        </div>
+      </div>
+    );
+  }
+
   // Not connected state
   if (!isAuthenticated) {
     return (
@@ -104,25 +129,36 @@ export default function CalendarWidget({ onOpenCalendarView, onOpenSettings }) {
             Connect Your Calendar
           </h3>
           <p className="text-xs text-app-muted mb-4 max-w-[200px]">
-            Connect Google Calendar to see your events and schedule in Lokus
+            Connect Google Calendar or iCloud to see your events in Lokus
           </p>
-          <button
-            onClick={handleConnect}
-            disabled={isConnecting || authLoading}
-            className="px-4 py-2 text-sm bg-app-accent text-app-accent-fg rounded hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
-          >
-            {isConnecting || authLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Connecting...
-              </>
-            ) : (
-              <>
-                <Plus className="w-4 h-4" />
-                Connect Google Calendar
-              </>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={handleConnect}
+              disabled={isConnecting || authLoading}
+              className="px-4 py-2 text-sm bg-app-accent text-app-accent-fg rounded hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
+            >
+              {isConnecting || authLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  Connect Google
+                </>
+              )}
+            </button>
+            {onOpenSettings && (
+              <button
+                onClick={onOpenSettings}
+                className="px-4 py-2 text-sm text-app-muted hover:text-app-text transition-colors flex items-center gap-2 justify-center"
+              >
+                <Settings className="w-4 h-4" />
+                More options (iCloud)
+              </button>
             )}
-          </button>
+          </div>
         </div>
       </div>
     );
@@ -158,12 +194,12 @@ export default function CalendarWidget({ onOpenCalendarView, onOpenSettings }) {
             )}
             <button
               onClick={() => {
-                if (window.confirm('Disconnect from Google Calendar?')) {
+                if (window.confirm(`Disconnect from ${getProviderName()}?`)) {
                   handleDisconnect();
                 }
               }}
               className="p-1 hover:bg-app-bg rounded transition-colors"
-              title="Disconnect calendar"
+              title={`Disconnect ${getProviderName()}`}
             >
               <X className="w-3.5 h-3.5 text-app-muted" />
             </button>

@@ -418,8 +418,8 @@ export default function CalendarView({ onClose, onOpenSettings }) {
     setShowCreateModal(true);
   }, [currentDate]);
 
-  // Get writable calendars for event creation
-  const writableCalendars = calendars.filter(c => c.is_writable !== false);
+  // Get writable calendars for event creation (only visible ones)
+  const writableCalendars = calendars.filter(c => c.is_writable !== false && c.visible);
 
   // Context menu handlers
   const handleContextMenu = useCallback((e, type, data) => {
@@ -488,8 +488,8 @@ export default function CalendarView({ onClose, onOpenSettings }) {
             // Optimistic delete - remove from UI immediately
             setViewEvents(prev => prev.filter(e => e.id !== event.id));
 
-            // Delete in background
-            calendarService.events.deleteEvent(event.calendar_id, event.id)
+            // Delete in background (pass etag for CalDAV concurrency)
+            calendarService.events.deleteEvent(event.calendar_id, event.id, event.etag)
               .then(() => {
                 toast.success('Event deleted', { description: event.title });
                 updateEventInCache(event.id, null); // Remove from cache
@@ -681,14 +681,14 @@ export default function CalendarView({ onClose, onOpenSettings }) {
       setViewEvents(prev => prev.map(e => e.id === event.id ? updatedEvent : e));
       setDragState(null);
 
-      // Update in background
+      // Update in background (pass etag for CalDAV concurrency)
       try {
         await calendarService.events.updateEvent(event.calendar_id, event.id, {
           title: event.title,
           start: newStart.toISOString(),
           end: newEnd.toISOString(),
           allDay: event.all_day,
-        });
+        }, event.etag);
         toast.success('Event moved', { description: `${event.title} moved to ${format(newStart, 'h:mm a')}` });
         updateEventInCache(event.id, updatedEvent); // Update in cache
       } catch (err) {
@@ -751,12 +751,13 @@ export default function CalendarView({ onClose, onOpenSettings }) {
     setDragState(null);
 
     try {
+      // Pass etag for CalDAV concurrency
       await calendarService.events.updateEvent(event.calendar_id, event.id, {
         title: event.title,
         start: newStart.toISOString(),
         end: newEnd.toISOString(),
         allDay: event.all_day,
-      });
+      }, event.etag);
       toast.success('Event moved', { description: `${event.title} moved to ${format(newStart, 'MMM d, h:mm a')}` });
       updateEventInCache(event.id, updatedEvent); // Update cache
     } catch (err) {
@@ -778,16 +779,22 @@ export default function CalendarView({ onClose, onOpenSettings }) {
             Connect Your Calendar
           </h2>
           <p className="text-sm text-app-muted mb-6 max-w-md">
-            Connect Google Calendar to view and manage your events in Lokus.
+            Connect Google Calendar or iCloud to view and manage your events in Lokus.
             Your events will sync automatically.
           </p>
-          <button
-            onClick={connectGoogle}
-            className="px-6 py-3 text-sm bg-app-accent text-app-accent-fg rounded-lg hover:opacity-90 transition-opacity flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Connect Google Calendar
-          </button>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={connectGoogle}
+              className="px-6 py-3 text-sm bg-app-accent text-app-accent-fg rounded-lg hover:opacity-90 transition-opacity flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Connect Google Calendar
+            </button>
+            <p className="text-xs text-app-muted">
+              For iCloud Calendar, go to{' '}
+              <span className="text-app-accent">Preferences → Connections</span>
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -1807,7 +1814,7 @@ function EventDetailsModal({ event, calendars, onClose, onOptimisticUpdate, onOp
     onOptimisticUpdate?.(updatedEvent);
     onClose();
 
-    // Save in background
+    // Save in background (pass etag for CalDAV concurrency)
     try {
       await calendarService.events.updateEvent(event.calendar_id, event.id, {
         title,
@@ -1816,7 +1823,7 @@ function EventDetailsModal({ event, calendars, onClose, onOptimisticUpdate, onOp
         start: startDateTime,
         end: endDateTime,
         allDay
-      });
+      }, event.etag);
       toast.success('Event updated', { description: title });
     } catch (err) {
       console.error('Failed to save event:', err);
@@ -1843,9 +1850,9 @@ function EventDetailsModal({ event, calendars, onClose, onOptimisticUpdate, onOp
     onOptimisticDelete?.(event.id);
     onClose();
 
-    // Delete in background
+    // Delete in background (pass etag for CalDAV concurrency)
     try {
-      await calendarService.events.deleteEvent(event.calendar_id, event.id);
+      await calendarService.events.deleteEvent(event.calendar_id, event.id, event.etag);
       toast.success('Event deleted', { description: event.title });
     } catch (err) {
       console.error('Failed to delete event:', err);
