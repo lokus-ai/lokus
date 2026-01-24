@@ -18,12 +18,8 @@ export async function getAppVersion() {
     const version = await getVersion();
     return version;
   } catch (error) {
-    // Fallback to package.json version in development
-    const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
-    if (isDev) {
-      return '1.0.0-dev';
-    }
-    return '1.0.0';
+    // Fallback version - should match tauri.conf.json
+    return '1.0.1';
   }
 }
 
@@ -56,12 +52,12 @@ export async function getAppInfo() {
 
     return cachedAppInfo;
   } catch (error) {
-    // Fallback information
+    // Fallback information - version should match tauri.conf.json
     const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
     const mode = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.MODE : process.env.NODE_ENV || 'production';
     return {
       name: 'Lokus',
-      version: '1.0.0',
+      version: '1.0.1',
       tauriVersion: 'unknown',
       environment: mode,
       isDev: isDev

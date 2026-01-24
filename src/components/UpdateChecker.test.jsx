@@ -4,7 +4,6 @@ import UpdateChecker, { _resetSessionFlag } from './UpdateChecker'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { toast } from 'sonner'
-import { showEnhancedToast } from './ui/enhanced-toast'
 import { readConfig } from '../core/config/store.js'
 import { getAppVersion } from '../utils/appInfo.js'
 
@@ -26,7 +25,7 @@ vi.mock('../utils/appInfo.js', () => ({
     getAppVersion: vi.fn()
 }))
 
-// Mock sonner and enhanced-toast
+// Mock sonner toast
 vi.mock('sonner', () => ({
     toast: Object.assign(vi.fn(), {
         loading: vi.fn(),
@@ -34,10 +33,6 @@ vi.mock('sonner', () => ({
         error: vi.fn(),
         dismiss: vi.fn(),
     }),
-}))
-
-vi.mock('./ui/enhanced-toast', () => ({
-    showEnhancedToast: vi.fn(),
 }))
 
 const SNOOZE_STORAGE_KEY = 'lokus_update_snoozed';
@@ -66,10 +61,48 @@ describe('UpdateChecker Component', () => {
             expect(check).toHaveBeenCalled()
         })
 
-        expect(showEnhancedToast).not.toHaveBeenCalled()
+        expect(toast).not.toHaveBeenCalled()
     })
 
-    it('shows enhanced toast when update is available', async () => {
+    it('does not show toast when remote version equals current version', async () => {
+        getAppVersion.mockResolvedValue('1.0.0')
+        check.mockResolvedValue({
+            available: true,
+            version: '1.0.0',
+            downloadAndInstall: vi.fn()
+        })
+
+        render(<UpdateChecker />)
+        window.dispatchEvent(new Event('check-for-update'))
+
+        await waitFor(() => {
+            expect(check).toHaveBeenCalled()
+        })
+
+        // Should NOT show toast when versions are equal
+        expect(toast).not.toHaveBeenCalled()
+    })
+
+    it('does not show toast when remote version is older than current version', async () => {
+        getAppVersion.mockResolvedValue('2.0.0')
+        check.mockResolvedValue({
+            available: true,
+            version: '1.0.0',
+            downloadAndInstall: vi.fn()
+        })
+
+        render(<UpdateChecker />)
+        window.dispatchEvent(new Event('check-for-update'))
+
+        await waitFor(() => {
+            expect(check).toHaveBeenCalled()
+        })
+
+        // Should NOT show toast when remote version is older
+        expect(toast).not.toHaveBeenCalled()
+    })
+
+    it('shows toast when update is available', async () => {
         check.mockResolvedValue({
             available: true,
             version: '2.0.0',
@@ -81,34 +114,12 @@ describe('UpdateChecker Component', () => {
         window.dispatchEvent(new Event('check-for-update'))
 
         await waitFor(() => {
-            expect(showEnhancedToast).toHaveBeenCalledWith(
+            expect(toast).toHaveBeenCalledWith(
+                'Update Available: v2.0.0',
                 expect.objectContaining({
                     id: 'update-available',
-                    title: 'Update Available: v2.0.0',
-                    message: 'A new version of Lokus is ready to install',
-                    variant: 'update',
-                    expandedContent: 'New features and bug fixes',
-                    persistent: true,
-                })
-            )
-        })
-    })
-
-    it('shows default expandedContent when body is empty', async () => {
-        check.mockResolvedValue({
-            available: true,
-            version: '2.0.0',
-            body: '',
-            downloadAndInstall: vi.fn()
-        })
-
-        render(<UpdateChecker />)
-        window.dispatchEvent(new Event('check-for-update'))
-
-        await waitFor(() => {
-            expect(showEnhancedToast).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    expandedContent: 'This update includes bug fixes and improvements.',
+                    description: 'A new version of Lokus is ready to install.',
+                    duration: Infinity,
                 })
             )
         })
@@ -134,11 +145,11 @@ describe('UpdateChecker Component', () => {
         window.dispatchEvent(new Event('check-for-update'))
 
         await waitFor(() => {
-            expect(showEnhancedToast).toHaveBeenCalled()
+            expect(toast).toHaveBeenCalled()
         })
 
         // Simulate clicking "Update Now" by calling the action onClick
-        const toastCall = showEnhancedToast.mock.calls[0][0]
+        const toastCall = toast.mock.calls[0][1]
         await toastCall.action.onClick()
 
         await waitFor(() => {
@@ -206,11 +217,11 @@ describe('UpdateChecker Component', () => {
         window.dispatchEvent(new Event('check-for-update'))
 
         await waitFor(() => {
-            expect(showEnhancedToast).toHaveBeenCalled()
+            expect(toast).toHaveBeenCalled()
         })
 
         // Simulate clicking "Update Now"
-        const toastCall = showEnhancedToast.mock.calls[0][0]
+        const toastCall = toast.mock.calls[0][1]
         await toastCall.action.onClick()
 
         await waitFor(() => {
@@ -224,7 +235,7 @@ describe('UpdateChecker Component', () => {
         })
     })
 
-    it('dismisses update toast when Later is clicked', async () => {
+    it('snoozes update when Later is clicked', async () => {
         check.mockResolvedValue({
             available: true,
             version: '2.0.0',
@@ -235,14 +246,16 @@ describe('UpdateChecker Component', () => {
         window.dispatchEvent(new Event('check-for-update'))
 
         await waitFor(() => {
-            expect(showEnhancedToast).toHaveBeenCalled()
+            expect(toast).toHaveBeenCalled()
         })
 
         // Simulate clicking "Later"
-        const toastCall = showEnhancedToast.mock.calls[0][0]
+        const toastCall = toast.mock.calls[0][1]
         toastCall.cancel.onClick()
 
-        expect(toast.dismiss).toHaveBeenCalledWith('update-available')
+        // Should set snooze in localStorage
+        const snoozed = JSON.parse(localStorage.getItem(SNOOZE_STORAGE_KEY))
+        expect(snoozed.version).toBe('2.0.0')
     })
 })
 
@@ -271,11 +284,11 @@ describe('UpdateChecker Snooze Logic', () => {
         window.dispatchEvent(new Event('check-for-update'))
 
         await waitFor(() => {
-            expect(showEnhancedToast).toHaveBeenCalled()
+            expect(toast).toHaveBeenCalled()
         })
 
         // Simulate clicking "Later"
-        const toastCall = showEnhancedToast.mock.calls[0][0]
+        const toastCall = toast.mock.calls[0][1]
         toastCall.cancel.onClick()
 
         // Check localStorage was set
@@ -311,7 +324,7 @@ describe('UpdateChecker Snooze Logic', () => {
         })
 
         // Should NOT show toast because it's snoozed
-        expect(showEnhancedToast).not.toHaveBeenCalled()
+        expect(toast).not.toHaveBeenCalled()
     })
 
     it('shows toast when snooze has expired', async () => {
@@ -332,7 +345,7 @@ describe('UpdateChecker Snooze Logic', () => {
         window.dispatchEvent(new Event('check-for-update'))
 
         await waitFor(() => {
-            expect(showEnhancedToast).toHaveBeenCalled()
+            expect(toast).toHaveBeenCalled()
         })
     })
 
@@ -355,10 +368,9 @@ describe('UpdateChecker Snooze Logic', () => {
         window.dispatchEvent(new Event('check-for-update'))
 
         await waitFor(() => {
-            expect(showEnhancedToast).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    title: 'Update Available: v3.0.0',
-                })
+            expect(toast).toHaveBeenCalledWith(
+                'Update Available: v3.0.0',
+                expect.anything()
             )
         })
     })
@@ -382,11 +394,11 @@ describe('UpdateChecker Snooze Logic', () => {
         window.dispatchEvent(new Event('check-for-update'))
 
         await waitFor(() => {
-            expect(showEnhancedToast).toHaveBeenCalled()
+            expect(toast).toHaveBeenCalled()
         })
 
         // Simulate clicking "Update Now"
-        const toastCall = showEnhancedToast.mock.calls[0][0]
+        const toastCall = toast.mock.calls[0][1]
         await toastCall.action.onClick()
 
         // Snooze should be cleared
@@ -408,7 +420,7 @@ describe('UpdateChecker Snooze Logic', () => {
 
         await waitFor(() => {
             // Should still show toast despite invalid snooze data
-            expect(showEnhancedToast).toHaveBeenCalled()
+            expect(toast).toHaveBeenCalled()
         })
     })
 
@@ -429,7 +441,7 @@ describe('UpdateChecker Snooze Logic', () => {
 
         await waitFor(() => {
             // Should show toast because snooze is invalid
-            expect(showEnhancedToast).toHaveBeenCalled()
+            expect(toast).toHaveBeenCalled()
         })
     })
 })
@@ -464,10 +476,10 @@ describe('UpdateChecker Download Progress', () => {
         window.dispatchEvent(new Event('check-for-update'))
 
         await waitFor(() => {
-            expect(showEnhancedToast).toHaveBeenCalled()
+            expect(toast).toHaveBeenCalled()
         })
 
-        const toastCall = showEnhancedToast.mock.calls[0][0]
+        const toastCall = toast.mock.calls[0][1]
         await toastCall.action.onClick()
 
         await waitFor(() => {
@@ -496,10 +508,10 @@ describe('UpdateChecker Download Progress', () => {
         window.dispatchEvent(new Event('check-for-update'))
 
         await waitFor(() => {
-            expect(showEnhancedToast).toHaveBeenCalled()
+            expect(toast).toHaveBeenCalled()
         })
 
-        const toastCall = showEnhancedToast.mock.calls[0][0]
+        const toastCall = toast.mock.calls[0][1]
         await toastCall.action.onClick()
 
         await waitFor(() => {

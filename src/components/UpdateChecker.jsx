@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { toast } from 'sonner';
-import { showEnhancedToast } from './ui/enhanced-toast';
 import { readConfig } from '../core/config/store.js';
 import { getAppVersion } from '../utils/appInfo.js';
 
@@ -102,6 +101,7 @@ export default function UpdateChecker() {
     try {
       // Get current version first for comparison
       const currentVersion = await getAppVersion();
+      console.log(`[UpdateChecker] Current app version: ${currentVersion}`);
 
       // Read beta preference from config
       const config = await readConfig();
@@ -109,25 +109,36 @@ export default function UpdateChecker() {
 
       // Try the standard Tauri updater
       const update = await check();
+      console.log(`[UpdateChecker] Tauri check result:`, {
+        available: update?.available,
+        version: update?.version,
+        currentVersion
+      });
 
       if (update?.available && update?.version) {
-        // Double-check version comparison ourselves
+        // Double-check version comparison ourselves - Tauri sometimes reports
+        // available=true even when versions are equal
         const comparison = compareVersions(update.version, currentVersion);
+        console.log(`[UpdateChecker] Version comparison: ${update.version} vs ${currentVersion} = ${comparison}`);
 
-        // Only show if remote version is actually newer
-        if (comparison > 0) {
-          // Check if this version is snoozed
-          if (isUpdateSnoozed(update.version)) {
-            console.log(`[UpdateChecker] Update v${update.version} is snoozed, skipping notification`);
-            return update;
-          }
+        // Only show if remote version is STRICTLY newer (comparison > 0)
+        // This prevents showing update notification when versions are equal
+        if (comparison <= 0) {
+          console.log(`[UpdateChecker] Skipping update notification - not a newer version`);
+          return null;
+        }
 
-          const isBeta = update.version.includes('beta') || update.version.includes('alpha');
-          setUpdateInfo(update);
-          showUpdateAvailableToast(update, isBeta);
-          hasShownUpdateThisSession = true;
+        // Check if this version is snoozed
+        if (isUpdateSnoozed(update.version)) {
+          console.log(`[UpdateChecker] Update v${update.version} is snoozed, skipping notification`);
           return update;
         }
+
+        const isBeta = update.version.includes('beta') || update.version.includes('alpha');
+        setUpdateInfo(update);
+        showUpdateAvailableToast(update, isBeta);
+        hasShownUpdateThisSession = true;
+        return update;
       }
 
       // If beta updates are enabled, check beta endpoint
@@ -136,8 +147,11 @@ export default function UpdateChecker() {
           const response = await fetch(BETA_ENDPOINT);
           if (response.ok) {
             const betaManifest = await response.json();
+            const betaComparison = compareVersions(betaManifest.version, currentVersion);
+            console.log(`[UpdateChecker] Beta version comparison: ${betaManifest.version} vs ${currentVersion} = ${betaComparison}`);
 
-            if (betaManifest.version && compareVersions(betaManifest.version, currentVersion) > 0) {
+            // Only show if beta version is STRICTLY newer
+            if (betaManifest.version && betaComparison > 0) {
               // Check if this version is snoozed
               if (isUpdateSnoozed(betaManifest.version)) {
                 console.log(`[UpdateChecker] Update v${betaManifest.version} is snoozed, skipping notification`);
@@ -161,6 +175,7 @@ export default function UpdateChecker() {
         }
       }
 
+      console.log(`[UpdateChecker] No update available`);
       return null;
     } catch (err) {
       // Suppress common errors
@@ -178,18 +193,12 @@ export default function UpdateChecker() {
   };
 
   const showUpdateAvailableToast = (update, isBeta = false) => {
-    const betaNote = isBeta ? '\n\n⚠️ Beta releases may contain bugs.' : '';
-
-    showEnhancedToast({
+    toast(`Update Available: v${update.version}${isBeta ? ' (Beta)' : ''}`, {
       id: 'update-available',
-      title: `Update Available: v${update.version}`,
-      message: 'A new version of Lokus is ready to install' + (isBeta ? ' (Beta)' : ''),
-      variant: 'update',
-      expandedContent: (update.body || 'This update includes bug fixes and improvements.') + betaNote,
-      persistent: true,
-      dismissible: true,
+      description: 'A new version of Lokus is ready to install.',
+      duration: Infinity,
       action: {
-        label: 'Update Now',
+        label: 'Update',
         onClick: () => downloadAndInstall(update),
       },
       cancel: {
@@ -197,7 +206,6 @@ export default function UpdateChecker() {
         onClick: () => {
           // Snooze for 24 hours
           snoozeUpdate(update.version);
-          toast.dismiss('update-available');
         },
       },
     });

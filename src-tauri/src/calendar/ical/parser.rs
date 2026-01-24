@@ -1,5 +1,6 @@
 use crate::calendar::models::{CalendarEvent, CalendarProvider, EventStatus, ICalSubscription};
-use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use chrono_tz::Tz;
 use ical::parser::ical::component::IcalEvent;
 use ical::parser::ical::IcalParser;
 use std::io::BufReader;
@@ -53,20 +54,32 @@ fn parse_ical_event(ical_event: &IcalEvent, calendar_id: &str) -> Option<Calenda
                 if let Some(ref value) = property.value {
                     // Check if it's an all-day event (DATE vs DATE-TIME)
                     let is_date_only = property.params.as_ref()
-                        .map(|p| p.iter().any(|(k, _)| k == "VALUE"))
+                        .map(|p| p.iter().any(|(k, v)| k == "VALUE" && v.contains(&"DATE".to_string())))
                         .unwrap_or(false) || value.len() == 8;
 
+                    // Extract TZID parameter if present
+                    let tzid = property.params.as_ref()
+                        .and_then(|p| p.iter().find(|(k, _)| k == "TZID"))
+                        .and_then(|(_, v)| v.first())
+                        .map(|s| s.as_str());
+
                     all_day = is_date_only;
-                    dtstart = parse_ical_datetime(value, is_date_only);
+                    dtstart = parse_ical_datetime(value, is_date_only, tzid);
                 }
             }
             "DTEND" => {
                 if let Some(ref value) = property.value {
                     let is_date_only = property.params.as_ref()
-                        .map(|p| p.iter().any(|(k, _)| k == "VALUE"))
+                        .map(|p| p.iter().any(|(k, v)| k == "VALUE" && v.contains(&"DATE".to_string())))
                         .unwrap_or(false) || value.len() == 8;
 
-                    dtend = parse_ical_datetime(value, is_date_only);
+                    // Extract TZID parameter if present
+                    let tzid = property.params.as_ref()
+                        .and_then(|p| p.iter().find(|(k, _)| k == "TZID"))
+                        .and_then(|(_, v)| v.first())
+                        .map(|s| s.as_str());
+
+                    dtend = parse_ical_datetime(value, is_date_only, tzid);
                 }
             }
             "LOCATION" => location = property.value.clone(),
@@ -83,12 +96,14 @@ fn parse_ical_event(ical_event: &IcalEvent, calendar_id: &str) -> Option<Calenda
             "RRULE" => rrule = property.value.clone(),
             "CREATED" => {
                 if let Some(ref value) = property.value {
-                    created = parse_ical_datetime(value, false);
+                    // CREATED is typically UTC, pass None for tzid
+                    created = parse_ical_datetime(value, false, None);
                 }
             }
             "LAST-MODIFIED" => {
                 if let Some(ref value) = property.value {
-                    last_modified = parse_ical_datetime(value, false);
+                    // LAST-MODIFIED is typically UTC, pass None for tzid
+                    last_modified = parse_ical_datetime(value, false, None);
                 }
             }
             _ => {}
@@ -131,9 +146,16 @@ fn parse_ical_event(ical_event: &IcalEvent, calendar_id: &str) -> Option<Calenda
 }
 
 /// Parse iCal datetime string to DateTime<Utc>
-fn parse_ical_datetime(value: &str, is_date_only: bool) -> Option<DateTime<Utc>> {
+///
+/// Handles three cases:
+/// 1. DATE format (YYYYMMDD) - all-day events, treated as UTC midnight
+/// 2. UTC datetime (YYYYMMDDTHHmmssZ) - already in UTC
+/// 3. Local datetime with TZID - converted from specified timezone to UTC
+/// 4. Local datetime without TZID - assumed to be in system local timezone
+fn parse_ical_datetime(value: &str, is_date_only: bool, tzid: Option<&str>) -> Option<DateTime<Utc>> {
     if is_date_only || value.len() == 8 {
-        // DATE format: YYYYMMDD
+        // DATE format: YYYYMMDD (all-day events)
+        // Treat as UTC midnight to avoid timezone shifts
         NaiveDate::parse_from_str(value, "%Y%m%d")
             .ok()
             .and_then(|d| d.and_hms_opt(0, 0, 0))
@@ -144,11 +166,32 @@ fn parse_ical_datetime(value: &str, is_date_only: bool) -> Option<DateTime<Utc>>
         NaiveDateTime::parse_from_str(value, "%Y%m%dT%H%M%S")
             .ok()
             .map(|dt| Utc.from_utc_datetime(&dt))
+    } else if let Some(tz_str) = tzid {
+        // Datetime with explicit timezone (TZID parameter)
+        let naive = NaiveDateTime::parse_from_str(value, "%Y%m%dT%H%M%S").ok()?;
+
+        // Try to parse the timezone string
+        if let Ok(tz) = tz_str.parse::<Tz>() {
+            // Convert from the specified timezone to UTC
+            tz.from_local_datetime(&naive)
+                .earliest()
+                .map(|dt| dt.with_timezone(&Utc))
+        } else {
+            // Fallback: if timezone parsing fails, treat as local time
+            tracing::warn!("Unknown timezone '{}', treating as local time", tz_str);
+            Local.from_local_datetime(&naive)
+                .earliest()
+                .map(|dt| dt.with_timezone(&Utc))
+        }
     } else {
-        // Local datetime: YYYYMMDDTHHmmss (treat as UTC for simplicity)
+        // Local datetime without TZID: assume system local timezone
         NaiveDateTime::parse_from_str(value, "%Y%m%dT%H%M%S")
             .ok()
-            .map(|dt| Utc.from_utc_datetime(&dt))
+            .and_then(|naive| {
+                Local.from_local_datetime(&naive)
+                    .earliest()
+                    .map(|dt| dt.with_timezone(&Utc))
+            })
     }
 }
 

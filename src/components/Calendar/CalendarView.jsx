@@ -250,8 +250,11 @@ export default function CalendarView({ onClose, onOpenSettings }) {
           await calendarService.calendars.getCalendars();
         }
 
-        // Fetch extended range
-        const events = await calendarService.events.getAllEvents(fetchStart, fetchEnd);
+        // Fetch extended range with deduplication
+        // getAllEventsDeduplicated returns { event, also_in, is_read_only, fingerprint }
+        // We extract just the event to maintain cache compatibility
+        const deduplicatedResults = await calendarService.events.getAllEventsDeduplicated(fetchStart, fetchEnd);
+        const events = deduplicatedResults.map(result => result.event);
 
         // Add to cache
         addToCache(events, fetchStart, fetchEnd);

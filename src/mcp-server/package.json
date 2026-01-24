@@ -1,6 +1,6 @@
 {
   "name": "@lokus/mcp-server",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Lokus MCP Server - Bundled with Lokus App",
   "type": "module",
   "main": "index.js",

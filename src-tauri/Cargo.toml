@@ -1,6 +1,6 @@
 [package]
 name = "lokus"
-version = "1.0.0"
+version = "1.0.1"
 description = "Lokus - Modern Knowledge Management and Writing Platform"
 authors = ["you"]
 license = "LicenseRef-FCL-1.0-MIT"
@@ -36,6 +36,7 @@ tokio = { version = "1", features = ["full"] }
 regex = "1.0"
 walkdir = "2.0"
 chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
 dirs = "5.0"
 url = "2.5"
 tempfile = "3.8"

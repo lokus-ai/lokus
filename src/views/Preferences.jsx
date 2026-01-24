@@ -298,6 +298,24 @@ export default function Preferences() {
     }
   }, [section]);
 
+  // Load daily notes settings from config
+  useEffect(() => {
+    const loadDailyNotesSettings = async () => {
+      try {
+        const config = await readConfig();
+        if (config?.dailyNotes) {
+          setDailyNotesSettings(prev => ({
+            ...prev,
+            ...config.dailyNotes
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to load daily notes settings:', error);
+      }
+    };
+    loadDailyNotesSettings();
+  }, []);
+
   // Enhanced Editor Preferences
   const [editorSettings, setEditorSettings] = useState({
     font: {

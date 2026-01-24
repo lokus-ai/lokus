@@ -9,21 +9,27 @@
 use crate::calendar::models::CalendarEvent;
 use blake3;
 
+/// Time bucket size in minutes for fingerprint matching.
+/// Events within the same 15-minute window are considered potential duplicates.
+/// This handles slight time differences between providers (e.g., 12:15 vs 12:20).
+const TIME_BUCKET_MINUTES: i64 = 15;
+
 /// Computes a unique fingerprint for an event based on its content.
 /// Events with the same fingerprint are considered duplicates.
 ///
 /// The fingerprint is computed as:
-/// `blake3(normalized_title | start_minute | normalized_location)`
+/// `blake3(normalized_title | time_bucket | normalized_location)`
 ///
 /// Where:
-/// - start_minute is the Unix timestamp divided by 60 (minute precision)
-/// - Title and location are normalized (lowercase, trimmed, collapsed whitespace)
+/// - time_bucket groups events into 15-minute windows (timestamp / 900)
+/// - Title and location are normalized (lowercase, trimmed, collapsed whitespace, iCal escapes stripped)
 pub fn compute_fingerprint(event: &CalendarEvent) -> String {
     let title = normalize_title(&event.title);
-    let start_minute = event.start.timestamp() / 60;
+    // Use 15-minute buckets instead of exact minutes for tolerance
+    let time_bucket = event.start.timestamp() / (TIME_BUCKET_MINUTES * 60);
     let location = normalize_location(event.location.as_deref());
 
-    let input = format!("{}|{}|{}", title, start_minute, location);
+    let input = format!("{}|{}|{}", title, time_bucket, location);
     let hash = blake3::hash(input.as_bytes());
 
     // Return first 16 hex characters for a compact but collision-resistant fingerprint
@@ -54,15 +60,27 @@ pub fn normalize_title(title: &str) -> String {
 /// Normalizes a location string for fingerprint comparison.
 /// - Converts to lowercase
 /// - Trims whitespace
+/// - Strips iCal escape sequences (\, → ,  \; → ;  \\ → \)
 /// - Returns empty string for None
 pub fn normalize_location(location: Option<&str>) -> String {
     match location {
         Some(loc) => {
             let trimmed = loc.trim().to_lowercase();
-            collapse_whitespace(&trimmed)
+            let unescaped = strip_ical_escapes(&trimmed);
+            collapse_whitespace(&unescaped)
         }
         None => String::new(),
     }
+}
+
+/// Strips iCal escape sequences from a string.
+/// iCal format uses backslash escapes: \, for comma, \; for semicolon, \\ for backslash
+fn strip_ical_escapes(s: &str) -> String {
+    s.replace("\\,", ",")
+        .replace("\\;", ";")
+        .replace("\\n", " ")
+        .replace("\\N", " ")
+        .replace("\\\\", "\\")
 }
 
 /// Collapses multiple consecutive whitespace characters into a single space.
@@ -163,14 +181,29 @@ mod tests {
     }
 
     #[test]
-    fn test_same_minute_same_fingerprint() {
-        // Events within the same minute should have the same fingerprint
+    fn test_same_time_bucket_same_fingerprint() {
+        // Events within the same 15-minute bucket should have the same fingerprint
         let event1 = make_test_event("Team Meeting", 0, None);
-        // 30 seconds later (still same minute)
-        let mut event2 = make_test_event("Team Meeting", 0, None);
-        event2.start = event1.start + chrono::Duration::seconds(30);
+        // 5 minutes later (still same 15-min bucket)
+        let event2 = make_test_event("Team Meeting", 5, None);
+        // 10 minutes later (still same 15-min bucket)
+        let event3 = make_test_event("Team Meeting", 10, None);
 
-        assert_eq!(compute_fingerprint(&event1), compute_fingerprint(&event2));
+        let fp1 = compute_fingerprint(&event1);
+        let fp2 = compute_fingerprint(&event2);
+        let fp3 = compute_fingerprint(&event3);
+
+        assert_eq!(fp1, fp2);
+        assert_eq!(fp2, fp3);
+    }
+
+    #[test]
+    fn test_different_time_bucket_different_fingerprint() {
+        // Events in different 15-minute buckets should have different fingerprints
+        let event1 = make_test_event("Team Meeting", 0, None);   // 10:00
+        let event2 = make_test_event("Team Meeting", 20, None);  // 10:20 (different bucket)
+
+        assert_ne!(compute_fingerprint(&event1), compute_fingerprint(&event2));
     }
 
     #[test]
@@ -200,5 +233,33 @@ mod tests {
         assert_eq!(normalize_title("RE: Meeting"), "meeting");
         assert_eq!(normalize_title("FW: Meeting"), "meeting");
         assert_eq!(normalize_title("Fwd: Meeting"), "meeting");
+    }
+
+    #[test]
+    fn test_ical_escape_sequences_normalized() {
+        // iCal uses \, for comma, \; for semicolon, \\ for backslash
+        // These should be normalized so escaped and unescaped versions match
+        let event1 = make_test_event("Meeting", 0, Some("014\\, Building:Z\\, Room:130"));
+        let event2 = make_test_event("Meeting", 0, Some("014, Building:Z, Room:130"));
+
+        assert_eq!(compute_fingerprint(&event1), compute_fingerprint(&event2));
+    }
+
+    #[test]
+    fn test_ical_newline_escape_normalized() {
+        // iCal uses \n and \N for newlines - should normalize to space
+        let event1 = make_test_event("Meeting", 0, Some("Room A\\nFloor 2"));
+        let event2 = make_test_event("Meeting", 0, Some("Room A Floor 2"));
+
+        assert_eq!(compute_fingerprint(&event1), compute_fingerprint(&event2));
+    }
+
+    #[test]
+    fn test_strip_ical_escapes() {
+        assert_eq!(strip_ical_escapes("hello\\, world"), "hello, world");
+        assert_eq!(strip_ical_escapes("a\\;b\\;c"), "a;b;c");
+        assert_eq!(strip_ical_escapes("path\\\\to\\\\file"), "path\\to\\file");
+        assert_eq!(strip_ical_escapes("line1\\nline2"), "line1 line2");
+        assert_eq!(strip_ical_escapes("line1\\Nline2"), "line1 line2");
     }
 }
