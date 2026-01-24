@@ -407,7 +407,7 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         let _ = app.emit("lokus:show-about", ());
       }
       PREFERENCES_ID => {
-        let _ = crate::window_manager::open_preferences_window(app.clone(), None);
+        let _ = crate::window_manager::open_preferences_window(app.clone(), None, None);
       }
       
       // File menu

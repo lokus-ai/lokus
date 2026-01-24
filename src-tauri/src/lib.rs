@@ -22,6 +22,8 @@ mod auth;
 #[cfg(desktop)]
 mod connections;
 #[cfg(desktop)]
+mod calendar;
+#[cfg(desktop)]
 mod oauth_server;
 mod secure_storage;
 #[cfg(desktop)]
@@ -736,7 +738,87 @@ pub fn run() {
       #[cfg(desktop)]
       api_server::api_clear_workspace,
       #[cfg(desktop)]
-      api_server::api_get_current_workspace
+      api_server::api_get_current_workspace,
+      // Calendar commands
+      #[cfg(desktop)]
+      calendar::google_calendar_auth_start,
+      #[cfg(desktop)]
+      calendar::google_calendar_auth_complete,
+      #[cfg(desktop)]
+      calendar::google_calendar_check_auth_callback,
+      #[cfg(desktop)]
+      calendar::google_calendar_auth_status,
+      #[cfg(desktop)]
+      calendar::google_calendar_get_account,
+      #[cfg(desktop)]
+      calendar::calendar_disconnect,
+      #[cfg(desktop)]
+      calendar::get_calendars,
+      #[cfg(desktop)]
+      calendar::get_cached_calendars,
+      #[cfg(desktop)]
+      calendar::get_events,
+      #[cfg(desktop)]
+      calendar::get_all_events,
+      #[cfg(desktop)]
+      calendar::create_event,
+      #[cfg(desktop)]
+      calendar::update_event,
+      #[cfg(desktop)]
+      calendar::delete_event,
+      #[cfg(desktop)]
+      calendar::get_sync_status,
+      #[cfg(desktop)]
+      calendar::sync_calendars,
+      #[cfg(desktop)]
+      calendar::update_calendar_visibility,
+      // iCal commands
+      #[cfg(desktop)]
+      calendar::ical_add_subscription,
+      #[cfg(desktop)]
+      calendar::ical_import_file,
+      #[cfg(desktop)]
+      calendar::ical_remove_subscription,
+      #[cfg(desktop)]
+      calendar::ical_get_subscriptions,
+      #[cfg(desktop)]
+      calendar::ical_sync_subscription,
+      #[cfg(desktop)]
+      calendar::ical_sync_all,
+      #[cfg(desktop)]
+      calendar::ical_update_subscription,
+      #[cfg(desktop)]
+      calendar::ical_get_events,
+      // CalDAV commands
+      #[cfg(desktop)]
+      calendar::caldav_connect,
+      #[cfg(desktop)]
+      calendar::caldav_is_connected,
+      #[cfg(desktop)]
+      calendar::caldav_get_account,
+      #[cfg(desktop)]
+      calendar::caldav_disconnect,
+      #[cfg(desktop)]
+      calendar::caldav_refresh_calendars,
+      #[cfg(desktop)]
+      calendar::caldav_get_events,
+      #[cfg(desktop)]
+      calendar::caldav_create_event,
+      #[cfg(desktop)]
+      calendar::caldav_update_event,
+      #[cfg(desktop)]
+      calendar::caldav_delete_event,
+      // Sync commands
+      #[cfg(desktop)]
+      calendar::get_all_events_deduplicated,
+      #[cfg(desktop)]
+      calendar::sync_calendars_full,
+      #[cfg(desktop)]
+      calendar::get_sync_config,
+      #[cfg(desktop)]
+      calendar::set_sync_config,
+      #[cfg(desktop)]
+      calendar::get_sync_state
     ])
     .setup(|app| {
       #[cfg(desktop)]
@@ -779,6 +861,10 @@ pub fn run() {
         // Initialize auth state
         let auth_state = auth::SharedAuthState::default();
         app.manage(auth_state);
+
+        // Initialize calendar auth state
+        let calendar_state = calendar::SharedCalendarAuthState::default();
+        app.manage(calendar_state);
 
         // Initialize Iroh sync provider (V1 or V2 based on configuration)
         // Initialize Iroh provider synchronously (it will be initialized on first use)

@@ -60,6 +60,21 @@
   flex-shrink: 0;
 }
 
+.drag-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  margin-left: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: white;
+  background-color: rgb(var(--accent));
+  border-radius: 10px;
+}
+
 /* Drop Target Highlighting */
 .drop-target-inside {
   background-color: rgb(var(--accent) / 0.15) !important;
@@ -74,9 +89,11 @@
 }
 
 @keyframes pulseExpand {
+
   0%, 100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.6;
     background-color: rgb(var(--accent) / 0.1);
@@ -197,3 +214,24 @@
 .file-tree-container::-webkit-scrollbar-thumb:hover {
   background: rgb(var(--muted));
 }
+
+/* Multi-select styling - VS Code style */
+.obsidian-file-item.selected {
+  background-color: rgb(var(--accent) / 0.12);
+  position: relative;
+}
+
+.obsidian-file-item.selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background-color: rgb(var(--accent));
+}
+
+.obsidian-file-item.selected.active {
+  background-color: rgb(var(--accent) / 0.2);
+}
+

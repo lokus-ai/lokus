@@ -100,6 +100,7 @@ async fn handle_request(req: Request<Incoming>) -> Result<HyperResponse, Box<dyn
 
     match (method, path) {
         (&Method::GET, "/gmail-callback") => handle_gmail_callback(req).await,
+        (&Method::GET, "/calendar-callback") => handle_calendar_callback(req).await,
         (&Method::POST, "/complete-auth") => handle_complete_auth(req).await,
         (&Method::GET, "/health") => handle_health_check().await,
         _ => {
@@ -181,6 +182,99 @@ async fn handle_gmail_callback(req: Request<Incoming>) -> Result<HyperResponse, 
             </html>
             "#
         ))))?)
+}
+
+async fn handle_calendar_callback(req: Request<Incoming>) -> Result<HyperResponse, Box<dyn std::error::Error + Send + Sync>> {
+    let uri = req.uri();
+    let query_params = parse_query_params(uri.query().unwrap_or(""));
+
+    let code = query_params.get("code");
+    let state = query_params.get("state");
+    let error = query_params.get("error");
+
+    if let Some(error) = error {
+        return Ok(hyper::Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .header("Content-Type", "text/html")
+            .body(Full::new(Bytes::from(format!(
+                r#"
+                <html>
+                  <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                    <h1 style="color: #dc3545;">Calendar Authentication Failed</h1>
+                    <p>Error: {}</p>
+                    <p>You can close this window and try again.</p>
+                  </body>
+                </html>
+                "#,
+                error
+            ))))?);
+    }
+
+    if code.is_none() || state.is_none() {
+        return Ok(hyper::Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .header("Content-Type", "text/html")
+            .body(Full::new(Bytes::from(
+                r#"
+                <html>
+                  <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                    <h1 style="color: #dc3545;">Calendar Authentication Failed</h1>
+                    <p>Missing authorization code or state parameter.</p>
+                    <p>You can close this window and try again.</p>
+                  </body>
+                </html>
+                "#
+            )))?);
+    }
+
+    let code = code.unwrap();
+    let state = state.unwrap();
+
+    // Write the auth data to a temporary file for the Tauri app to pick up
+    if let Err(_e) = write_calendar_auth_callback(code, state) {
+    }
+
+    Ok(hyper::Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "text/html")
+        .body(Full::new(Bytes::from(format!(
+            r#"
+            <html>
+              <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                <h1 style="color: #28a745;">Calendar Connected Successfully!</h1>
+                <p>Google Calendar connection completed successfully.</p>
+                <p>You can close this window and return to Lokus.</p>
+                <script>
+                  // Auto-close after 3 seconds
+                  setTimeout(() => {{
+                    window.close();
+                  }}, 3000);
+                </script>
+              </body>
+            </html>
+            "#
+        ))))?)
+}
+
+fn write_calendar_auth_callback(code: &str, state: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
+    let temp_dir = home_dir.join(".lokus").join("temp");
+
+    // Ensure temp directory exists
+    if !temp_dir.exists() {
+        fs::create_dir_all(&temp_dir)?;
+    }
+
+    let auth_file = temp_dir.join("calendar_auth_callback.json");
+    let auth_data = serde_json::json!({
+        "code": code,
+        "state": state,
+        "timestamp": chrono::Utc::now().timestamp()
+    });
+
+    fs::write(&auth_file, serde_json::to_string_pretty(&auth_data)?)?;
+
+    Ok(())
 }
 
 async fn handle_complete_auth(_req: Request<Incoming>) -> Result<HyperResponse, Box<dyn std::error::Error + Send + Sync>> {

@@ -19,6 +19,7 @@ import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/short
 import { PluginProvider } from "./hooks/usePlugins.jsx";
 import pluginStateAdapter from "./core/plugins/PluginStateAdapter.js";
 import { AuthProvider } from "./core/auth/AuthContext.jsx";
+import { CalendarProvider } from "./contexts/CalendarContext.jsx";
 import platformService from "./services/platform/PlatformService.js";
 import markdownSyntaxConfig from "./core/markdown/syntax-config.js";
 import editorConfigCache from "./core/editor/config-cache.js";
@@ -185,15 +186,17 @@ function App() {
       <div className="app-content">
         <AuthProvider>
           <PluginProvider>
-            <Suspense fallback={<LoadingFallback />}>
-              {isPrefsWindow ? (
-                <Preferences />
-              ) : activePath ? (
-                <Workspace initialPath={activePath} />
-              ) : (
-                <Launcher />
-              )}
-            </Suspense>
+            <CalendarProvider>
+              <Suspense fallback={<LoadingFallback />}>
+                {isPrefsWindow ? (
+                  <Preferences />
+                ) : activePath ? (
+                  <Workspace initialPath={activePath} />
+                ) : (
+                  <Launcher />
+                )}
+              </Suspense>
+            </CalendarProvider>
           </PluginProvider>
         </AuthProvider>
         <UpdateChecker />

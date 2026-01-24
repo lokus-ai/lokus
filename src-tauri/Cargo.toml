@@ -91,6 +91,8 @@ lettre = { version = "0.11", default-features = false, features = ["smtp-transpo
 mail-parser = "0.9"
 mailparse = "0.15"
 quoted_printable = "0.5"
+# iCal parsing
+ical = "0.11"
 axum = "0.7"
 git2 = { version = "0.18", default-features = false }
 # Crash reporting

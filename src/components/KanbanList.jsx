@@ -1,10 +1,65 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Trello, Plus, ExternalLink, RefreshCw } from 'lucide-react'
+import KanbanContextMenu from './KanbanContextMenu'
 
-export default function KanbanList({ workspacePath, onBoardOpen, onCreateBoard }) {
+// Inline rename input for kanban boards
+function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
+  const [value, setValue] = useState(initialValue.replace(/\.kanban$/, ''))
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    const input = inputRef.current
+    if (input) {
+      input.focus()
+      const rafId = requestAnimationFrame(() => {
+        if (inputRef.current && document.activeElement === inputRef.current) {
+          inputRef.current.select()
+        }
+      })
+      return () => cancelAnimationFrame(rafId)
+    }
+  }, [])
+
+  const handleKeyDown = (e) => {
+    e.stopPropagation()
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (value.trim()) {
+        onSubmit(value.trim() + '.kanban')
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      onCancel()
+    }
+  }
+
+  const handleBlur = () => {
+    if (value.trim()) {
+      onSubmit(value.trim() + '.kanban')
+    } else {
+      onCancel()
+    }
+  }
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={handleKeyDown}
+      onBlur={handleBlur}
+      onClick={(e) => e.stopPropagation()}
+      className="w-full px-2 py-1 text-sm bg-app-bg border border-app-accent rounded outline-none text-app-text"
+    />
+  )
+}
+
+export default function KanbanList({ workspacePath, onBoardOpen, onCreateBoard, onBoardAction }) {
   const [boards, setBoards] = useState([])
   const [loading, setLoading] = useState(true)
+  const [renamingBoardPath, setRenamingBoardPath] = useState(null)
 
   const loadBoards = useCallback(async () => {
     if (!workspacePath) return
@@ -27,12 +82,33 @@ export default function KanbanList({ workspacePath, onBoardOpen, onCreateBoard }
   }, [loadBoards])
 
   const handleBoardClick = (board) => {
+    if (renamingBoardPath) return // Don't open if renaming
     if (onBoardOpen) {
       onBoardOpen({
         path: board.path,
         name: board.path.split('/').pop(),
         is_directory: false
       })
+    }
+  }
+
+  const handleRenameSubmit = async (board, newName) => {
+    try {
+      await invoke('rename_file', { path: board.path, newName })
+      loadBoards()
+    } catch (err) {
+      console.error('Failed to rename board', err)
+    }
+    setRenamingBoardPath(null)
+  }
+
+  const handleAction = (action, boardData) => {
+    if (action === 'open') {
+      handleBoardClick(boardData)
+    } else if (action === 'rename') {
+      setRenamingBoardPath(boardData.path)
+    } else if (onBoardAction) {
+      onBoardAction(action, boardData, loadBoards)
     }
   }
 
@@ -86,37 +162,56 @@ export default function KanbanList({ workspacePath, onBoardOpen, onCreateBoard }
         ) : (
           <div className="space-y-1">
             {boards.map((board) => (
-              <button
+              <KanbanContextMenu
                 key={board.path}
-                onClick={() => handleBoardClick(board)}
-                className="w-full p-3 rounded-lg border border-app-border bg-app-panel/30 hover:bg-app-panel hover:border-app-accent/50 transition-all text-left group"
+                board={board}
+                onAction={handleAction}
               >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <Trello className="w-4 h-4 text-app-muted group-hover:text-app-accent flex-shrink-0" />
-                    <span className="font-medium text-sm text-app-text truncate">
-                      {board.name}
-                    </span>
+                <button
+                  onClick={() => handleBoardClick(board)}
+                  className="w-full p-3 rounded-lg border border-app-border bg-app-panel/30 hover:bg-app-panel hover:border-app-accent/50 transition-all text-left group"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <Trello className="w-4 h-4 text-app-muted group-hover:text-app-accent flex-shrink-0" />
+                      {renamingBoardPath === board.path ? (
+                        <InlineRenameInput
+                          initialValue={board.name}
+                          onSubmit={(newName) => handleRenameSubmit(board, newName)}
+                          onCancel={() => setRenamingBoardPath(null)}
+                        />
+                      ) : (
+                        <span className="font-medium text-sm text-app-text truncate">
+                          {board.name}
+                        </span>
+                      )}
+                    </div>
+                    {renamingBoardPath !== board.path && (
+                      <ExternalLink className="w-3 h-3 text-app-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                    )}
                   </div>
-                  <ExternalLink className="w-3 h-3 text-app-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                </div>
 
-                <div className="flex items-center gap-3 text-xs text-app-muted">
-                  <span>{board.card_count} {board.card_count === 1 ? 'card' : 'cards'}</span>
-                  <span>•</span>
-                  <span>{board.column_count} {board.column_count === 1 ? 'column' : 'columns'}</span>
-                </div>
+                  {renamingBoardPath !== board.path && (
+                    <>
+                      <div className="flex items-center gap-3 text-xs text-app-muted">
+                        <span>{board.card_count} {board.card_count === 1 ? 'card' : 'cards'}</span>
+                        <span>•</span>
+                        <span>{board.column_count} {board.column_count === 1 ? 'column' : 'columns'}</span>
+                      </div>
 
-                {board.modified && (
-                  <div className="mt-1 text-xs text-app-muted/70">
-                    {new Date(board.modified).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: new Date(board.modified).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
-                    })}
-                  </div>
-                )}
-              </button>
+                      {board.modified && (
+                        <div className="mt-1 text-xs text-app-muted/70">
+                          {new Date(board.modified).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: new Date(board.modified).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </button>
+              </KanbanContextMenu>
             ))}
           </div>
         )}

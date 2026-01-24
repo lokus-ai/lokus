@@ -4,7 +4,7 @@ import { listActions, getActiveShortcuts, setShortcut, resetShortcuts } from "..
 import { readConfig, updateConfig } from "../core/config/store.js";
 import { formatAccelerator } from "../core/shortcuts/registry.js";
 import { debounce } from "../core/search/index.js";
-import { Search, Pencil, RotateCcw, Upload, Download, Save, RefreshCw, GitBranch, CloudOff, CloudUpload } from "lucide-react";
+import { Search, Pencil, RotateCcw, Upload, Download, Save, RefreshCw, GitBranch, CloudOff, CloudUpload, ChevronDown, ChevronRight } from "lucide-react";
 import { open, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -15,6 +15,8 @@ import markdownSyntaxConfig from "../core/markdown/syntax-config.js";
 import AIAssistant from "./preferences/AIAssistant.jsx";
 import ConnectionStatus from "../components/ConnectionStatus.jsx";
 import GmailLogin from "../components/gmail/GmailLogin.jsx";
+import { CalendarSettings, CalendarConnectionStatus } from "../components/Calendar/index.js";
+import calendarService from "../services/calendar.js";
 import { useAuth } from "../core/auth/AuthContext";
 import { User, LogIn, LogOut, Crown, Shield, Settings as SettingsIcon } from "lucide-react";
 import QuickImport from "../components/QuickImport.jsx";
@@ -30,6 +32,15 @@ export default function Preferences() {
   const { isAuthenticated, user, signIn, signOut, isLoading, getAccessToken } = useAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [showQuickImport, setShowQuickImport] = useState(false);
+  const [expandedConnections, setExpandedConnections] = useState({ gmail: false, calendar: false, ical: false, caldav: false });
+  const [icalSubscriptions, setIcalSubscriptions] = useState([]);
+  const [icalUrl, setIcalUrl] = useState('');
+  const [icalLoading, setIcalLoading] = useState(false);
+  // CalDAV state
+  const [caldavAccount, setCaldavAccount] = useState(null);
+  const [caldavLoading, setCaldavLoading] = useState(false);
+  const [caldavForm, setCaldavForm] = useState({ serverUrl: 'https://caldav.icloud.com', username: '', password: '' });
+  const [caldavCalendars, setCaldavCalendars] = useState([]);
   // Removed mode/accent complexity - themes handle everything now
   const actions = useMemo(() => listActions(), []);
   const [keymap, setKeymap] = useState({});
@@ -274,6 +285,19 @@ export default function Preferences() {
     loadUpdateSettings();
   }, []);
 
+  // Load iCal subscriptions and CalDAV account when Connections section is active
+  useEffect(() => {
+    if (section === 'Connections') {
+      calendarService.ical.getSubscriptions().then(setIcalSubscriptions);
+      calendarService.caldav.getAccount().then(account => {
+        setCaldavAccount(account);
+        if (account) {
+          calendarService.caldav.refreshCalendars().then(setCaldavCalendars).catch(() => {});
+        }
+      });
+    }
+  }, [section]);
+
   // Enhanced Editor Preferences
   const [editorSettings, setEditorSettings] = useState({
     font: {
@@ -405,13 +429,19 @@ export default function Preferences() {
       try {
         let foundPath = false;
 
-        // Try to get from window.opener first (if opened from workspace)
+        // Always check URL params for section
+        const params = new URLSearchParams(window.location.search);
+        const sectionParam = params.get('section');
+        if (sectionParam) {
+          setSection(decodeURIComponent(sectionParam));
+        }
+
+        // Try to get workspace path from window.opener first (if opened from workspace)
         if (window.opener && window.opener.__WORKSPACE_PATH__) {
           setWorkspacePath(window.opener.__WORKSPACE_PATH__);
           foundPath = true;
         } else {
           // Try from URL params
-          const params = new URLSearchParams(window.location.search);
           const path = params.get('workspacePath');
           if (path) {
             setWorkspacePath(decodeURIComponent(path));
@@ -446,6 +476,27 @@ export default function Preferences() {
     getActiveShortcuts().then(setKeymap).catch((err) => {
       console.error('Preferences: Failed to get active shortcuts', err);
     });
+  }, []);
+
+  // Listen for section navigation events (when window is already open)
+  useEffect(() => {
+    let unlisten = null;
+    const setupListener = async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        unlisten = await listen('preferences:navigate', (event) => {
+          if (event.payload) {
+            setSection(event.payload);
+          }
+        });
+      } catch (e) {
+        console.error('Failed to set up preferences:navigate listener', e);
+      }
+    };
+    setupListener();
+    return () => {
+      if (unlisten) unlisten();
+    };
   }, []);
 
   // Create debounced save function with useMemo
@@ -2670,88 +2721,398 @@ export default function Preferences() {
             )}
 
             {section === "Connections" && (
-              <div className="space-y-6">
+              <div className="space-y-8">
                 <div>
-                  <h2 className="text-xl font-semibold mb-4 text-app-text">Connections</h2>
-                  <p className="text-app-text-secondary mb-6">
-                    Connect external services and manage integrations with your workspace.
+                  <h2 className="text-xl font-semibold text-app-text">Connections</h2>
+                  <p className="text-sm text-app-text-secondary mt-1">
+                    Link your accounts to sync data with Lokus
                   </p>
                 </div>
 
-                {/* Available Connections */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium text-app-text">Available Services</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Gmail - Real connection */}
-                    <div className="bg-app-panel border border-app-border rounded-lg p-4 hover:bg-app-panel/80 transition-colors">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-red-500 rounded-lg flex items-center justify-center text-white font-semibold">
-                            G
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-app-text">Gmail</h4>
-                            <p className="text-xs text-app-text-secondary">Email integration</p>
-                          </div>
-                        </div>
-                        <ConnectionStatus />
-                      </div>
+                {/* Gmail */}
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setExpandedConnections(prev => ({ ...prev, gmail: !prev.gmail }))}
+                    className="flex items-center gap-3 w-full hover:bg-app-panel/50 rounded-lg p-2 -m-2 transition-colors"
+                  >
+                    {expandedConnections.gmail ? <ChevronDown className="w-4 h-4 text-app-muted" /> : <ChevronRight className="w-4 h-4 text-app-muted" />}
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+                      <path d="M22 6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6Z" fill="#EA4335"/>
+                      <path d="M22 6L12 13L2 6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                    <span className="font-medium text-app-text flex-1 text-left">Gmail</span>
+                    <ConnectionStatus />
+                  </button>
+                  {expandedConnections.gmail && (
+                    <div className="pl-9">
+                      <GmailLogin />
                     </div>
-
-                    {/* Outlook - Disabled */}
-                    <div className="bg-app-panel border border-app-border rounded-lg p-4 opacity-50 cursor-not-allowed">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center text-white font-semibold">
-                            O
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-app-text-secondary">Outlook</h4>
-                            <p className="text-xs text-app-text-secondary">Coming soon</p>
-                          </div>
-                        </div>
-                        <div className="w-3 h-3 bg-app-muted rounded-full"></div>
-                      </div>
-                    </div>
-
-                    {/* Jira - Disabled */}
-                    <div className="bg-app-panel border border-app-border rounded-lg p-4 opacity-50 cursor-not-allowed">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-semibold">
-                            J
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-app-text-secondary">Jira</h4>
-                            <p className="text-xs text-app-text-secondary">Coming soon</p>
-                          </div>
-                        </div>
-                        <div className="w-3 h-3 bg-app-muted rounded-full"></div>
-                      </div>
-                    </div>
-
-                    {/* Slack - Disabled */}
-                    <div className="bg-app-panel border border-app-border rounded-lg p-4 opacity-50 cursor-not-allowed">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center text-white font-semibold">
-                            S
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-app-text-secondary">Slack</h4>
-                            <p className="text-xs text-app-text-secondary">Coming soon</p>
-                          </div>
-                        </div>
-                        <div className="w-3 h-3 bg-app-muted rounded-full"></div>
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
 
-                {/* Gmail Connection Component */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium text-app-text">Gmail Integration</h3>
-                  <GmailLogin />
+                <div className="border-t border-app-border" />
+
+                {/* Google Calendar */}
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setExpandedConnections(prev => ({ ...prev, calendar: !prev.calendar }))}
+                    className="flex items-center gap-3 w-full hover:bg-app-panel/50 rounded-lg p-2 -m-2 transition-colors"
+                  >
+                    {expandedConnections.calendar ? <ChevronDown className="w-4 h-4 text-app-muted" /> : <ChevronRight className="w-4 h-4 text-app-muted" />}
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+                      <rect x="3" y="4" width="18" height="18" rx="2" fill="#4285F4"/>
+                      <rect x="3" y="4" width="18" height="5" fill="#1967D2"/>
+                      <circle cx="7" cy="6.5" r="1" fill="#EA4335"/>
+                      <circle cx="17" cy="6.5" r="1" fill="#EA4335"/>
+                      <rect x="6" y="11" width="3" height="3" rx="0.5" fill="white"/>
+                      <rect x="10.5" y="11" width="3" height="3" rx="0.5" fill="white"/>
+                      <rect x="15" y="11" width="3" height="3" rx="0.5" fill="white"/>
+                      <rect x="6" y="15.5" width="3" height="3" rx="0.5" fill="white"/>
+                      <rect x="10.5" y="15.5" width="3" height="3" rx="0.5" fill="#FBBC05"/>
+                      <rect x="15" y="15.5" width="3" height="3" rx="0.5" fill="white"/>
+                    </svg>
+                    <span className="font-medium text-app-text flex-1 text-left">Google Calendar</span>
+                    <CalendarConnectionStatus />
+                  </button>
+                  {expandedConnections.calendar && (
+                    <div className="pl-9">
+                      <CalendarSettings />
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-app-border" />
+
+                {/* iCal Subscriptions */}
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setExpandedConnections(prev => ({ ...prev, ical: !prev.ical }))}
+                    className="flex items-center gap-3 w-full hover:bg-app-panel/50 rounded-lg p-2 -m-2 transition-colors"
+                  >
+                    {expandedConnections.ical ? <ChevronDown className="w-4 h-4 text-app-muted" /> : <ChevronRight className="w-4 h-4 text-app-muted" />}
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+                      <rect x="3" y="4" width="18" height="18" rx="2" fill="#5856D6"/>
+                      <rect x="3" y="4" width="18" height="5" fill="#4340B8"/>
+                      <path d="M7 6.5L7 3M17 6.5L17 3" stroke="#FF3B30" strokeWidth="1.5" strokeLinecap="round"/>
+                      <rect x="6" y="11" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9"/>
+                      <rect x="10.5" y="11" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9"/>
+                      <rect x="15" y="11" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9"/>
+                      <rect x="6" y="15" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9"/>
+                      <rect x="10.5" y="15" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9"/>
+                    </svg>
+                    <span className="font-medium text-app-text flex-1 text-left">iCal / ICS</span>
+                    {icalSubscriptions.length > 0 && (
+                      <span className="text-xs text-app-muted">{icalSubscriptions.length}</span>
+                    )}
+                  </button>
+                  {expandedConnections.ical && (
+                    <div className="pl-9 space-y-3">
+                      {/* Add subscription form */}
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (!icalUrl.trim()) return;
+                          setIcalLoading(true);
+                          try {
+                            const sub = await calendarService.ical.addSubscription(icalUrl.trim());
+                            setIcalSubscriptions(prev => [...prev, sub]);
+                            setIcalUrl('');
+                          } catch (err) {
+                            console.error('Failed to add subscription:', err);
+                            alert(err.message || 'Failed to add subscription');
+                          } finally {
+                            setIcalLoading(false);
+                          }
+                        }}
+                        className="flex gap-2"
+                      >
+                        <input
+                          type="text"
+                          value={icalUrl}
+                          onChange={(e) => setIcalUrl(e.target.value)}
+                          placeholder="webcal:// or https:// URL"
+                          className="flex-1 px-2 py-1.5 text-sm bg-app-bg border border-app-border rounded focus:outline-none focus:border-app-accent"
+                        />
+                        <button
+                          type="submit"
+                          disabled={icalLoading || !icalUrl.trim()}
+                          className="px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg rounded hover:opacity-90 disabled:opacity-50"
+                        >
+                          {icalLoading ? 'Adding...' : 'Add'}
+                        </button>
+                      </form>
+
+                      {/* Subscriptions list */}
+                      {icalSubscriptions.length > 0 ? (
+                        <div className="space-y-1">
+                          {icalSubscriptions.map((sub) => (
+                            <div key={sub.id} className="flex items-center justify-between py-1.5 group">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div
+                                  className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                                  style={{ backgroundColor: sub.color || '#5856D6' }}
+                                />
+                                <span className="text-sm text-app-text truncate">{sub.name}</span>
+                                {sub.last_synced && (
+                                  <span className="text-xs text-app-muted">
+                                    · {new Date(sub.last_synced).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const updated = await calendarService.ical.syncSubscription(sub.id);
+                                      setIcalSubscriptions(prev =>
+                                        prev.map(s => s.id === sub.id ? updated : s)
+                                      );
+                                    } catch (err) {
+                                      console.error('Failed to sync:', err);
+                                    }
+                                  }}
+                                  className="p-1 hover:bg-app-panel rounded"
+                                  title="Sync"
+                                >
+                                  <RefreshCw className="w-3 h-3 text-app-muted" />
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    if (!window.confirm(`Remove "${sub.name}"?`)) return;
+                                    try {
+                                      await calendarService.ical.removeSubscription(sub.id);
+                                      setIcalSubscriptions(prev => prev.filter(s => s.id !== sub.id));
+                                    } catch (err) {
+                                      console.error('Failed to remove:', err);
+                                    }
+                                  }}
+                                  className="p-1 hover:bg-app-panel rounded text-red-500"
+                                  title="Remove"
+                                >
+                                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M18 6L6 18M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-app-muted">
+                          Subscribe to iCal/ICS calendars from any URL
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-app-border" />
+
+                {/* CalDAV / iCloud Calendar */}
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setExpandedConnections(prev => ({ ...prev, caldav: !prev.caldav }))}
+                    className="flex items-center gap-3 w-full hover:bg-app-panel/50 rounded-lg p-2 -m-2 transition-colors"
+                  >
+                    {expandedConnections.caldav ? <ChevronDown className="w-4 h-4 text-app-muted" /> : <ChevronRight className="w-4 h-4 text-app-muted" />}
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+                      <defs>
+                        <linearGradient id="icloudGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                          <stop offset="0%" stopColor="#5AC8FA"/>
+                          <stop offset="100%" stopColor="#007AFF"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M19 18H6.5C4.01 18 2 15.99 2 13.5C2 11.26 3.64 9.41 5.79 9.07C6.07 6.25 8.43 4 11.32 4C13.34 4 15.09 5.18 16.01 6.9C16.33 6.83 16.66 6.8 17 6.8C19.76 6.8 22 9.04 22 11.8C22 14.22 20.25 16.24 17.94 16.72" fill="url(#icloudGrad)"/>
+                      <rect x="8" y="12" width="8" height="6" rx="1" fill="white" fillOpacity="0.9"/>
+                      <path d="M10 15L11.5 16.5L14 13.5" stroke="#007AFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span className="font-medium text-app-text flex-1 text-left">iCloud / CalDAV</span>
+                    {caldavAccount && (
+                      <span className="text-xs text-green-500">Connected</span>
+                    )}
+                  </button>
+                  {expandedConnections.caldav && (
+                    <div className="pl-9 space-y-3">
+                      {caldavAccount ? (
+                        <>
+                          {/* Connected state */}
+                          <div className="flex items-center justify-between py-2 px-3 bg-app-panel/50 rounded-lg">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+                                <span className="text-white text-xs font-medium">
+                                  {caldavAccount.username?.charAt(0)?.toUpperCase() || 'A'}
+                                </span>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm text-app-text truncate">{caldavAccount.display_name || caldavAccount.username}</p>
+                                <p className="text-xs text-app-muted truncate">{caldavAccount.username}</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={async () => {
+                                if (!window.confirm('Disconnect iCloud Calendar?')) return;
+                                setCaldavLoading(true);
+                                try {
+                                  await calendarService.caldav.disconnect();
+                                  setCaldavAccount(null);
+                                  setCaldavCalendars([]);
+                                } catch (err) {
+                                  console.error('Failed to disconnect:', err);
+                                } finally {
+                                  setCaldavLoading(false);
+                                }
+                              }}
+                              disabled={caldavLoading}
+                              className="px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10 rounded transition-colors"
+                            >
+                              Disconnect
+                            </button>
+                          </div>
+
+                          {/* Calendars list */}
+                          {caldavCalendars.length > 0 && (
+                            <div className="space-y-1">
+                              <span className="text-xs text-app-muted">Calendars</span>
+                              {caldavCalendars.map((cal) => (
+                                <div key={cal.id} className="flex items-center gap-2 py-1">
+                                  <div
+                                    className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                                    style={{ backgroundColor: cal.color || '#007AFF' }}
+                                  />
+                                  <span className="text-sm text-app-text">{cal.name}</span>
+                                  {cal.is_primary && (
+                                    <span className="text-xs text-app-muted">(Primary)</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Refresh button */}
+                          <button
+                            onClick={async () => {
+                              setCaldavLoading(true);
+                              try {
+                                const cals = await calendarService.caldav.refreshCalendars();
+                                setCaldavCalendars(cals);
+                              } catch (err) {
+                                console.error('Failed to refresh:', err);
+                              } finally {
+                                setCaldavLoading(false);
+                              }
+                            }}
+                            disabled={caldavLoading}
+                            className="flex items-center gap-1.5 text-xs text-app-muted hover:text-app-text transition-colors"
+                          >
+                            <RefreshCw className={`w-3 h-3 ${caldavLoading ? 'animate-spin' : ''}`} />
+                            Refresh Calendars
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {/* Connection form */}
+                          <p className="text-xs text-app-muted">
+                            Connect to iCloud Calendar for two-way sync. You'll need an{' '}
+                            <a
+                              href="https://support.apple.com/en-us/HT204397"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-app-accent hover:underline"
+                            >
+                              app-specific password
+                            </a>.
+                          </p>
+                          <form
+                            onSubmit={async (e) => {
+                              e.preventDefault();
+                              if (!caldavForm.username || !caldavForm.password) return;
+                              setCaldavLoading(true);
+                              try {
+                                const account = await calendarService.caldav.connect(
+                                  caldavForm.serverUrl,
+                                  caldavForm.username,
+                                  caldavForm.password
+                                );
+                                setCaldavAccount(account);
+                                setCaldavForm({ serverUrl: 'https://caldav.icloud.com', username: '', password: '' });
+                                // Refresh calendars
+                                const cals = await calendarService.caldav.refreshCalendars();
+                                setCaldavCalendars(cals);
+                              } catch (err) {
+                                console.error('Failed to connect:', err);
+                                alert(err.message || 'Failed to connect');
+                              } finally {
+                                setCaldavLoading(false);
+                              }
+                            }}
+                            className="space-y-2"
+                          >
+                            <input
+                              type="email"
+                              value={caldavForm.username}
+                              onChange={(e) => setCaldavForm(prev => ({ ...prev, username: e.target.value }))}
+                              placeholder="Apple ID (email)"
+                              className="w-full px-2 py-1.5 text-sm bg-app-bg border border-app-border rounded focus:outline-none focus:border-app-accent"
+                            />
+                            <input
+                              type="password"
+                              value={caldavForm.password}
+                              onChange={(e) => setCaldavForm(prev => ({ ...prev, password: e.target.value }))}
+                              placeholder="App-specific password"
+                              className="w-full px-2 py-1.5 text-sm bg-app-bg border border-app-border rounded focus:outline-none focus:border-app-accent"
+                            />
+                            <button
+                              type="submit"
+                              disabled={caldavLoading || !caldavForm.username || !caldavForm.password}
+                              className="w-full px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg rounded hover:opacity-90 disabled:opacity-50"
+                            >
+                              {caldavLoading ? 'Connecting...' : 'Connect iCloud Calendar'}
+                            </button>
+                          </form>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-app-border" />
+
+                {/* Coming Soon */}
+                <div className="space-y-3">
+                  <span className="text-xs font-medium text-app-muted uppercase tracking-wide">Coming Soon</span>
+                  <div className="flex flex-wrap gap-3">
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-app-panel border border-app-border rounded-full opacity-50">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
+                        <rect x="2" y="4" width="20" height="16" rx="2" fill="#0078D4"/>
+                        <path d="M2 8L12 14L22 8" stroke="white" strokeWidth="1.5"/>
+                      </svg>
+                      <span className="text-xs text-app-text-secondary">Outlook</span>
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-app-panel border border-app-border rounded-full opacity-50">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2Z" fill="#0052CC"/>
+                        <path d="M8 8H16V10H8V8ZM8 12H14V14H8V12Z" fill="white"/>
+                      </svg>
+                      <span className="text-xs text-app-text-secondary">Jira</span>
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-app-panel border border-app-border rounded-full opacity-50">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
+                        <path d="M6 6H10V10H6V6Z" fill="#E01E5A"/>
+                        <path d="M14 6H18V10H14V6Z" fill="#36C5F0"/>
+                        <path d="M6 14H10V18H6V14Z" fill="#2EB67D"/>
+                        <path d="M14 14H18V18H14V14Z" fill="#ECB22E"/>
+                      </svg>
+                      <span className="text-xs text-app-text-secondary">Slack</span>
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-app-panel border border-app-border rounded-full opacity-50">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
+                        <rect x="2" y="2" width="20" height="20" rx="4" fill="#FF5700"/>
+                        <circle cx="12" cy="12" r="4" fill="white"/>
+                        <circle cx="18" cy="6" r="1.5" fill="white"/>
+                      </svg>
+                      <span className="text-xs text-app-text-secondary">Reddit</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

@@ -2073,3 +2073,13 @@ html, body {
     --text-base: 16px;
   }
 }
+
+.obsidian-file-item.selected {
+  background: rgba(var(--accent), 0.15) !important;
+  border-left: 1px solid rgb(var(--accent)) !important;
+  padding-left: calc(0.5rem - 2px) !important;
+}
+
+.obsidian-file-item.selected:hover {
+  background: rgba(var(--accent), 0.25) !important;
+}

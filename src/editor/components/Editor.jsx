@@ -227,7 +227,15 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       }));
     }
     if (Table && TableRow && TableHeader && TableCell) {
-      exts.push(Table.configure({ resizable: true }), TableRow, TableHeader, TableCell);
+      // Extend TableCell and TableHeader to allow empty cells
+      // This prevents "Invalid content for node tableCell: <>" errors
+      const CustomTableCell = TableCell.extend({
+        content: 'block*',  // Allow zero or more blocks (instead of requiring at least one)
+      });
+      const CustomTableHeader = TableHeader.extend({
+        content: 'block*',  // Allow zero or more blocks (instead of requiring at least one)
+      });
+      exts.push(Table.configure({ resizable: true }), TableRow, CustomTableHeader, CustomTableCell);
     }
 
     // Additional formatting extensions
@@ -780,6 +788,14 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
       setMathFormulaModalState({ isOpen: true, mode, onInsert });
     };
 
+    // Listen for template insertion from Command Palette
+    const handleInsertTemplate = (event) => {
+      const { content } = event.detail;
+      if (editor && content) {
+        editor.chain().focus().insertContent(content).run();
+      }
+    };
+
     document.addEventListener('keydown', handleKeyDown);
     window.addEventListener('lokus:open-task-modal', handleTaskModalEvent);
     window.addEventListener('wiki-link-hover', handleWikiLinkHover);
@@ -787,6 +803,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     window.addEventListener('open-image-insert-modal', handleImageInsertModalEvent);
     window.addEventListener('lokus:open-image-url-modal', handleImageUrlModalEvent);
     window.addEventListener('open-math-formula-modal', handleMathFormulaModalEvent);
+    window.addEventListener('lokus:insert-template', handleInsertTemplate);
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
@@ -796,6 +813,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
       window.removeEventListener('open-image-insert-modal', handleImageInsertModalEvent);
       window.removeEventListener('lokus:open-image-url-modal', handleImageUrlModalEvent);
       window.removeEventListener('open-math-formula-modal', handleMathFormulaModalEvent);
+      window.removeEventListener('lokus:insert-template', handleInsertTemplate);
     };
   }, [editor]);
 
