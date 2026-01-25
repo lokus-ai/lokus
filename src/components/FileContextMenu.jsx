@@ -112,7 +112,7 @@ export default function FileContextMenu({
             <ContextMenuItem onClick={() => handleAction('deleteSelected')}>
               <Trash2 className="mr-2 h-4 w-4 text-red-500" />
               <span className="text-red-500">Delete {selectedCount} Items</span>
-              <ContextMenuShortcut>{isWindows ? 'Del' : '⌫'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Del' : '⌫'}</ContextMenuShortcut>)}
             </ContextMenuItem>
 
             <ContextMenuSeparator />
@@ -120,13 +120,13 @@ export default function FileContextMenu({
             <ContextMenuItem onClick={() => handleAction('cutSelected')}>
               <Scissors className="mr-2 h-4 w-4" />
               Cut {selectedCount} Items
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+X' : '⌘X'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+X' : '⌘X'}</ContextMenuShortcut>)}
             </ContextMenuItem>
 
             <ContextMenuItem onClick={() => handleAction('copySelected')}>
               <Copy className="mr-2 h-4 w-4" />
               Copy {selectedCount} Items
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+C' : '⌘C'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+C' : '⌘C'}</ContextMenuShortcut>)}
             </ContextMenuItem>
 
             <ContextMenuItem onClick={() => handleAction('duplicateSelected')}>
@@ -164,13 +164,13 @@ export default function FileContextMenu({
             <ContextMenuItem onClick={() => handleAction('newFile')}>
               <FilePlus className="mr-2 h-4 w-4" />
               New File
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+N' : '⌘N'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+N' : '⌘N'}</ContextMenuShortcut>)}
             </ContextMenuItem>
 
             <ContextMenuItem onClick={() => handleAction('newFolder')}>
               <FolderPlus className="mr-2 h-4 w-4" />
               New Folder
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+N' : '⌘⇧N'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+N' : '⌘⇧N'}</ContextMenuShortcut>)}
             </ContextMenuItem>
 
             <ContextMenuSeparator />
@@ -183,7 +183,7 @@ export default function FileContextMenu({
             <ContextMenuItem onClick={() => handleAction('open')}>
               {getFileTypeIcon()}
               Open
-              <ContextMenuShortcut>Enter</ContextMenuShortcut>
+              {isDesktop() && <ContextMenuShortcut>Enter</ContextMenuShortcut>}
             </ContextMenuItem>
 
             {isFile && (
@@ -191,13 +191,13 @@ export default function FileContextMenu({
                 <ContextMenuItem onClick={() => handleAction('openToSide')}>
                   <ArrowRight className="mr-2 h-4 w-4" />
                   Open to the Side
-                  <ContextMenuShortcut>{isWindows ? 'Ctrl+Enter' : '⌘Enter'}</ContextMenuShortcut>
+                  {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Enter' : '⌘Enter'}</ContextMenuShortcut>)}
                 </ContextMenuItem>
 
                 <ContextMenuItem onClick={() => handleAction('viewHistory')}>
                   <Clock className="mr-2 h-4 w-4" />
                   View History
-                  <ContextMenuShortcut>{isWindows ? 'Ctrl+H' : '⌘H'}</ContextMenuShortcut>
+                  {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+H' : '⌘H'}</ContextMenuShortcut>)}
                 </ContextMenuItem>
 
                 <ContextMenuSub>
@@ -233,7 +233,7 @@ export default function FileContextMenu({
             <ContextMenuItem onClick={() => handleAction('revealInFinder')}>
               <FolderOpen className="mr-2 h-4 w-4" />
               {isMac ? 'Reveal in Finder' : isWindows ? 'Reveal in File Explorer' : 'Show in File Manager'}
-              <ContextMenuShortcut>{isWindows ? 'Alt+R' : '⌥R'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Alt+R' : '⌥R'}</ContextMenuShortcut>)}
             </ContextMenuItem>
 
             {isDesktop() && (
@@ -256,7 +256,7 @@ export default function FileContextMenu({
             >
               <Scissors className="mr-2 h-4 w-4" />
               Cut
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+X' : '⌘X'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+X' : '⌘X'}</ContextMenuShortcut>)}
             </ContextMenuItem>
 
             <ContextMenuItem
@@ -265,13 +265,13 @@ export default function FileContextMenu({
             >
               <Copy className="mr-2 h-4 w-4" />
               Copy
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+C' : '⌘C'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+C' : '⌘C'}</ContextMenuShortcut>)}
             </ContextMenuItem>
 
             <ContextMenuItem onClick={() => handleAction('duplicate')}>
               <Files className="mr-2 h-4 w-4" />
               Duplicate
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+D' : '⌘D'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+D' : '⌘D'}</ContextMenuShortcut>)}
             </ContextMenuItem>
 
             <ContextMenuSeparator />
@@ -287,7 +287,7 @@ export default function FileContextMenu({
             >
               <Clipboard className="mr-2 h-4 w-4" />
               Paste
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+V' : '⌘V'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+V' : '⌘V'}</ContextMenuShortcut>)}
             </ContextMenuItem>
 
             <ContextMenuSeparator />
@@ -300,13 +300,13 @@ export default function FileContextMenu({
             <ContextMenuItem onClick={() => handleAction('rename')}>
               <Pencil className="mr-2 h-4 w-4" />
               Rename
-              <ContextMenuShortcut>F2</ContextMenuShortcut>
+              {isDesktop() && <ContextMenuShortcut>F2</ContextMenuShortcut>}
             </ContextMenuItem>
 
             <ContextMenuItem onClick={() => handleAction('delete')}>
               <Trash2 className="mr-2 h-4 w-4 text-red-500" />
               <span className="text-red-500">Delete</span>
-              <ContextMenuShortcut>{isWindows ? 'Del' : '⌘⌫'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Del' : '⌘⌫'}</ContextMenuShortcut>)}
             </ContextMenuItem>
 
             <ContextMenuSeparator />
@@ -325,12 +325,12 @@ export default function FileContextMenu({
                 <ContextMenuItem onClick={() => handleAction('copyPath')}>
                   <Link className="mr-2 h-4 w-4" />
                   Copy Path
-                  <ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+C' : '⌘⇧C'}</ContextMenuShortcut>
+                  {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+C' : '⌘⇧C'}</ContextMenuShortcut>)}
                 </ContextMenuItem>
                 <ContextMenuItem onClick={() => handleAction('copyRelativePath')}>
                   <Link className="mr-2 h-4 w-4" />
                   Copy Relative Path
-                  <ContextMenuShortcut>{isWindows ? 'Ctrl+K Ctrl+Shift+C' : '⌘K ⌘⇧C'}</ContextMenuShortcut>
+                  {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+K Ctrl+Shift+C' : '⌘K ⌘⇧C'}</ContextMenuShortcut>)}
                 </ContextMenuItem>
               </ContextMenuSubContent>
             </ContextMenuSub>
@@ -345,7 +345,7 @@ export default function FileContextMenu({
             <ContextMenuItem onClick={() => handleAction('findInFolder')}>
               <Search className="mr-2 h-4 w-4" />
               Find in Folder...
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+F' : '⌘⇧F'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+F' : '⌘⇧F'}</ContextMenuShortcut>)}
             </ContextMenuItem>
 
             <ContextMenuSeparator />
@@ -459,7 +459,7 @@ export default function FileContextMenu({
           <ContextMenuItem onClick={() => handleAction('refresh')}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
-            <ContextMenuShortcut>F5</ContextMenuShortcut>
+            {isDesktop() && (<ContextMenuShortcut>F5</ContextMenuShortcut>)}
           </ContextMenuItem>
         )}
 
@@ -470,7 +470,7 @@ export default function FileContextMenu({
             <ContextMenuItem onClick={() => handleAction('properties')}>
               <FolderTree className="mr-2 h-4 w-4" />
               Properties
-              <ContextMenuShortcut>{isWindows ? 'Alt+Enter' : '⌘I'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Alt+Enter' : '⌘I'}</ContextMenuShortcut>)}
             </ContextMenuItem>
           </>
         )}

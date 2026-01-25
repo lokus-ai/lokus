@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import MarkdownIt from "markdown-it";
 import { toast } from "sonner";
+import { isDesktop } from '../platform/index.js';
 
 // Initialize markdown renderer
 const md = new MarkdownIt({
@@ -222,7 +223,9 @@ function TaskCard({ task, onUpdate, onDelete, isDragging }) {
             autoFocus
           />
           <div className="text-[10px] text-app-muted mt-1">
-            Press Cmd/Ctrl+Enter to save, Escape to cancel
+            {isDesktop()
+              ? 'Press Cmd/Ctrl+Enter to save, Escape to cancel'
+              : 'Tap outside the box to save, or cancel'}
           </div>
         </div>
       ) : task.description ? (
