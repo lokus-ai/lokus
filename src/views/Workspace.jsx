@@ -980,6 +980,16 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
     return map;
   }, [flatEntries]);
 
+  //Add dropable for workspace root
+  const { setNodeRef: workspaceRootDroppableRef } = useDroppable({
+    id: 'workspace-root',
+    data: { 
+      type: "workspace-root", 
+      path: workspacePath 
+    }
+  });
+
+
    const handleSelectEntry = useCallback((entry, event) => {
     setSelectedPaths((prev) => {
       const next = new Set(prev);
@@ -1084,95 +1094,115 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
     }
   };
 
-  const handleDragEnd = async (event) => {
-    const { over, active } = event;
-    setActiveEntry(null);
-    const pathsToMove = new Set(draggedPaths);
-    setDraggedPaths(new Set());
-    clearPosition();
+ const handleDragEnd = async (event) => {
+  const { over, active } = event;
+  setActiveEntry(null);
+  const pathsToMove = new Set(draggedPaths);
+  setDraggedPaths(new Set());
+  clearPosition();
 
-    if (!over || !active) return;
+  if (!active) return;
 
-    const sourceEntry = active.data.current?.entry;
-    const targetEntry = over.data.current?.entry;
+  const sourceEntry = active.data.current?.entry;
+  if (!sourceEntry) return;
 
-    if (!sourceEntry || !targetEntry || sourceEntry.path === targetEntry.path) {
+  let destinationDir;
+  let targetEntry = over?.data.current?.entry;
+
+  // Check if dropping outside any entry (over the container)
+  if (!over || !targetEntry) {
+    // Dropping on empty space or container - move to workspace root
+    destinationDir = workspacePath;
+  } else if (targetEntry.path === sourceEntry.path) {
+    // Can't drop on self
+    return;
+  } else if (dropPosition) {
+    // Use drop position indicator (before/after/inside)
+    const { position, targetPath } = dropPosition;
+    if (position === "inside") {
+      destinationDir = targetPath;
+    } else {
+      // before/after - get parent directory
+      const parentPath = targetPath.substring(0, targetPath.lastIndexOf('/'));
+      destinationDir = parentPath || workspacePath;
+    }
+  } else if (targetEntry.is_directory) {
+    // Drop on a directory - move inside it
+    destinationDir = targetEntry.path;
+  } else {
+    // Drop on a file - move to its parent directory
+    const parentPath = targetEntry.path.substring(0, targetEntry.path.lastIndexOf('/'));
+    destinationDir = parentPath || workspacePath;
+  }
+
+   // Don't allow dropping into itself (for folders)
+  if (!destinationDir) return;
+  for (const p of pathsToMove) {
+    if (destinationDir.startsWith(p + '/') || destinationDir === p) {
+      toast?.error("Cannot move a folder into itself");
       return;
     }
+  }
 
-    // Calculate destination directory
-    let destinationDir;
-    if (dropPosition) {
-      const { position, targetPath } = dropPosition;
-      if (position === "inside") {
-        destinationDir = targetPath;
-      } else {
-        destinationDir = targetPath.substring(0, targetPath.lastIndexOf('/')) ||
-          targetEntry.path.substring(0, targetEntry.path.lastIndexOf('/'));
+   // Helper function to perform the actual move for multiple files
+  const performMoveAll = async () => {
+    let movedCount = 0;
+    for (const oldPath of pathsToMove) {
+      try {
+        await invoke("move_file", {
+          sourcePath: oldPath,
+          destinationDir: destinationDir,
+        });
+        movedCount++;
+      } catch (err) {
+        console.error(`Failed to move ${oldPath}:`, err);
       }
-    } else if (targetEntry.is_directory) {
-      destinationDir = targetEntry.path;
-    } else {
-      return; // Can't drop here
     }
+    setSelectedPaths(new Set());
+    onRefresh();
+    if (pathsToMove.size > 1) {
+      toast?.success(`Moved ${movedCount} item${movedCount > 1 ? 's' : ''}`);
+    }
+    return movedCount > 0;
+  };
 
-    // Don't allow dropping into itself (for folders)
-    for (const p of pathsToMove) {
-      if (destinationDir.startsWith(p + '/') || destinationDir === p) {
-        toast?.error("Cannot move a folder into itself");
+  // For single file moves, check references
+  if (pathsToMove.size === 1) {
+    const oldPath = sourceEntry.path;
+    const fileName = oldPath.substring(oldPath.lastIndexOf('/') + 1);
+    const newPath = `${destinationDir}/${fileName}`;
+
+    if (onCheckReferences) {
+      const affectedFiles = await referenceManager.findAffectedFiles(oldPath);
+      if (affectedFiles.length > 0) {
+        onCheckReferences({
+          oldPath,
+          newPath,
+          affectedFiles,
+          operation: performMoveAll
+        });
         return;
       }
     }
+  }
 
-    // Helper function to perform the actual move for multiple files
-    const performMoveAll = async () => {
-      let movedCount = 0;
-      for (const oldPath of pathsToMove) {
-        try {
-          await invoke("move_file", {
-            sourcePath: oldPath,
-            destinationDir: destinationDir,
-          });
-          movedCount++;
-        } catch (err) {
-          console.error(`Failed to move ${oldPath}:`, err);
-        }
-      }
-      setSelectedPaths(new Set());
-      onRefresh();
-      if (pathsToMove.size > 1) {
-        toast?.success(`Moved ${movedCount} item${movedCount > 1 ? 's' : ''}`);
-      }
-      return movedCount > 0;
-    };
-
-    // For single file moves, check references
-    if (pathsToMove.size === 1) {
-      const oldPath = sourceEntry.path;
-      const fileName = oldPath.substring(oldPath.lastIndexOf('/') + 1);
-      const newPath = `${destinationDir}/${fileName}`;
-
-      if (onCheckReferences) {
-        const affectedFiles = await referenceManager.findAffectedFiles(oldPath);
-        if (affectedFiles.length > 0) {
-          onCheckReferences({
-            oldPath,
-            newPath,
-            affectedFiles,
-            operation: performMoveAll
-          });
-          return;
-        }
-      }
-    }
-
-    // No references to update (or multiple files), proceed directly
-    await performMoveAll();
-  };
+   // No references to update (or multiple files), proceed directly
+  await performMoveAll();
+};
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div ref={fileTreeRef} className="file-tree-container" tabIndex={0} onClick={handleContainerClick}>
+     <div 
+        ref={(node) => {
+          if (node) {
+            fileTreeRef.current = node;
+            workspaceRootDroppableRef(node); // Apply both refs
+          }
+        }}
+        className="file-tree-container" 
+        tabIndex={0} 
+        onClick={handleContainerClick}
+      >
         <ul className="space-y-1">
           {creatingItem && creatingItem.targetPath === workspacePath && (
             <NewItemInput
