@@ -1,54 +1,63 @@
-import { invoke } from '@tauri-apps/api/core';
 import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
-import { listen } from '@tauri-apps/api/event';
+import { open } from '@tauri-apps/plugin-shell';
+import supabase from './supabase.js';
 
 class AuthManager {
   constructor() {
     this.listeners = new Set();
     this.user = null;
+    this.session = null;
     this.isAuthenticated = false;
-    // Always use production backend (lokusmd.com)
-    const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : process.env;
-    this.authBaseUrl = env.VITE_AUTH_BASE_URL || 'https://lokusmd.com';
+    this.isInitialized = false;
 
     // Throttling for auth checks to prevent excessive calls
     this.checkInProgress = false;
     this.lastCheckTime = 0;
     this.CHECK_THROTTLE = 1000; // Minimum 1 second between checks
 
-    // Token refresh lock to prevent concurrent refresh attempts
-    this.refreshInProgress = false;
-    this.refreshPromise = null;
-
     this.initialize();
   }
 
   async initialize() {
-    // Check if user is already authenticated
-    await this.checkAuthStatus();
+    // Set up Supabase auth state listener
+    supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[AuthManager] Auth state changed:', event, session?.user?.email);
 
-    // Listen for deep links using the plugin
+      this.session = session;
+      this.user = session?.user || null;
+      this.isAuthenticated = !!session;
+
+      if (!this.isInitialized) {
+        this.isInitialized = true;
+      }
+
+      this.notifyListeners();
+    });
+
+    // Get initial session
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) {
+      console.error('[AuthManager] Error getting session:', error);
+    }
+
+    this.session = session;
+    this.user = session?.user || null;
+    this.isAuthenticated = !!session;
+    this.isInitialized = true;
+    this.notifyListeners();
+
+    // Listen for deep links (OAuth callback)
     try {
       await onOpenUrl((urls) => {
         for (const url of urls) {
-          if (url.startsWith('lokus://auth-callback')) {
+          if (url.includes('auth-callback') || url.includes('access_token') || url.includes('code=')) {
             this.handleDeepLinkCallback(url);
           }
         }
       });
-    } catch { }
-
-    // Listen for localhost auth completion events
-    try {
-      await listen('auth-success', async (event) => {
-        await this.checkAuthStatus(); // Refresh auth state
-      });
-
-      await listen('auth-error', (event) => {
-        alert(`Authentication failed: ${JSON.stringify(event.payload)}`);
-        this.notifyListeners(); // Update UI to show error state
-      });
-    } catch { }
+    } catch (err) {
+      console.warn('[AuthManager] Deep link listener setup failed:', err);
+    }
   }
 
   async checkAuthStatus() {
@@ -63,189 +72,308 @@ class AuthManager {
     this.lastCheckTime = now;
 
     try {
-      const isAuth = await invoke('is_authenticated');
-      this.isAuthenticated = isAuth;
+      const { data: { session }, error } = await supabase.auth.getSession();
 
-      if (isAuth) {
-        const userProfile = await invoke('get_user_profile');
-        this.user = userProfile;
-      } else {
+      if (error) {
+        console.error('[AuthManager] Session check error:', error);
+        this.isAuthenticated = false;
         this.user = null;
+        this.session = null;
+      } else {
+        this.session = session;
+        this.user = session?.user || null;
+        this.isAuthenticated = !!session;
       }
 
       this.notifyListeners();
     } catch (error) {
+      console.error('[AuthManager] checkAuthStatus error:', error);
       this.isAuthenticated = false;
       this.user = null;
+      this.session = null;
       this.notifyListeners();
     } finally {
       this.checkInProgress = false;
     }
+
+    return this.isAuthenticated;
   }
 
-  handleDeepLinkCallback(url) {
+  async handleDeepLinkCallback(url) {
     try {
-      const urlObj = new URL(url);
-      const params = {};
+      console.log('[AuthManager] Handling deep link callback:', url);
 
-      // Extract query parameters
-      for (const [key, value] of urlObj.searchParams) {
-        params[key] = value;
+      // Parse the URL to extract tokens or code
+      const urlObj = new URL(url.replace('lokus://', 'https://lokus.app/'));
+
+      // Check for hash fragment (implicit flow) or query params (PKCE flow)
+      const hashParams = new URLSearchParams(urlObj.hash.substring(1));
+      const queryParams = urlObj.searchParams;
+
+      // Try to get access_token from hash (implicit flow)
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+
+      if (accessToken) {
+        // Set the session from tokens
+        const { data, error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+
+        if (error) {
+          console.error('[AuthManager] Error setting session from tokens:', error);
+          throw error;
+        }
+
+        console.log('[AuthManager] Session set from deep link tokens');
+        return;
       }
 
-      this.handleAuthCallback(params);
-    } catch { }
+      // Try to get code from query params (PKCE flow)
+      const code = queryParams.get('code');
+      if (code) {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+        if (error) {
+          console.error('[AuthManager] Error exchanging code for session:', error);
+          throw error;
+        }
+
+        console.log('[AuthManager] Session set from PKCE code exchange');
+        return;
+      }
+
+      // Check for error
+      const error = hashParams.get('error') || queryParams.get('error');
+      if (error) {
+        const errorDescription = hashParams.get('error_description') || queryParams.get('error_description');
+        console.error('[AuthManager] OAuth error:', error, errorDescription);
+        throw new Error(errorDescription || error);
+      }
+
+    } catch (error) {
+      console.error('[AuthManager] handleDeepLinkCallback error:', error);
+      this.notifyListeners();
+    }
   }
 
-  async handleAuthCallback(params) {
+  /**
+   * Sign in with email and password
+   */
+  async signInWithEmail(email, password) {
     try {
-      const { code, state, error } = params;
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
       if (error) {
-        throw new Error(`OAuth error: ${error}`);
+        throw error;
       }
 
-      if (!code || !state) {
-        throw new Error('Missing authorization code or state parameter');
-      }
-
-      // Handle OAuth callback with PKCE
-      await invoke('handle_oauth_callback', { code, state });
-
-      // Update auth state
-      this.isAuthenticated = true;
-      await this.checkAuthStatus(); // Refresh user profile
-
+      return data;
     } catch (error) {
-      this.notifyListeners();
-    }
-  }
-
-  async signIn() {
-    try {
-      // Initiate OAuth flow with PKCE
-      const authUrl = await invoke('initiate_oauth_flow');
-      await invoke('open_auth_url', { authUrl });
-    } catch (error) {
-      alert(`Failed to start authentication: ${error}`);
-      throw error;
-    }
-  }
-
-  async signOut() {
-    try {
-      await invoke('logout');
-      this.isAuthenticated = false;
-      this.user = null;
-      this.notifyListeners();
-    } catch (error) {
+      console.error('[AuthManager] signInWithEmail error:', error);
       throw error;
     }
   }
 
   /**
-   * Get a fresh access token, automatically refreshing if expired.
-   *
-   * This method handles the complete token lifecycle:
-   * - Waits for any in-progress refresh operations (prevents concurrent refresh)
-   * - Checks token expiration and automatically refreshes if needed
-   * - Signs out user if refresh token is unavailable
-   *
-   * Part of the unified token system: All sync operations now use auth tokens
-   * from AuthManager instead of maintaining separate sync tokens. This prevents
-   * auth-sync disconnect issues where sync would fail despite successful login.
-   *
-   * @returns {Promise<string|null>} Access token or null if not authenticated
+   * Sign up with email and password
+   */
+  async signUpWithEmail(email, password) {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('[AuthManager] signUpWithEmail error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Sign in with Google OAuth
+   */
+  async signInWithGoogle() {
+    try {
+      // Use 127.0.0.1 callback for more reliable OAuth flow
+      // (Safari blocks redirects to "localhost" from external HTTPS sites)
+      // The OAuth server on port 9080 will handle the callback
+      const redirectUrl = 'http://127.0.0.1:9080/auth-callback';
+
+      // Get the OAuth URL from Supabase
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true, // We'll open it manually in system browser
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      // Open the auth URL in the system browser
+      if (data?.url) {
+        console.log('[AuthManager] Opening OAuth URL in browser');
+        await open(data.url);
+
+        // Start polling for the callback file
+        this.pollForAuthCallback();
+      }
+
+      return data;
+    } catch (error) {
+      console.error('[AuthManager] signInWithGoogle error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Poll for the Supabase auth callback file
+   * The OAuth server writes the code to ~/.lokus/temp/supabase_auth_callback.json
+   */
+  async pollForAuthCallback() {
+    const maxAttempts = 60; // 60 seconds timeout
+    const pollInterval = 1000; // 1 second
+
+    console.log('[AuthManager] Starting auth callback polling...');
+
+    // Import dependencies once
+    const { readTextFile, remove } = await import('@tauri-apps/plugin-fs');
+    const { homeDir, join } = await import('@tauri-apps/api/path');
+
+    const home = await homeDir();
+    const callbackPath = await join(home, '.lokus', 'temp', 'supabase_auth_callback.json');
+    console.log('[AuthManager] Polling for callback file at:', callbackPath);
+
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        // Check if we're already authenticated (deep link might have worked)
+        if (this.isAuthenticated) {
+          console.log('[AuthManager] Already authenticated, stopping poll');
+          return;
+        }
+
+        try {
+          const content = await readTextFile(callbackPath);
+          const data = JSON.parse(content);
+
+          if (data.code) {
+            console.log('[AuthManager] Found auth callback code, exchanging for session...');
+
+            // Exchange code for session
+            const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(data.code);
+
+            if (error) {
+              console.error('[AuthManager] Code exchange error:', error);
+            } else {
+              console.log('[AuthManager] Successfully exchanged code for session!', sessionData?.user?.email);
+            }
+
+            // Delete the callback file
+            try {
+              await remove(callbackPath);
+            } catch (e) {
+              // Ignore deletion errors
+            }
+
+            return;
+          }
+        } catch (e) {
+          // File doesn't exist yet, continue polling (don't log every attempt)
+          if (i === 0 || i % 10 === 0) {
+            console.log(`[AuthManager] Waiting for auth callback... (${i}s)`);
+          }
+        }
+
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      } catch (error) {
+        console.error('[AuthManager] Poll error:', error);
+      }
+    }
+
+    console.log('[AuthManager] Auth callback polling timed out');
+  }
+
+  /**
+   * Sign in (legacy method - defaults to Google OAuth)
+   */
+  async signIn() {
+    return this.signInWithGoogle();
+  }
+
+  /**
+   * Sign out
+   */
+  async signOut() {
+    try {
+      const { error } = await supabase.auth.signOut();
+
+      if (error) {
+        throw error;
+      }
+
+      this.isAuthenticated = false;
+      this.user = null;
+      this.session = null;
+      this.notifyListeners();
+    } catch (error) {
+      console.error('[AuthManager] signOut error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get the current access token
    */
   async getAccessToken() {
     try {
-      // If a refresh is in progress, wait for it to complete
-      // This prevents multiple concurrent refresh requests which could cause race conditions
-      if (this.refreshInProgress && this.refreshPromise) {
-        await this.refreshPromise;
-        // After refresh completes, get the new token
-        const tokenData = await invoke('get_auth_token');
-        return tokenData?.access_token || null;
+      const { data: { session }, error } = await supabase.auth.getSession();
+
+      if (error || !session) {
+        return null;
       }
 
-      const tokenData = await invoke('get_auth_token');
-      if (!tokenData) return null;
-
-      // Check if token is expired
-      if (tokenData.expires_at && tokenData.expires_at < Math.floor(Date.now() / 1000)) {
-        // Token is expired, try to refresh
-        if (tokenData.refresh_token) {
-          await this.refreshToken();
-          // Get the new token
-          const newTokenData = await invoke('get_auth_token');
-          return newTokenData?.access_token || null;
-        } else {
-          // No refresh token, user needs to sign in again
-          await this.signOut();
-          return null;
-        }
-      }
-
-      return tokenData.access_token;
+      return session.access_token;
     } catch (error) {
+      console.error('[AuthManager] getAccessToken error:', error);
       return null;
     }
   }
 
   /**
-   * Refresh the access token using the refresh token.
-   *
-   * This method implements a refresh lock mechanism to prevent concurrent refresh attempts:
-   * - Only one refresh can be in progress at a time
-   * - Multiple concurrent calls will wait for the same refresh operation
-   * - The lock is cleared after refresh completes (success or failure)
-   *
-   * Why we need the refresh lock:
-   * - Multiple components may call getAccessToken() simultaneously
-   * - Without the lock, each would trigger a separate refresh request
-   * - This could cause race conditions and token invalidation
-   * - The lock ensures all callers share one refresh operation
-   *
-   * @returns {Promise<void>} Resolves when refresh completes, rejects on failure
-   * @throws {Error} If refresh fails, automatically signs out the user
+   * Refresh the session token
    */
   async refreshToken() {
-    // If already refreshing, return the existing promise
-    // This ensures multiple concurrent refresh calls wait for the same operation
-    if (this.refreshInProgress && this.refreshPromise) {
-      return this.refreshPromise;
-    }
+    try {
+      const { data, error } = await supabase.auth.refreshSession();
 
-    // Mark refresh as in progress and create the promise
-    this.refreshInProgress = true;
-    this.refreshPromise = (async () => {
-      try {
-        await invoke('refresh_auth_token');
-        await this.checkAuthStatus(); // Refresh auth state
-      } catch (error) {
-        // If refresh fails, sign out the user
+      if (error) {
+        console.error('[AuthManager] refreshToken error:', error);
+        // If refresh fails, sign out
         await this.signOut();
         throw error;
-      } finally {
-        // Clear the lock so future refresh operations can proceed
-        this.refreshInProgress = false;
-        this.refreshPromise = null;
       }
-    })();
 
-    return this.refreshPromise;
+      return data;
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**
-   * Helper method for making authenticated API requests.
-   *
-   * Automatically fetches a fresh access token and adds authentication headers.
-   * Used by sync operations to ensure they always use valid credentials.
-   *
-   * @param {string} url - The URL to fetch
-   * @param {RequestInit} options - Fetch options (headers, method, body, etc.)
-   * @returns {Promise<Response>} The fetch response
-   * @throws {Error} If user is not authenticated
+   * Helper method for making authenticated API requests
    */
   async authenticatedFetch(url, options = {}) {
     const token = await this.getAccessToken();
@@ -265,9 +393,37 @@ class AuthManager {
     });
   }
 
+  /**
+   * Reset password - sends a password reset email
+   */
+  async resetPassword(email) {
+    try {
+      const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'lokus://auth-callback',
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('[AuthManager] resetPassword error:', error);
+      throw error;
+    }
+  }
+
   // Event system for auth state changes
   onAuthStateChange(callback) {
     this.listeners.add(callback);
+
+    // Immediately call with current state if initialized
+    if (this.isInitialized) {
+      callback({
+        isAuthenticated: this.isAuthenticated,
+        user: this.user
+      });
+    }
 
     // Return unsubscribe function
     return () => {
@@ -282,7 +438,9 @@ class AuthManager {
           isAuthenticated: this.isAuthenticated,
           user: this.user
         });
-      } catch { }
+      } catch (err) {
+        console.error('[AuthManager] Listener error:', err);
+      }
     });
   }
 
@@ -293,6 +451,10 @@ class AuthManager {
 
   get currentUser() {
     return this.user;
+  }
+
+  get currentSession() {
+    return this.session;
   }
 }
 
