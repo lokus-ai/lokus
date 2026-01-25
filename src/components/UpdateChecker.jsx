@@ -6,6 +6,9 @@ import { showEnhancedToast } from './ui/enhanced-toast';
 import { readConfig } from '../core/config/store.js';
 import { getAppVersion } from '../utils/appInfo.js';
 
+// Disable update checks for Mac App Store builds (Apple Guideline 2.4.5)
+const UPDATES_DISABLED = import.meta.env.VITE_DISABLE_UPDATE_CHECKER === 'true';
+
 // Update endpoints
 const BETA_ENDPOINT = 'https://config.lokusmd.com/api/updates/beta.json';
 
@@ -94,6 +97,12 @@ export default function UpdateChecker() {
   const downloadToastId = useRef(null);
 
   const checkForUpdate = async () => {
+    // Skip update checks for App Store builds
+    if (UPDATES_DISABLED) {
+      console.debug('[UpdateChecker] Update checking disabled for this build');
+      return null;
+    }
+
     // Don't show again if already shown this session or dismissed
     if (hasShownUpdateThisSession || dismissed) {
       return null;
