@@ -1,5 +1,7 @@
 import { useEffect, lazy, Suspense } from "react";
 import Launcher from "./views/Launcher";
+import LoginScreen from "./views/LoginScreen";
+import { useAuth } from "./core/auth/AuthContext.jsx";
 // Lazy load heavy views
 const Workspace = lazy(() => import("./views/Workspace"));
 const Preferences = lazy(() => import("./views/Preferences"));
@@ -40,6 +42,28 @@ const LoadingFallback = () => (
     </div>
   </div>
 );
+
+// Auth gate component - must be inside AuthProvider
+const AuthGate = ({ children, isPrefsWindow }) => {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  // Show loading while checking auth
+  if (isLoading) {
+    return <LoadingFallback />;
+  }
+
+  // Preferences window doesn't require auth (allows signing out)
+  if (isPrefsWindow) {
+    return children;
+  }
+
+  // Show login screen if not authenticated
+  if (!isAuthenticated) {
+    return <LoginScreen />;
+  }
+
+  return children;
+};
 
 function App() {
   // Use the hooks' values directly (no setter param expected)
@@ -185,19 +209,21 @@ function App() {
 
       <div className="app-content">
         <AuthProvider>
-          <PluginProvider>
-            <CalendarProvider>
-              <Suspense fallback={<LoadingFallback />}>
-                {isPrefsWindow ? (
-                  <Preferences />
-                ) : activePath ? (
-                  <Workspace initialPath={activePath} />
-                ) : (
-                  <Launcher />
-                )}
-              </Suspense>
-            </CalendarProvider>
-          </PluginProvider>
+          <AuthGate isPrefsWindow={isPrefsWindow}>
+            <PluginProvider>
+              <CalendarProvider>
+                <Suspense fallback={<LoadingFallback />}>
+                  {isPrefsWindow ? (
+                    <Preferences />
+                  ) : activePath ? (
+                    <Workspace initialPath={activePath} />
+                  ) : (
+                    <Launcher />
+                  )}
+                </Suspense>
+              </CalendarProvider>
+            </PluginProvider>
+          </AuthGate>
         </AuthProvider>
         <UpdateChecker />
         {/* Only show announcements/toasts in workspace, not in launcher or preferences */}

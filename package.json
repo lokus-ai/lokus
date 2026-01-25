@@ -89,6 +89,7 @@
     "@react-sigma/core": "^5.0.4",
     "@react-sigma/layout-force": "^5.0.4",
     "@sentry/react": "^10.26.0",
+    "@supabase/supabase-js": "^2.91.1",
     "@tanstack/react-virtual": "^3.13.12",
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/plugin-deep-link": "^2.4.3",

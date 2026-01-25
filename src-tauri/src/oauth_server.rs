@@ -101,6 +101,7 @@ async fn handle_request(req: Request<Incoming>) -> Result<HyperResponse, Box<dyn
     match (method, path) {
         (&Method::GET, "/gmail-callback") => handle_gmail_callback(req).await,
         (&Method::GET, "/calendar-callback") => handle_calendar_callback(req).await,
+        (&Method::GET, "/auth-callback") => handle_supabase_auth_callback(req).await,
         (&Method::POST, "/complete-auth") => handle_complete_auth(req).await,
         (&Method::GET, "/health") => handle_health_check().await,
         _ => {
@@ -254,6 +255,97 @@ async fn handle_calendar_callback(req: Request<Incoming>) -> Result<HyperRespons
             </html>
             "#
         ))))?)
+}
+
+/// Handle Supabase OAuth callback (for user authentication)
+async fn handle_supabase_auth_callback(req: Request<Incoming>) -> Result<HyperResponse, Box<dyn std::error::Error + Send + Sync>> {
+    let uri = req.uri();
+    let query = uri.query().unwrap_or("");
+    let fragment = ""; // Fragment is handled client-side, but check query params for PKCE code
+
+    // For PKCE flow, code comes in query params
+    let query_params = parse_query_params(query);
+
+    let code = query_params.get("code");
+    let error = query_params.get("error");
+    let error_description = query_params.get("error_description");
+
+    if let Some(error) = error {
+        let desc = error_description.map(|s| s.as_str()).unwrap_or("Unknown error");
+        return Ok(hyper::Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .header("Content-Type", "text/html")
+            .body(Full::new(Bytes::from(format!(
+                r#"
+                <!DOCTYPE html>
+                <html>
+                  <head><title>Authentication Failed</title></head>
+                  <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 50px; background: #1a1a1a; color: #fff;">
+                    <h1 style="color: #ef4444;">Authentication Failed</h1>
+                    <p>Error: {} - {}</p>
+                    <p style="color: #888;">You can close this window and try again.</p>
+                  </body>
+                </html>
+                "#,
+                error, desc
+            ))))?);
+    }
+
+    // Write the auth callback data for the frontend to pick up
+    if let Some(code) = code {
+        if let Err(e) = write_supabase_auth_callback(code) {
+            eprintln!("Failed to write Supabase auth callback: {}", e);
+        }
+    }
+
+    // Return HTML that will redirect to the app via deep link and also notify via localStorage
+    Ok(hyper::Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "text/html")
+        .body(Full::new(Bytes::from(format!(
+            r#"
+            <!DOCTYPE html>
+            <html>
+              <head><title>Authentication Successful</title></head>
+              <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 50px; background: #1a1a1a; color: #fff;">
+                <h1 style="color: #22c55e;">Authentication Successful!</h1>
+                <p>You can close this window and return to Lokus.</p>
+                <p style="color: #888; font-size: 14px;">This window will close automatically...</p>
+                <script>
+                  // Try to open the app via deep link with the code
+                  const code = new URLSearchParams(window.location.search).get('code');
+                  if (code) {{
+                    window.location.href = 'lokus://auth-callback?code=' + encodeURIComponent(code);
+                  }}
+                  // Auto-close after a delay
+                  setTimeout(() => {{
+                    window.close();
+                  }}, 2000);
+                </script>
+              </body>
+            </html>
+            "#
+        ))))?)
+}
+
+fn write_supabase_auth_callback(code: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
+    let temp_dir = home_dir.join(".lokus").join("temp");
+
+    // Ensure temp directory exists
+    if !temp_dir.exists() {
+        fs::create_dir_all(&temp_dir)?;
+    }
+
+    let auth_file = temp_dir.join("supabase_auth_callback.json");
+    let auth_data = serde_json::json!({
+        "code": code,
+        "timestamp": chrono::Utc::now().timestamp()
+    });
+
+    fs::write(&auth_file, serde_json::to_string_pretty(&auth_data)?)?;
+
+    Ok(())
 }
 
 fn write_calendar_auth_callback(code: &str, state: &str) -> Result<(), Box<dyn std::error::Error>> {
