@@ -234,8 +234,8 @@ function App() {
           </>
         )}
         <WhatsNew />
-        {/* Toaster only in workspace */}
-        {activePath && !isPrefsWindow && <Toaster />}
+        {/* Toaster in all windows */}
+        <Toaster />
         <PluginDialogContainer />
         <ProgressIndicatorContainer progressItems={progressItems} />
       </div>

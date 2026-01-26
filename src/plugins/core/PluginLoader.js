@@ -9,6 +9,8 @@ import { RegistryAPI } from '../registry/RegistryAPI.js'
 import * as PluginSDK from '../../../packages/plugin-sdk/src/index.ts'
 // Security - Plugin Security Manager for monitoring and enforcement
 import { PluginSecurityManager } from '../security/PluginSecurityManager.js'
+// Import version from package.json (single source of truth)
+import pkg from '../../../package.json'
 
 /**
  * Plugin Loading Utilities
@@ -519,14 +521,14 @@ export class PluginLoader {
         logPath: '',
         extensionMode: 2, // Development
         environment: {
-          lokusVersion: '1.0.0',
-          nodeVersion: '18.0.0',
-          platform: 'darwin', // TODO: Get real platform
-          arch: 'x64',
+          lokusVersion: pkg.version,
+          nodeVersion: typeof process !== 'undefined' ? process.version : '18.0.0',
+          platform: typeof navigator !== 'undefined' ? navigator.platform : 'unknown',
+          arch: typeof navigator !== 'undefined' ? (navigator.userAgent.includes('arm') ? 'arm64' : 'x64') : 'x64',
           appName: 'Lokus',
-          appVersion: '1.0.0',
-          isDevelopment: true,
-          isTesting: false
+          appVersion: pkg.version,
+          isDevelopment: import.meta.env?.DEV ?? false,
+          isTesting: import.meta.env?.MODE === 'test'
         },
         permissions: new Set(manifest.permissions || []),
         subscriptions: [],
