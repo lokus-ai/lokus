@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, RefreshCw, Eye, EyeOff, Lock, ChevronDown, ChevronRight, Layers, Zap } from 'lucide-react';
+import { open } from '@tauri-apps/plugin-shell';
 import { useCalendarContext } from '../../contexts/CalendarContext.jsx';
 import calendarService from '../../services/calendar.js';
 
@@ -36,6 +37,7 @@ export default function CalendarSettings() {
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [showCalendars, setShowCalendars] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [accessRequested, setAccessRequested] = useState(false);
 
   const handleConnect = async () => {
     try {
@@ -70,25 +72,79 @@ export default function CalendarSettings() {
 
   // Not connected to Google
   if (!isGoogleConnected) {
+    const handleRequestAccess = () => {
+      // Get user email if available from Supabase auth
+      let userEmail = 'unknown';
+      try {
+        const authData = window.localStorage.getItem('lokus-auth');
+        if (authData) {
+          userEmail = JSON.parse(authData)?.user?.email || 'unknown';
+        }
+      } catch (e) {}
+
+      const subject = encodeURIComponent('Google Calendar Beta Access Request');
+      const body = encodeURIComponent(`Hi,
+
+I'd like to request access to Google Calendar integration in Lokus.
+
+My email: ${userEmail}
+
+Thanks!`);
+
+      // Open Gmail compose in browser (works for everyone)
+      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=pratham@lokusmd.com&su=${subject}&body=${body}`;
+      open(gmailUrl);
+      setAccessRequested(true);
+    };
+
     return (
-      <div className="flex items-center justify-between py-2">
-        <span className="text-sm text-app-text-secondary">
-          Sync your events with Google Calendar
-        </span>
-        <button
-          onClick={handleConnect}
-          disabled={isConnecting || authLoading}
-          className="px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
-        >
-          {isConnecting || authLoading ? (
-            <>
-              <Loader2 className="w-3 h-3 animate-spin" />
-              Connecting...
-            </>
-          ) : (
-            'Connect'
-          )}
-        </button>
+      <div className="space-y-3 py-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-app-text-secondary">
+            Sync your events with Google Calendar
+          </span>
+          <button
+            onClick={handleConnect}
+            disabled={isConnecting || authLoading}
+            className="px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
+          >
+            {isConnecting || authLoading ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Connecting...
+              </>
+            ) : (
+              'Connect'
+            )}
+          </button>
+        </div>
+
+        {/* Beta Access Notice */}
+        <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+          <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">
+            Google Calendar is currently in beta. If you see an "Access blocked" error, request access below and we'll add you within 24 hours.
+          </p>
+          <button
+            onClick={handleRequestAccess}
+            className="text-xs font-medium text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1"
+          >
+            {accessRequested ? (
+              <>
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Request sent - check your email app
+              </>
+            ) : (
+              <>
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                Request Beta Access
+              </>
+            )}
+          </button>
+        </div>
       </div>
     );
   }

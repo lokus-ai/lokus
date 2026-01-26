@@ -1,7 +1,7 @@
 {
   "name": "lokus",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Local-first markdown note-taking app with database views, 3D knowledge graphs, AI integration, and blazing-fast search. Built with React and Rust (Tauri). Obsidian alternative with 100x faster performance.",
   "keywords": [
     "markdown",
@@ -44,6 +44,8 @@
     "packages/*"
   ],
   "scripts": {
+    "version:sync": "node scripts/sync-version.cjs",
+    "version:bump": "npm version --no-git-tag-version",
     "dev": "vite",
     "dev:test": "concurrently \"npm run dev\" \"npm run test:watch:silent\"",
     "build": "cross-env NODE_OPTIONS='--max-old-space-size=4096' vite build",
@@ -55,7 +57,7 @@
     "bundle:mcp": "node scripts/bundle-mcp.cjs",
     "build:windows": "npm run bundle:mcp && node scripts/build-windows.js",
     "build:macos": "npm run bundle:mcp && node scripts/build-macos.js",
-    "build:appstore": "npm run bundle:mcp && npm run build && tauri build --config src-tauri/tauri.appstore.conf.json",
+    "build:appstore": "VITE_DISABLE_UPDATE_CHECKER=true npm run bundle:mcp && npm run build && tauri build --config src-tauri/tauri.appstore.conf.json",
     "build:linux": "npm run bundle:mcp && node scripts/build-linux.js",
     "build:all": "node scripts/check-platform.js && npm run build:all:cross",
     "build:all:cross": "npm run build:windows && npm run build:macos && npm run build:linux",
@@ -89,10 +91,12 @@
     "@react-sigma/core": "^5.0.4",
     "@react-sigma/layout-force": "^5.0.4",
     "@sentry/react": "^10.26.0",
+    "posthog-js": "^1.194.0",
+    "@supabase/supabase-js": "^2.91.1",
     "@tanstack/react-virtual": "^3.13.12",
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/plugin-deep-link": "^2.4.3",
-    "@tauri-apps/plugin-dialog": "^2.3.3",
+    "@tauri-apps/plugin-dialog": "^2.4.2",
     "@tauri-apps/plugin-fs": "^2.4.2",
     "@tauri-apps/plugin-global-shortcut": "^2.3.0",
     "@tauri-apps/plugin-opener": "^2.3.0",

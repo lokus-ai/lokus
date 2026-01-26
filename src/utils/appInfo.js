@@ -5,6 +5,8 @@
  */
 
 import { getName, getVersion, getTauriVersion } from '@tauri-apps/api/app';
+// Import version from package.json at build time (Vite handles this)
+import pkg from '../../package.json';
 
 let cachedAppInfo = null;
 
@@ -18,12 +20,8 @@ export async function getAppVersion() {
     const version = await getVersion();
     return version;
   } catch (error) {
-    // Fallback to package.json version in development
-    const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
-    if (isDev) {
-      return '1.0.0-dev';
-    }
-    return '1.0.0';
+    // Fallback to package.json version (imported at build time)
+    return pkg.version;
   }
 }
 
@@ -56,12 +54,12 @@ export async function getAppInfo() {
 
     return cachedAppInfo;
   } catch (error) {
-    // Fallback information
+    // Fallback information using package.json version
     const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
     const mode = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.MODE : process.env.NODE_ENV || 'production';
     return {
       name: 'Lokus',
-      version: '1.0.0',
+      version: pkg.version,
       tauriVersion: 'unknown',
       environment: mode,
       isDev: isDev

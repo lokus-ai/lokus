@@ -1,5 +1,7 @@
 import { useEffect, lazy, Suspense } from "react";
 import Launcher from "./views/Launcher";
+import LoginScreen from "./views/LoginScreen";
+import { useAuth } from "./core/auth/AuthContext.jsx";
 // Lazy load heavy views
 const Workspace = lazy(() => import("./views/Workspace"));
 const Preferences = lazy(() => import("./views/Preferences"));
@@ -30,7 +32,7 @@ import mcpClient from "./core/mcp/client.js";
 // Guard window access in non-Tauri environments
 import { emit } from "@tauri-apps/api/event";
 import * as Sentry from "@sentry/react";
-import analytics from "./services/analytics.js";
+import posthog from "./services/posthog.js";
 
 // Simple loading spinner for Suspense fallback
 const LoadingFallback = () => (
@@ -40,6 +42,28 @@ const LoadingFallback = () => (
     </div>
   </div>
 );
+
+// Auth gate component - must be inside AuthProvider
+const AuthGate = ({ children, isPrefsWindow }) => {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  // Show loading while checking auth
+  if (isLoading) {
+    return <LoadingFallback />;
+  }
+
+  // Preferences window doesn't require auth (allows signing out)
+  if (isPrefsWindow) {
+    return children;
+  }
+
+  // Show login screen if not authenticated
+  if (!isAuthenticated) {
+    return <LoginScreen />;
+  }
+
+  return children;
+};
 
 function App() {
   // Use the hooks' values directly (no setter param expected)
@@ -88,9 +112,9 @@ function App() {
     editorConfigCache.init(); // Pre-load editor config to eliminate "Loading editor..." delay
 
     // Initialize analytics and track startup time
-    analytics.initialize().then(() => {
+    posthog.initialize().then(() => {
       const startupTime = performance.now() - startTime;
-      analytics.trackStartupTime(startupTime);
+      posthog.trackAppStartup(startupTime, true);
     });
 
     // Check for updates 3 seconds after startup
@@ -185,19 +209,21 @@ function App() {
 
       <div className="app-content">
         <AuthProvider>
-          <PluginProvider>
-            <CalendarProvider>
-              <Suspense fallback={<LoadingFallback />}>
-                {isPrefsWindow ? (
-                  <Preferences />
-                ) : activePath ? (
-                  <Workspace initialPath={activePath} />
-                ) : (
-                  <Launcher />
-                )}
-              </Suspense>
-            </CalendarProvider>
-          </PluginProvider>
+          <AuthGate isPrefsWindow={isPrefsWindow}>
+            <PluginProvider>
+              <CalendarProvider>
+                <Suspense fallback={<LoadingFallback />}>
+                  {isPrefsWindow ? (
+                    <Preferences />
+                  ) : activePath ? (
+                    <Workspace initialPath={activePath} />
+                  ) : (
+                    <Launcher />
+                  )}
+                </Suspense>
+              </CalendarProvider>
+            </PluginProvider>
+          </AuthGate>
         </AuthProvider>
         <UpdateChecker />
         {/* Only show announcements/toasts in workspace, not in launcher or preferences */}
@@ -208,8 +234,8 @@ function App() {
           </>
         )}
         <WhatsNew />
-        {/* Toaster only in workspace */}
-        {activePath && !isPrefsWindow && <Toaster />}
+        {/* Toaster in all windows */}
+        <Toaster />
         <PluginDialogContainer />
         <ProgressIndicatorContainer progressItems={progressItems} />
       </div>

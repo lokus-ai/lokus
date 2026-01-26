@@ -22,7 +22,7 @@ import { GraphUI } from '../components/graph/GraphUI.jsx';
 import '../components/graph/GraphUI.css';
 import { invoke } from "@tauri-apps/api/core";
 import { loadGraphConfig, saveGraphConfig, getDefaultConfig, debouncedSaveGraphConfig } from '../core/graph/config-manager.js';
-import analytics from '../services/analytics.js';
+import posthog from '../services/posthog.js';
 import { generateFileTreeHash } from '../utils/fileTreeUtils.js';
 
 export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile, fileTree = [], onGraphStateChange }) => {
@@ -648,8 +648,8 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     setViewMode(mode);
     setIsLayoutRunning(false); // Reset layout when switching modes
 
-    // Track graph feature usage (rate limited to once per session)
-    analytics.trackFeatureUsed('graph');
+    // Track graph feature activation
+    posthog.trackFeatureActivation('graph');
   }, []);
 
   const handleLayoutControl = useCallback((action) => {

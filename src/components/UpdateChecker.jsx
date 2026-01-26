@@ -6,6 +6,9 @@ import { showEnhancedToast } from './ui/enhanced-toast';
 import { readConfig } from '../core/config/store.js';
 import { getAppVersion } from '../utils/appInfo.js';
 
+// Disable update checks for Mac App Store builds (Apple Guideline 2.4.5)
+const UPDATES_DISABLED = import.meta.env.VITE_DISABLE_UPDATE_CHECKER === 'true';
+
 // Update endpoints
 const BETA_ENDPOINT = 'https://config.lokusmd.com/api/updates/beta.json';
 
@@ -49,6 +52,10 @@ let hasShownUpdateThisSession = false;
 // For testing: reset the session flag
 export function _resetSessionFlag() {
   hasShownUpdateThisSession = false;
+}
+// Expose to window for debugging
+if (typeof window !== 'undefined') {
+  window.__resetUpdateChecker = _resetSessionFlag;
 }
 
 /**
@@ -94,6 +101,12 @@ export default function UpdateChecker() {
   const downloadToastId = useRef(null);
 
   const checkForUpdate = async () => {
+    // Skip update checks for App Store builds
+    if (UPDATES_DISABLED) {
+      console.debug('[UpdateChecker] Update checking disabled for this build');
+      return null;
+    }
+
     // Don't show again if already shown this session or dismissed
     if (hasShownUpdateThisSession || dismissed) {
       return null;
@@ -118,7 +131,6 @@ export default function UpdateChecker() {
         if (comparison > 0) {
           // Check if this version is snoozed
           if (isUpdateSnoozed(update.version)) {
-            console.log(`[UpdateChecker] Update v${update.version} is snoozed, skipping notification`);
             return update;
           }
 
@@ -140,7 +152,6 @@ export default function UpdateChecker() {
             if (betaManifest.version && compareVersions(betaManifest.version, currentVersion) > 0) {
               // Check if this version is snoozed
               if (isUpdateSnoozed(betaManifest.version)) {
-                console.log(`[UpdateChecker] Update v${betaManifest.version} is snoozed, skipping notification`);
                 return { available: true, version: betaManifest.version };
               }
 
@@ -266,9 +277,10 @@ export default function UpdateChecker() {
       }, 1000);
 
     } catch (err) {
+      console.error('Update failed:', err);
       toast.error('Update Failed', {
         id: 'update-download',
-        description: err.message,
+        description: err.message || 'Unknown error',
       });
       setDownloading(false);
     }
@@ -280,7 +292,9 @@ export default function UpdateChecker() {
     };
 
     window.addEventListener('check-for-update', handleCheckUpdate);
-    return () => window.removeEventListener('check-for-update', handleCheckUpdate);
+    return () => {
+      window.removeEventListener('check-for-update', handleCheckUpdate);
+    };
   }, [dismissed]);
 
   // This component no longer renders a modal - it uses toasts instead

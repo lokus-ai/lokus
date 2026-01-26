@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import authManager from './AuthManager';
+import posthog from '../../services/posthog.js';
 
 const AuthContext = createContext();
 
@@ -19,7 +20,7 @@ export const AuthProvider = ({ children }) => {
   });
 
   useEffect(() => {
-    
+
     // Subscribe to auth state changes
     const unsubscribe = authManager.onAuthStateChange((newState) => {
       setAuthState(prev => {
@@ -31,6 +32,13 @@ export const AuthProvider = ({ children }) => {
         };
         return newAuthState;
       });
+
+      // Identify user in PostHog when authenticated
+      if (newState.isAuthenticated && newState.user) {
+        posthog.identify(newState.user.id, {
+          email: newState.user.email
+        });
+      }
     });
 
     // Initial state check
@@ -49,6 +57,7 @@ export const AuthProvider = ({ children }) => {
     return unsubscribe;
   }, []);
 
+  // Legacy sign in (Google OAuth)
   const signIn = async () => {
     try {
       await authManager.signIn();
@@ -57,28 +66,73 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Sign in with email and password
+  const signInWithEmail = async (email, password) => {
+    try {
+      return await authManager.signInWithEmail(email, password);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  // Sign up with email and password
+  const signUpWithEmail = async (email, password) => {
+    try {
+      return await authManager.signUpWithEmail(email, password);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  // Sign in with Google
+  const signInWithGoogle = async () => {
+    try {
+      return await authManager.signInWithGoogle();
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  // Sign out
   const signOut = async () => {
     try {
+      // Reset PostHog to anonymous tracking
+      posthog.reset();
       await authManager.signOut();
     } catch (error) {
       throw error;
     }
   };
 
+  // Get access token
   const getAccessToken = async () => {
     return await authManager.getAccessToken();
   };
 
+  // Authenticated fetch helper
   const authenticatedFetch = async (url, options) => {
     return await authManager.authenticatedFetch(url, options);
+  };
+
+  // Reset password
+  const resetPassword = async (email) => {
+    try {
+      return await authManager.resetPassword(email);
+    } catch (error) {
+      throw error;
+    }
   };
 
   const value = {
     ...authState,
     signIn,
+    signInWithEmail,
+    signUpWithEmail,
+    signInWithGoogle,
     signOut,
     getAccessToken,
-    authenticatedFetch
+    authenticatedFetch,
+    resetPassword
   };
 
   return (

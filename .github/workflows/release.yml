@@ -105,9 +105,12 @@ jobs:
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
           VITE_ENABLE_CRASH_REPORTS: 'true'
           VITE_SENTRY_ENVIRONMENT: 'production'
-          # Analytics (Umami)
-          VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
-          VITE_UMAMI_API_ENDPOINT: ${{ secrets.VITE_UMAMI_API_ENDPOINT }}
+          # Supabase Auth
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # Analytics (PostHog)
+          VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
         with:
           includeUpdaterJson: true
           tagName: ${{ github.ref_name }}
@@ -211,8 +214,14 @@ jobs:
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
           VITE_ENABLE_CRASH_REPORTS: 'true'
           VITE_SENTRY_ENVIRONMENT: 'production'
-          VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
-          VITE_UMAMI_API_ENDPOINT: ${{ secrets.VITE_UMAMI_API_ENDPOINT }}
+          # Supabase Auth
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # Analytics (PostHog)
+          VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
+          # Mac App Store - disable update checker
+          VITE_DISABLE_UPDATE_CHECKER: 'true'
         run: |
           npm run build
           cd src-tauri

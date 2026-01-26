@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { useRemoteLinks, useUIVisibility, useLayoutDefaults } from "../contexts/RemoteConfigContext";
+import { useRemoteLinks, useUIVisibility, useLayoutDefaults, useFeatureFlags } from "../contexts/RemoteConfigContext";
 import ServiceStatus from "../components/ServiceStatus";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
@@ -47,7 +47,7 @@ import TemplatePicker from "../components/TemplatePicker.jsx";
 import { getMarkdownCompiler } from "../core/markdown/compiler.js";
 import { MarkdownExporter } from "../core/export/markdown-exporter.js";
 import dailyNotesManager from "../core/daily-notes/manager.js";
-import analytics from "../services/analytics.js";
+import posthog from "../services/posthog.js";
 import CreateTemplate from "../components/CreateTemplate.jsx";
 import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
 import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
@@ -980,6 +980,16 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
     return map;
   }, [flatEntries]);
 
+  //Add dropable for workspace root
+  const { setNodeRef: workspaceRootDroppableRef } = useDroppable({
+    id: 'workspace-root',
+    data: { 
+      type: "workspace-root", 
+      path: workspacePath 
+    }
+  });
+
+
    const handleSelectEntry = useCallback((entry, event) => {
     setSelectedPaths((prev) => {
       const next = new Set(prev);
@@ -1084,95 +1094,115 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
     }
   };
 
-  const handleDragEnd = async (event) => {
-    const { over, active } = event;
-    setActiveEntry(null);
-    const pathsToMove = new Set(draggedPaths);
-    setDraggedPaths(new Set());
-    clearPosition();
+ const handleDragEnd = async (event) => {
+  const { over, active } = event;
+  setActiveEntry(null);
+  const pathsToMove = new Set(draggedPaths);
+  setDraggedPaths(new Set());
+  clearPosition();
 
-    if (!over || !active) return;
+  if (!active) return;
 
-    const sourceEntry = active.data.current?.entry;
-    const targetEntry = over.data.current?.entry;
+  const sourceEntry = active.data.current?.entry;
+  if (!sourceEntry) return;
 
-    if (!sourceEntry || !targetEntry || sourceEntry.path === targetEntry.path) {
+  let destinationDir;
+  let targetEntry = over?.data.current?.entry;
+
+  // Check if dropping outside any entry (over the container)
+  if (!over || !targetEntry) {
+    // Dropping on empty space or container - move to workspace root
+    destinationDir = workspacePath;
+  } else if (targetEntry.path === sourceEntry.path) {
+    // Can't drop on self
+    return;
+  } else if (dropPosition) {
+    // Use drop position indicator (before/after/inside)
+    const { position, targetPath } = dropPosition;
+    if (position === "inside") {
+      destinationDir = targetPath;
+    } else {
+      // before/after - get parent directory
+      const parentPath = targetPath.substring(0, targetPath.lastIndexOf('/'));
+      destinationDir = parentPath || workspacePath;
+    }
+  } else if (targetEntry.is_directory) {
+    // Drop on a directory - move inside it
+    destinationDir = targetEntry.path;
+  } else {
+    // Drop on a file - move to its parent directory
+    const parentPath = targetEntry.path.substring(0, targetEntry.path.lastIndexOf('/'));
+    destinationDir = parentPath || workspacePath;
+  }
+
+   // Don't allow dropping into itself (for folders)
+  if (!destinationDir) return;
+  for (const p of pathsToMove) {
+    if (destinationDir.startsWith(p + '/') || destinationDir === p) {
+      toast?.error("Cannot move a folder into itself");
       return;
     }
+  }
 
-    // Calculate destination directory
-    let destinationDir;
-    if (dropPosition) {
-      const { position, targetPath } = dropPosition;
-      if (position === "inside") {
-        destinationDir = targetPath;
-      } else {
-        destinationDir = targetPath.substring(0, targetPath.lastIndexOf('/')) ||
-          targetEntry.path.substring(0, targetEntry.path.lastIndexOf('/'));
+   // Helper function to perform the actual move for multiple files
+  const performMoveAll = async () => {
+    let movedCount = 0;
+    for (const oldPath of pathsToMove) {
+      try {
+        await invoke("move_file", {
+          sourcePath: oldPath,
+          destinationDir: destinationDir,
+        });
+        movedCount++;
+      } catch (err) {
+        console.error(`Failed to move ${oldPath}:`, err);
       }
-    } else if (targetEntry.is_directory) {
-      destinationDir = targetEntry.path;
-    } else {
-      return; // Can't drop here
     }
+    setSelectedPaths(new Set());
+    onRefresh();
+    if (pathsToMove.size > 1) {
+      toast?.success(`Moved ${movedCount} item${movedCount > 1 ? 's' : ''}`);
+    }
+    return movedCount > 0;
+  };
 
-    // Don't allow dropping into itself (for folders)
-    for (const p of pathsToMove) {
-      if (destinationDir.startsWith(p + '/') || destinationDir === p) {
-        toast?.error("Cannot move a folder into itself");
+  // For single file moves, check references
+  if (pathsToMove.size === 1) {
+    const oldPath = sourceEntry.path;
+    const fileName = oldPath.substring(oldPath.lastIndexOf('/') + 1);
+    const newPath = `${destinationDir}/${fileName}`;
+
+    if (onCheckReferences) {
+      const affectedFiles = await referenceManager.findAffectedFiles(oldPath);
+      if (affectedFiles.length > 0) {
+        onCheckReferences({
+          oldPath,
+          newPath,
+          affectedFiles,
+          operation: performMoveAll
+        });
         return;
       }
     }
+  }
 
-    // Helper function to perform the actual move for multiple files
-    const performMoveAll = async () => {
-      let movedCount = 0;
-      for (const oldPath of pathsToMove) {
-        try {
-          await invoke("move_file", {
-            sourcePath: oldPath,
-            destinationDir: destinationDir,
-          });
-          movedCount++;
-        } catch (err) {
-          console.error(`Failed to move ${oldPath}:`, err);
-        }
-      }
-      setSelectedPaths(new Set());
-      onRefresh();
-      if (pathsToMove.size > 1) {
-        toast?.success(`Moved ${movedCount} item${movedCount > 1 ? 's' : ''}`);
-      }
-      return movedCount > 0;
-    };
-
-    // For single file moves, check references
-    if (pathsToMove.size === 1) {
-      const oldPath = sourceEntry.path;
-      const fileName = oldPath.substring(oldPath.lastIndexOf('/') + 1);
-      const newPath = `${destinationDir}/${fileName}`;
-
-      if (onCheckReferences) {
-        const affectedFiles = await referenceManager.findAffectedFiles(oldPath);
-        if (affectedFiles.length > 0) {
-          onCheckReferences({
-            oldPath,
-            newPath,
-            affectedFiles,
-            operation: performMoveAll
-          });
-          return;
-        }
-      }
-    }
-
-    // No references to update (or multiple files), proceed directly
-    await performMoveAll();
-  };
+   // No references to update (or multiple files), proceed directly
+  await performMoveAll();
+};
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div ref={fileTreeRef} className="file-tree-container" tabIndex={0} onClick={handleContainerClick}>
+     <div 
+        ref={(node) => {
+          if (node) {
+            fileTreeRef.current = node;
+            workspaceRootDroppableRef(node); // Apply both refs
+          }
+        }}
+        className="file-tree-container" 
+        tabIndex={0} 
+        onClick={handleContainerClick}
+      >
         <ul className="space-y-1">
           {creatingItem && creatingItem.targetPath === workspacePath && (
             <NewItemInput
@@ -1429,6 +1459,7 @@ function WorkspaceWithScope({ path }) {
   const remoteLinksRef = useRef(remoteLinks);
   const uiVisibility = useUIVisibility();
   const layoutDefaults = useLayoutDefaults();
+  const featureFlags = useFeatureFlags();
 
   // Keep ref updated with latest links for event handlers
   useEffect(() => {
@@ -2734,10 +2765,6 @@ function WorkspaceWithScope({ path }) {
 
       await invoke("write_file_content", { path: path_to_save, content: contentToSave });
 
-      // Track save performance
-      const saveDuration = performance.now() - saveStartTime;
-      analytics.trackNoteSavePerformance(saveDuration);
-
       setSavedContent(editorContent);
       setUnsavedChanges(prev => {
         const newSet = new Set(prev);
@@ -3049,7 +3076,7 @@ function WorkspaceWithScope({ path }) {
 
       }
     } catch (error) {
-      analytics.trackExportError('html');
+      posthog.trackError('export_failed', 'workspace', true);
     }
   }, []);
 
@@ -3232,7 +3259,7 @@ function WorkspaceWithScope({ path }) {
         }, 1000);
       }
     } catch (error) {
-      analytics.trackExportError('pdf');
+      posthog.trackError('export_failed', 'workspace', true);
     }
   }, []);
 
@@ -3313,12 +3340,16 @@ function WorkspaceWithScope({ path }) {
   };
 
   const handleCreateCanvas = async () => {
+    // Check feature flag before creating canvas
+    if (!featureFlags.enable_canvas) {
+      return;
+    }
     try {
       const targetPath = getTargetPath();
       const newCanvasPath = await canvasManager.createCanvas(targetPath, "Untitled Canvas");
       handleRefreshFiles();
       handleFileOpen({ path: newCanvasPath, name: "Untitled Canvas.canvas", is_directory: false });
-      analytics.trackFeatureUsed('canvas');
+      posthog.trackFeatureActivation('canvas');
     } catch { }
   };
 
@@ -3335,7 +3366,7 @@ function WorkspaceWithScope({ path }) {
       const fileName = "New Board.kanban";
       const boardPath = `${targetPath}/${fileName}`;
       handleFileOpen({ path: boardPath, name: fileName, is_directory: false });
-      analytics.trackFeatureUsed('database');
+      posthog.trackFeatureActivation('database');
     } catch { }
   };
 
@@ -3419,8 +3450,7 @@ function WorkspaceWithScope({ path }) {
         handleRefreshFiles();
       }
 
-      // Track daily note feature usage (rate limited)
-      analytics.trackFeatureUsed('daily_notes');
+      posthog.trackFeatureActivation('daily_notes');
     } catch { }
   };
 
@@ -3441,8 +3471,7 @@ function WorkspaceWithScope({ path }) {
 
       setShowDatePickerModal(false);
 
-      // Track daily note feature usage (rate limited)
-      analytics.trackFeatureUsed('daily_notes');
+      posthog.trackFeatureActivation('daily_notes');
     } catch { }
   };
 
@@ -3492,7 +3521,6 @@ function WorkspaceWithScope({ path }) {
         });
         handleRefreshFiles();
         handleFileOpen({ path: newPath, name: fileName, is_directory: false });
-        analytics.trackNoteCreation('blank');
       } else {
         await invoke("create_folder_in_workspace", {
           workspacePath: creatingItem.targetPath,
@@ -3657,8 +3685,7 @@ function WorkspaceWithScope({ path }) {
     const graphPath = '__graph__';
     const graphName = 'Graph View';
 
-    // Track graph feature usage (rate limited to once per session)
-    analytics.trackFeatureUsed('graph');
+    posthog.trackFeatureActivation('graph');
 
     setOpenTabs(prevTabs => {
       const newTabs = prevTabs.filter(t => t.path !== graphPath);
@@ -3675,8 +3702,7 @@ function WorkspaceWithScope({ path }) {
     const basesPath = '__bases__';
     const basesName = 'Bases';
 
-    // Track database feature usage (rate limited to once per session)
-    analytics.trackFeatureUsed('database');
+    posthog.trackFeatureActivation('database');
 
     setOpenTabs(prevTabs => {
       const newTabs = prevTabs.filter(t => t.path !== basesPath);
@@ -4550,7 +4576,7 @@ function WorkspaceWithScope({ path }) {
                 <FolderOpen className="w-5 h-5" strokeWidth={2} />
               </button>
             )}
-            {uiVisibility.toolbar_new_canvas && (
+            {featureFlags.enable_canvas && uiVisibility.toolbar_new_canvas && (
               <button
                 onClick={handleCreateCanvas}
                 className="obsidian-button icon-only small"
@@ -4690,7 +4716,7 @@ function WorkspaceWithScope({ path }) {
                 </button>
               )}
 
-              {uiVisibility.sidebar_plugins && (
+              {featureFlags.enable_plugins && uiVisibility.sidebar_plugins && (
                 <button
                   onClick={() => {
                     setShowPlugins(true);
@@ -4822,7 +4848,7 @@ function WorkspaceWithScope({ path }) {
           <div className="bg-app-border/20 w-px" />
           {showLeft && (
             <aside className="overflow-y-auto flex flex-col">
-              {showPlugins ? (
+              {featureFlags.enable_plugins && showPlugins ? (
                 <div className="flex-1 overflow-hidden">
                   <PluginSettings onOpenPluginDetail={handleOpenPluginDetail} />
                 </div>
@@ -4916,9 +4942,11 @@ function WorkspaceWithScope({ path }) {
                         New File
                         <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-file'])}</span>
                       </ContextMenuItem>
-                      <ContextMenuItem onClick={handleCreateCanvas}>
-                        New Canvas
-                      </ContextMenuItem>
+                      {featureFlags.enable_canvas && (
+                        <ContextMenuItem onClick={handleCreateCanvas}>
+                          New Canvas
+                        </ContextMenuItem>
+                      )}
                       <ContextMenuItem onClick={handleCreateFolder}>
                         New Folder
                         <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-folder'])}</span>
@@ -4999,7 +5027,7 @@ function WorkspaceWithScope({ path }) {
                   >
                     {/* Right/Bottom Pane Content */}
                     {rightPaneFile ? (
-                      rightPaneFile && rightPaneFile.endsWith('.canvas') ? (
+                      featureFlags.enable_canvas && rightPaneFile && rightPaneFile.endsWith('.canvas') ? (
                         <div className="flex-1 overflow-hidden">
                           <Canvas
                             canvasPath={rightPaneFile}
@@ -5054,7 +5082,7 @@ function WorkspaceWithScope({ path }) {
                           <div className="h-full">
                             <BasesView isVisible={true} onFileOpen={handleFileOpen} />
                           </div>
-                        ) : rightPaneFile.startsWith('__plugin_') ? (
+                        ) : featureFlags.enable_plugins && rightPaneFile.startsWith('__plugin_') ? (
                           <div className="flex-1 overflow-hidden">
                             {(() => {
                               const activeTab = openTabs.find(tab => tab.path === rightPaneFile);
@@ -5091,7 +5119,7 @@ function WorkspaceWithScope({ path }) {
               ) : (
                 /* Single View */
                 <>
-                  {activeFile && activeFile.endsWith('.canvas') ? (
+                  {featureFlags.enable_canvas && activeFile && activeFile.endsWith('.canvas') ? (
                     <div className="flex-1 overflow-hidden">
                       <Canvas
                         canvasPath={activeFile}
@@ -5188,7 +5216,7 @@ function WorkspaceWithScope({ path }) {
             <div className="flex-1 h-full overflow-hidden">
               <Gmail workspacePath={path} />
             </div>
-          ) : */ activeFile && activeFile.startsWith('__plugin_') ? (
+          ) : */ featureFlags.enable_plugins && activeFile && activeFile.startsWith('__plugin_') ? (
                       <div className="flex-1 p-8 md:p-12 overflow-y-auto">
                         <div className="max-w-full mx-auto h-full">
                           <div className="flex-1 overflow-hidden">
@@ -5323,16 +5351,18 @@ function WorkspaceWithScope({ path }) {
                                   <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+N")}</div>
                                 </button>
 
-                                <button
-                                  onClick={handleCreateCanvas}
-                                  className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
-                                >
-                                  <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
-                                    <Layers className="w-5 h-5 text-app-accent" />
-                                  </div>
-                                  <h3 className="font-medium text-app-text mb-2">New Canvas</h3>
-                                  <p className="text-sm text-app-muted">Create visual mind maps and diagrams</p>
-                                </button>
+                                {featureFlags.enable_canvas && (
+                                  <button
+                                    onClick={handleCreateCanvas}
+                                    className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
+                                  >
+                                    <div className="w-10 h-10 rounded-lg bg-app-accent/10 group-hover:bg-app-accent/20 flex items-center justify-center mb-4 transition-colors">
+                                      <Layers className="w-5 h-5 text-app-accent" />
+                                    </div>
+                                    <h3 className="font-medium text-app-text mb-2">New Canvas</h3>
+                                    <p className="text-sm text-app-muted">Create visual mind maps and diagrams</p>
+                                  </button>
+                                )}
 
                                 <button
                                   onClick={handleCreateFolder}

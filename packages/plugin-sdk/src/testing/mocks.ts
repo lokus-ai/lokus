@@ -2,6 +2,9 @@
  * @fileoverview Mock implementations for testing
  */
 
+// Import version from package.json (single source of truth)
+import pkg from '../../package.json'
+
 import type {
   LokusAPI,
   PluginContext,
@@ -640,12 +643,12 @@ export function createMockContext(
     logPath: '/mock/logs',
     extensionMode: 2, // Development
     environment: {
-      lokusVersion: '1.0.0',
+      lokusVersion: pkg.version,
       nodeVersion: '18.0.0',
       platform: 'darwin',
       arch: 'x64',
       appName: 'Lokus',
-      appVersion: '1.0.0',
+      appVersion: pkg.version,
       appRoot: '/mock/app',
       userDataDir: '/mock/userdata',
       tmpDir: '/mock/tmp',

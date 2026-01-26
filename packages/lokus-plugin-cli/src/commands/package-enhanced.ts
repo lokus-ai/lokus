@@ -12,6 +12,8 @@ import { ErrorHandler } from '../utils/error-handler';
 import { pluginValidator } from '../utils/plugin-validator';
 import { buildPlugin } from './build';
 import { DependencyManager } from '../utils/dependency-manager';
+// Import version from package.json (single source of truth)
+import pkg from '../../package.json';
 
 export interface PackageOptions {
   outDir?: string;
@@ -283,7 +285,7 @@ export class PluginPackager {
         fileCount: stats.fileCount,
         createdAt: new Date().toISOString(),
         buildTarget: this.options.target || 'production',
-        toolVersion: '1.0.0' // CLI version
+        toolVersion: pkg.version // CLI version from package.json
       }
     };
 
