@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useStatusBar } from '../../hooks/useStatusBar';
 import { useResponsiveStatusBar, STATUS_BAR_PRIORITY } from '../../hooks/useResponsiveStatusBar';
+import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
 import SyncStatus from '../Auth/SyncStatus.jsx';
 import { isDesktop } from '../../platform/index.js';
 import {
@@ -27,6 +28,7 @@ export default function ResponsiveStatusBar({
   onToggleTerminal = null
 }) {
   const { leftItems, rightItems } = useStatusBar();
+  const featureFlags = useFeatureFlags();
 
   // Count words and characters
   function countFinder(editor) {
@@ -375,9 +377,13 @@ export default function ResponsiveStatusBar({
           </>
         )}
 
-        {/* Sync Status (CRITICAL - always visible) */}
-        <div className="obsidian-status-bar-separator" />
-        <SyncStatus />
+        {/* Sync Status (CRITICAL - always visible when enabled) */}
+        {featureFlags.enable_sync && (
+          <>
+            <div className="obsidian-status-bar-separator" />
+            <SyncStatus />
+          </>
+        )}
       </div>
     </div>
   );

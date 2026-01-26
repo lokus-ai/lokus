@@ -12,6 +12,7 @@ import liveEditorSettings from "../core/editor/live-settings.js";
 // Import editor styles for Live Preview
 import "../editor/styles/editor.css";
 import markdownSyntaxConfig from "../core/markdown/syntax-config.js";
+import { useFeatureFlags } from "../contexts/RemoteConfigContext";
 import AIAssistant from "./preferences/AIAssistant.jsx";
 import ConnectionStatus from "../components/ConnectionStatus.jsx";
 import GmailLogin from "../components/gmail/GmailLogin.jsx";
@@ -30,6 +31,7 @@ export default function Preferences() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [section, setSection] = useState("Appearance");
   const { isAuthenticated, user, signIn, signOut, isLoading, getAccessToken } = useAuth();
+  const featureFlags = useFeatureFlags();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [showQuickImport, setShowQuickImport] = useState(false);
   const [expandedConnections, setExpandedConnections] = useState({ gmail: false, calendar: false, ical: false, caldav: false });
@@ -985,10 +987,10 @@ export default function Preferences() {
               "Markdown",
               "Shortcuts",
               "Import",
-              "Sync",
+              ...(featureFlags.enable_sync ? ["Sync"] : []),
               "Connections",
               "Account",
-              "AI Assistant",
+              ...(featureFlags.enable_ai_assistant ? ["AI Assistant"] : []),
               "Updates",
             ].map((name) => (
               <button
@@ -3236,7 +3238,7 @@ export default function Preferences() {
               </div>
             )}
 
-            {section === "Sync" && (
+            {featureFlags.enable_sync && section === "Sync" && (
               <div className="space-y-6 max-w-2xl">
                 <div>
                   <h2 className="text-lg font-semibold mb-2 text-app-text">Workspace Sync</h2>
@@ -4109,6 +4111,30 @@ export default function Preferences() {
                     )}
                   </div>
                 </section>
+
+                {/* Analytics - small toggle at bottom */}
+                <section className="pt-4 border-t border-app-border/30">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-app-muted">Help improve Lokus</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="sr-only peer"
+                        checked={localStorage.getItem('lokus-analytics-preferences') ? JSON.parse(localStorage.getItem('lokus-analytics-preferences')).enabled !== false : true}
+                        onChange={(e) => {
+                          const enabled = e.target.checked;
+                          localStorage.setItem('lokus-analytics-preferences', JSON.stringify({ enabled, lastUpdated: new Date().toISOString() }));
+                          // Dynamically import to avoid circular deps
+                          import('../services/posthog.js').then(({ default: posthog }) => {
+                            if (enabled) posthog.enable();
+                            else posthog.disable();
+                          });
+                        }}
+                      />
+                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-app-accent/70"></div>
+                    </label>
+                  </div>
+                </section>
               </div>
             )}
 
@@ -4202,7 +4228,7 @@ export default function Preferences() {
               </div>
             )}
 
-            {section === "AI Assistant" && (
+            {featureFlags.enable_ai_assistant && section === "AI Assistant" && (
               <AIAssistant />
             )}
           </main>

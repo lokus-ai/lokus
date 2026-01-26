@@ -7,7 +7,6 @@ import {
   setGlobalActiveTheme,
 } from "../core/theme/manager.js";
 import { useThemeOverrides } from "../contexts/RemoteConfigContext";
-import analytics from "../services/analytics.js";
 
 // Apply server-side theme overrides as CSS variables
 const applyThemeOverrides = (overrides) => {
@@ -116,7 +115,6 @@ export function ThemeProvider({ children }) {
   const handleSetTheme = useCallback(async (newTheme) => {
     setTheme(newTheme);
     await setGlobalActiveTheme(newTheme);
-    analytics.trackThemeChange(newTheme);
   }, []);
 
   const value = {

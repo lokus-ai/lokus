@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import authManager from './AuthManager';
+import posthog from '../../services/posthog.js';
 
 const AuthContext = createContext();
 
@@ -31,6 +32,13 @@ export const AuthProvider = ({ children }) => {
         };
         return newAuthState;
       });
+
+      // Identify user in PostHog when authenticated
+      if (newState.isAuthenticated && newState.user) {
+        posthog.identify(newState.user.id, {
+          email: newState.user.email
+        });
+      }
     });
 
     // Initial state check
@@ -88,6 +96,8 @@ export const AuthProvider = ({ children }) => {
   // Sign out
   const signOut = async () => {
     try {
+      // Reset PostHog to anonymous tracking
+      posthog.reset();
       await authManager.signOut();
     } catch (error) {
       throw error;
