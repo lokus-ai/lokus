@@ -5,6 +5,75 @@ All notable changes to Lokus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-01-26
+
+### 📱 iOS & Mobile Support
+- **iOS Mobile App** - Full native iOS app with optimized touch experience
+- **Mobile Bottom Navigation** - Thumb-friendly navigation bar for mobile devices
+- **Safe Area Support** - Proper handling for iPhone notch and Dynamic Island
+- **Haptic Feedback** - Native touch feedback throughout the app
+- **Responsive UI** - Adaptive font sizes, tab widths, and touch-optimized controls
+- **Mobile Optimizations** - Hidden terminal panel and git menu on mobile devices
+- **Touch Media Queries** - Better touch target sizes and interactions
+
+### 📅 Calendar Integration (New!)
+- **Native Google Calendar** - Connect and sync with Google Calendar directly
+- **iCal/CalDAV Support** - Sync with Apple Calendar, Outlook, Fastmail, and other CalDAV providers
+- **Intelligent Sync** - Smart calendar syncing with conflict resolution and deduplication
+
+### 🔐 Authentication
+- **Supabase Authentication** - New secure authentication system
+- **Login Screen** - Clean, modern login flow with email/password
+
+### ✍️ Editor & Writing
+- **Syntax Highlighting** - Code blocks now have proper language-aware highlighting
+- **Instant Content Rendering** - Inserted content renders immediately without reopening file
+- **Code Block Indentation** - Preserved correctly when copying and pasting
+- **Image Embed Autocomplete** - Smart image path suggestions with reference tracking
+
+### 📂 File Management
+- **Multi-Select Operations** - Select multiple files with Shift/Cmd+click
+- **Kanban Context Menu** - Right-click actions for kanban board cards
+- **Drag & Drop to Root** - Drop files directly to workspace root folder
+- **Create in Open Folder** - New files created inside the currently selected folder
+
+### 🔌 Plugin System
+- **Complete Plugin SDK** - Full API implementation for plugin developers
+- **Plugin System Overhaul** - Improved CLI, SDK, and runtime architecture
+- **Stability Fixes** - Resolved 363 failing tests across plugin APIs and templates
+
+### 🖼️ Canvas
+- **Canvas Links** - Reference `.canvas` files from Markdown with live preview support
+
+### 🎨 UI/UX Improvements
+- **Tooltips** - Added to all icon-only buttons for better accessibility
+- **Loading Indicators** - Visual feedback for server status and template actions
+- **Server-Pushed Toasts** - Enhanced notifications powered by Sonner
+- **Lokus Dark Theme** - New built-in dark theme option
+- **WikiLink Dialog** - Responsive autocomplete that works on all screen sizes
+- **Link Navigation** - Fixed wikilink and internal link navigation issues
+- **Better Error Messages** - Meaningful feedback in Kanban, Search, and throughout
+
+### 🏗️ Infrastructure & Stability
+- **Auto-Update Signing** - Fixed code signing for automatic updates
+- **Centralized Version Management** - Single source of truth for app version
+- **Mac App Store Compatibility** - Proper handling for MAS distribution
+- **Node.js 22** - Upgraded runtime for better performance and compatibility
+- **Remote Configuration** - Server-side feature flags and announcements system
+- **Production Audit** - Complete pre-deployment security and stability fixes
+- **E2E Tests** - Re-enabled comprehensive end-to-end testing
+
+### 📊 Analytics & Privacy
+- **PostHog Analytics** - Replaced Umami with focused, meaningful analytics
+- **Privacy Controls** - Analytics opt-out toggle in Preferences
+- **Session Recording Disabled** - Your notes and writing stay completely private
+- **Kill Switches** - Remote feature control for Canvas, Plugins, Sync, AI Assistant
+
+### 📜 Licensing
+- **Fair Core License (FCL 1.0)** - Updated from BSL 1.1 for clearer open-source terms
+
+---
+
 ## [2.1.0] - 2024-09-18
 
 ### ⌨️ New Keyboard Shortcuts
