@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { X, Keyboard } from "lucide-react";
 import { formatAccelerator } from "../core/shortcuts/registry.js";
+import { isDesktop } from '../platform/index.js';
 
 export default function ShortcutHelpModal({ isOpen, onClose }) {
   const [isMac, setIsMac] = useState(false);
@@ -171,9 +172,9 @@ export default function ShortcutHelpModal({ isOpen, onClose }) {
               color: 'rgb(var(--text))'
             }}>Esc</kbd> to close
           </div>
-          <div className="text-sm" style={{ color: 'rgb(var(--muted))' }}>
+          {isDesktop() && (<div className="text-sm" style={{ color: 'rgb(var(--muted))' }}>
             {isMac ? '⌘' : 'Ctrl'} = Command/Control key
-          </div>
+          </div>)}
         </div>
       </div>
     </div>

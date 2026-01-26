@@ -22,6 +22,7 @@ import { useAuth } from "../core/auth/AuthContext";
 import { User, LogIn, LogOut, Crown, Shield, Settings as SettingsIcon } from "lucide-react";
 import QuickImport from "../components/QuickImport.jsx";
 import { getAppVersion } from "../utils/appInfo.js";
+import { isDesktop } from '../platform/index.js';
 
 export default function Preferences() {
   const [themes, setThemes] = useState([]);
@@ -2637,14 +2638,15 @@ export default function Preferences() {
                       Open today's daily note on startup
                     </label>
                   </div>
-
-                  <div className="pt-4 border-t border-app-border">
-                    <p className="text-sm text-app-muted mb-2">Quick access:</p>
-                    <ul className="text-sm space-y-1 text-app-muted">
-                      <li>• Press <kbd className="px-2 py-0.5 bg-app-bg border border-app-border rounded text-xs">Cmd/Ctrl + Shift + D</kbd> to open today's note</li>
-                      <li>• Use Command Palette (Cmd/Ctrl + K) → "Open Daily Note"</li>
-                    </ul>
-                  </div>
+                  {isDesktop() && ( 
+                    <div className="pt-4 border-t border-app-border">
+                      <p className="text-sm text-app-muted mb-2">Quick access:</p>
+                      <ul className="text-sm space-y-1 text-app-muted">
+                        <li>• Press <kbd className="px-2 py-0.5 bg-app-bg border border-app-border rounded text-xs">Cmd/Ctrl + Shift + D</kbd> to open today's note</li>
+                        <li>• Use Command Palette (Cmd/Ctrl + K) → "Open Daily Note"</li>
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

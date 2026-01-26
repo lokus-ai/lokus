@@ -48,6 +48,7 @@ import posthog from '../services/posthog.js'
 import FolderSelector from './FolderSelector.jsx'
 import { useCommands, useCommandExecute } from '../hooks/useCommands.js'
 import { getMarkdownCompiler } from '../core/markdown/compiler.js'
+import { isDesktop } from '../platform/index.js';
 
 const markdownCompiler = getMarkdownCompiler()
 
@@ -1265,29 +1266,29 @@ Best regards,
             <CommandItem onSelect={() => runCommandWithHistory(onCreateFile, 'New File')}>
               <Plus className="mr-2 h-4 w-4" />
               <span>New File</span>
-              <CommandShortcut>{formatAccelerator(shortcuts['new-file'])}</CommandShortcut>
+              {isDesktop() && (<CommandShortcut>{formatAccelerator(shortcuts['new-file'])}</CommandShortcut>)}
             </CommandItem>
             <CommandItem onSelect={() => runCommandWithHistory(onCreateFolder, 'New Folder')}>
               <FolderPlus className="mr-2 h-4 w-4" />
               <span>New Folder</span>
-              <CommandShortcut>{formatAccelerator(shortcuts['new-folder'])}</CommandShortcut>
+              {isDesktop() && (<CommandShortcut>{formatAccelerator(shortcuts['new-folder'])}</CommandShortcut>)}
             </CommandItem>
             <CommandItem onSelect={() => runCommandWithHistory(onOpenDailyNote, 'Open Daily Note')}>
               <Calendar className="mr-2 h-4 w-4" />
               <span>Open Daily Note</span>
-              <CommandShortcut>{formatAccelerator(shortcuts['daily-note'])}</CommandShortcut>
+              {isDesktop() && (<CommandShortcut>{formatAccelerator(shortcuts['daily-note'])}</CommandShortcut>)}
             </CommandItem>
             {activeFile && (
               <>
                 <CommandItem onSelect={() => runCommandWithHistory(onSave, 'Save File', { fileName: activeFile.name })}>
                   <Save className="mr-2 h-4 w-4" />
                   <span>Save File</span>
-                  <CommandShortcut>{formatAccelerator(shortcuts['save-file'])}</CommandShortcut>
+                  {isDesktop() && (<CommandShortcut>{formatAccelerator(shortcuts['save-file'])}</CommandShortcut>)}
                 </CommandItem>
                 <CommandItem onSelect={() => runCommandWithHistory(() => onCloseTab(activeFile), 'Close Tab', { fileName: activeFile.name })}>
                   <X className="mr-2 h-4 w-4" />
                   <span>Close Tab</span>
-                  <CommandShortcut>{formatAccelerator(shortcuts['close-tab'])}</CommandShortcut>
+                  {isDesktop() && (<CommandShortcut>{formatAccelerator(shortcuts['close-tab'])}</CommandShortcut>)}
                 </CommandItem>
                 {/* Individual template commands */}
                 {templates.map((template) => (
@@ -1308,7 +1309,7 @@ Best regards,
                 >
                   <Plus className="mr-2 h-4 w-4" />
                   <span>Save as Template</span>
-                  <CommandShortcut>S</CommandShortcut>
+                  {isDesktop() && <CommandShortcut>S</CommandShortcut>}
                 </CommandItem>
               </>
             )}
@@ -1321,22 +1322,22 @@ Best regards,
             <CommandItem onSelect={() => runCommandWithHistory(onToggleSidebar, 'Toggle Sidebar')}>
               <ToggleLeft className="mr-2 h-4 w-4" />
               <span>Toggle Sidebar</span>
-              <CommandShortcut>{formatAccelerator(shortcuts['toggle-sidebar'])}</CommandShortcut>
+              {isDesktop() && (<CommandShortcut>{formatAccelerator(shortcuts['toggle-sidebar'])}</CommandShortcut>)}
             </CommandItem>
             <CommandItem onSelect={() => runCommandWithHistory(onOpenPreferences, 'Open Preferences')}>
               <Settings className="mr-2 h-4 w-4" />
               <span>Open Preferences</span>
-              <CommandShortcut>{formatAccelerator(shortcuts['open-preferences'])}</CommandShortcut>
+              {isDesktop() && (<CommandShortcut>{formatAccelerator(shortcuts['open-preferences'])}</CommandShortcut>)}
             </CommandItem>
             <CommandItem onSelect={() => runCommandWithHistory(onOpenGraph, 'Open Graph View')}>
               <Network className="mr-2 h-4 w-4" />
               <span>Professional Graph View</span>
-              <CommandShortcut>⌘G</CommandShortcut>
+              {isDesktop() && <CommandShortcut>⌘G</CommandShortcut>}
             </CommandItem>
             <CommandItem onSelect={() => runCommandWithHistory(onOpenGmail, 'Open Gmail')}>
               <Mail className="mr-2 h-4 w-4" />
               <span>Gmail</span>
-              <CommandShortcut>⌘M</CommandShortcut>
+              {isDesktop() && <CommandShortcut>⌘M</CommandShortcut>}
             </CommandItem>
           </CommandGroup>
 
@@ -1347,7 +1348,7 @@ Best regards,
             <CommandItem onSelect={() => runCommandWithHistory(handleOpenFolderSelector, 'Switch to Local View')}>
               <Target className="mr-2 h-4 w-4" />
               <span>Switch to Local View</span>
-              <CommandShortcut>⌘⇧L</CommandShortcut>
+              {isDesktop() && <CommandShortcut>⌘⇧L</CommandShortcut>}
             </CommandItem>
             {scopeMode === 'local' && (
               <CommandItem onSelect={() => runCommandWithHistory(() => {
@@ -1378,7 +1379,7 @@ Best regards,
             }, 'Create New Base')}>
               <Database className="mr-2 h-4 w-4" />
               <span>Create New Base</span>
-              <CommandShortcut>⌘⇧B</CommandShortcut>
+              {isDesktop() && <CommandShortcut>⌘⇧B</CommandShortcut>}
             </CommandItem>
             {bases && bases.length > 0 && bases.map((base) => (
               <CommandItem
@@ -1389,7 +1390,7 @@ Best regards,
               >
                 <Database className="mr-2 h-4 w-4" />
                 <span>Open {base.name}</span>
-                <CommandShortcut className="text-xs">{base.description || 'Base'}</CommandShortcut>
+                {isDesktop() && <CommandShortcut className="text-xs">{base.description || 'Base'}</CommandShortcut>}
               </CommandItem>
             ))}
           </CommandGroup>
@@ -1424,7 +1425,7 @@ Best regards,
                       <FileText className="mr-2 h-4 w-4" />
                     )}
                     <span>{cmd.title || cmd.id}</span>
-                    {cmd.category && (
+                    {isDesktop() && cmd.category && (
                       <CommandShortcut className="text-xs">{cmd.category}</CommandShortcut>
                     )}
                   </CommandItem>
@@ -1446,7 +1447,7 @@ Best regards,
               }, 'Authenticate Gmail')}>
                 <Mail className="mr-2 h-4 w-4" />
                 <span>Authenticate Gmail</span>
-                <CommandShortcut>Auth</CommandShortcut>
+                {isDesktop() && <CommandShortcut>Auth</CommandShortcut>}
               </CommandItem>
             ) : (
               <>
@@ -1469,7 +1470,7 @@ Best regards,
                 >
                   <Send className="mr-2 h-4 w-4" />
                   <span>Send Gmail</span>
-                  <CommandShortcut>Send</CommandShortcut>
+                  {isDesktop() && <CommandShortcut>Send</CommandShortcut>}
                 </CommandItem>
               </>
             )}

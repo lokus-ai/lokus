@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Image as ImageIcon, Link as LinkIcon, Upload, X, ExternalLink } from 'lucide-react';
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+import { isDesktop } from '../platform/index.js';
 
 export default function ImageInsertModal({
   isOpen,
@@ -325,9 +326,11 @@ export default function ImageInsertModal({
 
         {/* Footer */}
         <div className="flex items-center justify-between p-4 border-t border-app-border bg-app-bg">
-          <div className="text-xs text-app-muted">
-            <span className="font-medium">⌘+Enter</span> to insert • <span className="font-medium">Esc</span> to cancel
-          </div>
+          {isDesktop() && (
+            <div className="text-xs text-app-muted">
+              <span className="font-medium">⌘+Enter</span> to insert • <span className="font-medium">Esc</span> to cancel
+            </div>
+          )}
           <div className="flex gap-2">
             <button
               onClick={onClose}
