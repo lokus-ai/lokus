@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useBases } from './BasesContext.jsx';
 import { useFolderScope } from '../contexts/FolderScopeContext.jsx';
 import { DebouncedInput } from '../components/OptimizedWrapper.jsx';
-import analytics from '../services/analytics.js';
+import posthog from '../services/posthog.js';
 import BaseTableView from './ui/BaseTableView.jsx';
 import BaseListView from './ui/BaseListView.jsx';
 import BaseGridView from './ui/BaseGridView.jsx';
@@ -100,10 +100,10 @@ const BasesView = memo(function BasesView({ isVisible, onFileOpen }) {
     setRefreshKey(prev => prev + 1);
   };
 
-  // Handle view type change with analytics (rate limited)
+  // Handle view type change with analytics
   const handleViewTypeChange = (type) => {
     setViewType(type);
-    analytics.trackFeatureUsed('database');
+    posthog.trackFeatureActivation('database');
   };
 
   // Handle filter rules update from BaseTableView

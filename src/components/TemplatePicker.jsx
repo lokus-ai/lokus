@@ -13,7 +13,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { useTemplates, useTemplateProcessor } from '../hooks/useTemplates.js';
-import analytics from '../services/analytics.js';
+import posthog from '../services/posthog.js';
 import {
   Dialog,
   DialogContent,
@@ -142,8 +142,8 @@ export default function TemplatePicker({
         context: {}
       });
 
-      // Track template feature usage (rate limited to once per session)
-      analytics.trackFeatureUsed('templates');
+      // Track template feature activation
+      posthog.trackFeatureActivation('templates');
 
       onSelect?.(template, result.result || result.content || result);
       onClose?.();

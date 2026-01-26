@@ -32,7 +32,7 @@ import mcpClient from "./core/mcp/client.js";
 // Guard window access in non-Tauri environments
 import { emit } from "@tauri-apps/api/event";
 import * as Sentry from "@sentry/react";
-import analytics from "./services/analytics.js";
+import posthog from "./services/posthog.js";
 
 // Simple loading spinner for Suspense fallback
 const LoadingFallback = () => (
@@ -112,9 +112,9 @@ function App() {
     editorConfigCache.init(); // Pre-load editor config to eliminate "Loading editor..." delay
 
     // Initialize analytics and track startup time
-    analytics.initialize().then(() => {
+    posthog.initialize().then(() => {
       const startupTime = performance.now() - startTime;
-      analytics.trackStartupTime(startupTime);
+      posthog.trackAppStartup(startupTime, true);
     });
 
     // Check for updates 3 seconds after startup

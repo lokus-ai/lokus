@@ -6,6 +6,7 @@ import App from './App'
 import { ThemeProvider } from './hooks/theme'
 import './styles/globals.css'
 import { logger } from './utils/logger.js'
+import posthog from './services/posthog.js'
 
 // Expose React and ReactDOM for plugins
 window.React = React;
@@ -50,6 +51,11 @@ if (import.meta.env.VITE_ENABLE_CRASH_REPORTS === 'true') {
 } else {
   logger.info('Main', 'Crash reporting disabled');
 }
+
+// Initialize PostHog analytics
+posthog.initialize().catch(err => {
+  console.warn('[PostHog] Initialization failed:', err);
+});
 
 import { RemoteConfigProvider } from './contexts/RemoteConfigContext'
 

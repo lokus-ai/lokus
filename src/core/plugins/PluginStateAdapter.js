@@ -7,7 +7,7 @@ import { configManager } from "../config/ConfigManager.js";
 import { filesystemManager } from "../fs/FilesystemManager.js";
 import { PluginFileWatcher } from "./PluginFileWatcher.js";
 import { pluginEventBridge } from "../../plugins/PluginEventBridge.js";
-import analytics from "../../services/analytics.js";
+import posthog from "../../services/posthog.js";
 
 /**
  * PluginStateAdapter - UI State Management Facade for Plugin System
@@ -458,7 +458,7 @@ class PluginStateAdapter {
           await instance.activate();
 
           // Track plugin activation
-          analytics.trackPluginActivation(pluginId);
+          posthog.trackFeatureActivation('plugins');
 
           // Emit activation event for UI components (like StatusBar)
           try {

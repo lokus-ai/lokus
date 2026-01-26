@@ -43,7 +43,8 @@ import { saveEmailAsNote } from '../utils/emailToNote.js'
 import { invoke } from '@tauri-apps/api/core'
 import { useFolderScope } from '../contexts/FolderScopeContext'
 import { useBases } from '../bases/BasesContext.jsx'
-import analytics from '../services/analytics.js'
+import { useFeatureFlags } from '../contexts/RemoteConfigContext'
+import posthog from '../services/posthog.js'
 import FolderSelector from './FolderSelector.jsx'
 import { useCommands, useCommandExecute } from '../hooks/useCommands.js'
 import { getMarkdownCompiler } from '../core/markdown/compiler.js'
@@ -80,6 +81,7 @@ export default function CommandPalette({
   const { process: processTemplate } = useTemplateProcessor()
   const { scopeMode, setLocalScope, setGlobalScope, getScopeStatus } = useFolderScope()
   const { createBase, bases, loadBase, dataManager } = useBases()
+  const featureFlags = useFeatureFlags()
 
   // Use the new useCommands hook for plugin commands
   const pluginCommands = useCommands()
@@ -473,8 +475,8 @@ export default function CommandPalette({
       const markdownContent = result.result || result.content || result;
       const htmlContent = await markdownCompiler.compile(markdownContent)
 
-      // Track template feature usage
-      analytics.trackFeatureUsed('templates')
+      // Track template feature activation
+      posthog.trackFeatureActivation('templates')
 
       // Dispatch event to insert template into editor
       window.dispatchEvent(new CustomEvent('lokus:insert-template', {
@@ -1393,8 +1395,8 @@ Best regards,
           </CommandGroup>
           <CommandSeparator />
 
-          {/* Plugin Commands */}
-          {pluginCommands.length > 0 && (
+          {/* Plugin Commands - only show when plugins are enabled */}
+          {featureFlags.enable_plugins && pluginCommands.length > 0 && (
             <>
               <CommandGroup heading="Plugin Commands">
                 {pluginCommands.map((cmd) => (
