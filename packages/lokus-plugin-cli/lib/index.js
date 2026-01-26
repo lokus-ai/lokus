@@ -4,6 +4,9 @@ const { Command } = require('commander')
 const fs = require('fs-extra')
 const path = require('path')
 
+// Import version from package.json (single source of truth)
+const pkg = require('../package.json')
+
 // Simple color functions for CommonJS compatibility
 const colors = {
   blue: (text) => `\x1b[34m${text}\x1b[0m`,
@@ -18,7 +21,7 @@ const program = new Command()
 program
   .name('lokus-plugin')
   .description('Official CLI tool for developing Lokus plugins')
-  .version('1.0.0')
+  .version(pkg.version)
 
 // Create command
 program

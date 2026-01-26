@@ -1,13 +1,15 @@
 /**
  * @fileoverview Lokus Plugin SDK - Main Entry Point
- * 
+ *
  * This is the main entry point for the Lokus Plugin SDK, providing everything
  * developers need to create powerful plugins for Lokus.
- * 
- * @version 1.0.0
+ *
  * @author Lokus Team
  * @license MIT
  */
+
+// Import version from package.json (single source of truth)
+import pkg from '../package.json'
 
 // Export all types
 export * from './types/index.js'
@@ -49,14 +51,14 @@ export {
 } from './utils/index.js'
 
 /**
- * SDK version information
+ * SDK version information (read from package.json)
  */
-export const SDK_VERSION = '1.0.0'
+export const SDK_VERSION = pkg.version
 
 /**
  * Supported Lokus API version
  */
-export const SUPPORTED_API_VERSION = '1.0.0'
+export const SUPPORTED_API_VERSION = pkg.version
 
 /**
  * SDK metadata
