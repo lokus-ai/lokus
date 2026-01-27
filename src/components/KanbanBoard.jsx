@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   DndContext,
@@ -32,223 +32,239 @@ const md = new MarkdownIt({
   typographer: true,
 });
 
+
+const formatDateTime = (iso) => {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+};
+
+const getNowLocalISOString =() => {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+};
+
+
 // Individual task card component
 function TaskCard({ task, onUpdate, onDelete, isDragging }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [mode, setMode] = useState("view"); // view | edit
+
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || "");
+  const [dueDate, setDueDate] = useState(
+    task.due_date ? task.due_date.slice(0, 10) : ""
+  );
+
   const [showMenu, setShowMenu] = useState(false);
+
+  const menuRef = useRef(null);
+
 
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: task.id,
     data: { type: "card", task },
   });
 
-  // Sync state when task prop changes
   useEffect(() => {
     setTitle(task.title);
     setDescription(task.description || "");
-  }, [task.title, task.description]);
-
-  // Render markdown description
-  const renderedDescription = useMemo(() => {
-    if (!task.description) return null;
-    return md.render(task.description);
-  }, [task.description]);
-
-  const handleSave = useCallback(async () => {
-    if (title.trim() && title !== task.title) {
-      try {
-        await onUpdate(task.id, { title: title.trim() });
-      } catch (error) {
-        console.error(error);
-        toast.error(
-          `Failed to save description: ${error.message || "Unknown errror"}`
-        );
-        setTitle(task.title);
-      }
-    }
-    setIsEditing(false);
-  }, [task.id, task.title, title, onUpdate]);
-
-  const handleKeyDown = useCallback(
-    (e) => {
-      if (e.key === "Enter") {
-        handleSave();
-      } else if (e.key === "Escape") {
-        setTitle(task.title);
-        setIsEditing(false);
-      }
-    },
-    [task.title, handleSave]
-  );
-
-  const handleSaveDescription = useCallback(async () => {
-    const trimmedDesc = description.trim();
-    if (trimmedDesc !== (task.description || "")) {
-      try {
-        await onUpdate(task.id, { description: trimmedDesc || null });
-      } catch (error) {
-        console.error(error);
-        toast.error(
-          `Description save failed: ${error.message || "Unknown error"}`
-        );
-        setDescription(task.description || "");
-      }
-    }
-    setIsEditingDescription(false);
-  }, [task.id, task.description, description, onUpdate]);
-
-  const handleDescriptionKeyDown = useCallback(
-    (e) => {
-      if (e.key === "Escape") {
-        setDescription(task.description || "");
-        setIsEditingDescription(false);
-      }
-      // Allow Enter for newlines in textarea, Cmd/Ctrl+Enter to save
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        handleSaveDescription();
-      }
-    },
-    [task.description, handleSaveDescription]
-  );
+    setDueDate(task.due_date ? task.due_date.slice(0, 10) : "");
+  }, [task]);
 
   const style = transform
-    ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-      }
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
     : undefined;
+
+  const saveAll = async () => {
+    try {
+       if (dueDate && new Date(dueDate) < new Date()) {
+          toast.error("⛔ Due date cannot be in the past");
+          return;
+        }
+
+      await onUpdate(task.id, {
+        title: title.trim(),
+        description: description.trim() || null,
+        due_date: dueDate ? new Date(dueDate).toISOString() : null,
+      });
+      setMode("view");
+    } catch {
+      toast.error("Failed to save task");
+    }
+  };
+
+  const cancelEdit = () => {
+    setTitle(task.title);
+    setDescription(task.description || "");
+    setDueDate(task.due_date ? task.due_date.slice(0, 10) : "");
+    setMode("view");
+  };
+
+  useEffect(() => {
+    if (!showMenu) return;
+
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setShowMenu(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+}, [showMenu]);
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`group bg-app-bg border border-app-border rounded-lg p-3 mb-2 transition-all hover:shadow-md hover:border-app-accent/50 ${
-        isDragging ? "opacity-50" : ""
-      }`}
+      className={`group relative rounded-xl border p-3 mb-2
+        bg-app-bg border-app-border
+        hover:shadow-lg transition
+        ${isDragging ? "opacity-50 scale-[0.97]" : ""}`}
     >
-      <div className="flex items-start gap-2">
-        <div
-          {...attributes}
-          {...listeners}
-          className="cursor-grab active:cursor-grabbing mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-          title="Drag to reorder"
-        >
-          <GripVertical className="w-4 h-4 text-app-muted" />
-        </div>
+      {/* Drag Handle */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="absolute left-1 top-3 cursor-grab opacity-0 group-hover:opacity-100"
+      >
+        <GripVertical className="w-4 h-4 text-app-muted" />
+      </div>
 
-        {isEditing ? (
+      {/* Header */}
+      <div className="flex items-start gap-2 pl-4">
+        {mode === "edit" ? (
           <input
-            type="text"
+            autoFocus
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            onBlur={handleSave}
-            onKeyDown={handleKeyDown}
-            className="flex-1 bg-transparent border-none outline-none text-sm font-medium text-app-text"
-            autoFocus
+            className="flex-1 bg-blue-50/10 border border-blue-500/30
+              rounded-md px-2 py-1 text-sm font-semibold outline-none"
           />
         ) : (
-          <div
-            className="flex-1 text-sm font-medium text-app-text cursor-pointer"
-            onClick={() => setIsEditing(true)}
-          >
+          <div className="flex-1 text-sm font-semibold tracking-wide">
             {task.title}
           </div>
         )}
 
+        {/* Menu */}
         <div className="relative">
           <button
-            onClick={() => setShowMenu(!showMenu)}
-            className="p-1 rounded hover:bg-app-hover text-app-muted hover:text-app-text opacity-0 group-hover:opacity-100 transition-opacity"
-            title="Task options"
+            onClick={() => setShowMenu((v) => !v)}
+            className="p-1 rounded hover:bg-app-hover"
           >
-            <MoreHorizontal className="w-3.5 h-3.5" />
+            <MoreHorizontal className="w-4 h-4 text-app-muted" />
           </button>
 
           {showMenu && (
-            <>
-              <div
-                className="fixed inset-0 z-10"
-                onClick={() => setShowMenu(false)}
-              />
-              <div className="absolute right-0 top-6 bg-app-panel border border-app-border rounded-lg shadow-xl z-20 min-w-40 overflow-hidden">
-                <button
-                  onClick={() => {
-                    setIsEditing(true);
-                    setShowMenu(false);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-app-hover text-app-text flex items-center gap-2"
-                >
-                  <Pencil className="w-3 h-3" />
-                  Edit Title
-                </button>
-                <button
-                  onClick={() => {
-                    setIsEditingDescription(true);
-                    setShowMenu(false);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-app-hover text-app-text flex items-center gap-2"
-                >
-                  <FileText className="w-3 h-3" />
-                  {task.description ? "Edit Description" : "Add Description"}
-                </button>
-                <button
-                  onClick={() => {
-                    onDelete(task.id);
-                    setShowMenu(false);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-app-hover text-red-500 flex items-center gap-2"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  Delete
-                </button>
-              </div>
-            </>
+            <div
+              ref={menuRef}
+              className="absolute right-0 top-7 z-20 min-w-40
+                rounded-lg border bg-app-panel shadow-xl p-1"
+            >
+              <button
+                onClick={() => {
+                  setMode((prev)=> prev === "edit" ? "view" : "edit");
+                  setShowMenu(false);
+                }}
+                className="menu-item flex items-center gap-2 hover:text-blue-500"
+              >
+                Edit
+              </button>
+
+              <button
+                onClick={() => onDelete(task.id)}
+                className="menu-item flex items-center gap-2
+                  text-red-500 hover:bg-red-500/10"
+              >
+                Delete
+              </button>
+            </div>
           )}
+
         </div>
       </div>
 
-      {isEditingDescription ? (
-        <div className="mt-2">
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            onBlur={handleSaveDescription}
-            onKeyDown={handleDescriptionKeyDown}
-            placeholder="Add a description... (Markdown supported)"
-            className="w-full bg-app-bg border border-app-accent rounded-lg px-2 py-1.5 text-xs text-app-text outline-none resize-none min-h-16 max-h-48"
-            rows={3}
-            autoFocus
-          />
-          <div className="text-[10px] text-app-muted mt-1">
-            {isDesktop()
-              ? 'Press Cmd/Ctrl+Enter to save, Escape to cancel'
-              : 'Tap outside the box to save, or cancel'}
-          </div>
-        </div>
-      ) : task.description ? (
-        <div
-          className="mt-2 text-xs text-app-muted kanban-card-markdown max-h-48 overflow-y-auto cursor-pointer hover:bg-app-hover/50 rounded p-1 -m-1"
-          onClick={() => setIsEditingDescription(true)}
-          dangerouslySetInnerHTML={{ __html: renderedDescription }}
+      {/* Description */}
+      {mode === "edit" ? (
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Add description…"
+          className="mt-3 w-full rounded-lg border
+            bg-slate-900/40 p-2 text-xs outline-none"
         />
+      ) : task.description ? (
+        <div className="mt-3 text-xs text-app-muted bg-app-panel/30
+          rounded-lg px-2 py-1 max-h-16 overflow-hidden">
+           {task.description}
+        </div>
       ) : null}
 
-      {task.due_date && (
-        <div className="mt-2 text-xs text-app-muted/70 flex items-center gap-1">
-          <span>📅</span>
-          {new Date(task.due_date).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          })}
+      {/* Footer */}
+      <div className="mt-3 flex justify-between text-[11px] text-app-muted">
+        {/* Due */}
+        <div className="flex flex-col gap-1">
+          <span className="uppercase text-[10px]">Due</span>
+          {mode === "edit" ? (
+            <input
+              type="datetime-local"
+              value={dueDate}
+              min={getNowLocalISOString()}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="rounded-md border bg-yellow-500/10
+                border-yellow-500/30  py-0.5 text-xs outline-none"
+            />
+          ) : task.due_date ? (
+            <span className="rounded-full bg-yellow-500/15
+              px-2 py-0.5 text-yellow-400">
+              {formatDateTime(task.due_date)}
+            </span>
+          ) : (
+            <span className="opacity-40">—</span>
+          )}
+        </div>
+
+        {/* Created */}
+        <div className="flex flex-col gap-1">
+          <span className="uppercase text-[10px]">Created</span>
+          <span className="rounded-full bg-app-panel/40 px-2 py-0.5">
+            {formatDateTime(task.created)}
+          </span>
+        </div>
+      </div>
+
+      {/* Actions */}
+      {mode === "edit" && (
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            onClick={cancelEdit}
+            className="px-3 py-1 rounded-md text-xs
+               text-red-400 hover:opacity-80"
+          >
+             Cancel
+          </button>
+          <button
+            onClick={saveAll}
+            className="px-3 py-1 rounded-md text-xs
+              text-app-muted hover:text-app-text "
+          >
+             Save
+          </button>
         </div>
       )}
     </div>
   );
 }
+
 
 // Column component with droppable area
 function KanbanColumn({
@@ -265,6 +281,8 @@ function KanbanColumn({
   const [isAdding, setIsAdding] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDescription, setNewTaskDescription] = useState("");
+  const [dueDate, setDueDate] = useState("");
   const [columnName, setColumnName] = useState(column.name);
   const [showMenu, setShowMenu] = useState(false);
 
@@ -274,17 +292,30 @@ function KanbanColumn({
   });
 
   const handleAddTask = useCallback(async () => {
-    if (newTaskTitle.trim()) {
-      try {
-        await onAddTask(newTaskTitle.trim(), columnId);
-        setNewTaskTitle("");
-        setIsAdding(false);
-      } catch (error) {
-        console.error(error);
-        toast.error(`Add task failed: ${error.message || "Unknown error"}`);
-      }
+    if (!newTaskTitle.trim()) return;
+    
+     if (dueDate && new Date(dueDate) < new Date()) {
+    toast.error("⛔ Due date cannot be in the past");
+    return;
     }
-  }, [newTaskTitle, columnId, onAddTask]);
+    {
+        try {
+          await onAddTask(
+            newTaskTitle.trim(),
+            columnId,
+            newTaskDescription.trim() || null,
+            dueDate ? new Date(dueDate).toISOString() : null
+          );
+          setNewTaskTitle("");
+          setNewTaskDescription("");
+          setDueDate("");
+          setIsAdding(false);
+        } catch (error) {
+          console.error(error);
+          toast.error(`Add task failed: ${error.message || "Unknown error"}`);
+        }
+      }
+  }, [newTaskTitle, newTaskDescription, dueDate, columnId, onAddTask]);
 
   const handleRename = useCallback(async () => {
     if (columnName.trim() && columnName !== column.name) {
@@ -299,6 +330,14 @@ function KanbanColumn({
     setIsRenaming(false);
   }, [columnId, columnName, column.name, onRenameColumn]);
 
+  const cancelAdd = () => {
+    setNewTaskTitle("");
+    setNewTaskDescription("");
+    setDueDate("");
+    setIsAdding(false);
+  };
+
+
   const handleKeyDown = useCallback(
     (e) => {
       if (e.key === "Enter") {
@@ -306,8 +345,7 @@ function KanbanColumn({
         else if (isRenaming) handleRename();
       } else if (e.key === "Escape") {
         if (isAdding) {
-          setNewTaskTitle("");
-          setIsAdding(false);
+         cancelAdd();
         } else if (isRenaming) {
           setColumnName(column.name);
           setIsRenaming(false);
@@ -413,21 +451,75 @@ function KanbanColumn({
             onDelete={onTaskDelete}
           />
         ))}
-
         {isAdding && (
-          <div className="bg-app-bg border border-app-accent rounded-lg p-3 mb-2">
+          <div className="p-3 mt-2 rounded-xl border
+            bg-app-panel/40 border-app-border flex flex-col gap-2">
+
+            {/* Title */}
             <input
               type="text"
               value={newTaskTitle}
               onChange={(e) => setNewTaskTitle(e.target.value)}
-              onBlur={handleAddTask}
               onKeyDown={handleKeyDown}
-              placeholder="Task title..."
-              className="w-full bg-transparent border-none outline-none text-sm text-app-text placeholder:text-app-muted"
+              placeholder="Task title"
               autoFocus
+              className="w-full bg-blue-500/10 border border-blue-500/30
+                rounded-md px-3 py-2 text-sm outline-none"
             />
+
+            {/* Description */}
+            <textarea
+              value={newTaskDescription}
+              onChange={(e) => setNewTaskDescription(e.target.value)}
+              placeholder="Description (optional)"
+              rows={2}
+              className="w-full bg-slate-500/10 border border-slate-500/30
+                rounded-md px-3 py-2 text-xs resize-none outline-none"
+            />
+
+            {/* Due Date */}
+            <div className="flex items-center gap-2">
+              <input
+                type="datetime-local"
+                value={dueDate}
+                min={getNowLocalISOString()}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="flex-1 bg-yellow-500/10 border
+                  border-yellow-500/30 rounded-md px-2 py-1 text-xs outline-none"
+              />
+              {dueDate && (
+                <button
+                  onClick={() => setDueDate("")}
+                  className="text-xs text-red-400 hover:opacity-80"
+                  title="Clear due date"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-between mt-1 text-xs">
+              <button
+                onClick={cancelAdd}
+                className="text-red-400 hover:opacity-80"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddTask}
+                disabled={!newTaskTitle.trim()}
+                className="text-app-muted hover:text-app-text font-medium
+                  disabled:opacity-40"
+              >
+                ➕ Add Task
+              </button>
+            </div>
           </div>
         )}
+
+
+
 
         {tasks.length === 0 && !isAdding && (
           <div className="flex flex-col items-center justify-center py-8 text-app-muted/50">
@@ -456,6 +548,8 @@ export default function KanbanBoard({ workspacePath, boardPath, onFileOpen }) {
     })
   );
 
+  console.log("board", board);
+  
   // Load board from file
   const loadBoard = useCallback(async () => {
     if (!boardPath) return;
@@ -502,18 +596,18 @@ export default function KanbanBoard({ workspacePath, boardPath, onFileOpen }) {
 
   // Add new card to column
   const handleAddTask = useCallback(
-    async (title, columnId) => {
+    async (title, columnId, description, dueDate) => {
       if (!board || !boardPath) return;
 
       try {
         const newCard = {
           id: Date.now().toString(36) + Math.random().toString(36).substr(2),
           title,
-          description: "",
+          description,
           tags: [],
           assignee: null,
           priority: "normal",
-          due_date: null,
+          due_date: dueDate,
           linked_notes: [],
           checklist: [],
           created: new Date().toISOString(),
