@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { Search, X, ChevronDown, ChevronRight, Settings, Clock } from 'lucide-react'
 import { sanitizeSearchHighlight, isValidSearchQuery } from '../core/security/index.js'
 import { getFilename } from '../utils/pathUtils.js'
+import { isDesktop } from '../platform/index.js';
 
 // Utility function to highlight search matches in text (XSS-safe)
 const highlightText = (text, query, options) => {
@@ -390,7 +391,9 @@ export default function SearchPanel({ isOpen, onClose, onFileOpen, workspacePath
               <div className="p-8 text-center text-app-muted">
                 <Search className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <p>Start typing to search across your files</p>
-                <p className="text-sm mt-1">Press Ctrl+Shift+F to open search</p>
+                {isDesktop() && (
+                  <p className="text-sm mt-1">Press Ctrl+Shift+F to open search</p>
+                )}
               </div>
             )}
           </div>

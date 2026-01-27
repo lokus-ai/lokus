@@ -46,6 +46,8 @@ import {
   SeparatorHorizontal
 } from 'lucide-react';
 import platformService from '../services/platform/PlatformService';
+import { isDesktop } from '../platform/index.js';
+
 
 export default function EditorContextMenu({
   children,
@@ -83,7 +85,7 @@ export default function EditorContextMenu({
         >
           <Scissors className="mr-2 h-4 w-4" />
           Cut
-          <ContextMenuShortcut>{isWindows ? 'Ctrl+X' : '⌘X'}</ContextMenuShortcut>
+          {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+X' : '⌘X'}</ContextMenuShortcut>)}
         </ContextMenuItem>
 
         <ContextMenuItem
@@ -92,13 +94,13 @@ export default function EditorContextMenu({
         >
           <Copy className="mr-2 h-4 w-4" />
           Copy
-          <ContextMenuShortcut>{isWindows ? 'Ctrl+C' : '⌘C'}</ContextMenuShortcut>
+          {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+C' : '⌘C'}</ContextMenuShortcut>)}
         </ContextMenuItem>
 
         <ContextMenuItem onClick={() => handleAction('paste')}>
           <Clipboard className="mr-2 h-4 w-4" />
           Paste
-          <ContextMenuShortcut>{isWindows ? 'Ctrl+V' : '⌘V'}</ContextMenuShortcut>
+          {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+V' : '⌘V'}</ContextMenuShortcut>)}
         </ContextMenuItem>
 
         <ContextMenuSeparator />
@@ -116,7 +118,7 @@ export default function EditorContextMenu({
             >
               <Bold className="mr-2 h-4 w-4" />
               Bold
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+B' : '⌘B'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+B' : '⌘B'}</ContextMenuShortcut>)}
             </ContextMenuItem>
             <ContextMenuItem
               onClick={() => handleAction('toggleItalic')}
@@ -124,7 +126,7 @@ export default function EditorContextMenu({
             >
               <Italic className="mr-2 h-4 w-4" />
               Italic
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+I' : '⌘I'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+I' : '⌘I'}</ContextMenuShortcut>)}
             </ContextMenuItem>
             <ContextMenuItem
               onClick={() => handleAction('toggleStrikethrough')}
@@ -132,7 +134,7 @@ export default function EditorContextMenu({
             >
               <Strikethrough className="mr-2 h-4 w-4" />
               Strikethrough
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+X' : '⌘⇧X'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+X' : '⌘⇧X'}</ContextMenuShortcut>)}
             </ContextMenuItem>
             <ContextMenuItem
               onClick={() => handleAction('toggleCode')}
@@ -140,13 +142,13 @@ export default function EditorContextMenu({
             >
               <Code className="mr-2 h-4 w-4" />
               Inline Code
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+E' : '⌘E'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+E' : '⌘E'}</ContextMenuShortcut>)}
             </ContextMenuItem>
             <ContextMenuSeparator />
             <ContextMenuItem onClick={() => handleAction('clearFormatting')}>
               <Type className="mr-2 h-4 w-4" />
               Clear Formatting
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+\\' : '⌘\\'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+\\' : '⌘\\'}</ContextMenuShortcut>)}
             </ContextMenuItem>
           </ContextMenuSubContent>
         </ContextMenuSub>
@@ -161,7 +163,7 @@ export default function EditorContextMenu({
             <ContextMenuItem onClick={() => handleAction('insertLink')}>
               <Link className="mr-2 h-4 w-4" />
               Link
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+K' : '⌘K'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+K' : '⌘K'}</ContextMenuShortcut>)}
             </ContextMenuItem>
             <ContextMenuItem onClick={() => handleAction('insertImage')}>
               <Image className="mr-2 h-4 w-4" />
@@ -174,7 +176,7 @@ export default function EditorContextMenu({
             <ContextMenuItem onClick={() => handleAction('insertCodeBlock')}>
               <FileCode className="mr-2 h-4 w-4" />
               Code Block
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+C' : '⌘⇧C'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+C' : '⌘⇧C'}</ContextMenuShortcut>)}
             </ContextMenuItem>
             <ContextMenuItem onClick={() => handleAction('insertQuote')}>
               <Quote className="mr-2 h-4 w-4" />
@@ -208,17 +210,17 @@ export default function EditorContextMenu({
             <ContextMenuItem onClick={() => handleAction('setHeading', { level: 1 })}>
               <Heading className="mr-2 h-4 w-4" />
               Heading 1
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+Alt+1' : '⌘⌥1'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Alt+1' : '⌘⌥1'}</ContextMenuShortcut>)}
             </ContextMenuItem>
             <ContextMenuItem onClick={() => handleAction('setHeading', { level: 2 })}>
               <Heading className="mr-2 h-4 w-4" />
               Heading 2
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+Alt+2' : '⌘⌥2'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Alt+2' : '⌘⌥2'}</ContextMenuShortcut>)}
             </ContextMenuItem>
             <ContextMenuItem onClick={() => handleAction('setHeading', { level: 3 })}>
               <Heading className="mr-2 h-4 w-4" />
               Heading 3
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+Alt+3' : '⌘⌥3'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Alt+3' : '⌘⌥3'}</ContextMenuShortcut>)}
             </ContextMenuItem>
             <ContextMenuItem onClick={() => handleAction('setHeading', { level: 4 })}>
               <Heading className="mr-2 h-4 w-4" />
@@ -236,7 +238,7 @@ export default function EditorContextMenu({
             <ContextMenuItem onClick={() => handleAction('setParagraph')}>
               <Type className="mr-2 h-4 w-4" />
               Normal Text
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+Alt+0' : '⌘⌥0'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Alt+0' : '⌘⌥0'}</ContextMenuShortcut>)}
             </ContextMenuItem>
           </ContextMenuSubContent>
         </ContextMenuSub>
@@ -251,17 +253,17 @@ export default function EditorContextMenu({
             <ContextMenuItem onClick={() => handleAction('toggleBulletList')}>
               <List className="mr-2 h-4 w-4" />
               Bullet List
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+8' : '⌘⇧8'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+8' : '⌘⇧8'}</ContextMenuShortcut>)}
             </ContextMenuItem>
             <ContextMenuItem onClick={() => handleAction('toggleOrderedList')}>
               <ListOrdered className="mr-2 h-4 w-4" />
               Numbered List
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+7' : '⌘⇧7'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+7' : '⌘⇧7'}</ContextMenuShortcut>)}
             </ContextMenuItem>
             <ContextMenuItem onClick={() => handleAction('toggleTaskList')}>
               <CheckSquare className="mr-2 h-4 w-4" />
               Task List
-              <ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+9' : '⌘⇧9'}</ContextMenuShortcut>
+              {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+9' : '⌘⇧9'}</ContextMenuShortcut>)}
             </ContextMenuItem>
           </ContextMenuSubContent>
         </ContextMenuSub>
@@ -272,7 +274,7 @@ export default function EditorContextMenu({
         <ContextMenuItem onClick={() => handleAction('selectAll')}>
           <MousePointer2 className="mr-2 h-4 w-4" />
           Select All
-          <ContextMenuShortcut>{isWindows ? 'Ctrl+A' : '⌘A'}</ContextMenuShortcut>
+          {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+A' : '⌘A'}</ContextMenuShortcut>)}
         </ContextMenuItem>
 
         <ContextMenuSeparator />
@@ -284,7 +286,7 @@ export default function EditorContextMenu({
         >
           <RotateCcw className="mr-2 h-4 w-4" />
           Undo
-          <ContextMenuShortcut>{isWindows ? 'Ctrl+Z' : '⌘Z'}</ContextMenuShortcut>
+          {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Z' : '⌘Z'}</ContextMenuShortcut>)}
         </ContextMenuItem>
 
         <ContextMenuItem
@@ -293,7 +295,7 @@ export default function EditorContextMenu({
         >
           <RotateCw className="mr-2 h-4 w-4" />
           Redo
-          <ContextMenuShortcut>{isWindows ? 'Ctrl+Y' : '⌘⇧Z'}</ContextMenuShortcut>
+          {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Y' : '⌘⇧Z'}</ContextMenuShortcut>)}
         </ContextMenuItem>
 
         <ContextMenuSeparator />
@@ -302,13 +304,13 @@ export default function EditorContextMenu({
         <ContextMenuItem onClick={() => handleAction('find')}>
           <Search className="mr-2 h-4 w-4" />
           Find
-          <ContextMenuShortcut>{isWindows ? 'Ctrl+F' : '⌘F'}</ContextMenuShortcut>
+          {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+F' : '⌘F'}</ContextMenuShortcut>)}
         </ContextMenuItem>
 
         <ContextMenuItem onClick={() => handleAction('findAndReplace')}>
           <SearchX className="mr-2 h-4 w-4" />
           Replace
-          <ContextMenuShortcut>{isWindows ? 'Ctrl+H' : '⌘⌥F'}</ContextMenuShortcut>
+          {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+H' : '⌘⌥F'}</ContextMenuShortcut>)}
         </ContextMenuItem>
 
         <ContextMenuSeparator />
@@ -317,7 +319,7 @@ export default function EditorContextMenu({
         <ContextMenuItem onClick={() => handleAction('commandPalette')}>
           <Zap className="mr-2 h-4 w-4" />
           Command Palette
-          <ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+P' : '⌘⇧P'}</ContextMenuShortcut>
+          {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+P' : '⌘⇧P'}</ContextMenuShortcut>)}
         </ContextMenuItem>
 
         <ContextMenuSeparator />

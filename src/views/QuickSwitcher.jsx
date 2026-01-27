@@ -11,6 +11,7 @@ import {
   highlightMatches,
 } from '../core/search/fuzzy-matcher.js';
 import '../styles/quick-switcher.css';
+import { isDesktop } from '../platform/index.js';
 
 /**
  * Enhanced Quick Switcher Component
@@ -418,12 +419,14 @@ export default function QuickSwitcher({ isOpen, onClose, onSelectFile, workspace
         </div>
 
         <div className="quick-switcher-footer">
-          <div className="footer-hint">
-            <kbd>↑↓</kbd> Navigate
-            <kbd>Enter</kbd> Open
-            <kbd>⌘Enter</kbd> Split
-            <kbd>Tab</kbd> Preview
-          </div>
+          {isDesktop() && (
+            <div className="footer-hint">
+              <kbd>↑↓</kbd> Navigate
+              <kbd>Enter</kbd> Open
+              <kbd>{isWindows ? 'Ctrl+Enter' : '⌘Enter'}</kbd> Split
+              <kbd>Tab</kbd> Preview
+            </div>
+          )}
         </div>
       </div>
     </div>

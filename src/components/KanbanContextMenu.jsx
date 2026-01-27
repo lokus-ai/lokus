@@ -18,6 +18,7 @@ import {
   Download,
 } from 'lucide-react';
 import platformService from '../services/platform/PlatformService';
+import { isDesktop } from '../platform/index.js';
 
 export default function KanbanContextMenu({
   children,
@@ -43,7 +44,7 @@ export default function KanbanContextMenu({
         <ContextMenuItem onClick={() => handleAction('open')}>
           <Trello className="mr-2 h-4 w-4" />
           Open Board
-          <ContextMenuShortcut>Enter</ContextMenuShortcut>
+          {isDesktop() && (<ContextMenuShortcut>Enter</ContextMenuShortcut>)}
         </ContextMenuItem>
 
         <ContextMenuSeparator />
@@ -60,13 +61,13 @@ export default function KanbanContextMenu({
         <ContextMenuItem onClick={() => handleAction('duplicate')}>
           <Files className="mr-2 h-4 w-4" />
           Duplicate
-          <ContextMenuShortcut>{isWindows ? 'Ctrl+D' : '⌘D'}</ContextMenuShortcut>
+          {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+D' : '⌘D'}</ContextMenuShortcut>)}
         </ContextMenuItem>
 
         <ContextMenuItem onClick={() => handleAction('copyPath')}>
           <Link className="mr-2 h-4 w-4" />
           Copy Path
-          <ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+C' : '⌘⇧C'}</ContextMenuShortcut>
+          {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Shift+C' : '⌘⇧C'}</ContextMenuShortcut>)}
         </ContextMenuItem>
 
         <ContextMenuSeparator />
@@ -83,13 +84,13 @@ export default function KanbanContextMenu({
         <ContextMenuItem onClick={() => handleAction('rename')}>
           <Pencil className="mr-2 h-4 w-4" />
           Rename
-          <ContextMenuShortcut>F2</ContextMenuShortcut>
+          {isDesktop() && (<ContextMenuShortcut>F2</ContextMenuShortcut>)}
         </ContextMenuItem>
 
         <ContextMenuItem onClick={() => handleAction('delete')}>
           <Trash2 className="mr-2 h-4 w-4 text-red-500" />
           <span className="text-red-500">Delete</span>
-          <ContextMenuShortcut>{isWindows ? 'Del' : '⌘⌫'}</ContextMenuShortcut>
+          {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Del' : '⌘⌫'}</ContextMenuShortcut>)}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

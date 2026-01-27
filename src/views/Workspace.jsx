@@ -4877,7 +4877,7 @@ function WorkspaceWithScope({ path }) {
                   </div>
                   <div className="text-sm text-app-muted">
                     <p className="mb-2">The graph view shows the connections between your notes.</p>
-                    <p>Use <kbd className="px-1 py-0.5 text-xs bg-app-panel rounded">Cmd+Shift+G</kbd> to quickly open the graph view.</p>
+                    {isDesktop() && (<p>Use <kbd className="px-1 py-0.5 text-xs bg-app-panel rounded">Cmd+Shift+G</kbd> to quickly open the graph view.</p>)}
                   </div>
                 </div>
               ) : (
@@ -4940,7 +4940,7 @@ function WorkspaceWithScope({ path }) {
                     <ContextMenuContent>
                       <ContextMenuItem onClick={handleCreateFile}>
                         New File
-                        <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-file'])}</span>
+                       { isDesktop() && <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-file'])}</span>} 
                       </ContextMenuItem>
                       {featureFlags.enable_canvas && (
                         <ContextMenuItem onClick={handleCreateCanvas}>
@@ -4949,11 +4949,11 @@ function WorkspaceWithScope({ path }) {
                       )}
                       <ContextMenuItem onClick={handleCreateFolder}>
                         New Folder
-                        <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-folder'])}</span>
+                        { isDesktop() && <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['new-folder'])}</span>}
                       </ContextMenuItem>
                       <ContextMenuItem onClick={handleOpenDailyNote}>
                         Open Daily Note
-                        <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['daily-note'])}</span>
+                        { isDesktop() && <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['daily-note'])}</span>}
                       </ContextMenuItem>
                       <ContextMenuSeparator />
                       <ContextMenuItem onClick={handleRefreshFiles}>Refresh</ContextMenuItem>
@@ -5306,11 +5306,11 @@ function WorkspaceWithScope({ path }) {
                                 <ContextMenuContent>
                                   <ContextMenuItem onClick={handleSave}>
                                     Save
-                                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['save-file'])}</span>
+                                    { isDesktop() && <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['save-file'])}</span>}
                                   </ContextMenuItem>
                                   <ContextMenuItem onClick={() => stateRef.current.activeFile && handleTabClose(stateRef.current.activeFile)}>
                                     Close Tab
-                                    <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['close-tab'])}</span>
+                                    { isDesktop() && <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['close-tab'])}</span>}
                                   </ContextMenuItem>
                                   <ContextMenuSeparator />
                                   <ContextMenuItem onClick={() => document.execCommand && document.execCommand('selectAll')}>Select All</ContextMenuItem>
@@ -5348,7 +5348,7 @@ function WorkspaceWithScope({ path }) {
                                   </div>
                                   <h3 className="font-medium text-app-text mb-2">New Note</h3>
                                   <p className="text-sm text-app-muted">Create your first note and start writing</p>
-                                  <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+N")}</div>
+                                  {isDesktop() && (<div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+N")}</div>)}
                                 </button>
 
                                 {featureFlags.enable_canvas && (
@@ -5373,7 +5373,7 @@ function WorkspaceWithScope({ path }) {
                                   </div>
                                   <h3 className="font-medium text-app-text mb-2">New Folder</h3>
                                   <p className="text-sm text-app-muted">Organize your notes with folders</p>
-                                  <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+Shift+N")}</div>
+                                  {isDesktop() && (<div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+Shift+N")}</div>)}
                                 </button>
 
                                 <button
@@ -5386,7 +5386,7 @@ function WorkspaceWithScope({ path }) {
                                   </div>
                                   <h3 className="font-medium text-app-text mb-2">Command Palette</h3>
                                   <p className="text-sm text-app-muted">Quick access to all commands</p>
-                                  <div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+K")}</div>
+                                  {isDesktop() && (<div className="mt-3 text-xs text-app-muted/70">{formatAccelerator("CommandOrControl+K")}</div>)}
                                 </button>
                               </div>
                             </div>
@@ -5447,7 +5447,7 @@ function WorkspaceWithScope({ path }) {
                                       <li>• Plugin system for extensibility</li>
                                     </ul>
                                   </div>
-
+                                  {isDesktop() && (
                                   <div className="p-4 rounded-lg bg-app-panel/20 border border-app-border/50">
                                     <h3 className="font-medium text-app-text text-sm mb-2">⌨️ Quick Tips</h3>
                                     <ul className="text-sm text-app-muted space-y-1">
@@ -5456,7 +5456,7 @@ function WorkspaceWithScope({ path }) {
                                       <li>• <kbd className="px-1.5 py-0.5 bg-app-bg/50 rounded text-xs">{platformService.getModifierSymbol()}+P</kbd> Quick file open</li>
                                       <li>• Drag files to move them between folders</li>
                                     </ul>
-                                  </div>
+                                  </div>)}
                                 </div>
                               </div>
                             </div>

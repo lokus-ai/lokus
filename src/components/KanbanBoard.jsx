@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import MarkdownIt from "markdown-it";
 import { toast } from "sonner";
+import { isDesktop } from '../platform/index.js';
 
 // Initialize markdown renderer
 const md = new MarkdownIt({
