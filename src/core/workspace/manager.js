@@ -55,32 +55,42 @@ export class WorkspaceManager {
    * @returns {Promise<boolean>} True if valid workspace
    */
   static async validatePath(path) {
+    console.log('[WorkspaceManager] validatePath called:', path);
+
     // In browser/test mode without Tauri, accept any non-empty path
     // This enables E2E testing with Playwright
     if (!isTauriAvailable() && isTestMode()) {
+      console.log('[WorkspaceManager] Test mode: accepting any non-empty path');
       return path && typeof path === 'string' && path.length > 0;
     }
 
     // On mobile, use filesystem plugin to validate instead of Rust command
     // The desktop validation uses macOS security-scoped bookmarks which don't exist on iOS
     if (isMobilePlatform()) {
+      console.log('[WorkspaceManager] Mobile platform detected, using FS plugin');
       try {
         const { exists, stat } = await import("@tauri-apps/plugin-fs");
         const pathExists = await exists(path);
+        console.log('[WorkspaceManager] Path exists:', pathExists);
         if (!pathExists) return false;
 
         const pathStat = await stat(path);
+        console.log('[WorkspaceManager] Path stat:', pathStat);
         return pathStat.isDirectory;
       } catch (error) {
-        console.error("Mobile workspace validation error:", error);
-        // If we can't check, assume it's valid (we created it)
-        return path && typeof path === 'string' && path.length > 0;
+        console.error('[WorkspaceManager] Mobile workspace validation error:', error);
+        // If we can't check the path, it's not valid - don't assume it exists
+        return false;
       }
     }
 
     try {
-      return await invoke("validate_workspace_path", { path });
+      console.log('[WorkspaceManager] Desktop: invoking validate_workspace_path');
+      const result = await invoke("validate_workspace_path", { path });
+      console.log('[WorkspaceManager] Validation result:', result);
+      return result;
     } catch (error) {
+      console.error('[WorkspaceManager] Desktop validation error:', error);
       return false;
     }
   }
@@ -103,23 +113,27 @@ export class WorkspaceManager {
    * @returns {Promise<boolean>} True if saved successfully
    */
   static async saveWorkspacePath(path) {
+    console.log('[WorkspaceManager] saveWorkspacePath called:', path);
     try {
       // Validate before saving
       const isValid = await this.validatePath(path);
       if (!isValid) {
+        console.error('[WorkspaceManager] Cannot save - invalid workspace path');
         throw new Error("Invalid workspace path");
       }
 
       // On mobile, we don't need to call the Rust save command
       // The recents list in localStorage is sufficient
       if (isMobilePlatform()) {
+        console.log('[WorkspaceManager] Mobile: skipping Rust save, using localStorage');
         return true;
       }
 
       await invoke("save_last_workspace", { path });
+      console.log('[WorkspaceManager] Workspace path saved successfully');
       return true;
     } catch (error) {
-      console.error("Save workspace path error:", error);
+      console.error('[WorkspaceManager] Save workspace path error:', error);
       return false;
     }
   }

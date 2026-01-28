@@ -88,8 +88,10 @@ export default function SyncStatus() {
     // Cleanup listeners on unmount
     return () => {
       Promise.all(unlistenPromises).then(unlisteners => {
-        unlisteners.forEach(unlisten => unlisten());
-      });
+        unlisteners.forEach(unlisten => {
+          if (typeof unlisten === 'function') unlisten();
+        });
+      }).catch(() => {});
     };
   }, []);
 
