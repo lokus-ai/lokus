@@ -18,17 +18,23 @@ export function useWorkspaceActivation() {
 
   useEffect(() => {
     const initializeWorkspace = async () => {
+      console.log('[WorkspaceActivation] Starting workspace initialization');
+
       // Try multiple times with increasing delays
       for (let attempt = 0; attempt < 3; attempt++) {
         await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
-        
+        console.log(`[WorkspaceActivation] Attempt ${attempt + 1} of 3`);
+
         // Strategy 1: Check URL on initial load
         const params = new URLSearchParams(window.location.search);
         const forceWelcome = params.get("forceWelcome");
         const workspacePath = params.get("workspacePath");
 
+        console.log('[WorkspaceActivation] URL params:', { forceWelcome, workspacePath });
+
         // If forceWelcome is set, skip workspace loading and show launcher
         if (forceWelcome === "true") {
+          console.log('[WorkspaceActivation] forceWelcome=true, showing launcher');
           setPath(null);
           setIsInitialized(true);
           return;
@@ -36,29 +42,44 @@ export function useWorkspaceActivation() {
 
         if (workspacePath) {
           const decodedPath = decodeURIComponent(workspacePath);
+          console.log('[WorkspaceActivation] Validating URL workspace path:', decodedPath);
           // Validate the URL parameter workspace path
           const isValid = await WorkspaceManager.validatePath(decodedPath);
+          console.log('[WorkspaceActivation] URL path validation result:', isValid);
           if (isValid) {
             setPath(decodedPath);
             // Save for refresh recovery
             WorkspaceManager.saveWorkspacePath(decodedPath);
             setIsInitialized(true);
+            console.log('[WorkspaceActivation] Using URL workspace path:', decodedPath);
             return;
+          } else {
+            // Invalid workspace path - clear URL param to prevent loops
+            console.log('[WorkspaceActivation] Invalid workspace path, clearing URL param');
+            const url = new URL(window.location);
+            url.searchParams.delete('workspacePath');
+            window.history.replaceState({}, '', url.toString());
+            // Continue to show launcher
           }
         }
       }
 
       // Strategy 2: Check for saved workspace if no URL parameter
+      console.log('[WorkspaceActivation] No URL path, checking saved workspace');
       try {
         const validPath = await WorkspaceManager.getValidatedWorkspacePath();
+        console.log('[WorkspaceActivation] Saved workspace path:', validPath);
         if (validPath) {
           setPath(validPath);
           setIsInitialized(true);
           return;
         }
-      } catch { }
+      } catch (err) {
+        console.error('[WorkspaceActivation] Error getting saved workspace:', err);
+      }
 
       // Strategy 3: No valid workspace found, path remains null (shows launcher)
+      console.log('[WorkspaceActivation] No valid workspace found, showing launcher');
       setIsInitialized(true);
     };
 

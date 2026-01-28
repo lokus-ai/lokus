@@ -1,12 +1,16 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { logger } from '../utils/logger.js';
+import { isMobile } from '../platform/index.js';
 
 /**
  * Calendar Service Module
  *
  * Provides a clean wrapper around Calendar Tauri commands with error handling,
  * logging, and consistent API interface.
+ *
+ * Note: Calendar commands are desktop-only (#[cfg(desktop)] in Rust).
+ * On mobile, these functions return sensible defaults.
  */
 
 // Calendar authentication operations
@@ -60,6 +64,10 @@ export const calendarAuth = {
    * @returns {Promise<boolean>} - Authentication status
    */
   async isGoogleAuthenticated() {
+    // Calendar commands are desktop-only
+    if (isMobile()) {
+      return false;
+    }
     try {
       console.log('[calendarService] Checking Google auth status...');
       const isAuth = await invoke('google_calendar_auth_status');
