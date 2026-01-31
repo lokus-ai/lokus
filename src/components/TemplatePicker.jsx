@@ -13,6 +13,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { useTemplates, useTemplateProcessor } from '../hooks/useTemplates.js';
+import { getMarkdownCompiler } from '../core/markdown/compiler-logic.js';
 import posthog from '../services/posthog.js';
 import {
   Dialog,
@@ -31,6 +32,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select.jsx';
+
+const markdownCompiler = getMarkdownCompiler();
 
 export default function TemplatePicker({
   open,
@@ -142,13 +145,23 @@ export default function TemplatePicker({
         context: {}
       });
 
+      // Compile markdown to HTML (converts [[WikiLinks]] to clickable nodes)
+      const markdown = result.result || result.content || result;
+      const html = await markdownCompiler.compile(markdown);
+
       // Track template feature activation
       posthog.trackFeatureActivation('templates');
 
-      onSelect?.(template, result.result || result.content || result);
+      onSelect?.(template, html);
       onClose?.();
     } catch (err) {
-      onSelect?.(template, template.content);
+      // Fallback: try to compile raw content
+      try {
+        const html = await markdownCompiler.compile(template.content);
+        onSelect?.(template, html);
+      } catch {
+        onSelect?.(template, template.content);
+      }
       onClose?.();
     }
     finally {      
