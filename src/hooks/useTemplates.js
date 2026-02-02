@@ -224,7 +224,7 @@ export function useTemplates() {
 
 **Date:** {{date}}
 **Time:** {{time}}
-**Attendees:** {{attendees || "Add attendees here"}}
+**Attendees:** {{attendees | linkAttendees || "Add attendees here"}}
 
 ## Agenda
 {{agenda || "Add agenda items here"}}

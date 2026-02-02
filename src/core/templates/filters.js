@@ -6,6 +6,7 @@
  */
 
 import { format, formatDistance, formatRelative, parseISO } from 'date-fns';
+import { linkAttendees } from '../attendees/attendee-linker.js';
 
 /**
  * String Filters
@@ -737,7 +738,16 @@ export const allFilters = {
   ...numberFilters,
   ...dateFilters,
   ...objectFilters,
-  ...utilityFilters
+  ...utilityFilters,
+  // Attendee filter - converts names/emails to wiki-links
+  linkAttendees: (value) => {
+    if (!value) return '';
+    try {
+      return linkAttendees(value);
+    } catch {
+      return Array.isArray(value) ? value.join(', ') : String(value);
+    }
+  }
 };
 
 /**
