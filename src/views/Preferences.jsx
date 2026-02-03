@@ -23,6 +23,9 @@ import { User, LogIn, LogOut, Crown, Shield, Settings as SettingsIcon } from "lu
 import QuickImport from "../components/QuickImport.jsx";
 import { getAppVersion } from "../utils/appInfo.js";
 import { isDesktop } from '../platform/index.js';
+import { getCalloutConfig, saveCalloutConfig } from "@/core/editor/callout-config.js";
+
+
 
 export default function Preferences() {
   const [themes, setThemes] = useState([]);
@@ -114,6 +117,14 @@ export default function Preferences() {
   // Update settings state
   const [appVersion, setAppVersion] = useState('');
   const [betaUpdates, setBetaUpdates] = useState(false);
+
+  // Callouts
+  const [callouts, setCallouts] = useState(getCalloutConfig());
+
+  const [selectedType, setSelectedType] = useState("note");
+
+
+
 
   // Preset themes for quick styling
   const presets = {
@@ -295,7 +306,7 @@ export default function Preferences() {
       calendarService.caldav.getAccount().then(account => {
         setCaldavAccount(account);
         if (account) {
-          calendarService.caldav.refreshCalendars().then(setCaldavCalendars).catch(() => {});
+          calendarService.caldav.refreshCalendars().then(setCaldavCalendars).catch(() => { });
         }
       });
     }
@@ -984,6 +995,7 @@ export default function Preferences() {
               // "General",
               "Appearance",
               "Editor",
+              "Callouts",
               "Daily Notes",
               "Markdown",
               "Shortcuts",
@@ -1477,8 +1489,8 @@ export default function Preferences() {
                                 key={symbol}
                                 onClick={() => liveEditorSettings.updateSetting('bulletStyle', symbol)}
                                 className={`w-10 h-10 flex items-center justify-center rounded border transition-colors ${liveEditorSettings.getSetting('bulletStyle') === symbol
-                                    ? 'border-app-accent bg-app-accent/10 text-app-accent'
-                                    : 'border-app-border hover:border-app-accent/50'
+                                  ? 'border-app-accent bg-app-accent/10 text-app-accent'
+                                  : 'border-app-border hover:border-app-accent/50'
                                   }`}
                               >
                                 {symbol}
@@ -1494,8 +1506,8 @@ export default function Preferences() {
                                 key={symbol}
                                 onClick={() => liveEditorSettings.updateSetting('checkboxStyle', symbol)}
                                 className={`w-10 h-10 flex items-center justify-center rounded border transition-colors ${liveEditorSettings.getSetting('checkboxStyle') === symbol
-                                    ? 'border-app-accent bg-app-accent/10 text-app-accent'
-                                    : 'border-app-border hover:border-app-accent/50'
+                                  ? 'border-app-accent bg-app-accent/10 text-app-accent'
+                                  : 'border-app-border hover:border-app-accent/50'
                                   }`}
                               >
                                 {symbol}
@@ -2017,12 +2029,12 @@ export default function Preferences() {
                     <button
                       onClick={saveEditorSettings}
                       className={`px-6 py-2 rounded-lg transition-all flex items-center gap-2 font-medium shadow-lg ${saveStatus === 'saving'
-                          ? 'bg-app-muted text-app-bg cursor-wait'
-                          : saveStatus === 'success'
-                            ? 'bg-green-600 text-white shadow-green-600/50'
-                            : saveStatus === 'error'
-                              ? 'bg-red-600 text-white shadow-red-600/50'
-                              : 'bg-app-accent text-white hover:bg-app-accent/90 hover:shadow-app-accent/50'
+                        ? 'bg-app-muted text-app-bg cursor-wait'
+                        : saveStatus === 'success'
+                          ? 'bg-green-600 text-white shadow-green-600/50'
+                          : saveStatus === 'error'
+                            ? 'bg-red-600 text-white shadow-red-600/50'
+                            : 'bg-app-accent text-white hover:bg-app-accent/90 hover:shadow-app-accent/50'
                         }`}
                     >
                       {saveStatus === 'saving' && (
@@ -2094,6 +2106,61 @@ export default function Preferences() {
                 </div>
               </div>
             )}
+
+            {section === "Callouts" && (
+              <div className="p-6 space-y-4 max-w-md">
+                <h2 className="text-lg font-semibold">Callouts</h2>
+
+                <label className="block text-sm">Callout type</label>
+                <select
+                  className="w-full border p-2 rounded bg-app-panel"
+                  value={selectedType}
+                  onChange={(e) => setSelectedType(e.target.value)}
+                >
+                  <option value="note">Note</option>
+                  <option value="warning">Warning</option>
+                  <option value="tip">Tip</option>
+                </select>
+
+                <label className="block text-sm">Icon</label>
+                <input
+                  className="w-full border p-2 rounded bg-app-panel"
+                  value={callouts[selectedType]?.icon || ""}
+                  onChange={(e) => {
+                    const updated = {
+                      ...callouts,
+                      [selectedType]: {
+                        ...callouts[selectedType],
+                        icon: e.target.value
+                      }
+                    };
+                    setCallouts(updated);
+                    saveCalloutConfig(updated);
+                  }}
+                />
+
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={callouts[selectedType]?.collapsed ?? false}
+                    onChange={(e) => {
+                      const updated = {
+                        ...callouts,
+                        [selectedType]: {
+                          ...callouts[selectedType],
+                          collapsed: e.target.checked
+                        }
+                      };
+                      setCallouts(updated);
+                      saveCalloutConfig(updated);
+                    }}
+                  />
+                  Collapsed by default
+                </label>
+              </div>
+            )}
+
+
 
             {section === "General" && (
               <div className="text-app-muted">General settings coming soon.</div>
@@ -2638,7 +2705,7 @@ export default function Preferences() {
                       Open today's daily note on startup
                     </label>
                   </div>
-                  {isDesktop() && ( 
+                  {isDesktop() && (
                     <div className="pt-4 border-t border-app-border">
                       <p className="text-sm text-app-muted mb-2">Quick access:</p>
                       <ul className="text-sm space-y-1 text-app-muted">
@@ -2741,8 +2808,8 @@ export default function Preferences() {
                   >
                     {expandedConnections.gmail ? <ChevronDown className="w-4 h-4 text-app-muted" /> : <ChevronRight className="w-4 h-4 text-app-muted" />}
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
-                      <path d="M22 6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6Z" fill="#EA4335"/>
-                      <path d="M22 6L12 13L2 6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+                      <path d="M22 6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6Z" fill="#EA4335" />
+                      <path d="M22 6L12 13L2 6" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
                     <span className="font-medium text-app-text flex-1 text-left">Gmail</span>
                     <ConnectionStatus />
@@ -2764,16 +2831,16 @@ export default function Preferences() {
                   >
                     {expandedConnections.calendar ? <ChevronDown className="w-4 h-4 text-app-muted" /> : <ChevronRight className="w-4 h-4 text-app-muted" />}
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
-                      <rect x="3" y="4" width="18" height="18" rx="2" fill="#4285F4"/>
-                      <rect x="3" y="4" width="18" height="5" fill="#1967D2"/>
-                      <circle cx="7" cy="6.5" r="1" fill="#EA4335"/>
-                      <circle cx="17" cy="6.5" r="1" fill="#EA4335"/>
-                      <rect x="6" y="11" width="3" height="3" rx="0.5" fill="white"/>
-                      <rect x="10.5" y="11" width="3" height="3" rx="0.5" fill="white"/>
-                      <rect x="15" y="11" width="3" height="3" rx="0.5" fill="white"/>
-                      <rect x="6" y="15.5" width="3" height="3" rx="0.5" fill="white"/>
-                      <rect x="10.5" y="15.5" width="3" height="3" rx="0.5" fill="#FBBC05"/>
-                      <rect x="15" y="15.5" width="3" height="3" rx="0.5" fill="white"/>
+                      <rect x="3" y="4" width="18" height="18" rx="2" fill="#4285F4" />
+                      <rect x="3" y="4" width="18" height="5" fill="#1967D2" />
+                      <circle cx="7" cy="6.5" r="1" fill="#EA4335" />
+                      <circle cx="17" cy="6.5" r="1" fill="#EA4335" />
+                      <rect x="6" y="11" width="3" height="3" rx="0.5" fill="white" />
+                      <rect x="10.5" y="11" width="3" height="3" rx="0.5" fill="white" />
+                      <rect x="15" y="11" width="3" height="3" rx="0.5" fill="white" />
+                      <rect x="6" y="15.5" width="3" height="3" rx="0.5" fill="white" />
+                      <rect x="10.5" y="15.5" width="3" height="3" rx="0.5" fill="#FBBC05" />
+                      <rect x="15" y="15.5" width="3" height="3" rx="0.5" fill="white" />
                     </svg>
                     <span className="font-medium text-app-text flex-1 text-left">Google Calendar</span>
                     <CalendarConnectionStatus />
@@ -2795,14 +2862,14 @@ export default function Preferences() {
                   >
                     {expandedConnections.ical ? <ChevronDown className="w-4 h-4 text-app-muted" /> : <ChevronRight className="w-4 h-4 text-app-muted" />}
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
-                      <rect x="3" y="4" width="18" height="18" rx="2" fill="#5856D6"/>
-                      <rect x="3" y="4" width="18" height="5" fill="#4340B8"/>
-                      <path d="M7 6.5L7 3M17 6.5L17 3" stroke="#FF3B30" strokeWidth="1.5" strokeLinecap="round"/>
-                      <rect x="6" y="11" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9"/>
-                      <rect x="10.5" y="11" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9"/>
-                      <rect x="15" y="11" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9"/>
-                      <rect x="6" y="15" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9"/>
-                      <rect x="10.5" y="15" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9"/>
+                      <rect x="3" y="4" width="18" height="18" rx="2" fill="#5856D6" />
+                      <rect x="3" y="4" width="18" height="5" fill="#4340B8" />
+                      <path d="M7 6.5L7 3M17 6.5L17 3" stroke="#FF3B30" strokeWidth="1.5" strokeLinecap="round" />
+                      <rect x="6" y="11" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9" />
+                      <rect x="10.5" y="11" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9" />
+                      <rect x="15" y="11" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9" />
+                      <rect x="6" y="15" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9" />
+                      <rect x="10.5" y="15" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9" />
                     </svg>
                     <span className="font-medium text-app-text flex-1 text-left">iCal / ICS</span>
                     {icalSubscriptions.length > 0 && (
@@ -2922,13 +2989,13 @@ export default function Preferences() {
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
                       <defs>
                         <linearGradient id="icloudGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                          <stop offset="0%" stopColor="#5AC8FA"/>
-                          <stop offset="100%" stopColor="#007AFF"/>
+                          <stop offset="0%" stopColor="#5AC8FA" />
+                          <stop offset="100%" stopColor="#007AFF" />
                         </linearGradient>
                       </defs>
-                      <path d="M19 18H6.5C4.01 18 2 15.99 2 13.5C2 11.26 3.64 9.41 5.79 9.07C6.07 6.25 8.43 4 11.32 4C13.34 4 15.09 5.18 16.01 6.9C16.33 6.83 16.66 6.8 17 6.8C19.76 6.8 22 9.04 22 11.8C22 14.22 20.25 16.24 17.94 16.72" fill="url(#icloudGrad)"/>
-                      <rect x="8" y="12" width="8" height="6" rx="1" fill="white" fillOpacity="0.9"/>
-                      <path d="M10 15L11.5 16.5L14 13.5" stroke="#007AFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M19 18H6.5C4.01 18 2 15.99 2 13.5C2 11.26 3.64 9.41 5.79 9.07C6.07 6.25 8.43 4 11.32 4C13.34 4 15.09 5.18 16.01 6.9C16.33 6.83 16.66 6.8 17 6.8C19.76 6.8 22 9.04 22 11.8C22 14.22 20.25 16.24 17.94 16.72" fill="url(#icloudGrad)" />
+                      <rect x="8" y="12" width="8" height="6" rx="1" fill="white" fillOpacity="0.9" />
+                      <path d="M10 15L11.5 16.5L14 13.5" stroke="#007AFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                     <span className="font-medium text-app-text flex-1 text-left">iCloud / CalDAV</span>
                     {caldavAccount && (
@@ -3087,32 +3154,32 @@ export default function Preferences() {
                   <div className="flex flex-wrap gap-3">
                     <div className="flex items-center gap-2 px-3 py-1.5 bg-app-panel border border-app-border rounded-full opacity-50">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-                        <rect x="2" y="4" width="20" height="16" rx="2" fill="#0078D4"/>
-                        <path d="M2 8L12 14L22 8" stroke="white" strokeWidth="1.5"/>
+                        <rect x="2" y="4" width="20" height="16" rx="2" fill="#0078D4" />
+                        <path d="M2 8L12 14L22 8" stroke="white" strokeWidth="1.5" />
                       </svg>
                       <span className="text-xs text-app-text-secondary">Outlook</span>
                     </div>
                     <div className="flex items-center gap-2 px-3 py-1.5 bg-app-panel border border-app-border rounded-full opacity-50">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2Z" fill="#0052CC"/>
-                        <path d="M8 8H16V10H8V8ZM8 12H14V14H8V12Z" fill="white"/>
+                        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2Z" fill="#0052CC" />
+                        <path d="M8 8H16V10H8V8ZM8 12H14V14H8V12Z" fill="white" />
                       </svg>
                       <span className="text-xs text-app-text-secondary">Jira</span>
                     </div>
                     <div className="flex items-center gap-2 px-3 py-1.5 bg-app-panel border border-app-border rounded-full opacity-50">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-                        <path d="M6 6H10V10H6V6Z" fill="#E01E5A"/>
-                        <path d="M14 6H18V10H14V6Z" fill="#36C5F0"/>
-                        <path d="M6 14H10V18H6V14Z" fill="#2EB67D"/>
-                        <path d="M14 14H18V18H14V14Z" fill="#ECB22E"/>
+                        <path d="M6 6H10V10H6V6Z" fill="#E01E5A" />
+                        <path d="M14 6H18V10H14V6Z" fill="#36C5F0" />
+                        <path d="M6 14H10V18H6V14Z" fill="#2EB67D" />
+                        <path d="M14 14H18V18H14V14Z" fill="#ECB22E" />
                       </svg>
                       <span className="text-xs text-app-text-secondary">Slack</span>
                     </div>
                     <div className="flex items-center gap-2 px-3 py-1.5 bg-app-panel border border-app-border rounded-full opacity-50">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-                        <rect x="2" y="2" width="20" height="20" rx="4" fill="#FF5700"/>
-                        <circle cx="12" cy="12" r="4" fill="white"/>
-                        <circle cx="18" cy="6" r="1.5" fill="white"/>
+                        <rect x="2" y="2" width="20" height="20" rx="4" fill="#FF5700" />
+                        <circle cx="12" cy="12" r="4" fill="white" />
+                        <circle cx="18" cy="6" r="1.5" fill="white" />
                       </svg>
                       <span className="text-xs text-app-text-secondary">Reddit</span>
                     </div>
@@ -3543,8 +3610,8 @@ export default function Preferences() {
                                 </div>
                                 {peer.connection_type && (
                                   <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide ${peer.connection_type === 'direct'
-                                      ? 'bg-green-500/10 text-green-600 border border-green-500/20'
-                                      : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
+                                    ? 'bg-green-500/10 text-green-600 border border-green-500/20'
+                                    : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
                                     }`}>
                                     {peer.connection_type}
                                   </span>
