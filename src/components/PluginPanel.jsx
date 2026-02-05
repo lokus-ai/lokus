@@ -12,6 +12,7 @@ import {
   Pin,
   PinOff
 } from "lucide-react";
+import { isMobile } from '../platform/index.js';
 
 // Plugin Panel Container for dynamic plugin UI components
 export default function PluginPanel({
@@ -227,7 +228,7 @@ export default function PluginPanel({
       ref={panelRef}
       className={`${positionClasses[position]} bg-app-panel text-app-text z-40 flex flex-col ${className}`}
       style={{
-        width: position !== "bottom" ? dimensions.width : undefined,
+        width: position !== "bottom" ? (isMobile() ? '100%' : dimensions.width) : undefined,
         height: position === "bottom" ? dimensions.height : undefined,
         transform: collapsed ? (
           position === "right" ? `translateX(${dimensions.width - 40}px)` :
