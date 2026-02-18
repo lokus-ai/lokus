@@ -24,6 +24,7 @@ fn get_or_init_platform_provider() -> &'static Box<dyn PlatformProvider> {
 
 /// File entry structure that matches the existing API
 #[derive(Serialize, Deserialize, Debug)]
+#[allow(dead_code)]
 pub struct FileEntry {
     name: String,
     path: String,

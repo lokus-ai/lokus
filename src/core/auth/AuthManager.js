@@ -19,6 +19,28 @@ class AuthManager {
   }
 
   async initialize() {
+    // Check for local dev mode (bypass Supabase)
+    const isLocalDev = import.meta.env.VITE_LOCAL_DEV_MODE === 'true' || 
+                       import.meta.env.DEV && import.meta.env.VITE_SUPABASE_URL?.includes('dummy');
+    
+    if (isLocalDev) {
+      console.log('[AuthManager] Local dev mode enabled - bypassing Supabase authentication');
+      // Create a mock user session for local development
+      this.user = {
+        id: 'local-dev-user',
+        email: 'dev@localhost',
+        user_metadata: { name: 'Local Developer' }
+      };
+      this.session = { 
+        access_token: 'local-dev-token',
+        user: this.user 
+      };
+      this.isAuthenticated = true;
+      this.isInitialized = true;
+      this.notifyListeners();
+      return;
+    }
+
     // Set up Supabase auth state listener
     supabase.auth.onAuthStateChange((event, session) => {
       console.log('[AuthManager] Auth state changed:', event, session?.user?.email);
@@ -61,6 +83,15 @@ class AuthManager {
   }
 
   async checkAuthStatus() {
+    // Check for local dev mode
+    const isLocalDev = import.meta.env.VITE_LOCAL_DEV_MODE === 'true' || 
+                       import.meta.env.DEV && import.meta.env.VITE_SUPABASE_URL?.includes('dummy');
+    
+    if (isLocalDev) {
+      // Always return authenticated in local dev mode
+      return true;
+    }
+
     const now = Date.now();
 
     // Throttle auth checks to prevent excessive calls

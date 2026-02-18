@@ -20,7 +20,8 @@ import {
   Copy,
   Eye,
   CalendarPlus,
-  GripVertical
+  GripVertical,
+  ListTodo
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -41,16 +42,20 @@ import {
   subDays,
   parseISO
 } from 'date-fns';
+import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import { useCalendarContext } from '../../contexts/CalendarContext.jsx';
+import { useScheduleContext } from '../../contexts/ScheduleContext.jsx';
 import calendarService from '../../services/calendar.js';
 import EventCard from './EventCard.jsx';
+import TaskScheduleSidebar from './TaskScheduleSidebar.jsx';
+import ScheduleBlockComponent, { ScheduleBlockContextMenu } from './ScheduleBlockComponent.jsx';
 
 /**
  * Calendar View Component
  *
  * Full calendar view with month, week, and day views
  */
-export default function CalendarView({ onClose, onOpenSettings }) {
+export default function CalendarView({ workspacePath, onClose, onOpenSettings }) {
   const {
     isAuthenticated,
     calendars,
@@ -65,7 +70,7 @@ export default function CalendarView({ onClose, onOpenSettings }) {
   } = useCalendarContext();
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState('month'); // 'month', 'week', 'day'
+  const [viewMode, setViewMode] = useState('week'); // 'month', 'week', 'day' — default week for task time-blocking
   const [selectedDate, setSelectedDate] = useState(null);
   const [viewEvents, setViewEvents] = useState([]);
   const [viewEventsLoading, setViewEventsLoading] = useState(false);
@@ -80,6 +85,207 @@ export default function CalendarView({ onClose, onOpenSettings }) {
 
   // Drag state for event dragging (grip handle based)
   const [dragState, setDragState] = useState(null); // { event, isDragging, startX, startY, currentX, currentY }
+
+  // ============== TASK SCHEDULING INTEGRATION ==============
+  const {
+    blocks: scheduleBlocks,
+    loadBlocksForRange,
+    createBlock: createScheduleBlock,
+    updateBlock: updateScheduleBlock,
+    deleteBlock: deleteScheduleBlock,
+    getBlocksForDate: getScheduleBlocksForDate
+  } = useScheduleContext();
+
+  const [showTaskSidebar, setShowTaskSidebar] = useState(true); // open by default so users can see tasks and create time blocks
+  const [scheduleBlockContextMenu, setScheduleBlockContextMenu] = useState(null);
+  // Cache tasks for rendering schedule blocks
+  const tasksCacheRef = useRef(new Map());
+
+  // DnD sensors for task scheduling
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 }
+    })
+  );
+
+  // Load schedule blocks when view range changes
+  useEffect(() => {
+    let rangeStart, rangeEnd;
+    if (viewMode === 'week') {
+      rangeStart = startOfWeek(currentDate);
+      rangeEnd = endOfWeek(currentDate);
+    } else if (viewMode === 'day') {
+      rangeStart = new Date(currentDate);
+      rangeStart.setHours(0, 0, 0, 0);
+      rangeEnd = new Date(currentDate);
+      rangeEnd.setHours(23, 59, 59, 999);
+    } else {
+      rangeStart = startOfWeek(startOfMonth(currentDate));
+      rangeEnd = endOfWeek(endOfMonth(currentDate));
+    }
+    loadBlocksForRange(rangeStart.toISOString(), rangeEnd.toISOString());
+  }, [currentDate, viewMode, loadBlocksForRange]);
+
+  // Load tasks for schedule block rendering (Tauri tasks + Kanban cards for block titles)
+  useEffect(() => {
+    const loadTasksForBlocks = async () => {
+      if (scheduleBlocks.length === 0) return;
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const allTasks = await invoke('get_all_tasks');
+        const newCache = new Map();
+        (allTasks || []).forEach(t => newCache.set(t.id, t));
+
+        const hasKanbanBlocks = scheduleBlocks.some(b => b.task_id.startsWith('kanban:'));
+        if (hasKanbanBlocks && workspacePath) {
+          try {
+            const boardInfos = await invoke('list_kanban_boards', { workspacePath });
+            for (const info of boardInfos || []) {
+              try {
+                const board = await invoke('open_kanban_board', { filePath: info.path });
+                const columns = board?.columns ? Object.values(board.columns) : [];
+                for (const col of columns) {
+                  for (const card of col?.cards || []) {
+                    const id = `kanban:${info.path}:${card.id}`;
+                    const created = card.created ? new Date(card.created).getTime() : 0;
+                    const modified = card.modified ? new Date(card.modified).getTime() : created;
+                    newCache.set(id, {
+                      id,
+                      title: card.title || 'Untitled',
+                      description: card.description || null,
+                      status: 'todo',
+                      priority: 0,
+                      created_at: Math.floor(created / 1000),
+                      updated_at: Math.floor(modified / 1000),
+                      note_path: null,
+                      note_position: null,
+                      tags: card.tags || [],
+                    });
+                  }
+                }
+              } catch (_) {}
+            }
+          } catch (_) {}
+        }
+
+        tasksCacheRef.current = newCache;
+      } catch { }
+    };
+    loadTasksForBlocks();
+  }, [scheduleBlocks, workspacePath]);
+
+  // DnD handler: task dropped onto time grid
+  // Uses pointer coordinates to find the target time slot via DOM inspection
+  const handleDndDragEnd = useCallback(async (event) => {
+    const { active } = event;
+    if (!active) return;
+
+    const taskData = active.data?.current;
+    if (taskData?.type !== 'task' || !taskData.task) return;
+
+    // Get the pointer position from the native drag end event
+    const pointerEvent = event.activatorEvent;
+    if (!pointerEvent) return;
+
+    // Use the current pointer position (delta + original)
+    const clientX = pointerEvent.clientX + (event.delta?.x || 0);
+    const clientY = pointerEvent.clientY + (event.delta?.y || 0);
+
+    // Find the time grid element under the drop point
+    const timeGridEl = document.elementFromPoint(clientX, clientY)?.closest('[data-time-grid]');
+    if (!timeGridEl) return;
+
+    const dayIso = timeGridEl.dataset.dayIso;
+    const startHourAttr = parseFloat(timeGridEl.dataset.startHour);
+    const hourHeightAttr = parseFloat(timeGridEl.dataset.hourHeight);
+
+    if (!dayIso || isNaN(startHourAttr) || isNaN(hourHeightAttr)) return;
+
+    // Calculate hour from Y position within the time grid
+    const rect = timeGridEl.getBoundingClientRect();
+    const y = clientY - rect.top;
+    const rawHour = startHourAttr + (y / hourHeightAttr);
+    // Snap to 15 min
+    const snappedHour = Math.floor(rawHour * 4) / 4;
+    const startHours = Math.floor(snappedHour);
+    const startMinutes = Math.round((snappedHour - startHours) * 60);
+
+    const task = taskData.task;
+    const dropDate = new Date(dayIso);
+    const blockStart = new Date(dropDate);
+    blockStart.setHours(startHours, startMinutes, 0, 0);
+
+    // Default 1-hour block
+    const blockEnd = new Date(blockStart);
+    blockEnd.setHours(blockEnd.getHours() + 1);
+
+    try {
+      await createScheduleBlock(task.id, blockStart.toISOString(), blockEnd.toISOString());
+      toast.success('Task scheduled', { description: `${task.title} — ${format(blockStart, 'h:mm a')}` });
+    } catch (err) {
+      console.error('Failed to create schedule block:', err);
+      toast.error('Failed to schedule task');
+    }
+  }, [createScheduleBlock]);
+
+  // Schedule block context menu handlers
+  const handleScheduleBlockContextMenu = useCallback((e, block, task) => {
+    setScheduleBlockContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      block,
+      task
+    });
+  }, []);
+
+  const handleDeleteScheduleBlock = useCallback(async (blockId) => {
+    try {
+      await deleteScheduleBlock(blockId);
+      toast.success('Schedule block removed');
+    } catch (err) {
+      console.error('Failed to delete schedule block:', err);
+      toast.error('Failed to remove block');
+    }
+  }, [deleteScheduleBlock]);
+
+  const handleResizeScheduleBlock = useCallback(async (blockId, newEnd) => {
+    try {
+      await updateScheduleBlock(blockId, { end: newEnd });
+    } catch (err) {
+      console.error('Failed to resize schedule block:', err);
+      toast.error('Failed to resize block');
+    }
+  }, [updateScheduleBlock]);
+
+  const handleMarkTaskComplete = useCallback(async (block, task) => {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('update_task', {
+        taskId: task.id,
+        title: null,
+        description: null,
+        status: 'completed',
+        priority: null
+      });
+      toast.success('Task completed', { description: task.title });
+    } catch (err) {
+      console.error('Failed to mark task complete:', err);
+      toast.error('Failed to update task');
+    }
+  }, []);
+
+  // Close schedule block context menu on click
+  useEffect(() => {
+    if (!scheduleBlockContextMenu) return;
+    const handleClick = () => setScheduleBlockContextMenu(null);
+    const handleEsc = (e) => { if (e.key === 'Escape') setScheduleBlockContextMenu(null); };
+    document.addEventListener('click', handleClick);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('click', handleClick);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [scheduleBlockContextMenu]);
 
   // ============== STATE-OF-THE-ART CACHING SYSTEM ==============
   // - Aggressive pre-fetching (3 months ahead/behind)
@@ -769,36 +975,8 @@ export default function CalendarView({ onClose, onOpenSettings }) {
     }
   }, [dragState, updateEventInCache]);
 
-  // Not connected state
-  if (!isAuthenticated) {
-    return (
-      <div className="flex flex-col h-full bg-app-bg">
-        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-          <CalendarIcon className="w-16 h-16 text-app-muted mb-4 opacity-50" />
-          <h2 className="text-lg font-medium text-app-text mb-2">
-            Connect Your Calendar
-          </h2>
-          <p className="text-sm text-app-muted mb-6 max-w-md">
-            Connect Google Calendar or iCloud to view and manage your events in Lokus.
-            Your events will sync automatically.
-          </p>
-          <div className="flex flex-col gap-3">
-            <button
-              onClick={connectGoogle}
-              className="px-6 py-3 text-sm bg-app-accent text-app-accent-fg rounded-lg hover:opacity-90 transition-opacity flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Connect Google Calendar
-            </button>
-            <p className="text-xs text-app-muted">
-              For iCloud Calendar, go to{' '}
-              <span className="text-app-accent">Preferences → Connections</span>
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Always show the calendar view (local-first). When not connected, events are empty;
+  // users can connect Google/iCloud via Preferences → Connections if they want.
 
   return (
     <div className="flex flex-col h-full bg-app-bg">
@@ -836,6 +1014,21 @@ export default function CalendarView({ onClose, onOpenSettings }) {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Task Sidebar Toggle - only in week/day views */}
+          {(viewMode === 'week' || viewMode === 'day') && (
+            <button
+              onClick={() => setShowTaskSidebar(prev => !prev)}
+              className={`p-2 rounded-lg transition-colors ${
+                showTaskSidebar
+                  ? 'bg-app-accent/15 text-app-accent'
+                  : 'hover:bg-app-bg text-app-muted hover:text-app-text'
+              }`}
+              title={showTaskSidebar ? 'Hide task sidebar' : 'Schedule tasks'}
+            >
+              <ListTodo className="w-4 h-4" />
+            </button>
+          )}
+
           {/* Add Event Button */}
           {writableCalendars.length > 0 && (
             <button
@@ -896,59 +1089,101 @@ export default function CalendarView({ onClose, onOpenSettings }) {
       </div>
 
       {/* Calendar Content - Always show grid, events populate when ready */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-hidden">
         {viewMode === 'month' && (
-          <MonthView
-            currentDate={currentDate}
-            selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
-            onDayDoubleClick={(date) => {
-              setCurrentDate(date);
-              setSelectedDate(date);
-              setViewMode('day');
-            }}
-            getEventsForDate={getEventsForDate}
-            calendars={calendars}
-            onEventClick={handleEventClick}
-            onCreateEvent={openCreateModal}
-            onContextMenu={handleContextMenu}
-          />
+          <div className="h-full overflow-auto">
+            <MonthView
+              currentDate={currentDate}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+              onDayDoubleClick={(date) => {
+                setCurrentDate(date);
+                setSelectedDate(date);
+                setViewMode('day');
+              }}
+              getEventsForDate={getEventsForDate}
+              calendars={calendars}
+              onEventClick={handleEventClick}
+              onCreateEvent={openCreateModal}
+              onContextMenu={handleContextMenu}
+            />
+          </div>
         )}
-        {viewMode === 'week' && (
-          <WeekView
-            currentDate={currentDate}
-            selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
-            onDayDoubleClick={(date) => {
-              setCurrentDate(date);
-              setSelectedDate(date);
-              setViewMode('day');
-            }}
-            getEventsForDate={getEventsForDate}
-            calendars={calendars}
-            onCreateEvent={openCreateModal}
-            onContextMenu={handleContextMenu}
-            onEventDoubleClick={handleEventDoubleClick}
-            onEventMouseDown={handleEventMouseDown}
-            onEventDrop={handleEventDrop}
-            dragState={dragState}
-          />
-        )}
-        {viewMode === 'day' && (
-          <DayView
-            currentDate={currentDate}
-            getEventsForDate={getEventsForDate}
-            calendars={calendars}
-            onCreateEvent={openCreateModal}
-            onContextMenu={handleContextMenu}
-            onEventClick={handleEventClick}
-            onEventDoubleClick={handleEventDoubleClick}
-            onEventMouseDown={handleEventMouseDown}
-            onEventDrop={handleEventDrop}
-            dragState={dragState}
-          />
+        {(viewMode === 'week' || viewMode === 'day') && (
+          <DndContext sensors={dndSensors} onDragEnd={handleDndDragEnd}>
+            <div className="flex h-full relative">
+              {/* Task Sidebar */}
+              <TaskScheduleSidebar
+                isOpen={showTaskSidebar}
+                onToggle={() => setShowTaskSidebar(prev => !prev)}
+                scheduleBlocks={scheduleBlocks}
+                workspacePath={workspacePath}
+              />
+
+              {/* Calendar View */}
+              <div className="flex-1 overflow-auto">
+                {viewMode === 'week' && (
+                  <WeekView
+                    currentDate={currentDate}
+                    selectedDate={selectedDate}
+                    onSelectDate={setSelectedDate}
+                    onDayDoubleClick={(date) => {
+                      setCurrentDate(date);
+                      setSelectedDate(date);
+                      setViewMode('day');
+                    }}
+                    getEventsForDate={getEventsForDate}
+                    calendars={calendars}
+                    onCreateEvent={openCreateModal}
+                    onContextMenu={handleContextMenu}
+                    onEventDoubleClick={handleEventDoubleClick}
+                    onEventMouseDown={handleEventMouseDown}
+                    onEventDrop={handleEventDrop}
+                    dragState={dragState}
+                    scheduleBlocks={scheduleBlocks}
+                    getScheduleBlocksForDate={getScheduleBlocksForDate}
+                    tasksCache={tasksCacheRef.current}
+                    onScheduleBlockContextMenu={handleScheduleBlockContextMenu}
+                    onResizeScheduleBlock={handleResizeScheduleBlock}
+                  />
+                )}
+                {viewMode === 'day' && (
+                  <DayView
+                    currentDate={currentDate}
+                    getEventsForDate={getEventsForDate}
+                    calendars={calendars}
+                    onCreateEvent={openCreateModal}
+                    onContextMenu={handleContextMenu}
+                    onEventClick={handleEventClick}
+                    onEventDoubleClick={handleEventDoubleClick}
+                    onEventMouseDown={handleEventMouseDown}
+                    onEventDrop={handleEventDrop}
+                    dragState={dragState}
+                    scheduleBlocks={scheduleBlocks}
+                    getScheduleBlocksForDate={getScheduleBlocksForDate}
+                    tasksCache={tasksCacheRef.current}
+                    onScheduleBlockContextMenu={handleScheduleBlockContextMenu}
+                    onResizeScheduleBlock={handleResizeScheduleBlock}
+                  />
+                )}
+              </div>
+            </div>
+          </DndContext>
         )}
       </div>
+
+      {/* Schedule Block Context Menu */}
+      {scheduleBlockContextMenu && (
+        <ScheduleBlockContextMenu
+          x={scheduleBlockContextMenu.x}
+          y={scheduleBlockContextMenu.y}
+          block={scheduleBlockContextMenu.block}
+          task={scheduleBlockContextMenu.task}
+          onClose={() => setScheduleBlockContextMenu(null)}
+          onDelete={handleDeleteScheduleBlock}
+          onMarkComplete={handleMarkTaskComplete}
+        />
+      )}
 
       {/* Event Details Modal */}
       {selectedEvent && (
@@ -1139,7 +1374,7 @@ function MonthView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, 
 /**
  * Week View Component
  */
-function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, getEventsForDate, calendars, onCreateEvent, onContextMenu, onEventDoubleClick, onEventMouseDown, onEventDrop, dragState }) {
+function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, getEventsForDate, calendars, onCreateEvent, onContextMenu, onEventDoubleClick, onEventMouseDown, onEventDrop, dragState, scheduleBlocks, getScheduleBlocksForDate, tasksCache, onScheduleBlockContextMenu, onResizeScheduleBlock }) {
   const weekStart = startOfWeek(currentDate);
   const weekEnd = endOfWeek(currentDate);
   const days = eachDayOfInterval({ start: weekStart, end: weekEnd });
@@ -1346,6 +1581,10 @@ function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, g
               <div
                 key={day.toISOString()}
                 ref={el => timeGridRefs.current[day.toISOString()] = el}
+                data-time-grid
+                data-day-iso={day.toISOString()}
+                data-start-hour={START_HOUR}
+                data-hour-height={HOUR_HEIGHT}
                 className={`flex-1 relative border-l border-app-border cursor-pointer ${dragState?.isDragging ? 'bg-app-accent/5' : ''}`}
                 onClick={(e) => handleTimeGridClick(day, e)}
                 onContextMenu={(e) => handleTimeGridContextMenu(day, e)}
@@ -1439,6 +1678,22 @@ function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, g
                     </div>
                   );
                 })}
+
+                {/* Schedule Blocks (task time blocks) */}
+                {getScheduleBlocksForDate && getScheduleBlocksForDate(day).map((block, idx) => {
+                  const task = tasksCache?.get(block.task_id);
+                  return (
+                    <ScheduleBlockComponent
+                      key={block.id}
+                      block={block}
+                      task={task}
+                      startHour={START_HOUR}
+                      hourHeight={HOUR_HEIGHT}
+                      onContextMenu={onScheduleBlockContextMenu}
+                      onResizeEnd={onResizeScheduleBlock}
+                    />
+                  );
+                })}
               </div>
             );
           })}
@@ -1451,7 +1706,7 @@ function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, g
 /**
  * Day View Component
  */
-function DayView({ currentDate, getEventsForDate, calendars, onCreateEvent, onContextMenu, onEventClick, onEventDoubleClick, onEventMouseDown, onEventDrop, dragState }) {
+function DayView({ currentDate, getEventsForDate, calendars, onCreateEvent, onContextMenu, onEventClick, onEventDoubleClick, onEventMouseDown, onEventDrop, dragState, scheduleBlocks, getScheduleBlocksForDate, tasksCache, onScheduleBlockContextMenu, onResizeScheduleBlock }) {
   const events = getEventsForDate(currentDate);
   const allDayEvents = events.filter(e => e.all_day);
   const timedEvents = events.filter(e => !e.all_day);
@@ -1613,6 +1868,9 @@ function DayView({ currentDate, getEventsForDate, calendars, onCreateEvent, onCo
           {/* Events column - clickable to create events */}
           <div
             data-time-grid
+            data-day-iso={currentDate.toISOString()}
+            data-start-hour={START_HOUR}
+            data-hour-height={HOUR_HEIGHT}
             className={`flex-1 relative cursor-pointer ${dragState?.isDragging ? 'bg-app-accent/5' : ''}`}
             onClick={handleTimeGridClick}
             onContextMenu={handleTimeGridContextMenu}
@@ -1708,6 +1966,22 @@ function DayView({ currentDate, getEventsForDate, calendars, onCreateEvent, onCo
                     </div>
                   </div>
                 </div>
+              );
+            })}
+
+            {/* Schedule Blocks (task time blocks) */}
+            {getScheduleBlocksForDate && getScheduleBlocksForDate(currentDate).map((block) => {
+              const task = tasksCache?.get(block.task_id);
+              return (
+                <ScheduleBlockComponent
+                  key={block.id}
+                  block={block}
+                  task={task}
+                  startHour={START_HOUR}
+                  hourHeight={HOUR_HEIGHT}
+                  onContextMenu={onScheduleBlockContextMenu}
+                  onResizeEnd={onResizeScheduleBlock}
+                />
               );
             })}
           </div>

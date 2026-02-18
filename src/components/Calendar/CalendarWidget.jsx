@@ -110,7 +110,7 @@ export default function CalendarWidget({ onOpenCalendarView, onOpenSettings }) {
     );
   }
 
-  // Not connected state
+  // Not connected — show local calendar entry point (no connect prompt)
   if (!isAuthenticated) {
     return (
       <div className="flex flex-col h-full bg-app-panel">
@@ -122,40 +122,32 @@ export default function CalendarWidget({ onOpenCalendarView, onOpenSettings }) {
           </div>
         </div>
 
-        {/* Connect prompt */}
+        {/* Local calendar — open full view */}
         <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
           <Calendar className="w-12 h-12 text-app-muted mb-4 opacity-50" />
           <h3 className="text-sm font-medium text-app-text mb-2">
-            Connect Your Calendar
+            Local calendar
           </h3>
           <p className="text-xs text-app-muted mb-4 max-w-[200px]">
-            Connect Google Calendar or iCloud to see your events in Lokus
+            View and schedule tasks on your calendar
           </p>
           <div className="flex flex-col gap-2">
-            <button
-              onClick={handleConnect}
-              disabled={isConnecting || authLoading}
-              className="px-4 py-2 text-sm bg-app-accent text-app-accent-fg rounded hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
-            >
-              {isConnecting || authLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Connecting...
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4" />
-                  Connect Google
-                </>
-              )}
-            </button>
+            {onOpenCalendarView && (
+              <button
+                onClick={onOpenCalendarView}
+                className="px-4 py-2 text-sm bg-app-accent text-app-accent-fg rounded hover:opacity-90 transition-opacity flex items-center gap-2 justify-center"
+              >
+                <ChevronRight className="w-4 h-4" />
+                Open Calendar
+              </button>
+            )}
             {onOpenSettings && (
               <button
                 onClick={onOpenSettings}
                 className="px-4 py-2 text-sm text-app-muted hover:text-app-text transition-colors flex items-center gap-2 justify-center"
               >
                 <Settings className="w-4 h-4" />
-                More options (iCloud)
+                Connect Google or iCloud
               </button>
             )}
           </div>
