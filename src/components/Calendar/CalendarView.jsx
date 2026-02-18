@@ -55,7 +55,7 @@ import ScheduleBlockComponent, { ScheduleBlockContextMenu } from './ScheduleBloc
  *
  * Full calendar view with month, week, and day views
  */
-export default function CalendarView({ onClose, onOpenSettings }) {
+export default function CalendarView({ workspacePath, onClose, onOpenSettings }) {
   const {
     isAuthenticated,
     calendars,
@@ -70,7 +70,7 @@ export default function CalendarView({ onClose, onOpenSettings }) {
   } = useCalendarContext();
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState('month'); // 'month', 'week', 'day'
+  const [viewMode, setViewMode] = useState('week'); // 'month', 'week', 'day' — default week for task time-blocking
   const [selectedDate, setSelectedDate] = useState(null);
   const [viewEvents, setViewEvents] = useState([]);
   const [viewEventsLoading, setViewEventsLoading] = useState(false);
@@ -96,7 +96,7 @@ export default function CalendarView({ onClose, onOpenSettings }) {
     getBlocksForDate: getScheduleBlocksForDate
   } = useScheduleContext();
 
-  const [showTaskSidebar, setShowTaskSidebar] = useState(false);
+  const [showTaskSidebar, setShowTaskSidebar] = useState(true); // open by default so users can see tasks and create time blocks
   const [scheduleBlockContextMenu, setScheduleBlockContextMenu] = useState(null);
   // Cache tasks for rendering schedule blocks
   const tasksCacheRef = useRef(new Map());
@@ -126,7 +126,7 @@ export default function CalendarView({ onClose, onOpenSettings }) {
     loadBlocksForRange(rangeStart.toISOString(), rangeEnd.toISOString());
   }, [currentDate, viewMode, loadBlocksForRange]);
 
-  // Load tasks for schedule block rendering
+  // Load tasks for schedule block rendering (Tauri tasks + Kanban cards for block titles)
   useEffect(() => {
     const loadTasksForBlocks = async () => {
       if (scheduleBlocks.length === 0) return;
@@ -135,11 +135,44 @@ export default function CalendarView({ onClose, onOpenSettings }) {
         const allTasks = await invoke('get_all_tasks');
         const newCache = new Map();
         (allTasks || []).forEach(t => newCache.set(t.id, t));
+
+        const hasKanbanBlocks = scheduleBlocks.some(b => b.task_id.startsWith('kanban:'));
+        if (hasKanbanBlocks && workspacePath) {
+          try {
+            const boardInfos = await invoke('list_kanban_boards', { workspacePath });
+            for (const info of boardInfos || []) {
+              try {
+                const board = await invoke('open_kanban_board', { filePath: info.path });
+                const columns = board?.columns ? Object.values(board.columns) : [];
+                for (const col of columns) {
+                  for (const card of col?.cards || []) {
+                    const id = `kanban:${info.path}:${card.id}`;
+                    const created = card.created ? new Date(card.created).getTime() : 0;
+                    const modified = card.modified ? new Date(card.modified).getTime() : created;
+                    newCache.set(id, {
+                      id,
+                      title: card.title || 'Untitled',
+                      description: card.description || null,
+                      status: 'todo',
+                      priority: 0,
+                      created_at: Math.floor(created / 1000),
+                      updated_at: Math.floor(modified / 1000),
+                      note_path: null,
+                      note_position: null,
+                      tags: card.tags || [],
+                    });
+                  }
+                }
+              } catch (_) {}
+            }
+          } catch (_) {}
+        }
+
         tasksCacheRef.current = newCache;
       } catch { }
     };
     loadTasksForBlocks();
-  }, [scheduleBlocks]);
+  }, [scheduleBlocks, workspacePath]);
 
   // DnD handler: task dropped onto time grid
   // Uses pointer coordinates to find the target time slot via DOM inspection
@@ -942,36 +975,8 @@ export default function CalendarView({ onClose, onOpenSettings }) {
     }
   }, [dragState, updateEventInCache]);
 
-  // Not connected state
-  if (!isAuthenticated) {
-    return (
-      <div className="flex flex-col h-full bg-app-bg">
-        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-          <CalendarIcon className="w-16 h-16 text-app-muted mb-4 opacity-50" />
-          <h2 className="text-lg font-medium text-app-text mb-2">
-            Connect Your Calendar
-          </h2>
-          <p className="text-sm text-app-muted mb-6 max-w-md">
-            Connect Google Calendar or iCloud to view and manage your events in Lokus.
-            Your events will sync automatically.
-          </p>
-          <div className="flex flex-col gap-3">
-            <button
-              onClick={connectGoogle}
-              className="px-6 py-3 text-sm bg-app-accent text-app-accent-fg rounded-lg hover:opacity-90 transition-opacity flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Connect Google Calendar
-            </button>
-            <p className="text-xs text-app-muted">
-              For iCloud Calendar, go to{' '}
-              <span className="text-app-accent">Preferences → Connections</span>
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Always show the calendar view (local-first). When not connected, events are empty;
+  // users can connect Google/iCloud via Preferences → Connections if they want.
 
   return (
     <div className="flex flex-col h-full bg-app-bg">
@@ -1112,6 +1117,7 @@ export default function CalendarView({ onClose, onOpenSettings }) {
                 isOpen={showTaskSidebar}
                 onToggle={() => setShowTaskSidebar(prev => !prev)}
                 scheduleBlocks={scheduleBlocks}
+                workspacePath={workspacePath}
               />
 
               {/* Calendar View */}

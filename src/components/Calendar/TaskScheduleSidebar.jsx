@@ -94,30 +94,80 @@ function DraggableTaskCard({ task, scheduledBlockCount }) {
 }
 
 /**
+ * Normalize a Kanban card to task-like shape for the sidebar and calendar.
+ * id format: kanban:boardPath:cardId so schedule blocks can reference it.
+ */
+function kanbanCardToTask(card, boardPath) {
+  const id = `kanban:${boardPath}:${card.id}`;
+  const created = card.created ? new Date(card.created).getTime() : 0;
+  const modified = card.modified ? new Date(card.modified).getTime() : created;
+  return {
+    id,
+    title: card.title || 'Untitled',
+    description: card.description || null,
+    status: 'todo',
+    priority: 0,
+    created_at: Math.floor(created / 1000),
+    updated_at: Math.floor(modified / 1000),
+    note_path: null,
+    note_position: null,
+    tags: card.tags || [],
+    kanban_board: boardPath,
+    kanban_column: null,
+    kanban_card_id: card.id,
+  };
+}
+
+/**
  * Task Schedule Sidebar
  *
  * Shows a list of tasks that can be dragged onto the calendar time grid.
+ * Includes both Tauri task store tasks and Kanban board cards when workspacePath is set.
  * Only visible in week and day views.
  */
-export default function TaskScheduleSidebar({ isOpen, onToggle, scheduleBlocks }) {
+export default function TaskScheduleSidebar({ isOpen, onToggle, scheduleBlocks, workspacePath }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState('unscheduled'); // 'unscheduled', 'all', 'active'
   const searchInputRef = useRef(null);
 
-  // Load tasks from backend
+  // Load tasks from backend (Tauri store) + Kanban cards from workspace
   const loadTasks = useCallback(async () => {
     setLoading(true);
     try {
       const allTasks = await invoke('get_all_tasks');
-      setTasks(allTasks || []);
+      let combined = [...(allTasks || [])];
+
+      if (workspacePath) {
+        try {
+          const boardInfos = await invoke('list_kanban_boards', { workspacePath });
+          for (const info of boardInfos || []) {
+            try {
+              const board = await invoke('open_kanban_board', { filePath: info.path });
+              const columns = board?.columns ? Object.values(board.columns) : [];
+              for (const col of columns) {
+                const cards = col?.cards || [];
+                for (const card of cards) {
+                  combined.push(kanbanCardToTask(card, info.path));
+                }
+              }
+            } catch (_) {
+              // skip board if open fails
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to load Kanban boards for calendar sidebar:', err);
+        }
+      }
+
+      setTasks(combined);
     } catch (err) {
       console.error('Failed to load tasks for sidebar:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [workspacePath]);
 
   useEffect(() => {
     if (isOpen) {
@@ -257,7 +307,9 @@ export default function TaskScheduleSidebar({ isOpen, onToggle, scheduleBlocks }
                 ? 'No tasks match your search'
                 : filterMode === 'unscheduled'
                   ? 'All tasks are scheduled!'
-                  : 'No tasks found'}
+                  : tasks.length === 0
+                    ? 'Add tasks in the Tasks board, then drag them here to create time blocks.'
+                    : 'No tasks found'}
             </div>
           </div>
         ) : (

@@ -242,7 +242,7 @@ export function ScheduleBlockContextMenu({
       label: 'Open linked note',
       action: () => { onOpenNote?.(task.note_path); onClose(); }
     }] : []),
-    ...(task?.status !== 'completed' ? [{
+    ...(task?.status !== 'completed' && task?.id && !String(task.id).startsWith('kanban:') ? [{
       icon: CheckSquare,
       label: 'Mark task complete',
       action: () => { onMarkComplete?.(block, task); onClose(); }

@@ -5197,6 +5197,7 @@ function WorkspaceWithScope({ path }) {
                   ) : activeFile === '__calendar__' ? (
                     <div className="flex-1 h-full overflow-hidden">
                       <CalendarView
+                        workspacePath={path}
                         onClose={() => {
                           const remaining = openTabs.filter(t => t.path !== '__calendar__');
                           setOpenTabs(remaining);

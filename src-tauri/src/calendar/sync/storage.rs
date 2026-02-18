@@ -85,12 +85,14 @@ impl SyncStorage {
     }
 
     /// Get a mapping by fingerprint
+    #[allow(dead_code)]
     pub fn get_mapping_by_fingerprint(fingerprint: &str) -> Result<Option<EventMapping>, CalendarError> {
         let mappings = Self::get_mappings()?;
         Ok(mappings.into_iter().find(|m| m.fingerprint == fingerprint))
     }
 
     /// Get a mapping by event ID (checks primary and linked events)
+    #[allow(dead_code)]
     pub fn get_mapping_by_event_id(event_id: &str) -> Result<Option<EventMapping>, CalendarError> {
         let mappings = Self::get_mappings()?;
         Ok(mappings.into_iter().find(|m| {
@@ -100,6 +102,7 @@ impl SyncStorage {
     }
 
     /// Add or update a mapping
+    #[allow(dead_code)]
     pub fn upsert_mapping(mapping: EventMapping) -> Result<(), CalendarError> {
         let mut mappings = Self::get_mappings()?;
 
@@ -113,6 +116,7 @@ impl SyncStorage {
     }
 
     /// Delete a mapping by ID
+    #[allow(dead_code)]
     pub fn delete_mapping(mapping_id: &str) -> Result<(), CalendarError> {
         let mut mappings = Self::get_mappings()?;
         mappings.retain(|m| m.id != mapping_id);
@@ -140,6 +144,7 @@ impl SyncStorage {
     }
 
     /// Get the fingerprint index for fast lookups
+    #[allow(dead_code)]
     pub fn get_fingerprint_index() -> Result<HashMap<String, String>, CalendarError> {
         let path = Self::get_fingerprint_index_path()?;
 
@@ -221,6 +226,7 @@ impl SyncStorage {
     // ============== Utility ==============
 
     /// Clear all sync data (mappings, state, but keep config)
+    #[allow(dead_code)]
     pub fn clear_sync_data() -> Result<(), CalendarError> {
         let base = Self::get_sync_base_path()?;
 
@@ -243,6 +249,7 @@ impl SyncStorage {
     }
 
     /// Clear everything including config
+    #[allow(dead_code)]
     pub fn clear_all() -> Result<(), CalendarError> {
         let base = Self::get_sync_base_path()?;
 

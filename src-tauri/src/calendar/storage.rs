@@ -5,6 +5,7 @@ use serde_json;
 
 const GOOGLE_TOKEN_KEY: &str = "lokus_google_calendar_token";
 const GOOGLE_ACCOUNT_KEY: &str = "lokus_google_calendar_account";
+#[allow(dead_code)]
 const CALENDARS_KEY: &str = "lokus_calendars";
 const SERVICE_NAME: &str = "com.lokus.app.calendar";
 
@@ -145,6 +146,7 @@ impl CalendarStorage {
         Ok(calendars)
     }
 
+    #[allow(dead_code)]
     pub fn delete_calendars() -> Result<(), CalendarError> {
         let calendars_path = Self::get_calendars_path()?;
         if calendars_path.exists() {
@@ -169,6 +171,7 @@ impl CalendarStorage {
     }
 
     // Clear all calendar storage
+    #[allow(dead_code)]
     pub fn clear_all() -> Result<(), CalendarError> {
         let _ = Self::delete_google_token();
         let _ = Self::delete_google_account();
@@ -336,6 +339,7 @@ impl CalendarStorage {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn get_all_ical_events() -> Result<Vec<CalendarEvent>, CalendarError> {
         let subscriptions = Self::get_ical_subscriptions()?;
         let mut all_events = Vec::new();

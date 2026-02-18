@@ -8,12 +8,22 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const isLocalDev = import.meta.env.VITE_LOCAL_DEV_MODE === 'true' || 
+                   (import.meta.env.DEV && supabaseUrl?.includes('dummy'));
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY');
+  if (isLocalDev) {
+    console.warn('[Supabase] Local dev mode: Using dummy Supabase credentials. Authentication will be bypassed.');
+  } else {
+    console.error('Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY');
+  }
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+// Use dummy values if missing (for local dev)
+const finalUrl = supabaseUrl || 'https://dummy-project.supabase.co';
+const finalKey = supabaseAnonKey || 'dummy-anon-key-for-local-dev';
+
+export const supabase = createClient(finalUrl, finalKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,

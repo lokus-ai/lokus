@@ -189,6 +189,7 @@ pub async fn fetch_ics_from_url(url: &str) -> Result<String, String> {
 }
 
 /// Parse ICS file from filesystem
+#[allow(dead_code)]
 pub fn parse_ics_file(path: &std::path::Path, calendar_id: &str) -> Result<Vec<CalendarEvent>, String> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;

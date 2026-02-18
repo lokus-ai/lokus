@@ -151,6 +151,7 @@ fn select_primary_event(
 ///
 /// Use case: iCal subscription event that also exists in Google Calendar
 /// -> Hide the iCal version, show the Google version
+#[allow(dead_code)]
 pub fn should_hide_duplicate(
     event: &CalendarEvent,
     deduplicated: &[DeduplicatedEvent],
@@ -167,6 +168,7 @@ pub fn should_hide_duplicate(
 }
 
 /// Returns fingerprints that appear in multiple calendars
+#[allow(dead_code)]
 pub fn find_duplicate_fingerprints(events: &[CalendarEvent]) -> Vec<String> {
     let groups = group_events_by_fingerprint(events);
 

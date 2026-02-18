@@ -99,6 +99,7 @@ pub struct CalDAVAccount {
 
 /// CalDAV server presets
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum CalDAVPreset {
     ICloud,
     Fastmail,
@@ -106,6 +107,7 @@ pub enum CalDAVPreset {
 }
 
 impl CalDAVPreset {
+    #[allow(dead_code)]
     pub fn server_url(&self) -> &'static str {
         match self {
             CalDAVPreset::ICloud => "https://caldav.icloud.com",

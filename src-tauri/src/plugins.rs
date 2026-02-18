@@ -66,6 +66,7 @@ pub struct PluginSettings {
 
 /// Cached marketplace metadata (saved alongside plugin)
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[allow(dead_code)]
 pub struct MarketplaceMetadata {
     pub slug: Option<String>,
     pub icon_url: Option<String>,
