@@ -319,56 +319,65 @@ function getExtension(filename) {
 }
 
 // --- Inline Rename Input Component ---
-function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
-  // Store only the name without extension
+function getExtension(name) {
+  const dotIndex = name.lastIndexOf(".");
+  return dotIndex > 0 ? name.slice(dotIndex) : "";
+}
+
+function getNameWithoutExtension(name) {
+  const dotIndex = name.lastIndexOf(".");
+  return dotIndex > 0 ? name.slice(0, dotIndex) : name;
+}
+
+export default function InlineRenameInput({
+  initialValue,
+  onSubmit,
+  onCancel,
+}) {
   const extension = getExtension(initialValue);
   const nameOnly = getNameWithoutExtension(initialValue);
+
   const [value, setValue] = useState(nameOnly);
   const inputRef = useRef(null);
 
   useEffect(() => {
     const input = inputRef.current;
-    if (input) {
-      input.focus();
-      // Use requestAnimationFrame to ensure selection happens after DOM paint
-      const rafId = requestAnimationFrame(() => {
-        if (inputRef.current && document.activeElement === inputRef.current) {
-          inputRef.current.select();
-        }
-      });
-      return () => cancelAnimationFrame(rafId);
-    }
+    if (!input) return;
+
+    input.focus();
+    requestAnimationFrame(() => {
+      if (document.activeElement === input) {
+        input.select();
+      }
+    });
   }, []);
 
   const handleKeyDown = (e) => {
-    // Stop propagation for ALL keys to prevent file tree shortcuts from firing
     e.stopPropagation();
 
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       e.preventDefault();
-      // Add extension back when submitting
       onSubmit(value + extension);
-    } else if (e.key === 'Escape') {
+    }
+
+    if (e.key === "Escape") {
       e.preventDefault();
       onCancel();
     }
   };
 
   const handleBlur = () => {
-    // Add extension back when submitting
     onSubmit(value + extension);
   };
 
   return (
     <input
       ref={inputRef}
-      type="text"
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={handleKeyDown}
       onBlur={handleBlur}
       className="inline-rename-input"
-      onClick={(e) => e.stopPropagation()}
     />
   );
 }
