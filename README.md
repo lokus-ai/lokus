@@ -235,6 +235,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 - [GitHub Discussions](https://github.com/lokus-ai/lokus/discussions) — Questions & ideas
 - [Discord](https://discord.com/invite/2rauPDEXcs) — Real-time chat
 - [Twitter](https://x.com/LokusMD0) — Updates & news
+- [Youtube](https://www.youtube.com/) - Youtube
 
 <br />
 
