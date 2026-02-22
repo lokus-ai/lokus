@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useMeeting } from '../../contexts/MeetingContext';
 import MeetingTimer from './MeetingTimer';
+import { insertMeetingSummary } from '../../services/daily-note-integration.js';
 
 // ---------------------------------------------------------------------------
 // Speaker colour palette — cycles through a small set of accent-compatible
@@ -241,7 +242,22 @@ function ProcessingView({ summary }) {
 // ---------------------------------------------------------------------------
 // CompleteView — final summary + action buttons
 // ---------------------------------------------------------------------------
-function CompleteView({ summary, reset }) {
+function CompleteView({ summary, reset, meetingTitle, duration, workspacePath }) {
+  const [inserting, setInserting] = useState(false);
+  const [inserted, setInserted] = useState(false);
+
+  const handleInsert = async () => {
+    if (!summary || inserting || inserted) return;
+    setInserting(true);
+    try {
+      await insertMeetingSummary({ summary, meetingTitle, duration, workspacePath });
+      setInserted(true);
+    } catch (e) {
+      console.error('Failed to insert in daily note:', e);
+    } finally {
+      setInserting(false);
+    }
+  };
   return (
     <>
       {/* Header */}
@@ -271,17 +287,20 @@ function CompleteView({ summary, reset }) {
       <div className="flex-shrink-0 px-3 py-2 border-t border-app-border space-y-1.5">
         {/* Insert in Daily Note */}
         <button
-          className="
+          onClick={handleInsert}
+          disabled={inserting || inserted || !summary}
+          className={`
             w-full flex items-center justify-center gap-1.5
             px-3 py-1.5 rounded
-            bg-app-accent text-app-accent-fg
-            text-xs font-medium
-            hover:opacity-90 active:opacity-80 transition-opacity
-          "
+            text-xs font-medium transition-opacity
+            ${inserted
+              ? 'bg-emerald-600 text-white'
+              : 'bg-app-accent text-app-accent-fg hover:opacity-90 active:opacity-80'}
+          `}
           aria-label="Insert summary in daily note"
         >
-          <FileText className="w-3.5 h-3.5" />
-          Insert in Daily Note
+          {inserted ? <CheckCircle className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
+          {inserting ? 'Inserting...' : inserted ? 'Inserted' : 'Insert in Daily Note'}
         </button>
 
         {/* Regenerate */}
@@ -324,7 +343,7 @@ function CompleteView({ summary, reset }) {
 // ---------------------------------------------------------------------------
 // MeetingPanel — root component
 // ---------------------------------------------------------------------------
-export default function MeetingPanel() {
+export default function MeetingPanel({ workspacePath }) {
   const {
     state,
     transcript,
@@ -350,12 +369,14 @@ export default function MeetingPanel() {
   return (
     <div
       className="
-        w-80 h-full
+        fixed right-0 top-[30px] bottom-0
+        w-80 z-40
         flex flex-col
         bg-app-panel
         border-l border-app-border
         overflow-hidden
         select-none
+        shadow-lg
       "
       aria-label="Meeting panel"
       role="complementary"
@@ -376,7 +397,7 @@ export default function MeetingPanel() {
       )}
 
       {state === 'complete' && (
-        <CompleteView summary={summary} reset={reset} />
+        <CompleteView summary={summary} reset={reset} meetingTitle={meetingTitle} duration={duration} workspacePath={workspacePath} />
       )}
     </div>
   );

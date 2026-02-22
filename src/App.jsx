@@ -23,6 +23,7 @@ import pluginStateAdapter from "./core/plugins/PluginStateAdapter.js";
 import { AuthProvider } from "./core/auth/AuthContext.jsx";
 import { CalendarProvider } from "./contexts/CalendarContext.jsx";
 import { ScheduleProvider } from "./contexts/ScheduleContext.jsx";
+import { MeetingProvider } from "./contexts/MeetingContext.jsx";
 import platformService from "./services/platform/PlatformService.js";
 import markdownSyntaxConfig from "./core/markdown/syntax-config.js";
 import editorConfigCache from "./core/editor/config-cache.js";
@@ -214,15 +215,17 @@ function App() {
             <PluginProvider>
               <CalendarProvider>
                 <ScheduleProvider>
-                  <Suspense fallback={<LoadingFallback />}>
-                    {isPrefsWindow ? (
-                      <Preferences />
-                    ) : activePath ? (
-                      <Workspace initialPath={activePath} />
-                    ) : (
-                      <Launcher />
-                    )}
-                  </Suspense>
+                  <MeetingProvider>
+                    <Suspense fallback={<LoadingFallback />}>
+                      {isPrefsWindow ? (
+                        <Preferences />
+                      ) : activePath ? (
+                        <Workspace initialPath={activePath} />
+                      ) : (
+                        <Launcher />
+                      )}
+                    </Suspense>
+                  </MeetingProvider>
                 </ScheduleProvider>
               </CalendarProvider>
             </PluginProvider>
