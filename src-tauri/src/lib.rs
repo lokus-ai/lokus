@@ -44,7 +44,12 @@ mod notifications;
 
 #[cfg(desktop)]
 use window_manager::{open_workspace_window, open_preferences_window, open_launcher_window};
-use tauri::{Manager, Listener, Emitter};
+use tauri::{Manager, Listener, Emitter, RunEvent, WindowEvent};
+#[cfg(desktop)]
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+};
 use tauri_plugin_store::{StoreBuilder, JsonValue};
 use std::path::PathBuf;
 
@@ -381,6 +386,51 @@ fn get_all_workspaces(app: tauri::AppHandle) -> Vec<WorkspaceItem> {
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
+}
+
+/// Set up the system tray icon with a context menu.
+///
+/// Left-click on the tray icon shows and focuses the main window.
+/// Right-click reveals the context menu with "Show Window" and "Quit Lokus" items.
+#[cfg(desktop)]
+fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
+    let show_item = MenuItem::with_id(app, "show_window", "Show Window", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit Lokus", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+    let _tray = TrayIconBuilder::new()
+        .icon(app.default_window_icon().cloned().unwrap())
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                let app = tray.app_handle();
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        })
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show_window" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            "quit" => {
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .build(app)?;
+
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -854,6 +904,9 @@ pub fn run() {
       #[cfg(desktop)]
       menu::init(&app.handle())?;
 
+      #[cfg(desktop)]
+      setup_tray(app)?;
+
       // Install native macOS notification delegate and register categories.
       // Permission request is non-blocking; the OS shows a dialog at most once.
       notifications::install_notification_delegate(app.handle().clone());
@@ -1048,6 +1101,17 @@ pub fn run() {
 
       Ok(())
     })
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .on_window_event(|window, event| {
+      if let WindowEvent::CloseRequested { api, .. } = event {
+        window.hide().unwrap();
+        api.prevent_close();
+      }
+    })
+    .build(tauri::generate_context!())
+    .expect("error while building tauri application")
+    .run(|_app, event| {
+      if let RunEvent::ExitRequested { api, .. } = event {
+        api.prevent_exit();
+      }
+    });
 }

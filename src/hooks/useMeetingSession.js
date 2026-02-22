@@ -25,7 +25,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { streamMeetingSummary } from '../services/llm-summary.js';
-import { logger } from '../utils/logger.js';
+
+// Use console directly for meeting diagnostics (the app logger is a no-op in dev)
+const log = (...args) => console.log('[MeetingSession]', ...args);
+const logError = (...args) => console.error('[MeetingSession]', ...args);
 
 // ---------------------------------------------------------------------------
 // Session state machine
@@ -206,7 +209,7 @@ export function useMeetingSession() {
    * @param {number} startTimeMs - Recording start timestamp.
    */
   const _runSummary = useCallback(async (segments, startTimeMs) => {
-    logger.info('MeetingSession', 'Starting summary generation');
+    log('Starting summary generation');
     setSummary('');
 
     try {
@@ -234,9 +237,9 @@ export function useMeetingSession() {
       }
 
       setState(SESSION_STATE.COMPLETE);
-      logger.info('MeetingSession', 'Summary generation complete');
+      log('Summary generation complete');
     } catch (err) {
-      logger.error('MeetingSession', 'Summary generation failed:', err);
+      logError('Summary generation failed:', err);
       setError(`Summary generation failed: ${err.message}`);
       // Still transition to COMPLETE so the user can see whatever partial
       // summary was streamed before the error occurred.
@@ -262,7 +265,7 @@ export function useMeetingSession() {
         const unlisten = await listen(event, handler);
         unlistenFns.push(unlisten);
       } catch (err) {
-        logger.error('MeetingSession', `Failed to register listener for "${event}":`, err);
+        logError(`Failed to register listener for "${event}":`, err);
       }
     };
 
@@ -289,7 +292,7 @@ export function useMeetingSession() {
     // Background detection fired — ask the user whether to start.
     // ----------------------------------------------------------------
     register('lokus:meeting-detected', () => {
-      logger.info('MeetingSession', 'Meeting detected — transitioning to prompted');
+      log('Meeting detected — transitioning to prompted');
       setState((prev) => {
         if (prev === SESSION_STATE.DETECTING) {
           return SESSION_STATE.PROMPTED;
@@ -303,10 +306,7 @@ export function useMeetingSession() {
     // Grace-period warning from the Rust meeting monitor.
     // ----------------------------------------------------------------
     register('lokus:meeting-ending', ({ payload }) => {
-      logger.info(
-        'MeetingSession',
-        `Meeting ending grace period: ${payload?.grace_period_secs ?? '?'}s`
-      );
+      log(`Meeting ending grace period: ${payload?.grace_period_secs ?? '?'}s`);
       setIsEnding(true);
     });
 
@@ -315,7 +315,7 @@ export function useMeetingSession() {
     // Rust-side silence auto-stop — mirror the recording stop flow.
     // ----------------------------------------------------------------
     register('lokus:meeting-ended', () => {
-      logger.info('MeetingSession', 'Meeting ended event received — auto-stopping');
+      log('Meeting ended event received — auto-stopping');
       setIsEnding(false);
 
       setState((prev) => {
@@ -330,7 +330,7 @@ export function useMeetingSession() {
     // ----------------------------------------------------------------
     register('lokus:transcription-error', ({ payload }) => {
       const msg = payload?.message ?? 'Unknown transcription error';
-      logger.error('MeetingSession', 'Transcription error:', msg);
+      logError('Transcription error:', msg);
       setError(`Transcription error: ${msg}`);
     });
 
@@ -384,9 +384,9 @@ export function useMeetingSession() {
       setError(null);
       await invoke('enable_meeting_detection');
       setState(SESSION_STATE.DETECTING);
-      logger.info('MeetingSession', 'Background detection enabled');
+      log('Background detection enabled');
     } catch (err) {
-      logger.error('MeetingSession', 'enable_meeting_detection failed:', err);
+      logError('enable_meeting_detection failed:', err);
       setError(`Failed to start detection: ${err.message ?? err}`);
     }
   }, []);
@@ -401,9 +401,9 @@ export function useMeetingSession() {
       setState((prev) =>
         prev === SESSION_STATE.DETECTING ? SESSION_STATE.IDLE : prev
       );
-      logger.info('MeetingSession', 'Background detection disabled');
+      log('Background detection disabled');
     } catch (err) {
-      logger.error('MeetingSession', 'disable_meeting_detection failed:', err);
+      logError('disable_meeting_detection failed:', err);
       setError(`Failed to stop detection: ${err.message ?? err}`);
     }
   }, []);
@@ -429,13 +429,15 @@ export function useMeetingSession() {
 
     try {
       await invoke('start_audio_capture', {
-        device_id:         null,
-        sample_rate:       16000,
-        channels:          1,
-        chunk_duration_ms: 100,
+        config: {
+          deviceId:        null,
+          sampleRate:      16000,
+          channels:        1,
+          chunkDurationMs: 100,
+        },
       });
     } catch (err) {
-      logger.error('MeetingSession', 'start_audio_capture failed:', err);
+      logError('start_audio_capture failed:', err);
       setError(`Failed to start audio capture: ${err.message ?? err}`);
       startTimeRef.current = null;
       return false;
@@ -446,15 +448,17 @@ export function useMeetingSession() {
       // Dynamically imported to avoid a hard dependency at module load time
       // and to keep the hook testable with a simple mock.
       const { loadProviderConfig } = await import('../services/ai-provider.js');
-      const config = await loadProviderConfig();
+      const providerCfg = await loadProviderConfig();
 
       await invoke('start_transcription', {
-        api_key:   config.deepgramApiKey || '',
-        mode:      config.mode === 'lokus' ? 'proxy' : 'direct',
-        proxy_url: config.mode === 'lokus' ? config.supabaseUrl : null,
+        config: {
+          apiKey:   providerCfg.deepgramApiKey || '',
+          mode:     providerCfg.mode === 'lokus' ? 'proxy' : 'direct',
+          proxyUrl: providerCfg.mode === 'lokus' ? providerCfg.supabaseUrl : null,
+        },
       });
     } catch (err) {
-      logger.error('MeetingSession', 'start_transcription failed:', err);
+      logError('start_transcription failed:', err);
       setError(`Failed to start transcription: ${err.message ?? err}`);
       // Best-effort rollback
       invoke('stop_audio_capture').catch(() => {});
@@ -467,11 +471,11 @@ export function useMeetingSession() {
     } catch (err) {
       // Non-fatal — monitoring enhances auto-stop but the session can
       // continue without it.
-      logger.error('MeetingSession', 'start_meeting_monitoring failed (non-fatal):', err);
+      logError('start_meeting_monitoring failed (non-fatal):', err);
     }
 
     setState(SESSION_STATE.RECORDING);
-    logger.info('MeetingSession', 'Recording started');
+    log('Recording started');
     return true;
   }, []);
 
@@ -492,9 +496,9 @@ export function useMeetingSession() {
     try {
       await invoke('dismiss_detection');
       setState(SESSION_STATE.DETECTING);
-      logger.info('MeetingSession', 'Detection prompt dismissed (5 min cooldown)');
+      log('Detection prompt dismissed (5 min cooldown)');
     } catch (err) {
-      logger.error('MeetingSession', 'dismiss_detection failed:', err);
+      logError('dismiss_detection failed:', err);
       setError(`Failed to dismiss: ${err.message ?? err}`);
     }
   }, []);
@@ -525,7 +529,7 @@ export function useMeetingSession() {
   const stopRecording = useCallback(async () => {
     if (state !== SESSION_STATE.RECORDING) return;
 
-    logger.info('MeetingSession', 'Stopping recording');
+    log('Stopping recording');
     setIsEnding(false);
 
     // Attempt each stop command independently so a failure in one does
@@ -533,20 +537,20 @@ export function useMeetingSession() {
     try {
       await invoke('stop_meeting_monitoring');
     } catch (err) {
-      logger.error('MeetingSession', 'stop_meeting_monitoring failed (non-fatal):', err);
+      logError('stop_meeting_monitoring failed (non-fatal):', err);
     }
 
     try {
       await invoke('stop_transcription');
     } catch (err) {
-      logger.error('MeetingSession', 'stop_transcription failed:', err);
+      logError('stop_transcription failed:', err);
       setError(`Failed to stop transcription: ${err.message ?? err}`);
     }
 
     try {
       await invoke('stop_audio_capture');
     } catch (err) {
-      logger.error('MeetingSession', 'stop_audio_capture failed:', err);
+      logError('stop_audio_capture failed:', err);
       setError(`Failed to stop audio capture: ${err.message ?? err}`);
     }
 
@@ -580,7 +584,7 @@ export function useMeetingSession() {
     setIsEnding(false);
     setState(SESSION_STATE.IDLE);
 
-    logger.info('MeetingSession', 'Session reset to idle');
+    log('Session reset to idle');
   }, [_clearDurationInterval]);
 
   // ------------------------------------------------------------------

@@ -24,6 +24,8 @@
  */
 
 import React, { createContext, useContext, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { useMeetingSession } from '../hooks/useMeetingSession.js';
 
 // ---------------------------------------------------------------------------
@@ -57,29 +59,52 @@ const MeetingContext = createContext(null);
 export function MeetingProvider({ children }) {
   const session = useMeetingSession();
 
-  // Auto-start meeting detection on mount if user has it enabled
+  // Auto-start meeting detection on mount if user has it enabled.
+  // Also request native notification permission so later calls succeed.
   useEffect(() => {
+    invoke('request_notification_permission_cmd').catch(console.error);
+
     const settings = JSON.parse(localStorage.getItem('lokus-meeting-settings') || '{}');
     const micDetection = settings.detectAdHocCalls !== false; // default true
+    console.log('[Lokus Meeting] Auto-start check:', { micDetection, state: session.state });
     if (micDetection && session.state === 'idle') {
+      console.log('[Lokus Meeting] Starting detection...');
       session.startDetecting();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // only on mount
 
-  // Send OS notification when meeting is detected (works even if app not focused)
+  // Send native OS notification when a meeting is detected.
+  // Works even when the app window is not focused or visible.
   useEffect(() => {
     if (session.state === 'prompted') {
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('Lokus — Meeting Detected', {
-          body: 'Microphone activity detected. Open Lokus to start recording.',
-          icon: '/icon.png',
-        });
-      } else if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
+      invoke('send_native_notification', {
+        title: 'Meeting Detected',
+        body: 'A meeting is in progress. Start recording?',
+      }).catch(console.error);
     }
   }, [session.state]);
+
+  // Listen for action buttons tapped on the native notification banner.
+  // The Rust layer emits `lokus:notification-action` with { action: string }.
+  useEffect(() => {
+    const unlisten = listen('lokus:notification-action', (event) => {
+      const { action } = event.payload;
+      if (
+        action === 'start_recording' ||
+        action === 'com.apple.UNNotificationDefaultActionIdentifier'
+      ) {
+        session.acceptPrompt();
+      } else if (action === 'dismiss') {
+        session.dismissPrompt();
+      }
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+    // acceptPrompt and dismissPrompt are stable useCallback refs from the hook.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.acceptPrompt, session.dismissPrompt]);
 
   return (
     <MeetingContext.Provider value={session}>

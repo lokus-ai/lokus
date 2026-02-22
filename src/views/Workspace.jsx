@@ -79,6 +79,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { toast, demoAllToasts } from "../components/ui/enhanced-toast";
 import MeetingPanel from "../components/meeting/MeetingPanel.jsx";
 import MeetingNotification from "../components/meeting/MeetingNotification.jsx";
+import MeetingFAB from "../components/meeting/MeetingFAB.jsx";
 import { useMeeting } from "../contexts/MeetingContext.jsx";
 // Expose demo function to window for console access
 if (typeof window !== 'undefined') {
@@ -5479,7 +5480,8 @@ function WorkspaceWithScope({ path }) {
           className="border-t border-app-border"
         />
 
-        {/* Meeting Notes — floating notification + docked panel */}
+        {/* Meeting Notes — floating FAB + notification + docked panel */}
+        <MeetingFAB />
         <MeetingNotification />
         <MeetingPanel workspacePath={path} />
 
