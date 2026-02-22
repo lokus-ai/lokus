@@ -2707,24 +2707,31 @@ function WorkspaceWithScope({ path }) {
 
     let path_to_save = activeFile;
     let needsStateUpdate = false;
-    const saveStartTime = performance.now();
+    let renamedFrom = null;
 
-    try {
-      const currentTab = openTabs.find(t => t.path === activeFile);
-      const currentName = currentTab.name.replace(/\.md$/, "");
+    // Phase 1: Rename (if title changed)
+    const currentTab = openTabs.find(t => t.path === activeFile);
+    if (!currentTab) return;
+    const currentName = currentTab.name.replace(/\.md$/, "");
 
-      if (editorTitle !== currentName && editorTitle.trim() !== "") {
+    if (editorTitle !== currentName && editorTitle.trim() !== "") {
+      try {
         const newFileName = `${editorTitle.trim()}.md`;
         const newPath = await invoke("rename_file", { path: activeFile, newName: newFileName });
         editorGroups.updateTabPath(activeFile, newPath);
+        renamedFrom = activeFile;
         path_to_save = newPath;
         needsStateUpdate = true;
+      } catch (renameErr) {
+        toast.error(`Rename failed: ${renameErr}`);
+        return;
       }
+    }
 
-      // For .md files, we need to convert HTML content back to markdown
+    // Phase 2: Write content
+    try {
       let contentToSave = editorContent;
       if (path_to_save.endsWith('.md')) {
-        // Convert HTML back to markdown, preserving wiki links
         const exporter = new MarkdownExporter();
         contentToSave = exporter.htmlToMarkdown(editorContent, { preserveWikiLinks: true });
       }
@@ -2739,7 +2746,7 @@ function WorkspaceWithScope({ path }) {
         return newSet;
       });
 
-      // Save version only if content actually changed
+      // Phase 3: Version save (non-critical)
       const lastContent = lastVersionContentRef.current[path_to_save];
       const contentChanged = !lastContent || lastContent !== contentToSave;
 
@@ -2752,52 +2759,52 @@ function WorkspaceWithScope({ path }) {
           const now = Date.now();
           lastVersionSaveRef.current[path_to_save] = now;
           lastVersionContentRef.current[path_to_save] = contentToSave;
-
-          // Refresh version history panel
           setVersionRefreshKey(prev => prev + 1);
-
         } catch (error) {
-          // Non-blocking - don't show error to user
+          // Version save is non-critical
         }
-      } else {
       }
 
+      // Phase 4: State + graph update
       if (needsStateUpdate) {
         const newName = path_to_save.split("/").pop();
         setOpenTabs(tabs => tabs.map(t => t.path === activeFile ? { path: path_to_save, name: newName } : t));
         setActiveFile(path_to_save);
         handleRefreshFiles();
       } else {
-        // File content changed but not renamed - use real-time link tracking
         if (graphProcessorRef.current) {
           try {
-            // Use the new real-time update method for file content
             const updateResult = await graphProcessorRef.current.updateFileContent(path_to_save, editorContent);
-
-            // Only rebuild graph structure if there were actual changes
             if (updateResult.added > 0 || updateResult.removed > 0) {
               const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
               setGraphData(updatedGraphData);
-            } else {
             }
           } catch (error) {
-            // Fallback to full selective update
             try {
               const updatedGraphData = await graphProcessorRef.current.updateChangedFiles([path_to_save]);
               if (updatedGraphData) {
                 setGraphData(updatedGraphData);
               }
             } catch (fallbackError) {
-              // Final fallback to full refresh
               handleRefreshFiles();
             }
           }
-        } else {
-          // Graph processor not initialized yet, but if graph view becomes active,
-          // it will build the graph data including this file's changes
         }
       }
-    } catch { }
+    } catch (writeErr) {
+      // Rollback rename if it happened
+      if (renamedFrom) {
+        try {
+          const oldName = renamedFrom.split('/').pop();
+          await invoke("rename_file", { path: path_to_save, newName: oldName });
+          editorGroups.updateTabPath(path_to_save, renamedFrom);
+        } catch (rollbackErr) {
+          toast.error(`Save failed and rename rollback failed. Your file may be at: ${path_to_save}`);
+          return;
+        }
+      }
+      toast.error(`Save failed: ${writeErr}`);
+    }
   }, []);
 
   const handleSaveAs = useCallback(async () => {
