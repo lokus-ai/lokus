@@ -792,7 +792,7 @@ fn build_ws_request(
     ),
     String,
 > {
-    use tokio_tungstenite::tungstenite::http::{Request, Uri};
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
     let url_str = match config.mode.as_str() {
         "byok" => format!("{DEEPGRAM_URL}?{DEEPGRAM_QUERY}"),
@@ -803,21 +803,24 @@ fn build_ws_request(
         other => return Err(format!("Unknown transcription mode: '{other}'")),
     };
 
-    let uri: Uri = url_str
-        .parse()
-        .map_err(|e| format!("Invalid WebSocket URL '{url_str}': {e}"))?;
-
-    let mut request_builder = Request::builder().uri(uri);
+    // Use IntoClientRequest to build a proper WebSocket upgrade request with
+    // all required handshake headers (Host, Upgrade, Connection,
+    // Sec-WebSocket-Key, Sec-WebSocket-Version).
+    let mut request = url_str
+        .as_str()
+        .into_client_request()
+        .map_err(|e| format!("Failed to build WebSocket request for '{url_str}': {e}"))?;
 
     // Add the Authorization header in BYOK mode.
     if config.mode == "byok" {
         let auth_value = format!("Token {}", config.api_key);
-        request_builder = request_builder.header("Authorization", auth_value);
+        request.headers_mut().insert(
+            "Authorization",
+            auth_value
+                .parse()
+                .map_err(|e| format!("Invalid Authorization header value: {e}"))?,
+        );
     }
-
-    let request = request_builder
-        .body(())
-        .map_err(|e| format!("Failed to build WebSocket request: {e}"))?;
 
     Ok((url_str, request))
 }

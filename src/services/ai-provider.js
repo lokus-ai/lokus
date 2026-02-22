@@ -27,6 +27,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { invoke } from '@tauri-apps/api/core';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -112,94 +113,6 @@ async function _throwForStatus(response, context) {
   throw new Error(`${context}: unexpected response (${response.status}) — ${body.slice(0, 200)}`);
 }
 
-/**
- * Build the system + user prompt for meeting note summarisation.
- * @param {string} transcript   - Full transcript text.
- * @param {string} userNotes    - Sparse notes typed during the meeting.
- * @param {string} template     - Template name ('default' | 'sales' | 'standup' | '1on1').
- * @returns {{ system: string, user: string }}
- */
-function _buildSummaryPrompt(transcript, userNotes, template) {
-  const templateInstructions = {
-    default: `Generate a structured meeting summary with these sections:
-## Summary
-[2-3 sentence overview]
-
-### Key Decisions
-- [Decision items]
-
-### Action Items
-- [ ] [Task] — Owner: [Speaker if identifiable]
-
-### Notes
-[Merged user notes + relevant context from transcript]
-
-### Open Questions
-- [Unresolved items]`,
-
-    sales: `Generate a structured sales call summary with these sections:
-## Summary
-[2-3 sentence overview of the call and outcome]
-
-### Prospect Pain Points
-- [Pain point items]
-
-### Next Steps
-- [ ] [Action] — Owner: [Party]
-
-### Key Objections
-- [Objection items]
-
-### Notes
-[Merged user notes + call context]`,
-
-    standup: `Generate a structured standup summary with these sections:
-## Summary
-[Brief team status overview]
-
-### Updates by Speaker
-- **Speaker X:** [Yesterday / Today / Blockers]
-
-### Blockers & Follow-ups
-- [Blocking items]
-
-### Notes
-[Merged user notes]`,
-
-    '1on1': `Generate a structured 1:1 meeting summary with these sections:
-## Summary
-[Brief overview]
-
-### Discussion Topics
-- [Topic items]
-
-### Action Items
-- [ ] [Task] — Owner: [Party]
-
-### Follow-ups for Next 1:1
-- [Items to revisit]
-
-### Notes
-[Merged user notes]`,
-  };
-
-  const format = templateInstructions[template] || templateInstructions.default;
-
-  const system =
-    'You are an expert meeting note-taker. You receive a meeting transcript and sparse notes ' +
-    'typed by the user during the meeting. Produce a clean, structured summary in Markdown. ' +
-    'Be concise. Preserve specific details such as names, numbers, and decisions. ' +
-    'If speaker labels are present in the transcript (e.g. "Speaker 1:"), use them. ' +
-    'Only include sections that have meaningful content — omit empty sections.';
-
-  const user =
-    `# Transcript\n\n${transcript || '(no transcript available)'}\n\n` +
-    `# User Notes\n\n${userNotes || '(no notes)'}\n\n` +
-    `# Required Output Format\n\n${format}`;
-
-  return { system, user };
-}
-
 // ---------------------------------------------------------------------------
 // LLM client — direct path (BYOK)
 // ---------------------------------------------------------------------------
@@ -211,172 +124,83 @@ function _buildSummaryPrompt(transcript, userNotes, template) {
  * @param {{ system: string, user: string }} prompt
  * @returns {Promise<string>}
  */
+/**
+ * Send a non-streaming LLM request through the Rust backend (bypasses CORS).
+ * @param {string} provider - 'openai' or 'anthropic'
+ * @param {string} apiKey
+ * @param {string} model
+ * @param {{ system: string, user: string }} prompt
+ * @returns {Promise<string>} Generated text.
+ */
+async function _rustGenerate(provider, apiKey, model, prompt) {
+  const result = await invoke('llm_stream_request', {
+    sessionId: crypto.randomUUID(),
+    provider,
+    apiKey,
+    model,
+    systemPrompt: prompt.system,
+    userPrompt: prompt.user,
+    stream: false,
+  });
+
+  if (provider === 'openai') {
+    return result?.choices?.[0]?.message?.content ?? '';
+  }
+  if (provider === 'anthropic') {
+    return result?.content?.[0]?.text ?? '';
+  }
+  return '';
+}
+
+/**
+ * Stream an LLM response through the Rust backend using Tauri events.
+ * @param {string} provider - 'openai' or 'anthropic'
+ * @param {string} apiKey
+ * @param {string} model
+ * @param {{ system: string, user: string }} prompt
+ * @param {function(string): void} onChunk
+ * @returns {Promise<void>}
+ */
+async function _rustStream(provider, apiKey, model, prompt, onChunk) {
+  const { listen: listenEvent } = await import('@tauri-apps/api/event');
+  const sessionId = crypto.randomUUID();
+
+  // Set up chunk listener before starting the request
+  const unlisten = await listenEvent(`lokus:llm-chunk:${sessionId}`, (event) => {
+    const text = event.payload?.text;
+    if (text) onChunk(text);
+  });
+
+  try {
+    await invoke('llm_stream_request', {
+      sessionId,
+      provider,
+      apiKey,
+      model,
+      systemPrompt: prompt.system,
+      userPrompt: prompt.user,
+      stream: true,
+    });
+  } finally {
+    unlisten();
+  }
+}
+
+// Keep old function names as wrappers for compatibility with createLLMClient
 async function _openaiGenerate(apiKey, model, prompt) {
-  const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: prompt.system },
-        { role: 'user',   content: prompt.user },
-      ],
-      temperature: 0.3,
-    }),
-  });
-
-  if (!response.ok) {
-    await _throwForStatus(response, 'OpenAI generate');
-  }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content ?? '';
+  return _rustGenerate('openai', apiKey, model, prompt);
 }
 
-/**
- * Stream a summary from OpenAI, calling onChunk with each text delta.
- * @param {string} apiKey
- * @param {string} model
- * @param {{ system: string, user: string }} prompt
- * @param {function(string): void} onChunk
- * @returns {Promise<void>}
- */
 async function _openaiStream(apiKey, model, prompt, onChunk) {
-  const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: prompt.system },
-        { role: 'user',   content: prompt.user },
-      ],
-      temperature: 0.3,
-      stream: true,
-    }),
-  });
-
-  if (!response.ok) {
-    await _throwForStatus(response, 'OpenAI stream');
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop(); // last (possibly incomplete) line stays in buffer
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed === 'data: [DONE]') continue;
-      if (!trimmed.startsWith('data: ')) continue;
-
-      try {
-        const json = JSON.parse(trimmed.slice(6));
-        const delta = json.choices?.[0]?.delta?.content;
-        if (delta) onChunk(delta);
-      } catch { /* malformed SSE line — skip */ }
-    }
-  }
+  return _rustStream('openai', apiKey, model, prompt, onChunk);
 }
 
-/**
- * Send a one-shot summary request to Anthropic and return the completed text.
- * @param {string} apiKey
- * @param {string} model
- * @param {{ system: string, user: string }} prompt
- * @returns {Promise<string>}
- */
 async function _anthropicGenerate(apiKey, model, prompt) {
-  const response = await fetch(`${ANTHROPIC_BASE_URL}/messages`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': ANTHROPIC_API_VERSION,
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 2048,
-      system: prompt.system,
-      messages: [{ role: 'user', content: prompt.user }],
-    }),
-  });
-
-  if (!response.ok) {
-    await _throwForStatus(response, 'Anthropic generate');
-  }
-
-  const data = await response.json();
-  return data.content?.[0]?.text ?? '';
+  return _rustGenerate('anthropic', apiKey, model, prompt);
 }
 
-/**
- * Stream a summary from Anthropic, calling onChunk with each text delta.
- * @param {string} apiKey
- * @param {string} model
- * @param {{ system: string, user: string }} prompt
- * @param {function(string): void} onChunk
- * @returns {Promise<void>}
- */
 async function _anthropicStream(apiKey, model, prompt, onChunk) {
-  const response = await fetch(`${ANTHROPIC_BASE_URL}/messages`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': ANTHROPIC_API_VERSION,
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 2048,
-      system: prompt.system,
-      messages: [{ role: 'user', content: prompt.user }],
-      stream: true,
-    }),
-  });
-
-  if (!response.ok) {
-    await _throwForStatus(response, 'Anthropic stream');
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop();
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || !trimmed.startsWith('data: ')) continue;
-
-      try {
-        const json = JSON.parse(trimmed.slice(6));
-        // Anthropic streaming: content_block_delta events carry text deltas
-        if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
-          onChunk(json.delta.text);
-        }
-      } catch { /* malformed SSE line — skip */ }
-    }
-  }
+  return _rustStream('anthropic', apiKey, model, prompt, onChunk);
 }
 
 // ---------------------------------------------------------------------------
@@ -501,7 +325,7 @@ async function _proxyStream(supabaseUrl, supabaseToken, prompt, model, llmProvid
  *
  * @example
  * const client = createLLMClient(config);
- * const summary = await client.generateSummary(transcript, notes, 'default');
+ * const summary = await client.generateSummary({ system: '...', user: '...' });
  */
 export function createLLMClient(config) {
   const { mode, llmProvider, llmApiKey, llmModel, supabaseUrl, supabaseToken } = config ?? {};
@@ -509,27 +333,20 @@ export function createLLMClient(config) {
   return {
     /**
      * Generate a structured meeting summary (non-streaming).
-     * @param {string} transcript  - Full transcript text.
-     * @param {string} userNotes   - User's sparse notes.
-     * @param {string} [template='default'] - Summary template name.
+     * @param {{ system: string, user: string }} prompt - Pre-built prompt object from llm-summary.js.
      * @returns {Promise<string>} Generated summary in Markdown.
      */
-    async generateSummary(transcript, userNotes, template = 'default') {
-      const prompt = _buildSummaryPrompt(transcript, userNotes, template);
-
+    async generateSummary(prompt) {
       try {
         if (mode === 'lokus') {
           return await _proxyGenerate(supabaseUrl, supabaseToken, prompt, llmModel, llmProvider);
         }
-
-        // BYOK path
         if (llmProvider === 'openai') {
           return await _openaiGenerate(llmApiKey, llmModel, prompt);
         }
         if (llmProvider === 'anthropic') {
           return await _anthropicGenerate(llmApiKey, llmModel, prompt);
         }
-
         throw new Error(`Unknown LLM provider: ${llmProvider}`);
       } catch (error) {
         logger.error('AIProvider', 'generateSummary failed:', error);
@@ -539,28 +356,21 @@ export function createLLMClient(config) {
 
     /**
      * Stream a structured meeting summary, calling onChunk for each text delta.
-     * @param {string} transcript  - Full transcript text.
-     * @param {string} userNotes   - User's sparse notes.
-     * @param {string} [template='default'] - Summary template name.
+     * @param {{ system: string, user: string }} prompt - Pre-built prompt object from llm-summary.js.
      * @param {function(string): void} onChunk - Called for each streaming text fragment.
      * @returns {Promise<void>} Resolves when the stream is complete.
      */
-    async streamSummary(transcript, userNotes, template = 'default', onChunk) {
-      const prompt = _buildSummaryPrompt(transcript, userNotes, template);
-
+    async streamSummary(prompt, onChunk) {
       try {
         if (mode === 'lokus') {
           return await _proxyStream(supabaseUrl, supabaseToken, prompt, llmModel, llmProvider, onChunk);
         }
-
-        // BYOK path
         if (llmProvider === 'openai') {
           return await _openaiStream(llmApiKey, llmModel, prompt, onChunk);
         }
         if (llmProvider === 'anthropic') {
           return await _anthropicStream(llmApiKey, llmModel, prompt, onChunk);
         }
-
         throw new Error(`Unknown LLM provider: ${llmProvider}`);
       } catch (error) {
         logger.error('AIProvider', 'streamSummary failed:', error);
@@ -779,55 +589,15 @@ export async function validateApiKey(provider, apiKey) {
   }
 
   try {
-    if (provider === 'openai') {
-      const response = await fetch(`${OPENAI_BASE_URL}/models`, {
-        headers: { 'Authorization': `Bearer ${apiKey}` },
-      });
-      if (response.ok) return { valid: true };
-      if (response.status === 401) return { valid: false, error: 'Invalid OpenAI API key.' };
-      if (response.status === 429) return { valid: false, error: 'Rate limit hit — key may be valid but exhausted.' };
-      return { valid: false, error: `OpenAI validation failed (${response.status}).` };
-    }
-
-    if (provider === 'anthropic') {
-      // Send the smallest valid request; a 400 "invalid_request_error" means
-      // the key IS valid but we sent a bad payload — treat that as valid.
-      const response = await fetch(`${ANTHROPIC_BASE_URL}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': ANTHROPIC_API_VERSION,
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 1,
-          messages: [{ role: 'user', content: '.' }],
-        }),
-      });
-      if (response.ok || response.status === 400) return { valid: true };
-      if (response.status === 401) return { valid: false, error: 'Invalid Anthropic API key.' };
-      if (response.status === 403) return { valid: false, error: 'Anthropic API key lacks required permissions.' };
-      if (response.status === 429) return { valid: false, error: 'Rate limit hit — key may be valid but exhausted.' };
-      return { valid: false, error: `Anthropic validation failed (${response.status}).` };
-    }
-
-    if (provider === 'deepgram') {
-      // /v1/projects is a lightweight authenticated endpoint
-      const response = await fetch(`${DEEPGRAM_BASE_URL}/projects`, {
-        headers: { 'Authorization': `Token ${apiKey}` },
-      });
-      if (response.ok) return { valid: true };
-      if (response.status === 401) return { valid: false, error: 'Invalid Deepgram API key.' };
-      if (response.status === 403) return { valid: false, error: 'Deepgram API key lacks required permissions.' };
-      if (response.status === 429) return { valid: false, error: 'Rate limit hit — key may be valid but exhausted.' };
-      return { valid: false, error: `Deepgram validation failed (${response.status}).` };
-    }
-
-    return { valid: false, error: `Unknown provider: ${provider}` };
+    // Route through Rust backend to bypass CORS restrictions in Tauri WebView.
+    const result = await invoke('validate_api_key', {
+      provider,
+      apiKey: apiKey.trim(),
+    });
+    return result;
   } catch (error) {
-    logger.error('AIProvider', `validateApiKey(${provider}) network error:`, error);
-    return { valid: false, error: `Network error during validation: ${error.message}` };
+    logger.error('AIProvider', `validateApiKey(${provider}) error:`, error);
+    return { valid: false, error: `Validation error: ${error}` };
   }
 }
 

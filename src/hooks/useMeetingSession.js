@@ -224,7 +224,7 @@ export function useMeetingSession() {
         duration:     startTimeMs
           ? Math.round((Date.now() - startTimeMs) / 60000)
           : undefined,
-        templateId:   'general',
+        typeHint:     'auto-detect',
         onChunk: (chunk) => {
           setSummary((prev) => prev + chunk);
         },
@@ -279,7 +279,7 @@ export function useMeetingSession() {
         text:      payload.text      ?? '',
         speaker:   payload.speaker   ?? null,
         timestamp: payload.timestamp ?? Date.now(),
-        is_final:  payload.is_final  ?? false,
+        is_final:  payload.isFinal   ?? payload.is_final ?? false,
         words:     payload.words     ?? [],
       };
 
@@ -329,7 +329,7 @@ export function useMeetingSession() {
     // Non-fatal transcription errors — surface to UI but keep running.
     // ----------------------------------------------------------------
     register('lokus:transcription-error', ({ payload }) => {
-      const msg = payload?.message ?? 'Unknown transcription error';
+      const msg = payload?.error ?? payload?.message ?? 'Unknown transcription error';
       logError('Transcription error:', msg);
       setError(`Transcription error: ${msg}`);
     });
@@ -453,7 +453,7 @@ export function useMeetingSession() {
       await invoke('start_transcription', {
         config: {
           apiKey:   providerCfg.deepgramApiKey || '',
-          mode:     providerCfg.mode === 'lokus' ? 'proxy' : 'direct',
+          mode:     providerCfg.mode === 'lokus' ? 'proxy' : 'byok',
           proxyUrl: providerCfg.mode === 'lokus' ? providerCfg.supabaseUrl : null,
         },
       });

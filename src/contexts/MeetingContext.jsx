@@ -59,20 +59,25 @@ const MeetingContext = createContext(null);
 export function MeetingProvider({ children }) {
   const session = useMeetingSession();
 
-  // Auto-start meeting detection on mount if user has it enabled.
-  // Also request native notification permission so later calls succeed.
+  // Request notification permission once on mount.
   useEffect(() => {
     invoke('request_notification_permission_cmd').catch(console.error);
+  }, []);
+
+  // Auto-start meeting detection whenever state returns to idle (including
+  // initial mount, after a session completes, and after a reset).
+  useEffect(() => {
+    if (session.state !== 'idle') return;
 
     const settings = JSON.parse(localStorage.getItem('lokus-meeting-settings') || '{}');
     const micDetection = settings.detectAdHocCalls !== false; // default true
     console.log('[Lokus Meeting] Auto-start check:', { micDetection, state: session.state });
-    if (micDetection && session.state === 'idle') {
+    if (micDetection) {
       console.log('[Lokus Meeting] Starting detection...');
       session.startDetecting();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // only on mount
+  }, [session.state]); // re-run whenever state changes
 
   // Send notification when a meeting is detected.
   // Try native OS notification first; fall back to browser Notification API
