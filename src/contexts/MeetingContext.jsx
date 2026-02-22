@@ -74,14 +74,25 @@ export function MeetingProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // only on mount
 
-  // Send native OS notification when a meeting is detected.
-  // Works even when the app window is not focused or visible.
+  // Send notification when a meeting is detected.
+  // Try native OS notification first; fall back to browser Notification API
+  // (works in dev mode where native notifications are unavailable).
   useEffect(() => {
     if (session.state === 'prompted') {
+      console.log('[Lokus Meeting] Meeting detected — sending notification');
       invoke('send_native_notification', {
         title: 'Meeting Detected',
         body: 'A meeting is in progress. Start recording?',
-      }).catch(console.error);
+      }).catch(() => {
+        // Native notification unavailable (dev mode) — use browser fallback
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Meeting Detected', {
+            body: 'A meeting is in progress. Open Lokus to start recording.',
+          });
+        } else if ('Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission();
+        }
+      });
     }
   }, [session.state]);
 
