@@ -46,6 +46,7 @@ export class CanvasManager {
       const content = JSON.stringify(emptyCanvas, null, 2);
 
       await invoke('write_file_content', {
+        workspacePath: workspacePath,
         path: canvasPath,
         content
       });
@@ -100,7 +101,7 @@ export class CanvasManager {
       // ALWAYS clear cache before loading to ensure fresh data after saves
       this.canvasCache.delete(canvasPath);
 
-      const content = await invoke('read_file_content', { path: canvasPath }); let tldrawSnapshot;
+      const content = await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path: canvasPath }); let tldrawSnapshot;
       try {
         tldrawSnapshot = JSON.parse(content);        // If snapshot is missing schema, add it (for backwards compatibility)
         if (!tldrawSnapshot.schema) {
@@ -191,6 +192,7 @@ export class CanvasManager {
       const content = JSON.stringify(tldrawSnapshot, null, 2);
 
       await invoke('write_file_content', {
+        workspacePath: window.__WORKSPACE_PATH__,
         path: canvasPath,
         content
       });      // Clear cache to force fresh read next time
@@ -209,7 +211,7 @@ export class CanvasManager {
    */
   async deleteCanvas(canvasPath) {
     try {
-      await invoke('delete_file', { path: canvasPath });
+      await invoke('delete_file', { workspacePath: window.__WORKSPACE_PATH__, path: canvasPath });
       this.canvasCache.delete(canvasPath);
     } catch (error) {
       throw error;

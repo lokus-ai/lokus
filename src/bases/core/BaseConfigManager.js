@@ -17,7 +17,7 @@ export class BaseConfigManager {
    */
   async load() {
     try {
-      const content = await invoke('read_file_content', { path: this.configPath });
+      const content = await invoke('read_file_content', { workspacePath: this.workspacePath, path: this.configPath });
       this.config = JSON.parse(content);
       return this.config;
     } catch (error) {
@@ -48,6 +48,7 @@ export class BaseConfigManager {
       }
 
       await invoke('write_file_content', {
+        workspacePath: this.workspacePath,
         path: this.configPath,
         content: content,
       });

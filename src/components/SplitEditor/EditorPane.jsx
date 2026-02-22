@@ -53,7 +53,7 @@ const EditorPane = ({
     setIsLoading(true);
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const content = await invoke('read_file_content', { path: filePath });
+      const content = await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path: filePath });
       const fileName = filePath.split('/').pop();
       
       setLocalContent(content);
@@ -96,9 +96,10 @@ const EditorPane = ({
       // Handle save for inactive pane
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('write_file_content', { 
-          path: pane.file, 
-          content: localContent 
+        await invoke('write_file_content', {
+          workspacePath: window.__WORKSPACE_PATH__,
+          path: pane.file,
+          content: localContent
         });
       } catch { }
     }
@@ -159,9 +160,10 @@ const EditorPane = ({
             onSave={async (canvasData) => {
               try {
                 const { invoke } = await import('@tauri-apps/api/core');
-                await invoke('write_file_content', { 
-                  path: pane.file, 
-                  content: JSON.stringify(canvasData, null, 2) 
+                await invoke('write_file_content', {
+                  workspacePath: window.__WORKSPACE_PATH__,
+                  path: pane.file,
+                  content: JSON.stringify(canvasData, null, 2)
                 });
               } catch { }
             }}

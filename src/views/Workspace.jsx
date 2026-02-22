@@ -503,7 +503,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
           affectedFiles,
           operation: async () => {
             try {
-              await invoke("rename_file", { path: oldPath, newName: trimmedName });
+              await invoke("rename_file", { workspacePath: window.__WORKSPACE_PATH__, path: oldPath, newName: trimmedName });
               onUpdateTabPath?.(oldPath, newPath);
               setRenamingPath(null);
               onRefresh && onRefresh();
@@ -521,7 +521,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 
     // No references to update, proceed directly
     try {
-      await invoke("rename_file", { path: oldPath, newName: trimmedName });
+      await invoke("rename_file", { workspacePath: window.__WORKSPACE_PATH__, path: oldPath, newName: trimmedName });
       onUpdateTabPath?.(oldPath, newPath);
       setRenamingPath(null);
       onRefresh && onRefresh();
@@ -539,7 +539,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
     try {
       const base = entry.is_directory ? entry.path : entry.path.split("/").slice(0, -1).join("/");
       const name = "Untitled.md";
-      await invoke("write_file_content", { path: `${base}/${name}`, content: "" });
+      await invoke("write_file_content", { workspacePath: window.__WORKSPACE_PATH__, path: `${base}/${name}`, content: "" });
       onRefresh && onRefresh();
     } catch (e) {
       toast?.error(`Failed to create file: ${e.message || e}`);
@@ -581,7 +581,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
             setRightPaneContent(editorContent);
           } else {
             try {
-              const content = await invoke('read_file_content', { path: file.path });
+              const content = await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path: file.path });
               setRightPaneContent(content || '');
             } catch (err) {
               setRightPaneContent('');
@@ -658,7 +658,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         try {
           const confirmed = await confirm(`Are you sure you want to delete "${file.name}"?`);
           if (confirmed) {
-            await invoke('delete_file', { path: file.path });
+            await invoke('delete_file', { workspacePath: window.__WORKSPACE_PATH__, path: file.path });
             onRefresh && onRefresh();
           }
         } catch (err) {
@@ -714,7 +714,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
           if (confirmed) {
             for (const p of data.selectedPaths) {
               try {
-                await invoke('delete_file', { path: p });
+                await invoke('delete_file', { workspacePath: window.__WORKSPACE_PATH__, path: p });
               } catch (err) {
                 console.error(`Failed to delete ${p}:`, err);
               }
@@ -745,7 +745,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
           for (const p of data.selectedPaths) {
             try {
               // Read content and write to new file with " copy" suffix
-              const content = await invoke('read_file_content', { path: p });
+              const content = await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path: p });
               const pathParts = p.split('/');
               const fileName = pathParts.pop();
               const dirPath = pathParts.join('/');
@@ -776,6 +776,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
               for (const p of data.selectedPaths) {
                 try {
                   await invoke('move_file', {
+                    workspacePath: window.__WORKSPACE_PATH__,
                     sourcePath: p,
                     destinationDir: selectedFolder,
                   });
@@ -808,7 +809,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
               for (const p of data.selectedPaths) {
                 try {
                   // Read file content and write to new location
-                  const content = await invoke('read_file_content', { path: p });
+                  const content = await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path: p });
                   const fileName = p.substring(p.lastIndexOf('/') + 1);
                   const destPath = `${exportFolder}/${fileName}`;
                   await invoke('write_file', { path: destPath, content });
@@ -1061,7 +1062,7 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
         const confirmed = await confirm(`Delete ${count} item${count > 1 ? 's' : ''}?`);
         if (confirmed) {
           for (const p of selectedPaths) {
-            try { await invoke('delete_file', { path: p }); } catch {}
+            try { await invoke('delete_file', { workspacePath: workspacePath, path: p }); } catch {}
           }
           setSelectedPaths(new Set());
           onRefresh?.();
@@ -1159,6 +1160,7 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
     for (const oldPath of pathsToMove) {
       try {
         await invoke("move_file", {
+          workspacePath: workspacePath,
           sourcePath: oldPath,
           destinationDir: destinationDir,
         });
@@ -1537,7 +1539,7 @@ function WorkspaceWithScope({ path }) {
     if (!activeFile) return;
 
     try {
-      const content = await invoke("read_file_content", { path: activeFile });
+      const content = await invoke("read_file_content", { workspacePath: path, path: activeFile });
       const activeTab = openTabs.find(tab => tab.path === activeFile);
 
       if (activeTab) {
@@ -2089,7 +2091,7 @@ function WorkspaceWithScope({ path }) {
       // Capture activeFile in local variable to prevent stale closure issues
       const fileToLoad = activeFile;
 
-      invoke("read_file_content", { path: fileToLoad })
+      invoke("read_file_content", { workspacePath: path, path: fileToLoad })
         .then(async content => {
           // Guard against stale promise resolutions - only update if this file is still active
           if (fileToLoad !== activeFile) {
@@ -2595,7 +2597,7 @@ function WorkspaceWithScope({ path }) {
           if (nextTab.path === path && editorContent) {
             setRightPaneContent(editorContent);
           } else {
-            invoke("read_file_content", { path: nextTab.path })
+            invoke("read_file_content", { workspacePath: path, path: nextTab.path })
               .then(content => {
                 setRightPaneContent(content || '');
               })
@@ -2715,7 +2717,7 @@ function WorkspaceWithScope({ path }) {
 
       if (editorTitle !== currentName && editorTitle.trim() !== "") {
         const newFileName = `${editorTitle.trim()}.md`;
-        const newPath = await invoke("rename_file", { path: activeFile, newName: newFileName });
+        const newPath = await invoke("rename_file", { workspacePath: path, path: activeFile, newName: newFileName });
         editorGroups.updateTabPath(activeFile, newPath);
         path_to_save = newPath;
         needsStateUpdate = true;
@@ -2729,7 +2731,7 @@ function WorkspaceWithScope({ path }) {
         contentToSave = exporter.htmlToMarkdown(editorContent, { preserveWikiLinks: true });
       }
 
-      await invoke("write_file_content", { path: path_to_save, content: contentToSave });
+      await invoke("write_file_content", { workspacePath: path, path: path_to_save, content: contentToSave });
 
       setSavedContent(editorContent);
       setUnsavedChanges(prev => {
@@ -2882,7 +2884,7 @@ function WorkspaceWithScope({ path }) {
         }
 
         // Save the file
-        await invoke("write_file_content", { path: filePath, content: contentToSave });
+        await invoke("write_file_content", { workspacePath: window.__WORKSPACE_PATH__, path: filePath, content: contentToSave });
 
         // Update current file state to point to new location
         const newFileName = filePath.split('/').pop();
@@ -3009,7 +3011,7 @@ function WorkspaceWithScope({ path }) {
 </html>`;
 
         // Save the HTML file
-        await invoke("write_file_content", { path: filePath, content: htmlContent });
+        await invoke("write_file_content", { workspacePath: window.__WORKSPACE_PATH__, path: filePath, content: htmlContent });
 
       }
     } catch (error) {
@@ -3327,12 +3329,12 @@ function WorkspaceWithScope({ path }) {
         break;
       case 'duplicate':
         try {
-          const content = await invoke('read_file_content', { path: board.path });
+          const content = await invoke('read_file_content', { workspacePath: path, path: board.path });
           const dirPath = board.path.split('/').slice(0, -1).join('/');
           const baseName = board.name.replace(/\.kanban$/, '');
           const newName = `${baseName} copy.kanban`;
           const newPath = `${dirPath}/${newName}`;
-          await invoke('write_file_content', { path: newPath, content });
+          await invoke('write_file_content', { workspacePath: path, path: newPath, content });
           refreshBoards?.();
           toast.success(`Duplicated: ${newName}`);
         } catch (err) {
@@ -3341,7 +3343,7 @@ function WorkspaceWithScope({ path }) {
         break;
       case 'export':
         try {
-          const content = await invoke('read_file_content', { path: board.path });
+          const content = await invoke('read_file_content', { workspacePath: path, path: board.path });
           const blob = new Blob([content], { type: 'application/json' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
@@ -3359,7 +3361,7 @@ function WorkspaceWithScope({ path }) {
         try {
           const confirmed = await confirm(`Are you sure you want to delete "${board.name}"?`);
           if (confirmed) {
-            await invoke('delete_file', { path: board.path });
+            await invoke('delete_file', { workspacePath: path, path: board.path });
             refreshBoards?.();
             toast.success(`Deleted: ${board.name}`);
           }
@@ -3739,7 +3741,7 @@ function WorkspaceWithScope({ path }) {
                 setRightPaneContent(editorContent);
               } else {
                 try {
-                  const content = await invoke("read_file_content", { path: nextTab.path });
+                  const content = await invoke("read_file_content", { workspacePath: path, path: nextTab.path });
                   setRightPaneContent(content || '');
                 } catch (err) {
                   setRightPaneContent('');

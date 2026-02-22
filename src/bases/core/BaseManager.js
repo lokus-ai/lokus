@@ -170,7 +170,7 @@ export class BaseManager {
       }
 
       // Read file content
-      const content = await invoke('read_file_content', { path: basePath })
+      const content = await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path: basePath })
 
       // Parse content
       const parseResult = baseParser.parse(content, {
@@ -335,7 +335,7 @@ export class BaseManager {
       }
 
       // Delete file
-      await invoke('delete_file', { path: metadata.path })
+      await invoke('delete_file', { workspacePath: window.__WORKSPACE_PATH__, path: metadata.path })
 
       // Remove from cache and index
       this.cache.delete(baseId)
@@ -786,7 +786,7 @@ export class BaseManager {
 
   async fileExists(path) {
     try {
-      const content = await invoke('read_file_content', { path: path })
+      const content = await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path: path })
       return true
     } catch (error) {
       return false

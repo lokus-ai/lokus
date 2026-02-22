@@ -264,7 +264,7 @@ export class GraphDataProcessor {
       // Read file content using Tauri command
       let content;
       try {
-        content = await invoke('read_file_content', { path: file.path });
+        content = await invoke('read_file_content', { workspacePath: this.workspacePath, path: file.path });
       } catch (error) {
         this.processingStats.errors++;
         return;
@@ -753,7 +753,7 @@ export class GraphDataProcessor {
         // Read file content to extract new links
         let content = '';
         try {
-          content = await invoke('read_file_content', { path: filePath });
+          content = await invoke('read_file_content', { workspacePath: this.workspacePath, path: filePath });
         } catch (error) {
           continue;
         }
