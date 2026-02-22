@@ -333,6 +333,7 @@ export function MermaidViewerModal({ isOpen, svgContent, onClose }) {
             transformOrigin: 'center center',
             transition: isDragging ? 'none' : 'transform 0.1s ease-out',
           }}
+          // eslint-disable-next-line react/no-danger -- SVG output from trusted Mermaid renderer
           dangerouslySetInnerHTML={{ __html: svgContent }}
         />
       </div>

@@ -344,13 +344,14 @@ export default function SearchPanel({ isOpen, onClose, onFileOpen, workspacePath
                                       <span className="text-app-muted mr-2 select-none">
                                         {contextLine.lineNumber}:
                                       </span>
-                                      <span 
+                                      {/* eslint-disable-next-line react/no-danger -- output from trusted highlightText for search highlighting */}
+                                      <span
                                         dangerouslySetInnerHTML={{
                                           __html: highlightText(
-                                            contextLine.text.length > 80 ? 
-                                              contextLine.text.slice(0, 80) + '...' : 
-                                              contextLine.text, 
-                                            query, 
+                                            contextLine.text.length > 80 ?
+                                              contextLine.text.slice(0, 80) + '...' :
+                                              contextLine.text,
+                                            query,
                                             searchOptions
                                           )
                                         }}
@@ -363,13 +364,14 @@ export default function SearchPanel({ isOpen, onClose, onFileOpen, workspacePath
                                     <span className="text-app-muted mr-2 select-none">
                                       {match.line}:
                                     </span>
-                                    <span 
+                                    {/* eslint-disable-next-line react/no-danger -- output from trusted highlightText for search highlighting */}
+                                    <span
                                       dangerouslySetInnerHTML={{
                                         __html: highlightText(
-                                          match.text.length > 80 ? 
-                                            match.text.slice(0, 80) + '...' : 
-                                            match.text, 
-                                          query, 
+                                          match.text.length > 80 ?
+                                            match.text.slice(0, 80) + '...' :
+                                            match.text,
+                                          query,
                                           searchOptions
                                         )
                                       }}

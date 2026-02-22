@@ -353,6 +353,7 @@ Add your template content here. Use {{variable}} for dynamic values.`}
               <TabsContent value="preview" className="flex-1 m-0 p-6 overflow-auto">
                 <div className="prose prose-sm dark:prose-invert max-w-none">
                   {previewHtml ? (
+                    // eslint-disable-next-line react/no-danger -- output from trusted Markdown compiler
                     <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
                   ) : (
                     <div className="text-center text-app-muted py-12">
