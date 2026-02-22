@@ -22,7 +22,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "^2.0", features = [] }
 
 [dependencies]
-tauri = { version = "^2.0", features = ["protocol-asset"] }
+tauri = { version = "^2.0", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-opener = "^2.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -76,12 +76,20 @@ getrandom = "0.2"
 zstd = "0.13"
 # Retry logic
 backoff = { version = "0.4", features = ["tokio"] }
+# Audio capture
+cpal = "0.15"
+ringbuf = "0.4"
+bytemuck = { version = "1", features = ["derive"] }
+# WebSocket transcription
+tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
+tungstenite = "0.26"
+futures-util = "0.3"
 
 # Desktop-only dependencies (use system_configuration which is macOS-only)
 [target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
 machine-uid = "0.4"
 tauri-plugin-global-shortcut = "2.3.0"
-reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"], default-features = false }
 keyring = "3.6"
 oauth2 = "4.4"
 hyper = { version = "1.0", features = ["full"] }
@@ -110,10 +118,30 @@ sysinfo = "0.32"
 rdiff = "0.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+screencapturekit = "0.3"
 cocoa = "0.25"
 objc = "0.2"
 objc-foundation = "0.1"
 security-framework = "2.9"
+# CoreAudio meeting detection
+coreaudio-sys = "0.2"
+# Native macOS APIs (notifications, app detection)
+objc2 = "0.6"
+block2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSError", "NSUUID", "NSSet", "NSBundle"] }
+objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
+objc2-user-notifications = { version = "0.3", features = [
+    "UNUserNotificationCenter",
+    "UNNotificationContent",
+    "UNNotificationRequest",
+    "UNNotificationAction",
+    "UNNotificationCategory",
+    "UNNotificationResponse",
+    "UNNotification",
+    "UNNotificationTrigger",
+    "UNNotificationSettings",
+    "block2",
+] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.57", features = ["Win32_Security_Credentials"] }

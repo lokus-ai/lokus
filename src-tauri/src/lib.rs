@@ -37,10 +37,19 @@ mod credentials;
 mod file_locking;
 #[cfg(target_os = "macos")]
 mod macos;
+mod audio;
+mod meeting_detector;
+mod transcription;
+mod notifications;
 
 #[cfg(desktop)]
 use window_manager::{open_workspace_window, open_preferences_window, open_launcher_window};
-use tauri::{Manager, Listener, Emitter};
+use tauri::{Manager, Listener, Emitter, RunEvent, WindowEvent};
+#[cfg(desktop)]
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+};
 use tauri_plugin_store::{StoreBuilder, JsonValue};
 use std::path::PathBuf;
 
@@ -377,6 +386,251 @@ fn get_all_workspaces(app: tauri::AppHandle) -> Vec<WorkspaceItem> {
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
+}
+
+/// Validate an API key by making a lightweight HTTP request from Rust.
+///
+/// This bypasses CORS restrictions that block browser `fetch()` from the
+/// Tauri WebView to external API servers.
+#[cfg(desktop)]
+#[tauri::command]
+async fn validate_api_key(provider: String, api_key: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+
+    let response = match provider.as_str() {
+        "openai" => {
+            client
+                .get("https://api.openai.com/v1/models")
+                .header("Authorization", format!("Bearer {}", api_key))
+                .send()
+                .await
+        }
+        "anthropic" => {
+            client
+                .post("https://api.anthropic.com/v1/messages")
+                .header("Content-Type", "application/json")
+                .header("x-api-key", &api_key)
+                .header("anthropic-version", "2023-06-01")
+                .body(r#"{"model":"claude-haiku-4-5-20251001","max_tokens":1,"messages":[{"role":"user","content":"."}]}"#)
+                .send()
+                .await
+        }
+        "deepgram" => {
+            client
+                .get("https://api.deepgram.com/v1/projects")
+                .header("Authorization", format!("Token {}", api_key))
+                .send()
+                .await
+        }
+        _ => return Ok(serde_json::json!({ "valid": false, "error": format!("Unknown provider: {}", provider) })),
+    };
+
+    match response {
+        Ok(resp) => {
+            let status = resp.status().as_u16();
+            // For Anthropic: 200 or 400 means key is valid (400 = bad payload but auth passed)
+            let valid = if provider == "anthropic" {
+                status == 200 || status == 400
+            } else {
+                status == 200
+            };
+
+            if valid {
+                Ok(serde_json::json!({ "valid": true }))
+            } else {
+                let error = match status {
+                    401 => format!("Invalid {} API key.", provider),
+                    403 => format!("{} API key lacks required permissions.", provider),
+                    429 => "Rate limit hit — key may be valid but exhausted.".to_string(),
+                    _ => format!("{} validation failed ({}).", provider, status),
+                };
+                Ok(serde_json::json!({ "valid": false, "error": error }))
+            }
+        }
+        Err(e) => {
+            Ok(serde_json::json!({ "valid": false, "error": format!("Network error: {}", e) }))
+        }
+    }
+}
+
+/// Proxy an LLM request through Rust to bypass CORS.
+///
+/// Supports both OpenAI and Anthropic in streaming mode. Streams SSE chunks
+/// back to the frontend as `lokus:llm-chunk:{sessionId}` events, then emits
+/// `lokus:llm-done:{sessionId}` when complete.
+#[cfg(desktop)]
+#[tauri::command]
+async fn llm_stream_request(
+    app: tauri::AppHandle,
+    session_id: String,
+    provider: String,
+    api_key: String,
+    model: String,
+    system_prompt: String,
+    user_prompt: String,
+    stream: bool,
+) -> Result<serde_json::Value, String> {
+    use futures_util::StreamExt;
+
+    let client = reqwest::Client::new();
+
+    let (url, request_body, headers) = match provider.as_str() {
+        "openai" => {
+            let body = serde_json::json!({
+                "model": model,
+                "messages": [
+                    { "role": "system", "content": system_prompt },
+                    { "role": "user", "content": user_prompt },
+                ],
+                "temperature": 0.3,
+                "max_tokens": 2048,
+                "stream": stream,
+            });
+            let mut h = reqwest::header::HeaderMap::new();
+            h.insert("Authorization", format!("Bearer {}", api_key).parse().unwrap());
+            h.insert("Content-Type", "application/json".parse().unwrap());
+            ("https://api.openai.com/v1/chat/completions".to_string(), body, h)
+        }
+        "anthropic" => {
+            let body = serde_json::json!({
+                "model": model,
+                "max_tokens": 2048,
+                "system": system_prompt,
+                "messages": [{ "role": "user", "content": user_prompt }],
+                "stream": stream,
+            });
+            let mut h = reqwest::header::HeaderMap::new();
+            h.insert("x-api-key", api_key.parse().unwrap());
+            h.insert("anthropic-version", "2023-06-01".parse().unwrap());
+            h.insert("Content-Type", "application/json".parse().unwrap());
+            ("https://api.anthropic.com/v1/messages".to_string(), body, h)
+        }
+        _ => return Err(format!("Unknown LLM provider: {}", provider)),
+    };
+
+    let response = client
+        .post(&url)
+        .headers(headers)
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|e| format!("LLM request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status().as_u16();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("LLM API error ({}): {}", status, body));
+    }
+
+    if !stream {
+        // Non-streaming: return the full response
+        let body: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse LLM response: {}", e))?;
+        return Ok(body);
+    }
+
+    // Streaming: read SSE lines and emit events
+    let chunk_event = format!("lokus:llm-chunk:{}", session_id);
+    let done_event = format!("lokus:llm-done:{}", session_id);
+
+    let mut byte_stream = response.bytes_stream();
+    let mut buffer = String::new();
+
+    while let Some(chunk_result) = byte_stream.next().await {
+        let chunk = chunk_result.map_err(|e| format!("Stream read error: {}", e))?;
+        buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+        // Process complete lines
+        while let Some(newline_pos) = buffer.find('\n') {
+            let line = buffer[..newline_pos].trim().to_string();
+            buffer = buffer[newline_pos + 1..].to_string();
+
+            if line.is_empty() || !line.starts_with("data: ") {
+                continue;
+            }
+
+            let data = &line[6..];
+            if data == "[DONE]" {
+                continue;
+            }
+
+            // Parse the SSE data and extract text delta
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
+                let text = match provider.as_str() {
+                    "openai" => json
+                        .pointer("/choices/0/delta/content")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    "anthropic" => {
+                        if json.get("type").and_then(|v| v.as_str()) == Some("content_block_delta") {
+                            json.pointer("/delta/text")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string()
+                        } else {
+                            String::new()
+                        }
+                    }
+                    _ => String::new(),
+                };
+
+                if !text.is_empty() {
+                    let _ = app.emit(&chunk_event, serde_json::json!({ "text": text }));
+                }
+            }
+        }
+    }
+
+    let _ = app.emit(&done_event, serde_json::json!({}));
+    Ok(serde_json::json!({ "done": true }))
+}
+
+/// Set up the system tray icon with a context menu.
+///
+/// Left-click on the tray icon shows and focuses the main window.
+/// Right-click reveals the context menu with "Show Window" and "Quit Lokus" items.
+#[cfg(desktop)]
+fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
+    let show_item = MenuItem::with_id(app, "show_window", "Show Window", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit Lokus", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+    let _tray = TrayIconBuilder::new()
+        .icon(app.default_window_icon().cloned().unwrap())
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                let app = tray.app_handle();
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        })
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show_window" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            "quit" => {
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .build(app)?;
+
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -826,11 +1080,42 @@ pub fn run() {
       #[cfg(desktop)]
       calendar::set_sync_config,
       #[cfg(desktop)]
-      calendar::get_sync_state
+      calendar::get_sync_state,
+      // Audio capture commands
+      audio::get_audio_devices,
+      audio::start_audio_capture,
+      audio::stop_audio_capture,
+      audio::get_audio_level,
+      audio::start_system_audio_capture,
+      // Meeting detector commands
+      meeting_detector::enable_meeting_detection,
+      meeting_detector::disable_meeting_detection,
+      meeting_detector::dismiss_detection,
+      meeting_detector::start_meeting_monitoring,
+      meeting_detector::stop_meeting_monitoring,
+      // Transcription commands
+      transcription::start_transcription,
+      transcription::stop_transcription,
+      // Native notification commands
+      notifications::request_notification_permission_cmd,
+      notifications::send_native_notification,
+      #[cfg(desktop)]
+      validate_api_key,
+      #[cfg(desktop)]
+      llm_stream_request
     ])
     .setup(|app| {
       #[cfg(desktop)]
       menu::init(&app.handle())?;
+
+      #[cfg(desktop)]
+      setup_tray(app)?;
+
+      // Install native macOS notification delegate and register categories.
+      // Permission request is non-blocking; the OS shows a dialog at most once.
+      notifications::install_notification_delegate(app.handle().clone());
+      notifications::register_notification_categories();
+      notifications::request_notification_permission();
 
       // Initialize platform-specific systems with better error handling
       match handlers::platform_files::initialize() {
@@ -1020,6 +1305,17 @@ pub fn run() {
 
       Ok(())
     })
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .on_window_event(|window, event| {
+      if let WindowEvent::CloseRequested { api, .. } = event {
+        window.hide().unwrap();
+        api.prevent_close();
+      }
+    })
+    .build(tauri::generate_context!())
+    .expect("error while building tauri application")
+    .run(|_app, event| {
+      if let RunEvent::ExitRequested { api, .. } = event {
+        api.prevent_exit();
+      }
+    });
 }

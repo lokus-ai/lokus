@@ -77,6 +77,10 @@ import { OnboardingWizard } from "../components/onboarding/OnboardingWizard.jsx"
 import ExternalDropZone from "../components/ExternalDropZone.jsx";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast, demoAllToasts } from "../components/ui/enhanced-toast";
+import MeetingPanel from "../components/meeting/MeetingPanel.jsx";
+import MeetingNotification from "../components/meeting/MeetingNotification.jsx";
+import MeetingFAB from "../components/meeting/MeetingFAB.jsx";
+import { useMeeting } from "../contexts/MeetingContext.jsx";
 // Expose demo function to window for console access
 if (typeof window !== 'undefined') {
   window.demoToasts = demoAllToasts;
@@ -5475,6 +5479,11 @@ function WorkspaceWithScope({ path }) {
           position={PANEL_POSITIONS.BOTTOM}
           className="border-t border-app-border"
         />
+
+        {/* Meeting Notes — floating FAB + notification + docked panel */}
+        <MeetingFAB />
+        <MeetingNotification />
+        <MeetingPanel workspacePath={path} />
 
         <CommandPalette
           open={showCommandPalette}
