@@ -286,6 +286,7 @@ export default function QuickSwitcher({ isOpen, onClose, onSelectFile, workspace
         >
           <FileText size={16} className="item-icon" />
           <div className="item-content">
+            {/* eslint-disable-next-line react/no-danger -- output from trusted highlightMatches with escaped input */}
             <div
               className="item-title"
               dangerouslySetInnerHTML={{
@@ -310,6 +311,7 @@ export default function QuickSwitcher({ isOpen, onClose, onSelectFile, workspace
         >
           <Hash size={16} className="item-icon" />
           <div className="item-content">
+            {/* eslint-disable-next-line react/no-danger -- output from trusted highlightMatches with escaped input */}
             <div
               className="item-title"
               dangerouslySetInnerHTML={{
@@ -335,6 +337,7 @@ export default function QuickSwitcher({ isOpen, onClose, onSelectFile, workspace
         >
           <Hash size={16} className="item-icon" />
           <div className="item-content">
+            {/* eslint-disable-next-line react/no-danger -- output from trusted highlightMatches with escaped input */}
             <div
               className="item-title"
               dangerouslySetInnerHTML={{
