@@ -40,6 +40,7 @@ mod macos;
 mod audio;
 mod meeting_detector;
 mod transcription;
+mod notifications;
 
 #[cfg(desktop)]
 use window_manager::{open_workspace_window, open_preferences_window, open_launcher_window};
@@ -844,11 +845,20 @@ pub fn run() {
       meeting_detector::stop_meeting_monitoring,
       // Transcription commands
       transcription::start_transcription,
-      transcription::stop_transcription
+      transcription::stop_transcription,
+      // Native notification commands
+      notifications::request_notification_permission_cmd,
+      notifications::send_native_notification
     ])
     .setup(|app| {
       #[cfg(desktop)]
       menu::init(&app.handle())?;
+
+      // Install native macOS notification delegate and register categories.
+      // Permission request is non-blocking; the OS shows a dialog at most once.
+      notifications::install_notification_delegate(app.handle().clone());
+      notifications::register_notification_categories();
+      notifications::request_notification_permission();
 
       // Initialize platform-specific systems with better error handling
       match handlers::platform_files::initialize() {
