@@ -14,8 +14,6 @@ import "../editor/styles/editor.css";
 import markdownSyntaxConfig from "../core/markdown/syntax-config.js";
 import { useFeatureFlags } from "../contexts/RemoteConfigContext";
 import AIAssistant from "./preferences/AIAssistant.jsx";
-import ConnectionStatus from "../components/ConnectionStatus.jsx";
-import GmailLogin from "../components/gmail/GmailLogin.jsx";
 import { CalendarSettings, CalendarConnectionStatus } from "../components/Calendar/index.js";
 import calendarService from "../services/calendar.js";
 import { useAuth } from "../core/auth/AuthContext";
@@ -35,7 +33,7 @@ export default function Preferences() {
   const featureFlags = useFeatureFlags();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [showQuickImport, setShowQuickImport] = useState(false);
-  const [expandedConnections, setExpandedConnections] = useState({ gmail: false, calendar: false, ical: false, caldav: false });
+  const [expandedConnections, setExpandedConnections] = useState({ calendar: false, ical: false, caldav: false });
   const [icalSubscriptions, setIcalSubscriptions] = useState([]);
   const [icalUrl, setIcalUrl] = useState('');
   const [icalLoading, setIcalLoading] = useState(false);
@@ -2732,29 +2730,6 @@ export default function Preferences() {
                     Link your accounts to sync data with Lokus
                   </p>
                 </div>
-
-                {/* Gmail */}
-                <div className="space-y-2">
-                  <button
-                    onClick={() => setExpandedConnections(prev => ({ ...prev, gmail: !prev.gmail }))}
-                    className="flex items-center gap-3 w-full hover:bg-app-panel/50 rounded-lg p-2 -m-2 transition-colors"
-                  >
-                    {expandedConnections.gmail ? <ChevronDown className="w-4 h-4 text-app-muted" /> : <ChevronRight className="w-4 h-4 text-app-muted" />}
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
-                      <path d="M22 6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6Z" fill="#EA4335"/>
-                      <path d="M22 6L12 13L2 6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-                    </svg>
-                    <span className="font-medium text-app-text flex-1 text-left">Gmail</span>
-                    <ConnectionStatus />
-                  </button>
-                  {expandedConnections.gmail && (
-                    <div className="pl-9">
-                      <GmailLogin />
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t border-app-border" />
 
                 {/* Google Calendar */}
                 <div className="space-y-2">

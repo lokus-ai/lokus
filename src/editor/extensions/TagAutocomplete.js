@@ -36,6 +36,11 @@ const TagAutocomplete = Extension.create({
             return false;
           }
 
+          // Don't show tag suggestions in headings — # is heading syntax
+          if (nodeType === 'heading') {
+            return false;
+          }
+
           // Check for backticks (inline code)
           const textBefore = state.doc.textBetween(
             Math.max(0, range.from - 20),

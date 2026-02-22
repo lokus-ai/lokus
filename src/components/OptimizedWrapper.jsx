@@ -27,7 +27,6 @@ export const LazyGraph = lazy(() =>
 );
 export const LazyCanvas = lazy(() => import('../views/Canvas.jsx'));
 export const LazyKanban = lazy(() => import('../components/KanbanBoard.jsx'));
-export const LazyGmail = lazy(() => import('../views/Gmail.jsx'));
 export const LazyPreferences = lazy(() => import('../views/Preferences.jsx'));
 
 /**
@@ -293,7 +292,6 @@ export default {
   LazyGraph,
   LazyCanvas,
   LazyKanban,
-  LazyGmail,
   LazyPreferences,
   DebouncedInput,
   VirtualScroll,

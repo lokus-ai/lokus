@@ -1,5 +1,5 @@
 /**
- * Date utilities for Gmail components
+ * Date utilities
  */
 
 export const formatDistanceToNow = (date) => {
