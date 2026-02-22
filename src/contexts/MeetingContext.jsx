@@ -23,7 +23,7 @@
  * @module contexts/MeetingContext
  */
 
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useEffect } from 'react';
 import { useMeetingSession } from '../hooks/useMeetingSession.js';
 
 // ---------------------------------------------------------------------------
@@ -56,6 +56,30 @@ const MeetingContext = createContext(null);
  */
 export function MeetingProvider({ children }) {
   const session = useMeetingSession();
+
+  // Auto-start meeting detection on mount if user has it enabled
+  useEffect(() => {
+    const settings = JSON.parse(localStorage.getItem('lokus-meeting-settings') || '{}');
+    const micDetection = settings.detectAdHocCalls !== false; // default true
+    if (micDetection && session.state === 'idle') {
+      session.startDetecting();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // only on mount
+
+  // Send OS notification when meeting is detected (works even if app not focused)
+  useEffect(() => {
+    if (session.state === 'prompted') {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('Lokus — Meeting Detected', {
+          body: 'Microphone activity detected. Open Lokus to start recording.',
+          icon: '/icon.png',
+        });
+      } else if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+    }
+  }, [session.state]);
 
   return (
     <MeetingContext.Provider value={session}>
