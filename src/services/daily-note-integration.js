@@ -76,7 +76,9 @@ async function _ensureInitialised(workspacePath) {
 export function formatMeetingSummarySection(summary, meetingTitle, duration = 0) {
   const title       = meetingTitle?.trim() || 'Ad-hoc Call';
   const durationMin = Math.round((duration ?? 0) / 60);
-  const metaLine    = `*Duration: ${durationMin} min | Recorded by Lokus*`;
+  const now         = new Date();
+  const time        = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const metaLine    = `*${time} | ${durationMin} min | Recorded by Lokus*`;
 
   return [
     '',

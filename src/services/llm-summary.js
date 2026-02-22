@@ -41,8 +41,8 @@ import { logger }                               from '../utils/logger.js';
  * @param {string}  [ctx.typeHint='auto-detect']
  * @returns {{ system: string, user: string }}
  */
-function _buildPrompt({ transcript, sparseNotes, meetingTitle, duration, typeHint = 'auto-detect' }) {
-  return buildMeetingPrompt({ transcript, sparseNotes, meetingTitle, duration, typeHint });
+function _buildPrompt({ transcript, sparseNotes, meetingTitle, participants, duration, typeHint = 'auto-detect' }) {
+  return buildMeetingPrompt({ transcript, sparseNotes, meetingTitle, participants, duration, typeHint });
 }
 
 /**
@@ -113,7 +113,7 @@ export async function generateMeetingSummary({
     throw new Error(`generateMeetingSummary: could not load AI provider config — ${err.message}`);
   }
 
-  const prompt = _buildPrompt({ transcript, sparseNotes, meetingTitle, duration, typeHint });
+  const prompt = _buildPrompt({ transcript, sparseNotes, meetingTitle, participants, duration, typeHint });
 
   const client = createLLMClient(config);
 
@@ -207,7 +207,7 @@ export async function streamMeetingSummary({
     throw new Error(`streamMeetingSummary: could not load AI provider config — ${err.message}`);
   }
 
-  const prompt = _buildPrompt({ transcript, sparseNotes, meetingTitle, duration, typeHint });
+  const prompt = _buildPrompt({ transcript, sparseNotes, meetingTitle, participants, duration, typeHint });
 
   const client = createLLMClient(config);
 

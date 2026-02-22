@@ -78,18 +78,20 @@ export function buildMeetingPrompt({
   transcript,
   sparseNotes,
   meetingTitle,
+  participants,
   duration,
   typeHint = 'auto-detect',
 } = {}) {
   const title    = meetingTitle?.trim() || 'Ad-hoc Call';
   const durText  = duration != null ? `${duration} minutes` : 'unknown';
+  const partText = participants?.trim() || null;
   const notes    = sparseNotes?.trim() || '(no notes taken)';
   const tx       = transcript?.trim()  || '(no transcript available)';
 
   const user = `## Meeting Context
 - **Title:** ${title}
 - **Date:** ${_today()}
-- **Duration:** ${durText}
+- **Duration:** ${durText}${partText ? `\n- **Participants:** ${partText}` : ''}
 - **Type hint:** ${typeHint}
 
 ## User Notes (taken during the meeting)

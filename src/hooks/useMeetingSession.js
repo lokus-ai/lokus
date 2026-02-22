@@ -25,6 +25,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { streamMeetingSummary } from '../services/llm-summary.js';
+import { calendarAuth, events as calendarEventsApi } from '../services/calendar.js';
 
 // Use console directly for meeting diagnostics (the app logger is a no-op in dev)
 const log = (...args) => console.log('[MeetingSession]', ...args);
@@ -217,10 +218,72 @@ export function useMeetingSession() {
       const currentNotes = sparseNotesRef.current;
       const currentTitle = meetingTitleRef.current;
 
+      // Skip the LLM call when there's nothing to summarize.
+      if (!transcriptString.trim() && !currentNotes?.trim()) {
+        log('No transcript or notes — skipping summary generation');
+        setSummary('*No transcript was captured for this meeting.*');
+        setState(SESSION_STATE.COMPLETE);
+        return;
+      }
+
+      // Try to enrich from Google Calendar — pull meeting title and participants.
+      let calendarTitle = null;
+      let participants  = null;
+
+      try {
+        const isAuthed = await calendarAuth.isGoogleAuthenticated();
+        if (isAuthed && startTimeMs) {
+          const recordingStart = new Date(startTimeMs);
+          const recordingEnd   = new Date();
+
+          const allEvents = await calendarEventsApi.getAllEvents(recordingStart, recordingEnd);
+          log(`Calendar lookup: ${allEvents.length} event(s) overlapping recording window`);
+
+          if (allEvents.length > 0) {
+            // Pick the event with the most time overlap with the recording window.
+            const recStart = recordingStart.getTime();
+            const recEnd   = recordingEnd.getTime();
+
+            let bestEvent   = allEvents[0];
+            let bestOverlap = 0;
+
+            for (const evt of allEvents) {
+              const evtStart = new Date(evt.start).getTime();
+              const evtEnd   = new Date(evt.end).getTime();
+              const overlap  = Math.min(recEnd, evtEnd) - Math.max(recStart, evtStart);
+              if (overlap > bestOverlap) {
+                bestOverlap = overlap;
+                bestEvent   = evt;
+              }
+            }
+
+            if (bestEvent.title) {
+              calendarTitle = bestEvent.title;
+              setMeetingTitle(calendarTitle);
+              log(`Calendar match: "${calendarTitle}"`);
+            }
+
+            if (bestEvent.attendees?.length) {
+              participants = bestEvent.attendees
+                .map((a) => a.name || a.email)
+                .filter(Boolean)
+                .join(', ');
+              log(`Participants from calendar: ${participants}`);
+            }
+          }
+        }
+      } catch (calErr) {
+        // Calendar lookup is best-effort — never block summary generation.
+        log('Calendar lookup failed (non-fatal):', calErr.message);
+      }
+
+      const effectiveTitle = calendarTitle || currentTitle || undefined;
+
       const { summary: completedSummary } = await streamMeetingSummary({
         transcript:   transcriptString,
         sparseNotes:  currentNotes,
-        meetingTitle: currentTitle || undefined,
+        meetingTitle: effectiveTitle,
+        participants: participants || undefined,
         duration:     startTimeMs
           ? Math.round((Date.now() - startTimeMs) / 60000)
           : undefined,
