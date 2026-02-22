@@ -28,7 +28,7 @@ export default function PDFViewerTab({ file, onClose }) {
         setPageNumber(1); // Reset to first page
 
         // Read file as binary using Tauri command
-        const binaryData = await invoke('read_binary_file', { path: file });
+        const binaryData = await invoke('read_binary_file', { workspacePath: window.__WORKSPACE_PATH__, path: file });
 
         // Convert to Uint8Array - this needs to be done only once
         const uint8Array = new Uint8Array(binaryData);

@@ -234,7 +234,7 @@ export class DailyNotesManager {
     const content = await this.getDailyNoteContent(date);
 
     try {
-      await invoke('write_file_content', { path: filePath, content });
+      await invoke('write_file_content', { workspacePath: this.workspacePath, path: filePath, content });
       return filePath;
     } catch (error) {
       throw new Error(`Failed to create daily note: ${error.message}`);
