@@ -262,7 +262,26 @@ export class MarkdownExporter {
             break;
 
           // Div and other block elements
-          case 'div':
+          case 'div': {
+            // Check for callout nodes first
+            const calloutType = child.getAttribute('data-callout-type');
+            if (calloutType) {
+              const title = child.getAttribute('data-callout-title') || '';
+              const collapsed = child.getAttribute('data-collapsed') === 'true' ? '-' : '';
+              const titlePart = title ? ` ${title}` : '';
+              result += `\n> [!${calloutType}]${collapsed}${titlePart}\n`;
+              // Only process the .callout-content div, skip .callout-header
+              // (header contains icon/title/toggle which are rendered by the extension)
+              const contentDiv = child.querySelector('.callout-content') || child;
+              const innerContent = this.processNode(contentDiv, options).trim();
+              if (innerContent) {
+                const prefixedLines = innerContent.split('\n').map(line => `> ${line}`).join('\n');
+                result += prefixedLines + '\n\n';
+              }
+              break;
+            }
+
+            // Check for math types
             const mathType = child.getAttribute('data-type');
             // Check for all math type variations including @aarkue extension
             const isDivMathType = ['inlineMath', 'math-block', 'math', 'math-inline'].includes(mathType);
@@ -276,6 +295,7 @@ export class MarkdownExporter {
               result += content;
             }
             break;
+          }
 
           // Line breaks
           case 'br':

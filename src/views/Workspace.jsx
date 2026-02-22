@@ -73,7 +73,7 @@ import { isImageFile, findImageFiles } from "../utils/imageUtils.js";
 import CanvasPreviewPopup from '../components/CanvasPreviewPopup.jsx';
 import { generatePreview } from '../core/canvas/preview-generator.js';
 import TagManagementModal from "../components/TagManagementModal.jsx";
-import ProductTour from "../components/ProductTour.jsx";
+import { OnboardingWizard } from "../components/onboarding/OnboardingWizard.jsx";
 import ExternalDropZone from "../components/ExternalDropZone.jsx";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast, demoAllToasts } from "../components/ui/enhanced-toast";
@@ -87,7 +87,7 @@ import DropIndicator from "../components/FileTree/DropIndicator.jsx";
 import Breadcrumbs from "../components/FileTree/Breadcrumbs.jsx";
 import AboutDialog from "../components/AboutDialog.jsx";
 import { copyFiles, cutFiles, getClipboardState, getRelativePath } from "../utils/clipboard.js";
-import "../styles/product-tour.css";
+
 import { isDesktop, isMobile } from '../platform/index.js';
 import TerminalPanel from "../components/TerminalPanel/TerminalPanel.jsx";
 import { OutputPanel } from "../components/OutputPanel/OutputPanel.jsx";
@@ -374,7 +374,7 @@ function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
 }
 
 // --- File Entry Component ---
-function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences, onSelectEntry, isSelected, selectedPaths, setSelectedPaths, creatingItem, onCreateConfirm }) {
+function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences, onSelectEntry, isSelected, selectedPaths, setSelectedPaths, creatingItem, onCreateConfirm, onUpdateTabPath }) {
   const entryRef = useRef(null);
   const hoverTimeoutRef = useRef(null);
 
@@ -500,6 +500,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
           operation: async () => {
             try {
               await invoke("rename_file", { path: oldPath, newName: trimmedName });
+              onUpdateTabPath?.(oldPath, newPath);
               setRenamingPath(null);
               onRefresh && onRefresh();
               return true;
@@ -517,6 +518,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
     // No references to update, proceed directly
     try {
       await invoke("rename_file", { path: oldPath, newName: trimmedName });
+      onUpdateTabPath?.(oldPath, newPath);
       setRenamingPath(null);
       onRefresh && onRefresh();
     } catch (e) {
@@ -773,6 +775,8 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
                     sourcePath: p,
                     destinationDir: selectedFolder,
                   });
+                  const fileName = p.split('/').pop();
+                  onUpdateTabPath?.(p, selectedFolder + '/' + fileName);
                   movedCount++;
                 } catch (err) {
                   console.error(`Failed to move ${p}:`, err);
@@ -937,6 +941,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
                   isSelected={selectedPaths.has(child.path) || false}
                   selectedPaths={selectedPaths}
                   setSelectedPaths={setSelectedPaths}
+                  onUpdateTabPath={onUpdateTabPath}
                 />
               ))}
             </ul>
@@ -955,7 +960,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 }
 
 // --- File Tree View Component ---
-function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, creatingItem, onCreateConfirm, keymap, selectedPath, setSelectedPath, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences, workspacePath }) {
+function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFolders, toggleFolder, creatingItem, onCreateConfirm, keymap, selectedPath, setSelectedPath, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences, workspacePath, onUpdateTabPath }) {
   const [activeEntry, setActiveEntry] = useState(null);
   const [draggedPaths, setDraggedPaths] = useState(new Set()); // Track paths being dragged (for multi-select)
   const fileTreeRef = useRef(null);
@@ -1153,6 +1158,8 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
           sourcePath: oldPath,
           destinationDir: destinationDir,
         });
+        const fileName = oldPath.split('/').pop();
+        onUpdateTabPath?.(oldPath, destinationDir + '/' + fileName);
         movedCount++;
       } catch (err) {
         console.error(`Failed to move ${oldPath}:`, err);
@@ -1244,6 +1251,7 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
               isSelected={selectedPaths.has(entry.path)}
               selectedPaths={selectedPaths}
               setSelectedPaths={setSelectedPaths}
+              onUpdateTabPath={onUpdateTabPath}
             />
           ))}
         </ul>
@@ -1568,7 +1576,6 @@ function WorkspaceWithScope({ path }) {
   const [showPlugins, setShowPlugins] = useState(false);
   const [showBases, setShowBases] = useState(false);
   const [showMarketplace, setShowMarketplace] = useState(false);
-  const [showGmail, setShowGmail] = useState(false);
   const [showTagModal, setShowTagModal] = useState(false);
   const [tagModalFile, setTagModalFile] = useState(null);
   const [showAboutDialog, setShowAboutDialog] = useState(false);
@@ -1723,7 +1730,6 @@ function WorkspaceWithScope({ path }) {
   const getTabDisplayName = useCallback((tabPath, pluginsList = []) => {
     if (tabPath === '__graph__') return 'Graph View';
     if (tabPath === '__kanban__') return 'Task Board';
-    // if (tabPath === '__gmail__') return 'Gmail'; // Gmail disabled
     if (tabPath === '__bases__') return 'Bases';
     if (tabPath.startsWith('__plugin_') && tabPath.endsWith('__')) {
       // Extract plugin ID and look up name
@@ -2691,51 +2697,6 @@ function WorkspaceWithScope({ path }) {
     });
   }, []);
 
-  // Gmail template detection and parsing - DISABLED
-  /* const parseGmailTemplate = (content) => {
-    try {
-      // Check if content starts with YAML frontmatter
-      if (!content.startsWith('---')) {
-        return null;
-      }
-
-      // Extract frontmatter and body
-      const frontmatterEnd = content.indexOf('---', 3);
-      if (frontmatterEnd === -1) {
-        return null;
-      }
-
-      const frontmatterContent = content.slice(3, frontmatterEnd).trim();
-      const body = content.slice(frontmatterEnd + 3).trim();
-
-      // Parse the YAML-like frontmatter
-      const metadata = {};
-      const lines = frontmatterContent.split('\n');
-      
-      for (const line of lines) {
-        const colonIndex = line.indexOf(':');
-        if (colonIndex > 0) {
-          const key = line.slice(0, colonIndex).trim().toLowerCase();
-          const value = line.slice(colonIndex + 1).trim();
-          metadata[key] = value;
-        }
-      }
-
-      // Check if this looks like a Gmail template
-      if (metadata.to !== undefined && metadata.subject !== undefined) {
-        return {
-          to: metadata.to ? metadata.to.split(',').map(email => email.trim()).filter(email => email) : [],
-          cc: metadata.cc ? metadata.cc.split(',').map(email => email.trim()).filter(email => email) : [],
-          bcc: metadata.bcc ? metadata.bcc.split(',').map(email => email.trim()).filter(email => email) : [],
-          subject: metadata.subject || '',
-          body: body.replace(/<!--.*?-->/gs, '').trim() // Remove HTML comments
-        };
-      }
-    } catch { }
-
-    return null;
-  }; */
-
   const handleSave = useCallback(async () => {
     const { activeFile, openTabs, editorContent, editorTitle } = stateRef.current;
     if (!activeFile) return;
@@ -2751,6 +2712,7 @@ function WorkspaceWithScope({ path }) {
       if (editorTitle !== currentName && editorTitle.trim() !== "") {
         const newFileName = `${editorTitle.trim()}.md`;
         const newPath = await invoke("rename_file", { path: activeFile, newName: newFileName });
+        editorGroups.updateTabPath(activeFile, newPath);
         path_to_save = newPath;
         needsStateUpdate = true;
       }
@@ -2795,35 +2757,6 @@ function WorkspaceWithScope({ path }) {
         }
       } else {
       }
-
-      // Gmail template checking disabled
-      /* const gmailTemplate = parseGmailTemplate(contentToSave);
-      if (gmailTemplate) {
-        try {
-
-          // Check if user is authenticated with Gmail
-          const isAuthenticated = await gmailAuth.isAuthenticated();
-          if (isAuthenticated && gmailTemplate.to.length > 0 && gmailTemplate.subject) {
-            // Send the email
-            await gmailEmails.sendEmail({
-              to: gmailTemplate.to,
-              cc: gmailTemplate.cc,
-              bcc: gmailTemplate.bcc,
-              subject: gmailTemplate.subject,
-              body: gmailTemplate.body,
-              attachments: [] // For future implementation
-            });
-
-            // Optional: Show success notification to user
-            // You could add a toast notification here
-          } else if (!isAuthenticated) {
-            // Optional: Show authentication prompt
-          } else {
-          }
-        } catch (emailError) {
-          // Optional: Show error notification to user
-        }
-      } */
 
       if (needsStateUpdate) {
         const newName = path_to_save.split("/").pop();
@@ -3715,22 +3648,6 @@ function WorkspaceWithScope({ path }) {
     setActiveFile(basesPath);
   }, []);
 
-  // Gmail functionality disabled
-  /* const handleOpenGmail = useCallback(() => {
-    const gmailPath = '__gmail__';
-    const gmailName = 'Gmail';
-
-    setOpenTabs(prevTabs => {
-      const newTabs = prevTabs.filter(t => t.path !== gmailPath);
-      newTabs.unshift({ path: gmailPath, name: gmailName });
-      if (newTabs.length > MAX_OPEN_TABS) {
-        newTabs.pop();
-      }
-      return newTabs;
-    });
-    setActiveFile(gmailPath);
-  }, []); */
-
   // Initialize graph processor when workspace path changes
   useEffect(() => {
     if (path) {
@@ -3807,7 +3724,6 @@ function WorkspaceWithScope({ path }) {
           // Load the content for the right pane asynchronously
           setTimeout(async () => {
             const isSpecialView = nextTab.path === '__kanban__' ||
-              // nextTab.path === '__gmail__' || // Gmail disabled
               nextTab.path === '__bases__' ||
               nextTab.path.startsWith('__graph__') ||
               nextTab.path.startsWith('__plugin_') ||
@@ -4527,7 +4443,7 @@ function WorkspaceWithScope({ path }) {
     <PanelManager>
       <div className={`h-full bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select relative ${isMobile() ? 'safe-area-inset-top' : ''}`}>
         {/* Product Tour */}
-        <ProductTour autoStart={true} delay={1500} />
+        <OnboardingWizard />
 
         {/* Service Status / Maintenance Banner */}
         <ServiceStatus />
@@ -4826,22 +4742,6 @@ function WorkspaceWithScope({ path }) {
                 <CalendarDays className="w-5 h-5" style={showCalendarPanel ? { color: 'rgb(var(--accent))' } : {}} />
               </button>
 
-              {/* Gmail button disabled to improve startup performance */}
-              {/* <button
-              onClick={handleOpenGmail}
-              title="Gmail"
-              className="obsidian-button icon-only w-full"
-              onMouseEnter={(e) => {
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = 'rgb(var(--accent))';
-              }}
-              onMouseLeave={(e) => {
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) icon.style.color = '';
-              }}
-            >
-              <Mail className="w-5 h-5" />
-            </button> */}
 
             </div>
           </aside>
@@ -4934,6 +4834,7 @@ function WorkspaceWithScope({ path }) {
                           toast={toast}
                           onCheckReferences={handleCheckReferences}
                           workspacePath={path}
+                          onUpdateTabPath={editorGroups.updateTabPath}
                         />
                       </div>
                     </ContextMenuTrigger>
@@ -5074,11 +4975,7 @@ function WorkspaceWithScope({ path }) {
                             workspacePath={path}
                           />
                         </div>
-                      ) : /* rightPaneFile === '__gmail__' ? (
-                      <div className="h-full">
-                        <Gmail workspacePath={path} />
-                      </div>
-                    ) : */ rightPaneFile === '__bases__' ? (
+                      ) : rightPaneFile === '__bases__' ? (
                           <div className="h-full">
                             <BasesView isVisible={true} onFileOpen={handleFileOpen} />
                           </div>
@@ -5213,11 +5110,7 @@ function WorkspaceWithScope({ path }) {
                         }}
                       />
                     </div>
-                  ) : /* activeFile === '__gmail__' ? (
-            <div className="flex-1 h-full overflow-hidden">
-              <Gmail workspacePath={path} />
-            </div>
-          ) : */ featureFlags.enable_plugins && activeFile && activeFile.startsWith('__plugin_') ? (
+                  ) : featureFlags.enable_plugins && activeFile && activeFile.startsWith('__plugin_') ? (
                       <div className="flex-1 p-8 md:p-12 overflow-y-auto">
                         <div className="max-w-full mx-auto h-full">
                           <div className="flex-1 overflow-hidden">
@@ -5752,7 +5645,6 @@ function WorkspaceWithScope({ path }) {
             });
           }}
           onCreateTemplate={handleCreateTemplate}
-          // onOpenGmail={handleOpenGmail} // Gmail disabled
           onOpenDailyNote={handleOpenDailyNote}
           onRefresh={handleRefreshFiles}
           activeFile={activeFile}

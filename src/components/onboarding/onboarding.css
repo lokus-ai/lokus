@@ -1,0 +1,102 @@
+/* Onboarding Wizard Styles */
+
+.onboarding-overlay {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+}
+
+.onboarding-card {
+  transition: all 0.2s ease;
+  border: 1px solid rgb(var(--border));
+  border-radius: 12px;
+  background: rgb(var(--panel));
+}
+
+.onboarding-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  border-color: rgb(var(--accent) / 0.5);
+}
+
+.onboarding-card.selected {
+  border-color: rgb(var(--accent));
+  box-shadow: 0 0 0 2px rgb(var(--accent) / 0.3);
+}
+
+.onboarding-card.selected .onboarding-check {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.onboarding-check {
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 0.2s ease;
+}
+
+/* Step dot indicators */
+.onboarding-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(var(--muted) / 0.3);
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.onboarding-dot:hover {
+  background: rgb(var(--muted) / 0.5);
+}
+
+.onboarding-dot.active {
+  width: 24px;
+  border-radius: 4px;
+  background: rgb(var(--accent));
+}
+
+.onboarding-dot.completed {
+  background: rgb(var(--accent) / 0.5);
+}
+
+/* Theme preview cards */
+.theme-preview-card {
+  border: 2px solid transparent;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.theme-preview-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.theme-preview-card.selected {
+  border-color: rgb(var(--accent));
+  box-shadow: 0 0 0 2px rgb(var(--accent) / 0.3);
+}
+
+/* Feature gallery grid */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.feature-grid::-webkit-scrollbar {
+  width: 4px;
+}
+
+.feature-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.feature-grid::-webkit-scrollbar-thumb {
+  background: rgb(var(--muted) / 0.3);
+  border-radius: 2px;
+}
+

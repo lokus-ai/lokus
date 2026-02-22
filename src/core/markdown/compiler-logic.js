@@ -14,6 +14,7 @@ import katex from "katex"
 import markdownItWikiLinks from "./plugins/wikilinks.js"
 import markdownItMermaid from "./plugins/mermaid.js"
 import markdownItTaskLists from "./plugins/task-lists.js"
+import { convertCalloutBlockquotes } from "./plugins/callouts.js"
 
 export class MarkdownCompiler {
   constructor(options = {}) {
@@ -279,6 +280,9 @@ export class MarkdownCompiler {
       // markdown-it-texmath outputs: <eq><span class="katex">...<annotation>latex</annotation>...</span></eq>
       // TipTap expects: <span data-type="inlineMath" data-latex="latex">$latex$</span>
       html = this.convertMathFormat(html)
+
+      // Convert blockquotes with [!type] syntax to callout divs for TipTap
+      html = convertCalloutBlockquotes(html)
 
       // Debug: Check if HTML contains table
       if (hasTableSyntax) {

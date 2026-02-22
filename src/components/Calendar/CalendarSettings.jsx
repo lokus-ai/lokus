@@ -91,9 +91,9 @@ My email: ${userEmail}
 
 Thanks!`);
 
-      // Open Gmail compose in browser (works for everyone)
-      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=pratham@lokusmd.com&su=${subject}&body=${body}`;
-      open(gmailUrl);
+      // Open mail compose in browser
+      const mailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=pratham@lokusmd.com&su=${subject}&body=${body}`;
+      open(mailUrl);
       setAccessRequested(true);
     };
 

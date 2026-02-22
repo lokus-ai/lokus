@@ -2,7 +2,6 @@ import React, { useRef, useState } from 'react';
 import Editor from '../editor';
 import Canvas from '../views/Canvas';
 import KanbanBoard from './KanbanBoard';
-import Gmail from '../views/Gmail';
 import BasesView from '../bases/BasesView';
 import PluginDetail from '../views/PluginDetail';
 import { ProfessionalGraphView } from '../views/ProfessionalGraphView';
@@ -98,14 +97,6 @@ export default function EditorGroup({
             workspacePath={workspacePath}
             onOpenFile={onFileOpen}
           />
-        </div>
-      );
-    }
-
-    if (activeFile === '__gmail__') {
-      return (
-        <div className="h-full">
-          <Gmail workspacePath={workspacePath} />
         </div>
       );
     }

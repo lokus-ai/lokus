@@ -21,9 +21,6 @@ import {
   Minus,
   FileText,
   Link,
-  Mail,
-  Send,
-  Kanban,
   CheckSquare,
   Info,
   Lightbulb,
@@ -129,246 +126,6 @@ function openFileLinkPicker({ editor, range }) {
       editor.chain().focus().deleteRange(range).insertContent('[[Link]]').run();
     } catch { }
   }
-}
-
-function getCurrentFileName() {
-  // Get the current file name from the workspace context
-  try {
-    const activeFile = window.__LOKUS_ACTIVE_FILE__;
-    if (activeFile) {
-      // Extract filename from full path and remove extension
-      const fileName = activeFile.split('/').pop() || 'Untitled';
-      return fileName.replace(/\.[^/.]+$/, ''); // Remove extension (.md, .txt, etc.)
-    }
-    return 'Untitled';
-  } catch (error) {
-    return 'Untitled';
-  }
-}
-
-function createGmailTemplate({ editor, range }) {
-  const fileName = getCurrentFileName();
-
-  const template = `---
-To:
-Subject: ${fileName}
----
-
-<!-- Write your email body here -->
-
-`;
-
-  editor.chain().focus().deleteRange(range).insertContent(template).run();
-}
-
-// Kanban helper functions
-async function getKanbanBoards() {
-  try {
-    if (typeof window !== 'undefined' && window.__TAURI__) {
-      const { invoke } = window.__TAURI__.tauri;
-      const boards = await invoke('list_kanban_boards');
-      return boards || [];
-    }
-  } catch (error) {
-    logger.error('SlashCommand', 'Failed to get kanban boards:', error);
-  }
-  return [];
-}
-
-function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
-  getKanbanBoards().then(boards => {
-    if (boards.length === 0) {
-      // No boards, prompt to create one
-      const boardName = window.prompt('No kanban boards found. Create a new board:');
-      if (boardName && boardName.trim()) {
-        if (onInsertTask) {
-          editor.chain().focus().deleteRange(range).insertContent(`@task[${boardName.trim()}] `).run();
-        } else {
-          // Just create the board
-          if (typeof window !== 'undefined' && window.__TAURI__) {
-            const { invoke } = window.__TAURI__.tauri;
-            invoke('create_kanban_board', { name: boardName.trim() })
-              .then(() => {
-                logger.debug('SlashCommand', 'Created kanban board:', boardName.trim());
-              })
-              .catch(err => logger.error('SlashCommand', 'Failed to create board:', err));
-          }
-        }
-      }
-      return;
-    }
-
-    // Create board picker UI
-    const overlay = document.createElement('div');
-    overlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10000;
-      backdrop-filter: blur(4px);
-    `;
-
-    // Define cleanup function early so it can be used in event handlers
-    const cleanup = () => {
-      if (overlay.parentNode) {
-        overlay.parentNode.removeChild(overlay);
-      }
-    };
-
-    const picker = document.createElement('div');
-    picker.style.cssText = `
-      background: rgb(var(--panel));
-      border: 1px solid rgb(var(--border));
-      border-radius: 12px;
-      width: 500px;
-      max-height: 600px;
-      overflow: hidden;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-    `;
-
-    const header = document.createElement('div');
-    header.style.cssText = `
-      padding: 16px 20px;
-      border-bottom: 1px solid rgb(var(--border));
-      background: rgb(var(--bg));
-    `;
-    header.innerHTML = `
-      <h3 style="margin: 0; color: rgb(var(--text)); font-size: 16px; font-weight: 600;">
-        ${onInsertTask ? 'Select Board for Task' : 'Open Kanban Board'}
-      </h3>
-      <p style="margin: 4px 0 0 0; color: rgb(var(--muted)); font-size: 14px;">
-        ${onInsertTask ? 'Choose a board to link your task to' : 'Choose a board to open'}
-      </p>
-    `;
-
-    const listContainer = document.createElement('div');
-    listContainer.style.cssText = `
-      max-height: 400px;
-      overflow-y: auto;
-      padding: 8px 0;
-    `;
-
-    boards.forEach((board) => {
-      const item = document.createElement('div');
-      item.style.cssText = `
-        padding: 12px 20px;
-        cursor: pointer;
-        border-bottom: 1px solid rgba(var(--border), 0.5);
-        transition: background-color 0.15s ease;
-      `;
-
-      item.innerHTML = `
-        <div style="color: rgb(var(--text)); font-size: 14px; font-weight: 500;">
-          ${board}
-        </div>
-      `;
-
-      item.addEventListener('mouseenter', () => {
-        item.style.backgroundColor = 'rgba(var(--accent), 0.1)';
-      });
-
-      item.addEventListener('mouseleave', () => {
-        item.style.backgroundColor = 'transparent';
-      });
-
-      item.addEventListener('click', () => {
-        if (onInsertTask) {
-          editor.chain().focus().deleteRange(range).insertContent(`@task[${board}] `).run();
-        } else {
-          // Open the board file
-          window.dispatchEvent(new CustomEvent('lokus:open-file', {
-            detail: { path: `kanban/${board}.kanban` }
-          }));
-        }
-        cleanup();
-      });
-
-      listContainer.appendChild(item);
-    });
-
-    const footer = document.createElement('div');
-    footer.style.cssText = `
-      padding: 12px 20px;
-      border-top: 1px solid rgb(var(--border));
-      background: rgb(var(--bg));
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    `;
-
-    const createBtn = document.createElement('button');
-    createBtn.textContent = '+ New Board';
-    createBtn.style.cssText = `
-      background: rgb(var(--accent));
-      border: none;
-      color: white;
-      padding: 8px 16px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-    `;
-
-    createBtn.addEventListener('click', () => {
-      cleanup();
-      const boardName = window.prompt('Create new kanban board:');
-      if (boardName && boardName.trim()) {
-        if (onInsertTask) {
-          editor.chain().focus().deleteRange(range).insertContent(`@task[${boardName.trim()}] `).run();
-        }
-        if (typeof window !== 'undefined' && window.__TAURI__) {
-          const { invoke } = window.__TAURI__.tauri;
-          invoke('create_kanban_board', { name: boardName.trim() })
-            .then(() => {
-              logger.debug('SlashCommand', 'Created kanban board:', boardName.trim());
-            })
-            .catch(err => logger.error('SlashCommand', 'Failed to create board:', err));
-        }
-      }
-    });
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.style.cssText = `
-      background: transparent;
-      border: 1px solid rgb(var(--border));
-      color: rgb(var(--muted));
-      padding: 8px 16px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-    `;
-
-    cancelBtn.addEventListener('click', cleanup);
-
-    footer.appendChild(createBtn);
-    footer.appendChild(cancelBtn);
-
-    picker.appendChild(header);
-    picker.appendChild(listContainer);
-    picker.appendChild(footer);
-    overlay.appendChild(picker);
-    document.body.appendChild(overlay);
-
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) cleanup();
-    });
-
-    const handleKeydown = (e) => {
-      if (e.key === 'Escape') {
-        cleanup();
-        document.removeEventListener('keydown', handleKeydown);
-      }
-    };
-    document.addEventListener('keydown', handleKeydown);
-  }).catch(error => {
-  });
 }
 
 function createFilePicker(files, onSelect) {
@@ -630,38 +387,7 @@ function openTableSizePicker({ editor, range }) {
 
 const commandItems = [
   {
-    group: "Tasks & Kanban",
-    commands: [
-      {
-        title: "Kanban Board",
-        description: "Open or create a kanban board.",
-        icon: <Kanban size={18} />,
-        command: ({ editor, range }) => {
-          try {
-            createKanbanBoardPicker({ editor, range, onInsertTask: false });
-          } catch { }
-        },
-      },
-      {
-        title: "Linked Task",
-        description: "Create task linked to kanban board.",
-        icon: <CheckSquare size={18} />,
-        command: ({ editor, range }) => {
-          createKanbanBoardPicker({ editor, range, onInsertTask: true });
-        },
-      },
-      {
-        title: "Simple Task",
-        description: "Create standalone task (!task).",
-        icon: <ListTodo size={18} />,
-        command: ({ editor, range }) => {
-          editor.chain().focus().deleteRange(range).insertContent('!task ').run();
-        },
-      },
-    ],
-  },
-  {
-    group: "Basic Blocks",
+    group: "Writing",
     commands: [
       {
         title: "Heading 1",
@@ -669,61 +395,6 @@ const commandItems = [
         icon: <Heading1 size={18} />,
         command: ({ editor, range }) => {
           editor.chain().focus().deleteRange(range).setNode("heading", { level: 1 }).run();
-        },
-      },
-      {
-        title: "Task List",
-        description: "Track tasks with checkboxes.",
-        icon: <ListTodo size={18} />,
-        command: ({ editor, range }) => {
-          runWhenReady(editor, 'toggleTaskList', () => {
-            editor.chain().focus().deleteRange(range).toggleTaskList().run();
-          }, { timeout: 5000 });
-        },
-      },
-      {
-        title: "Table",
-        description: "Pick size, then insert.",
-        icon: <Table2 size={18} />,
-        command: ({ editor, range }) => {
-          openTableSizePicker({ editor, range });
-        },
-      },
-      {
-        title: "Image",
-        description: "Insert image from workspace or URL.",
-        icon: <ImageIcon size={18} />,
-        command: ({ editor, range }) => {
-          // Delete the slash command and insert ![[ to trigger image autocomplete
-          editor.chain()
-            .focus()
-            .deleteRange(range)
-            .insertContent('![[')
-            .run();
-        },
-      },
-      {
-        title: "Template",
-        description: "Insert a template with variables.",
-        icon: <FileText size={18} />,
-        command: ({ editor, range }) => {
-          openTemplatePicker({ editor, range });
-        },
-      },
-      {
-        title: "Link to File",
-        description: "Create a wiki link to another file.",
-        icon: <Link size={18} />,
-        command: ({ editor, range }) => {
-          openFileLinkPicker({ editor, range });
-        },
-      },
-      {
-        title: "Load Gmail",
-        description: "Create an email template with file name as subject.",
-        icon: <Mail size={18} />,
-        command: ({ editor, range }) => {
-          createGmailTemplate({ editor, range });
         },
       },
       {
@@ -759,6 +430,16 @@ const commandItems = [
         },
       },
       {
+        title: "Task List",
+        description: "Track tasks with checkboxes.",
+        icon: <ListTodo size={18} />,
+        command: ({ editor, range }) => {
+          runWhenReady(editor, 'toggleTaskList', () => {
+            editor.chain().focus().deleteRange(range).toggleTaskList().run();
+          }, { timeout: 5000 });
+        },
+      },
+      {
         title: "Quote",
         description: "Capture a quote.",
         icon: <TextQuote size={18} />,
@@ -769,8 +450,103 @@ const commandItems = [
     ],
   },
   {
+    group: "Content",
+    commands: [
+      {
+        title: "Image",
+        description: "Insert image from workspace or URL.",
+        icon: <ImageIcon size={18} />,
+        command: ({ editor, range }) => {
+          // Delete the slash command and insert ![[ to trigger image autocomplete
+          editor.chain()
+            .focus()
+            .deleteRange(range)
+            .insertContent('![[')
+            .run();
+        },
+      },
+      {
+        title: "Table",
+        description: "Pick size, then insert.",
+        icon: <Table2 size={18} />,
+        command: ({ editor, range }) => {
+          openTableSizePicker({ editor, range });
+        },
+      },
+      {
+        title: "Template",
+        description: "Insert a template with variables.",
+        icon: <FileText size={18} />,
+        command: ({ editor, range }) => {
+          openTemplatePicker({ editor, range });
+        },
+      },
+      {
+        title: "Link to File",
+        description: "Create a wiki link to another file.",
+        icon: <Link size={18} />,
+        command: ({ editor, range }) => {
+          openFileLinkPicker({ editor, range });
+        },
+      },
+      {
+        title: "Simple Task",
+        description: "Create standalone task (!task).",
+        icon: <ListTodo size={18} />,
+        command: ({ editor, range }) => {
+          editor.chain().focus().deleteRange(range).insertContent('!task ').run();
+        },
+      },
+    ],
+  },
+  {
+    group: "Code",
+    commands: [
+      {
+        title: "Code",
+        description: "Capture a code snippet.",
+        icon: <Code size={18} />,
+        command: ({ editor, range }) => {
+          editor.chain().focus().deleteRange(range).toggleCode().run();
+        },
+      },
+      {
+        title: "Code Block",
+        description: "Capture a larger code block.",
+        icon: <CodeXml size={18} />,
+        command: ({ editor, range }) => {
+          editor.chain().focus().deleteRange(range).toggleCodeBlock().run();
+        },
+      },
+    ],
+  },
+  {
     group: "Formatting",
     commands: [
+      {
+        title: "Highlight",
+        description: "Highlight text (==text==).",
+        icon: <Highlighter size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.toggleHighlight) {
+            editor.chain().focus().deleteRange(range).toggleHighlight().run();
+          } else {
+            editor.chain().focus().deleteRange(range).insertContent('<mark></mark>').run();
+          }
+        },
+      },
+      {
+        title: "Strikethrough",
+        description: "Cross out text (~~text~~).",
+        icon: <Strikethrough size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.toggleStrike) {
+            editor.chain().focus().deleteRange(range).toggleStrike().run();
+          } else {
+            editor.chain().focus().deleteRange(range).insertContent('<s></s>').run();
+          }
+        },
+      },
       {
         title: "Superscript",
         description: "Raise text (x^2).",
@@ -797,30 +573,6 @@ const commandItems = [
         },
       },
       {
-        title: "Strikethrough",
-        description: "Cross out text (~~text~~).",
-        icon: <Strikethrough size={18} />,
-        command: ({ editor, range }) => {
-          if (editor?.commands?.toggleStrike) {
-            editor.chain().focus().deleteRange(range).toggleStrike().run();
-          } else {
-            editor.chain().focus().deleteRange(range).insertContent('<s></s>').run();
-          }
-        },
-      },
-      {
-        title: "Highlight",
-        description: "Highlight text (==text==).",
-        icon: <Highlighter size={18} />,
-        command: ({ editor, range }) => {
-          if (editor?.commands?.toggleHighlight) {
-            editor.chain().focus().deleteRange(range).toggleHighlight().run();
-          } else {
-            editor.chain().focus().deleteRange(range).insertContent('<mark></mark>').run();
-          }
-        },
-      },
-      {
         title: "Horizontal Rule",
         description: "Insert a horizontal divider.",
         icon: <Minus size={18} />,
@@ -830,27 +582,6 @@ const commandItems = [
           } else {
             editor.chain().focus().deleteRange(range).insertContent('<hr />').run();
           }
-        },
-      },
-    ],
-  },
-  {
-    group: "Code",
-    commands: [
-      {
-        title: "Code",
-        description: "Capture a code snippet.",
-        icon: <Code size={18} />,
-        command: ({ editor, range }) => {
-          editor.chain().focus().deleteRange(range).toggleCode().run();
-        },
-      },
-      {
-        title: "Code Block",
-        description: "Capture a larger code block.",
-        icon: <CodeXml size={18} />,
-        command: ({ editor, range }) => {
-          editor.chain().focus().deleteRange(range).toggleCodeBlock().run();
         },
       },
     ],
@@ -879,6 +610,16 @@ const commandItems = [
         },
       },
       {
+        title: "Info Callout",
+        description: "Insert an info callout block.",
+        icon: <Info size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'info' }).run();
+          }
+        },
+      },
+      {
         title: "Warning Callout",
         description: "Insert a warning callout block.",
         icon: <AlertTriangle size={18} />,
@@ -895,16 +636,6 @@ const commandItems = [
         command: ({ editor, range }) => {
           if (editor?.commands?.setCallout) {
             editor.chain().focus().deleteRange(range).setCallout({ type: 'danger' }).run();
-          }
-        },
-      },
-      {
-        title: "Info Callout",
-        description: "Insert an info callout block.",
-        icon: <Info size={18} />,
-        command: ({ editor, range }) => {
-          if (editor?.commands?.setCallout) {
-            editor.chain().focus().deleteRange(range).setCallout({ type: 'info' }).run();
           }
         },
       },

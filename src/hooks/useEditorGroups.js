@@ -109,6 +109,35 @@ export function useEditorGroups(initialTabs = []) {
   }, []);
 
   /**
+   * Update a tab's path across all groups (used when file is moved/renamed)
+   */
+  const updateTabPath = useCallback((oldPath, newPath) => {
+    const newName = newPath.split('/').pop() || newPath;
+    setLayout(prev => {
+      const update = (node) => {
+        if (node.type === 'group') {
+          const updatedTabs = node.tabs.map(tab =>
+            tab.path === oldPath ? { ...tab, path: newPath, name: newName } : tab
+          );
+          return {
+            ...node,
+            tabs: updatedTabs,
+            activeTab: node.activeTab === oldPath ? newPath : node.activeTab,
+          };
+        }
+        if (node.type === 'container') {
+          return {
+            ...node,
+            children: node.children.map(update),
+          };
+        }
+        return node;
+      };
+      return update(prev);
+    });
+  }, []);
+
+  /**
    * Add a tab to a group
    */
   const addTab = useCallback((groupId, tab, makeActive = true) => {
@@ -343,6 +372,7 @@ export function useEditorGroups(initialTabs = []) {
     closeGroup,
     updateSizes,
     focusAdjacentGroup,
+    updateTabPath,
 
     // Queries
     findGroup: (groupId) => findGroup(layout, groupId),

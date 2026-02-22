@@ -1,0 +1,138 @@
+/* Interactive Walkthrough — Cutout Overlay */
+
+.walkthrough-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.walkthrough-overlay svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* The tooltip */
+.walkthrough-tooltip {
+  position: fixed;
+  z-index: 9999;
+  max-width: 320px;
+  background: rgb(var(--panel));
+  border: 1px solid rgb(var(--border));
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+}
+
+.walkthrough-tooltip-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: rgb(var(--text));
+  margin-bottom: 4px;
+}
+
+.walkthrough-tooltip-desc {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: rgb(var(--muted));
+}
+
+.walkthrough-tooltip-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+
+.walkthrough-tooltip-progress {
+  font-size: 0.75rem;
+  color: rgb(var(--muted) / 0.6);
+}
+
+.walkthrough-tooltip-skip {
+  font-size: 0.75rem;
+  color: rgb(var(--muted));
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: color 0.15s;
+}
+
+.walkthrough-tooltip-skip:hover {
+  color: rgb(var(--text));
+}
+
+.walkthrough-tooltip-next {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: rgb(var(--accent-fg));
+  background: rgb(var(--accent));
+  border: none;
+  cursor: pointer;
+  padding: 6px 14px;
+  border-radius: 8px;
+  transition: opacity 0.15s;
+}
+
+.walkthrough-tooltip-next:hover {
+  opacity: 0.9;
+}
+
+/* Arrow for tooltip */
+.walkthrough-arrow {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: rgb(var(--panel));
+  border: 1px solid rgb(var(--border));
+  transform: rotate(45deg);
+}
+
+.walkthrough-arrow-bottom {
+  bottom: -7px;
+  left: 24px;
+  border-top: none;
+  border-left: none;
+}
+
+.walkthrough-arrow-top {
+  top: -7px;
+  left: 24px;
+  border-bottom: none;
+  border-right: none;
+}
+
+.walkthrough-arrow-left {
+  left: -7px;
+  top: 24px;
+  border-top: none;
+  border-right: none;
+}
+
+.walkthrough-arrow-right {
+  right: -7px;
+  top: 24px;
+  border-bottom: none;
+  border-left: none;
+}
+
+/* Pulsing ring on target element */
+.walkthrough-pulse {
+  position: fixed;
+  z-index: 9997;
+  border-radius: 8px;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px rgb(var(--accent)), 0 0 0 4px rgb(var(--accent) / 0.3);
+  animation: walkthrough-ring-pulse 2s ease-in-out infinite;
+}
+
+@keyframes walkthrough-ring-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgb(var(--accent)), 0 0 0 4px rgb(var(--accent) / 0.3); }
+  50% { box-shadow: 0 0 0 2px rgb(var(--accent)), 0 0 0 8px rgb(var(--accent) / 0.1); }
+}

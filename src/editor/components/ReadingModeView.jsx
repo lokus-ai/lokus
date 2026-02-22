@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import DOMPurify from 'dompurify';
 import '../styles/editor.css';
 
 /**
@@ -16,7 +17,7 @@ const ReadingModeView = ({ content, editorSettings }) => {
   useEffect(() => {
     if (containerRef.current && content) {
       // Set the HTML content
-      containerRef.current.innerHTML = content;
+      containerRef.current.innerHTML = DOMPurify.sanitize(content);
 
       // Add click handlers for interactive elements
       const handleCalloutToggle = (e) => {

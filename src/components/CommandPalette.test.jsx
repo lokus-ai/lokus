@@ -235,12 +235,9 @@ describe("CommandPalette", () => {
       result = render(<CommandPalette {...mockProps} />);
     });
 
-    const input = result.getByTestId("command-input");
-    expect(input).toHaveAttribute(
-      "placeholder",
-      "Type command: 'send gmail', 'search emails', 'save email' or direct commands",
-    );
-  });
+    const input = result.getByTestId('command-input')
+    expect(input).toHaveAttribute('placeholder', "Type a command or search files...")
+  })
 
   it("should show file tree items", async () => {
     let result;

@@ -106,7 +106,7 @@ export const CustomCodeBlock = CodeBlockLowlight
       // Backspace at start of empty code block = convert to paragraph
       Backspace: () => {
         const { empty, $anchor } = this.editor.state.selection;
-        const isAtStart = $anchor.pos === 1;
+        const isAtStart = $anchor.parentOffset === 0;
 
         if (!empty || $anchor.parent.type.name !== this.name) {
           return false;
