@@ -31,7 +31,7 @@ const getThemeColors = () => {
   };
 };
 
-const MermaidComponent = ({ node, updateAttributes }) => {
+const MermaidComponent = ({ node, updateAttributes, editor }) => {
   const { code = "" } = node.attrs;  // Start in edit mode if there's no code or only whitespace
   const [isEditing, setIsEditing] = useState(() => {
     const hasCode = code && code.trim().length > 0; return !hasCode;
@@ -103,15 +103,7 @@ const MermaidComponent = ({ node, updateAttributes }) => {
             height: containerRef.current.offsetHeight,
             clientHeight: containerRef.current.clientHeight,
             scrollHeight: containerRef.current.scrollHeight
-          };          // If container has no dimensions, retry after layout
-          if (dimensions.width === 0 || dimensions.height === 0) {
-            setTimeout(() => {
-              if (containerRef.current) {
-                containerRef.current.innerHTML = svg;
-              }
-            }, 100);
-          }
-          const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
+          };          const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
           if (isDev) {
           }
 
@@ -169,12 +161,14 @@ const MermaidComponent = ({ node, updateAttributes }) => {
   const handleBlur = () => {
     updateAttributes({ code: localCode });
     setIsEditing(false);
+    editor?.chain().focus().run();
   };
 
   const handleKeyDown = (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault(); updateAttributes({ code: localCode });
       setIsEditing(false);
+      editor?.chain().focus().run();
     }
   };
 
