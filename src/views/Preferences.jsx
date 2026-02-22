@@ -14,6 +14,7 @@ import "../editor/styles/editor.css";
 import markdownSyntaxConfig from "../core/markdown/syntax-config.js";
 import { useFeatureFlags } from "../contexts/RemoteConfigContext";
 import AIAssistant from "./preferences/AIAssistant.jsx";
+import MeetingNotes from "./preferences/MeetingNotes.jsx";
 import { CalendarSettings, CalendarConnectionStatus } from "../components/Calendar/index.js";
 import calendarService from "../services/calendar.js";
 import { useAuth } from "../core/auth/AuthContext";
@@ -1001,6 +1002,7 @@ export default function Preferences() {
               ...(featureFlags.enable_sync ? ["Sync"] : []),
               "Connections",
               "Account",
+              "Meeting Notes",
               ...(featureFlags.enable_ai_assistant ? ["AI Assistant"] : []),
               "Updates",
             ].map((name) => (
@@ -4271,6 +4273,8 @@ export default function Preferences() {
                 </div>
               </div>
             )}
+
+            {section === "Meeting Notes" && <MeetingNotes />}
 
             {featureFlags.enable_ai_assistant && section === "AI Assistant" && (
               <AIAssistant />

@@ -38,6 +38,8 @@ mod file_locking;
 #[cfg(target_os = "macos")]
 mod macos;
 mod audio;
+mod meeting_detector;
+mod transcription;
 
 #[cfg(desktop)]
 use window_manager::{open_workspace_window, open_preferences_window, open_launcher_window};
@@ -833,7 +835,16 @@ pub fn run() {
       audio::start_audio_capture,
       audio::stop_audio_capture,
       audio::get_audio_level,
-      audio::start_system_audio_capture
+      audio::start_system_audio_capture,
+      // Meeting detector commands
+      meeting_detector::enable_meeting_detection,
+      meeting_detector::disable_meeting_detection,
+      meeting_detector::dismiss_detection,
+      meeting_detector::start_meeting_monitoring,
+      meeting_detector::stop_meeting_monitoring,
+      // Transcription commands
+      transcription::start_transcription,
+      transcription::stop_transcription
     ])
     .setup(|app| {
       #[cfg(desktop)]
