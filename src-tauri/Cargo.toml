@@ -76,6 +76,10 @@ getrandom = "0.2"
 zstd = "0.13"
 # Retry logic
 backoff = { version = "0.4", features = ["tokio"] }
+# Audio capture
+cpal = "0.15"
+ringbuf = "0.4"
+bytemuck = { version = "1", features = ["derive"] }
 
 # Desktop-only dependencies (use system_configuration which is macOS-only)
 [target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
@@ -110,6 +114,7 @@ sysinfo = "0.32"
 rdiff = "0.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+screencapturekit = "0.3"
 cocoa = "0.25"
 objc = "0.2"
 objc-foundation = "0.1"

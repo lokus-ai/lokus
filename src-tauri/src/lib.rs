@@ -37,6 +37,7 @@ mod credentials;
 mod file_locking;
 #[cfg(target_os = "macos")]
 mod macos;
+mod audio;
 
 #[cfg(desktop)]
 use window_manager::{open_workspace_window, open_preferences_window, open_launcher_window};
@@ -826,7 +827,13 @@ pub fn run() {
       #[cfg(desktop)]
       calendar::set_sync_config,
       #[cfg(desktop)]
-      calendar::get_sync_state
+      calendar::get_sync_state,
+      // Audio capture commands
+      audio::get_audio_devices,
+      audio::start_audio_capture,
+      audio::stop_audio_capture,
+      audio::get_audio_level,
+      audio::start_system_audio_capture
     ])
     .setup(|app| {
       #[cfg(desktop)]
