@@ -7,6 +7,7 @@ mod handlers;
 mod clipboard;
 mod clipboard_platform;
 mod tasks;
+mod schedule_blocks;
 mod kanban;
 mod search;
 mod plugins;
@@ -626,6 +627,13 @@ pub fn run() {
       tasks::extract_tasks_from_content,
       tasks::link_task_to_kanban,
       tasks::get_tasks_by_kanban_board,
+      schedule_blocks::create_schedule_block,
+      schedule_blocks::update_schedule_block,
+      schedule_blocks::delete_schedule_block,
+      schedule_blocks::get_all_schedule_blocks,
+      schedule_blocks::get_schedule_blocks_for_task,
+      schedule_blocks::get_schedule_blocks_in_range,
+      schedule_blocks::delete_schedule_blocks_for_task,
       kanban::list_kanban_boards,
       kanban::create_kanban_board,
       kanban::open_kanban_board,

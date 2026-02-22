@@ -1,6 +1,6 @@
 use crate::calendar::models::{
     Calendar, CalendarEvent, CalendarProvider, CalDAVAccount, CalendarError,
-    CreateEventRequest, UpdateEventRequest, EventStatus,
+    CreateEventRequest, UpdateEventRequest,
 };
 use crate::calendar::ical;
 use chrono::{DateTime, Utc};
@@ -431,6 +431,7 @@ impl CalDAVClient {
     }
 
     /// Get updated account with discovered URLs
+    #[allow(dead_code)]
     pub fn get_account(&self) -> &CalDAVAccount {
         &self.account
     }

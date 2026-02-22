@@ -13,6 +13,7 @@ pub struct SyncStatus {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[allow(dead_code)]
 pub struct GitCredentials {
     pub username: String,
     pub token: String,

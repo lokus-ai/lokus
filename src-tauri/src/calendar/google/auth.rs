@@ -285,6 +285,7 @@ impl GoogleCalendarAuth {
         Ok(account)
     }
 
+    #[allow(dead_code)]
     pub async fn revoke_token(&self, token: &str) -> Result<(), CalendarError> {
         let client = Client::new();
         let _response = client

@@ -261,7 +261,7 @@ async fn handle_calendar_callback(req: Request<Incoming>) -> Result<HyperRespons
 async fn handle_supabase_auth_callback(req: Request<Incoming>) -> Result<HyperResponse, Box<dyn std::error::Error + Send + Sync>> {
     let uri = req.uri();
     let query = uri.query().unwrap_or("");
-    let fragment = ""; // Fragment is handled client-side, but check query params for PKCE code
+    let _fragment = ""; // Fragment is handled client-side, but check query params for PKCE code
 
     // For PKCE flow, code comes in query params
     let query_params = parse_query_params(query);

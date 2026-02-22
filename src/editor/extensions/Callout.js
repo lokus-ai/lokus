@@ -1,6 +1,6 @@
 import { Node, mergeAttributes, InputRule } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
-
+import { getCalloutConfig } from "@/core/editor/callout-config";
 /**
  * Callout/Admonition Extension for TipTap
  *
@@ -79,9 +79,18 @@ export const Callout = Node.create({
 
   renderHTML({ node, HTMLAttributes }) {
     const type = node.attrs.type || 'note';
-    const title = node.attrs.title || CALLOUT_TYPES[type]?.label || 'Note';
-    const collapsed = node.attrs.collapsed || false;
-    const calloutConfig = CALLOUT_TYPES[type] || CALLOUT_TYPES.note;
+
+    const userConfig = getCalloutConfig();
+    const calloutConfig =
+      userConfig?.[type] || CALLOUT_TYPES[type] || CALLOUT_TYPES.note;
+
+    const title =
+      node.attrs.title || calloutConfig.label || 'Note';
+
+    const collapsed =
+      typeof node.attrs.collapsed === "boolean"
+        ? node.attrs.collapsed
+        : calloutConfig.collapsed ?? false;
 
     return [
       'div',
@@ -93,22 +102,11 @@ export const Callout = Node.create({
       [
         'div',
         { class: 'callout-header' },
-        [
-          'span',
-          { class: 'callout-icon' },
-          calloutConfig.icon
-        ],
-        [
-          'span',
-          { class: 'callout-title' },
-          title
-        ],
+        ['span', { class: 'callout-icon' }, calloutConfig.icon],
+        ['span', { class: 'callout-title' }, title],
         [
           'button',
-          {
-            class: 'callout-toggle',
-            'data-toggle': 'true'
-          },
+          { class: 'callout-toggle', 'data-toggle': 'true' },
           collapsed ? '▶' : '▼'
         ]
       ],

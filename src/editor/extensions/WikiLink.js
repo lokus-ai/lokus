@@ -79,7 +79,19 @@ export const WikiLink = Node.create({
       src: { default: '' },
     }
   },
-  parseHTML() { return [{ tag: 'span[data-type="wiki-link"]' }] },
+  parseHTML() {
+    return [{
+      tag: 'span[data-type="wiki-link"]',
+      getAttrs: (el) => ({
+        href: el.getAttribute('href') || '',
+        target: el.getAttribute('target') || el.textContent || '',
+        alt: el.textContent || '',
+        embed: false,
+        src: '',
+        id: el.getAttribute('data-id') || '',
+      }),
+    }];
+  },
   renderHTML({ HTMLAttributes }) {
     const { embed, alt, target, href, src } = HTMLAttributes
     if (embed && src) {

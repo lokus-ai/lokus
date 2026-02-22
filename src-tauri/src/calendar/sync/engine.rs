@@ -30,6 +30,7 @@ impl SyncEngine {
         Ok(Self { config })
     }
 
+    #[allow(dead_code)]
     pub fn with_config(config: SyncConfig) -> Self {
         Self { config }
     }
@@ -504,6 +505,7 @@ impl SyncEngine {
     }
 
     /// Performs an incremental sync (only changes since last sync)
+    #[allow(dead_code)]
     pub async fn incremental_sync(&self) -> Result<FullSyncResult, CalendarError> {
         // For now, just do a full sync
         // TODO: Implement proper incremental sync using sync tokens

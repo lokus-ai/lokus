@@ -46,6 +46,7 @@ pub struct EmailAttachment {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct EmailThread {
     pub id: String,
     pub subject: String,

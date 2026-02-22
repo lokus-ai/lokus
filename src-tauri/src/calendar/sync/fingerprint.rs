@@ -86,6 +86,7 @@ fn collapse_whitespace(s: &str) -> String {
 }
 
 /// Computes fingerprints for multiple events at once.
+#[allow(dead_code)]
 pub fn compute_fingerprints(events: &[CalendarEvent]) -> Vec<(String, &CalendarEvent)> {
     events.iter()
         .map(|event| (compute_fingerprint(event), event))
