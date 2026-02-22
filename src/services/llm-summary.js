@@ -23,7 +23,7 @@
  */
 
 import { createLLMClient, loadProviderConfig } from './ai-provider.js';
-import { getTemplate }                          from './summary-templates.js';
+import { buildMeetingPrompt }                   from './summary-templates.js';
 import { logger }                               from '../utils/logger.js';
 
 // ---------------------------------------------------------------------------
@@ -31,21 +31,18 @@ import { logger }                               from '../utils/logger.js';
 // ---------------------------------------------------------------------------
 
 /**
- * Build the fully-rendered prompt for a meeting, combining template output
- * with the provided meeting context.
+ * Build the { system, user } prompt pair for the LLM.
  *
  * @param {Object} ctx
- * @param {string}        ctx.transcript    - Formatted transcript text.
- * @param {string}        ctx.sparseNotes   - User's notes taken during the meeting.
- * @param {string}        [ctx.meetingTitle]
- * @param {string}        [ctx.participants]
- * @param {number}        [ctx.duration]
- * @param {string}        [ctx.templateId='general'] - Template identifier.
- * @returns {string} Complete prompt string.
+ * @param {string}  ctx.transcript
+ * @param {string}  ctx.sparseNotes
+ * @param {string}  [ctx.meetingTitle]
+ * @param {number}  [ctx.duration]
+ * @param {string}  [ctx.typeHint='auto-detect']
+ * @returns {{ system: string, user: string }}
  */
-function _buildPrompt({ transcript, sparseNotes, meetingTitle, participants, duration, templateId = 'general' }) {
-  const templateFn = getTemplate(templateId);
-  return templateFn({ transcript, sparseNotes, meetingTitle, participants, duration });
+function _buildPrompt({ transcript, sparseNotes, meetingTitle, duration, typeHint = 'auto-detect' }) {
+  return buildMeetingPrompt({ transcript, sparseNotes, meetingTitle, duration, typeHint });
 }
 
 /**
@@ -78,8 +75,8 @@ function _validateInputs(transcript, sparseNotes) {
  * @param {string}        [options.meetingTitle]   - Optional meeting title.
  * @param {string}        [options.participants]   - Optional participant names / labels.
  * @param {number}        [options.duration]       - Optional meeting length in minutes.
- * @param {string}        [options.templateId='general'] - Template id: 'general' | 'sales' |
- *                                                         'oneOnOne' | 'standup'.
+ * @param {string}        [options.typeHint='auto-detect'] - Hint for the meeting type used to
+ *                                                          select the prompt style.
  * @returns {Promise<{ summary: string, tokensUsed: { prompt: number, completion: number } }>}
  *
  * @throws {Error} When the AI provider configuration cannot be loaded or the
@@ -92,7 +89,7 @@ function _validateInputs(transcript, sparseNotes) {
  *   meetingTitle: 'Q2 Planning',
  *   participants: 'Alice, Bob, Carol',
  *   duration:     30,
- *   templateId:   'general',
+ *   typeHint:     'auto-detect',
  * });
  * console.log(result.summary);
  */
@@ -102,11 +99,11 @@ export async function generateMeetingSummary({
   meetingTitle,
   participants,
   duration,
-  templateId    = 'general',
+  typeHint      = 'auto-detect',
 } = {}) {
   _validateInputs(transcript, sparseNotes);
 
-  logger.info('LLMSummary', `generateMeetingSummary — template: "${templateId}"`);
+  logger.info('LLMSummary', `generateMeetingSummary — typeHint: "${typeHint}"`);
 
   let config;
   try {
@@ -116,7 +113,7 @@ export async function generateMeetingSummary({
     throw new Error(`generateMeetingSummary: could not load AI provider config — ${err.message}`);
   }
 
-  const prompt = _buildPrompt({ transcript, sparseNotes, meetingTitle, participants, duration, templateId });
+  const prompt = _buildPrompt({ transcript, sparseNotes, meetingTitle, duration, typeHint });
 
   const client = createLLMClient(config);
 
@@ -163,8 +160,8 @@ export async function generateMeetingSummary({
  * @param {string}        [options.meetingTitle]   - Optional meeting title.
  * @param {string}        [options.participants]   - Optional participant names / labels.
  * @param {number}        [options.duration]       - Optional meeting length in minutes.
- * @param {string}        [options.templateId='general'] - Template id: 'general' | 'sales' |
- *                                                         'oneOnOne' | 'standup'.
+ * @param {string}        [options.typeHint='auto-detect'] - Hint for the meeting type used to
+ *                                                          select the prompt style.
  * @param {function(string): void} options.onChunk - Called for each incremental text chunk.
  *                                                   Must be a function.
  * @returns {Promise<{ summary: string }>} Resolves when the stream is complete.
@@ -180,7 +177,7 @@ export async function generateMeetingSummary({
  *   meetingTitle: 'Q2 Planning',
  *   participants: 'Alice, Bob',
  *   duration:     30,
- *   templateId:   'general',
+ *   typeHint:     'auto-detect',
  *   onChunk:      (chunk) => { accumulated += chunk; },
  * });
  * console.log(result.summary); // same as accumulated
@@ -191,7 +188,7 @@ export async function streamMeetingSummary({
   meetingTitle,
   participants,
   duration,
-  templateId    = 'general',
+  typeHint      = 'auto-detect',
   onChunk,
 } = {}) {
   if (typeof onChunk !== 'function') {
@@ -200,7 +197,7 @@ export async function streamMeetingSummary({
 
   _validateInputs(transcript, sparseNotes);
 
-  logger.info('LLMSummary', `streamMeetingSummary — template: "${templateId}"`);
+  logger.info('LLMSummary', `streamMeetingSummary — typeHint: "${typeHint}"`);
 
   let config;
   try {
@@ -210,7 +207,7 @@ export async function streamMeetingSummary({
     throw new Error(`streamMeetingSummary: could not load AI provider config — ${err.message}`);
   }
 
-  const prompt = _buildPrompt({ transcript, sparseNotes, meetingTitle, participants, duration, templateId });
+  const prompt = _buildPrompt({ transcript, sparseNotes, meetingTitle, duration, typeHint });
 
   const client = createLLMClient(config);
 
@@ -254,18 +251,19 @@ export async function streamMeetingSummary({
  * @param {string}        [options.meetingTitle]   - Optional meeting title.
  * @param {string}        [options.participants]   - Optional participant names / labels.
  * @param {number}        [options.duration]       - Optional meeting length in minutes.
- * @param {string}        [options.templateId='general'] - The new template to apply.
+ * @param {string}        [options.typeHint='auto-detect'] - Hint for the meeting type used to
+ *                                                          select the prompt style.
  * @returns {Promise<{ summary: string, tokensUsed: { prompt: number, completion: number } }>}
  *
  * @throws {Error} Propagates any errors from {@link generateMeetingSummary}.
  *
  * @example
- * // Reformat an existing meeting with the standup template
+ * // Reformat an existing meeting with a standup hint
  * const result = await regenerateSummary({
  *   transcript:   existingTranscript,
  *   sparseNotes:  existingNotes,
  *   meetingTitle: 'Morning Sync',
- *   templateId:   'standup',
+ *   typeHint:     'standup',
  * });
  */
 export async function regenerateSummary({
@@ -274,9 +272,9 @@ export async function regenerateSummary({
   meetingTitle,
   participants,
   duration,
-  templateId    = 'general',
+  typeHint      = 'auto-detect',
 } = {}) {
-  logger.info('LLMSummary', `regenerateSummary — switching to template: "${templateId}"`);
+  logger.info('LLMSummary', `regenerateSummary — switching to typeHint: "${typeHint}"`);
 
   return generateMeetingSummary({
     transcript,
@@ -284,6 +282,6 @@ export async function regenerateSummary({
     meetingTitle,
     participants,
     duration,
-    templateId,
+    typeHint,
   });
 }
