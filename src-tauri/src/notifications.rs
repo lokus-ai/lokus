@@ -157,6 +157,20 @@ mod macos_impl {
     }
 
     // -----------------------------------------------------------------------
+    // Bundle check — UNUserNotificationCenter crashes if no bundle ID
+    // -----------------------------------------------------------------------
+
+    /// Returns `true` if the process has a valid bundle identifier.
+    /// `UNUserNotificationCenter::currentNotificationCenter()` throws an
+    /// `NSException` (abort) when called from an unbundled process (e.g.
+    /// `cargo run` during development).
+    fn has_bundle_id() -> bool {
+        use objc2_foundation::NSBundle;
+        let bundle = NSBundle::mainBundle();
+        bundle.bundleIdentifier().is_some()
+    }
+
+    // -----------------------------------------------------------------------
     // Public API
     // -----------------------------------------------------------------------
 
@@ -165,6 +179,10 @@ mod macos_impl {
     /// This is idempotent — the OS will only show the permission dialog once.
     /// Subsequent calls are silent no-ops from the user's perspective.
     pub fn request_notification_permission() {
+        if !has_bundle_id() {
+            tracing::warn!("Skipping notification permission request — no bundle identifier (dev mode)");
+            return;
+        }
         let center = UNUserNotificationCenter::currentNotificationCenter();
 
         let options = objc2_user_notifications::UNAuthorizationOptions::Alert
@@ -190,6 +208,10 @@ mod macos_impl {
     ///
     /// Must be called once on startup, before any notifications are sent.
     pub fn register_notification_categories() {
+        if !has_bundle_id() {
+            tracing::warn!("Skipping notification category registration — no bundle identifier (dev mode)");
+            return;
+        }
         let start_id = NSString::from_str("start_recording");
         let start_title = NSString::from_str("Start Recording");
         let start_action = UNNotificationAction::actionWithIdentifier_title_options(
@@ -242,6 +264,11 @@ mod macos_impl {
         // Store the app handle (ignore if already set — idempotent).
         let _ = APP_HANDLE.set(app_handle);
 
+        if !has_bundle_id() {
+            tracing::warn!("Skipping notification delegate install — no bundle identifier (dev mode)");
+            return;
+        }
+
         // Create and permanently retain the delegate.
         let delegate = DELEGATE.get_or_init(NotificationDelegate::new);
 
@@ -267,6 +294,10 @@ mod macos_impl {
     /// A new UUID is used for each call so notifications do not overwrite
     /// each other.
     pub fn send_meeting_notification(title: &str, body: &str) {
+        if !has_bundle_id() {
+            tracing::warn!("Skipping notification — no bundle identifier (dev mode)");
+            return;
+        }
         let content = UNMutableNotificationContent::new();
         content.setTitle(&NSString::from_str(title));
         content.setBody(&NSString::from_str(body));

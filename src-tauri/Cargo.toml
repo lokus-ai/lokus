@@ -128,7 +128,7 @@ coreaudio-sys = "0.2"
 # Native macOS APIs (notifications, app detection)
 objc2 = "0.6"
 block2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSError", "NSUUID", "NSSet"] }
+objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSError", "NSUUID", "NSSet", "NSBundle"] }
 objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
 objc2-user-notifications = { version = "0.3", features = [
     "UNUserNotificationCenter",
