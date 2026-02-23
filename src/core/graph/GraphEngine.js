@@ -1291,7 +1291,7 @@ export class GraphEngine {
     }
 
     // No cache hit, start new layout
-    if (this.webWorker && this.graph.order > 500) {
+    if (this.webWorker && this.graph.order > 50) {
       // Use worker for large graphs
       this.startWorkerLayout(config);
     } else {
