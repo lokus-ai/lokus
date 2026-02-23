@@ -105,7 +105,8 @@ export default function MobileWorkspace({ initialPath }) {
 
     try {
       const content = await invoke('read_file_content', {
-        filePath: file.path
+        workspacePath: initialPath,
+        path: file.path
       });
       setFileContent(content || '');
     } catch (e) {
@@ -120,7 +121,8 @@ export default function MobileWorkspace({ initialPath }) {
     try {
       const content = editorRef.current?.getContent?.() || fileContent;
       await invoke('write_file_content', {
-        filePath: activeFile.path,
+        workspacePath: initialPath,
+        path: activeFile.path,
         content
       });
       toast.success('Saved');

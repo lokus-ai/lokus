@@ -28,6 +28,17 @@ export const LazyGraph = lazy(() =>
 export const LazyCanvas = lazy(() => import('../views/Canvas.jsx'));
 export const LazyKanban = lazy(() => import('../components/KanbanBoard.jsx'));
 export const LazyPreferences = lazy(() => import('../views/Preferences.jsx'));
+export const LazyPDFViewer = lazy(() => import('./PDFViewer/PDFViewerTab.jsx'));
+export const LazyPluginSettings = lazy(() => import('../views/PluginSettings.jsx'));
+export const LazyPluginDetail = lazy(() => import('../views/PluginDetail.jsx'));
+export const LazyMathFormula = lazy(() => import('./MathFormulaModal.jsx'));
+export const LazyVersionHistory = lazy(() => import('./VersionHistoryPanel.jsx'));
+export const LazyCalendarView = lazy(() => import('./Calendar/CalendarView.jsx'));
+export const LazyTerminalPanel = lazy(() => import('./TerminalPanel/TerminalPanel.jsx'));
+export const LazyMeetingPanel = lazy(() => import('./meeting/MeetingPanel.jsx'));
+export const LazyImageViewer = lazy(() => import('./ImageViewer/ImageViewerTab.jsx').then(m => ({ default: m.ImageViewerTab })));
+export const LazyOnboarding = lazy(() => import('./onboarding/OnboardingWizard.jsx').then(m => ({ default: m.OnboardingWizard })));
+export const LazyAboutDialog = lazy(() => import('./AboutDialog.jsx'));
 
 /**
  * Simple debounced input that actually works
@@ -293,6 +304,17 @@ export default {
   LazyCanvas,
   LazyKanban,
   LazyPreferences,
+  LazyPDFViewer,
+  LazyPluginSettings,
+  LazyPluginDetail,
+  LazyMathFormula,
+  LazyVersionHistory,
+  LazyCalendarView,
+  LazyTerminalPanel,
+  LazyMeetingPanel,
+  LazyImageViewer,
+  LazyOnboarding,
+  LazyAboutDialog,
   DebouncedInput,
   VirtualScroll,
   LazyLoad,

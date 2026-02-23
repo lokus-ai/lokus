@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback, forwardRef, useImperativeHandle } from "react";
+import * as Sentry from "@sentry/react";
+import { recoverContent } from "../lib/sanitizeHTML.js";
 import { useEditor, EditorContent } from "@tiptap/react";
 import * as StarterKitExt from "@tiptap/starter-kit";
 import * as PlaceholderExt from "@tiptap/extension-placeholder";
@@ -830,13 +832,40 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     // Update when new content arrives
     if (!isLoading && content !== editor.getHTML()) {
       isSettingRef.current = true;
-      // Content is already processed in Workspace.jsx, just set it directly
-      // This prevents double markdown-it processing which corrupts custom HTML tags
-      editor.commands.setContent(content, {
-        parseOptions: {
-          preserveWhitespace: 'full',
+
+      try {
+        // Normal path — works for all valid content
+        editor.commands.setContent(content, {
+          parseOptions: { preserveWhitespace: 'full' },
+        });
+      } catch (err) {
+        isSettingRef.current = false;
+        console.warn('[Editor] setContent failed, recovering per-block:', err.message);
+
+        // Per-block recovery: split HTML into blocks, test each one,
+        // render bad blocks as <pre><code> so only they degrade — not the whole file
+        try {
+          const recovered = recoverContent(content, editor);
+          editor.commands.setContent(recovered, {
+            parseOptions: { preserveWhitespace: 'full' },
+          });
+        } catch (err2) {
+          // Even recovery failed — last resort: empty doc
+          console.error('[Editor] Per-block recovery also failed:', err2.message);
+          try { editor.commands.setContent('<p></p>'); } catch {}
+
+          // Only now emit source mode event as absolute last resort
+          window.dispatchEvent(
+            new CustomEvent('lokus:editor-content-error', {
+              detail: { filePath: globalThis.__LOKUS_ACTIVE_FILE__, error: err?.message || String(err) },
+            })
+          );
         }
-      });
+
+        try {
+          Sentry.captureException(err, { extra: { context: 'setContent-per-block-recovery' } });
+        } catch {}
+      }
     }
   }, [content, editor, isLoading]);
 

@@ -40,7 +40,9 @@ fn save_pkce_to_file(pkce: &PKCEData) -> Result<(), String> {
         "code_challenge": pkce.code_challenge,
         "state": pkce.state
     });
-    std::fs::write(&path, serde_json::to_string(&json).unwrap()).map_err(|e| e.to_string())
+    let json_str = serde_json::to_string(&json)
+        .map_err(|e| format!("Failed to serialize calendar data: {}", e))?;
+    std::fs::write(&path, json_str).map_err(|e| e.to_string())
 }
 
 fn load_pkce_from_file() -> Option<PKCEData> {
@@ -85,7 +87,8 @@ pub async fn google_calendar_auth_start(
     // Store PKCE data for callback verification (both in memory and file for persistence)
     save_pkce_to_file(&pkce_data).map_err(|e| format!("Failed to save PKCE: {}", e))?;
     {
-        let mut calendar_state_guard = calendar_state.lock().unwrap();
+        let mut calendar_state_guard = calendar_state.lock()
+            .map_err(|e| format!("Calendar state lock failed: {}", e))?;
         calendar_state_guard.pkce_data = Some(pkce_data);
     }
 
@@ -101,7 +104,8 @@ pub async fn google_calendar_auth_complete(
     app_handle: AppHandle,
 ) -> Result<CalendarAccount, String> {
     let pkce_data = {
-        let calendar_state_guard = calendar_state.lock().unwrap();
+        let calendar_state_guard = calendar_state.lock()
+            .map_err(|e| format!("Calendar state lock failed: {}", e))?;
         calendar_state_guard.pkce_data.clone()
     };
 
@@ -129,7 +133,8 @@ pub async fn google_calendar_auth_complete(
     // Clear PKCE data (both memory and file)
     delete_pkce_file();
     {
-        let mut calendar_state_guard = calendar_state.lock().unwrap();
+        let mut calendar_state_guard = calendar_state.lock()
+            .map_err(|e| format!("Calendar state lock failed: {}", e))?;
         calendar_state_guard.pkce_data = None;
     }
 
@@ -150,7 +155,8 @@ pub async fn google_calendar_check_auth_callback(
 ) -> Result<Option<CalendarAccount>, String> {
     // Check if there's a pending auth (try memory first, then file)
     let pkce_data = {
-        let calendar_state_guard = calendar_state.lock().unwrap();
+        let calendar_state_guard = calendar_state.lock()
+            .map_err(|e| format!("Calendar state lock failed: {}", e))?;
         calendar_state_guard.pkce_data.clone()
     }.or_else(|| load_pkce_from_file());
 
@@ -184,7 +190,7 @@ pub async fn google_calendar_check_auth_callback(
     // Delete callback file
     let _ = std::fs::remove_file(&callback_file);
 
-    let pkce_data = pkce_data.unwrap();
+    let pkce_data = pkce_data.ok_or_else(|| "Missing PKCE data for OAuth exchange".to_string())?;
 
     // Verify state parameter
     if state != pkce_data.state {
@@ -207,7 +213,8 @@ pub async fn google_calendar_check_auth_callback(
     // Clear PKCE data (both memory and file)
     delete_pkce_file();
     {
-        let mut calendar_state_guard = calendar_state.lock().unwrap();
+        let mut calendar_state_guard = calendar_state.lock()
+            .map_err(|e| format!("Calendar state lock failed: {}", e))?;
         calendar_state_guard.pkce_data = None;
     }
 

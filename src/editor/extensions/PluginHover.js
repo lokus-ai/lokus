@@ -7,6 +7,7 @@ import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { editorAPI } from '../../plugins/api/EditorAPI.js';
+import { safeSetInnerHTML } from '../../core/security/sanitizer';
 
 const PLUGIN_HOVER_KEY = new PluginKey('pluginHover');
 
@@ -188,7 +189,7 @@ function showHoverTooltip(view, event, hoverResult, pos) {
         p.appendChild(code);
       } else {
         // Markdown or plain text
-        p.innerHTML = content.value.replace(/\n/g, '<br>');
+        safeSetInnerHTML(p, content.value.replace(/\n/g, '<br>'));
       }
       p.style.margin = '0 0 8px 0';
       contentDiv.appendChild(p);

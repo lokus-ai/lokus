@@ -242,7 +242,9 @@ pub fn rename_file(path: String, new_name: String) -> Result<String, String> {
 
     // Check if destination already exists
     if new_path.exists() {
-        return Err(format!("A file or folder named '{}' already exists", new_path.file_name().unwrap().to_string_lossy()));
+        let file_name = new_path.file_name()
+            .ok_or_else(|| "Invalid file path: no filename".to_string())?;
+        return Err(format!("A file or folder named '{}' already exists", file_name.to_string_lossy()));
     }
 
     fs::rename(&path, &new_path).map_err(|e| {

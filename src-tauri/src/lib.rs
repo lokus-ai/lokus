@@ -34,7 +34,7 @@ mod logging;
 mod sync;
 #[cfg(desktop)]
 mod credentials;
-mod file_locking;
+pub(crate) mod file_locking;
 #[cfg(target_os = "macos")]
 mod macos;
 mod audio;
@@ -100,11 +100,14 @@ fn save_last_workspace(app: tauri::AppHandle, path: String) -> Result<(), String
 }
 
 #[tauri::command]
-fn clear_last_workspace(app: tauri::AppHandle) {
-    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
+fn clear_last_workspace(app: tauri::AppHandle) -> Result<(), String> {
+    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat"))
+        .build()
+        .map_err(|e| e.to_string())?;
     let _ = store.reload();
     let _ = store.delete("last_workspace_path".to_string());
     let _ = store.save();
+    Ok(())
 }
 
 /// Internal helper to validate a workspace path
@@ -266,7 +269,10 @@ fn restore_workspace_access(_app: &tauri::AppHandle) -> Option<String> {
 
 #[tauri::command]
 fn get_validated_workspace_path(app: tauri::AppHandle) -> Option<String> {
-    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
+    let store = match StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build() {
+        Ok(s) => s,
+        Err(_) => return None,
+    };
     let _ = store.reload();
 
     if let Some(path) = store.get("last_workspace_path") {
@@ -284,8 +290,10 @@ fn get_validated_workspace_path(app: tauri::AppHandle) -> Option<String> {
 }
 
 #[tauri::command]
-fn clear_all_workspace_data(app: tauri::AppHandle) {
-    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
+fn clear_all_workspace_data(app: tauri::AppHandle) -> Result<(), String> {
+    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat"))
+        .build()
+        .map_err(|e| e.to_string())?;
     let _ = store.reload();
 
     // Clear all workspace-related keys
@@ -300,6 +308,7 @@ fn clear_all_workspace_data(app: tauri::AppHandle) {
     }
 
     let _ = store.save();
+    Ok(())
 }
 
 #[tauri::command]
@@ -310,13 +319,15 @@ fn is_development_mode() -> bool {
 
 #[tauri::command]
 fn force_launcher_mode(app: tauri::AppHandle) -> bool {
-    clear_all_workspace_data(app);
+    let _ = clear_all_workspace_data(app);
     true
 }
 
 #[tauri::command]
-fn save_session_state(app: tauri::AppHandle, workspace_path: String, open_tabs: Vec<String>, expanded_folders: Vec<String>, recent_files: Vec<String>) {
-    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
+fn save_session_state(app: tauri::AppHandle, workspace_path: String, open_tabs: Vec<String>, expanded_folders: Vec<String>, recent_files: Vec<String>) -> Result<(), String> {
+    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat"))
+        .build()
+        .map_err(|e| e.to_string())?;
     let _ = store.reload();
     let session = SessionState { open_tabs, expanded_folders, recent_files };
 
@@ -327,13 +338,17 @@ fn save_session_state(app: tauri::AppHandle, workspace_path: String, open_tabs: 
     workspace_path.hash(&mut hasher);
     let workspace_key = format!("session_state_{}", hasher.finish());
 
-    let _ = store.set(workspace_key, serde_json::to_value(session).unwrap());
+    let _ = store.set(workspace_key, serde_json::to_value(session).map_err(|e| e.to_string())?);
     let _ = store.save();
+    Ok(())
 }
 
 #[tauri::command]
 fn load_session_state(app: tauri::AppHandle, workspace_path: String) -> Option<SessionState> {
-    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
+    let store = match StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build() {
+        Ok(s) => s,
+        Err(_) => return None,
+    };
     let _ = store.reload();
 
     // Create workspace-specific key by hashing the path
@@ -354,7 +369,10 @@ struct WorkspaceItem {
 
 #[tauri::command]
 fn get_all_workspaces(app: tauri::AppHandle) -> Vec<WorkspaceItem> {
-    let store = StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build().unwrap();
+    let store = match StoreBuilder::new(&app, PathBuf::from(".settings.dat")).build() {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
     let _ = store.reload();
 
     let mut workspaces = Vec::new();
@@ -1275,7 +1293,7 @@ pub fn run() {
 
         // In development mode, always clear workspace data and show launcher
         if cfg!(debug_assertions) {
-          clear_all_workspace_data(app.handle().clone());
+          let _ = clear_all_workspace_data(app.handle().clone());
           if let Some(main_window) = app.get_webview_window("main") {
             let _ = main_window.show();
           }

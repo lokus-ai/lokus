@@ -168,6 +168,7 @@ export default function MathFormulaModal({
               <div
                 ref={previewRef}
                 className={`flex ${mode === 'inline' ? 'items-center' : 'items-start justify-center'} text-app-text overflow-x-auto`}
+                // eslint-disable-next-line react/no-danger -- output from trusted KaTeX renderer
                 dangerouslySetInnerHTML={{ __html: preview }}
               />
             ) : (

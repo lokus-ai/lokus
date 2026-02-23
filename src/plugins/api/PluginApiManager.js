@@ -107,47 +107,47 @@ export class PluginApiManager {
     this.registerApi('fs', {
       readFile: async (path) => {
         try {
-          return await invoke('read_file_content', { path })
+          return await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path })
         } catch (error) {
           throw new Error(`Failed to read file: ${error}`)
         }
       },
-      
+
       writeFile: async (path, content) => {
         try {
-          return await invoke('write_file_content', { path, content })
+          return await invoke('write_file_content', { workspacePath: window.__WORKSPACE_PATH__, path, content })
         } catch (error) {
           throw new Error(`Failed to write file: ${error}`)
         }
       },
-      
+
       createFile: async (path) => {
         try {
-          return await invoke('create_file_in_workspace', { path })
+          return await invoke('create_file_in_workspace', { workspacePath: window.__WORKSPACE_PATH__, name: path })
         } catch (error) {
           throw new Error(`Failed to create file: ${error}`)
         }
       },
-      
+
       createFolder: async (path) => {
         try {
-          return await invoke('create_folder_in_workspace', { path })
+          return await invoke('create_folder_in_workspace', { workspacePath: window.__WORKSPACE_PATH__, name: path })
         } catch (error) {
           throw new Error(`Failed to create folder: ${error}`)
         }
       },
-      
+
       deleteFile: async (path) => {
         try {
-          return await invoke('delete_file', { path })
+          return await invoke('delete_file', { workspacePath: window.__WORKSPACE_PATH__, path })
         } catch (error) {
           throw new Error(`Failed to delete file: ${error}`)
         }
       },
-      
+
       renameFile: async (oldPath, newPath) => {
         try {
-          return await invoke('rename_file', { old_path: oldPath, new_path: newPath })
+          return await invoke('rename_file', { workspacePath: window.__WORKSPACE_PATH__, path: oldPath, newName: newPath })
         } catch (error) {
           throw new Error(`Failed to rename file: ${error}`)
         }

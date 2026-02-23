@@ -4,8 +4,20 @@
  */
 
 import { readFile, writeFile, readdir, stat, mkdir } from "fs/promises";
-import { join, dirname, basename, extname } from "path";
+import { join, dirname, basename, extname, resolve, sep } from "path";
 import { getWorkspaceContext, formatWorkspaceContext } from "./workspace-context.js";
+
+export function validateNotePath(workspace, userPath) {
+  const resolvedWorkspace = resolve(workspace);
+  const resolvedPath = resolve(workspace, userPath);
+  if (
+    resolvedPath !== resolvedWorkspace &&
+    !resolvedPath.startsWith(resolvedWorkspace + sep)
+  ) {
+    throw new Error(`Path escapes workspace: ${userPath}`);
+  }
+  return resolvedPath;
+}
 
 export const notesTools = [
   {
@@ -303,7 +315,7 @@ async function findNotesRecursive(dir, baseDir = dir) {
 }
 
 async function readNote(workspace, path) {
-  const notePath = path.startsWith('/') ? path : join(workspace, path);
+  const notePath = validateNotePath(workspace, path);
   const content = await readFile(notePath, 'utf-8');
 
   return {
@@ -315,7 +327,7 @@ async function readNote(workspace, path) {
 }
 
 async function createNote(workspace, { path, content, frontmatter }) {
-  const notePath = join(workspace, path);
+  const notePath = validateNotePath(workspace, path);
   await mkdir(dirname(notePath), { recursive: true });
 
   let finalContent = content;
@@ -337,7 +349,7 @@ async function createNote(workspace, { path, content, frontmatter }) {
 }
 
 async function updateNote(workspace, { path, content, preserveFrontmatter }) {
-  const notePath = join(workspace, path);
+  const notePath = validateNotePath(workspace, path);
 
   if (preserveFrontmatter) {
     const existing = await readFile(notePath, 'utf-8');
@@ -358,7 +370,7 @@ async function updateNote(workspace, { path, content, preserveFrontmatter }) {
 }
 
 async function deleteNote(workspace, path) {
-  const notePath = join(workspace, path);
+  const notePath = validateNotePath(workspace, path);
   const { unlink } = await import('fs/promises');
   await unlink(notePath);
 
@@ -422,7 +434,7 @@ async function searchNotes(workspace, { query, searchIn = 'all', regex = false }
 }
 
 async function getNoteLinks(workspace, path) {
-  const notePath = join(workspace, path);
+  const notePath = validateNotePath(workspace, path);
   const content = await readFile(notePath, 'utf-8');
 
   // Extract wiki links [[...]]
@@ -466,7 +478,7 @@ async function getNoteBacklinks(workspace, noteName) {
 }
 
 async function extractNoteMetadata(workspace, path) {
-  const notePath = join(workspace, path);
+  const notePath = validateNotePath(workspace, path);
   const content = await readFile(notePath, 'utf-8');
 
   // Extract frontmatter
@@ -508,8 +520,8 @@ async function extractNoteMetadata(workspace, path) {
 }
 
 async function renameNote(workspace, { oldPath, newPath, updateLinks = true }) {
-  const oldNotePath = join(workspace, oldPath);
-  const newNotePath = join(workspace, newPath);
+  const oldNotePath = validateNotePath(workspace, oldPath);
+  const newNotePath = validateNotePath(workspace, newPath);
 
   // Create directory if needed
   await mkdir(dirname(newNotePath), { recursive: true });

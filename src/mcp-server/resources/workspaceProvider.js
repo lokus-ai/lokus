@@ -332,7 +332,7 @@ export class WorkspaceProvider {
    */
   async getFileContent(filePath) {
     try {
-      const content = await invoke('read_file_content', { path: filePath });
+      const content = await invoke('read_file_content', { workspacePath: this.workspacePath, path: filePath });
       const fileInfo = {
         path: filePath,
         name: filePath.split('/').pop(),
