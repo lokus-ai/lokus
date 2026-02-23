@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, Suspense } from "react";
 import { useRemoteLinks, useUIVisibility, useLayoutDefaults, useFeatureFlags } from "../contexts/RemoteConfigContext";
 import ServiceStatus from "../components/ServiceStatus";
 import { listen } from "@tauri-apps/api/event";
@@ -10,11 +10,17 @@ import { DraggableTab } from "./DraggableTab";
 import { Menu, FilePlus2, FolderPlus, Search, LayoutGrid, FolderMinus, Puzzle, FolderOpen, FilePlus, Layers, Package, Network, /* Mail, */ Database, Trello, FileText, FolderTree, Grid2X2, PanelRightOpen, PanelRightClose, Plus, Calendar, CalendarDays, FoldVertical, SquareSplitHorizontal, FilePlus as FilePlusCorner, SquareKanban, RefreshCw, Terminal, Trash2, X, Copy, Scissors, Check } from "lucide-react";
 import { ColoredFileIcon } from "../components/FileIcon.jsx";
 import LokusLogo from "../components/LokusLogo.jsx";
-import { ProfessionalGraphView } from "./ProfessionalGraphView.jsx";
+import {
+  Loading,
+  LazyGraph, LazyCanvas, LazyPDFViewer,
+  LazyPluginSettings, LazyPluginDetail,
+  LazyVersionHistory, LazyCalendarView,
+  LazyTerminalPanel, LazyMeetingPanel,
+  LazyImageViewer, LazyOnboarding, LazyAboutDialog
+} from '../components/OptimizedWrapper';
 import Editor from "../editor";
 import ResponsiveStatusBar from "../components/StatusBar/ResponsiveStatusBar.jsx";
 import ConnectionStatus from "../components/ConnectionStatus.jsx";
-import Canvas from "./Canvas.jsx";
 import KanbanBoard from "../components/KanbanBoard.jsx";
 import { GraphDataProcessor } from "../core/graph/GraphDataProcessor.js";
 import { GraphData } from "../core/graph/GraphData.js";
@@ -40,8 +46,6 @@ import ShortcutHelpModal from "../components/ShortcutHelpModal.jsx";
 import KanbanList from "../components/KanbanList.jsx";
 import { WorkspaceManager } from "../core/workspace/manager.js";
 // FullKanban removed - now using file-based KanbanBoard system
-import PluginSettings from "./PluginSettings.jsx";
-import PluginDetail from "./PluginDetail.jsx";
 import { canvasManager } from "../core/canvas/manager.js";
 import TemplatePicker from "../components/TemplatePicker.jsx";
 import { getMarkdownCompiler } from "../core/markdown/compiler.js";
@@ -55,7 +59,6 @@ import { usePlugins } from "../hooks/usePlugins.jsx";
 import { setGlobalActiveTheme, getSystemPreferredTheme, setupSystemThemeListener, readGlobalVisuals } from "../core/theme/manager.js";
 import { useTheme } from "../hooks/theme.jsx";
 import SplitEditor from "../components/SplitEditor/SplitEditor.jsx";
-import PDFViewerTab from "../components/PDFViewer/PDFViewerTab.jsx";
 import { isPDFFile } from "../utils/pdfUtils.js";
 import { getFilename, getBasename, joinPath } from '../utils/pathUtils.js';
 import platformService from "../services/platform/PlatformService.js";
@@ -64,20 +67,16 @@ import { BasesProvider, useBases } from "../bases/BasesContext.jsx";
 import BasesView from "../bases/BasesView.jsx";
 import DocumentOutline from "../components/DocumentOutline.jsx";
 import GraphSidebar from "../components/GraphSidebar.jsx";
-import VersionHistoryPanel from "../components/VersionHistoryPanel.jsx";
 import BacklinksPanel from "./BacklinksPanel.jsx";
 import { DailyNotesPanel, NavigationButtons, DatePickerModal } from "../components/DailyNotes/index.js";
-import { CalendarWidget, CalendarView } from "../components/Calendar/index.js";
-import { ImageViewerTab } from "../components/ImageViewer/ImageViewerTab.jsx";
+import { CalendarWidget } from "../components/Calendar/index.js";
 import { isImageFile, findImageFiles } from "../utils/imageUtils.js";
 import CanvasPreviewPopup from '../components/CanvasPreviewPopup.jsx';
 import { generatePreview } from '../core/canvas/preview-generator.js';
 import TagManagementModal from "../components/TagManagementModal.jsx";
-import { OnboardingWizard } from "../components/onboarding/OnboardingWizard.jsx";
 import ExternalDropZone from "../components/ExternalDropZone.jsx";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast, demoAllToasts } from "../components/ui/enhanced-toast";
-import MeetingPanel from "../components/meeting/MeetingPanel.jsx";
 import MeetingNotification from "../components/meeting/MeetingNotification.jsx";
 import MeetingFAB from "../components/meeting/MeetingFAB.jsx";
 import { useMeeting } from "../contexts/MeetingContext.jsx";
@@ -89,11 +88,9 @@ import { useDropPosition } from "../hooks/useDropPosition.js";
 import { useAutoExpand } from "../hooks/useAutoExpand.js";
 import DropIndicator from "../components/FileTree/DropIndicator.jsx";
 import Breadcrumbs from "../components/FileTree/Breadcrumbs.jsx";
-import AboutDialog from "../components/AboutDialog.jsx";
 import { copyFiles, cutFiles, getClipboardState, getRelativePath } from "../utils/clipboard.js";
 
 import { isDesktop, isMobile } from '../platform/index.js';
-import TerminalPanel from "../components/TerminalPanel/TerminalPanel.jsx";
 import { OutputPanel } from "../components/OutputPanel/OutputPanel.jsx";
 import referenceManager from "../core/references/ReferenceManager.js";
 import ReferenceUpdateModal from "../components/ReferenceUpdateModal.jsx";
@@ -503,7 +500,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
           affectedFiles,
           operation: async () => {
             try {
-              await invoke("rename_file", { workspacePath: window.__WORKSPACE_PATH__, path: oldPath, newName: trimmedName });
+              await invoke("rename_file", { path: oldPath, newName: trimmedName });
               onUpdateTabPath?.(oldPath, newPath);
               setRenamingPath(null);
               onRefresh && onRefresh();
@@ -521,7 +518,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
 
     // No references to update, proceed directly
     try {
-      await invoke("rename_file", { workspacePath: window.__WORKSPACE_PATH__, path: oldPath, newName: trimmedName });
+      await invoke("rename_file", { path: oldPath, newName: trimmedName });
       onUpdateTabPath?.(oldPath, newPath);
       setRenamingPath(null);
       onRefresh && onRefresh();
@@ -539,7 +536,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
     try {
       const base = entry.is_directory ? entry.path : entry.path.split("/").slice(0, -1).join("/");
       const name = "Untitled.md";
-      await invoke("write_file_content", { workspacePath: window.__WORKSPACE_PATH__, path: `${base}/${name}`, content: "" });
+      await invoke("write_file_content", { path: `${base}/${name}`, content: "" });
       onRefresh && onRefresh();
     } catch (e) {
       toast?.error(`Failed to create file: ${e.message || e}`);
@@ -581,7 +578,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
             setRightPaneContent(editorContent);
           } else {
             try {
-              const content = await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path: file.path });
+              const content = await invoke('read_file_content', { path: file.path });
               setRightPaneContent(content || '');
             } catch (err) {
               setRightPaneContent('');
@@ -658,7 +655,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         try {
           const confirmed = await confirm(`Are you sure you want to delete "${file.name}"?`);
           if (confirmed) {
-            await invoke('delete_file', { workspacePath: window.__WORKSPACE_PATH__, path: file.path });
+            await invoke('delete_file', { path: file.path });
             onRefresh && onRefresh();
           }
         } catch (err) {
@@ -714,7 +711,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
           if (confirmed) {
             for (const p of data.selectedPaths) {
               try {
-                await invoke('delete_file', { workspacePath: window.__WORKSPACE_PATH__, path: p });
+                await invoke('delete_file', { path: p });
               } catch (err) {
                 console.error(`Failed to delete ${p}:`, err);
               }
@@ -745,7 +742,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
           for (const p of data.selectedPaths) {
             try {
               // Read content and write to new file with " copy" suffix
-              const content = await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path: p });
+              const content = await invoke('read_file_content', { path: p });
               const pathParts = p.split('/');
               const fileName = pathParts.pop();
               const dirPath = pathParts.join('/');
@@ -776,7 +773,6 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
               for (const p of data.selectedPaths) {
                 try {
                   await invoke('move_file', {
-                    workspacePath: window.__WORKSPACE_PATH__,
                     sourcePath: p,
                     destinationDir: selectedFolder,
                   });
@@ -809,7 +805,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
               for (const p of data.selectedPaths) {
                 try {
                   // Read file content and write to new location
-                  const content = await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path: p });
+                  const content = await invoke('read_file_content', { path: p });
                   const fileName = p.substring(p.lastIndexOf('/') + 1);
                   const destPath = `${exportFolder}/${fileName}`;
                   await invoke('write_file', { path: destPath, content });
@@ -1062,7 +1058,7 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
         const confirmed = await confirm(`Delete ${count} item${count > 1 ? 's' : ''}?`);
         if (confirmed) {
           for (const p of selectedPaths) {
-            try { await invoke('delete_file', { workspacePath: workspacePath, path: p }); } catch {}
+            try { await invoke('delete_file', { path: p }); } catch {}
           }
           setSelectedPaths(new Set());
           onRefresh?.();
@@ -1160,7 +1156,6 @@ function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expandedFol
     for (const oldPath of pathsToMove) {
       try {
         await invoke("move_file", {
-          workspacePath: workspacePath,
           sourcePath: oldPath,
           destinationDir: destinationDir,
         });
@@ -1539,7 +1534,7 @@ function WorkspaceWithScope({ path }) {
     if (!activeFile) return;
 
     try {
-      const content = await invoke("read_file_content", { workspacePath: path, path: activeFile });
+      const content = await invoke("read_file_content", { path: activeFile });
       const activeTab = openTabs.find(tab => tab.path === activeFile);
 
       if (activeTab) {
@@ -2091,7 +2086,7 @@ function WorkspaceWithScope({ path }) {
       // Capture activeFile in local variable to prevent stale closure issues
       const fileToLoad = activeFile;
 
-      invoke("read_file_content", { workspacePath: path, path: fileToLoad })
+      invoke("read_file_content", { path: fileToLoad })
         .then(async content => {
           // Guard against stale promise resolutions - only update if this file is still active
           if (fileToLoad !== activeFile) {
@@ -2597,7 +2592,7 @@ function WorkspaceWithScope({ path }) {
           if (nextTab.path === path && editorContent) {
             setRightPaneContent(editorContent);
           } else {
-            invoke("read_file_content", { workspacePath: path, path: nextTab.path })
+            invoke("read_file_content", { path: nextTab.path })
               .then(content => {
                 setRightPaneContent(content || '');
               })
@@ -2709,36 +2704,29 @@ function WorkspaceWithScope({ path }) {
 
     let path_to_save = activeFile;
     let needsStateUpdate = false;
-    let renamedFrom = null;
+    const saveStartTime = performance.now();
 
-    // Phase 1: Rename (if title changed)
-    const currentTab = openTabs.find(t => t.path === activeFile);
-    if (!currentTab) return;
-    const currentName = currentTab.name.replace(/\.md$/, "");
+    try {
+      const currentTab = openTabs.find(t => t.path === activeFile);
+      const currentName = currentTab.name.replace(/\.md$/, "");
 
-    if (editorTitle !== currentName && editorTitle.trim() !== "") {
-      try {
+      if (editorTitle !== currentName && editorTitle.trim() !== "") {
         const newFileName = `${editorTitle.trim()}.md`;
-        const newPath = await invoke("rename_file", { workspacePath: path, path: activeFile, newName: newFileName });
+        const newPath = await invoke("rename_file", { path: activeFile, newName: newFileName });
         editorGroups.updateTabPath(activeFile, newPath);
-        renamedFrom = activeFile;
         path_to_save = newPath;
         needsStateUpdate = true;
-      } catch (renameErr) {
-        toast.error(`Rename failed: ${renameErr}`);
-        return;
       }
-    }
 
-    // Phase 2: Write content
-    try {
+      // For .md files, we need to convert HTML content back to markdown
       let contentToSave = editorContent;
       if (path_to_save.endsWith('.md')) {
+        // Convert HTML back to markdown, preserving wiki links
         const exporter = new MarkdownExporter();
         contentToSave = exporter.htmlToMarkdown(editorContent, { preserveWikiLinks: true });
       }
 
-      await invoke("write_file_content", { workspacePath: path, path: path_to_save, content: contentToSave });
+      await invoke("write_file_content", { path: path_to_save, content: contentToSave });
 
       setSavedContent(editorContent);
       setUnsavedChanges(prev => {
@@ -2748,7 +2736,7 @@ function WorkspaceWithScope({ path }) {
         return newSet;
       });
 
-      // Phase 3: Version save (non-critical)
+      // Save version only if content actually changed
       const lastContent = lastVersionContentRef.current[path_to_save];
       const contentChanged = !lastContent || lastContent !== contentToSave;
 
@@ -2761,52 +2749,52 @@ function WorkspaceWithScope({ path }) {
           const now = Date.now();
           lastVersionSaveRef.current[path_to_save] = now;
           lastVersionContentRef.current[path_to_save] = contentToSave;
+
+          // Refresh version history panel
           setVersionRefreshKey(prev => prev + 1);
+
         } catch (error) {
-          // Version save is non-critical
+          // Non-blocking - don't show error to user
         }
+      } else {
       }
 
-      // Phase 4: State + graph update
       if (needsStateUpdate) {
         const newName = path_to_save.split("/").pop();
         setOpenTabs(tabs => tabs.map(t => t.path === activeFile ? { path: path_to_save, name: newName } : t));
         setActiveFile(path_to_save);
         handleRefreshFiles();
       } else {
+        // File content changed but not renamed - use real-time link tracking
         if (graphProcessorRef.current) {
           try {
+            // Use the new real-time update method for file content
             const updateResult = await graphProcessorRef.current.updateFileContent(path_to_save, editorContent);
+
+            // Only rebuild graph structure if there were actual changes
             if (updateResult.added > 0 || updateResult.removed > 0) {
               const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
               setGraphData(updatedGraphData);
+            } else {
             }
           } catch (error) {
+            // Fallback to full selective update
             try {
               const updatedGraphData = await graphProcessorRef.current.updateChangedFiles([path_to_save]);
               if (updatedGraphData) {
                 setGraphData(updatedGraphData);
               }
             } catch (fallbackError) {
+              // Final fallback to full refresh
               handleRefreshFiles();
             }
           }
+        } else {
+          // Graph processor not initialized yet, but if graph view becomes active,
+          // it will build the graph data including this file's changes
         }
       }
-    } catch (writeErr) {
-      // Rollback rename if it happened
-      if (renamedFrom) {
-        try {
-          const oldName = renamedFrom.split('/').pop();
-          await invoke("rename_file", { path: path_to_save, newName: oldName });
-          editorGroups.updateTabPath(path_to_save, renamedFrom);
-        } catch (rollbackErr) {
-          toast.error(`Save failed and rename rollback failed. Your file may be at: ${path_to_save}`);
-          return;
-        }
-      }
-      toast.error(`Save failed: ${writeErr}`);
-    }
+    } catch { }
   }, []);
 
   const handleSaveAs = useCallback(async () => {
@@ -2891,7 +2879,7 @@ function WorkspaceWithScope({ path }) {
         }
 
         // Save the file
-        await invoke("write_file_content", { workspacePath: window.__WORKSPACE_PATH__, path: filePath, content: contentToSave });
+        await invoke("write_file_content", { path: filePath, content: contentToSave });
 
         // Update current file state to point to new location
         const newFileName = filePath.split('/').pop();
@@ -3018,7 +3006,7 @@ function WorkspaceWithScope({ path }) {
 </html>`;
 
         // Save the HTML file
-        await invoke("write_file_content", { workspacePath: window.__WORKSPACE_PATH__, path: filePath, content: htmlContent });
+        await invoke("write_file_content", { path: filePath, content: htmlContent });
 
       }
     } catch (error) {
@@ -3336,12 +3324,12 @@ function WorkspaceWithScope({ path }) {
         break;
       case 'duplicate':
         try {
-          const content = await invoke('read_file_content', { workspacePath: path, path: board.path });
+          const content = await invoke('read_file_content', { path: board.path });
           const dirPath = board.path.split('/').slice(0, -1).join('/');
           const baseName = board.name.replace(/\.kanban$/, '');
           const newName = `${baseName} copy.kanban`;
           const newPath = `${dirPath}/${newName}`;
-          await invoke('write_file_content', { workspacePath: path, path: newPath, content });
+          await invoke('write_file_content', { path: newPath, content });
           refreshBoards?.();
           toast.success(`Duplicated: ${newName}`);
         } catch (err) {
@@ -3350,7 +3338,7 @@ function WorkspaceWithScope({ path }) {
         break;
       case 'export':
         try {
-          const content = await invoke('read_file_content', { workspacePath: path, path: board.path });
+          const content = await invoke('read_file_content', { path: board.path });
           const blob = new Blob([content], { type: 'application/json' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
@@ -3368,7 +3356,7 @@ function WorkspaceWithScope({ path }) {
         try {
           const confirmed = await confirm(`Are you sure you want to delete "${board.name}"?`);
           if (confirmed) {
-            await invoke('delete_file', { workspacePath: path, path: board.path });
+            await invoke('delete_file', { path: board.path });
             refreshBoards?.();
             toast.success(`Deleted: ${board.name}`);
           }
@@ -3748,7 +3736,7 @@ function WorkspaceWithScope({ path }) {
                 setRightPaneContent(editorContent);
               } else {
                 try {
-                  const content = await invoke("read_file_content", { workspacePath: path, path: nextTab.path });
+                  const content = await invoke("read_file_content", { path: nextTab.path });
                   setRightPaneContent(content || '');
                 } catch (err) {
                   setRightPaneContent('');
@@ -4456,7 +4444,9 @@ function WorkspaceWithScope({ path }) {
     <PanelManager>
       <div className={`h-full bg-app-panel text-app-text flex flex-col font-sans transition-colors duration-300 overflow-hidden no-select relative ${isMobile() ? 'safe-area-inset-top' : ''}`}>
         {/* Product Tour */}
-        <OnboardingWizard />
+        <Suspense fallback={<Loading />}>
+          <LazyOnboarding />
+        </Suspense>
 
         {/* Service Status / Maintenance Banner */}
         <ServiceStatus />
@@ -4763,7 +4753,9 @@ function WorkspaceWithScope({ path }) {
             <aside className="overflow-y-auto flex flex-col">
               {featureFlags.enable_plugins && showPlugins ? (
                 <div className="flex-1 overflow-hidden">
-                  <PluginSettings onOpenPluginDetail={handleOpenPluginDetail} />
+                  <Suspense fallback={<Loading />}>
+                    <LazyPluginSettings onOpenPluginDetail={handleOpenPluginDetail} />
+                  </Suspense>
                 </div>
               ) : showBases ? (
                 <div className="flex-1 overflow-hidden">
@@ -4943,23 +4935,25 @@ function WorkspaceWithScope({ path }) {
                     {rightPaneFile ? (
                       featureFlags.enable_canvas && rightPaneFile && rightPaneFile.endsWith('.canvas') ? (
                         <div className="flex-1 overflow-hidden">
-                          <Canvas
-                            canvasPath={rightPaneFile}
-                            canvasName={openTabs.find(tab => tab.path === rightPaneFile)?.name}
-                            onSave={async (canvasData) => {
-                              try {
-                                await canvasManager.saveCanvas(rightPaneFile, canvasData);
-                                setUnsavedChanges(prev => {
-                                  const newSet = new Set(prev);
-                                  newSet.delete(rightPaneFile);
-                                  return newSet;
-                                });
-                              } catch { }
-                            }}
-                            onChange={() => {
-                              setUnsavedChanges(prev => new Set(prev).add(rightPaneFile));
-                            }}
-                          />
+                          <Suspense fallback={<Loading />}>
+                            <LazyCanvas
+                              canvasPath={rightPaneFile}
+                              canvasName={openTabs.find(tab => tab.path === rightPaneFile)?.name}
+                              onSave={async (canvasData) => {
+                                try {
+                                  await canvasManager.saveCanvas(rightPaneFile, canvasData);
+                                  setUnsavedChanges(prev => {
+                                    const newSet = new Set(prev);
+                                    newSet.delete(rightPaneFile);
+                                    return newSet;
+                                  });
+                                } catch { }
+                              }}
+                              onChange={() => {
+                                setUnsavedChanges(prev => new Set(prev).add(rightPaneFile));
+                              }}
+                            />
+                          </Suspense>
                         </div>
                       ) : rightPaneFile && rightPaneFile.endsWith('.kanban') ? (
                         <div className="flex-1 overflow-hidden">
@@ -4971,22 +4965,26 @@ function WorkspaceWithScope({ path }) {
                         </div>
                       ) : rightPaneFile && rightPaneFile.endsWith('.pdf') ? (
                         <div className="flex-1 overflow-hidden">
-                          <PDFViewerTab
-                            file={rightPaneFile}
-                            onClose={() => {
-                              setOpenTabs(prev => prev.filter(tab => tab.path !== rightPaneFile));
-                              setRightPaneFile(null);
-                            }}
-                          />
+                          <Suspense fallback={<Loading />}>
+                            <LazyPDFViewer
+                              file={rightPaneFile}
+                              onClose={() => {
+                                setOpenTabs(prev => prev.filter(tab => tab.path !== rightPaneFile));
+                                setRightPaneFile(null);
+                              }}
+                            />
+                          </Suspense>
                         </div>
                       ) : rightPaneFile.startsWith('__graph__') ? (
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-                          <ProfessionalGraphView
-                            fileTree={filteredFileTree}
-                            activeFile={rightPaneFile}
-                            onFileOpen={handleFileOpen}
-                            workspacePath={path}
-                          />
+                          <Suspense fallback={<Loading />}>
+                            <LazyGraph
+                              fileTree={filteredFileTree}
+                              activeFile={rightPaneFile}
+                              onFileOpen={handleFileOpen}
+                              workspacePath={path}
+                            />
+                          </Suspense>
                         </div>
                       ) : rightPaneFile === '__bases__' ? (
                           <div className="h-full">
@@ -4996,7 +4994,7 @@ function WorkspaceWithScope({ path }) {
                           <div className="flex-1 overflow-hidden">
                             {(() => {
                               const activeTab = openTabs.find(tab => tab.path === rightPaneFile);
-                              return activeTab?.plugin ? <PluginDetail plugin={activeTab.plugin} /> : <div>Plugin not found</div>;
+                              return activeTab?.plugin ? <Suspense fallback={<Loading />}><LazyPluginDetail plugin={activeTab.plugin} /></Suspense> : <div>Plugin not found</div>;
                             })()}
                           </div>
                         ) : (
@@ -5031,28 +5029,30 @@ function WorkspaceWithScope({ path }) {
                 <>
                   {featureFlags.enable_canvas && activeFile && activeFile.endsWith('.canvas') ? (
                     <div className="flex-1 overflow-hidden">
-                      <Canvas
-                        canvasPath={activeFile}
-                        canvasName={openTabs.find(tab => tab.path === activeFile)?.name}
-                        onSave={async (canvasData) => {
-                          try {
-                            await canvasManager.saveCanvas(activeFile, canvasData);
+                      <Suspense fallback={<Loading />}>
+                        <LazyCanvas
+                          canvasPath={activeFile}
+                          canvasName={openTabs.find(tab => tab.path === activeFile)?.name}
+                          onSave={async (canvasData) => {
+                            try {
+                              await canvasManager.saveCanvas(activeFile, canvasData);
+                              setUnsavedChanges(prev => {
+                                const newSet = new Set(prev);
+                                newSet.delete(activeFile);
+                                return newSet;
+                              });
+                            } catch { }
+                          }}
+                          onContentChange={(canvasData) => {
                             setUnsavedChanges(prev => {
                               const newSet = new Set(prev);
-                              newSet.delete(activeFile);
+                              newSet.add(activeFile);
                               return newSet;
                             });
-                          } catch { }
-                        }}
-                        onContentChange={(canvasData) => {
-                          setUnsavedChanges(prev => {
-                            const newSet = new Set(prev);
-                            newSet.add(activeFile);
-                            return newSet;
-                          });
-                        }}
-                        initialData={null} // Will be loaded by Canvas component
-                      />
+                          }}
+                          initialData={null} // Will be loaded by Canvas component
+                        />
+                      </Suspense>
                     </div>
                   ) : activeFile && activeFile.endsWith('.kanban') ? (
                     <div className="flex-1 overflow-hidden">
@@ -5064,41 +5064,47 @@ function WorkspaceWithScope({ path }) {
                     </div>
                   ) : activeFile && activeFile.endsWith('.pdf') ? (
                     <div className="flex-1 overflow-hidden">
-                      <PDFViewerTab
-                        file={activeFile}
-                        onClose={() => {
-                          setOpenTabs(prev => prev.filter(tab => tab.path !== activeFile));
-                          setActiveFile(null);
-                        }}
-                      />
+                      <Suspense fallback={<Loading />}>
+                        <LazyPDFViewer
+                          file={activeFile}
+                          onClose={() => {
+                            setOpenTabs(prev => prev.filter(tab => tab.path !== activeFile));
+                            setActiveFile(null);
+                          }}
+                        />
+                      </Suspense>
                     </div>
                   ) : activeFile && isImageFile(activeFile) ? (
                     <div className="flex-1 overflow-hidden">
-                      <ImageViewerTab
-                        imagePath={activeFile}
-                        allImageFiles={allImageFiles}
-                        onImageChange={(newPath) => {
-                          // Update active file and tab name when navigating between images
-                          setActiveFile(newPath);
-                          setOpenTabs(prevTabs => {
-                            return prevTabs.map(tab =>
-                              tab.path === activeFile
-                                ? { ...tab, path: newPath, name: getFilename(newPath) }
-                                : tab
-                            );
-                          });
-                        }}
-                      />
+                      <Suspense fallback={<Loading />}>
+                        <LazyImageViewer
+                          imagePath={activeFile}
+                          allImageFiles={allImageFiles}
+                          onImageChange={(newPath) => {
+                            // Update active file and tab name when navigating between images
+                            setActiveFile(newPath);
+                            setOpenTabs(prevTabs => {
+                              return prevTabs.map(tab =>
+                                tab.path === activeFile
+                                  ? { ...tab, path: newPath, name: getFilename(newPath) }
+                                  : tab
+                              );
+                            });
+                          }}
+                        />
+                      </Suspense>
                     </div>
                   ) : activeFile === '__graph__' ? (
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-                      <ProfessionalGraphView
-                        isVisible={true}
-                        fileTree={filteredFileTree}
-                        workspacePath={path}
-                        onOpenFile={handleFileOpen}
-                        onGraphStateChange={handleGraphStateChange}
-                      />
+                      <Suspense fallback={<Loading />}>
+                        <LazyGraph
+                          isVisible={true}
+                          fileTree={filteredFileTree}
+                          workspacePath={path}
+                          onOpenFile={handleFileOpen}
+                          onGraphStateChange={handleGraphStateChange}
+                        />
+                      </Suspense>
                     </div>
                   ) : activeFile === '__bases__' ? (
                     <div className="flex-1 h-full overflow-hidden">
@@ -5106,22 +5112,24 @@ function WorkspaceWithScope({ path }) {
                     </div>
                   ) : activeFile === '__calendar__' ? (
                     <div className="flex-1 h-full overflow-hidden">
-                      <CalendarView
-                        workspacePath={path}
-                        onClose={() => {
-                          const remaining = openTabs.filter(t => t.path !== '__calendar__');
-                          setOpenTabs(remaining);
-                          setActiveFile(remaining[0]?.path || null);
-                        }}
-                        onOpenSettings={async () => {
-                          try {
-                            const { invoke } = await import('@tauri-apps/api/core');
-                            await invoke('open_preferences_window', { workspacePath: path, section: 'Connections' });
-                          } catch (e) {
-                            console.error('Failed to open preferences:', e);
-                          }
-                        }}
-                      />
+                      <Suspense fallback={<Loading />}>
+                        <LazyCalendarView
+                          workspacePath={path}
+                          onClose={() => {
+                            const remaining = openTabs.filter(t => t.path !== '__calendar__');
+                            setOpenTabs(remaining);
+                            setActiveFile(remaining[0]?.path || null);
+                          }}
+                          onOpenSettings={async () => {
+                            try {
+                              const { invoke } = await import('@tauri-apps/api/core');
+                              await invoke('open_preferences_window', { workspacePath: path, section: 'Connections' });
+                            } catch (e) {
+                              console.error('Failed to open preferences:', e);
+                            }
+                          }}
+                        />
+                      </Suspense>
                     </div>
                   ) : featureFlags.enable_plugins && activeFile && activeFile.startsWith('__plugin_') ? (
                       <div className="flex-1 p-8 md:p-12 overflow-y-auto">
@@ -5129,7 +5137,7 @@ function WorkspaceWithScope({ path }) {
                           <div className="flex-1 overflow-hidden">
                             {(() => {
                               const activeTab = openTabs.find(tab => tab.path === activeFile);
-                              return activeTab?.plugin ? <PluginDetail plugin={activeTab.plugin} /> : <div>Plugin not found</div>;
+                              return activeTab?.plugin ? <Suspense fallback={<Loading />}><LazyPluginDetail plugin={activeTab.plugin} /></Suspense> : <div>Plugin not found</div>;
                             })()}
                           </div>
                         </div>
@@ -5381,13 +5389,15 @@ function WorkspaceWithScope({ path }) {
               {/* Show VersionHistory, GraphSidebar, DailyNotesPanel, or DocumentOutline */}
               <div className="flex-1 overflow-hidden">
                 {showVersionHistory ? (
-                  <VersionHistoryPanel
-                    key={`version-${activeFile}-${versionRefreshKey}`}
-                    workspacePath={path}
-                    filePath={activeFile}
-                    onClose={() => setShowVersionHistory(false)}
-                    onRestore={reloadCurrentFile}
-                  />
+                  <Suspense fallback={<Loading />}>
+                    <LazyVersionHistory
+                      key={`version-${activeFile}-${versionRefreshKey}`}
+                      workspacePath={path}
+                      filePath={activeFile}
+                      onClose={() => setShowVersionHistory(false)}
+                      onRestore={reloadCurrentFile}
+                    />
+                  </Suspense>
                 ) : showDailyNotesPanel ? (
                   <DailyNotesPanel
                     workspacePath={path}
@@ -5492,7 +5502,9 @@ function WorkspaceWithScope({ path }) {
         {/* Meeting Notes — floating FAB + notification + docked panel */}
         <MeetingFAB />
         <MeetingNotification />
-        <MeetingPanel workspacePath={path} />
+        <Suspense fallback={<Loading />}>
+          <LazyMeetingPanel workspacePath={path} />
+        </Suspense>
 
         <CommandPalette
           open={showCommandPalette}
@@ -5739,10 +5751,12 @@ function WorkspaceWithScope({ path }) {
         />
 
         {/* About Dialog */}
-        <AboutDialog
-          isOpen={showAboutDialog}
-          onClose={() => setShowAboutDialog(false)}
-        />
+        <Suspense fallback={<Loading />}>
+          <LazyAboutDialog
+            isOpen={showAboutDialog}
+            onClose={() => setShowAboutDialog(false)}
+          />
+        </Suspense>
 
         {/* Reference Update Modal */}
         <ReferenceUpdateModal
@@ -5858,13 +5872,15 @@ function WorkspaceWithScope({ path }) {
             <div style={{ flex: 1, overflow: 'hidden' }}>
               {/* Terminal Panel - Desktop only */}
               {isDesktop() && bottomPanelTab === 'terminal' && showTerminalPanel && (
-                <TerminalPanel
-                  isOpen={showTerminalPanel}
-                  onClose={() => {
-                    setShowTerminalPanel(false);
-                    setShowOutputPanel(false);
-                  }}
-                />
+                <Suspense fallback={<Loading />}>
+                  <LazyTerminalPanel
+                    isOpen={showTerminalPanel}
+                    onClose={() => {
+                      setShowTerminalPanel(false);
+                      setShowOutputPanel(false);
+                    }}
+                  />
+                </Suspense>
               )}
               {bottomPanelTab === 'output' && showOutputPanel && (
                 <OutputPanel
