@@ -13,6 +13,7 @@ import { dropCursor } from 'prosemirror-dropcursor';
 import { gapCursor } from 'prosemirror-gapcursor';
 import { inputRules, wrappingInputRule, textblockTypeInputRule } from 'prosemirror-inputrules';
 import { createEditorCommands, insertContent as pmInsertContent } from '../commands/index.js';
+import { DOMParser as ProseMirrorDOMParser } from 'prosemirror-model';
 
 // --- Extension plugin factories ---
 import { createBlockIdPlugin } from '../extensions/BlockId.js';
@@ -784,18 +785,56 @@ const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, edi
       setContent: (content, opts) => {
         const view = viewRef.current;
         if (!view) return;
-        let doc;
-        if (typeof content === 'object' && content !== null && content.type) {
-          doc = view.state.schema.nodeFromJSON(content.type === 'doc' ? content : { type: 'doc', content: [content] });
-        } else if (typeof content === 'string') {
-          // Legacy HTML string — shouldn't happen after migration but handle gracefully
-          console.warn('[PMEditor] setContent received HTML string — skipping. Use JSON doc format.');
-          return;
+
+        try {
+          let doc;
+          if (typeof content === 'object' && content !== null && content.type) {
+            doc = view.state.schema.nodeFromJSON(content.type === 'doc' ? content : { type: 'doc', content: [content] });
+          } else if (typeof content === 'string') {
+            // HTML string — parse via DOMParser for crash-proof recovery path
+            const dom = new DOMParser().parseFromString(`<body>${content}</body>`, 'text/html').body;
+            doc = ProseMirrorDOMParser.fromSchema(view.state.schema).parse(dom);
+          }
+          if (!doc) return;
+          doc.check(); // Validate before dispatching
+          const tr = view.state.tr.replaceWith(0, view.state.doc.content.size, doc.content);
+          tr.setMeta('programmatic', true);
+          view.dispatch(tr);
+        } catch (err) {
+          console.warn('[PMEditor] setContent failed, attempting per-block recovery:', err.message);
+
+          // Per-block recovery: test each block individually, degrade only failing blocks
+          try {
+            const htmlContent = typeof content === 'string'
+              ? content
+              : JSON.stringify(content);
+            const recovered = recoverContent(htmlContent, { schema: view.state.schema });
+            const dom = new DOMParser().parseFromString(`<body>${recovered}</body>`, 'text/html').body;
+            const doc = ProseMirrorDOMParser.fromSchema(view.state.schema).parse(dom);
+            const tr = view.state.tr.replaceWith(0, view.state.doc.content.size, doc.content);
+            tr.setMeta('programmatic', true);
+            view.dispatch(tr);
+          } catch (err2) {
+            // Last resort — empty doc
+            console.error('[PMEditor] Per-block recovery also failed:', err2.message);
+            try {
+              const emptyDoc = view.state.schema.node('doc', null, [view.state.schema.node('paragraph')]);
+              const tr = view.state.tr.replaceWith(0, view.state.doc.content.size, emptyDoc.content);
+              tr.setMeta('programmatic', true);
+              view.dispatch(tr);
+            } catch {}
+
+            window.dispatchEvent(
+              new CustomEvent('lokus:editor-content-error', {
+                detail: { filePath: globalThis.__LOKUS_ACTIVE_FILE__, error: err?.message || String(err) },
+              })
+            );
+          }
+
+          try {
+            Sentry.captureException(err, { extra: { context: 'setContent-per-block-recovery' } });
+          } catch {}
         }
-        if (!doc) return;
-        const tr = view.state.tr.replaceWith(0, view.state.doc.content.size, doc.content);
-        tr.setMeta('programmatic', true);
-        view.dispatch(tr);
       },
       focus: () => viewRef.current?.focus(),
       scrollIntoView: () => {
