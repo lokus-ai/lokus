@@ -1,5 +1,7 @@
 import { useCallback } from 'react';
-import { useWorkspaceStore } from '../../../stores/workspace';
+import { useFileTreeStore } from '../../../stores/fileTree';
+import { useEditorGroupStore } from '../../../stores/editorGroups';
+import { useViewStore } from '../../../stores/views';
 import { invoke } from '@tauri-apps/api/core';
 import { confirm } from '@tauri-apps/plugin-dialog';
 import { toast } from '../../../components/ui/enhanced-toast';
@@ -10,19 +12,23 @@ import posthog from '../../../services/posthog.js';
 import { setGlobalActiveTheme } from '../../../core/theme/manager.js';
 
 export function useFileOperations({ workspacePath, featureFlags, handleFileOpen, editorRef, currentTheme }) {
-  const refreshTree = useWorkspaceStore((s) => s.refreshTree);
-  const startCreate = useWorkspaceStore((s) => s.startCreate);
-  const cancelCreate = useWorkspaceStore((s) => s.cancelCreate);
-  const startRename = useWorkspaceStore((s) => s.startRename);
-  const cancelRename = useWorkspaceStore((s) => s.cancelRename);
+  const refreshTree = useFileTreeStore((s) => s.refreshTree);
+  const startCreate = useFileTreeStore((s) => s.startCreate);
+  const cancelCreate = useFileTreeStore((s) => s.cancelCreate);
+  const startRename = useFileTreeStore((s) => s.startRename);
+  const cancelRename = useFileTreeStore((s) => s.cancelRename);
 
   // ---------------------------------------------------------------------------
   // Target path resolution
   // Priority: 1. Selected path, 2. Bases folder, 3. Expanded folder, 4. Scoped folder, 5. Workspace root
   // ---------------------------------------------------------------------------
   const getTargetPath = useCallback(() => {
-    const store = useWorkspaceStore.getState();
-    const { selectedPath, fileTree, expandedFolders, openTabs } = store;
+    const ftStore = useFileTreeStore.getState();
+    const { selectedPath, fileTree, expandedFolders } = ftStore;
+
+    const egStore = useEditorGroupStore.getState();
+    const focusedGroup = egStore.getFocusedGroup();
+    const openTabs = focusedGroup?.tabs || [];
 
     const findEntry = (entries, targetPath) => {
       for (const entry of entries) {
@@ -52,7 +58,7 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
     // so we read it from the store if available, otherwise skip.
     const hasBasesTab = openTabs.some(tab => tab.path === '__bases__');
     if (hasBasesTab) {
-      // activeBase is not in the workspace store; callers that need bases support
+      // activeBase is not in the editor group store; callers that need bases support
       // should override this behaviour. Fall through to expanded folders.
     }
 
@@ -73,23 +79,31 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
   const handleCreateFile = useCallback(() => {
     const targetPath = getTargetPath();
     if (targetPath !== workspacePath) {
-      useWorkspaceStore.setState((s) => ({ expandedFolders: new Set([...s.expandedFolders, targetPath]) }));
+      const { expandedFolders } = useFileTreeStore.getState();
+      useFileTreeStore.getState().setFileTree(useFileTreeStore.getState().fileTree); // no-op placeholder
+      // Expand the target folder by toggling only if not already expanded
+      if (!expandedFolders.has(targetPath)) {
+        useFileTreeStore.getState().toggleFolder(targetPath);
+      }
     }
-    useWorkspaceStore.setState({ creatingItem: { type: 'file', targetPath } });
+    useFileTreeStore.getState().startCreate('file', targetPath);
   }, [workspacePath, getTargetPath]);
 
   const handleCreateFolder = useCallback(() => {
     const targetPath = getTargetPath();
     if (targetPath !== workspacePath) {
-      useWorkspaceStore.setState((s) => ({ expandedFolders: new Set([...s.expandedFolders, targetPath]) }));
+      const { expandedFolders } = useFileTreeStore.getState();
+      if (!expandedFolders.has(targetPath)) {
+        useFileTreeStore.getState().toggleFolder(targetPath);
+      }
     }
-    useWorkspaceStore.setState({ creatingItem: { type: 'folder', targetPath } });
+    useFileTreeStore.getState().startCreate('folder', targetPath);
   }, [workspacePath, getTargetPath]);
 
   const handleConfirmCreate = useCallback(async (name) => {
-    const { creatingItem } = useWorkspaceStore.getState();
+    const { creatingItem } = useFileTreeStore.getState();
     if (!creatingItem || !name) {
-      useWorkspaceStore.setState({ creatingItem: null });
+      useFileTreeStore.getState().cancelCreate();
       return;
     }
 
@@ -113,7 +127,7 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
       console.error('Failed to create:', e);
     }
 
-    useWorkspaceStore.setState({ creatingItem: null });
+    useFileTreeStore.getState().cancelCreate();
   }, [refreshTree, handleFileOpen]);
 
   // ---------------------------------------------------------------------------
@@ -252,7 +266,7 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
         refreshTree();
       }
 
-      useWorkspaceStore.getState().closePanel('showDatePickerModal');
+      useViewStore.getState().closePanel('datePickerModal');
 
       posthog.trackFeatureActivation('daily_notes');
     } catch { }
@@ -277,7 +291,7 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
 
           return selectedHTML;
         } else {
-          const { activeFile } = useWorkspaceStore.getState();
+          const activeFile = useEditorGroupStore.getState().getFocusedGroup()?.activeTab;
           if (activeFile) {
             const editorHTML = editorRef.current.getHTML ? editorRef.current.getHTML() : null;
 
@@ -285,7 +299,9 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
               return editorHTML;
             }
 
-            const currentContent = useWorkspaceStore.getState().savedContent || '';
+            const focusedGroup = useEditorGroupStore.getState().getFocusedGroup();
+            const tabContent = focusedGroup?.contentByTab?.[activeFile];
+            const currentContent = tabContent?.savedContent ?? tabContent?.html ?? '';
             return currentContent;
           }
         }
@@ -294,13 +310,13 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
     };
 
     const contentForTemplate = getContentForTemplate();
-    useWorkspaceStore.setState({ createTemplateContent: contentForTemplate });
-    useWorkspaceStore.getState().openPanel('showCreateTemplate');
+    useViewStore.setState({ createTemplateContent: contentForTemplate });
+    useViewStore.getState().openPanel('showCreateTemplate');
   }, [editorRef]);
 
   const handleCreateTemplateSaved = useCallback(() => {
-    useWorkspaceStore.getState().closePanel('showCreateTemplate');
-    useWorkspaceStore.setState({ createTemplateContent: '' });
+    useViewStore.getState().closePanel('showCreateTemplate');
+    useViewStore.setState({ createTemplateContent: '' });
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -328,9 +344,10 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
 
     try {
       await invoke('delete_file', { path });
-      const store = useWorkspaceStore.getState();
-      if (store.openTabs.some(t => t.path === path)) {
-        store.closeTab(path);
+      const egStore = useEditorGroupStore.getState();
+      const focusedGroup = egStore.getFocusedGroup();
+      if (focusedGroup && focusedGroup.tabs.some(t => t.path === path)) {
+        egStore.removeTab(focusedGroup.id, path);
       }
       refreshTree();
     } catch (e) {
@@ -342,16 +359,14 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
     try {
       const affected = await referenceManager.findAffectedFiles(oldPath, workspacePath);
       if (affected.length > 0) {
-        useWorkspaceStore.setState({
-          referenceUpdateModal: {
-            isOpen: true,
-            oldPath,
-            newPath,
-            affectedFiles: affected,
-            isProcessing: false,
-            result: null,
-            pendingOperation: null,
-          }
+        useViewStore.getState().setReferenceUpdateModal({
+          isOpen: true,
+          oldPath,
+          newPath,
+          affectedFiles: affected,
+          isProcessing: false,
+          result: null,
+          pendingOperation: null,
         });
         return true;
       }
@@ -362,11 +377,11 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
   }, [workspacePath]);
 
   const handleConfirmReferenceUpdate = useCallback(async () => {
-    const store = useWorkspaceStore.getState();
-    const { referenceUpdateModal } = store;
+    const viewStore = useViewStore.getState();
+    const { referenceUpdateModal } = viewStore;
     if (!referenceUpdateModal.isOpen) return;
 
-    store.setReferenceUpdateModal({
+    viewStore.setReferenceUpdateModal({
       ...referenceUpdateModal,
       isProcessing: true,
     });
@@ -378,14 +393,14 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
         referenceUpdateModal.affectedFiles,
         workspacePath,
       );
-      store.setReferenceUpdateModal({
+      viewStore.setReferenceUpdateModal({
         ...referenceUpdateModal,
         isProcessing: false,
         result,
       });
       refreshTree();
     } catch (e) {
-      store.setReferenceUpdateModal({
+      viewStore.setReferenceUpdateModal({
         ...referenceUpdateModal,
         isProcessing: false,
         result: { error: e.message },

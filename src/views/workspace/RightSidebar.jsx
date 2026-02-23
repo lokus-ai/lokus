@@ -1,5 +1,6 @@
 import { useLayoutStore } from '../../stores/layout';
-import { useWorkspaceStore } from '../../stores/workspace';
+import { useViewStore } from '../../stores/views';
+import { useEditorGroupStore } from '../../stores/editorGroups';
 import DocumentOutline from '../../components/DocumentOutline.jsx';
 import BacklinksPanel from '../BacklinksPanel.jsx';
 import GraphSidebar from '../../components/GraphSidebar.jsx';
@@ -16,7 +17,7 @@ import { EditorModeSwitcher } from '../../features/editor';
  *
  * Reads focused group's active tab from useEditorGroupStore.
  * Panel visibility comes from useViewStore (showVersionHistory, etc.) and
- * legacy flags from useWorkspaceStore during the migration.
+ * useLayoutStore for sidebar dimensions.
  */
 export default function RightSidebar({
   workspacePath,
@@ -29,31 +30,46 @@ export default function RightSidebar({
   const showRight = useLayoutStore((s) => s.showRight);
   const rightW = useLayoutStore((s) => s.rightW);
 
-  // Panel visibility flags
-  const showVersionHistory = useWorkspaceStore((s) => s.showVersionHistory);
-  const versionRefreshKey = useWorkspaceStore((s) => s.versionRefreshKey);
-  const showDailyNotesPanel = useWorkspaceStore((s) => s.showDailyNotesPanel);
-  const showCalendarPanel = useWorkspaceStore((s) => s.showCalendarPanel);
-  const currentDailyNoteDate = useWorkspaceStore((s) => s.currentDailyNoteDate);
+  // Panel visibility flags from useViewStore
+  const showVersionHistory = useViewStore((s) => s.showVersionHistory);
+  const versionRefreshKey = useViewStore((s) => s.versionRefreshKey);
+  const showDailyNotesPanel = useViewStore((s) => s.showDailyNotesPanel);
+  const showCalendarPanel = useViewStore((s) => s.showCalendarPanel);
+  const currentDailyNoteDate = useViewStore((s) => s.currentDailyNoteDate);
 
-  // Graph sidebar data (still on workspace store during migration)
-  const graphSidebarData = useWorkspaceStore((s) => s.graphSidebarData);
-  const activeFile = useWorkspaceStore((s) => s.activeFile);
+  // Graph sidebar data from useEditorGroupStore
+  const graphSidebarData = useEditorGroupStore((s) => s.graphSidebarData);
+
+  // Active file from the focused editor group
+  const activeFile = useEditorGroupStore((s) => {
+    const { layout, focusedGroupId } = s;
+    if (!focusedGroupId) return null;
+    const findGroup = (node) => {
+      if (node.type === 'group' && node.id === focusedGroupId) return node;
+      if (node.type === 'container') {
+        for (const child of node.children) {
+          const found = findGroup(child);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return findGroup(layout)?.activeTab ?? null;
+  });
 
   if (!showRight) return null;
 
   const handleOpenCalendarView = () => {
     const calendarPath = '__calendar__';
     const calendarName = 'Calendar';
-    const MAX_OPEN_TABS = 10;
-
-    useWorkspaceStore.setState((s) => {
-      const newTabs = s.openTabs.filter((t) => t.path !== calendarPath);
-      newTabs.unshift({ path: calendarPath, name: calendarName });
-      if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
-      return { openTabs: newTabs };
-    });
-    useWorkspaceStore.setState({ activeFile: calendarPath });
+    const { focusedGroupId } = useEditorGroupStore.getState();
+    if (focusedGroupId) {
+      useEditorGroupStore.getState().addTab(
+        focusedGroupId,
+        { path: calendarPath, name: calendarName },
+        true
+      );
+    }
   };
 
   const handleOpenCalendarSettings = async () => {
@@ -79,7 +95,7 @@ export default function RightSidebar({
             key={`version-${activeFile}-${versionRefreshKey}`}
             workspacePath={workspacePath}
             filePath={activeFile}
-            onClose={() => useWorkspaceStore.getState().closePanel('showVersionHistory')}
+            onClose={() => useViewStore.getState().closePanel('showVersionHistory')}
             onRestore={onReloadCurrentFile}
           />
         ) : showDailyNotesPanel ? (

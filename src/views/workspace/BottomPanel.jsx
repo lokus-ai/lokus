@@ -1,5 +1,4 @@
 import { useLayoutStore } from '../../stores/layout';
-import { useWorkspaceStore } from '../../stores/workspace';
 import TerminalPanel from '../../components/TerminalPanel/TerminalPanel.jsx';
 import { OutputPanel } from '../../components/OutputPanel/OutputPanel.jsx';
 import { isDesktop } from '../../platform/index.js';
@@ -8,35 +7,33 @@ import { isDesktop } from '../../platform/index.js';
  * BottomPanel — Terminal and Output panels with tab switching and resize handle.
  *
  * Only renders on desktop when showTerminalPanel or showOutputPanel is true.
- * Reads height and active tab from useLayoutStore.
- * Panel open/close state still on useWorkspaceStore during the migration.
+ * Reads height, active tab, and panel open/close state from useLayoutStore.
  */
 export default function BottomPanel({ workspacePath, onResizeStart }) {
   const bottomPanelHeight = useLayoutStore((s) => s.bottomPanelHeight);
   const bottomPanelTab = useLayoutStore((s) => s.bottomPanelTab);
-
-  const showTerminalPanel = useWorkspaceStore((s) => s.showTerminalPanel);
-  const showOutputPanel = useWorkspaceStore((s) => s.showOutputPanel);
+  const showTerminalPanel = useLayoutStore((s) => s.showTerminalPanel);
+  const showOutputPanel = useLayoutStore((s) => s.showOutputPanel);
 
   if (!isDesktop() || (!showTerminalPanel && !showOutputPanel)) {
     return null;
   }
 
   const handleClosePanel = () => {
-    useWorkspaceStore.setState({ showTerminalPanel: false });
-    useWorkspaceStore.setState({ showOutputPanel: false });
+    useLayoutStore.setState({ showTerminalPanel: false });
+    useLayoutStore.setState({ showOutputPanel: false });
   };
 
   const handleSelectTerminal = () => {
     useLayoutStore.getState().setBottomTab('terminal');
-    useWorkspaceStore.setState({ showTerminalPanel: true });
-    useWorkspaceStore.setState({ showOutputPanel: false });
+    useLayoutStore.setState({ showTerminalPanel: true });
+    useLayoutStore.setState({ showOutputPanel: false });
   };
 
   const handleSelectOutput = () => {
     useLayoutStore.getState().setBottomTab('output');
-    useWorkspaceStore.setState({ showOutputPanel: true });
-    useWorkspaceStore.setState({ showTerminalPanel: false });
+    useLayoutStore.setState({ showOutputPanel: true });
+    useLayoutStore.setState({ showTerminalPanel: false });
   };
 
   return (

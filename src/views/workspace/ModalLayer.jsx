@@ -1,4 +1,7 @@
-import { useWorkspaceStore } from '../../stores/workspace';
+import { useViewStore } from '../../stores/views';
+import { useEditorGroupStore } from '../../stores/editorGroups';
+import { useLayoutStore } from '../../stores/layout';
+import { useFileTreeStore } from '../../stores/fileTree';
 import CommandPalette from '../../components/CommandPalette.jsx';
 import InFileSearch from '../../components/InFileSearch.jsx';
 import FullTextSearchPanel from '../FullTextSearchPanel.jsx';
@@ -12,8 +15,6 @@ import CanvasPreviewPopup from '../../components/CanvasPreviewPopup.jsx';
 import { DatePickerModal } from '../../components/DailyNotes/index.js';
 import { getMarkdownCompiler } from '../../core/markdown/compiler.js';
 import { getFilename } from '../../utils/pathUtils.js';
-
-const MAX_OPEN_TABS = 10;
 
 /**
  * Inserts template content into the editor, handling the {{cursor}} placeholder.
@@ -75,8 +76,8 @@ function applyTemplate(editorInstance, processedContent) {
 /**
  * ModalLayer — renders all modals and overlays for the workspace.
  *
- * Panel visibility flags are read from useWorkspaceStore (migration source)
- * and will gradually move to useViewStore.
+ * Panel visibility flags are read from useViewStore.
+ * Tab/file state is read from useEditorGroupStore.
  */
 export default function ModalLayer({
   workspacePath,
@@ -94,23 +95,41 @@ export default function ModalLayer({
   onCloseReferenceModal,
   editorRef,
 }) {
-  // Modals from workspace store (legacy, migrating to viewStore)
-  const showCommandPalette = useWorkspaceStore((s) => s.showCommandPalette);
-  const showInFileSearch = useWorkspaceStore((s) => s.showInFileSearch);
-  const showShortcutHelp = useWorkspaceStore((s) => s.showShortcutHelp);
-  const showTemplatePicker = useWorkspaceStore((s) => s.showTemplatePicker);
-  const templatePickerData = useWorkspaceStore((s) => s.templatePickerData);
-  const showCreateTemplate = useWorkspaceStore((s) => s.showCreateTemplate);
-  const createTemplateContent = useWorkspaceStore((s) => s.createTemplateContent);
-  const showGlobalSearch = useWorkspaceStore((s) => s.showGlobalSearch);
-  const showTagModal = useWorkspaceStore((s) => s.showTagModal);
-  const tagModalFile = useWorkspaceStore((s) => s.tagModalFile);
-  const showAboutDialog = useWorkspaceStore((s) => s.showAboutDialog);
-  const showDatePickerModal = useWorkspaceStore((s) => s.showDatePickerModal);
-  const canvasPreview = useWorkspaceStore((s) => s.canvasPreview);
-  const referenceUpdateModal = useWorkspaceStore((s) => s.referenceUpdateModal);
-  const openTabs = useWorkspaceStore((s) => s.openTabs);
-  const activeFile = useWorkspaceStore((s) => s.activeFile);
+  // Modal visibility flags from useViewStore
+  const showCommandPalette = useViewStore((s) => s.showCommandPalette);
+  const showInFileSearch = useViewStore((s) => s.showInFileSearch);
+  const showShortcutHelp = useViewStore((s) => s.showShortcutHelp);
+  const showTemplatePicker = useViewStore((s) => s.showTemplatePicker);
+  const templatePickerData = useViewStore((s) => s.templatePickerData);
+  const showCreateTemplate = useViewStore((s) => s.showCreateTemplate);
+  const createTemplateContent = useViewStore((s) => s.createTemplateContent);
+  const showGlobalSearch = useViewStore((s) => s.showGlobalSearch);
+  const showTagModal = useViewStore((s) => s.showTagModal);
+  const tagModalFile = useViewStore((s) => s.tagModalFile);
+  const showAboutDialog = useViewStore((s) => s.showAboutDialog);
+  const showDatePickerModal = useViewStore((s) => s.showDatePickerModal);
+  const canvasPreview = useViewStore((s) => s.canvasPreview);
+  const referenceUpdateModal = useViewStore((s) => s.referenceUpdateModal);
+
+  // Tab/file state from useEditorGroupStore
+  const focusedGroup = useEditorGroupStore((s) => {
+    const { layout, focusedGroupId } = s;
+    if (!focusedGroupId) return null;
+    const findGroup = (node) => {
+      if (node.type === 'group' && node.id === focusedGroupId) return node;
+      if (node.type === 'container') {
+        for (const child of node.children) {
+          const found = findGroup(child);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return findGroup(layout);
+  });
+
+  const openTabs = focusedGroup?.tabs ?? [];
+  const activeFile = focusedGroup?.activeTab ?? null;
 
   const handleOpenPreferences = () => {
     (async () => {
@@ -130,13 +149,14 @@ export default function ModalLayer({
   const handleOpenGraph = () => {
     const graphPath = '__professional_graph__';
     const graphName = 'Professional Graph';
-    useWorkspaceStore.setState((s) => {
-      const newTabs = s.openTabs.filter((t) => t.path !== graphPath);
-      newTabs.unshift({ path: graphPath, name: graphName });
-      if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
-      return { openTabs: newTabs };
-    });
-    useWorkspaceStore.setState({ activeFile: graphPath });
+    const { focusedGroupId } = useEditorGroupStore.getState();
+    if (focusedGroupId) {
+      useEditorGroupStore.getState().addTab(
+        focusedGroupId,
+        { path: graphPath, name: graphName },
+        true
+      );
+    }
   };
 
   const handleShowTemplatePicker = (templateSelection) => {
@@ -157,8 +177,8 @@ export default function ModalLayer({
     }
 
     // Fall back to opening the template picker modal
-    useWorkspaceStore.getState().openPanel('showTemplatePicker');
-    useWorkspaceStore.setState({
+    useViewStore.getState().openPanel('showTemplatePicker');
+    useViewStore.setState({
       templatePickerData: {
         editorState: { editor: editorRef?.current },
         onSelect: (template, processedContent) => {
@@ -179,7 +199,7 @@ export default function ModalLayer({
       {/* Command Palette */}
       <CommandPalette
         open={showCommandPalette}
-        setOpen={(v) => useWorkspaceStore.setState({ showCommandPalette: v })}
+        setOpen={(v) => useViewStore.setState({ showCommandPalette: v })}
         fileTree={filteredFileTree}
         openFiles={openTabs}
         onFileOpen={onFileOpen}
@@ -187,13 +207,13 @@ export default function ModalLayer({
         onCreateFolder={onCreateFolder}
         onSave={onSave}
         onOpenPreferences={handleOpenPreferences}
-        onToggleSidebar={() => useWorkspaceStore.getState().toggleLeft()}
+        onToggleSidebar={() => useLayoutStore.getState().toggleLeft()}
         onCloseTab={onTabClose}
         onOpenGraph={handleOpenGraph}
         onShowTemplatePicker={handleShowTemplatePicker}
         onCreateTemplate={onCreateTemplate}
         onOpenDailyNote={onOpenDailyNote}
-        onRefresh={() => useWorkspaceStore.getState().refreshTree()}
+        onRefresh={() => useFileTreeStore.getState().refreshTree()}
         activeFile={activeFile}
       />
 
@@ -201,7 +221,7 @@ export default function ModalLayer({
       <InFileSearch
         editor={editorRef?.current}
         isVisible={showInFileSearch}
-        onClose={() => useWorkspaceStore.getState().closePanel('showInFileSearch')}
+        onClose={() => useViewStore.getState().closePanel('showInFileSearch')}
       />
 
       {/* Template picker */}
@@ -209,15 +229,15 @@ export default function ModalLayer({
         <TemplatePicker
           open={showTemplatePicker}
           onClose={() => {
-            useWorkspaceStore.getState().closePanel('showTemplatePicker');
-            useWorkspaceStore.setState({ templatePickerData: null });
+            useViewStore.getState().closePanel('showTemplatePicker');
+            useViewStore.setState({ templatePickerData: null });
           }}
           onSelect={(template, processedContent) => {
             if (templatePickerData.onSelect) {
               templatePickerData.onSelect(template, processedContent);
             }
-            useWorkspaceStore.getState().closePanel('showTemplatePicker');
-            useWorkspaceStore.setState({ templatePickerData: null });
+            useViewStore.getState().closePanel('showTemplatePicker');
+            useViewStore.setState({ templatePickerData: null });
           }}
           editorState={templatePickerData.editorState}
         />
@@ -226,7 +246,7 @@ export default function ModalLayer({
       {/* Full-text search */}
       <FullTextSearchPanel
         isOpen={showGlobalSearch}
-        onClose={() => useWorkspaceStore.getState().closePanel('showGlobalSearch')}
+        onClose={() => useViewStore.getState().closePanel('showGlobalSearch')}
         onResultClick={(result) => {
           if (result.path) {
             onFileOpen({
@@ -236,7 +256,7 @@ export default function ModalLayer({
               column: result.column,
             });
           }
-          useWorkspaceStore.getState().closePanel('showGlobalSearch');
+          useViewStore.getState().closePanel('showGlobalSearch');
         }}
         workspacePath={workspacePath}
       />
@@ -244,13 +264,13 @@ export default function ModalLayer({
       {/* Shortcut help */}
       <ShortcutHelpModal
         isOpen={showShortcutHelp}
-        onClose={() => useWorkspaceStore.getState().closePanel('showShortcutHelp')}
+        onClose={() => useViewStore.getState().closePanel('showShortcutHelp')}
       />
 
       {/* Create template */}
       <CreateTemplate
         open={showCreateTemplate}
-        onClose={() => useWorkspaceStore.getState().closePanel('showCreateTemplate')}
+        onClose={() => useViewStore.getState().closePanel('showCreateTemplate')}
         initialContent={createTemplateContent}
         onSaved={onCreateTemplateSaved}
       />
@@ -258,7 +278,7 @@ export default function ModalLayer({
       {/* Date picker for daily notes */}
       <DatePickerModal
         isOpen={showDatePickerModal}
-        onClose={() => useWorkspaceStore.getState().closePanel('showDatePickerModal')}
+        onClose={() => useViewStore.getState().closePanel('showDatePickerModal')}
         onDateSelect={onOpenDailyNoteByDate}
         workspacePath={workspacePath}
       />
@@ -267,17 +287,17 @@ export default function ModalLayer({
       <TagManagementModal
         isOpen={showTagModal}
         onClose={() => {
-          useWorkspaceStore.getState().closePanel('showTagModal');
-          useWorkspaceStore.setState({ tagModalFile: null });
+          useViewStore.getState().closePanel('showTagModal');
+          useViewStore.setState({ tagModalFile: null });
         }}
         file={tagModalFile}
-        onTagsUpdated={() => useWorkspaceStore.getState().refreshTree()}
+        onTagsUpdated={() => useFileTreeStore.getState().refreshTree()}
       />
 
       {/* About dialog */}
       <AboutDialog
         isOpen={showAboutDialog}
-        onClose={() => useWorkspaceStore.getState().closePanel('showAboutDialog')}
+        onClose={() => useViewStore.getState().closePanel('showAboutDialog')}
       />
 
       {/* Reference update modal */}
@@ -301,7 +321,7 @@ export default function ModalLayer({
           thumbnailUrl={canvasPreview.thumbnailUrl}
           loading={canvasPreview.loading}
           error={canvasPreview.error}
-          onClose={() => useWorkspaceStore.setState({ canvasPreview: null })}
+          onClose={() => useViewStore.setState({ canvasPreview: null })}
         />
       )}
     </>

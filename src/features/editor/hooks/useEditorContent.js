@@ -1,21 +1,30 @@
 import { useCallback, useEffect } from 'react';
-import { useWorkspaceStore } from '../../../stores/workspace';
+import { useEditorGroupStore } from '../../../stores/editorGroups';
 import { invoke } from '@tauri-apps/api/core';
 import { getMarkdownCompiler } from '../../../core/markdown/compiler';
 
 export function useEditorContent({ workspacePath }) {
-  const activeFile = useWorkspaceStore((s) => s.activeFile);
-  const setContent = useWorkspaceStore((s) => s.setContent);
-  const setSavedContent = useWorkspaceStore((s) => s.setSavedContent);
-  const setTitle = useWorkspaceStore((s) => s.setTitle);
-  const setLoading = useWorkspaceStore((s) => s.setLoading);
+  // Derive the active file from the focused group in the editor group store
+  const focusedGroupId = useEditorGroupStore((s) => s.focusedGroupId);
+  const layout = useEditorGroupStore((s) => s.layout);
 
-  // Load file content when activeFile changes
+  // Resolve the focused group's activeTab reactively
+  const getFocusedGroup = useEditorGroupStore((s) => s.getFocusedGroup);
+  const focusedGroup = getFocusedGroup();
+  const activeFile = focusedGroup?.activeTab ?? null;
+
+  const setTabContent = useEditorGroupStore((s) => s.setTabContent);
+  const markTabDirty = useEditorGroupStore((s) => s.markTabDirty);
+
+  // Load file content when activeFile or focusedGroupId changes
   useEffect(() => {
     if (!activeFile || activeFile.startsWith('__')) return;
+    if (!focusedGroupId) return;
 
     let cancelled = false;
-    setLoading(true);
+
+    // Signal loading via tab content
+    setTabContent(focusedGroupId, activeFile, { loading: true });
 
     (async () => {
       try {
@@ -27,29 +36,38 @@ export function useEditorContent({ workspacePath }) {
           const compiler = getMarkdownCompiler();
           html = compiler.compile(content);
         }
-        setContent(html);
-        setSavedContent(html);
-        setTitle(activeFile.split('/').pop().replace(/\.md$/, ''));
+
+        setTabContent(focusedGroupId, activeFile, {
+          html,
+          savedContent: html,
+          title: activeFile.split('/').pop().replace(/\.md$/, ''),
+          loading: false,
+        });
       } catch (e) {
         console.error('Failed to load file:', e);
-      } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setTabContent(focusedGroupId, activeFile, { loading: false });
+        }
       }
     })();
 
     return () => { cancelled = true; };
-  }, [activeFile, workspacePath, setContent, setSavedContent, setTitle, setLoading]);
+  }, [activeFile, focusedGroupId, workspacePath, setTabContent]);
 
   const handleEditorChange = useCallback((newContent) => {
-    const store = useWorkspaceStore.getState();
-    store.setContent(newContent);
-    if (!store.activeFile) return;
-    if (newContent !== store.savedContent) {
-      store.markUnsaved(store.activeFile);
-    } else {
-      store.markSaved(store.activeFile);
+    const store = useEditorGroupStore.getState();
+    const group = store.getFocusedGroup();
+    if (!group || !group.activeTab) return;
+
+    const { id: groupId, activeTab: tabPath, contentByTab } = group;
+    const savedContent = contentByTab?.[tabPath]?.savedContent ?? null;
+
+    setTabContent(groupId, tabPath, { html: newContent });
+
+    if (savedContent !== null) {
+      markTabDirty(groupId, tabPath, newContent !== savedContent);
     }
-  }, []);
+  }, [setTabContent, markTabDirty]);
 
   return { handleEditorChange };
 }

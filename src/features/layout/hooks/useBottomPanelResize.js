@@ -1,14 +1,14 @@
 import { useCallback, useRef } from 'react';
-import { useWorkspaceStore } from '../../../stores/workspace';
+import { useLayoutStore } from '../../../stores/layout';
 
 export function useBottomPanelResize({ min = 150, max = 600 }) {
   const isResizingRef = useRef(false);
-  const setBottomHeight = useWorkspaceStore((s) => s.setBottomHeight);
+  const setBottomHeight = useLayoutStore((s) => s.setBottomHeight);
 
   const startResize = useCallback((e) => {
     isResizingRef.current = true;
     const startY = e.clientY;
-    const startH = useWorkspaceStore.getState().bottomPanelHeight;
+    const startH = useLayoutStore.getState().bottomPanelHeight;
 
     function onMove(e) {
       if (!isResizingRef.current) return;

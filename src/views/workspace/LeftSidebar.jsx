@@ -1,5 +1,6 @@
 import { RefreshCw, FoldVertical } from 'lucide-react';
-import { useWorkspaceStore } from '../../stores/workspace';
+import { useViewStore } from '../../stores/views';
+import { useEditorGroupStore } from '../../stores/editorGroups';
 import { useFileTreeStore } from '../../stores/fileTree';
 import { useLayoutStore } from '../../stores/layout';
 import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
@@ -25,7 +26,7 @@ import {
  *
  * Shows the file explorer by default, and conditionally renders
  * DailyNotesPanel, CalendarWidget, KanbanList, PluginSettings, or BasesView
- * based on the active view flags from the workspace store.
+ * based on the active view from useViewStore and panel flags.
  */
 export default function LeftSidebar({
   workspacePath,
@@ -48,15 +49,34 @@ export default function LeftSidebar({
   const showLeft = useLayoutStore((s) => s.showLeft);
   const featureFlags = useFeatureFlags();
 
-  // View-specific flags (still on useWorkspaceStore during migration)
-  const showKanban = useWorkspaceStore((s) => s.showKanban);
-  const showPlugins = useWorkspaceStore((s) => s.showPlugins);
-  const showBases = useWorkspaceStore((s) => s.showBases);
-  const showGraphView = useWorkspaceStore((s) => s.showGraphView);
-  const showDailyNotesPanel = useWorkspaceStore((s) => s.showDailyNotesPanel);
-  const showCalendarPanel = useWorkspaceStore((s) => s.showCalendarPanel);
-  const currentDailyNoteDate = useWorkspaceStore((s) => s.currentDailyNoteDate);
-  const activeFile = useWorkspaceStore((s) => s.activeFile);
+  // View state from useViewStore
+  const currentView = useViewStore((s) => s.currentView);
+  const showDailyNotesPanel = useViewStore((s) => s.showDailyNotesPanel);
+  const showCalendarPanel = useViewStore((s) => s.showCalendarPanel);
+  const currentDailyNoteDate = useViewStore((s) => s.currentDailyNoteDate);
+
+  // Derive boolean view flags from currentView
+  const showKanban = currentView === 'kanban';
+  const showPlugins = currentView === 'marketplace';
+  const showBases = currentView === 'bases';
+  const showGraphView = currentView === 'graph';
+
+  // Active file from the focused editor group
+  const activeFile = useEditorGroupStore((s) => {
+    const { layout, focusedGroupId } = s;
+    if (!focusedGroupId) return null;
+    const findGroup = (node) => {
+      if (node.type === 'group' && node.id === focusedGroupId) return node;
+      if (node.type === 'container') {
+        for (const child of node.children) {
+          const found = findGroup(child);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return findGroup(layout)?.activeTab ?? null;
+  });
 
   // File tree state from the dedicated fileTree store
   const selectedPath = useFileTreeStore((s) => s.selectedPath);
@@ -75,15 +95,14 @@ export default function LeftSidebar({
   const handleOpenCalendarView = () => {
     const calendarPath = '__calendar__';
     const calendarName = 'Calendar';
-    const MAX_OPEN_TABS = 10;
-
-    useWorkspaceStore.setState((s) => {
-      const newTabs = s.openTabs.filter((t) => t.path !== calendarPath);
-      newTabs.unshift({ path: calendarPath, name: calendarName });
-      if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
-      return { openTabs: newTabs };
-    });
-    useWorkspaceStore.setState({ activeFile: calendarPath });
+    const { focusedGroupId } = useEditorGroupStore.getState();
+    if (focusedGroupId) {
+      useEditorGroupStore.getState().addTab(
+        focusedGroupId,
+        { path: calendarPath, name: calendarName },
+        true
+      );
+    }
   };
 
   const handleOpenCalendarSettings = async () => {
@@ -143,7 +162,12 @@ export default function LeftSidebar({
         <div className="flex-1 overflow-hidden p-4">
           <div className="text-center mb-4">
             <button
-              onClick={() => useWorkspaceStore.setState({ activeFile: '__graph__' })}
+              onClick={() => {
+                const { focusedGroupId } = useEditorGroupStore.getState();
+                if (focusedGroupId) {
+                  useEditorGroupStore.getState().setActiveTab(focusedGroupId, '__graph__');
+                }
+              }}
               className="obsidian-button primary w-full"
             >
               Open Graph View
@@ -242,16 +266,28 @@ export default function LeftSidebar({
               renamingPath={renamingPath}
               setRenamingPath={(x) => useFileTreeStore.setState({ renamingPath: x })}
               onViewHistory={onViewHistory}
-              setTagModalFile={(x) => useWorkspaceStore.setState({ tagModalFile: x })}
+              setTagModalFile={(x) => useViewStore.setState({ tagModalFile: x })}
               setShowTagModal={(v) =>
                 v
-                  ? useWorkspaceStore.getState().openPanel('showTagModal')
-                  : useWorkspaceStore.getState().closePanel('showTagModal')
+                  ? useViewStore.getState().openPanel('showTagModal')
+                  : useViewStore.getState().closePanel('showTagModal')
               }
-              setUseSplitView={(x) => useWorkspaceStore.setState({ useSplitView: x })}
-              setRightPaneFile={(x) => useWorkspaceStore.setState({ rightPaneFile: x })}
-              setRightPaneTitle={(x) => useWorkspaceStore.setState({ rightPaneTitle: x })}
-              setRightPaneContent={(x) => useWorkspaceStore.setState({ rightPaneContent: x })}
+              setUseSplitView={(x) => {
+                const { focusedGroupId } = useEditorGroupStore.getState();
+                if (x && focusedGroupId) {
+                  useEditorGroupStore.getState().splitGroup(focusedGroupId, 'horizontal');
+                }
+              }}
+              setRightPaneFile={(x) => {
+                const { focusedGroupId, getAllGroups } = useEditorGroupStore.getState();
+                const groups = getAllGroups();
+                const rightGroup = groups.find((g) => g.id !== focusedGroupId) ?? null;
+                if (rightGroup && x) {
+                  useEditorGroupStore.getState().addTab(rightGroup.id, { path: x, name: x.split('/').pop() || x }, true);
+                }
+              }}
+              setRightPaneTitle={() => {}}
+              setRightPaneContent={() => {}}
               isExternalDragActive={isExternalDragActive}
               hoveredFolder={hoveredFolder}
               setHoveredFolder={(x) => useFileTreeStore.getState().setHoveredFolder(x)}

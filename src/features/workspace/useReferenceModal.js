@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { useWorkspaceStore } from "../../stores/workspace";
+import { useViewStore } from "../../stores/views";
 import referenceManager from "../../core/references/ReferenceManager.js";
 
 /**
@@ -9,7 +9,7 @@ import referenceManager from "../../core/references/ReferenceManager.js";
 export function useReferenceModal() {
   // Handler for checking references before file move/rename
   const handleCheckReferences = useCallback(({ oldPath, newPath, affectedFiles, operation }) => {
-    useWorkspaceStore.getState().setReferenceUpdateModal({
+    useViewStore.getState().setReferenceUpdateModal({
       isOpen: true,
       oldPath,
       newPath,
@@ -22,30 +22,32 @@ export function useReferenceModal() {
 
   // Handler for confirming reference updates
   const handleConfirmReferenceUpdate = useCallback(async (updateReferences) => {
-    const { oldPath, newPath, pendingOperation } = useWorkspaceStore.getState().referenceUpdateModal;
+    const { oldPath, newPath, pendingOperation } = useViewStore.getState().referenceUpdateModal;
 
-    useWorkspaceStore.setState((s) => ({ referenceUpdateModal: { ...s.referenceUpdateModal, isProcessing: true } }));
+    useViewStore.getState().setReferenceUpdateModal({ isProcessing: true });
 
     try {
       // First, execute the move/rename operation
       const operationSuccess = await pendingOperation();
 
       if (!operationSuccess) {
-        useWorkspaceStore.setState((s) => ({
-          referenceUpdateModal: { ...s.referenceUpdateModal, isProcessing: false, result: { success: false, error: 'Operation failed' } }
-        }));
+        useViewStore.getState().setReferenceUpdateModal({
+          isProcessing: false,
+          result: { success: false, error: 'Operation failed' },
+        });
         return;
       }
 
       // If user chose to update references, do it now
       if (updateReferences) {
         const result = await referenceManager.updateAllReferences(oldPath, newPath);
-        useWorkspaceStore.setState((s) => ({
-          referenceUpdateModal: { ...s.referenceUpdateModal, isProcessing: false, result: { success: true, updated: result.updated, files: result.files } }
-        }));
+        useViewStore.getState().setReferenceUpdateModal({
+          isProcessing: false,
+          result: { success: true, updated: result.updated, files: result.files },
+        });
       } else {
         // Just close after successful operation without updating references
-        useWorkspaceStore.getState().setReferenceUpdateModal({
+        useViewStore.getState().setReferenceUpdateModal({
           isOpen: false,
           oldPath: null,
           newPath: null,
@@ -56,15 +58,16 @@ export function useReferenceModal() {
         });
       }
     } catch (err) {
-      useWorkspaceStore.setState((s) => ({
-        referenceUpdateModal: { ...s.referenceUpdateModal, isProcessing: false, result: { success: false, error: err.message || 'Failed to update references' } }
-      }));
+      useViewStore.getState().setReferenceUpdateModal({
+        isProcessing: false,
+        result: { success: false, error: err.message || 'Failed to update references' },
+      });
     }
   }, []);
 
   // Handler for closing reference update modal
   const handleCloseReferenceModal = useCallback(() => {
-    useWorkspaceStore.getState().setReferenceUpdateModal({
+    useViewStore.getState().setReferenceUpdateModal({
       isOpen: false,
       oldPath: null,
       newPath: null,

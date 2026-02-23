@@ -8,7 +8,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useAutoExpand } from "../../hooks/useAutoExpand.js";
 import { getFilename } from "../../utils/pathUtils.js";
 import { copyFiles, cutFiles, getRelativePath } from "../../utils/clipboard.js";
-import { useWorkspaceStore } from "../../stores/workspace";
+import { useViewStore } from "../../stores/views";
+import { useEditorGroupStore } from "../../stores/editorGroups";
 import referenceManager from "../../core/references/ReferenceManager.js";
 import { InlineRenameInput } from "./InlineRenameInput.jsx";
 import { NewItemInput } from "./NewItemInput.jsx";
@@ -229,8 +230,9 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
 
         // Load content if it's a markdown file
         if (file.path.endsWith('.md') || file.path.endsWith('.txt')) {
-          // Check if this file is already loaded in the left pane to avoid duplicate load
-          const currentEditorContent = useWorkspaceStore.getState().editorContent;
+          // Check if this file is already loaded in the focused group to avoid duplicate load
+          const focusedGroup = useEditorGroupStore.getState().getFocusedGroup();
+          const currentEditorContent = focusedGroup?.contentByTab?.[file.path]?.html ?? null;
           if (file.path === activeFile && currentEditorContent) {
             setRightPaneContent(currentEditorContent);
           } else {
@@ -323,13 +325,13 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
       case 'selectForCompare':
         // Select file for comparison
         if (file.type === 'file') {
-          useWorkspaceStore.setState({ selectedFileForCompare: file });
+          useViewStore.setState({ selectedFileForCompare: file });
           toast.success(`Selected for compare: ${file.name}`);
         }
         break;
       case 'compareWith': {
         // Compare with previously selected file
-        const compareFile = useWorkspaceStore.getState().selectedFileForCompare;
+        const compareFile = useViewStore.getState().selectedFileForCompare;
         if (compareFile && file.type === 'file') {
           // Open both files in split view for manual comparison
           onFileClick(compareFile.path);
@@ -339,7 +341,7 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
             setRightPaneTitle(file.name);
           }, 100);
           toast.success(`Comparing ${compareFile.name} with ${file.name}`);
-          useWorkspaceStore.setState({ selectedFileForCompare: null });
+          useViewStore.setState({ selectedFileForCompare: null });
         }
         break;
       }
@@ -359,7 +361,7 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
         // Open tag management modal for markdown files
         if (file && (file.name.endsWith('.md') || file.name.endsWith('.markdown'))) {
           setTagModalFile(file);
-          useWorkspaceStore.getState().openPanel('showTagModal');
+          useViewStore.getState().openPanel('showTagModal');
         }
         break;
 

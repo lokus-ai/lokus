@@ -1,12 +1,18 @@
 import { useCallback } from 'react';
-import { useWorkspaceStore } from '../../../stores/workspace';
+import { useEditorGroupStore } from '../../../stores/editorGroups';
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import posthog from '../../../services/posthog.js';
 
 export function useExport({ workspacePath }) {
   const handleExportHtml = useCallback(async () => {
-    const { activeFile, editorContent, editorTitle } = useWorkspaceStore.getState();
+    const editorGroupStore = useEditorGroupStore.getState();
+    const focusedGroup = editorGroupStore.getFocusedGroup();
+    const activeFile = focusedGroup?.activeTab ?? null;
+    const tabContent = activeFile ? focusedGroup?.contentByTab?.[activeFile] : null;
+    const editorContent = tabContent?.html ?? tabContent?.content ?? '';
+    const editorTitle = tabContent?.title ?? '';
+
     if (!activeFile) return;
 
     try {
@@ -120,7 +126,13 @@ export function useExport({ workspacePath }) {
   }, []);
 
   const handleExportPdf = useCallback(async () => {
-    const { activeFile, editorContent, editorTitle } = useWorkspaceStore.getState();
+    const editorGroupStore = useEditorGroupStore.getState();
+    const focusedGroup = editorGroupStore.getFocusedGroup();
+    const activeFile = focusedGroup?.activeTab ?? null;
+    const tabContent = activeFile ? focusedGroup?.contentByTab?.[activeFile] : null;
+    const editorContent = tabContent?.html ?? tabContent?.content ?? '';
+    const editorTitle = tabContent?.title ?? '';
+
     if (!activeFile) return;
 
     try {

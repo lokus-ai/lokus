@@ -1,11 +1,9 @@
 import { useRef, useCallback, useEffect } from 'react';
-import { useWorkspaceStore } from '../../../stores/workspace';
+import { useEditorGroupStore } from '../../../stores/editorGroups';
 import { GraphDataProcessor } from '../../../core/graph/GraphDataProcessor';
 import { GraphData } from '../../../core/graph/GraphData';
 import { GraphEngine } from '../../../core/graph/GraphEngine';
 import posthog from '../../../services/posthog.js';
-
-const MAX_OPEN_TABS = 10;
 
 export function useGraphEngine({ workspacePath }) {
   const graphProcessorRef = useRef(null);
@@ -31,18 +29,22 @@ export function useGraphEngine({ workspacePath }) {
     const graphDatabase = graphProcessorRef.current.getGraphDatabase();
 
     const handleFileLinksUpdated = () => {
-      const { activeFile, graphData } = useWorkspaceStore.getState();
+      const store = useEditorGroupStore.getState();
+      const activeFile = store.getFocusedGroup()?.activeTab ?? null;
+      const { graphData } = store;
       if (activeFile === '__graph__' && graphData) {
         const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
-        useWorkspaceStore.getState().setGraphData(updatedGraphData);
+        store.setGraphData(updatedGraphData);
       }
     };
 
     const handleConnectionChanged = () => {
-      const { activeFile, graphData } = useWorkspaceStore.getState();
+      const store = useEditorGroupStore.getState();
+      const activeFile = store.getFocusedGroup()?.activeTab ?? null;
+      const { graphData } = store;
       if (activeFile === '__graph__' && graphData) {
         const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
-        useWorkspaceStore.getState().setGraphData(updatedGraphData);
+        store.setGraphData(updatedGraphData);
       }
     };
 
@@ -60,16 +62,16 @@ export function useGraphEngine({ workspacePath }) {
 
   // Handle graph state updates from ProfessionalGraphView
   const handleGraphStateChange = useCallback((state) => {
-    useWorkspaceStore.getState().setGraphSidebar(state);
+    useEditorGroupStore.getState().setGraphSidebar(state);
   }, []);
 
   // Build graph data for backlinks panel
   // Note: ProfessionalGraphView has its own data loading, but BacklinksPanel needs GraphDatabase
   const buildGraphData = useCallback(async () => {
-    const { isLoadingGraph } = useWorkspaceStore.getState();
+    const { isLoadingGraph } = useEditorGroupStore.getState();
     if (!graphProcessorRef.current || isLoadingGraph) return;
 
-    useWorkspaceStore.getState().setLoadingGraph(true);
+    useEditorGroupStore.getState().setLoadingGraph(true);
 
     try {
       const data = await graphProcessorRef.current.buildGraphFromWorkspace({
@@ -78,22 +80,24 @@ export function useGraphEngine({ workspacePath }) {
         excludePatterns: ['.git', 'node_modules', '.lokus', '.DS_Store']
       });
 
-      useWorkspaceStore.getState().setGraphData(data);
+      useEditorGroupStore.getState().setGraphData(data);
     } catch (error) {
-      useWorkspaceStore.getState().setGraphData(null);
+      useEditorGroupStore.getState().setGraphData(null);
     } finally {
-      useWorkspaceStore.getState().setLoadingGraph(false);
+      useEditorGroupStore.getState().setLoadingGraph(false);
     }
   }, []);
 
   const handleGraphNodeClick = useCallback((event) => {
-    const { nodeId, nodeData } = event;
+    const { nodeData } = event;
 
-    // If it's a file node (not phantom), open the file
+    // If it's a file node (not phantom), open the file in the focused group
     if (nodeData && nodeData.path && !nodeData.isPhantom) {
-      const store = useWorkspaceStore.getState();
+      const store = useEditorGroupStore.getState();
+      const focusedGroup = store.getFocusedGroup();
+      if (!focusedGroup) return;
       const fileName = nodeData.path.split('/').pop();
-      store.openTab(nodeData.path, fileName);
+      store.addTab(focusedGroup.id, { path: nodeData.path, name: fileName });
     }
   }, []);
 
@@ -103,15 +107,11 @@ export function useGraphEngine({ workspacePath }) {
 
     posthog.trackFeatureActivation('graph');
 
-    useWorkspaceStore.setState((s) => {
-      const newTabs = s.openTabs.filter(t => t.path !== graphPath);
-      newTabs.unshift({ path: graphPath, name: graphName });
-      if (newTabs.length > MAX_OPEN_TABS) {
-        newTabs.pop();
-      }
-      return { openTabs: newTabs };
-    });
-    useWorkspaceStore.setState({ activeFile: graphPath });
+    const store = useEditorGroupStore.getState();
+    const focusedGroup = store.getFocusedGroup();
+    if (!focusedGroup) return;
+
+    store.addTab(focusedGroup.id, { path: graphPath, name: graphName });
   }, []);
 
   const updateFileInGraph = useCallback(async (filePath, content) => {
@@ -120,12 +120,12 @@ export function useGraphEngine({ workspacePath }) {
       const updateResult = await graphProcessorRef.current.updateFileContent(filePath, content);
       if (updateResult.added > 0 || updateResult.removed > 0) {
         const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
-        useWorkspaceStore.getState().setGraphData(updatedGraphData);
+        useEditorGroupStore.getState().setGraphData(updatedGraphData);
       }
     } catch (e) {
       try {
         const updatedGraphData = await graphProcessorRef.current.updateChangedFiles([filePath]);
-        if (updatedGraphData) useWorkspaceStore.getState().setGraphData(updatedGraphData);
+        if (updatedGraphData) useEditorGroupStore.getState().setGraphData(updatedGraphData);
       } catch (_) { /* silent */ }
     }
   }, []);
@@ -139,7 +139,7 @@ export function useGraphEngine({ workspacePath }) {
 
   // Build graph data ONCE when workspace is initialized (for backlinks)
   useEffect(() => {
-    const { graphData, isLoadingGraph } = useWorkspaceStore.getState();
+    const { graphData, isLoadingGraph } = useEditorGroupStore.getState();
     if (workspacePath && graphProcessorRef.current && !graphData && !isLoadingGraph) {
       buildGraphData();
     }

@@ -1,11 +1,11 @@
 import { useCallback } from 'react';
-import { useWorkspaceStore } from '../../../stores/workspace';
+import { useFileTreeStore } from '../../../stores/fileTree';
 import { invoke } from '@tauri-apps/api/core';
 
 export function useFileDragDrop({ workspacePath }) {
-  const refreshTree = useWorkspaceStore((s) => s.refreshTree);
-  const setHoveredFolder = useWorkspaceStore((s) => s.setHoveredFolder);
-  const setExternalDragActive = useWorkspaceStore((s) => s.setExternalDragActive);
+  const refreshTree = useFileTreeStore((s) => s.refreshTree);
+  const setHoveredFolder = useFileTreeStore((s) => s.setHoveredFolder);
+  const setExternalDragActive = useFileTreeStore((s) => s.setExternalDragActive);
 
   const handleDragEnd = useCallback(async (event) => {
     const { active, over } = event;

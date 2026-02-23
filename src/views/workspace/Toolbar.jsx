@@ -1,5 +1,5 @@
 import { useLayoutStore } from '../../stores/layout';
-import { useWorkspaceStore } from '../../stores/workspace';
+import { useEditorGroupStore } from '../../stores/editorGroups';
 import { useUIVisibility, useFeatureFlags } from '../../contexts/RemoteConfigContext';
 import { ResponsiveTabBar } from '../../components/TabBar/ResponsiveTabBar.jsx';
 import {
@@ -36,24 +36,46 @@ export default function Toolbar({
   const uiVisibility = useUIVisibility();
   const featureFlags = useFeatureFlags();
 
-  // Tabs from workspace store (legacy, will migrate to editorGroupStore)
-  const openTabs = useWorkspaceStore((s) => s.openTabs);
-  const activeFile = useWorkspaceStore((s) => s.activeFile);
-  const unsavedChanges = useWorkspaceStore((s) => s.unsavedChanges);
-  const useSplitView = useWorkspaceStore((s) => s.useSplitView);
+  // Tabs from the focused editor group
+  const focusedGroup = useEditorGroupStore((s) => {
+    const { layout, focusedGroupId } = s;
+    if (!focusedGroupId) return null;
+    const findGroup = (node) => {
+      if (node.type === 'group' && node.id === focusedGroupId) return node;
+      if (node.type === 'container') {
+        for (const child of node.children) {
+          const found = findGroup(child);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return findGroup(layout);
+  });
 
-  // Callbacks delegated to workspace store for tab interactions
+  const openTabs = focusedGroup?.tabs ?? [];
+  const activeFile = focusedGroup?.activeTab ?? null;
+  const unsavedChanges = focusedGroup
+    ? Object.fromEntries(
+        Object.entries(focusedGroup.contentByTab ?? {}).map(([path, data]) => [
+          path,
+          data?.dirty ?? false,
+        ])
+      )
+    : {};
+
   const handleTabClick = (path) => {
-    useWorkspaceStore.setState({ activeFile: path });
+    const groupId = useEditorGroupStore.getState().focusedGroupId;
+    if (groupId) {
+      useEditorGroupStore.getState().setActiveTab(groupId, path);
+    }
   };
 
   const handleTabClose = (path) => {
-    useWorkspaceStore.setState((s) => {
-      const newTabs = s.openTabs.filter((t) => t.path !== path);
-      const newActive =
-        s.activeFile === path ? (newTabs[0]?.path || null) : s.activeFile;
-      return { openTabs: newTabs, activeFile: newActive };
-    });
+    const groupId = useEditorGroupStore.getState().focusedGroupId;
+    if (groupId) {
+      useEditorGroupStore.getState().removeTab(groupId, path);
+    }
   };
 
   return (
@@ -133,8 +155,8 @@ export default function Toolbar({
         {uiVisibility.toolbar_split_view && (
           <button
             onClick={onToggleSplitView}
-            className={`obsidian-button icon-only small ${useSplitView ? 'active' : ''}`}
-            title={useSplitView ? 'Exit Split View' : 'Enter Split View'}
+            className="obsidian-button icon-only small"
+            title="Split View"
             data-tauri-drag-region="false"
             data-tour="split-view"
             style={{ pointerEvents: 'auto' }}

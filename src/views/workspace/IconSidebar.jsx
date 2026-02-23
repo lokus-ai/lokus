@@ -1,8 +1,8 @@
 import { FolderOpen, LayoutGrid, Puzzle, Database, Network, Calendar, CalendarDays } from 'lucide-react';
 import LokusLogo from '../../components/LokusLogo.jsx';
 import { useLayoutStore } from '../../stores/layout';
+import { useViewStore } from '../../stores/views';
 import { useUIVisibility, useFeatureFlags } from '../../contexts/RemoteConfigContext';
-import { useWorkspaceStore } from '../../stores/workspace';
 import platformService from '../../services/platform/PlatformService.js';
 
 /**
@@ -18,56 +18,46 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
   const uiVisibility = useUIVisibility();
   const featureFlags = useFeatureFlags();
 
-  // View flags still on useWorkspaceStore during migration
-  const showKanban = useWorkspaceStore((s) => s.showKanban);
-  const showPlugins = useWorkspaceStore((s) => s.showPlugins);
-  const showBases = useWorkspaceStore((s) => s.showBases);
-  const showGraphView = useWorkspaceStore((s) => s.showGraphView);
-  const showDailyNotesPanel = useWorkspaceStore((s) => s.showDailyNotesPanel);
-  const showCalendarPanel = useWorkspaceStore((s) => s.showCalendarPanel);
+  // View state from useViewStore
+  const currentView = useViewStore((s) => s.currentView);
+  const showDailyNotesPanel = useViewStore((s) => s.showDailyNotesPanel);
+  const showCalendarPanel = useViewStore((s) => s.showCalendarPanel);
+
+  // Derive boolean view flags from currentView
+  const showKanban = currentView === 'kanban';
+  const showPlugins = currentView === 'marketplace';
+  const showBases = currentView === 'bases';
+  const showGraphView = currentView === 'graph';
 
   const isExplorer = !showKanban && !showPlugins && !showBases && !showGraphView && showLeft;
 
   const handleExplorerClick = () => {
-    useWorkspaceStore.setState({ showKanban: false });
-    useWorkspaceStore.setState({ showPlugins: false });
-    useWorkspaceStore.setState({ showBases: false });
-    useWorkspaceStore.setState({ showGraphView: false });
-    useWorkspaceStore.setState({ showLeft: true });
+    useViewStore.getState().switchView('editor');
+    useLayoutStore.setState({ showLeft: true });
   };
 
   const handleKanbanClick = () => {
-    useWorkspaceStore.setState({ showKanban: true });
-    useWorkspaceStore.setState({ showPlugins: false });
-    useWorkspaceStore.setState({ showBases: false });
-    useWorkspaceStore.setState({ showGraphView: false });
-    useWorkspaceStore.setState({ showLeft: true });
+    useViewStore.getState().switchView('kanban');
+    useLayoutStore.setState({ showLeft: true });
   };
 
   const handlePluginsClick = () => {
-    useWorkspaceStore.setState({ showPlugins: true });
-    useWorkspaceStore.setState({ showKanban: false });
-    useWorkspaceStore.setState({ showBases: false });
-    useWorkspaceStore.setState({ showGraphView: false });
-    useWorkspaceStore.setState({ showLeft: true });
+    useViewStore.getState().switchView('marketplace');
+    useLayoutStore.setState({ showLeft: true });
   };
 
   const handleDailyNotesClick = () => {
-    useWorkspaceStore.setState({
-      showDailyNotesPanel: !useWorkspaceStore.getState().showDailyNotesPanel,
-    });
-    useWorkspaceStore.setState({ showCalendarPanel: false });
-    useWorkspaceStore.setState({ showRight: true });
-    useWorkspaceStore.getState().closePanel('showVersionHistory');
+    const nextValue = !useViewStore.getState().showDailyNotesPanel;
+    useViewStore.setState({ showDailyNotesPanel: nextValue, showCalendarPanel: false });
+    useLayoutStore.setState({ showRight: true });
+    useViewStore.getState().closePanel('showVersionHistory');
   };
 
   const handleCalendarClick = () => {
-    useWorkspaceStore.setState({
-      showCalendarPanel: !useWorkspaceStore.getState().showCalendarPanel,
-    });
-    useWorkspaceStore.setState({ showDailyNotesPanel: false });
-    useWorkspaceStore.setState({ showRight: true });
-    useWorkspaceStore.getState().closePanel('showVersionHistory');
+    const nextValue = !useViewStore.getState().showCalendarPanel;
+    useViewStore.setState({ showCalendarPanel: nextValue, showDailyNotesPanel: false });
+    useLayoutStore.setState({ showRight: true });
+    useViewStore.getState().closePanel('showVersionHistory');
   };
 
   return (

@@ -3,13 +3,19 @@
  * Coordinates exports to different formats (Markdown, PDF, ZIP)
  */
 
-import markdownExporter from './markdown-exporter.js';
 import pdfExporter from './pdf-exporter.js';
 import JSZip from 'jszip';
 
+// Simple HTML→text fallback for markdown export (markdown-exporter deleted;
+// primary save path now uses @tiptap/markdown on the editor instance).
+const htmlToPlainMarkdown = (html) => {
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  return div.textContent || div.innerText || '';
+};
+
 export class ExportManager {
   constructor() {
-    this.markdownExporter = markdownExporter;
     this.pdfExporter = pdfExporter;
   }
 
@@ -32,11 +38,7 @@ export class ExportManager {
     }
 
     // Convert to markdown
-    const markdown = this.markdownExporter.export(htmlContent, {
-      preserveWikiLinks,
-      includeMetadata,
-      metadata,
-    });
+    const markdown = htmlToPlainMarkdown(htmlContent);
 
     // Create blob
     const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
@@ -294,7 +296,7 @@ export class ExportManager {
    * @returns {string} Markdown preview
    */
   previewMarkdown(htmlContent, options = {}) {
-    return this.markdownExporter.export(htmlContent, options);
+    return htmlToPlainMarkdown(htmlContent);
   }
 
   /**

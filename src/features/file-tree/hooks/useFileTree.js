@@ -1,13 +1,13 @@
 import { useCallback, useEffect } from 'react';
-import { useWorkspaceStore } from '../../../stores/workspace';
+import { useFileTreeStore } from '../../../stores/fileTree';
 import { invoke } from '@tauri-apps/api/core';
 
 export function useFileTree({ workspacePath }) {
-  const setFileTree = useWorkspaceStore((s) => s.setFileTree);
-  const refreshId = useWorkspaceStore((s) => s.refreshId);
-  const refreshTree = useWorkspaceStore((s) => s.refreshTree);
-  const toggleFolder = useWorkspaceStore((s) => s.toggleFolder);
-  const closeAllFolders = useWorkspaceStore((s) => s.closeAllFolders);
+  const setFileTree = useFileTreeStore((s) => s.setFileTree);
+  const refreshId = useFileTreeStore((s) => s.refreshId);
+  const refreshTree = useFileTreeStore((s) => s.refreshTree);
+  const toggleFolder = useFileTreeStore((s) => s.toggleFolder);
+  const closeAllFolders = useFileTreeStore((s) => s.closeAllFolders);
 
   const loadFileTree = useCallback(async () => {
     if (!workspacePath) return;

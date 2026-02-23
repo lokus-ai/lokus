@@ -1,15 +1,15 @@
 import { useCallback } from 'react';
-import { useWorkspaceStore } from '../../../stores/workspace';
+import { useLayoutStore } from '../../../stores/layout';
 
 export function useColumnResize({ minLeft = 220, maxLeft = 500, minRight = 220, maxRight = 500 }) {
-  const leftW = useWorkspaceStore((s) => s.leftW);
-  const rightW = useWorkspaceStore((s) => s.rightW);
-  const setLeftW = useWorkspaceStore((s) => s.setLeftW);
-  const setRightW = useWorkspaceStore((s) => s.setRightW);
+  const leftW = useLayoutStore((s) => s.leftW);
+  const rightW = useLayoutStore((s) => s.rightW);
+  const setLeftW = useLayoutStore((s) => s.setLeftW);
+  const setRightW = useLayoutStore((s) => s.setRightW);
 
   const startLeftDrag = useCallback((e) => {
     const startX = e.clientX;
-    const startW = useWorkspaceStore.getState().leftW;
+    const startW = useLayoutStore.getState().leftW;
 
     function onMove(e) {
       setLeftW(Math.min(maxLeft, Math.max(minLeft, startW + (e.clientX - startX))));
@@ -24,7 +24,7 @@ export function useColumnResize({ minLeft = 220, maxLeft = 500, minRight = 220, 
 
   const startRightDrag = useCallback((e) => {
     const startX = e.clientX;
-    const startW = useWorkspaceStore.getState().rightW;
+    const startW = useLayoutStore.getState().rightW;
 
     function onMove(e) {
       setRightW(Math.min(maxRight, Math.max(minRight, startW - (e.clientX - startX))));
