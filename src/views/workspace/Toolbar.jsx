@@ -1,18 +1,34 @@
-import React from 'react';
 import { useLayoutStore } from '../../stores/layout';
-import { useEditorGroupStore } from '../../stores/editorGroups';
+import { useWorkspaceStore } from '../../stores/workspace';
 import { useUIVisibility, useFeatureFlags } from '../../contexts/RemoteConfigContext';
-import { ResponsiveTabBar } from '../../components/TabBar/ResponsiveTabBar';
+import { ResponsiveTabBar } from '../../components/TabBar/ResponsiveTabBar.jsx';
 import {
-  FilePlus as FilePlusCorner, FolderOpen, SquareKanban,
-  SquareSplitHorizontal, PanelRightOpen, PanelRightClose, Plus,
+  FilePlus as FilePlusCorner,
+  FolderOpen,
+  SquareKanban,
+  SquareSplitHorizontal,
+  PanelRightOpen,
+  PanelRightClose,
+  Plus,
 } from 'lucide-react';
-import platformService from '../../services/platform/PlatformService';
+import platformService from '../../services/platform/PlatformService.js';
 
 /**
  * Toolbar — fixed titlebar with action buttons and responsive tab bar.
+ *
+ * Left section: New File, New Folder, New Canvas buttons.
+ * Center section: responsive tab bar for the focused editor group.
+ * Right section: Split View, Right Sidebar toggle, New Tab buttons.
+ *
+ * Uses useEditorGroupStore for focused group tabs and useLayoutStore
+ * for sidebar widths and toggle actions.
  */
-export default function Toolbar({ onCreateFile, onCreateFolder, onCreateCanvas }) {
+export default function Toolbar({
+  onCreateFile,
+  onCreateFolder,
+  onCreateCanvas,
+  onToggleSplitView,
+}) {
   const showLeft = useLayoutStore((s) => s.showLeft);
   const showRight = useLayoutStore((s) => s.showRight);
   const leftW = useLayoutStore((s) => s.leftW);
@@ -20,30 +36,24 @@ export default function Toolbar({ onCreateFile, onCreateFolder, onCreateCanvas }
   const uiVisibility = useUIVisibility();
   const featureFlags = useFeatureFlags();
 
-  // Get tabs from focused group
-  const focusedGroup = useEditorGroupStore((s) => s.getFocusedGroup());
-  const tabs = focusedGroup?.tabs || [];
-  const activeTab = focusedGroup?.activeTab || null;
-  const focusedGroupId = useEditorGroupStore((s) => s.focusedGroupId);
+  // Tabs from workspace store (legacy, will migrate to editorGroupStore)
+  const openTabs = useWorkspaceStore((s) => s.openTabs);
+  const activeFile = useWorkspaceStore((s) => s.activeFile);
+  const unsavedChanges = useWorkspaceStore((s) => s.unsavedChanges);
+  const useSplitView = useWorkspaceStore((s) => s.useSplitView);
 
+  // Callbacks delegated to workspace store for tab interactions
   const handleTabClick = (path) => {
-    if (focusedGroupId) {
-      useEditorGroupStore.getState().setActiveTab(focusedGroupId, path);
-    }
+    useWorkspaceStore.setState({ activeFile: path });
   };
 
   const handleTabClose = (path) => {
-    if (focusedGroupId) {
-      const tab = tabs.find((t) => t.path === path);
-      if (tab) useEditorGroupStore.getState().addRecentlyClosed(tab);
-      useEditorGroupStore.getState().removeTab(focusedGroupId, path);
-    }
-  };
-
-  const handleSplit = () => {
-    if (focusedGroupId) {
-      useEditorGroupStore.getState().splitGroup(focusedGroupId, 'vertical');
-    }
+    useWorkspaceStore.setState((s) => {
+      const newTabs = s.openTabs.filter((t) => t.path !== path);
+      const newActive =
+        s.activeFile === path ? (newTabs[0]?.path || null) : s.activeFile;
+      return { openTabs: newTabs, activeFile: newActive };
+    });
   };
 
   return (
@@ -100,28 +110,31 @@ export default function Toolbar({ onCreateFile, onCreateFolder, onCreateCanvas }
       <div
         className="absolute flex items-center overflow-hidden px-2"
         style={{
-          left: showLeft ? `${leftW + 57}px` : `${platformService.isMacOS() ? 200 : 120}px`,
+          left: showLeft
+            ? `${leftW + 57}px`
+            : `${platformService.isMacOS() ? 200 : 120}px`,
           right: showRight ? `${rightW + 120}px` : '120px',
           top: 0,
           height: '32px',
         }}
       >
         <ResponsiveTabBar
-          tabs={tabs}
-          activeTab={activeTab}
+          tabs={openTabs}
+          activeTab={activeFile}
           onTabClick={handleTabClick}
           onTabClose={handleTabClose}
+          unsavedChanges={unsavedChanges}
           reservedSpace={0}
         />
       </div>
 
-      {/* Right: split, sidebar toggle, new tab */}
+      {/* Right: split view toggle, sidebar toggle, new tab */}
       <div className="flex items-center gap-1">
         {uiVisibility.toolbar_split_view && (
           <button
-            onClick={handleSplit}
-            className="obsidian-button icon-only small"
-            title="Split View"
+            onClick={onToggleSplitView}
+            className={`obsidian-button icon-only small ${useSplitView ? 'active' : ''}`}
+            title={useSplitView ? 'Exit Split View' : 'Enter Split View'}
             data-tauri-drag-region="false"
             data-tour="split-view"
             style={{ pointerEvents: 'auto' }}
@@ -136,7 +149,11 @@ export default function Toolbar({ onCreateFile, onCreateFolder, onCreateCanvas }
           data-tauri-drag-region="false"
           style={{ pointerEvents: 'auto' }}
         >
-          {showRight ? <PanelRightClose className="w-5 h-5" strokeWidth={2} /> : <PanelRightOpen className="w-5 h-5" strokeWidth={2} />}
+          {showRight ? (
+            <PanelRightClose className="w-5 h-5" strokeWidth={2} />
+          ) : (
+            <PanelRightOpen className="w-5 h-5" strokeWidth={2} />
+          )}
         </button>
         <button
           onClick={onCreateFile}
