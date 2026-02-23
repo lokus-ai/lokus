@@ -2,64 +2,6 @@ use serde::{Serialize, Deserialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Validates that a user-provided path resolves within the workspace.
-/// Returns the validated absolute path on success.
-fn validate_workspace_path(workspace: &Path, user_path: &str) -> Result<PathBuf, String> {
-    let workspace_canonical = workspace.canonicalize()
-        .map_err(|e| format!("Invalid workspace path: {}", e))?;
-
-    let target = if Path::new(user_path).is_absolute() {
-        PathBuf::from(user_path)
-    } else {
-        workspace.join(user_path)
-    };
-
-    // For existing paths: canonicalize resolves symlinks and ..
-    if target.exists() {
-        let target_canonical = target.canonicalize()
-            .map_err(|e| format!("Cannot resolve path: {}", e))?;
-        if !target_canonical.starts_with(&workspace_canonical) {
-            return Err(format!("Path escapes workspace: {}", user_path));
-        }
-        return Ok(target_canonical);
-    }
-
-    // For non-existent paths (create operations):
-    // Walk up to find the nearest existing ancestor, canonicalize that,
-    // then append the remaining components
-    let mut existing_ancestor = target.as_path();
-    let mut remaining_components = Vec::new();
-
-    loop {
-        if existing_ancestor.exists() {
-            break;
-        }
-        if let Some(file_name) = existing_ancestor.file_name() {
-            remaining_components.push(file_name.to_os_string());
-        } else {
-            return Err(format!("Invalid path: {}", user_path));
-        }
-        existing_ancestor = match existing_ancestor.parent() {
-            Some(p) => p,
-            None => return Err(format!("Invalid path: no parent for {}", user_path)),
-        };
-    }
-
-    let ancestor_canonical = existing_ancestor.canonicalize()
-        .map_err(|e| format!("Cannot resolve path: {}", e))?;
-
-    if !ancestor_canonical.starts_with(&workspace_canonical) {
-        return Err(format!("Path escapes workspace: {}", user_path));
-    }
-
-    let mut result = ancestor_canonical;
-    for component in remaining_components.into_iter().rev() {
-        result = result.join(component);
-    }
-
-    Ok(result)
-}
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FileEntry {
     name: String,
@@ -147,21 +89,18 @@ pub async fn read_workspace_files(workspace_path: String) -> Result<Vec<FileEntr
 }
 
 #[tauri::command]
-pub async fn read_file_content(workspace_path: String, path: String) -> Result<String, String> {
-    let validated = validate_workspace_path(Path::new(&workspace_path), &path)?;
-    tokio::fs::read_to_string(validated).await.map_err(|e| e.to_string())
+pub async fn read_file_content(path: String) -> Result<String, String> {
+    tokio::fs::read_to_string(path).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn read_binary_file(workspace_path: String, path: String) -> Result<Vec<u8>, String> {
-    let validated = validate_workspace_path(Path::new(&workspace_path), &path)?;
-    fs::read(validated).map_err(|e| e.to_string())
+pub fn read_binary_file(path: String) -> Result<Vec<u8>, String> {
+    fs::read(path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn write_file_content(workspace_path: String, path: String, content: String) -> Result<(), String> {
-    let validated = validate_workspace_path(Path::new(&workspace_path), &path)?;
-    atomic_write_file(&validated.to_string_lossy(), &content)
+pub fn write_file_content(path: String, content: String) -> Result<(), String> {
+    atomic_write_file(&path, &content)
 }
 
 // Atomic write implementation: write to temp file then rename
@@ -284,37 +223,49 @@ fn find_workspace_root(start_path: &Path) -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
-pub fn rename_file(workspace_path: String, path: String, new_name: String) -> Result<String, String> {
-    let validated = validate_workspace_path(Path::new(&workspace_path), &path)?;
-    if !validated.exists() {
-        return Err(format!("File or folder '{}' does not exist", validated.display()));
+pub fn rename_file(path: String, new_name: String) -> Result<String, String> {
+
+    let path = PathBuf::from(&path);
+
+    // Validate that the source file exists
+    if !path.exists() {
+        return Err(format!("File or folder '{}' does not exist", path.display()));
     }
+
+    // Validate new name is not empty
     if new_name.trim().is_empty() {
         return Err("New name cannot be empty".to_string());
     }
-    let mut new_path = validated.clone();
+
+    let mut new_path = path.clone();
     new_path.set_file_name(new_name.trim());
+
+    // Check if destination already exists
     if new_path.exists() {
         let file_name = new_path.file_name()
             .ok_or_else(|| "Invalid file path: no filename".to_string())?;
         return Err(format!("A file or folder named '{}' already exists", file_name.to_string_lossy()));
     }
-    fs::rename(&validated, &new_path).map_err(|e| format!("Failed to rename: {}", e))?;
+
+    fs::rename(&path, &new_path).map_err(|e| {
+        format!("Failed to rename: {}", e)
+    })?;
+
     Ok(new_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
 pub fn create_file_in_workspace(workspace_path: String, name: String) -> Result<String, String> {
-    let validated = validate_workspace_path(Path::new(&workspace_path), &name)?;
-    let path_str = validated.to_string_lossy().to_string();
+    let path = Path::new(&workspace_path).join(&name);
+    let path_str = path.to_string_lossy().to_string();
     atomic_write_file(&path_str, "")?;
     Ok(path_str)
 }
 
 #[tauri::command]
 pub fn create_folder_in_workspace(workspace_path: String, name: String) -> Result<(), String> {
-    let validated = validate_workspace_path(Path::new(&workspace_path), &name)?;
-    fs::create_dir(validated).map_err(|e| e.to_string())?;
+    let path = Path::new(&workspace_path).join(name);
+    fs::create_dir(path).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -426,26 +377,29 @@ pub async fn copy_external_files_to_workspace(
 }
 
 #[tauri::command]
-pub fn move_file(workspace_path: String, source_path: String, destination_dir: String) -> Result<(), String> {
-    let ws = Path::new(&workspace_path);
-    let validated_source = validate_workspace_path(ws, &source_path)?;
-    let validated_dest_dir = validate_workspace_path(ws, &destination_dir)?;
-    let file_name = validated_source.file_name().ok_or("Invalid source path")?;
-    let final_dest = validated_dest_dir.join(file_name);
+pub fn move_file(source_path: String, destination_dir: String) -> Result<(), String> {
+    let source = PathBuf::from(&source_path);
+    let dest_dir = PathBuf::from(&destination_dir);
+
+    let file_name = source.file_name().ok_or("Invalid source path")?;
+    let final_dest = dest_dir.join(file_name);
+
+    // Check if the destination already exists
     if final_dest.exists() {
         return Err("A file with that name already exists in the destination folder.".to_string());
     }
-    fs::rename(&validated_source, &final_dest).map_err(|e| e.to_string())?;
+
+    fs::rename(&source, &final_dest).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn delete_file(workspace_path: String, path: String) -> Result<(), String> {
-    let validated = validate_workspace_path(Path::new(&workspace_path), &path)?;
-    if validated.is_dir() {
-        fs::remove_dir_all(validated).map_err(|e| e.to_string())
+pub fn delete_file(path: String) -> Result<(), String> {
+    let path = PathBuf::from(path);
+    if path.is_dir() {
+        fs::remove_dir_all(path).map_err(|e| e.to_string())
     } else {
-        fs::remove_file(validated).map_err(|e| e.to_string())
+        fs::remove_file(path).map_err(|e| e.to_string())
     }
 }
 
@@ -505,17 +459,22 @@ pub struct DirectoryEntry {
 }
 
 #[tauri::command]
-pub fn read_directory(workspace_path: String, path: String) -> Result<Vec<DirectoryEntry>, String> {
-    let validated = validate_workspace_path(Path::new(&workspace_path), &path)?;
-    let entries = fs::read_dir(&validated).map_err(|e| e.to_string())?;
+pub fn read_directory(path: String) -> Result<Vec<DirectoryEntry>, String> {
+    let entries = fs::read_dir(&path).map_err(|e| e.to_string())?;
     let mut result = vec![];
+
     for entry in entries {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
-        let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let name = path.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
         let is_dir = path.is_dir();
+
         result.push(DirectoryEntry { name, is_dir });
     }
+
     Ok(result)
 }
 
@@ -609,58 +568,4 @@ pub async fn find_workspace_images(workspace_path: String) -> Result<Vec<String>
         .map_err(|e| format!("Failed to scan directory: {}", e))?;
 
     Ok(image_files)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::tempdir;
-
-    #[test]
-    fn test_validate_allows_relative() {
-        let dir = tempdir().unwrap();
-        let workspace = dir.path();
-        fs::write(workspace.join("note.md"), "hello").unwrap();
-        let result = validate_workspace_path(workspace, "note.md");
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_validate_rejects_absolute_outside() {
-        let dir = tempdir().unwrap();
-        let result = validate_workspace_path(dir.path(), "/etc/passwd");
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("escapes workspace"));
-    }
-
-    #[test]
-    fn test_validate_rejects_traversal() {
-        let dir = tempdir().unwrap();
-        let result = validate_workspace_path(dir.path(), "../../../etc/passwd");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_validate_allows_internal_dotdot() {
-        let dir = tempdir().unwrap();
-        let workspace = dir.path();
-        fs::create_dir_all(workspace.join("sub")).unwrap();
-        fs::write(workspace.join("note.md"), "hello").unwrap();
-        let result = validate_workspace_path(workspace, "sub/../note.md");
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_validate_allows_new_file() {
-        let dir = tempdir().unwrap();
-        let result = validate_workspace_path(dir.path(), "new-note.md");
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_validate_rejects_new_file_outside() {
-        let dir = tempdir().unwrap();
-        let result = validate_workspace_path(dir.path(), "../outside.md");
-        assert!(result.is_err());
-    }
 }
