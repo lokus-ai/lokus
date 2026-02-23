@@ -1321,9 +1321,6 @@ function WorkspaceWithScope({ path }) {
   const versionRefreshKey = useWorkspaceStore((s) => s.versionRefreshKey);
   const editor = useWorkspaceStore((s) => s.editor);
 
-  const lastVersionSaveRef = useRef({}); // Track last version save time per file
-  const lastVersionContentRef = useRef({}); // Track last saved content per file
-
   const { toggleVersionHistory } = usePanels();
 
   // File tree
@@ -1439,6 +1436,14 @@ function WorkspaceWithScope({ path }) {
 
   // GraphData instance for backlinks
   const graphDataInstanceRef = useRef(null);
+
+  // Save handlers provided by the feature hook
+  const { handleSave, handleSaveAs } = useSave({
+    workspacePath: path,
+    editorGroupsRef: null,
+    graphProcessorRef,
+    onRefreshFiles: () => useWorkspaceStore.getState().refreshTree(),
+  });
 
   // Split view
   const useSplitView = useWorkspaceStore((s) => s.useSplitView);
@@ -2504,208 +2509,6 @@ function WorkspaceWithScope({ path }) {
       }
       return { unsavedChanges: next };
     });
-  }, []);
-
-  const handleSave = useCallback(async () => {
-    const { activeFile, openTabs, editorContent, editorTitle } = useWorkspaceStore.getState();
-    if (!activeFile) return;
-
-    let path_to_save = activeFile;
-    let needsStateUpdate = false;
-    const saveStartTime = performance.now();
-
-    try {
-      const currentTab = openTabs.find(t => t.path === activeFile);
-      const currentName = currentTab.name.replace(/\.md$/, "");
-
-      if (editorTitle !== currentName && editorTitle.trim() !== "") {
-        const newFileName = `${editorTitle.trim()}.md`;
-        const newPath = await invoke("rename_file", { path: activeFile, newName: newFileName });
-        editorGroups.updateTabPath(activeFile, newPath);
-        path_to_save = newPath;
-        needsStateUpdate = true;
-      }
-
-      // For .md files, we need to convert HTML content back to markdown
-      let contentToSave = editorContent;
-      if (path_to_save.endsWith('.md')) {
-        // Convert HTML back to markdown, preserving wiki links
-        const exporter = new MarkdownExporter();
-        contentToSave = exporter.htmlToMarkdown(editorContent, { preserveWikiLinks: true });
-      }
-
-      await invoke("write_file_content", { path: path_to_save, content: contentToSave });
-
-      useWorkspaceStore.getState().setSavedContent(editorContent);
-      useWorkspaceStore.setState((s) => {
-        const newSet = new Set(s.unsavedChanges);
-        newSet.delete(activeFile);
-        newSet.delete(path_to_save);
-        return { unsavedChanges: newSet };
-      });
-
-      // Save version only if content actually changed
-      const lastContent = lastVersionContentRef.current[path_to_save];
-      const contentChanged = !lastContent || lastContent !== contentToSave;
-
-      if (contentChanged) {
-        try {
-          await invoke("save_file_version_manual", {
-            path: path_to_save,
-            content: contentToSave
-          });
-          const now = Date.now();
-          lastVersionSaveRef.current[path_to_save] = now;
-          lastVersionContentRef.current[path_to_save] = contentToSave;
-
-          // Refresh version history panel
-          useWorkspaceStore.getState().incrementVersionRefreshKey();
-
-        } catch (error) {
-          // Non-blocking - don't show error to user
-        }
-      } else {
-      }
-
-      if (needsStateUpdate) {
-        const newName = path_to_save.split("/").pop();
-        useWorkspaceStore.setState((s) => ({ openTabs: s.openTabs.map(t => t.path === activeFile ? { path: path_to_save, name: newName } : t) }));
-        useWorkspaceStore.setState({ activeFile: path_to_save });
-        handleRefreshFiles();
-      } else {
-        // File content changed but not renamed - use real-time link tracking
-        if (graphProcessorRef.current) {
-          try {
-            // Use the new real-time update method for file content
-            const updateResult = await graphProcessorRef.current.updateFileContent(path_to_save, editorContent);
-
-            // Only rebuild graph structure if there were actual changes
-            if (updateResult.added > 0 || updateResult.removed > 0) {
-              const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
-              useWorkspaceStore.getState().setGraphData(updatedGraphData);
-            } else {
-            }
-          } catch (error) {
-            // Fallback to full selective update
-            try {
-              const updatedGraphData = await graphProcessorRef.current.updateChangedFiles([path_to_save]);
-              if (updatedGraphData) {
-                useWorkspaceStore.getState().setGraphData(updatedGraphData);
-              }
-            } catch (fallbackError) {
-              // Final fallback to full refresh
-              handleRefreshFiles();
-            }
-          }
-        } else {
-          // Graph processor not initialized yet, but if graph view becomes active,
-          // it will build the graph data including this file's changes
-        }
-      }
-    } catch { }
-  }, []);
-
-  const handleSaveAs = useCallback(async () => {
-    const { activeFile, editorContent } = useWorkspaceStore.getState();
-    if (!activeFile) return;
-
-    try {
-      // Get the current file name without extension for default name
-      const currentFileName = activeFile.split('/').pop().replace(/\.[^.]*$/, '');
-
-      // Show save dialog with more format options
-      const filePath = await save({
-        defaultPath: `${currentFileName}.md`,
-        filters: [{
-          name: 'Markdown',
-          extensions: ['md']
-        }, {
-          name: 'HTML',
-          extensions: ['html']
-        }, {
-          name: 'Text',
-          extensions: ['txt']
-        }, {
-          name: 'JSON',
-          extensions: ['json']
-        }, {
-          name: 'All Files',
-          extensions: ['*']
-        }],
-        title: 'Save As'
-      });
-
-      if (filePath) {
-        // Prepare content - handle different file types
-        let contentToSave = editorContent;
-
-        if (filePath.endsWith('.html')) {
-          // For HTML files, wrap content in a complete HTML document
-          const { editorTitle } = useWorkspaceStore.getState();
-          const title = editorTitle || currentFileName;
-          contentToSave = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${title}</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-            line-height: 1.6;
-            max-width: 800px;
-            margin: 40px auto;
-            padding: 20px;
-            color: #333;
-        }
-        pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
-        blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; color: #666; }
-        table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background: #f4f4f4; }
-    </style>
-</head>
-<body>
-    ${editorContent}
-</body>
-</html>`;
-        } else if (filePath.endsWith('.json')) {
-          // For JSON files, create a structured export
-          const { editorTitle } = useWorkspaceStore.getState();
-          contentToSave = JSON.stringify({
-            title: editorTitle || currentFileName,
-            content: editorContent,
-            exported: new Date().toISOString(),
-            format: 'html'
-          }, null, 2);
-        } else if (filePath.endsWith('.txt')) {
-          // For text files, strip HTML tags
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = editorContent;
-          contentToSave = tempDiv.textContent || tempDiv.innerText || '';
-        }
-
-        // Save the file
-        await invoke("write_file_content", { path: filePath, content: contentToSave });
-
-        // Update current file state to point to new location
-        const newFileName = filePath.split('/').pop();
-        useWorkspaceStore.setState((s) => ({ openTabs: s.openTabs.map(t => t.path === activeFile ? { path: filePath, name: newFileName } : t) }));
-        useWorkspaceStore.setState({ activeFile: filePath });
-        useWorkspaceStore.getState().setSavedContent(editorContent);
-        useWorkspaceStore.setState((s) => {
-          const newSet = new Set(s.unsavedChanges);
-          newSet.delete(activeFile);
-          newSet.delete(filePath);
-          return { unsavedChanges: newSet };
-        });
-
-        // Refresh file tree to show new file
-        handleRefreshFiles();
-
-      }
-    } catch { }
   }, []);
 
   const handleExportHtml = useCallback(async () => {
