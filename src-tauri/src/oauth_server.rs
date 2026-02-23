@@ -138,26 +138,25 @@ async fn handle_gmail_callback(req: Request<Incoming>) -> Result<HyperResponse, 
             ))))?);
     }
 
-    if code.is_none() || state.is_none() {
-        return Ok(hyper::Response::builder()
-            .status(StatusCode::BAD_REQUEST)
-            .header("Content-Type", "text/html")
-            .body(Full::new(Bytes::from(
-                r#"
-                <html>
-                  <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-                    <h1 style="color: #dc3545;">❌ Authentication Failed</h1>
-                    <p>Missing authorization code or state parameter.</p>
-                    <p>You can close this window and try again.</p>
-                  </body>
-                </html>
-                "#
-            )))?);
-    }
-
-    let code = code.unwrap();
-    let state = state.unwrap();
-
+    let (code, state) = match (code, state) {
+        (Some(c), Some(s)) => (c, s),
+        _ => {
+            return Ok(hyper::Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .header("Content-Type", "text/html")
+                .body(Full::new(Bytes::from(
+                    r#"
+                    <html>
+                      <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                        <h1 style="color: #dc3545;">❌ Authentication Failed</h1>
+                        <p>Missing authorization code or state parameter.</p>
+                        <p>You can close this window and try again.</p>
+                      </body>
+                    </html>
+                    "#
+                )))?);
+        }
+    };
 
     // Write the auth data to a temporary file for the Tauri app to pick up
     if let Err(_e) = write_auth_callback(code, state) {
@@ -211,25 +210,25 @@ async fn handle_calendar_callback(req: Request<Incoming>) -> Result<HyperRespons
             ))))?);
     }
 
-    if code.is_none() || state.is_none() {
-        return Ok(hyper::Response::builder()
-            .status(StatusCode::BAD_REQUEST)
-            .header("Content-Type", "text/html")
-            .body(Full::new(Bytes::from(
-                r#"
-                <html>
-                  <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-                    <h1 style="color: #dc3545;">Calendar Authentication Failed</h1>
-                    <p>Missing authorization code or state parameter.</p>
-                    <p>You can close this window and try again.</p>
-                  </body>
-                </html>
-                "#
-            )))?);
-    }
-
-    let code = code.unwrap();
-    let state = state.unwrap();
+    let (code, state) = match (code, state) {
+        (Some(c), Some(s)) => (c, s),
+        _ => {
+            return Ok(hyper::Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .header("Content-Type", "text/html")
+                .body(Full::new(Bytes::from(
+                    r#"
+                    <html>
+                      <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                        <h1 style="color: #dc3545;">Calendar Authentication Failed</h1>
+                        <p>Missing authorization code or state parameter.</p>
+                        <p>You can close this window and try again.</p>
+                      </body>
+                    </html>
+                    "#
+                )))?);
+        }
+    };
 
     // Write the auth data to a temporary file for the Tauri app to pick up
     if let Err(_e) = write_calendar_auth_callback(code, state) {
