@@ -396,8 +396,9 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         // Load content if it's a markdown file
         if (file.path.endsWith('.md') || file.path.endsWith('.txt')) {
           // Check if this file is already loaded in the left pane to avoid duplicate load
-          if (file.path === activeFile && editorContent) {
-            setRightPaneContent(editorContent);
+          const currentEditorContent = useWorkspaceStore.getState().editorContent;
+          if (file.path === activeFile && currentEditorContent) {
+            setRightPaneContent(currentEditorContent);
           } else {
             try {
               const content = await invoke('read_file_content', { path: file.path });
@@ -457,7 +458,8 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         break;
       case 'copyRelativePath':
         try {
-          const relativePath = getRelativePath(file.path, path);
+          const wsPath = window.__LOKUS_WORKSPACE_PATH__ || '';
+          const relativePath = getRelativePath(file.path, wsPath);
           await navigator.clipboard.writeText(relativePath);
           toast.success('Copied relative path');
         } catch (e) {
@@ -487,24 +489,26 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
       case 'selectForCompare':
         // Select file for comparison
         if (file.type === 'file') {
-          setSelectedFileForCompare(file);
+          useWorkspaceStore.setState({ selectedFileForCompare: file });
           toast.success(`Selected for compare: ${file.name}`);
         }
         break;
-      case 'compareWith':
+      case 'compareWith': {
         // Compare with previously selected file
-        if (selectedFileForCompare && file.type === 'file') {
+        const compareFile = useWorkspaceStore.getState().selectedFileForCompare;
+        if (compareFile && file.type === 'file') {
           // Open both files in split view for manual comparison
-          onFileClick(selectedFileForCompare.path);
+          onFileClick(compareFile.path);
           setUseSplitView(true);
           setTimeout(() => {
             setRightPaneFile(file.path);
             setRightPaneTitle(file.name);
           }, 100);
-          toast.success(`Comparing ${selectedFileForCompare.name} with ${file.name}`);
-          setSelectedFileForCompare(null);
+          toast.success(`Comparing ${compareFile.name} with ${file.name}`);
+          useWorkspaceStore.setState({ selectedFileForCompare: null });
         }
         break;
+      }
       case 'shareEmail':
       case 'shareSlack':
       case 'shareTeams':
@@ -521,7 +525,7 @@ function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFol
         // Open tag management modal for markdown files
         if (file && (file.name.endsWith('.md') || file.name.endsWith('.markdown'))) {
           setTagModalFile(file);
-          setShowTagModal(true);
+          useWorkspaceStore.getState().openPanel('showTagModal');
         }
         break;
 
@@ -1365,14 +1369,14 @@ function WorkspaceWithScope({ path }) {
           processedContent = await compiler.compile(content);
         }
 
-        setEditorContent(processedContent);
-        setSavedContent(content);
+        useWorkspaceStore.getState().setContent(processedContent);
+        useWorkspaceStore.getState().setSavedContent(content);
 
         // Clear unsaved changes for this file since we just reloaded
-        setUnsavedChanges(prev => {
-          const newSet = new Set(prev);
+        useWorkspaceStore.setState((s) => {
+          const newSet = new Set(s.unsavedChanges);
           newSet.delete(activeFile);
-          return newSet;
+          return { unsavedChanges: newSet };
         });
       }
     } catch { }
@@ -1464,7 +1468,7 @@ function WorkspaceWithScope({ path }) {
 
   // Handler for checking references before file move/rename
   const handleCheckReferences = useCallback(({ oldPath, newPath, affectedFiles, operation }) => {
-    setReferenceUpdateModal({
+    useWorkspaceStore.getState().setReferenceUpdateModal({
       isOpen: true,
       oldPath,
       newPath,
@@ -1477,19 +1481,17 @@ function WorkspaceWithScope({ path }) {
 
   // Handler for confirming reference updates
   const handleConfirmReferenceUpdate = useCallback(async (updateReferences) => {
-    const { oldPath, newPath, pendingOperation } = referenceUpdateModal;
+    const { oldPath, newPath, pendingOperation } = useWorkspaceStore.getState().referenceUpdateModal;
 
-    setReferenceUpdateModal(prev => ({ ...prev, isProcessing: true }));
+    useWorkspaceStore.setState((s) => ({ referenceUpdateModal: { ...s.referenceUpdateModal, isProcessing: true } }));
 
     try {
       // First, execute the move/rename operation
       const operationSuccess = await pendingOperation();
 
       if (!operationSuccess) {
-        setReferenceUpdateModal(prev => ({
-          ...prev,
-          isProcessing: false,
-          result: { success: false, error: 'Operation failed' }
+        useWorkspaceStore.setState((s) => ({
+          referenceUpdateModal: { ...s.referenceUpdateModal, isProcessing: false, result: { success: false, error: 'Operation failed' } }
         }));
         return;
       }
@@ -1497,14 +1499,12 @@ function WorkspaceWithScope({ path }) {
       // If user chose to update references, do it now
       if (updateReferences) {
         const result = await referenceManager.updateAllReferences(oldPath, newPath);
-        setReferenceUpdateModal(prev => ({
-          ...prev,
-          isProcessing: false,
-          result: { success: true, updated: result.updated, files: result.files }
+        useWorkspaceStore.setState((s) => ({
+          referenceUpdateModal: { ...s.referenceUpdateModal, isProcessing: false, result: { success: true, updated: result.updated, files: result.files } }
         }));
       } else {
         // Just close after successful operation without updating references
-        setReferenceUpdateModal({
+        useWorkspaceStore.getState().setReferenceUpdateModal({
           isOpen: false,
           oldPath: null,
           newPath: null,
@@ -1515,17 +1515,15 @@ function WorkspaceWithScope({ path }) {
         });
       }
     } catch (err) {
-      setReferenceUpdateModal(prev => ({
-        ...prev,
-        isProcessing: false,
-        result: { success: false, error: err.message || 'Failed to update references' }
+      useWorkspaceStore.setState((s) => ({
+        referenceUpdateModal: { ...s.referenceUpdateModal, isProcessing: false, result: { success: false, error: err.message || 'Failed to update references' } }
       }));
     }
   }, [referenceUpdateModal]);
 
   // Handler for closing reference update modal
   const handleCloseReferenceModal = useCallback(() => {
-    setReferenceUpdateModal({
+    useWorkspaceStore.getState().setReferenceUpdateModal({
       isOpen: false,
       oldPath: null,
       newPath: null,
@@ -1560,7 +1558,7 @@ function WorkspaceWithScope({ path }) {
         invoke("validate_workspace_path", { path })
       ]).then(([session, valid]) => {
         if (session && session.open_tabs) {
-          setExpandedFolders(new Set(session.expanded_folders || []));
+          useWorkspaceStore.setState({ expandedFolders: new Set(session.expanded_folders || []) });
 
           // Reconstruct tabs - plugin tabs will be hydrated when plugins load
           const tabsWithNames = session.open_tabs.map(p => ({
@@ -1568,28 +1566,28 @@ function WorkspaceWithScope({ path }) {
             name: getTabDisplayName(p, plugins)
           }));
 
-          setOpenTabs(tabsWithNames);
+          useWorkspaceStore.setState({ openTabs: tabsWithNames });
 
           if (tabsWithNames.length > 0) {
-            setActiveFile(tabsWithNames[0].path);
+            useWorkspaceStore.setState({ activeFile: tabsWithNames[0].path });
           }
 
           // Load recent files from session state if available, otherwise use open tabs
           if (session.recent_files && session.recent_files.length > 0) {
-            setRecentFiles(session.recent_files.slice(0, 5).map(p => ({
+            useWorkspaceStore.setState({ recentFiles: session.recent_files.slice(0, 5).map(p => ({
               path: p,
               name: getFilename(p)
-            })));
+            })) });
           } else {
             // Fallback: use open tabs as recent files
             const actualFiles = session.open_tabs.filter(p =>
               !p.startsWith('__') &&
               (p.endsWith('.md') || p.endsWith('.txt') || p.endsWith('.canvas') || p.endsWith('.kanban') || p.endsWith('.pdf'))
             );
-            setRecentFiles(actualFiles.slice(0, 5).map(p => ({
+            useWorkspaceStore.setState({ recentFiles: actualFiles.slice(0, 5).map(p => ({
               path: p,
               name: getFilename(p)
-            })));
+            })) });
           }
         }
       }).catch(err => {
@@ -1600,14 +1598,15 @@ function WorkspaceWithScope({ path }) {
   // Rehydrate plugin tabs when plugins become available
   useEffect(() => {
     if (plugins.length > 0 && openTabs.length > 0) {
-      setOpenTabs(prevTabs => {
+      useWorkspaceStore.setState((s) => {
+        const prevTabs = s.openTabs;
         const needsUpdate = prevTabs.some(tab =>
           tab.path.startsWith('__plugin_') && tab.path.endsWith('__') && !tab.plugin
         );
 
-        if (!needsUpdate) return prevTabs;
+        if (!needsUpdate) return {};
 
-        return prevTabs
+        return { openTabs: prevTabs
           .map(tab => {
             if (tab.path.startsWith('__plugin_') && tab.path.endsWith('__') && !tab.plugin) {
               const pluginId = tab.path.slice(9, -2);
@@ -1624,7 +1623,7 @@ function WorkspaceWithScope({ path }) {
               return false;
             }
             return true;
-          });
+          }) };
       });
     }
   }, [plugins]);
@@ -1716,7 +1715,7 @@ function WorkspaceWithScope({ path }) {
           if (isCleanedUp) return; // Guard against stale listeners
 
           const filePaths = event.payload.paths || event.payload;
-          setIsExternalDragActive(false);
+          useWorkspaceStore.setState({ isExternalDragActive: false });
 
           try {
             // Determine destination folder (use ref to get current value)
@@ -1741,21 +1740,21 @@ function WorkspaceWithScope({ path }) {
             }
 
           } catch { } finally {
-            setHoveredFolder(null);
+            useWorkspaceStore.setState({ hoveredFolder: null });
           }
         });
 
         // tauri://drag-over - Files being dragged over window
         unlistenOver = await listen('tauri://drag-over', () => {
           if (isCleanedUp) return;
-          setIsExternalDragActive(true);
+          useWorkspaceStore.setState({ isExternalDragActive: true });
         });
 
         // tauri://drag-leave - Drag left window
         unlistenLeave = await listen('tauri://drag-leave', () => {
           if (isCleanedUp) return;
-          setIsExternalDragActive(false);
-          setHoveredFolder(null);
+          useWorkspaceStore.setState({ isExternalDragActive: false });
+          useWorkspaceStore.setState({ hoveredFolder: null });
         });
 
       } catch { }
@@ -1773,16 +1772,16 @@ function WorkspaceWithScope({ path }) {
 
   // Load shortcuts map for hints and keep it fresh
   useEffect(() => {
-    getActiveShortcuts().then(setKeymap).catch(() => { });
+    getActiveShortcuts().then(m => useWorkspaceStore.setState({ keymap: m })).catch(() => { });
     let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch { }
     if (isTauri) {
       const sub = listen('shortcuts:updated', async () => {
         const m = await getActiveShortcuts();
-        setKeymap(m);
+        useWorkspaceStore.setState({ keymap: m });
       });
       return () => { sub.then((un) => un()); };
     } else {
-      const onDom = async () => { setKeymap(await getActiveShortcuts()); };
+      const onDom = async () => { useWorkspaceStore.setState({ keymap: await getActiveShortcuts() }); };
       window.addEventListener('shortcuts:updated', onDom);
       return () => window.removeEventListener('shortcuts:updated', onDom);
     }
@@ -1842,7 +1841,7 @@ function WorkspaceWithScope({ path }) {
               });
           };
           const tree = filterIgnored(files);
-          setFileTree(tree);
+          useWorkspaceStore.getState().setFileTree(tree);
           // Build flat index for wiki suggestions
           const flat = [];
           const walk = (arr) => {
@@ -1860,7 +1859,7 @@ function WorkspaceWithScope({ path }) {
 
           // Extract all image files for image viewer navigation
           const imageFiles = findImageFiles(tree);
-          setAllImageFiles(imageFiles);
+          useWorkspaceStore.getState().setAllImageFiles(imageFiles);
         })
         .catch((error) => {
           // Log to backend instead
@@ -1888,9 +1887,9 @@ function WorkspaceWithScope({ path }) {
       }
 
       // IMMEDIATE: Clear editor and show loading state
-      setEditorContent("");
-      setEditorTitle("");
-      setIsLoadingContent(true);
+      useWorkspaceStore.getState().setContent("");
+      useWorkspaceStore.getState().setTitle("");
+      useWorkspaceStore.getState().setLoading(true);
 
       // Capture activeFile in local variable to prevent stale closure issues
       const fileToLoad = activeFile;
@@ -1921,23 +1920,23 @@ function WorkspaceWithScope({ path }) {
             processedContent = await compiler.compile(content);
           }
 
-          setEditorContent(processedContent);
-          setEditorTitle(fileName.replace(/\.md$/, ""));
-          setSavedContent(content); // Keep original content for saving
-          setIsLoadingContent(false); // Loading complete
+          useWorkspaceStore.getState().setContent(processedContent);
+          useWorkspaceStore.getState().setTitle(fileName.replace(/\.md$/, ""));
+          useWorkspaceStore.getState().setSavedContent(content); // Keep original content for saving
+          useWorkspaceStore.getState().setLoading(false); // Loading complete
         })
         .catch((err) => {
           if (fileToLoad === activeFile) {
-            setIsLoadingContent(false);
+            useWorkspaceStore.getState().setLoading(false);
             // Show error message in editor
-            setEditorContent(`<div class="text-red-500 p-4">Failed to load file: ${err}</div>`);
-            setEditorTitle("Error");
+            useWorkspaceStore.getState().setContent(`<div class="text-red-500 p-4">Failed to load file: ${err}</div>`);
+            useWorkspaceStore.getState().setTitle("Error");
           }
         });
     } else {
-      setEditorContent("");
-      setEditorTitle("");
-      setIsLoadingContent(false);
+      useWorkspaceStore.getState().setContent("");
+      useWorkspaceStore.getState().setTitle("");
+      useWorkspaceStore.getState().setLoading(false);
     }
   }, [activeFile]);
 
@@ -1949,20 +1948,20 @@ function WorkspaceWithScope({ path }) {
     const openPath = (p, switchToTab = true) => {
       if (!p) return;
 
-      setOpenTabs(prevTabs => {
+      useWorkspaceStore.setState((s) => {
         const name = getFilename(p);
-        const wasAlreadyOpen = prevTabs.some(t => t.path === p);
-        const newTabs = prevTabs.filter(t => t.path !== p);
+        const wasAlreadyOpen = s.openTabs.some(t => t.path === p);
+        const newTabs = s.openTabs.filter(t => t.path !== p);
         newTabs.unshift({ path: p, name });
         if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
 
-        return newTabs;
+        return { openTabs: newTabs };
       });
 
       // Only switch to the new tab if requested (regular click)
       // For Cmd/Ctrl+Click, keep current tab active
       if (switchToTab) {
-        setActiveFile(p);
+        useWorkspaceStore.setState({ activeFile: p });
       } else {
       }
     };
@@ -1993,10 +1992,10 @@ function WorkspaceWithScope({ path }) {
         try {
           // Get current editor content for real-time update
           const currentContent = editorRef.current ?
-            (editorRef.current.getText() || stateRef.current.editorContent) :
-            stateRef.current.editorContent;
+            (editorRef.current.getText() || useWorkspaceStore.getState().editorContent) :
+            useWorkspaceStore.getState().editorContent;
 
-          if (currentContent && sourceFile === stateRef.current.activeFile) {
+          if (currentContent && sourceFile === useWorkspaceStore.getState().activeFile) {
 
             // Use the real-time update method
             const updateResult = await graphProcessorRef.current.updateFileContent(sourceFile, currentContent);
@@ -2004,7 +2003,7 @@ function WorkspaceWithScope({ path }) {
             // Update graph data if there were changes and graph is visible
             if ((updateResult.added > 0 || updateResult.removed > 0) && activeFile === '__graph__') {
               const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
-              setGraphData(updatedGraphData);
+              useWorkspaceStore.getState().setGraphData(updatedGraphData);
             }
           }
         } catch { }
@@ -2116,27 +2115,27 @@ function WorkspaceWithScope({ path }) {
   useEffect(() => {
     const handleCanvasLinkHover = async (event) => {
       const { canvasName, canvasPath, position } = event.detail;
-      setCanvasPreview({ canvasName, canvasPath, position, loading: true });
+      useWorkspaceStore.setState({ canvasPreview: { canvasName, canvasPath, position, loading: true } });
 
       // Generate preview (async)
       try {
         const thumbnailUrl = await generatePreview(canvasPath);
-        setCanvasPreview(prev =>
-          prev?.canvasPath === canvasPath
-            ? { ...prev, thumbnailUrl, loading: false }
+        useWorkspaceStore.setState((s) => ({
+          canvasPreview: s.canvasPreview?.canvasPath === canvasPath
+            ? { ...s.canvasPreview, thumbnailUrl, loading: false }
             : null
-        );
+        }));
       } catch (error) {
-        setCanvasPreview(prev =>
-          prev?.canvasPath === canvasPath
-            ? { ...prev, error: true, loading: false }
+        useWorkspaceStore.setState((s) => ({
+          canvasPreview: s.canvasPreview?.canvasPath === canvasPath
+            ? { ...s.canvasPreview, error: true, loading: false }
             : null
-        );
+        }));
       }
     };
 
     const handleCanvasLinkHoverEnd = () => {
-      setCanvasPreview(null);
+      useWorkspaceStore.setState({ canvasPreview: null });
     };
 
     const handleOpenCanvas = (event) => {
@@ -2160,13 +2159,13 @@ function WorkspaceWithScope({ path }) {
       // Open canvas file directly using the same logic as openPath
       if (canvasPath) {
         const name = canvasPath.split('/').pop() || canvasPath;
-        setOpenTabs(prevTabs => {
-          const newTabs = prevTabs.filter(t => t.path !== canvasPath);
+        useWorkspaceStore.setState((s) => {
+          const newTabs = s.openTabs.filter(t => t.path !== canvasPath);
           newTabs.unshift({ path: canvasPath, name });
           if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
-          return newTabs;
+          return { openTabs: newTabs };
         });
-        setActiveFile(canvasPath);
+        useWorkspaceStore.setState({ activeFile: canvasPath });
       }
     };
 
@@ -2199,14 +2198,14 @@ function WorkspaceWithScope({ path }) {
       if (openTabs.length <= 1) return;
       const currentIndex = openTabs.findIndex(tab => tab.path === activeFile);
       const nextIndex = (currentIndex + 1) % openTabs.length;
-      setActiveFile(openTabs[nextIndex].path);
+      useWorkspaceStore.setState({ activeFile: openTabs[nextIndex].path });
     };
 
     const handlePrevTabImmediate = () => {
       if (openTabs.length <= 1) return;
       const currentIndex = openTabs.findIndex(tab => tab.path === activeFile);
       const prevIndex = currentIndex === 0 ? openTabs.length - 1 : currentIndex - 1;
-      setActiveFile(openTabs[prevIndex].path);
+      useWorkspaceStore.setState({ activeFile: openTabs[prevIndex].path });
     };
 
     // Throttled versions with 200ms cooldown
@@ -2252,11 +2251,11 @@ function WorkspaceWithScope({ path }) {
         if (e.shiftKey) {
           // Previous tab
           const prevIndex = currentIndex === 0 ? openTabs.length - 1 : currentIndex - 1;
-          setActiveFile(openTabs[prevIndex].path);
+          useWorkspaceStore.setState({ activeFile: openTabs[prevIndex].path });
         } else {
           // Next tab
           const nextIndex = (currentIndex + 1) % openTabs.length;
-          setActiveFile(openTabs[nextIndex].path);
+          useWorkspaceStore.setState({ activeFile: openTabs[nextIndex].path });
         }
       }
     };
@@ -2269,35 +2268,35 @@ function WorkspaceWithScope({ path }) {
   // Removed global context menu handler - context menus are now component-specific
   // EditorContextMenu handles editor right-clicks, FileContextMenu handles file sidebar right-clicks
 
-  const handleRefreshFiles = () => setRefreshId(id => id + 1);
+  const handleRefreshFiles = () => useWorkspaceStore.getState().refreshTree();
 
   const handleOpenPluginDetail = (plugin) => {
     const pluginPath = `__plugin_${plugin.id}__`;
     const pluginName = `${plugin.name} Plugin`;
 
-    setOpenTabs(prevTabs => {
-      const newTabs = prevTabs.filter(t => t.path !== pluginPath);
+    useWorkspaceStore.setState((s) => {
+      const newTabs = s.openTabs.filter(t => t.path !== pluginPath);
       newTabs.unshift({ path: pluginPath, name: pluginName, plugin });
       if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
-      return newTabs;
+      return { openTabs: newTabs };
     });
-    setActiveFile(pluginPath);
+    useWorkspaceStore.setState({ activeFile: pluginPath });
   };
 
   const toggleFolder = (folderPath) => {
-    setExpandedFolders(prev => {
-      const newSet = new Set(prev);
+    useWorkspaceStore.setState((s) => {
+      const newSet = new Set(s.expandedFolders);
       if (newSet.has(folderPath)) {
         newSet.delete(folderPath);
       } else {
         newSet.add(folderPath);
       }
-      return newSet;
+      return { expandedFolders: newSet };
     });
   };
 
   const closeAllFolders = () => {
-    setExpandedFolders(new Set());
+    useWorkspaceStore.setState({ expandedFolders: new Set() });
   };
 
   const handleFileOpen = (file) => {
@@ -2306,22 +2305,22 @@ function WorkspaceWithScope({ path }) {
       const filePath = file.path;
       const fileName = getFilename(filePath);
 
-      setOpenTabs(prevTabs => {
-        const newTabs = prevTabs.filter(t => t.path !== filePath);
+      useWorkspaceStore.setState((s) => {
+        const newTabs = s.openTabs.filter(t => t.path !== filePath);
         newTabs.unshift({ path: filePath, name: fileName });
         if (newTabs.length > MAX_OPEN_TABS) {
           newTabs.pop();
         }
-        return newTabs;
+        return { openTabs: newTabs };
       });
-      setActiveFile(filePath);
+      useWorkspaceStore.setState({ activeFile: filePath });
 
       // Update recent files list
       if (!filePath.startsWith('__') && (filePath.endsWith('.md') || filePath.endsWith('.txt') || filePath.endsWith('.canvas') || filePath.endsWith('.kanban') || filePath.endsWith('.pdf'))) {
-        setRecentFiles(prev => {
-          const filtered = prev.filter(f => f.path !== filePath);
+        useWorkspaceStore.setState((s) => {
+          const filtered = s.recentFiles.filter(f => f.path !== filePath);
           const newRecent = [{ path: filePath, name: fileName }, ...filtered].slice(0, 5);
-          return newRecent;
+          return { recentFiles: newRecent };
         });
       }
 
@@ -2347,25 +2346,25 @@ function WorkspaceWithScope({ path }) {
     if (file.is_directory) return;
 
     // Add file to tabs (works for all file types including images)
-    setOpenTabs(prevTabs => {
-      const newTabs = prevTabs.filter(t => t.path !== file.path);
+    useWorkspaceStore.setState((s) => {
+      const newTabs = s.openTabs.filter(t => t.path !== file.path);
       // Ensure we only use the filename, not a full path
       const fileName = getFilename(file.name);
       newTabs.unshift({ path: file.path, name: fileName });
       if (newTabs.length > MAX_OPEN_TABS) {
         newTabs.pop();
       }
-      return newTabs;
+      return { openTabs: newTabs };
     });
-    setActiveFile(file.path);
+    useWorkspaceStore.setState({ activeFile: file.path });
 
     // Update recent files list
     if (!file.path.startsWith('__') && (file.path.endsWith('.md') || file.path.endsWith('.txt') || file.path.endsWith('.canvas') || file.path.endsWith('.kanban') || file.path.endsWith('.pdf'))) {
       const fileName = getFilename(file.name || file.path);
-      setRecentFiles(prev => {
-        const filtered = prev.filter(f => f.path !== file.path);
+      useWorkspaceStore.setState((s) => {
+        const filtered = s.recentFiles.filter(f => f.path !== file.path);
         const newRecent = [{ path: file.path, name: fileName }, ...filtered].slice(0, 5);
-        return newRecent;
+        return { recentFiles: newRecent };
       });
     }
   };
@@ -2376,7 +2375,7 @@ function WorkspaceWithScope({ path }) {
     const [mostRecentTab, ...remaining] = recentlyClosedTabs;
 
     // Remove from recently closed list
-    setRecentlyClosedTabs(remaining);
+    useWorkspaceStore.setState({ recentlyClosedTabs: remaining });
 
     // Reopen the tab
     handleFileOpen(mostRecentTab);
@@ -2385,28 +2384,28 @@ function WorkspaceWithScope({ path }) {
   // handleOpenFullKanban removed - use file-based kanban boards instead
 
   const handleTabClick = (path) => {
-    setActiveFile(path);
+    useWorkspaceStore.setState({ activeFile: path });
 
     // If split view is active, update the right pane to show the next tab
     if (useSplitView) {
       const currentIndex = openTabs.findIndex(t => t.path === path);
       const nextTab = openTabs[currentIndex + 1] || openTabs[0];
       if (nextTab && nextTab.path !== path) {
-        setRightPaneFile(nextTab.path);
+        useWorkspaceStore.setState({ rightPaneFile: nextTab.path });
         // Extract just the filename in case name contains a path
         const fileName = getFilename(nextTab.name);
-        setRightPaneTitle(fileName.replace(/\.md$/, ""));
+        useWorkspaceStore.setState({ rightPaneTitle: fileName.replace(/\.md$/, "") });
         if (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt')) {
           // Check if this file is already loaded in the left pane
           if (nextTab.path === path && editorContent) {
-            setRightPaneContent(editorContent);
+            useWorkspaceStore.setState({ rightPaneContent: editorContent });
           } else {
             invoke("read_file_content", { path: nextTab.path })
               .then(content => {
-                setRightPaneContent(content || '');
+                useWorkspaceStore.setState({ rightPaneContent: content || '' });
               })
               .catch(err => {
-                setRightPaneContent('');
+                useWorkspaceStore.setState({ rightPaneContent: '' });
               });
           }
         }
@@ -2438,37 +2437,37 @@ function WorkspaceWithScope({ path }) {
     lastCloseTimeRef.current = now;
 
     const closeTab = () => {
-      setOpenTabs(prevTabs => {
+      useWorkspaceStore.setState((s) => {
+        const prevTabs = s.openTabs;
         const tabIndex = prevTabs.findIndex(t => t.path === path);
         const closedTab = prevTabs.find(t => t.path === path);
         const newTabs = prevTabs.filter(t => t.path !== path);
 
+        const updates = { openTabs: newTabs };
+
         // Save the closed tab to recently closed list (max 10 items)
         if (closedTab && !closedTab.path.startsWith('__')) { // Don't track special tabs like graph, kanban
-          setRecentlyClosedTabs(prev => {
-            const newClosed = [{ ...closedTab, closedAt: Date.now() }, ...prev.slice(0, 9)];
-            return newClosed;
-          });
+          updates.recentlyClosedTabs = [{ ...closedTab, closedAt: Date.now() }, ...s.recentlyClosedTabs.slice(0, 9)];
         }
 
-        if (stateRef.current.activeFile === path) {
+        if (s.activeFile === path) {
           if (newTabs.length === 0) {
-            setActiveFile(null);
+            updates.activeFile = null;
           } else {
             const newActiveIndex = Math.max(0, tabIndex - 1);
-            setActiveFile(newTabs[newActiveIndex].path);
+            updates.activeFile = newTabs[newActiveIndex].path;
           }
         }
-        return newTabs;
-      });
-      setUnsavedChanges(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(path);
-        return newSet;
+
+        const newUnsaved = new Set(s.unsavedChanges);
+        newUnsaved.delete(path);
+        updates.unsavedChanges = newUnsaved;
+
+        return updates;
       });
     };
 
-    if (stateRef.current.unsavedChanges.has(path)) {
+    if (useWorkspaceStore.getState().unsavedChanges.has(path)) {
       try {
         currentlyClosingPathRef.current = path;
         isShowingDialogRef.current = true;
@@ -2494,21 +2493,21 @@ function WorkspaceWithScope({ path }) {
   }, []);
 
   const handleEditorChange = useCallback((newContent) => {
-    setEditorContent(newContent);
-    if (!stateRef.current.activeFile) return;
-    setUnsavedChanges(prev => {
-      const next = new Set(prev);
-      if (newContent !== stateRef.current.savedContent) {
-        next.add(stateRef.current.activeFile);
+    useWorkspaceStore.getState().setContent(newContent);
+    if (!useWorkspaceStore.getState().activeFile) return;
+    useWorkspaceStore.setState((s) => {
+      const next = new Set(s.unsavedChanges);
+      if (newContent !== s.savedContent) {
+        next.add(s.activeFile);
       } else {
-        next.delete(stateRef.current.activeFile);
+        next.delete(s.activeFile);
       }
-      return next;
+      return { unsavedChanges: next };
     });
   }, []);
 
   const handleSave = useCallback(async () => {
-    const { activeFile, openTabs, editorContent, editorTitle } = stateRef.current;
+    const { activeFile, openTabs, editorContent, editorTitle } = useWorkspaceStore.getState();
     if (!activeFile) return;
 
     let path_to_save = activeFile;
@@ -2537,12 +2536,12 @@ function WorkspaceWithScope({ path }) {
 
       await invoke("write_file_content", { path: path_to_save, content: contentToSave });
 
-      setSavedContent(editorContent);
-      setUnsavedChanges(prev => {
-        const newSet = new Set(prev);
+      useWorkspaceStore.getState().setSavedContent(editorContent);
+      useWorkspaceStore.setState((s) => {
+        const newSet = new Set(s.unsavedChanges);
         newSet.delete(activeFile);
         newSet.delete(path_to_save);
-        return newSet;
+        return { unsavedChanges: newSet };
       });
 
       // Save version only if content actually changed
@@ -2560,7 +2559,7 @@ function WorkspaceWithScope({ path }) {
           lastVersionContentRef.current[path_to_save] = contentToSave;
 
           // Refresh version history panel
-          setVersionRefreshKey(prev => prev + 1);
+          useWorkspaceStore.getState().incrementVersionRefreshKey();
 
         } catch (error) {
           // Non-blocking - don't show error to user
@@ -2570,8 +2569,8 @@ function WorkspaceWithScope({ path }) {
 
       if (needsStateUpdate) {
         const newName = path_to_save.split("/").pop();
-        setOpenTabs(tabs => tabs.map(t => t.path === activeFile ? { path: path_to_save, name: newName } : t));
-        setActiveFile(path_to_save);
+        useWorkspaceStore.setState((s) => ({ openTabs: s.openTabs.map(t => t.path === activeFile ? { path: path_to_save, name: newName } : t) }));
+        useWorkspaceStore.setState({ activeFile: path_to_save });
         handleRefreshFiles();
       } else {
         // File content changed but not renamed - use real-time link tracking
@@ -2583,7 +2582,7 @@ function WorkspaceWithScope({ path }) {
             // Only rebuild graph structure if there were actual changes
             if (updateResult.added > 0 || updateResult.removed > 0) {
               const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
-              setGraphData(updatedGraphData);
+              useWorkspaceStore.getState().setGraphData(updatedGraphData);
             } else {
             }
           } catch (error) {
@@ -2591,7 +2590,7 @@ function WorkspaceWithScope({ path }) {
             try {
               const updatedGraphData = await graphProcessorRef.current.updateChangedFiles([path_to_save]);
               if (updatedGraphData) {
-                setGraphData(updatedGraphData);
+                useWorkspaceStore.getState().setGraphData(updatedGraphData);
               }
             } catch (fallbackError) {
               // Final fallback to full refresh
@@ -2607,7 +2606,7 @@ function WorkspaceWithScope({ path }) {
   }, []);
 
   const handleSaveAs = useCallback(async () => {
-    const { activeFile, editorContent } = stateRef.current;
+    const { activeFile, editorContent } = useWorkspaceStore.getState();
     if (!activeFile) return;
 
     try {
@@ -2642,7 +2641,7 @@ function WorkspaceWithScope({ path }) {
 
         if (filePath.endsWith('.html')) {
           // For HTML files, wrap content in a complete HTML document
-          const { editorTitle } = stateRef.current;
+          const { editorTitle } = useWorkspaceStore.getState();
           const title = editorTitle || currentFileName;
           contentToSave = `<!DOCTYPE html>
 <html lang="en">
@@ -2673,7 +2672,7 @@ function WorkspaceWithScope({ path }) {
 </html>`;
         } else if (filePath.endsWith('.json')) {
           // For JSON files, create a structured export
-          const { editorTitle } = stateRef.current;
+          const { editorTitle } = useWorkspaceStore.getState();
           contentToSave = JSON.stringify({
             title: editorTitle || currentFileName,
             content: editorContent,
@@ -2692,14 +2691,14 @@ function WorkspaceWithScope({ path }) {
 
         // Update current file state to point to new location
         const newFileName = filePath.split('/').pop();
-        setOpenTabs(tabs => tabs.map(t => t.path === activeFile ? { path: filePath, name: newFileName } : t));
-        setActiveFile(filePath);
-        setSavedContent(editorContent);
-        setUnsavedChanges(prev => {
-          const newSet = new Set(prev);
+        useWorkspaceStore.setState((s) => ({ openTabs: s.openTabs.map(t => t.path === activeFile ? { path: filePath, name: newFileName } : t) }));
+        useWorkspaceStore.setState({ activeFile: filePath });
+        useWorkspaceStore.getState().setSavedContent(editorContent);
+        useWorkspaceStore.setState((s) => {
+          const newSet = new Set(s.unsavedChanges);
           newSet.delete(activeFile);
           newSet.delete(filePath);
-          return newSet;
+          return { unsavedChanges: newSet };
         });
 
         // Refresh file tree to show new file
@@ -2710,7 +2709,7 @@ function WorkspaceWithScope({ path }) {
   }, []);
 
   const handleExportHtml = useCallback(async () => {
-    const { activeFile, editorContent, editorTitle } = stateRef.current;
+    const { activeFile, editorContent, editorTitle } = useWorkspaceStore.getState();
     if (!activeFile) return;
 
     try {
@@ -2824,7 +2823,7 @@ function WorkspaceWithScope({ path }) {
   }, []);
 
   const handleExportPdf = useCallback(async () => {
-    const { activeFile, editorContent, editorTitle } = stateRef.current;
+    const { activeFile, editorContent, editorTitle } = useWorkspaceStore.getState();
     if (!activeFile) return;
 
     try {
@@ -3077,9 +3076,9 @@ function WorkspaceWithScope({ path }) {
   const handleCreateFile = () => {
     const targetPath = getTargetPath();
     if (targetPath !== path) {
-      setExpandedFolders(prev => new Set([...prev, targetPath]));
+      useWorkspaceStore.setState((s) => ({ expandedFolders: new Set([...s.expandedFolders, targetPath]) }));
     }
-    setCreatingItem({ type: 'file', targetPath });
+    useWorkspaceStore.setState({ creatingItem: { type: 'file', targetPath } });
   };
 
   const handleCreateCanvas = async () => {
@@ -3212,7 +3211,7 @@ function WorkspaceWithScope({ path }) {
         handleRefreshFiles();
       }
 
-      setShowDatePickerModal(false);
+      useWorkspaceStore.getState().closePanel('showDatePickerModal');
 
       posthog.trackFeatureActivation('daily_notes');
     } catch { }
@@ -3244,15 +3243,15 @@ function WorkspaceWithScope({ path }) {
   const handleCreateFolder = () => {
     const targetPath = getTargetPath();
     if (targetPath !== path) {
-      setExpandedFolders(prev => new Set([...prev, targetPath]));
+      useWorkspaceStore.setState((s) => ({ expandedFolders: new Set([...s.expandedFolders, targetPath]) }));
     }
-    setCreatingItem({type: 'folder', targetPath});
+    useWorkspaceStore.setState({ creatingItem: { type: 'folder', targetPath } });
   };
 
-  const handleConfirmCreate = async (name) => {                                                                                                                          
-    if (!creatingItem || !name) {                                                                                                                                        
-      setCreatingItem(null);                                                                                                                                             
-      return;                                                                                                                                                            
+  const handleConfirmCreate = async (name) => {
+    if (!creatingItem || !name) {
+      useWorkspaceStore.setState({ creatingItem: null });
+      return;
     }                                                                                                                                                                    
                                                                                                                                                                           
     try {
@@ -3275,8 +3274,8 @@ function WorkspaceWithScope({ path }) {
       console.error('Failed to create:', e);
     }                                                                                                                                                                    
                                                                                                                                                                           
-    setCreatingItem(null);                                                                                                                                               
-  }; 
+    useWorkspaceStore.setState({ creatingItem: null });
+  };
 
   const handleCreateTemplate = useCallback(() => {
     // Get content from editor - extract HTML for proper markdown conversion
@@ -3315,7 +3314,7 @@ function WorkspaceWithScope({ path }) {
           }
 
           // Fallback to saved markdown content if HTML extraction fails
-          const currentContent = stateRef.current.savedContent || '';
+          const currentContent = useWorkspaceStore.getState().savedContent || '';
           return currentContent;
         }
       }
@@ -3323,14 +3322,14 @@ function WorkspaceWithScope({ path }) {
     };
 
     const contentForTemplate = getContentForTemplate();
-    setCreateTemplateContent(contentForTemplate);
-    setShowCreateTemplate(true);
+    useWorkspaceStore.setState({ createTemplateContent: contentForTemplate });
+    useWorkspaceStore.getState().openPanel('showCreateTemplate');
   }, [activeFile]);
 
   const handleCreateTemplateSaved = useCallback(() => {
     // Template was saved successfully
-    setShowCreateTemplate(false);
-    setCreateTemplateContent('');
+    useWorkspaceStore.getState().closePanel('showCreateTemplate');
+    useWorkspaceStore.setState({ createTemplateContent: '' });
   }, []);
 
   // Graph View Functions
@@ -3356,7 +3355,7 @@ function WorkspaceWithScope({ path }) {
       if (activeFile === '__graph__' && graphData) {
         // Rebuild graph structure if graph view is active
         const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
-        setGraphData(updatedGraphData);
+        useWorkspaceStore.getState().setGraphData(updatedGraphData);
       }
     };
 
@@ -3365,7 +3364,7 @@ function WorkspaceWithScope({ path }) {
       if (activeFile === '__graph__' && graphData) {
         // Rebuild graph structure if graph view is active
         const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
-        setGraphData(updatedGraphData);
+        useWorkspaceStore.getState().setGraphData(updatedGraphData);
       }
     };
 
@@ -3384,7 +3383,7 @@ function WorkspaceWithScope({ path }) {
 
   // Handle graph state updates from ProfessionalGraphView
   const handleGraphStateChange = useCallback((state) => {
-    setGraphSidebarData(state);
+    useWorkspaceStore.getState().setGraphSidebar(state);
   }, []);
 
   // Build graph data for backlinks panel
@@ -3392,7 +3391,7 @@ function WorkspaceWithScope({ path }) {
   const buildGraphData = useCallback(async () => {
     if (!graphProcessorRef.current || isLoadingGraph) return;
 
-    setIsLoadingGraph(true);
+    useWorkspaceStore.getState().setLoadingGraph(true);
 
     try {
       const data = await graphProcessorRef.current.buildGraphFromWorkspace({
@@ -3401,12 +3400,12 @@ function WorkspaceWithScope({ path }) {
         excludePatterns: ['.git', 'node_modules', '.lokus', '.DS_Store']
       });
 
-      setGraphData(data);
+      useWorkspaceStore.getState().setGraphData(data);
 
     } catch (error) {
-      setGraphData(null);
+      useWorkspaceStore.getState().setGraphData(null);
     } finally {
-      setIsLoadingGraph(false);
+      useWorkspaceStore.getState().setLoadingGraph(false);
     }
   }, [isLoadingGraph]);
 
@@ -3430,15 +3429,15 @@ function WorkspaceWithScope({ path }) {
 
     posthog.trackFeatureActivation('graph');
 
-    setOpenTabs(prevTabs => {
-      const newTabs = prevTabs.filter(t => t.path !== graphPath);
+    useWorkspaceStore.setState((s) => {
+      const newTabs = s.openTabs.filter(t => t.path !== graphPath);
       newTabs.unshift({ path: graphPath, name: graphName });
       if (newTabs.length > MAX_OPEN_TABS) {
         newTabs.pop();
       }
-      return newTabs;
+      return { openTabs: newTabs };
     });
-    setActiveFile(graphPath);
+    useWorkspaceStore.setState({ activeFile: graphPath });
   }, []);
 
   const handleOpenBasesTab = useCallback(() => {
@@ -3447,15 +3446,15 @@ function WorkspaceWithScope({ path }) {
 
     posthog.trackFeatureActivation('database');
 
-    setOpenTabs(prevTabs => {
-      const newTabs = prevTabs.filter(t => t.path !== basesPath);
+    useWorkspaceStore.setState((s) => {
+      const newTabs = s.openTabs.filter(t => t.path !== basesPath);
       newTabs.unshift({ path: basesPath, name: basesName });
       if (newTabs.length > MAX_OPEN_TABS) {
         newTabs.pop();
       }
-      return newTabs;
+      return { openTabs: newTabs };
     });
-    setActiveFile(basesPath);
+    useWorkspaceStore.setState({ activeFile: basesPath });
   }, []);
 
   // Initialize graph processor when workspace path changes
@@ -3476,9 +3475,9 @@ function WorkspaceWithScope({ path }) {
   useEffect(() => {
     if (activeFile && path) {
       const noteDate = getDailyNoteDate(activeFile);
-      setCurrentDailyNoteDate(noteDate);
+      useWorkspaceStore.setState({ currentDailyNoteDate: noteDate });
     } else {
-      setCurrentDailyNoteDate(null);
+      useWorkspaceStore.setState({ currentDailyNoteDate: null });
     }
   }, [activeFile, path]);
 
@@ -3511,60 +3510,58 @@ function WorkspaceWithScope({ path }) {
 
   // Split editor handlers
   const handleSplitDragStart = useCallback((tab) => {
-    setDraggedTabForSplit(tab);
+    useWorkspaceStore.setState({ draggedTabForSplit: tab });
   }, []);
 
   const handleSplitDragEnd = useCallback((tab) => {
-    setDraggedTabForSplit(null);
+    useWorkspaceStore.setState({ draggedTabForSplit: null });
   }, []);
 
   const handleToggleSplitView = useCallback(async () => {
-    setUseSplitView(prev => {
-      const newSplitView = !prev;
-      if (newSplitView) {
-        // When enabling split view, load the next tab in right pane
-        const currentIndex = openTabs.findIndex(t => t.path === activeFile);
-        const nextTab = openTabs[currentIndex + 1] || openTabs[0];
-        if (nextTab && nextTab.path !== activeFile) {
-          setRightPaneFile(nextTab.path);
-          // Extract just the filename in case name contains a path
-          const fileName = getFilename(nextTab.name);
-          setRightPaneTitle(fileName.replace(/\.md$/, ""));
+    const newSplitView = !useWorkspaceStore.getState().useSplitView;
+    useWorkspaceStore.setState({ useSplitView: newSplitView });
+    if (newSplitView) {
+      // When enabling split view, load the next tab in right pane
+      const { openTabs: tabs, activeFile: active } = useWorkspaceStore.getState();
+      const currentIndex = tabs.findIndex(t => t.path === active);
+      const nextTab = tabs[currentIndex + 1] || tabs[0];
+      if (nextTab && nextTab.path !== active) {
+        useWorkspaceStore.setState({ rightPaneFile: nextTab.path });
+        // Extract just the filename in case name contains a path
+        const fileName = getFilename(nextTab.name);
+        useWorkspaceStore.setState({ rightPaneTitle: fileName.replace(/\.md$/, "") });
 
-          // Load the content for the right pane asynchronously
-          setTimeout(async () => {
-            const isSpecialView = nextTab.path === '__kanban__' ||
-              nextTab.path === '__bases__' ||
-              nextTab.path.startsWith('__graph__') ||
-              nextTab.path.startsWith('__plugin_') ||
-              nextTab.path.endsWith('.canvas') || nextTab.path.endsWith('.kanban');
+        // Load the content for the right pane asynchronously
+        setTimeout(async () => {
+          const isSpecialView = nextTab.path === '__kanban__' ||
+            nextTab.path === '__bases__' ||
+            nextTab.path.startsWith('__graph__') ||
+            nextTab.path.startsWith('__plugin_') ||
+            nextTab.path.endsWith('.canvas') || nextTab.path.endsWith('.kanban');
 
-            if (!isSpecialView && (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt'))) {
-              // Check if this file is already loaded in the left pane
-              if (nextTab.path === activeFile && editorContent) {
-                setRightPaneContent(editorContent);
-              } else {
-                try {
-                  const content = await invoke("read_file_content", { path: nextTab.path });
-                  setRightPaneContent(content || '');
-                } catch (err) {
-                  setRightPaneContent('');
-                }
-              }
+          const { activeFile: curActive, editorContent: curContent } = useWorkspaceStore.getState();
+          if (!isSpecialView && (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt'))) {
+            // Check if this file is already loaded in the left pane
+            if (nextTab.path === curActive && curContent) {
+              useWorkspaceStore.setState({ rightPaneContent: curContent });
             } else {
-              // For special views, just clear content
-              setRightPaneContent('');
+              try {
+                const content = await invoke("read_file_content", { path: nextTab.path });
+                useWorkspaceStore.setState({ rightPaneContent: content || '' });
+              } catch (err) {
+                useWorkspaceStore.setState({ rightPaneContent: '' });
+              }
             }
-          }, 0);
-        }
-      } else {
-        // Clear right pane when disabling split view
-        setRightPaneFile(null);
-        setRightPaneContent('');
-        setRightPaneTitle('');
+          } else {
+            // For special views, just clear content
+            useWorkspaceStore.setState({ rightPaneContent: '' });
+          }
+        }, 0);
       }
-      return newSplitView;
-    });
+    } else {
+      // Clear right pane when disabling split view
+      useWorkspaceStore.setState({ rightPaneFile: null, rightPaneContent: '', rightPaneTitle: '' });
+    }
   }, [openTabs, activeFile]);
 
   // Pane resize handlers
@@ -3585,7 +3582,7 @@ function WorkspaceWithScope({ path }) {
 
     // Clamp between 20% and 80%
     newSize = Math.max(20, Math.min(80, newSize));
-    setLeftPaneSize(newSize);
+    useWorkspaceStore.getState().setPaneSize(newSize);
   }, [useSplitView, splitDirection]);
 
   const handleMouseDown = useCallback((e) => {
@@ -3601,11 +3598,11 @@ function WorkspaceWithScope({ path }) {
   }, [handlePaneResize]);
 
   const resetPaneSize = useCallback(() => {
-    setLeftPaneSize(50);
+    useWorkspaceStore.getState().setPaneSize(50);
   }, []);
 
   const toggleSplitDirection = useCallback(() => {
-    setSplitDirection(prev => prev === 'vertical' ? 'horizontal' : 'vertical');
+    useWorkspaceStore.setState((s) => ({ splitDirection: s.splitDirection === 'vertical' ? 'horizontal' : 'vertical' }));
   }, []);
 
   // Bottom panel resize handlers
@@ -3619,7 +3616,7 @@ function WorkspaceWithScope({ path }) {
       if (!isResizingBottomPanelRef.current) return;
       const deltaY = startY - e.clientY;
       const newHeight = Math.max(100, Math.min(600, startHeight + deltaY));
-      setBottomPanelHeight(newHeight);
+      useWorkspaceStore.getState().setBottomHeight(newHeight);
     };
 
     const handleMouseUp = () => {
@@ -3668,20 +3665,20 @@ function WorkspaceWithScope({ path }) {
 
     // Handle split creation if dragged to editor area
     if (over && over.id === 'editor-drop-zone') {
-      setUseSplitView(true);
+      useWorkspaceStore.setState({ useSplitView: true });
       return;
     }
 
     // Handle tab reordering
     if (over && active.id !== over.id) {
-      setOpenTabs((tabs) => {
-        const oldIndex = tabs.findIndex((t) => t.path === active.id);
-        const newIndex = tabs.findIndex((t) => t.path === over.id);
-        if (oldIndex === -1 || newIndex === -1) return tabs;
-        const newTabs = Array.from(tabs);
+      useWorkspaceStore.setState((s) => {
+        const oldIndex = s.openTabs.findIndex((t) => t.path === active.id);
+        const newIndex = s.openTabs.findIndex((t) => t.path === over.id);
+        if (oldIndex === -1 || newIndex === -1) return {};
+        const newTabs = Array.from(s.openTabs);
         const [removed] = newTabs.splice(oldIndex, 1);
         newTabs.splice(newIndex, 0, removed);
-        return newTabs;
+        return { openTabs: newTabs };
       });
     }
   };
@@ -3708,7 +3705,7 @@ function WorkspaceWithScope({ path }) {
       // Ctrl/Cmd+`: Toggle terminal panel (desktop only)
       if ((e.metaKey || e.ctrlKey) && e.key === '`' && !e.shiftKey && !e.altKey && isDesktop()) {
         e.preventDefault();
-        setShowTerminalPanel(prev => !prev);
+        useWorkspaceStore.setState({ showTerminalPanel: !useWorkspaceStore.getState().showTerminalPanel });
         return;
       }
     };
@@ -3724,36 +3721,36 @@ function WorkspaceWithScope({ path }) {
     const addDom = (name, fn) => { const h = (event) => fn(event); window.addEventListener(name, h); return () => window.removeEventListener(name, h); };
     const unlistenSave = isTauri ? listen("lokus:save-file", handleSave) : Promise.resolve(addDom('lokus:save-file', handleSave));
     const unlistenClose = isTauri ? listen("lokus:close-tab", () => {
-      if (stateRef.current.activeFile) {
-        handleTabClose(stateRef.current.activeFile);
+      if (useWorkspaceStore.getState().activeFile) {
+        handleTabClose(useWorkspaceStore.getState().activeFile);
       }
     }) : Promise.resolve(addDom('lokus:close-tab', () => {
-      if (stateRef.current.activeFile) handleTabClose(stateRef.current.activeFile);
+      if (useWorkspaceStore.getState().activeFile) handleTabClose(useWorkspaceStore.getState().activeFile);
     }));
     const unlistenNewFile = isTauri ? listen("lokus:new-file", handleCreateFile) : Promise.resolve(addDom('lokus:new-file', handleCreateFile));
     const unlistenNewFolder = isTauri ? listen("lokus:new-folder", handleCreateFolder) : Promise.resolve(addDom('lokus:new-folder', handleCreateFolder));
-    const unlistenToggleSidebar = isTauri ? listen("lokus:toggle-sidebar", () => setShowLeft(v => !v)) : Promise.resolve(addDom('lokus:toggle-sidebar', () => setShowLeft(v => !v)));
+    const unlistenToggleSidebar = isTauri ? listen("lokus:toggle-sidebar", () => useWorkspaceStore.getState().toggleLeft()) : Promise.resolve(addDom('lokus:toggle-sidebar', () => useWorkspaceStore.getState().toggleLeft()));
     const unlistenCommandPalette = isTauri ? listen("lokus:command-palette", () => {
       // Don't open command palette when graph view is active
-      const isGraphActive = stateRef.current.activeFile === '__graph__' ||
-        stateRef.current.activeFile?.startsWith('__graph__');
+      const isGraphActive = useWorkspaceStore.getState().activeFile === '__graph__' ||
+        useWorkspaceStore.getState().activeFile?.startsWith('__graph__');
       if (!isGraphActive) {
-        setShowCommandPalette(true);
+        useWorkspaceStore.getState().openPanel('showCommandPalette');
       }
     }) : Promise.resolve(addDom('lokus:command-palette', () => {
-      const isGraphActive = stateRef.current.activeFile === '__graph__' ||
-        stateRef.current.activeFile?.startsWith('__graph__');
+      const isGraphActive = useWorkspaceStore.getState().activeFile === '__graph__' ||
+        useWorkspaceStore.getState().activeFile?.startsWith('__graph__');
       if (!isGraphActive) {
-        setShowCommandPalette(true);
+        useWorkspaceStore.getState().openPanel('showCommandPalette');
       }
     }));
-    const unlistenInFileSearch = isTauri ? listen("lokus:in-file-search", () => setShowInFileSearch(true)) : Promise.resolve(addDom('lokus:in-file-search', () => setShowInFileSearch(true)));
-    const unlistenGlobalSearch = isTauri ? listen("lokus:global-search", () => setShowGlobalSearch(true)) : Promise.resolve(addDom('lokus:global-search', () => setShowGlobalSearch(true)));
+    const unlistenInFileSearch = isTauri ? listen("lokus:in-file-search", () => useWorkspaceStore.getState().openPanel('showInFileSearch')) : Promise.resolve(addDom('lokus:in-file-search', () => useWorkspaceStore.getState().openPanel('showInFileSearch')));
+    const unlistenGlobalSearch = isTauri ? listen("lokus:global-search", () => useWorkspaceStore.getState().openPanel('showGlobalSearch')) : Promise.resolve(addDom('lokus:global-search', () => useWorkspaceStore.getState().openPanel('showGlobalSearch')));
     const unlistenGraphView = isTauri ? listen("lokus:graph-view", handleOpenGraphView) : Promise.resolve(addDom('lokus:graph-view', handleOpenGraphView));
     const unlistenShortcutHelp = isTauri ? listen("lokus:shortcut-help", () => {
-      setShowShortcutHelp(true);
+      useWorkspaceStore.getState().openPanel('showShortcutHelp');
     }) : Promise.resolve(addDom('lokus:shortcut-help', () => {
-      setShowShortcutHelp(true);
+      useWorkspaceStore.getState().openPanel('showShortcutHelp');
     }));
     const unlistenRefreshFiles = isTauri ? listen("lokus:refresh-files", handleRefreshFiles) : Promise.resolve(addDom('lokus:refresh-files', handleRefreshFiles));
     const unlistenNewCanvas = isTauri ? listen("lokus:new-canvas", handleCreateCanvas) : Promise.resolve(addDom('lokus:new-canvas', handleCreateCanvas));
@@ -3765,13 +3762,13 @@ function WorkspaceWithScope({ path }) {
     const unlistenToggleSplitView = isTauri ? listen("lokus:toggle-split-view", handleToggleSplitView) : Promise.resolve(addDom('lokus:toggle-split-view', handleToggleSplitView));
     const unlistenToggleSplitDirection = isTauri ? listen("lokus:toggle-split-direction", toggleSplitDirection) : Promise.resolve(addDom('lokus:toggle-split-direction', toggleSplitDirection));
     const unlistenResetPaneSize = isTauri ? listen("lokus:reset-pane-size", resetPaneSize) : Promise.resolve(addDom('lokus:reset-pane-size', resetPaneSize));
-    const unlistenToggleSyncScrolling = isTauri ? listen("lokus:toggle-sync-scrolling", () => setSyncScrolling(prev => !prev)) : Promise.resolve(addDom('lokus:toggle-sync-scrolling', () => setSyncScrolling(prev => !prev)));
+    const unlistenToggleSyncScrolling = isTauri ? listen("lokus:toggle-sync-scrolling", () => useWorkspaceStore.setState((s) => ({ syncScrolling: !s.syncScrolling }))) : Promise.resolve(addDom('lokus:toggle-sync-scrolling', () => useWorkspaceStore.setState((s) => ({ syncScrolling: !s.syncScrolling }))));
 
     // Template picker event listener
     const handleTemplatePicker = (event) => {
       const data = event?.detail || event;
-      setTemplatePickerData(data);
-      setShowTemplatePicker(true);
+      useWorkspaceStore.setState({ templatePickerData: data });
+      useWorkspaceStore.getState().openPanel('showTemplatePicker');
     };
     const unlistenTemplatePicker = Promise.resolve(addDom('open-template-picker', handleTemplatePicker));
 
@@ -3936,7 +3933,7 @@ function WorkspaceWithScope({ path }) {
           }
           break;
         case 'keyboard-shortcuts':
-          setShowShortcutHelp(true);
+          useWorkspaceStore.getState().openPanel('showShortcutHelp');
           break;
         case 'release-notes':
           // Open release notes (server-driven URL)
@@ -3962,8 +3959,8 @@ function WorkspaceWithScope({ path }) {
 
     // Additional missing file menu events
     const unlistenShowAbout = isTauri ? listen("lokus:show-about", () => {
-      setShowAboutDialog(true);
-    }) : Promise.resolve(addDom('lokus:show-about', () => { setShowAboutDialog(true); }));
+      useWorkspaceStore.getState().openPanel('showAboutDialog');
+    }) : Promise.resolve(addDom('lokus:show-about', () => { useWorkspaceStore.getState().openPanel('showAboutDialog'); }));
 
     const unlistenSaveAs = isTauri ? listen("lokus:save-as", handleSaveAs) : Promise.resolve(addDom('lokus:save-as', handleSaveAs));
 
@@ -3982,7 +3979,7 @@ function WorkspaceWithScope({ path }) {
     const unlistenCopy = isTauri ? listen("lokus:edit-copy", () => handleEditorEdit('copy')) : Promise.resolve(addDom('lokus:edit-copy', () => handleEditorEdit('copy')));
     const unlistenPaste = isTauri ? listen("lokus:edit-paste", () => handleEditorEdit('paste')) : Promise.resolve(addDom('lokus:edit-paste', () => handleEditorEdit('paste')));
     const unlistenSelectAll = isTauri ? listen("lokus:edit-select-all", () => handleEditorEdit('select-all')) : Promise.resolve(addDom('lokus:edit-select-all', () => handleEditorEdit('select-all')));
-    const unlistenFindReplace = isTauri ? listen("lokus:find-replace", () => setShowInFileSearch(true)) : Promise.resolve(addDom('lokus:find-replace', () => setShowInFileSearch(true)));
+    const unlistenFindReplace = isTauri ? listen("lokus:find-replace", () => useWorkspaceStore.getState().openPanel('showInFileSearch')) : Promise.resolve(addDom('lokus:find-replace', () => useWorkspaceStore.getState().openPanel('showInFileSearch')));
 
     // View menu events
     const unlistenZoomIn = isTauri ? listen("lokus:zoom-in", () => handleViewAction('zoom-in')) : Promise.resolve(addDom('lokus:zoom-in', () => handleViewAction('zoom-in')));
@@ -4350,7 +4347,7 @@ function WorkspaceWithScope({ path }) {
               </button>
             )}
             <button
-              onClick={() => setShowRight(v => !v)}
+              onClick={() => useWorkspaceStore.getState().toggleRight()}
               className={`obsidian-button icon-only small ${showRight ? 'active' : ''}`}
               title={showRight ? "Hide Right Sidebar" : "Show Right Sidebar"}
               data-tauri-drag-region="false"
@@ -4378,7 +4375,7 @@ function WorkspaceWithScope({ path }) {
           <aside className="flex flex-col items-center gap-1 border-r border-app-border bg-app-panel" style={{ paddingTop: platformService.isMacOS() ? '0.5rem' : '0.75rem', paddingBottom: '0.75rem' }}>
             {/* Menu Toggle */}
             <button
-              onClick={() => setShowLeft(v => !v)}
+              onClick={() => useWorkspaceStore.getState().toggleLeft()}
               title={showLeft ? "Hide sidebar" : "Show sidebar"}
               className="obsidian-button icon-only mb-2"
               onMouseEnter={(e) => {
@@ -4397,11 +4394,11 @@ function WorkspaceWithScope({ path }) {
             <div className="w-full pt-2">
               <button
                 onClick={() => {
-                  setShowKanban(false);
-                  setShowPlugins(false);
-                  setShowBases(false);
-                  setShowGraphView(false);
-                  setShowLeft(true);
+                  useWorkspaceStore.setState({ showKanban: false });
+                  useWorkspaceStore.setState({ showPlugins: false });
+                  useWorkspaceStore.setState({ showBases: false });
+                  useWorkspaceStore.setState({ showGraphView: false });
+                  useWorkspaceStore.getState().openPanel('showLeft');
                 }}
                 title="Explorer"
                 data-tour="files"
@@ -4421,11 +4418,11 @@ function WorkspaceWithScope({ path }) {
               {uiVisibility.sidebar_kanban && (
                 <button
                   onClick={() => {
-                    setShowKanban(true);
-                    setShowPlugins(false);
-                    setShowBases(false);
-                    setShowGraphView(false);
-                    setShowLeft(true);
+                    useWorkspaceStore.setState({ showKanban: true });
+                    useWorkspaceStore.setState({ showPlugins: false });
+                    useWorkspaceStore.setState({ showBases: false });
+                    useWorkspaceStore.setState({ showGraphView: false });
+                    useWorkspaceStore.getState().openPanel('showLeft');
                   }}
                   title="Task Board"
                   className="obsidian-button icon-only w-full mb-1"
@@ -4445,11 +4442,11 @@ function WorkspaceWithScope({ path }) {
               {featureFlags.enable_plugins && uiVisibility.sidebar_plugins && (
                 <button
                   onClick={() => {
-                    setShowPlugins(true);
-                    setShowKanban(false);
-                    setShowBases(false);
-                    setShowGraphView(false);
-                    setShowLeft(true);
+                    useWorkspaceStore.setState({ showPlugins: true });
+                    useWorkspaceStore.setState({ showKanban: false });
+                    useWorkspaceStore.setState({ showBases: false });
+                    useWorkspaceStore.setState({ showGraphView: false });
+                    useWorkspaceStore.getState().openPanel('showLeft');
                   }}
                   title="Extensions"
                   className="obsidian-button icon-only w-full mb-1"
@@ -4509,10 +4506,10 @@ function WorkspaceWithScope({ path }) {
               {uiVisibility.sidebar_daily_notes && (
                 <button
                   onClick={() => {
-                    setShowDailyNotesPanel(!showDailyNotesPanel);
-                    setShowCalendarPanel(false);
-                    setShowRight(true);
-                    setShowVersionHistory(false);
+                    useWorkspaceStore.setState({ showDailyNotesPanel: !useWorkspaceStore.getState().showDailyNotesPanel });
+                    useWorkspaceStore.getState().closePanel('showCalendarPanel');
+                    useWorkspaceStore.getState().openPanel('showRight');
+                    useWorkspaceStore.getState().closePanel('showVersionHistory');
                   }}
                   title="Daily Notes"
                   className={`obsidian-button icon-only w-full mb-1 ${showDailyNotesPanel ? 'active' : ''}`}
@@ -4533,10 +4530,10 @@ function WorkspaceWithScope({ path }) {
               {/* Calendar Integration button */}
               <button
                 onClick={() => {
-                  setShowCalendarPanel(!showCalendarPanel);
-                  setShowDailyNotesPanel(false);
-                  setShowRight(true);
-                  setShowVersionHistory(false);
+                  useWorkspaceStore.setState({ showCalendarPanel: !useWorkspaceStore.getState().showCalendarPanel });
+                  useWorkspaceStore.getState().closePanel('showDailyNotesPanel');
+                  useWorkspaceStore.getState().openPanel('showRight');
+                  useWorkspaceStore.getState().closePanel('showVersionHistory');
                 }}
                 title="Calendar"
                 className={`obsidian-button icon-only w-full mb-1 ${showCalendarPanel ? 'active' : ''}`}
@@ -4628,19 +4625,19 @@ function WorkspaceWithScope({ path }) {
                           onCreateConfirm={handleConfirmCreate}
                           keymap={keymap}
                           selectedPath={selectedPath}
-                          setSelectedPath={setSelectedPath}
+                          setSelectedPath={(x) => useWorkspaceStore.getState().selectEntry(x)}
                           renamingPath={renamingPath}
-                          setRenamingPath={setRenamingPath}
+                          setRenamingPath={(x) => useWorkspaceStore.setState({ renamingPath: x })}
                           onViewHistory={toggleVersionHistory}
-                          setTagModalFile={setTagModalFile}
-                          setShowTagModal={setShowTagModal}
-                          setUseSplitView={setUseSplitView}
-                          setRightPaneFile={setRightPaneFile}
-                          setRightPaneTitle={setRightPaneTitle}
-                          setRightPaneContent={setRightPaneContent}
+                          setTagModalFile={(x) => useWorkspaceStore.setState({ tagModalFile: x })}
+                          setShowTagModal={(v) => v ? useWorkspaceStore.getState().openPanel('showTagModal') : useWorkspaceStore.getState().closePanel('showTagModal')}
+                          setUseSplitView={(x) => useWorkspaceStore.setState({ useSplitView: x })}
+                          setRightPaneFile={(x) => useWorkspaceStore.setState({ rightPaneFile: x })}
+                          setRightPaneTitle={(x) => useWorkspaceStore.setState({ rightPaneTitle: x })}
+                          setRightPaneContent={(x) => useWorkspaceStore.setState({ rightPaneContent: x })}
                           isExternalDragActive={isExternalDragActive}
                           hoveredFolder={hoveredFolder}
-                          setHoveredFolder={setHoveredFolder}
+                          setHoveredFolder={(x) => useWorkspaceStore.setState({ hoveredFolder: x })}
                           toast={toast}
                           onCheckReferences={handleCheckReferences}
                           workspacePath={path}
@@ -4701,14 +4698,14 @@ function WorkspaceWithScope({ path }) {
                         <input
                           type="text"
                           value={editorTitle}
-                          onChange={(e) => setEditorTitle(e.target.value)}
+                          onChange={(e) => useWorkspaceStore.getState().setTitle(e.target.value)}
                           className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
                         />
                         <Editor
                           ref={editorRef}
                           content={editorContent}
                           onContentChange={handleEditorChange}
-                          onEditorReady={setEditor}
+                          onEditorReady={(e) => useWorkspaceStore.getState().setEditor(e)}
                           isLoading={isLoadingContent}
                         />
                       </div>
@@ -4746,15 +4743,15 @@ function WorkspaceWithScope({ path }) {
                             onSave={async (canvasData) => {
                               try {
                                 await canvasManager.saveCanvas(rightPaneFile, canvasData);
-                                setUnsavedChanges(prev => {
-                                  const newSet = new Set(prev);
+                                useWorkspaceStore.setState((s) => {
+                                  const newSet = new Set(s.unsavedChanges);
                                   newSet.delete(rightPaneFile);
-                                  return newSet;
+                                  return { unsavedChanges: newSet };
                                 });
                               } catch { }
                             }}
                             onChange={() => {
-                              setUnsavedChanges(prev => new Set(prev).add(rightPaneFile));
+                              useWorkspaceStore.setState((s) => ({ unsavedChanges: new Set(s.unsavedChanges).add(rightPaneFile) }));
                             }}
                           />
                         </div>
@@ -4771,8 +4768,8 @@ function WorkspaceWithScope({ path }) {
                           <PDFViewerTab
                             file={rightPaneFile}
                             onClose={() => {
-                              setOpenTabs(prev => prev.filter(tab => tab.path !== rightPaneFile));
-                              setRightPaneFile(null);
+                              useWorkspaceStore.setState((s) => ({ openTabs: s.openTabs.filter(tab => tab.path !== rightPaneFile) }));
+                              useWorkspaceStore.setState({ rightPaneFile: null });
                             }}
                           />
                         </div>
@@ -4805,14 +4802,14 @@ function WorkspaceWithScope({ path }) {
                             <input
                               type="text"
                               value={rightPaneTitle}
-                              onChange={(e) => setRightPaneTitle(e.target.value)}
+                              onChange={(e) => useWorkspaceStore.setState({ rightPaneTitle: e.target.value })}
                               className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
                             />
                             <Editor
                               key={`right-pane-${rightPaneFile}`}
                               content={rightPaneContent}
-                              onContentChange={(content) => setRightPaneContent(content)}
-                              onEditorReady={setEditor}
+                              onContentChange={(content) => useWorkspaceStore.setState({ rightPaneContent: content })}
+                              onEditorReady={(e) => useWorkspaceStore.getState().setEditor(e)}
                             />
                           </div>
                         )
@@ -4834,18 +4831,18 @@ function WorkspaceWithScope({ path }) {
                         onSave={async (canvasData) => {
                           try {
                             await canvasManager.saveCanvas(activeFile, canvasData);
-                            setUnsavedChanges(prev => {
-                              const newSet = new Set(prev);
+                            useWorkspaceStore.setState((s) => {
+                              const newSet = new Set(s.unsavedChanges);
                               newSet.delete(activeFile);
-                              return newSet;
+                              return { unsavedChanges: newSet };
                             });
                           } catch { }
                         }}
                         onContentChange={(canvasData) => {
-                          setUnsavedChanges(prev => {
-                            const newSet = new Set(prev);
+                          useWorkspaceStore.setState((s) => {
+                            const newSet = new Set(s.unsavedChanges);
                             newSet.add(activeFile);
-                            return newSet;
+                            return { unsavedChanges: newSet };
                           });
                         }}
                         initialData={null} // Will be loaded by Canvas component
@@ -4864,8 +4861,8 @@ function WorkspaceWithScope({ path }) {
                       <PDFViewerTab
                         file={activeFile}
                         onClose={() => {
-                          setOpenTabs(prev => prev.filter(tab => tab.path !== activeFile));
-                          setActiveFile(null);
+                          useWorkspaceStore.setState((s) => ({ openTabs: s.openTabs.filter(tab => tab.path !== activeFile) }));
+                          useWorkspaceStore.setState({ activeFile: null });
                         }}
                       />
                     </div>
@@ -4876,14 +4873,14 @@ function WorkspaceWithScope({ path }) {
                         allImageFiles={allImageFiles}
                         onImageChange={(newPath) => {
                           // Update active file and tab name when navigating between images
-                          setActiveFile(newPath);
-                          setOpenTabs(prevTabs => {
-                            return prevTabs.map(tab =>
+                          useWorkspaceStore.setState({ activeFile: newPath });
+                          useWorkspaceStore.setState((s) => ({
+                            openTabs: s.openTabs.map(tab =>
                               tab.path === activeFile
                                 ? { ...tab, path: newPath, name: getFilename(newPath) }
                                 : tab
-                            );
-                          });
+                            )
+                          }));
                         }}
                       />
                     </div>
@@ -4907,8 +4904,8 @@ function WorkspaceWithScope({ path }) {
                         workspacePath={path}
                         onClose={() => {
                           const remaining = openTabs.filter(t => t.path !== '__calendar__');
-                          setOpenTabs(remaining);
-                          setActiveFile(remaining[0]?.path || null);
+                          useWorkspaceStore.setState({ openTabs: remaining });
+                          useWorkspaceStore.setState({ activeFile: remaining[0]?.path || null });
                         }}
                         onOpenSettings={async () => {
                           try {
@@ -4993,7 +4990,7 @@ function WorkspaceWithScope({ path }) {
                                     <input
                                       type="text"
                                       value={editorTitle}
-                                      onChange={(e) => setEditorTitle(e.target.value)}
+                                      onChange={(e) => useWorkspaceStore.getState().setTitle(e.target.value)}
                                       className="w-full bg-transparent text-4xl font-bold mb-4 outline-none text-app-text"
                                     />
                                     <div data-tour="editor">
@@ -5001,7 +4998,7 @@ function WorkspaceWithScope({ path }) {
                                         ref={editorRef}
                                         content={editorContent}
                                         onContentChange={handleEditorChange}
-                                        onEditorReady={setEditor}
+                                        onEditorReady={(e) => useWorkspaceStore.getState().setEditor(e)}
                                         isLoading={isLoadingContent}
                                       />
                                     </div>
@@ -5012,7 +5009,7 @@ function WorkspaceWithScope({ path }) {
                                     Save
                                     { isDesktop() && <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['save-file'])}</span>}
                                   </ContextMenuItem>
-                                  <ContextMenuItem onClick={() => stateRef.current.activeFile && handleTabClose(stateRef.current.activeFile)}>
+                                  <ContextMenuItem onClick={() => useWorkspaceStore.getState().activeFile && handleTabClose(useWorkspaceStore.getState().activeFile)}>
                                     Close Tab
                                     { isDesktop() && <span className="ml-auto text-xs text-app-muted">{formatAccelerator(keymap['close-tab'])}</span>}
                                   </ContextMenuItem>
@@ -5081,7 +5078,7 @@ function WorkspaceWithScope({ path }) {
                                 </button>
 
                                 <button
-                                  onClick={() => setShowCommandPalette(true)}
+                                  onClick={() => useWorkspaceStore.getState().openPanel('showCommandPalette')}
                                   className="group p-6 rounded-xl border border-app-border bg-app-panel/30 hover:bg-app-panel/50 hover:border-app-accent/40 transition-all duration-200 text-left"
                                   data-tour="templates"
                                 >
@@ -5182,7 +5179,7 @@ function WorkspaceWithScope({ path }) {
                     key={`version-${activeFile}-${versionRefreshKey}`}
                     workspacePath={path}
                     filePath={activeFile}
-                    onClose={() => setShowVersionHistory(false)}
+                    onClose={() => useWorkspaceStore.getState().closePanel('showVersionHistory')}
                     onRestore={reloadCurrentFile}
                   />
                 ) : showDailyNotesPanel ? (
@@ -5198,13 +5195,13 @@ function WorkspaceWithScope({ path }) {
                       const calendarPath = '__calendar__';
                       const calendarName = 'Calendar';
 
-                      setOpenTabs(prevTabs => {
-                        const newTabs = prevTabs.filter(t => t.path !== calendarPath);
+                      useWorkspaceStore.setState((s) => {
+                        const newTabs = s.openTabs.filter(t => t.path !== calendarPath);
                         newTabs.unshift({ path: calendarPath, name: calendarName });
                         if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
-                        return newTabs;
+                        return { openTabs: newTabs };
                       });
-                      setActiveFile(calendarPath);
+                      useWorkspaceStore.setState({ activeFile: calendarPath });
                     }}
                     onOpenSettings={async () => {
                       // Open preferences with calendar section
@@ -5313,19 +5310,19 @@ function WorkspaceWithScope({ path }) {
             };
             openPreferences();
           }}
-          onToggleSidebar={() => setShowLeft(v => !v)}
+          onToggleSidebar={() => useWorkspaceStore.getState().toggleLeft()}
           onCloseTab={handleTabClose}
           onOpenGraph={() => {
             const graphPath = '__professional_graph__';
             const graphName = 'Professional Graph';
 
-            setOpenTabs(prevTabs => {
-              const newTabs = prevTabs.filter(t => t.path !== graphPath);
+            useWorkspaceStore.setState((s) => {
+              const newTabs = s.openTabs.filter(t => t.path !== graphPath);
               newTabs.unshift({ path: graphPath, name: graphName });
               if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
-              return newTabs;
+              return { openTabs: newTabs };
             });
-            setActiveFile(graphPath);
+            useWorkspaceStore.setState({ activeFile: graphPath });
           }}
           onShowTemplatePicker={(templateSelection) => {
             // Handle direct template selection from Command Palette
@@ -5373,8 +5370,8 @@ function WorkspaceWithScope({ path }) {
             }
 
             // Fall back to opening template picker modal
-            setShowTemplatePicker(true);
-            setTemplatePickerData({
+            useWorkspaceStore.getState().openPanel('showTemplatePicker');
+            useWorkspaceStore.setState({ templatePickerData: {
               editorState: { editor: editorRef.current },
               onSelect: (template, processedContent) => {
 
@@ -5457,7 +5454,7 @@ function WorkspaceWithScope({ path }) {
                 } else {
                 }
               }
-            });
+            } });
           }}
           onCreateTemplate={handleCreateTemplate}
           onOpenDailyNote={handleOpenDailyNote}
@@ -5468,22 +5465,22 @@ function WorkspaceWithScope({ path }) {
         <InFileSearch
           editor={editorRef.current}
           isVisible={showInFileSearch}
-          onClose={() => setShowInFileSearch(false)}
+          onClose={() => useWorkspaceStore.getState().closePanel('showInFileSearch')}
         />
 
         {showTemplatePicker && templatePickerData && (
           <TemplatePicker
             open={showTemplatePicker}
             onClose={() => {
-              setShowTemplatePicker(false);
-              setTemplatePickerData(null);
+              useWorkspaceStore.getState().closePanel('showTemplatePicker');
+              useWorkspaceStore.setState({ templatePickerData: null });
             }}
             onSelect={(template, processedContent) => {
               if (templatePickerData.onSelect) {
                 templatePickerData.onSelect(template, processedContent);
               }
-              setShowTemplatePicker(false);
-              setTemplatePickerData(null);
+              useWorkspaceStore.getState().closePanel('showTemplatePicker');
+              useWorkspaceStore.setState({ templatePickerData: null });
             }}
             editorState={templatePickerData.editorState}
           />
@@ -5491,24 +5488,24 @@ function WorkspaceWithScope({ path }) {
 
         <FullTextSearchPanel
           isOpen={showGlobalSearch}
-          onClose={() => setShowGlobalSearch(false)}
+          onClose={() => useWorkspaceStore.getState().closePanel('showGlobalSearch')}
           onResultClick={(result) => {
             if (result.path) {
               handleFileOpen(result.path);
             }
-            setShowGlobalSearch(false);
+            useWorkspaceStore.getState().closePanel('showGlobalSearch');
           }}
           workspacePath={path}
         />
 
         <ShortcutHelpModal
           isOpen={showShortcutHelp}
-          onClose={() => setShowShortcutHelp(false)}
+          onClose={() => useWorkspaceStore.getState().closePanel('showShortcutHelp')}
         />
 
         <CreateTemplate
           open={showCreateTemplate}
-          onClose={() => setShowCreateTemplate(false)}
+          onClose={() => useWorkspaceStore.getState().closePanel('showCreateTemplate')}
           initialContent={createTemplateContent}
           onSaved={handleCreateTemplateSaved}
         />
@@ -5516,7 +5513,7 @@ function WorkspaceWithScope({ path }) {
         {/* Date Picker Modal for Daily Notes */}
         <DatePickerModal
           isOpen={showDatePickerModal}
-          onClose={() => setShowDatePickerModal(false)}
+          onClose={() => useWorkspaceStore.getState().closePanel('showDatePickerModal')}
           onDateSelect={handleOpenDailyNoteByDate}
           workspacePath={path}
         />
@@ -5525,20 +5522,20 @@ function WorkspaceWithScope({ path }) {
         <TagManagementModal
           isOpen={showTagModal}
           onClose={() => {
-            setShowTagModal(false);
-            setTagModalFile(null);
+            useWorkspaceStore.getState().closePanel('showTagModal');
+            useWorkspaceStore.setState({ tagModalFile: null });
           }}
           file={tagModalFile}
           onTagsUpdated={(file, tags) => {
             // Refresh file tree and Bases to show updated tags
-            setRefreshId(prev => prev + 1);
+            useWorkspaceStore.getState().refreshTree();
           }}
         />
 
         {/* About Dialog */}
         <AboutDialog
           isOpen={showAboutDialog}
-          onClose={() => setShowAboutDialog(false)}
+          onClose={() => useWorkspaceStore.getState().closePanel('showAboutDialog')}
         />
 
         {/* Reference Update Modal */}
@@ -5591,9 +5588,9 @@ function WorkspaceWithScope({ path }) {
               {isDesktop() && (
                 <button
                   onClick={() => {
-                    setBottomPanelTab('terminal');
-                    setShowTerminalPanel(true);
-                    setShowOutputPanel(false);
+                    useWorkspaceStore.getState().setBottomTab('terminal');
+                    useWorkspaceStore.getState().openPanel('showTerminalPanel');
+                    useWorkspaceStore.getState().closePanel('showOutputPanel');
                   }}
                   style={{
                     padding: '0 12px',
@@ -5612,9 +5609,9 @@ function WorkspaceWithScope({ path }) {
               )}
               <button
                 onClick={() => {
-                  setBottomPanelTab('output');
-                  setShowOutputPanel(true);
-                  setShowTerminalPanel(false);
+                  useWorkspaceStore.getState().setBottomTab('output');
+                  useWorkspaceStore.getState().openPanel('showOutputPanel');
+                  useWorkspaceStore.getState().closePanel('showTerminalPanel');
                 }}
                 style={{
                   padding: '0 12px',
@@ -5633,8 +5630,8 @@ function WorkspaceWithScope({ path }) {
               <div style={{ flex: 1 }}></div>
               <button
                 onClick={() => {
-                  setShowTerminalPanel(false);
-                  setShowOutputPanel(false);
+                  useWorkspaceStore.getState().closePanel('showTerminalPanel');
+                  useWorkspaceStore.getState().closePanel('showOutputPanel');
                 }}
                 style={{
                   padding: '0 12px',
@@ -5658,8 +5655,8 @@ function WorkspaceWithScope({ path }) {
                 <TerminalPanel
                   isOpen={showTerminalPanel}
                   onClose={() => {
-                    setShowTerminalPanel(false);
-                    setShowOutputPanel(false);
+                    useWorkspaceStore.getState().closePanel('showTerminalPanel');
+                    useWorkspaceStore.getState().closePanel('showOutputPanel');
                   }}
                 />
               )}
@@ -5667,8 +5664,8 @@ function WorkspaceWithScope({ path }) {
                 <OutputPanel
                   isOpen={showOutputPanel}
                   onClose={() => {
-                    setShowOutputPanel(false);
-                    setShowTerminalPanel(false);
+                    useWorkspaceStore.getState().closePanel('showOutputPanel');
+                    useWorkspaceStore.getState().closePanel('showTerminalPanel');
                   }}
                 />
               )}
@@ -5680,7 +5677,7 @@ function WorkspaceWithScope({ path }) {
         {isMobile() && (
           <MobileBottomNav
             activeTab={currentView}
-            onTabChange={setCurrentView}
+            onTabChange={(v) => useWorkspaceStore.getState().switchView(v)}
           />
         )}
 
@@ -5693,19 +5690,19 @@ function WorkspaceWithScope({ path }) {
           showTerminal={isDesktop() ? showTerminalPanel : false}
           onToggleTerminal={() => {
             if (isDesktop()) {
-              setShowTerminalPanel(prev => !prev);
+              useWorkspaceStore.setState({ showTerminalPanel: !useWorkspaceStore.getState().showTerminalPanel });
               if (!showTerminalPanel) {
-                setBottomPanelTab('terminal');
-                setShowOutputPanel(false);
+                useWorkspaceStore.getState().setBottomTab('terminal');
+                useWorkspaceStore.getState().closePanel('showOutputPanel');
               }
             }
           }}
           showOutput={showOutputPanel}
           onToggleOutput={() => {
-            setShowOutputPanel(prev => !prev);
+            useWorkspaceStore.setState({ showOutputPanel: !useWorkspaceStore.getState().showOutputPanel });
             if (!showOutputPanel) {
-              setBottomPanelTab('output');
-              setShowTerminalPanel(false);
+              useWorkspaceStore.getState().setBottomTab('output');
+              useWorkspaceStore.getState().closePanel('showTerminalPanel');
             }
           }}
         />
@@ -5719,7 +5716,7 @@ function WorkspaceWithScope({ path }) {
             thumbnailUrl={canvasPreview.thumbnailUrl}
             loading={canvasPreview.loading}
             error={canvasPreview.error}
-            onClose={() => setCanvasPreview(null)}
+            onClose={() => useWorkspaceStore.setState({ canvasPreview: null })}
           />
         )}
 
