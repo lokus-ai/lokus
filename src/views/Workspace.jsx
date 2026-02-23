@@ -100,13 +100,14 @@ import ReferenceUpdateModal from "../components/ReferenceUpdateModal.jsx";
 import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
 import { useWorkspaceStore } from '../stores/workspace';
 import { useColumnResize } from '../features/layout';
-import { useEditorContent, useSave, EditorModeSwitcher as FeatureEditorModeSwitcher } from '../features/editor';
+import { useEditorContent, useExport, useSave, EditorModeSwitcher as FeatureEditorModeSwitcher } from '../features/editor';
 import { useFileTree, useFileOperations } from '../features/file-tree';
 import { NewItemInput as FeatureNewItemInput } from '../features/file-tree';
 import { useGraphEngine } from '../features/graph';
 import { useSplitView as useSplitViewHook } from '../features/split-view';
 import { usePanels } from '../features/panels';
 import { ShortcutListener } from '../features/shortcuts';
+import { useTabs } from '../features/tabs';
 
 // EditorModeSwitcher extracted to src/features/editor/EditorModeSwitcher.jsx
 const EditorModeSwitcher = FeatureEditorModeSwitcher;
@@ -1445,6 +1446,15 @@ function WorkspaceWithScope({ path }) {
     onRefreshFiles: () => useWorkspaceStore.getState().refreshTree(),
   });
 
+  const { handleExportHtml, handleExportPdf } = useExport({ workspacePath: path });
+
+  // --- Refs for stable callbacks ---
+  const editorRef = useRef(null);
+  const leftPaneScrollRef = useRef(null);
+  const rightPaneScrollRef = useRef(null);
+
+  const { handleTabClose, handleFileOpen, handleTabClick, handleReopenClosedTab } = useTabs({ workspacePath: path, editorRef, onSave: handleSave });
+
   // Split view
   const useSplitView = useWorkspaceStore((s) => s.useSplitView);
   const splitDirection = useWorkspaceStore((s) => s.splitDirection);
@@ -1455,11 +1465,6 @@ function WorkspaceWithScope({ path }) {
   const rightPaneContent = useWorkspaceStore((s) => s.rightPaneContent);
   const rightPaneTitle = useWorkspaceStore((s) => s.rightPaneTitle);
   const syncScrolling = useWorkspaceStore((s) => s.syncScrolling);
-
-  // --- Refs for stable callbacks ---
-  const editorRef = useRef(null);
-  const leftPaneScrollRef = useRef(null);
-  const rightPaneScrollRef = useRef(null);
 
   // Initialize layout defaults from remote config
   useEffect(() => {
@@ -2304,198 +2309,9 @@ function WorkspaceWithScope({ path }) {
     useWorkspaceStore.setState({ expandedFolders: new Set() });
   };
 
-  const handleFileOpen = (file) => {
-    // Handle search result format with line numbers
-    if (file.path && file.lineNumber !== undefined) {
-      const filePath = file.path;
-      const fileName = getFilename(filePath);
-
-      useWorkspaceStore.setState((s) => {
-        const newTabs = s.openTabs.filter(t => t.path !== filePath);
-        newTabs.unshift({ path: filePath, name: fileName });
-        if (newTabs.length > MAX_OPEN_TABS) {
-          newTabs.pop();
-        }
-        return { openTabs: newTabs };
-      });
-      useWorkspaceStore.setState({ activeFile: filePath });
-
-      // Update recent files list
-      if (!filePath.startsWith('__') && (filePath.endsWith('.md') || filePath.endsWith('.txt') || filePath.endsWith('.canvas') || filePath.endsWith('.kanban') || filePath.endsWith('.pdf'))) {
-        useWorkspaceStore.setState((s) => {
-          const filtered = s.recentFiles.filter(f => f.path !== filePath);
-          const newRecent = [{ path: filePath, name: fileName }, ...filtered].slice(0, 5);
-          return { recentFiles: newRecent };
-        });
-      }
-
-      // Jump to line after editor loads (only for non-image files)
-      if (!isImageFile(filePath)) {
-        setTimeout(() => {
-          if (editorRef.current && file.lineNumber) {
-            try {
-              const doc = editorRef.current.state.doc;
-              const linePos = doc.line(file.lineNumber).from + (file.column || 0);
-              const selection = editorRef.current.state.selection.constructor.create(doc, linePos, linePos);
-              const tr = editorRef.current.state.tr.setSelection(selection);
-              editorRef.current.view.dispatch(tr);
-              editorRef.current.commands.scrollIntoView();
-            } catch { }
-          }
-        }, 100);
-      }
-      return;
-    }
-
-    // Handle regular file format
-    if (file.is_directory) return;
-
-    // Add file to tabs (works for all file types including images)
-    useWorkspaceStore.setState((s) => {
-      const newTabs = s.openTabs.filter(t => t.path !== file.path);
-      // Ensure we only use the filename, not a full path
-      const fileName = getFilename(file.name);
-      newTabs.unshift({ path: file.path, name: fileName });
-      if (newTabs.length > MAX_OPEN_TABS) {
-        newTabs.pop();
-      }
-      return { openTabs: newTabs };
-    });
-    useWorkspaceStore.setState({ activeFile: file.path });
-
-    // Update recent files list
-    if (!file.path.startsWith('__') && (file.path.endsWith('.md') || file.path.endsWith('.txt') || file.path.endsWith('.canvas') || file.path.endsWith('.kanban') || file.path.endsWith('.pdf'))) {
-      const fileName = getFilename(file.name || file.path);
-      useWorkspaceStore.setState((s) => {
-        const filtered = s.recentFiles.filter(f => f.path !== file.path);
-        const newRecent = [{ path: file.path, name: fileName }, ...filtered].slice(0, 5);
-        return { recentFiles: newRecent };
-      });
-    }
-  };
-
-  const handleReopenClosedTab = useCallback(() => {
-    if (recentlyClosedTabs.length === 0) return;
-
-    const [mostRecentTab, ...remaining] = recentlyClosedTabs;
-
-    // Remove from recently closed list
-    useWorkspaceStore.setState({ recentlyClosedTabs: remaining });
-
-    // Reopen the tab
-    handleFileOpen(mostRecentTab);
-  }, [recentlyClosedTabs]);
 
   // handleOpenFullKanban removed - use file-based kanban boards instead
 
-  const handleTabClick = (path) => {
-    useWorkspaceStore.setState({ activeFile: path });
-
-    // If split view is active, update the right pane to show the next tab
-    if (useSplitView) {
-      const currentIndex = openTabs.findIndex(t => t.path === path);
-      const nextTab = openTabs[currentIndex + 1] || openTabs[0];
-      if (nextTab && nextTab.path !== path) {
-        useWorkspaceStore.setState({ rightPaneFile: nextTab.path });
-        // Extract just the filename in case name contains a path
-        const fileName = getFilename(nextTab.name);
-        useWorkspaceStore.setState({ rightPaneTitle: fileName.replace(/\.md$/, "") });
-        if (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt')) {
-          // Check if this file is already loaded in the left pane
-          if (nextTab.path === path && editorContent) {
-            useWorkspaceStore.setState({ rightPaneContent: editorContent });
-          } else {
-            invoke("read_file_content", { path: nextTab.path })
-              .then(content => {
-                useWorkspaceStore.setState({ rightPaneContent: content || '' });
-              })
-              .catch(err => {
-                useWorkspaceStore.setState({ rightPaneContent: '' });
-              });
-          }
-        }
-      }
-    }
-  };
-
-  // Ref to track last close timestamp for debouncing (global for any tab)
-  const lastCloseTimeRef = useRef(0);
-  const isShowingDialogRef = useRef(false);
-  const currentlyClosingPathRef = useRef(null);
-
-  const handleTabClose = useCallback(async (path) => {
-    // Prevent closing the same tab multiple times
-    if (currentlyClosingPathRef.current === path) {
-      return;
-    }
-
-    // Prevent multiple dialogs from showing
-    if (isShowingDialogRef.current) {
-      return;
-    }
-
-    // Global debounce: ignore ANY tab close within 200ms of the last one
-    const now = Date.now();
-    if (now - lastCloseTimeRef.current < 200) {
-      return;
-    }
-    lastCloseTimeRef.current = now;
-
-    const closeTab = () => {
-      useWorkspaceStore.setState((s) => {
-        const prevTabs = s.openTabs;
-        const tabIndex = prevTabs.findIndex(t => t.path === path);
-        const closedTab = prevTabs.find(t => t.path === path);
-        const newTabs = prevTabs.filter(t => t.path !== path);
-
-        const updates = { openTabs: newTabs };
-
-        // Save the closed tab to recently closed list (max 10 items)
-        if (closedTab && !closedTab.path.startsWith('__')) { // Don't track special tabs like graph, kanban
-          updates.recentlyClosedTabs = [{ ...closedTab, closedAt: Date.now() }, ...s.recentlyClosedTabs.slice(0, 9)];
-        }
-
-        if (s.activeFile === path) {
-          if (newTabs.length === 0) {
-            updates.activeFile = null;
-          } else {
-            const newActiveIndex = Math.max(0, tabIndex - 1);
-            updates.activeFile = newTabs[newActiveIndex].path;
-          }
-        }
-
-        const newUnsaved = new Set(s.unsavedChanges);
-        newUnsaved.delete(path);
-        updates.unsavedChanges = newUnsaved;
-
-        return updates;
-      });
-    };
-
-    if (useWorkspaceStore.getState().unsavedChanges.has(path)) {
-      try {
-        currentlyClosingPathRef.current = path;
-        isShowingDialogRef.current = true;
-
-        const confirmed = await confirm("You have unsaved changes. Close without saving?", {
-          title: "Unsaved Changes",
-          type: "warning",
-        });
-
-        if (confirmed) {
-          closeTab();
-        } else {
-        }
-      } catch { } finally {
-        isShowingDialogRef.current = false;
-        currentlyClosingPathRef.current = null;
-      }
-    } else {
-      currentlyClosingPathRef.current = path;
-      closeTab();
-      currentlyClosingPathRef.current = null;
-    }
-  }, []);
 
   const handleEditorChange = useCallback((newContent) => {
     useWorkspaceStore.getState().setContent(newContent);
@@ -2509,303 +2325,6 @@ function WorkspaceWithScope({ path }) {
       }
       return { unsavedChanges: next };
     });
-  }, []);
-
-  const handleExportHtml = useCallback(async () => {
-    const { activeFile, editorContent, editorTitle } = useWorkspaceStore.getState();
-    if (!activeFile) return;
-
-    try {
-      // Get the current file name without extension for default name
-      const currentFileName = activeFile.split('/').pop().replace(/\.[^.]*$/, '');
-      const exportFileName = editorTitle.trim() || currentFileName;
-
-      // Show save dialog for HTML export
-      const filePath = await save({
-        defaultPath: `${exportFileName}.html`,
-        filters: [{
-          name: 'HTML',
-          extensions: ['html']
-        }, {
-          name: 'All Files',
-          extensions: ['*']
-        }],
-        title: 'Export as HTML'
-      });
-
-      if (filePath) {
-        // Create a complete HTML document with proper styling and math support
-        const htmlContent = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${exportFileName}</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" integrity="sha384-GvrOXuhMATgEsSwCs4smul74iXGOixntILdUW9XmUC6+HX0sLNAK3q71HotJqlAn" crossorigin="anonymous">
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 40px 20px;
-            background: #fff;
-        }
-        h1, h2, h3, h4, h5, h6 {
-            color: #2c3e50;
-            margin-top: 2em;
-            margin-bottom: 0.5em;
-        }
-        h1 { font-size: 2.5em; border-bottom: 2px solid #3498db; padding-bottom: 0.3em; }
-        h2 { font-size: 2em; }
-        h3 { font-size: 1.5em; }
-        p { margin-bottom: 1em; }
-        blockquote {
-            border-left: 4px solid #3498db;
-            padding-left: 20px;
-            margin: 1.5em 0;
-            color: #7f8c8d;
-            font-style: italic;
-        }
-        code {
-            background: #f8f9fa;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
-        }
-        pre {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 6px;
-            overflow-x: auto;
-            border: 1px solid #e1e5e9;
-        }
-        pre code {
-            background: none;
-            padding: 0;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 1.5em 0;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 12px;
-            text-align: left;
-        }
-        th {
-            background: #f8f9fa;
-            font-weight: 600;
-        }
-        ul, ol { margin-bottom: 1em; }
-        li { margin-bottom: 0.5em; }
-        a { color: #3498db; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        .math-display { text-align: center; margin: 1.5em 0; }
-        .highlight { background: #fff3cd; padding: 2px 4px; }
-        .task-list-item { list-style-type: none; }
-        .task-list-item input[type="checkbox"] { margin-right: 8px; }
-    </style>
-</head>
-<body>
-    <article class="content">
-        ${editorContent}
-    </article>
-</body>
-</html>`;
-
-        // Save the HTML file
-        await invoke("write_file_content", { path: filePath, content: htmlContent });
-
-      }
-    } catch (error) {
-      posthog.trackError('export_failed', 'workspace', true);
-    }
-  }, []);
-
-  const handleExportPdf = useCallback(async () => {
-    const { activeFile, editorContent, editorTitle } = useWorkspaceStore.getState();
-    if (!activeFile) return;
-
-    try {
-      // Get the current file name without extension for default name
-      const currentFileName = activeFile.split('/').pop().replace(/\.[^.]*$/, '');
-      const exportFileName = editorTitle.trim() || currentFileName;
-
-      // Show save dialog for PDF export
-      const filePath = await save({
-        defaultPath: `${exportFileName}.pdf`,
-        filters: [{
-          name: 'PDF',
-          extensions: ['pdf']
-        }, {
-          name: 'All Files',
-          extensions: ['*']
-        }],
-        title: 'Export as PDF'
-      });
-
-      if (filePath) {
-        // Create HTML content for PDF conversion
-        const htmlForPdf = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${exportFileName}</title>
-    <style>
-        @page {
-            margin: 1in;
-            size: letter;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-            line-height: 1.6;
-            color: #333;
-            font-size: 14px;
-        }
-        h1, h2, h3, h4, h5, h6 {
-            color: #2c3e50;
-            margin-top: 1.5em;
-            margin-bottom: 0.5em;
-            break-after: avoid;
-        }
-        h1 {
-            font-size: 24px;
-            border-bottom: 2px solid #3498db;
-            padding-bottom: 0.3em;
-            page-break-after: avoid;
-        }
-        h2 { font-size: 20px; }
-        h3 { font-size: 18px; }
-        h4 { font-size: 16px; }
-        h5 { font-size: 14px; }
-        h6 { font-size: 12px; }
-        p {
-            margin-bottom: 1em;
-            orphans: 3;
-            widows: 3;
-        }
-        blockquote {
-            border-left: 4px solid #3498db;
-            padding-left: 20px;
-            margin: 1em 0;
-            color: #7f8c8d;
-            font-style: italic;
-            break-inside: avoid;
-        }
-        code {
-            background: #f8f9fa;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
-            font-size: 12px;
-            break-inside: avoid;
-        }
-        pre {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 6px;
-            border: 1px solid #e1e5e9;
-            break-inside: avoid;
-            font-size: 12px;
-            line-height: 1.4;
-            overflow-x: hidden;
-        }
-        pre code {
-            background: none;
-            padding: 0;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 1em 0;
-            break-inside: avoid;
-            font-size: 12px;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background: #f8f9fa;
-            font-weight: 600;
-        }
-        ul, ol {
-            margin-bottom: 1em;
-            break-inside: avoid;
-        }
-        li {
-            margin-bottom: 0.3em;
-        }
-        a {
-            color: #3498db;
-            text-decoration: none;
-        }
-        .math-display {
-            text-align: center;
-            margin: 1em 0;
-            break-inside: avoid;
-        }
-        .highlight {
-            background: #fff3cd;
-            padding: 2px 4px;
-        }
-        .task-list-item {
-            list-style-type: none;
-        }
-        .task-list-item input[type="checkbox"] {
-            margin-right: 8px;
-        }
-        .page-break {
-            page-break-before: always;
-        }
-        img {
-            max-width: 100%;
-            height: auto;
-            break-inside: avoid;
-        }
-    </style>
-</head>
-<body>
-    <article class="content">
-        ${editorContent}
-    </article>
-</body>
-</html>`;
-
-        // Create a hidden iframe for PDF generation
-        const iframe = document.createElement('iframe');
-        iframe.style.position = 'absolute';
-        iframe.style.width = '0';
-        iframe.style.height = '0';
-        iframe.style.border = 'none';
-        document.body.appendChild(iframe);
-
-        // Write content to iframe
-        iframe.contentDocument.write(htmlForPdf);
-        iframe.contentDocument.close();
-
-        // Wait for content to load
-        await new Promise(resolve => {
-          iframe.onload = resolve;
-          setTimeout(resolve, 500);
-        });
-
-        // Use browser print dialog to save as PDF
-        iframe.contentWindow.print();
-
-        // Cleanup after a delay
-        setTimeout(() => {
-          document.body.removeChild(iframe);
-        }, 1000);
-      }
-    } catch (error) {
-      posthog.trackError('export_failed', 'workspace', true);
-    }
   }, []);
 
   const handleOpenWorkspace = useCallback(async () => {
