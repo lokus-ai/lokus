@@ -2120,13 +2120,46 @@ function WorkspaceWithScope({ path }) {
           setSavedContent(content); // Keep original content for saving
           setIsLoadingContent(false); // Loading complete
         })
-        .catch((err) => {
-          if (fileToLoad === activeFile) {
-            setIsLoadingContent(false);
-            // Show error message in editor
-            setEditorContent(`<div class="text-red-500 p-4">Failed to load file: ${err}</div>`);
-            setEditorTitle("Error");
+        .catch(async (err) => {
+          if (fileToLoad !== activeFile) {
+            return;
           }
+
+          // Check if the error is "file not found" - auto-create the file
+          const errStr = String(err).toLowerCase();
+          const isFileNotFound = errStr.includes('no such file') ||
+                                 errStr.includes('not found') ||
+                                 errStr.includes('os error 2');
+
+          if (isFileNotFound && fileToLoad.endsWith('.md')) {
+            try {
+              // Auto-create the file with empty content
+              await invoke("write_file_content", { path: fileToLoad, content: "" });
+
+              // Set empty content for the new file
+              const fileName = getFilename(fileToLoad);
+              setEditorContent("");
+              setEditorTitle(fileName.replace(/\.md$/, ""));
+              setSavedContent("");
+              setIsLoadingContent(false);
+
+              // Refresh file index to include the new file
+              try {
+                const { emit } = await import('@tauri-apps/api/event');
+                await emit('lokus:refresh-file-index');
+              } catch {}
+
+              return;
+            } catch (createErr) {
+              // If creation also fails, show the original error
+              console.error('[Workspace] Failed to create file:', createErr);
+            }
+          }
+
+          setIsLoadingContent(false);
+          // Show error message in editor
+          setEditorContent(`<div class="text-red-500 p-4">Failed to load file: ${err}</div>`);
+          setEditorTitle("Error");
         });
     } else {
       setEditorContent("");
