@@ -588,8 +588,22 @@ class PluginStateAdapter {
             return {};
           };
 
-          const fn = new Function('module', 'exports', 'require', code);
-          fn(module, exports, require);
+          // Shadow dangerous globals to prevent plugin access
+          const fn = new Function(
+            'module', 'exports', 'require',
+            // Shadow dangerous globals
+            'window', 'document', 'globalThis', 'self',
+            'fetch', 'XMLHttpRequest', 'eval', 'Function',
+            'setTimeout', 'setInterval', 'importScripts',
+            code
+          );
+          fn(
+            module, exports, require,
+            // Pass undefined for all shadowed globals
+            undefined, undefined, undefined, undefined,
+            undefined, undefined, undefined, undefined,
+            undefined, undefined, undefined
+          );
 
           if (module.exports) {
             pluginModule = module.exports;
@@ -599,6 +613,8 @@ class PluginStateAdapter {
       }
 
       // 4b. Fallback to ES Module (Blob URL)
+      // NOTE: Known limitation — Blob URL + dynamic import runs unsandboxed.
+      // Blob URL imports cannot be sandboxed client-side without a Worker.
       if (!loadedAsCJS) {
         const blob = new Blob([code], { type: 'text/javascript' });
         const blobUrl = URL.createObjectURL(blob);
