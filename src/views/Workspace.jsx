@@ -16,9 +16,6 @@ import ResponsiveStatusBar from "../components/StatusBar/ResponsiveStatusBar.jsx
 import ConnectionStatus from "../components/ConnectionStatus.jsx";
 import Canvas from "./Canvas.jsx";
 import KanbanBoard from "../components/KanbanBoard.jsx";
-import { GraphDataProcessor } from "../core/graph/GraphDataProcessor.js";
-import { GraphData } from "../core/graph/GraphData.js";
-import { GraphEngine } from "../core/graph/GraphEngine.js";
 import FileContextMenu from "../components/FileContextMenu.jsx";
 import EditorGroupsContainer from "../components/EditorGroupsContainer.jsx";
 import { useEditorGroups } from "../hooks/useEditorGroups.js";
@@ -52,7 +49,7 @@ import CreateTemplate from "../components/CreateTemplate.jsx";
 import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
 import { PANEL_POSITIONS } from "../plugins/api/UIAPI.js";
 import { usePlugins } from "../hooks/usePlugins.jsx";
-import { setGlobalActiveTheme, getSystemPreferredTheme, setupSystemThemeListener, readGlobalVisuals } from "../core/theme/manager.js";
+import { getSystemPreferredTheme, setupSystemThemeListener, readGlobalVisuals } from "../core/theme/manager.js";
 import { useTheme } from "../hooks/theme.jsx";
 import SplitEditor from "../components/SplitEditor/SplitEditor.jsx";
 import PDFViewerTab from "../components/PDFViewer/PDFViewerTab.jsx";
@@ -1409,7 +1406,6 @@ function WorkspaceWithScope({ path }) {
   const showCalendarPanel = useWorkspaceStore((s) => s.showCalendarPanel);
   const showTerminalPanel = useWorkspaceStore((s) => s.showTerminalPanel);
   const showOutputPanel = useWorkspaceStore((s) => s.showOutputPanel);
-  const isResizingBottomPanelRef = useRef(false);
   const showDatePickerModal = useWorkspaceStore((s) => s.showDatePickerModal);
   const currentDailyNoteDate = useWorkspaceStore((s) => s.currentDailyNoteDate);
 
@@ -1429,14 +1425,17 @@ function WorkspaceWithScope({ path }) {
   // Graph sidebar
   const graphSidebarData = useWorkspaceStore((s) => s.graphSidebarData);
 
-  // Persistent GraphEngine instance that survives tab switches
-  const persistentGraphEngineRef = useRef(null);
-
-  // Graph data processor instance
-  const graphProcessorRef = useRef(null);
-
-  // GraphData instance for backlinks
-  const graphDataInstanceRef = useRef(null);
+  // Graph engine hook - provides processor refs and graph callbacks
+  const {
+    initializeGraphProcessor,
+    handleGraphStateChange,
+    buildGraphData,
+    handleGraphNodeClick,
+    handleOpenGraphView,
+    graphProcessorRef,
+    graphDataInstanceRef,
+    persistentGraphEngineRef,
+  } = useGraphEngine({ workspacePath: path });
 
   // Save handlers provided by the feature hook
   const { handleSave, handleSaveAs } = useSave({
@@ -1455,6 +1454,27 @@ function WorkspaceWithScope({ path }) {
 
   const { handleTabClose, handleFileOpen, handleTabClick, handleReopenClosedTab } = useTabs({ workspacePath: path, editorRef, onSave: handleSave });
 
+  const {
+    getTargetPath,
+    handleCreateFile,
+    handleCreateCanvas,
+    handleCreateKanban,
+    handleKanbanBoardAction,
+    handleOpenDailyNote,
+    handleOpenDailyNoteByDate,
+    handleCreateFolder,
+    handleConfirmCreate,
+    handleCreateTemplate,
+    handleCreateTemplateSaved,
+    handleOpenWorkspace,
+  } = useFileOperations({
+    workspacePath: path,
+    featureFlags,
+    handleFileOpen,
+    editorRef,
+    currentTheme,
+  });
+
   // Split view
   const useSplitView = useWorkspaceStore((s) => s.useSplitView);
   const splitDirection = useWorkspaceStore((s) => s.splitDirection);
@@ -1465,6 +1485,19 @@ function WorkspaceWithScope({ path }) {
   const rightPaneContent = useWorkspaceStore((s) => s.rightPaneContent);
   const rightPaneTitle = useWorkspaceStore((s) => s.rightPaneTitle);
   const syncScrolling = useWorkspaceStore((s) => s.syncScrolling);
+
+  // Split-view feature hook
+  const {
+    handleSplitDragStart,
+    handleSplitDragEnd,
+    handleToggleSplitView,
+    handleMouseDown,
+    resetPaneSize,
+    toggleSplitDirection,
+    handleBottomPanelResizeStart,
+    handleLeftPaneScroll,
+    handleRightPaneScroll,
+  } = useSplitViewHook({ workspacePath: path, editorRef, leftPaneScrollRef, rightPaneScrollRef });
 
   // Initialize layout defaults from remote config
   useEffect(() => {
@@ -2327,218 +2360,6 @@ function WorkspaceWithScope({ path }) {
     });
   }, []);
 
-  const handleOpenWorkspace = useCallback(async () => {
-    try {
-
-      // Ensure current theme is saved globally so launcher window inherits it
-      if (currentTheme) {
-        await setGlobalActiveTheme(currentTheme);
-      }
-
-      // First clear the saved workspace to ensure launcher shows
-      await invoke('clear_last_workspace');
-
-      // Use backend command to create launcher window (same approach as preferences)
-      await invoke('open_launcher_window');
-    } catch { }
-  }, [currentTheme]);
-
-  // Helper function to determine target path for file creation
-  // Priority: 1. Bases folder, 2. Local scope folder, 3. Workspace root
-  const getTargetPath = useCallback(() => {
-    // Priority 1: If bases tab is open and has an active base
-    const findEntry = (entries, targetPath) => {
-        for (const entry of entries) {
-          if (entry.path === targetPath) {
-            return entry;
-          }
-          if (entry.is_directory && entry.children) {
-            const found = findEntry(entry.children, targetPath);
-            if (found) return found;
-          }
-        }
-        return null;
-      }
-
-
-    if (selectedPath) {                                                                                                                                                  
-      const selectedEntry = findEntry(fileTree, selectedPath);                                                                                                           
-      if (selectedEntry) {                                                                                                                                               
-        if (selectedEntry.is_directory) {                                                                                                                                
-          return selectedEntry.path;                                                                                                                                     
-        } else {                                                                                                                                                         
-          return selectedPath.split('/').slice(0, -1).join('/') || path;                                                                                                 
-        }                                                                                                                                                                
-      }                                                                                                                                                                  
-    }  
-
-    const hasBasesTab = openTabs.some(tab => tab.path === '__bases__');
-    if (hasBasesTab && activeBase?.sourceFolder) {
-      return activeBase.sourceFolder;
-    }
-
-    // Priority 2: If in local scope mode with folders selected
-    if (expandedFolders.size > 0) {
-      const expandedArray = Array.from(expandedFolders);
-      const deepestFolder = expandedArray.reduce((deepest, current) => {
-        return current.length > deepest.length ? current : deepest;
-      }, expandedArray[0]);
-      return deepestFolder;
-    }
-
-    if (scopeMode === 'local' && scopedFolders.length > 0) {
-      // Use the first scoped folder as the default target
-      return scopedFolders[0];
-    }
-
-    // Priority 3: Workspace root
-    return path;
-  }, [selectedPath, fileTree, expandedFolders, openTabs, activeBase, scopeMode, scopedFolders, path]);
-
-  const handleCreateFile = () => {
-    const targetPath = getTargetPath();
-    if (targetPath !== path) {
-      useWorkspaceStore.setState((s) => ({ expandedFolders: new Set([...s.expandedFolders, targetPath]) }));
-    }
-    useWorkspaceStore.setState({ creatingItem: { type: 'file', targetPath } });
-  };
-
-  const handleCreateCanvas = async () => {
-    // Check feature flag before creating canvas
-    if (!featureFlags.enable_canvas) {
-      return;
-    }
-    try {
-      const targetPath = getTargetPath();
-      const newCanvasPath = await canvasManager.createCanvas(targetPath, "Untitled Canvas");
-      handleRefreshFiles();
-      handleFileOpen({ path: newCanvasPath, name: "Untitled Canvas.canvas", is_directory: false });
-      posthog.trackFeatureActivation('canvas');
-    } catch { }
-  };
-
-  const handleCreateKanban = async () => {
-    try {
-      const targetPath = getTargetPath();
-      // Create a real kanban board with file-based storage
-      const board = await invoke("create_kanban_board", {
-        workspacePath: targetPath,
-        name: "New Board",
-        columns: ["To Do", "In Progress", "Done"]
-      });
-      handleRefreshFiles();
-      const fileName = "New Board.kanban";
-      const boardPath = `${targetPath}/${fileName}`;
-      handleFileOpen({ path: boardPath, name: fileName, is_directory: false });
-      posthog.trackFeatureActivation('database');
-    } catch { }
-  };
-
-  const handleKanbanBoardAction = async (action, board, refreshBoards) => {
-    switch (action) {
-      case 'revealInFinder':
-        try {
-          await invoke('platform_reveal_in_file_manager', { path: board.path });
-        } catch (err) {
-          console.error('Failed to reveal board in finder', err);
-          toast.error('Failed to reveal in finder');
-        }
-        break;
-      case 'copyPath':
-        try {
-          await navigator.clipboard.writeText(board.path);
-          toast.success('Board path copied');
-        } catch (err) {
-          toast.error('Failed to copy path');
-        }
-        break;
-      case 'duplicate':
-        try {
-          const content = await invoke('read_file_content', { path: board.path });
-          const dirPath = board.path.split('/').slice(0, -1).join('/');
-          const baseName = board.name.replace(/\.kanban$/, '');
-          const newName = `${baseName} copy.kanban`;
-          const newPath = `${dirPath}/${newName}`;
-          await invoke('write_file_content', { path: newPath, content });
-          refreshBoards?.();
-          toast.success(`Duplicated: ${newName}`);
-        } catch (err) {
-          toast.error('Failed to duplicate board');
-        }
-        break;
-      case 'export':
-        try {
-          const content = await invoke('read_file_content', { path: board.path });
-          const blob = new Blob([content], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${board.name}.json`;
-          a.click();
-          URL.revokeObjectURL(url);
-          toast.success('Board exported');
-        } catch (err) {
-          toast.error('Failed to export board');
-        }
-        break;
-      // rename is handled locally in KanbanList with inline input
-      case 'delete':
-        try {
-          const confirmed = await confirm(`Are you sure you want to delete "${board.name}"?`);
-          if (confirmed) {
-            await invoke('delete_file', { path: board.path });
-            refreshBoards?.();
-            toast.success(`Deleted: ${board.name}`);
-          }
-        } catch (err) {
-          toast.error('Failed to delete board');
-        }
-        break;
-      default:
-        break;
-    }
-  };
-
-  const handleOpenDailyNote = async () => {
-    try {
-      const result = await dailyNotesManager.openToday();
-      const fileName = result.path.split('/').pop();
-
-      handleFileOpen({
-        path: result.path,
-        name: fileName,
-        is_directory: false
-      });
-
-      if (result.created) {
-        handleRefreshFiles();
-      }
-
-      posthog.trackFeatureActivation('daily_notes');
-    } catch { }
-  };
-
-  const handleOpenDailyNoteByDate = async (date) => {
-    try {
-      const result = await dailyNotesManager.openDate(date);
-      const fileName = result.path.split('/').pop();
-
-      handleFileOpen({
-        path: result.path,
-        name: fileName,
-        is_directory: false
-      });
-
-      if (result.created) {
-        handleRefreshFiles();
-      }
-
-      useWorkspaceStore.getState().closePanel('showDatePickerModal');
-
-      posthog.trackFeatureActivation('daily_notes');
-    } catch { }
-  };
-
   // Check if a file path is a daily note
   const isDailyNotePath = (filePath) => {
     if (!filePath || !path) return false;
@@ -2562,206 +2383,6 @@ function WorkspaceWithScope({ path }) {
     }
   };
 
-  const handleCreateFolder = () => {
-    const targetPath = getTargetPath();
-    if (targetPath !== path) {
-      useWorkspaceStore.setState((s) => ({ expandedFolders: new Set([...s.expandedFolders, targetPath]) }));
-    }
-    useWorkspaceStore.setState({ creatingItem: { type: 'folder', targetPath } });
-  };
-
-  const handleConfirmCreate = async (name) => {
-    if (!creatingItem || !name) {
-      useWorkspaceStore.setState({ creatingItem: null });
-      return;
-    }                                                                                                                                                                    
-                                                                                                                                                                          
-    try {
-      if (creatingItem.type === 'file') {
-        const fileName = name.endsWith('.md') ? name : `${name}.md`;
-        const newPath = await invoke("create_file_in_workspace", {
-          workspacePath: creatingItem.targetPath,
-          name: fileName
-        });
-        handleRefreshFiles();
-        handleFileOpen({ path: newPath, name: fileName, is_directory: false });
-      } else {
-        await invoke("create_folder_in_workspace", {
-          workspacePath: creatingItem.targetPath,
-          name
-        });
-        handleRefreshFiles();
-      }
-    } catch (e) {
-      console.error('Failed to create:', e);
-    }                                                                                                                                                                    
-                                                                                                                                                                          
-    useWorkspaceStore.setState({ creatingItem: null });
-  };
-
-  const handleCreateTemplate = useCallback(() => {
-    // Get content from editor - extract HTML for proper markdown conversion
-    const getContentForTemplate = () => {
-      if (editorRef.current) {
-        const { state } = editorRef.current;
-        const { selection } = state;
-
-        // Check if there's a selection
-        if (!selection.empty) {
-          // Get HTML for selected content to preserve formatting
-
-          // Create a fragment from selection
-          const fragment = state.doc.slice(selection.from, selection.to);
-
-          // Convert fragment to HTML using the editor
-          // We'll use getHTML() and then extract just the selected portion
-          // For now, get the full HTML and we'll rely on CreateTemplate to convert it
-          const selectedHTML = editorRef.current.getHTML ? editorRef.current.getHTML() : '';
-
-          // Fallback: if HTML extraction fails, use plaintext
-          if (!selectedHTML || !selectedHTML.includes('<')) {
-            const selectedText = state.doc.textBetween(selection.from, selection.to);
-            return selectedText;
-          }
-
-          return selectedHTML;
-        } else if (activeFile) {
-          // No selection, use current editor content as HTML
-
-          // First try to get HTML from editor (preserves rich formatting)
-          const editorHTML = editorRef.current.getHTML ? editorRef.current.getHTML() : null;
-
-          if (editorHTML && editorHTML.includes('<')) {
-            return editorHTML;
-          }
-
-          // Fallback to saved markdown content if HTML extraction fails
-          const currentContent = useWorkspaceStore.getState().savedContent || '';
-          return currentContent;
-        }
-      }
-      return '';
-    };
-
-    const contentForTemplate = getContentForTemplate();
-    useWorkspaceStore.setState({ createTemplateContent: contentForTemplate });
-    useWorkspaceStore.getState().openPanel('showCreateTemplate');
-  }, [activeFile]);
-
-  const handleCreateTemplateSaved = useCallback(() => {
-    // Template was saved successfully
-    useWorkspaceStore.getState().closePanel('showCreateTemplate');
-    useWorkspaceStore.setState({ createTemplateContent: '' });
-  }, []);
-
-  // Graph View Functions
-  const initializeGraphProcessor = useCallback(() => {
-    if (!path || graphProcessorRef.current) return;
-
-    graphProcessorRef.current = new GraphDataProcessor(path);
-
-    // Initialize GraphData instance for backlinks
-    if (!graphDataInstanceRef.current) {
-      graphDataInstanceRef.current = new GraphData({
-        enablePersistence: false,
-        enableRealTimeSync: true,
-        maxCacheSize: 10000
-      });
-    }
-
-    // Set up event listeners for real-time graph updates
-    const graphDatabase = graphProcessorRef.current.getGraphDatabase();
-
-    // Listen for file link updates and rebuild graph if active
-    const handleFileLinksUpdated = (event) => {
-      if (activeFile === '__graph__' && graphData) {
-        // Rebuild graph structure if graph view is active
-        const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
-        useWorkspaceStore.getState().setGraphData(updatedGraphData);
-      }
-    };
-
-    // Listen for connection changes
-    const handleConnectionChanged = (event) => {
-      if (activeFile === '__graph__' && graphData) {
-        // Rebuild graph structure if graph view is active
-        const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
-        useWorkspaceStore.getState().setGraphData(updatedGraphData);
-      }
-    };
-
-    graphDatabase.on('fileLinksUpdated', handleFileLinksUpdated);
-    graphDatabase.on('connectionAdded', handleConnectionChanged);
-    graphDatabase.on('connectionRemoved', handleConnectionChanged);
-
-    // Store cleanup function
-    graphProcessorRef.current._cleanup = () => {
-      graphDatabase.off('fileLinksUpdated', handleFileLinksUpdated);
-      graphDatabase.off('connectionAdded', handleConnectionChanged);
-      graphDatabase.off('connectionRemoved', handleConnectionChanged);
-    };
-
-  }, [path, activeFile, graphData]);
-
-  // Handle graph state updates from ProfessionalGraphView
-  const handleGraphStateChange = useCallback((state) => {
-    useWorkspaceStore.getState().setGraphSidebar(state);
-  }, []);
-
-  // Build graph data for backlinks panel
-  // Note: ProfessionalGraphView has its own data loading, but BacklinksPanel needs GraphDatabase
-  const buildGraphData = useCallback(async () => {
-    if (!graphProcessorRef.current || isLoadingGraph) return;
-
-    useWorkspaceStore.getState().setLoadingGraph(true);
-
-    try {
-      const data = await graphProcessorRef.current.buildGraphFromWorkspace({
-        includeNonMarkdown: false,
-        maxDepth: 10,
-        excludePatterns: ['.git', 'node_modules', '.lokus', '.DS_Store']
-      });
-
-      useWorkspaceStore.getState().setGraphData(data);
-
-    } catch (error) {
-      useWorkspaceStore.getState().setGraphData(null);
-    } finally {
-      useWorkspaceStore.getState().setLoadingGraph(false);
-    }
-  }, [isLoadingGraph]);
-
-  const handleGraphNodeClick = useCallback((event) => {
-    const { nodeId, nodeData } = event;
-
-    // If it's a file node (not phantom), open the file
-    if (nodeData && nodeData.path && !nodeData.isPhantom) {
-      const fileName = nodeData.path.split('/').pop();
-      handleFileOpen({
-        path: nodeData.path,
-        name: fileName,
-        is_directory: nodeData.isDirectory || false
-      });
-    }
-  }, []);
-
-  const handleOpenGraphView = useCallback(() => {
-    const graphPath = '__graph__';
-    const graphName = 'Graph View';
-
-    posthog.trackFeatureActivation('graph');
-
-    useWorkspaceStore.setState((s) => {
-      const newTabs = s.openTabs.filter(t => t.path !== graphPath);
-      newTabs.unshift({ path: graphPath, name: graphName });
-      if (newTabs.length > MAX_OPEN_TABS) {
-        newTabs.pop();
-      }
-      return { openTabs: newTabs };
-    });
-    useWorkspaceStore.setState({ activeFile: graphPath });
-  }, []);
-
   const handleOpenBasesTab = useCallback(() => {
     const basesPath = '__bases__';
     const basesName = 'Bases';
@@ -2779,13 +2400,6 @@ function WorkspaceWithScope({ path }) {
     useWorkspaceStore.setState({ activeFile: basesPath });
   }, []);
 
-  // Initialize graph processor when workspace path changes
-  useEffect(() => {
-    if (path) {
-      initializeGraphProcessor();
-    }
-  }, [path, initializeGraphProcessor]);
-
   // Initialize daily notes manager when workspace path changes
   useEffect(() => {
     if (path) {
@@ -2802,185 +2416,6 @@ function WorkspaceWithScope({ path }) {
       useWorkspaceStore.setState({ currentDailyNoteDate: null });
     }
   }, [activeFile, path]);
-
-  // Build graph data ONCE when workspace is initialized (for backlinks)
-  useEffect(() => {
-    if (path && graphProcessorRef.current && !graphData && !isLoadingGraph) {
-      buildGraphData();
-    }
-  }, [path, graphData, isLoadingGraph, buildGraphData]);
-
-  // Cleanup persistent GraphEngine and GraphDatabase when workspace unmounts
-  useEffect(() => {
-    return () => {
-      if (persistentGraphEngineRef.current) {
-        persistentGraphEngineRef.current.destroy();
-        persistentGraphEngineRef.current = null;
-      }
-
-      if (graphProcessorRef.current) {
-        // Call cleanup function for event listeners
-        if (graphProcessorRef.current._cleanup) {
-          graphProcessorRef.current._cleanup();
-        }
-        // Destroy the GraphDatabase
-        graphProcessorRef.current.destroy();
-        graphProcessorRef.current = null;
-      }
-    };
-  }, []);
-
-  // Split editor handlers
-  const handleSplitDragStart = useCallback((tab) => {
-    useWorkspaceStore.setState({ draggedTabForSplit: tab });
-  }, []);
-
-  const handleSplitDragEnd = useCallback((tab) => {
-    useWorkspaceStore.setState({ draggedTabForSplit: null });
-  }, []);
-
-  const handleToggleSplitView = useCallback(async () => {
-    const newSplitView = !useWorkspaceStore.getState().useSplitView;
-    useWorkspaceStore.setState({ useSplitView: newSplitView });
-    if (newSplitView) {
-      // When enabling split view, load the next tab in right pane
-      const { openTabs: tabs, activeFile: active } = useWorkspaceStore.getState();
-      const currentIndex = tabs.findIndex(t => t.path === active);
-      const nextTab = tabs[currentIndex + 1] || tabs[0];
-      if (nextTab && nextTab.path !== active) {
-        useWorkspaceStore.setState({ rightPaneFile: nextTab.path });
-        // Extract just the filename in case name contains a path
-        const fileName = getFilename(nextTab.name);
-        useWorkspaceStore.setState({ rightPaneTitle: fileName.replace(/\.md$/, "") });
-
-        // Load the content for the right pane asynchronously
-        setTimeout(async () => {
-          const isSpecialView = nextTab.path === '__kanban__' ||
-            nextTab.path === '__bases__' ||
-            nextTab.path.startsWith('__graph__') ||
-            nextTab.path.startsWith('__plugin_') ||
-            nextTab.path.endsWith('.canvas') || nextTab.path.endsWith('.kanban');
-
-          const { activeFile: curActive, editorContent: curContent } = useWorkspaceStore.getState();
-          if (!isSpecialView && (nextTab.path.endsWith('.md') || nextTab.path.endsWith('.txt'))) {
-            // Check if this file is already loaded in the left pane
-            if (nextTab.path === curActive && curContent) {
-              useWorkspaceStore.setState({ rightPaneContent: curContent });
-            } else {
-              try {
-                const content = await invoke("read_file_content", { path: nextTab.path });
-                useWorkspaceStore.setState({ rightPaneContent: content || '' });
-              } catch (err) {
-                useWorkspaceStore.setState({ rightPaneContent: '' });
-              }
-            }
-          } else {
-            // For special views, just clear content
-            useWorkspaceStore.setState({ rightPaneContent: '' });
-          }
-        }, 0);
-      }
-    } else {
-      // Clear right pane when disabling split view
-      useWorkspaceStore.setState({ rightPaneFile: null, rightPaneContent: '', rightPaneTitle: '' });
-    }
-  }, [openTabs, activeFile]);
-
-  // Pane resize handlers
-  const handlePaneResize = useCallback((e) => {
-    if (!useSplitView) return;
-
-    const container = e.currentTarget.parentElement;
-    const rect = container.getBoundingClientRect();
-
-    let newSize;
-    if (splitDirection === 'vertical') {
-      const mouseX = e.clientX - rect.left;
-      newSize = (mouseX / rect.width) * 100;
-    } else {
-      const mouseY = e.clientY - rect.top;
-      newSize = (mouseY / rect.height) * 100;
-    }
-
-    // Clamp between 20% and 80%
-    newSize = Math.max(20, Math.min(80, newSize));
-    useWorkspaceStore.getState().setPaneSize(newSize);
-  }, [useSplitView, splitDirection]);
-
-  const handleMouseDown = useCallback((e) => {
-    e.preventDefault();
-    const handleMouseMove = (e) => handlePaneResize(e);
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [handlePaneResize]);
-
-  const resetPaneSize = useCallback(() => {
-    useWorkspaceStore.getState().setPaneSize(50);
-  }, []);
-
-  const toggleSplitDirection = useCallback(() => {
-    useWorkspaceStore.setState((s) => ({ splitDirection: s.splitDirection === 'vertical' ? 'horizontal' : 'vertical' }));
-  }, []);
-
-  // Bottom panel resize handlers
-  const handleBottomPanelResizeStart = useCallback((e) => {
-    e.preventDefault();
-    isResizingBottomPanelRef.current = true;
-    const startY = e.clientY;
-    const startHeight = bottomPanelHeight;
-
-    const handleMouseMove = (e) => {
-      if (!isResizingBottomPanelRef.current) return;
-      const deltaY = startY - e.clientY;
-      const newHeight = Math.max(100, Math.min(600, startHeight + deltaY));
-      useWorkspaceStore.getState().setBottomHeight(newHeight);
-    };
-
-    const handleMouseUp = () => {
-      isResizingBottomPanelRef.current = false;
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-
-    document.body.style.cursor = 'ns-resize';
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [bottomPanelHeight]);
-
-  // Synchronized scrolling handlers
-  const handleLeftPaneScroll = useCallback((e) => {
-    if (!syncScrolling || !rightPaneScrollRef.current) return;
-
-    const scrollTop = e.target.scrollTop;
-    const scrollHeight = e.target.scrollHeight;
-    const clientHeight = e.target.clientHeight;
-    const scrollPercent = scrollTop / (scrollHeight - clientHeight);
-
-    const rightPane = rightPaneScrollRef.current;
-    const rightScrollTop = scrollPercent * (rightPane.scrollHeight - rightPane.clientHeight);
-    rightPane.scrollTop = rightScrollTop;
-  }, [syncScrolling]);
-
-  const handleRightPaneScroll = useCallback((e) => {
-    if (!syncScrolling || !leftPaneScrollRef.current) return;
-
-    const scrollTop = e.target.scrollTop;
-    const scrollHeight = e.target.scrollHeight;
-    const clientHeight = e.target.clientHeight;
-    const scrollPercent = scrollTop / (scrollHeight - clientHeight);
-
-    const leftPane = leftPaneScrollRef.current;
-    const leftScrollTop = scrollPercent * (leftPane.scrollHeight - leftPane.clientHeight);
-    leftPane.scrollTop = leftScrollTop;
-  }, [syncScrolling]);
 
   const handleTabDragEnd = (event) => {
     const { active, over } = event;
