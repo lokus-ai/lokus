@@ -67,11 +67,14 @@ export function useSplitView({ workspacePath, editorRef, leftPaneScrollRef, righ
 
   // --- Pane resize handlers ---
 
+  const splitContainerRef = useRef(null);
+
   const handlePaneResize = useCallback((e) => {
     const { useSplitView, splitDirection } = useWorkspaceStore.getState();
     if (!useSplitView) return;
 
-    const container = e.currentTarget.parentElement;
+    const container = splitContainerRef.current;
+    if (!container) return;
     const rect = container.getBoundingClientRect();
 
     let newSize;
@@ -90,6 +93,8 @@ export function useSplitView({ workspacePath, editorRef, leftPaneScrollRef, righ
 
   const handleMouseDown = useCallback((e) => {
     e.preventDefault();
+    // Capture the container from the divider's parent before moving to document listeners
+    splitContainerRef.current = e.currentTarget.parentElement;
     const handleMouseMove = (moveEvent) => handlePaneResize(moveEvent);
     const handleMouseUp = () => {
       document.removeEventListener('mousemove', handleMouseMove);

@@ -40,6 +40,17 @@ const PANEL_MAP = {
   aboutDialog:      'showAboutDialog',
   datePickerModal:  'showDatePickerModal',
   versionHistory:   ['showVersionHistory', 'versionHistoryFile'],
+  // Also accept raw state keys (show* format) so callers don't need to strip prefix
+  showCommandPalette:   'showCommandPalette',
+  showInFileSearch:     'showInFileSearch',
+  showShortcutHelp:     'showShortcutHelp',
+  showTemplatePicker:   ['showTemplatePicker', 'templatePickerData'],
+  showCreateTemplate:   'showCreateTemplate',
+  showGlobalSearch:     'showGlobalSearch',
+  showTagModal:         ['showTagModal', 'tagModalFile'],
+  showAboutDialog:      'showAboutDialog',
+  showDatePickerModal:  'showDatePickerModal',
+  showVersionHistory:   ['showVersionHistory', 'versionHistoryFile'],
 };
 
 const createPanelsSlice = (set) => ({

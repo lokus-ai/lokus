@@ -700,7 +700,7 @@ function WorkspaceWithScope({ path }) {
                   useWorkspaceStore.setState({ showPlugins: false });
                   useWorkspaceStore.setState({ showBases: false });
                   useWorkspaceStore.setState({ showGraphView: false });
-                  useWorkspaceStore.getState().openPanel('showLeft');
+                  useWorkspaceStore.setState({ showLeft: true });
                 }}
                 title="Explorer"
                 data-tour="files"
@@ -724,7 +724,7 @@ function WorkspaceWithScope({ path }) {
                     useWorkspaceStore.setState({ showPlugins: false });
                     useWorkspaceStore.setState({ showBases: false });
                     useWorkspaceStore.setState({ showGraphView: false });
-                    useWorkspaceStore.getState().openPanel('showLeft');
+                    useWorkspaceStore.setState({ showLeft: true });
                   }}
                   title="Task Board"
                   className="obsidian-button icon-only w-full mb-1"
@@ -748,7 +748,7 @@ function WorkspaceWithScope({ path }) {
                     useWorkspaceStore.setState({ showKanban: false });
                     useWorkspaceStore.setState({ showBases: false });
                     useWorkspaceStore.setState({ showGraphView: false });
-                    useWorkspaceStore.getState().openPanel('showLeft');
+                    useWorkspaceStore.setState({ showLeft: true });
                   }}
                   title="Extensions"
                   className="obsidian-button icon-only w-full mb-1"
@@ -809,8 +809,8 @@ function WorkspaceWithScope({ path }) {
                 <button
                   onClick={() => {
                     useWorkspaceStore.setState({ showDailyNotesPanel: !useWorkspaceStore.getState().showDailyNotesPanel });
-                    useWorkspaceStore.getState().closePanel('showCalendarPanel');
-                    useWorkspaceStore.getState().openPanel('showRight');
+                    useWorkspaceStore.setState({ showCalendarPanel: false });
+                    useWorkspaceStore.setState({ showRight: true });
                     useWorkspaceStore.getState().closePanel('showVersionHistory');
                   }}
                   title="Daily Notes"
@@ -833,8 +833,8 @@ function WorkspaceWithScope({ path }) {
               <button
                 onClick={() => {
                   useWorkspaceStore.setState({ showCalendarPanel: !useWorkspaceStore.getState().showCalendarPanel });
-                  useWorkspaceStore.getState().closePanel('showDailyNotesPanel');
-                  useWorkspaceStore.getState().openPanel('showRight');
+                  useWorkspaceStore.setState({ showDailyNotesPanel: false });
+                  useWorkspaceStore.setState({ showRight: true });
                   useWorkspaceStore.getState().closePanel('showVersionHistory');
                 }}
                 title="Calendar"
@@ -1592,7 +1592,7 @@ function WorkspaceWithScope({ path }) {
 
         <CommandPalette
           open={showCommandPalette}
-          setOpen={setShowCommandPalette}
+          setOpen={(v) => useWorkspaceStore.setState({ showCommandPalette: v })}
           fileTree={filteredFileTree}
           openFiles={openTabs}
           onFileOpen={handleFileOpen}
@@ -1793,7 +1793,7 @@ function WorkspaceWithScope({ path }) {
           onClose={() => useWorkspaceStore.getState().closePanel('showGlobalSearch')}
           onResultClick={(result) => {
             if (result.path) {
-              handleFileOpen(result.path);
+              handleFileOpen({ path: result.path, name: getFilename(result.path), lineNumber: result.lineNumber, column: result.column });
             }
             useWorkspaceStore.getState().closePanel('showGlobalSearch');
           }}
@@ -1891,8 +1891,8 @@ function WorkspaceWithScope({ path }) {
                 <button
                   onClick={() => {
                     useWorkspaceStore.getState().setBottomTab('terminal');
-                    useWorkspaceStore.getState().openPanel('showTerminalPanel');
-                    useWorkspaceStore.getState().closePanel('showOutputPanel');
+                    useWorkspaceStore.setState({ showTerminalPanel: true });
+                    useWorkspaceStore.setState({ showOutputPanel: false });
                   }}
                   style={{
                     padding: '0 12px',
@@ -1912,8 +1912,8 @@ function WorkspaceWithScope({ path }) {
               <button
                 onClick={() => {
                   useWorkspaceStore.getState().setBottomTab('output');
-                  useWorkspaceStore.getState().openPanel('showOutputPanel');
-                  useWorkspaceStore.getState().closePanel('showTerminalPanel');
+                  useWorkspaceStore.setState({ showOutputPanel: true });
+                  useWorkspaceStore.setState({ showTerminalPanel: false });
                 }}
                 style={{
                   padding: '0 12px',
@@ -1932,8 +1932,8 @@ function WorkspaceWithScope({ path }) {
               <div style={{ flex: 1 }}></div>
               <button
                 onClick={() => {
-                  useWorkspaceStore.getState().closePanel('showTerminalPanel');
-                  useWorkspaceStore.getState().closePanel('showOutputPanel');
+                  useWorkspaceStore.setState({ showTerminalPanel: false });
+                  useWorkspaceStore.setState({ showOutputPanel: false });
                 }}
                 style={{
                   padding: '0 12px',
@@ -1957,8 +1957,8 @@ function WorkspaceWithScope({ path }) {
                 <TerminalPanel
                   isOpen={showTerminalPanel}
                   onClose={() => {
-                    useWorkspaceStore.getState().closePanel('showTerminalPanel');
-                    useWorkspaceStore.getState().closePanel('showOutputPanel');
+                    useWorkspaceStore.setState({ showTerminalPanel: false });
+                    useWorkspaceStore.setState({ showOutputPanel: false });
                   }}
                 />
               )}
@@ -1966,8 +1966,8 @@ function WorkspaceWithScope({ path }) {
                 <OutputPanel
                   isOpen={showOutputPanel}
                   onClose={() => {
-                    useWorkspaceStore.getState().closePanel('showOutputPanel');
-                    useWorkspaceStore.getState().closePanel('showTerminalPanel');
+                    useWorkspaceStore.setState({ showOutputPanel: false });
+                    useWorkspaceStore.setState({ showTerminalPanel: false });
                   }}
                 />
               )}
@@ -1995,7 +1995,7 @@ function WorkspaceWithScope({ path }) {
               useWorkspaceStore.setState({ showTerminalPanel: !useWorkspaceStore.getState().showTerminalPanel });
               if (!showTerminalPanel) {
                 useWorkspaceStore.getState().setBottomTab('terminal');
-                useWorkspaceStore.getState().closePanel('showOutputPanel');
+                useWorkspaceStore.setState({ showOutputPanel: false });
               }
             }
           }}
@@ -2004,7 +2004,7 @@ function WorkspaceWithScope({ path }) {
             useWorkspaceStore.setState({ showOutputPanel: !useWorkspaceStore.getState().showOutputPanel });
             if (!showOutputPanel) {
               useWorkspaceStore.getState().setBottomTab('output');
-              useWorkspaceStore.getState().closePanel('showTerminalPanel');
+              useWorkspaceStore.setState({ showTerminalPanel: false });
             }
           }}
         />

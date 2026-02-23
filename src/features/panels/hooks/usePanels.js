@@ -9,8 +9,7 @@ export function usePanels() {
   const toggleVersionHistory = useCallback((filePath) => {
     const store = useWorkspaceStore.getState();
     if (store.showVersionHistory && store.versionHistoryFile === filePath) {
-      store.closePanel('showVersionHistory');
-      useWorkspaceStore.setState({ versionHistoryFile: null });
+      useWorkspaceStore.setState({ showVersionHistory: false, versionHistoryFile: null });
     } else {
       useWorkspaceStore.setState({ showVersionHistory: true, versionHistoryFile: filePath });
     }

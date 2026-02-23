@@ -252,56 +252,7 @@ export function useWorkspaceEvents({
     };
   }, []);
 
-  // -------------------------------------------------------------------------
-  // Tab navigation throttled shortcuts
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    const throttle = (func, wait) => {
-      let lastTime = 0;
-      return function executedFunction(...args) {
-        const now = Date.now();
-        if (now - lastTime >= wait) {
-          lastTime = now;
-          func(...args);
-        }
-      };
-    };
-
-    const handleNextTabImmediate = () => {
-      const { openTabs, activeFile } = useWorkspaceStore.getState();
-      if (openTabs.length <= 1) return;
-      const currentIndex = openTabs.findIndex(tab => tab.path === activeFile);
-      const nextIndex = (currentIndex + 1) % openTabs.length;
-      useWorkspaceStore.setState({ activeFile: openTabs[nextIndex].path });
-    };
-
-    const handlePrevTabImmediate = () => {
-      const { openTabs, activeFile } = useWorkspaceStore.getState();
-      if (openTabs.length <= 1) return;
-      const currentIndex = openTabs.findIndex(tab => tab.path === activeFile);
-      const prevIndex = currentIndex === 0 ? openTabs.length - 1 : currentIndex - 1;
-      useWorkspaceStore.setState({ activeFile: openTabs[prevIndex].path });
-    };
-
-    const handleNextTab = throttle(handleNextTabImmediate, 200);
-    const handlePrevTab = throttle(handlePrevTabImmediate, 200);
-
-    if (isTauriEnv()) {
-      const nextTabSub = listen('lokus:next-tab', handleNextTab);
-      const prevTabSub = listen('lokus:prev-tab', handlePrevTab);
-      return () => {
-        nextTabSub.then(u => u());
-        prevTabSub.then(u => u());
-      };
-    } else {
-      window.addEventListener('lokus:next-tab', handleNextTab);
-      window.addEventListener('lokus:prev-tab', handlePrevTab);
-      return () => {
-        window.removeEventListener('lokus:next-tab', handleNextTab);
-        window.removeEventListener('lokus:prev-tab', handlePrevTab);
-      };
-    }
-  }, []);
+  // Tab navigation handled by ShortcutListener (useShortcuts hook)
 
   // -------------------------------------------------------------------------
   // Ctrl+Tab keyboard handler (capture phase)
