@@ -6,6 +6,8 @@ use chrono::{DateTime, Utc};
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use flate2::read::GzDecoder;
+use rand::Rng;
+use crate::file_locking::FileLock;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileVersion {
@@ -142,10 +144,11 @@ pub fn save_version(
     let workspace = Path::new(&workspace_path);
     let backups_dir = get_backups_dir(workspace, &file_path)?;
 
-    // Generate timestamp-based filename
+    // Generate timestamp-based filename with random suffix to prevent collisions
     let timestamp = Utc::now();
     let timestamp_str = timestamp.format("%Y-%m-%dT%H-%M-%S%.3f").to_string();
-    let version_path = backups_dir.join(format!("{}.md.gz", timestamp_str));
+    let random_suffix: u16 = rand::thread_rng().gen();
+    let version_path = backups_dir.join(format!("{}-{:04x}.md.gz", timestamp_str, random_suffix));
 
     // Compress and save version file
     let compressed = compress_content(&content)?;
@@ -162,16 +165,24 @@ pub fn save_version(
         preview: create_preview(&content, 200),
     };
 
-    // Load metadata and add version
-    let mut metadata = load_metadata(&backups_dir);
-    metadata.file = file_path.clone();
-    metadata.versions.push(version.clone());
+    // Load metadata and add version (protected by file lock)
+    let metadata_path = backups_dir.join("metadata.json").to_string_lossy().to_string();
+    let op_id = format!("save_version_{}", timestamp_str);
 
-    // Cleanup old versions if needed
-    cleanup_old_versions_internal(&mut metadata, &backups_dir)?;
+    FileLock::acquire_write_lock(&metadata_path, &op_id)
+        .map_err(|e| format!("Failed to acquire metadata lock: {}", e))?;
 
-    // Save updated metadata
-    save_metadata(&backups_dir, &metadata)?;
+    let result = (|| -> Result<(), String> {
+        let mut metadata = load_metadata(&backups_dir);
+        metadata.file = file_path.clone();
+        metadata.versions.push(version.clone());
+        cleanup_old_versions_internal(&mut metadata, &backups_dir)?;
+        save_metadata(&backups_dir, &metadata)?;
+        Ok(())
+    })();
+
+    let _ = FileLock::release_write_lock(&metadata_path, &op_id);
+    result?;
 
     Ok(version)
 }
@@ -359,4 +370,25 @@ fn cleanup_old_versions_internal(
     });
 
     Ok(removed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_version_filenames_are_unique() {
+        // Generate multiple version filenames at the "same" time
+        let mut filenames = std::collections::HashSet::new();
+        for _ in 0..100 {
+            let timestamp = Utc::now();
+            let timestamp_str = timestamp.format("%Y-%m-%dT%H-%M-%S%.3f").to_string();
+            let random_suffix: u16 = rand::thread_rng().gen();
+            let filename = format!("{}-{:04x}.md.gz", timestamp_str, random_suffix);
+            filenames.insert(filename);
+        }
+        // With 16-bit random suffix, 100 attempts should all be unique
+        // (birthday paradox threshold is ~256 for 65536 space)
+        assert_eq!(filenames.len(), 100, "Generated duplicate filenames!");
+    }
 }

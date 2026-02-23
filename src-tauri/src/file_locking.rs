@@ -12,12 +12,10 @@ lazy_static::lazy_static! {
 /// and data races during read/write operations
 
 #[derive(Clone)]
-#[allow(dead_code)] // Infrastructure ready for file operation integration
-struct FileLock {
+pub(crate) struct FileLock {
     locks: Arc<Mutex<HashMap<String, LockState>>>,
 }
 
-#[allow(dead_code)]
 struct LockState {
     locked_by: String,  // Operation ID
     locked_at: Instant,
@@ -25,13 +23,11 @@ struct LockState {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)]
 enum LockType {
     Read,
     Write,
 }
 
-#[allow(dead_code)] // Public API ready for integration
 impl FileLock {
     /// Acquire a write lock on a file
     /// Blocks until lock is available or timeout
