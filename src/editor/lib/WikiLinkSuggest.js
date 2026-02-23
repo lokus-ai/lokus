@@ -212,11 +212,14 @@ const WikiLinkSuggest = Extension.create({
 
           // Use textBetween with absolute positions to properly handle inline nodes like WikiLinks
           // (parentOffset doesn't align with textContent when WikiLinks are present)
-          const textBefore = state.doc.textBetween(Math.max(parentStart, pos - 2), pos)
           const fullTextBefore = state.doc.textBetween(parentStart, pos)
 
           // Check for [[ pattern (file linking)
-          const isAfterDoubleBracket = textBefore.endsWith('[[')
+          // We need to check if we're INSIDE an unclosed [[ context, not just immediately after [[
+          // Look for [[ that doesn't have a matching ]]
+          const lastOpenBracket = fullTextBefore.lastIndexOf('[[')
+          const lastCloseBracket = fullTextBefore.lastIndexOf(']]')
+          const isInsideWikiLink = lastOpenBracket !== -1 && lastOpenBracket > lastCloseBracket
 
           // Check for ^ pattern within [[ ]] (block linking)
           // Look for pattern: [[Filename^ or [[Filename.md^
@@ -238,7 +241,7 @@ const WikiLinkSuggest = Extension.create({
           const isInList = isInListItem || isInTaskItem || isInNestedList
 
           // Note: ![ for canvas is handled by Plugin 2
-          const shouldAllow = (isAfterDoubleBracket || isAfterCaret) && !isInList
+          const shouldAllow = (isInsideWikiLink || isAfterCaret) && !isInList
           return shouldAllow
         },
         items: async ({ query, editor }) => {
