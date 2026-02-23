@@ -165,9 +165,9 @@ const SearchResultItem = ({ result, query, onClick, onKeyDown }) => {
       </div>
 
       {snippet && (
-        {/* eslint-disable-next-line react/no-danger -- output from trusted highlightMatches with escaped input */}
         <div
           className="result-snippet"
+          // eslint-disable-next-line react/no-danger -- trusted highlightMatches
           dangerouslySetInnerHTML={{
             __html: highlightMatches(snippet, query)
           }}
