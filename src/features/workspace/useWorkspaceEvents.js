@@ -1,7 +1,10 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { useWorkspaceStore } from "../../stores/workspace";
+import { useLayoutStore } from "../../stores/layout";
+import { useViewStore } from "../../stores/views";
+import { useEditorGroupStore } from "../../stores/editorGroups";
+import { useFileTreeStore } from "../../stores/fileTree";
 import { useLayoutDefaults } from "../../contexts/RemoteConfigContext";
 import { getActiveShortcuts } from "../../core/shortcuts/registry.js";
 import { getFilename } from "../../utils/pathUtils.js";
@@ -17,28 +20,8 @@ function isTauriEnv() {
   }
 }
 
-const MAX_OPEN_TABS = 10;
-
 /**
- * Registers all workspace-level event listeners:
- *   - lokus:open-file / lokus:open-file-new-tab
- *   - wiki link creation
- *   - canvas link hover/open
- *   - tab navigation shortcuts (throttled)
- *   - Ctrl+Tab keyboard handler
- *   - shortcuts loading / hot-reload
- *   - markdown config changes
- *   - layout defaults initialisation
- *   - external file drop (Tauri drag-drop)
- *   - hoveredFolder ref sync
- *   - template picker DOM event
- *   - insert-template DOM event
- *
- * @param {object} params
- * @param {string}  params.workspacePath          - Active workspace path.
- * @param {object}  params.editorRef              - Ref to the Tiptap editor instance.
- * @param {object}  params.graphProcessorRef      - Ref to the graph processor.
- * @param {Function} params.insertImagesIntoEditor - Callback to insert dropped images.
+ * Registers all workspace-level event listeners.
  */
 export function useWorkspaceEvents({
   workspacePath,
@@ -53,10 +36,10 @@ export function useWorkspaceEvents({
   // -------------------------------------------------------------------------
   useEffect(() => {
     if (layoutDefaults.left_sidebar_visible !== undefined) {
-      useWorkspaceStore.setState({ showLeft: layoutDefaults.left_sidebar_visible });
+      useLayoutStore.setState({ showLeft: layoutDefaults.left_sidebar_visible });
     }
     if (layoutDefaults.right_sidebar_visible !== undefined) {
-      useWorkspaceStore.setState({ showRight: layoutDefaults.right_sidebar_visible });
+      useLayoutStore.setState({ showRight: layoutDefaults.right_sidebar_visible });
     }
   }, [layoutDefaults]);
 
@@ -66,18 +49,12 @@ export function useWorkspaceEvents({
   useEffect(() => {
     const openPath = (p, switchToTab = true) => {
       if (!p) return;
-
-      useWorkspaceStore.setState((s) => {
-        const name = getFilename(p);
-        const newTabs = s.openTabs.filter(t => t.path !== p);
-        newTabs.unshift({ path: p, name });
-        if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
-        return { openTabs: newTabs };
-      });
-
-      if (switchToTab) {
-        useWorkspaceStore.setState({ activeFile: p });
-      }
+      const name = getFilename(p);
+      const store = useEditorGroupStore.getState();
+      const groupId = store.focusedGroupId || store.getAllGroups()[0]?.id;
+      if (!groupId) return;
+      store.addTab(groupId, { path: p, name }, switchToTab);
+      store.addRecentFile(p);
     };
 
     if (isTauriEnv()) {
@@ -105,16 +82,16 @@ export function useWorkspaceEvents({
 
       if (graphProcessorRef.current) {
         try {
-          const currentContent = editorRef.current
-            ? (editorRef.current.getText() || useWorkspaceStore.getState().editorContent)
-            : useWorkspaceStore.getState().editorContent;
+          const currentContent = editorRef.current?.getText() || '';
+          const group = useEditorGroupStore.getState().getFocusedGroup();
+          const activeFile = group?.activeTab;
 
-          if (currentContent && sourceFile === useWorkspaceStore.getState().activeFile) {
+          if (currentContent && sourceFile === activeFile) {
             const updateResult = await graphProcessorRef.current.updateFileContent(sourceFile, currentContent);
 
-            if ((updateResult.added > 0 || updateResult.removed > 0) && useWorkspaceStore.getState().activeFile === '__graph__') {
+            if ((updateResult.added > 0 || updateResult.removed > 0) && useViewStore.getState().currentView === 'graph') {
               const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
-              useWorkspaceStore.getState().setGraphData(updatedGraphData);
+              useEditorGroupStore.getState().setGraphData(updatedGraphData);
             }
           }
         } catch {}
@@ -125,7 +102,7 @@ export function useWorkspaceEvents({
       const blockId = e.detail;
       if (!blockId) return;
 
-      const attemptScroll = (delay, attemptNum) => {
+      const attemptScroll = (delay) => {
         setTimeout(() => {
           const editorEl = document.querySelector('.tiptap.ProseMirror');
           if (!editorEl) return;
@@ -172,9 +149,9 @@ export function useWorkspaceEvents({
         }, delay);
       };
 
-      attemptScroll(100, 1);
-      attemptScroll(300, 2);
-      attemptScroll(600, 3);
+      attemptScroll(100);
+      attemptScroll(300);
+      attemptScroll(600);
     };
 
     window.addEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
@@ -194,17 +171,17 @@ export function useWorkspaceEvents({
   useEffect(() => {
     const handleCanvasLinkHover = async (event) => {
       const { canvasName, canvasPath, position } = event.detail;
-      useWorkspaceStore.setState({ canvasPreview: { canvasName, canvasPath, position, loading: true } });
+      useViewStore.setState({ canvasPreview: { canvasName, canvasPath, position, loading: true } });
 
       try {
         const thumbnailUrl = await generatePreview(canvasPath);
-        useWorkspaceStore.setState((s) => ({
+        useViewStore.setState((s) => ({
           canvasPreview: s.canvasPreview?.canvasPath === canvasPath
             ? { ...s.canvasPreview, thumbnailUrl, loading: false }
             : null
         }));
       } catch {
-        useWorkspaceStore.setState((s) => ({
+        useViewStore.setState((s) => ({
           canvasPreview: s.canvasPreview?.canvasPath === canvasPath
             ? { ...s.canvasPreview, error: true, loading: false }
             : null
@@ -213,7 +190,7 @@ export function useWorkspaceEvents({
     };
 
     const handleCanvasLinkHoverEnd = () => {
-      useWorkspaceStore.setState({ canvasPreview: null });
+      useViewStore.setState({ canvasPreview: null });
     };
 
     const handleOpenCanvas = (event) => {
@@ -229,15 +206,11 @@ export function useWorkspaceEvents({
         if (matchedFile) canvasPath = matchedFile.path;
       }
 
-      if (canvasPath) {
+      const store = useEditorGroupStore.getState();
+      const groupId = store.focusedGroupId || store.getAllGroups()[0]?.id;
+      if (groupId && canvasPath) {
         const name = canvasPath.split('/').pop() || canvasPath;
-        useWorkspaceStore.setState((s) => {
-          const newTabs = s.openTabs.filter(t => t.path !== canvasPath);
-          newTabs.unshift({ path: canvasPath, name });
-          if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
-          return { openTabs: newTabs };
-        });
-        useWorkspaceStore.setState({ activeFile: canvasPath });
+        store.addTab(groupId, { path: canvasPath, name }, true);
       }
     };
 
@@ -252,8 +225,6 @@ export function useWorkspaceEvents({
     };
   }, []);
 
-  // Tab navigation handled by ShortcutListener (useShortcuts hook)
-
   // -------------------------------------------------------------------------
   // Ctrl+Tab keyboard handler (capture phase)
   // -------------------------------------------------------------------------
@@ -263,17 +234,18 @@ export function useWorkspaceEvents({
         e.preventDefault();
         e.stopPropagation();
 
-        const { openTabs, activeFile } = useWorkspaceStore.getState();
-        if (openTabs.length <= 1) return;
+        const store = useEditorGroupStore.getState();
+        const group = store.getFocusedGroup();
+        if (!group || group.tabs.length <= 1) return;
 
-        const currentIndex = openTabs.findIndex(tab => tab.path === activeFile);
+        const currentIndex = group.tabs.findIndex(tab => tab.path === group.activeTab);
 
         if (e.shiftKey) {
-          const prevIndex = currentIndex === 0 ? openTabs.length - 1 : currentIndex - 1;
-          useWorkspaceStore.setState({ activeFile: openTabs[prevIndex].path });
+          const prevIndex = currentIndex === 0 ? group.tabs.length - 1 : currentIndex - 1;
+          store.setActiveTab(group.id, group.tabs[prevIndex].path);
         } else {
-          const nextIndex = (currentIndex + 1) % openTabs.length;
-          useWorkspaceStore.setState({ activeFile: openTabs[nextIndex].path });
+          const nextIndex = (currentIndex + 1) % group.tabs.length;
+          store.setActiveTab(group.id, group.tabs[nextIndex].path);
         }
       }
     };
@@ -286,16 +258,16 @@ export function useWorkspaceEvents({
   // Shortcuts loading / hot-reload
   // -------------------------------------------------------------------------
   useEffect(() => {
-    getActiveShortcuts().then(m => useWorkspaceStore.setState({ keymap: m })).catch(() => {});
+    getActiveShortcuts().then(m => useFileTreeStore.setState({ keymap: m })).catch(() => {});
 
     if (isTauriEnv()) {
       const sub = listen('shortcuts:updated', async () => {
         const m = await getActiveShortcuts();
-        useWorkspaceStore.setState({ keymap: m });
+        useFileTreeStore.setState({ keymap: m });
       });
       return () => { sub.then((un) => un()); };
     } else {
-      const onDom = async () => { useWorkspaceStore.setState({ keymap: await getActiveShortcuts() }); };
+      const onDom = async () => { useFileTreeStore.setState({ keymap: await getActiveShortcuts() }); };
       window.addEventListener('shortcuts:updated', onDom);
       return () => window.removeEventListener('shortcuts:updated', onDom);
     }
@@ -322,9 +294,8 @@ export function useWorkspaceEvents({
   useEffect(() => {
     if (!workspacePath) return;
 
-    // Keep hoveredFolder available without re-registering listeners
-    const hoveredFolderRef = { current: useWorkspaceStore.getState().hoveredFolder };
-    const unsubHovered = useWorkspaceStore.subscribe(
+    const hoveredFolderRef = { current: useFileTreeStore.getState().hoveredFolder };
+    const unsubHovered = useFileTreeStore.subscribe(
       (s) => s.hoveredFolder,
       (v) => { hoveredFolderRef.current = v; }
     );
@@ -340,7 +311,7 @@ export function useWorkspaceEvents({
           if (isCleanedUp) return;
 
           const filePaths = event.payload.paths || event.payload;
-          useWorkspaceStore.setState({ isExternalDragActive: false });
+          useFileTreeStore.getState().setExternalDragActive(false);
 
           try {
             const targetFolder = hoveredFolderRef.current || null;
@@ -351,7 +322,7 @@ export function useWorkspaceEvents({
             });
 
             if (result.success.length > 0) {
-              useWorkspaceStore.getState().refreshTree();
+              useFileTreeStore.getState().refreshTree();
 
               const imageFiles = result.success.filter(p => isImageFile(p));
               if (imageFiles.length > 0 && editorRef.current) {
@@ -359,18 +330,19 @@ export function useWorkspaceEvents({
               }
             }
           } catch {} finally {
-            useWorkspaceStore.setState({ hoveredFolder: null });
+            useFileTreeStore.getState().setHoveredFolder(null);
           }
         });
 
         unlistenOver = await listen('tauri://drag-over', () => {
           if (isCleanedUp) return;
-          useWorkspaceStore.setState({ isExternalDragActive: true });
+          useFileTreeStore.getState().setExternalDragActive(true);
         });
 
         unlistenLeave = await listen('tauri://drag-leave', () => {
           if (isCleanedUp) return;
-          useWorkspaceStore.setState({ isExternalDragActive: false, hoveredFolder: null });
+          useFileTreeStore.getState().setExternalDragActive(false);
+          useFileTreeStore.getState().setHoveredFolder(null);
         });
       } catch {}
     };
@@ -392,8 +364,8 @@ export function useWorkspaceEvents({
   useEffect(() => {
     const handleTemplatePicker = (event) => {
       const data = event?.detail || event;
-      useWorkspaceStore.setState({ templatePickerData: data });
-      useWorkspaceStore.getState().openPanel('showTemplatePicker');
+      useViewStore.setState({ templatePickerData: data });
+      useViewStore.getState().openPanel('showTemplatePicker');
     };
     window.addEventListener('open-template-picker', handleTemplatePicker);
     return () => window.removeEventListener('open-template-picker', handleTemplatePicker);

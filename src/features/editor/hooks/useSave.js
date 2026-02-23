@@ -1,52 +1,45 @@
 import { useCallback, useRef } from 'react';
-import { useWorkspaceStore } from '../../../stores/workspace';
+import { useEditorGroupStore } from '../../../stores/editorGroups';
+import { useViewStore } from '../../../stores/views';
 import { invoke } from '@tauri-apps/api/core';
 import { confirm, save } from '@tauri-apps/plugin-dialog';
-import { MarkdownExporter } from '../../../core/export/markdown-exporter';
 
-export function useSave({ workspacePath, editorGroupsRef, graphProcessorRef, onRefreshFiles }) {
+export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
   const lastVersionContentRef = useRef({});
   const lastVersionSaveRef = useRef({});
 
-  const handleSave = useCallback(async () => {
-    const store = useWorkspaceStore.getState();
-    const { activeFile, openTabs, editorContent, editorTitle } = store;
+  const handleSave = useCallback(async (editor, filePath, groupId) => {
+    // If called without args, derive from focused group
+    const store = useEditorGroupStore.getState();
+    const group = groupId ? store.findGroup(groupId) : store.getFocusedGroup();
+    if (!group) return;
+
+    const activeFile = filePath || group.activeTab;
     if (!activeFile) return;
 
+    const activeEditor = editor || null;
     let pathToSave = activeFile;
-    let needsStateUpdate = false;
 
     try {
-      const currentTab = openTabs.find(t => t.path === activeFile);
-      if (!currentTab) return;
-      const currentName = currentTab.name.replace(/\.md$/, '');
+      const tab = group.tabs.find(t => t.path === activeFile);
+      if (!tab) return;
 
-      // Handle rename if title changed
-      if (editorTitle !== currentName && editorTitle.trim() !== '') {
-        const newFileName = `${editorTitle.trim()}.md`;
-        const newPath = await invoke('rename_file', { path: activeFile, newName: newFileName });
-        if (editorGroupsRef?.current) {
-          editorGroupsRef.current.updateTabPath(activeFile, newPath);
-        }
-        pathToSave = newPath;
-        needsStateUpdate = true;
-      }
-
-      // Convert HTML to markdown for .md files
-      let contentToSave = editorContent;
-      if (pathToSave.endsWith('.md')) {
-        const exporter = new MarkdownExporter();
-        contentToSave = exporter.htmlToMarkdown(editorContent, { preserveWikiLinks: true });
+      // Get markdown from editor's @tiptap/markdown storage, or fall back to getText
+      let contentToSave = '';
+      if (activeEditor) {
+        contentToSave = activeEditor.storage.markdown?.getMarkdown?.()
+          || activeEditor.getText()
+          || '';
+      } else {
+        // Fall back to cached content
+        const cached = group.contentByTab?.[activeFile];
+        contentToSave = cached?.rawMarkdown || '';
       }
 
       await invoke('write_file_content', { path: pathToSave, content: contentToSave });
 
-      // Update store state
-      store.setSavedContent(editorContent);
-      store.markSaved(activeFile);
-      if (pathToSave !== activeFile) {
-        store.markSaved(pathToSave);
-      }
+      // Mark tab as clean
+      store.markTabDirty(group.id, activeFile, false);
 
       // Save version if content changed
       const lastContent = lastVersionContentRef.current[pathToSave];
@@ -55,18 +48,13 @@ export function useSave({ workspacePath, editorGroupsRef, graphProcessorRef, onR
           await invoke('save_file_version_manual', { path: pathToSave, content: contentToSave });
           lastVersionSaveRef.current[pathToSave] = Date.now();
           lastVersionContentRef.current[pathToSave] = contentToSave;
-          store.incrementVersionRefreshKey();
         } catch (_) { /* non-blocking */ }
       }
 
-      if (needsStateUpdate) {
-        const newName = pathToSave.split('/').pop();
-        store.updateTabName(activeFile, pathToSave);
-        if (onRefreshFiles) onRefreshFiles();
-      } else if (graphProcessorRef?.current) {
-        // Update graph with new content
+      // Update graph with new content
+      if (graphProcessorRef?.current) {
         try {
-          const updateResult = await graphProcessorRef.current.updateFileContent(pathToSave, editorContent);
+          const updateResult = await graphProcessorRef.current.updateFileContent(pathToSave, contentToSave);
           if (updateResult.added > 0 || updateResult.removed > 0) {
             const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
             store.setGraphData(updatedGraphData);
@@ -81,12 +69,15 @@ export function useSave({ workspacePath, editorGroupsRef, graphProcessorRef, onR
         }
       }
     } catch (_) { /* silent fail */ }
-  }, [workspacePath, editorGroupsRef, graphProcessorRef, onRefreshFiles]);
+  }, [workspacePath, graphProcessorRef, onRefreshFiles]);
 
-  const handleSaveAs = useCallback(async () => {
-    const store = useWorkspaceStore.getState();
-    const { activeFile, editorContent, editorTitle } = store;
-    if (!activeFile) return;
+  const handleSaveAs = useCallback(async (editor) => {
+    const store = useEditorGroupStore.getState();
+    const group = store.getFocusedGroup();
+    if (!group?.activeTab) return;
+    const activeFile = group.activeTab;
+
+    const activeEditor = editor || null;
 
     try {
       const currentFileName = activeFile.split('/').pop().replace(/\.[^.]*$/, '');
@@ -105,10 +96,17 @@ export function useSave({ workspacePath, editorGroupsRef, graphProcessorRef, onR
 
       if (!filePath) return;
 
-      let contentToSave = editorContent;
+      // Get content from editor
+      let contentToSave = '';
+      if (activeEditor) {
+        contentToSave = activeEditor.storage.markdown?.getMarkdown?.()
+          || activeEditor.getText()
+          || '';
+      }
 
       if (filePath.endsWith('.html')) {
-        const title = editorTitle || currentFileName;
+        const title = currentFileName;
+        const htmlContent = activeEditor?.getHTML?.() || contentToSave;
         contentToSave = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -125,31 +123,25 @@ export function useSave({ workspacePath, editorGroupsRef, graphProcessorRef, onR
         th { background: #f4f4f4; }
     </style>
 </head>
-<body>${editorContent}</body>
+<body>${htmlContent}</body>
 </html>`;
       } else if (filePath.endsWith('.json')) {
         contentToSave = JSON.stringify({
-          title: editorTitle || currentFileName,
-          content: editorContent,
+          title: currentFileName,
+          content: activeEditor?.getHTML?.() || contentToSave,
           exported: new Date().toISOString(),
-          format: 'html'
+          format: 'markdown'
         }, null, 2);
       } else if (filePath.endsWith('.txt')) {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = editorContent;
-        contentToSave = tempDiv.textContent || tempDiv.innerText || '';
-      } else if (filePath.endsWith('.md')) {
-        const exporter = new MarkdownExporter();
-        contentToSave = exporter.htmlToMarkdown(editorContent, { preserveWikiLinks: true });
+        contentToSave = activeEditor?.getText?.() || contentToSave;
       }
+      // .md files already have markdown from getMarkdown()
 
       await invoke('write_file_content', { path: filePath, content: contentToSave });
 
-      const newFileName = filePath.split('/').pop();
-      store.updateTabName(activeFile, filePath);
-      store.setSavedContent(editorContent);
-      store.markSaved(activeFile);
-      store.markSaved(filePath);
+      // Update tab path to the new file
+      store.updateTabPath(activeFile, filePath);
+      store.markTabDirty(group.id, filePath, false);
 
       if (onRefreshFiles) onRefreshFiles();
     } catch (_) { /* silent fail */ }

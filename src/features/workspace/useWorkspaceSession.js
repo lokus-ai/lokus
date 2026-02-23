@@ -1,7 +1,7 @@
 import { useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useWorkspaceStore } from "../../stores/workspace";
-import { getMarkdownCompiler } from "../../core/markdown/compiler.js";
+import { useEditorGroupStore } from "../../stores/editorGroups";
+import { useFileTreeStore } from "../../stores/fileTree";
 import { getFilename } from "../../utils/pathUtils.js";
 import { isImageFile, findImageFiles } from "../../utils/imageUtils.js";
 import referenceManager from "../../core/references/ReferenceManager.js";
@@ -16,19 +16,12 @@ import referenceManager from "../../core/references/ReferenceManager.js";
  *
  * @returns {{
  *   reloadCurrentFile:      () => Promise<void>,
- *   handleEditorChange:     (newContent: string) => void,
  *   getTabDisplayName:      (tabPath: string, pluginsList?: Array) => string,
  *   insertImagesIntoEditor: (imagePaths: string[]) => Promise<void>,
  * }}
  */
 export function useWorkspaceSession({ workspacePath, editorRef, plugins }) {
-  // Store slices consumed by effects — pulled via selectors so effects re-run
-  // only when the relevant slice actually changes.
-  const openTabs = useWorkspaceStore((s) => s.openTabs);
-  const expandedFolders = useWorkspaceStore((s) => s.expandedFolders);
-  const recentFiles = useWorkspaceStore((s) => s.recentFiles);
-  const activeFile = useWorkspaceStore((s) => s.activeFile);
-  const refreshId = useWorkspaceStore((s) => s.refreshId);
+  const refreshId = useFileTreeStore((s) => s.refreshId);
 
   // -------------------------------------------------------------------------
   // Helper – get proper display name for special tabs
@@ -55,75 +48,34 @@ export function useWorkspaceSession({ workspacePath, editorRef, plugins }) {
       invoke("load_session_state", { workspacePath }),
       invoke("validate_workspace_path", { path: workspacePath })
     ]).then(([session]) => {
-      if (session && session.open_tabs) {
-        useWorkspaceStore.setState({ expandedFolders: new Set(session.expanded_folders || []) });
+      if (!session) return;
 
-        const tabsWithNames = session.open_tabs.map(p => ({
+      // Restore expanded folders into fileTree store
+      if (session.expanded_folders) {
+        useFileTreeStore.setState({ expandedFolders: new Set(session.expanded_folders) });
+      }
+
+      // Restore editor layout if available (new format)
+      if (session.editor_layout) {
+        useEditorGroupStore.getState().restoreLayout(session.editor_layout);
+      } else if (session.open_tabs && session.open_tabs.length > 0) {
+        // Legacy: build single group from open_tabs
+        const tabs = session.open_tabs.map(p => ({
           path: p,
           name: getTabDisplayName(p, plugins)
         }));
+        useEditorGroupStore.getState().initLayout(tabs, tabs[0]?.path || null);
+      }
 
-        useWorkspaceStore.setState({ openTabs: tabsWithNames });
-
-        if (tabsWithNames.length > 0) {
-          useWorkspaceStore.setState({ activeFile: tabsWithNames[0].path });
-        }
-
-        if (session.recent_files && session.recent_files.length > 0) {
-          useWorkspaceStore.setState({
-            recentFiles: session.recent_files.slice(0, 5).map(p => ({
-              path: p,
-              name: getFilename(p)
-            }))
-          });
-        } else {
-          const actualFiles = session.open_tabs.filter(p =>
-            !p.startsWith('__') &&
-            (p.endsWith('.md') || p.endsWith('.txt') || p.endsWith('.canvas') || p.endsWith('.kanban') || p.endsWith('.pdf'))
-          );
-          useWorkspaceStore.setState({
-            recentFiles: actualFiles.slice(0, 5).map(p => ({
-              path: p,
-              name: getFilename(p)
-            }))
-          });
-        }
+      // Restore recent files
+      if (session.recent_files && session.recent_files.length > 0) {
+        session.recent_files.slice(0, 5).forEach(p => {
+          useEditorGroupStore.getState().addRecentFile(p);
+        });
       }
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspacePath]);
-
-  // -------------------------------------------------------------------------
-  // Plugin tab rehydration
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    if (plugins.length === 0 || openTabs.length === 0) return;
-
-    useWorkspaceStore.setState((s) => {
-      const prevTabs = s.openTabs;
-      const needsUpdate = prevTabs.some(tab =>
-        tab.path.startsWith('__plugin_') && tab.path.endsWith('__') && !tab.plugin
-      );
-
-      if (!needsUpdate) return {};
-
-      return {
-        openTabs: prevTabs
-          .map(tab => {
-            if (tab.path.startsWith('__plugin_') && tab.path.endsWith('__') && !tab.plugin) {
-              const pluginId = tab.path.slice(9, -2);
-              const plugin = plugins.find(p => p.id === pluginId || p.name === pluginId);
-              if (plugin) return { ...tab, name: plugin.name, plugin };
-            }
-            return tab;
-          })
-          .filter(tab => {
-            if (tab.path.startsWith('__plugin_') && tab.path.endsWith('__') && !tab.plugin) return false;
-            return true;
-          })
-      };
-    });
-  }, [plugins, openTabs]);
 
   // -------------------------------------------------------------------------
   // Session save (debounced, 500 ms)
@@ -131,18 +83,26 @@ export function useWorkspaceSession({ workspacePath, editorRef, plugins }) {
   useEffect(() => {
     const saveTimeout = setTimeout(() => {
       if (!workspacePath) return;
-      const tabPaths = openTabs.map(t => t.path);
+
+      const { layout, getAllGroups, globalRecentFiles } = useEditorGroupStore.getState();
+      const { expandedFolders } = useFileTreeStore.getState();
+
+      // Collect all open tab paths from all groups for backward compatibility
+      const allGroups = getAllGroups();
+      const tabPaths = allGroups.flatMap(g => g.tabs.map(t => t.path));
       const folderPaths = Array.from(expandedFolders);
-      const recentPaths = recentFiles.map(f => f.path);
+      const recentPaths = globalRecentFiles.slice(0, 5);
+
       invoke("save_session_state", {
         workspacePath,
         openTabs: tabPaths,
         expandedFolders: folderPaths,
         recentFiles: recentPaths,
+        editorLayout: layout,
       });
     }, 500);
     return () => clearTimeout(saveTimeout);
-  }, [workspacePath, openTabs, expandedFolders, recentFiles]);
+  }, [workspacePath]);
 
   // -------------------------------------------------------------------------
   // File tree fetching
@@ -169,7 +129,7 @@ export function useWorkspaceSession({ workspacePath, editorRef, plugins }) {
         };
 
         const tree = filterIgnored(files);
-        useWorkspaceStore.getState().setFileTree(tree);
+        useFileTreeStore.getState().setFileTree(tree);
 
         const flat = [];
         const walk = (arr) => {
@@ -185,113 +145,32 @@ export function useWorkspaceSession({ workspacePath, editorRef, plugins }) {
         referenceManager.buildIndex(flat).catch(() => {});
 
         const imageFiles = findImageFiles(tree);
-        useWorkspaceStore.getState().setAllImageFiles(imageFiles);
+        useEditorGroupStore.getState().setAllImageFiles(imageFiles);
       })
       .catch(() => {});
   }, [workspacePath, refreshId]);
-
-  // -------------------------------------------------------------------------
-  // File content loading (runs when activeFile changes)
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    if (activeFile) {
-      try { window.__LOKUS_ACTIVE_FILE__ = activeFile; } catch {}
-
-      if (
-        activeFile.startsWith('__') ||
-        activeFile.endsWith('.canvas') ||
-        activeFile.endsWith('.kanban') ||
-        activeFile.endsWith('.pdf') ||
-        isImageFile(activeFile)
-      ) {
-        return;
-      }
-
-      useWorkspaceStore.getState().setContent("");
-      useWorkspaceStore.getState().setTitle("");
-      useWorkspaceStore.getState().setLoading(true);
-
-      const fileToLoad = activeFile;
-
-      invoke("read_file_content", { path: fileToLoad })
-        .then(async content => {
-          if (fileToLoad !== useWorkspaceStore.getState().activeFile) return;
-
-          const fileName = getFilename(fileToLoad);
-          const compiler = getMarkdownCompiler();
-          let processedContent = content;
-
-          if (fileToLoad.endsWith('.md') && (await compiler.isMarkdown(content))) {
-            processedContent = await compiler.compile(content);
-          }
-
-          useWorkspaceStore.getState().setContent(processedContent);
-          useWorkspaceStore.getState().setTitle(fileName.replace(/\.md$/, ""));
-          useWorkspaceStore.getState().setSavedContent(content);
-          useWorkspaceStore.getState().setLoading(false);
-        })
-        .catch((err) => {
-          if (fileToLoad === useWorkspaceStore.getState().activeFile) {
-            useWorkspaceStore.getState().setLoading(false);
-            useWorkspaceStore.getState().setContent(`<div class="text-red-500 p-4">Failed to load file: ${err}</div>`);
-            useWorkspaceStore.getState().setTitle("Error");
-          }
-        });
-    } else {
-      useWorkspaceStore.getState().setContent("");
-      useWorkspaceStore.getState().setTitle("");
-      useWorkspaceStore.getState().setLoading(false);
-    }
-  }, [activeFile]);
 
   // -------------------------------------------------------------------------
   // Callbacks
   // -------------------------------------------------------------------------
 
   const reloadCurrentFile = useCallback(async () => {
-    const { activeFile: file, openTabs: tabs } = useWorkspaceStore.getState();
-    if (!file) return;
+    const group = useEditorGroupStore.getState().getFocusedGroup();
+    if (!group?.activeTab) return;
+    const file = group.activeTab;
 
     try {
       const content = await invoke("read_file_content", { path: file });
-      const activeTab = tabs.find(tab => tab.path === file);
-
-      if (activeTab) {
-        const compiler = getMarkdownCompiler();
-        let processedContent = content;
-
-        if (activeTab.name.endsWith('.md') && (await compiler.isMarkdown(content))) {
-          processedContent = await compiler.compile(content);
-        }
-
-        useWorkspaceStore.getState().setContent(processedContent);
-        useWorkspaceStore.getState().setSavedContent(content);
-
-        useWorkspaceStore.setState((s) => {
-          const newSet = new Set(s.unsavedChanges);
-          newSet.delete(file);
-          return { unsavedChanges: newSet };
-        });
-      }
+      // Store raw markdown in the group's content cache — the EditorGroup
+      // component will pick this up and set it into the TipTap editor.
+      useEditorGroupStore.getState().setTabContent(group.id, file, {
+        rawMarkdown: content,
+        dirty: false,
+      });
     } catch {}
   }, []);
 
-  const handleEditorChange = useCallback((newContent) => {
-    useWorkspaceStore.getState().setContent(newContent);
-    if (!useWorkspaceStore.getState().activeFile) return;
-    useWorkspaceStore.setState((s) => {
-      const next = new Set(s.unsavedChanges);
-      if (newContent !== s.savedContent) {
-        next.add(s.activeFile);
-      } else {
-        next.delete(s.activeFile);
-      }
-      return { unsavedChanges: next };
-    });
-  }, []);
-
   // Insert images into editor at cursor position.
-  // Uses WikiLink nodes with pre-resolved data-URL src to avoid race conditions.
   const insertImagesIntoEditor = useCallback(async (imagePaths) => {
     if (!editorRef.current) return;
 
@@ -339,7 +218,6 @@ export function useWorkspaceSession({ workspacePath, editorRef, plugins }) {
 
   return {
     reloadCurrentFile,
-    handleEditorChange,
     getTabDisplayName,
     insertImagesIntoEditor,
   };

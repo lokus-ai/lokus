@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { useWorkspaceStore } from '../../../stores/workspace';
+import { useLayoutStore } from '../../../stores/layout';
+import { useViewStore } from '../../../stores/views';
+import { useEditorGroupStore } from '../../../stores/editorGroups';
+import { useFileTreeStore } from '../../../stores/fileTree';
 import { setGlobalActiveTheme, getSystemPreferredTheme, setupSystemThemeListener } from '../../../core/theme/manager';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isDesktop } from '../../../platform/index';
@@ -18,53 +21,58 @@ export function useShortcuts({ workspacePath, editorRef, onSave, onSaveAs, onCre
     on('lokus:save-file', () => onSave?.());
     on('lokus:save-as', () => onSaveAs?.());
     on('lokus:close-tab', () => {
-      const { activeFile, closeTab } = useWorkspaceStore.getState();
-      if (activeFile) closeTab(activeFile);
+      const store = useEditorGroupStore.getState();
+      const group = store.getFocusedGroup();
+      if (group?.activeTab) {
+        const tab = group.tabs.find(t => t.path === group.activeTab);
+        if (tab) store.addRecentlyClosed(tab);
+        store.removeTab(group.id, group.activeTab);
+      }
     });
     on('lokus:new-file', () => onCreateFile?.());
     on('lokus:new-folder', () => onCreateFolder?.());
     on('lokus:new-canvas', () => onCreateCanvas?.());
     on('lokus:reopen-closed-tab', () => {
-      useWorkspaceStore.getState().reopenClosed();
+      useEditorGroupStore.getState().reopenClosed();
     });
 
     // Navigation
     on('lokus:next-tab', () => {
-      const { openTabs, activeFile, switchTab } = useWorkspaceStore.getState();
-      if (openTabs.length === 0) return;
-      const idx = openTabs.findIndex(t => t.path === activeFile);
-      const next = openTabs[(idx + 1) % openTabs.length];
-      if (next) switchTab(next.path);
+      const store = useEditorGroupStore.getState();
+      const group = store.getFocusedGroup();
+      if (!group || group.tabs.length === 0) return;
+      const idx = group.tabs.findIndex(t => t.path === group.activeTab);
+      const next = group.tabs[(idx + 1) % group.tabs.length];
+      if (next) store.setActiveTab(group.id, next.path);
     });
     on('lokus:prev-tab', () => {
-      const { openTabs, activeFile, switchTab } = useWorkspaceStore.getState();
-      if (openTabs.length === 0) return;
-      const idx = openTabs.findIndex(t => t.path === activeFile);
-      const prev = openTabs[(idx - 1 + openTabs.length) % openTabs.length];
-      if (prev) switchTab(prev.path);
+      const store = useEditorGroupStore.getState();
+      const group = store.getFocusedGroup();
+      if (!group || group.tabs.length === 0) return;
+      const idx = group.tabs.findIndex(t => t.path === group.activeTab);
+      const prev = group.tabs[(idx - 1 + group.tabs.length) % group.tabs.length];
+      if (prev) store.setActiveTab(group.id, prev.path);
     });
 
     // Sidebar and panels
-    on('lokus:toggle-sidebar', () => useWorkspaceStore.getState().toggleLeft());
-    on('lokus:command-palette', () => useWorkspaceStore.getState().togglePanel('showCommandPalette'));
-    on('lokus:in-file-search', () => useWorkspaceStore.getState().togglePanel('showInFileSearch'));
-    on('lokus:global-search', () => useWorkspaceStore.getState().togglePanel('showGlobalSearch'));
-    on('lokus:shortcut-help', () => useWorkspaceStore.getState().togglePanel('showShortcutHelp'));
-    on('lokus:keyboard-shortcuts', () => useWorkspaceStore.getState().togglePanel('showShortcutHelp'));
-    on('lokus:show-about', () => useWorkspaceStore.getState().togglePanel('showAboutDialog'));
-    on('lokus:refresh-files', () => useWorkspaceStore.getState().refreshTree());
+    on('lokus:toggle-sidebar', () => useLayoutStore.getState().toggleLeft());
+    on('lokus:command-palette', () => useViewStore.getState().togglePanel('showCommandPalette'));
+    on('lokus:in-file-search', () => useViewStore.getState().togglePanel('showInFileSearch'));
+    on('lokus:global-search', () => useViewStore.getState().togglePanel('showGlobalSearch'));
+    on('lokus:shortcut-help', () => useViewStore.getState().togglePanel('showShortcutHelp'));
+    on('lokus:keyboard-shortcuts', () => useViewStore.getState().togglePanel('showShortcutHelp'));
+    on('lokus:show-about', () => useViewStore.getState().togglePanel('showAboutDialog'));
+    on('lokus:refresh-files', () => useFileTreeStore.getState().refreshTree());
 
     // Views
-    on('lokus:graph-view', () => useWorkspaceStore.getState().toggleView('showGraphView'));
+    on('lokus:graph-view', () => useViewStore.getState().switchView('graph'));
     on('lokus:daily-note', () => onOpenDailyNote?.());
 
-    // Split view
-    on('lokus:toggle-split-view', () => useWorkspaceStore.getState().toggleSplit());
-    on('lokus:toggle-split-direction', () => useWorkspaceStore.getState().toggleDirection());
-    on('lokus:reset-pane-size', () => useWorkspaceStore.getState().resetPaneSize());
-    on('lokus:toggle-sync-scrolling', () => {
-      const { syncScrolling, setSyncScrolling } = useWorkspaceStore.getState();
-      setSyncScrolling(!syncScrolling);
+    // Split view — now handled via EditorGroupStore
+    on('lokus:toggle-split-view', () => {
+      const store = useEditorGroupStore.getState();
+      const group = store.getFocusedGroup();
+      if (group) store.splitGroup(group.id, 'vertical');
     });
 
     // Export / workspace
@@ -83,7 +91,7 @@ export function useShortcuts({ workspacePath, editorRef, onSave, onSaveAs, onCre
     on('lokus:edit-copy', () => document.execCommand('copy'));
     on('lokus:edit-paste', () => navigator.clipboard?.readText?.().then(t => document.execCommand('insertText', false, t)).catch(() => {}));
     on('lokus:edit-select-all', () => document.execCommand('selectAll'));
-    on('lokus:find-replace', () => useWorkspaceStore.getState().togglePanel('showInFileSearch'));
+    on('lokus:find-replace', () => useViewStore.getState().togglePanel('showInFileSearch'));
 
     // View / zoom
     on('lokus:zoom-in', () => { document.body.style.zoom = `${(parseFloat(document.body.style.zoom || '1') + 0.1)}`; });
@@ -151,7 +159,7 @@ export function useShortcuts({ workspacePath, editorRef, onSave, onSaveAs, onCre
     });
 
     // Help
-    on('lokus:help', () => useWorkspaceStore.getState().togglePanel('showShortcutHelp'));
+    on('lokus:help', () => useViewStore.getState().togglePanel('showShortcutHelp'));
     on('lokus:release-notes', () => { /* open changelog */ });
     on('lokus:report-issue', () => {
       if (typeof window !== 'undefined') {
@@ -168,18 +176,21 @@ export function useShortcuts({ workspacePath, editorRef, onSave, onSaveAs, onCre
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'h' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
-        const { activeFile, showVersionHistory, versionHistoryFile } = useWorkspaceStore.getState();
-        if (activeFile && !activeFile.startsWith('__')) {
-          useWorkspaceStore.setState({
-            showVersionHistory: !(showVersionHistory && versionHistoryFile === activeFile),
-            versionHistoryFile: activeFile,
-          });
+        const group = useEditorGroupStore.getState().getFocusedGroup();
+        const file = group?.activeTab;
+        if (file && !file.startsWith('__')) {
+          const vs = useViewStore.getState();
+          if (vs.showVersionHistory && vs.versionHistoryFile === file) {
+            vs.closePanel('versionHistory');
+          } else {
+            vs.openPanel('versionHistory', file);
+          }
         }
         return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key === '`' && !e.shiftKey && !e.altKey && isDesktop()) {
         e.preventDefault();
-        useWorkspaceStore.getState().toggleView('showTerminalPanel');
+        useLayoutStore.getState().setBottomTab('terminal');
         return;
       }
     };
