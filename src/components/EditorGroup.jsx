@@ -1,49 +1,49 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useCallback } from 'react';
 import Editor from '../editor';
 import Canvas from '../views/Canvas';
-import KanbanBoard from './KanbanBoard';
-import BasesView from '../bases/BasesView';
-import PluginDetail from '../views/PluginDetail';
-import { ProfessionalGraphView } from '../views/ProfessionalGraphView';
+import { useEditorGroupStore } from '../stores/editorGroups';
+import { ResponsiveTabBar } from './TabBar/ResponsiveTabBar';
+import { canvasManager } from '../core/canvas/manager';
 import DropZoneOverlay, { DropZoneHighlight } from './DropZoneOverlay';
 
 /**
- * EditorGroup - A single editor pane that can contain multiple tabs
- * This is the core building block of the VSCode-style editor groups system
+ * EditorGroup — a single editor pane with its own tabs, content cache,
+ * and TipTap instance. Reads all state from useEditorGroupStore.
+ *
+ * The root cause of tab cross-contamination was local useState for content.
+ * Now content is stored per-tab in the group's contentByTab cache.
  */
-export default function EditorGroup({
-  group,
-  isFocused,
-  isDragActive,
-  dropTarget,
-  fileTree,
-  workspacePath,
-  unsavedChanges,
-  onTabClick,
-  onTabClose,
-  onTabDragStart,
-  onTabDragEnd,
-  onDropZoneHover,
-  onDrop,
-  onContentChange,
-  onFocus,
-  onFileOpen,
-  canvasManager,
-  openTabs,
-  TabBarComponent, // Pass the TabBar component from Workspace
-}) {
-  const [editorContent, setEditorContent] = useState('');
-  const [editorTitle, setEditorTitle] = useState('');
+export default function EditorGroup({ group, isFocused, workspacePath }) {
   const editorRef = useRef(null);
-  const scrollRef = useRef(null);
 
   const activeFile = group.activeTab;
   const tabs = group.tabs;
+  const cachedContent = group.contentByTab?.[activeFile];
 
-  // Determine if we should show drop zones
-  const showDropZones = isDragActive;
+  const handleTabClick = useCallback((path) => {
+    useEditorGroupStore.getState().setActiveTab(group.id, path);
+  }, [group.id]);
 
-  // Render the active file's content
+  const handleTabClose = useCallback((path) => {
+    const tab = tabs.find((t) => t.path === path);
+    if (tab) {
+      useEditorGroupStore.getState().addRecentlyClosed(tab);
+    }
+    useEditorGroupStore.getState().removeTab(group.id, path);
+  }, [group.id, tabs]);
+
+  const handleFocus = useCallback(() => {
+    useEditorGroupStore.getState().setFocusedGroupId(group.id);
+  }, [group.id]);
+
+  const handleContentChange = useCallback((content) => {
+    useEditorGroupStore.getState().setTabContent(group.id, activeFile, {
+      prosemirrorDoc: content,
+      dirty: true,
+    });
+    useEditorGroupStore.getState().markTabDirty(group.id, activeFile, true);
+  }, [group.id, activeFile]);
+
   const renderContent = () => {
     if (!activeFile) {
       return (
@@ -53,7 +53,7 @@ export default function EditorGroup({
       );
     }
 
-    // Handle special views
+    // Canvas files
     if (activeFile.endsWith('.canvas')) {
       return (
         <div className="flex-1 overflow-hidden">
@@ -63,89 +63,25 @@ export default function EditorGroup({
             onSave={async (canvasData) => {
               try {
                 await canvasManager.saveCanvas(activeFile, canvasData);
-                onContentChange && onContentChange(activeFile, false); // Mark as saved
-              } catch { }
+                useEditorGroupStore.getState().markTabDirty(group.id, activeFile, false);
+              } catch { /* ignore */ }
             }}
             onChange={() => {
-              onContentChange && onContentChange(activeFile, true); // Mark as unsaved
+              useEditorGroupStore.getState().markTabDirty(group.id, activeFile, true);
             }}
           />
-        </div>
-      );
-    }
-
-    if (activeFile.endsWith('.kanban')) {
-      return (
-        <div className="flex-1 overflow-hidden">
-          <KanbanBoard
-            workspacePath={workspacePath}
-            boardPath={activeFile}
-            onFileOpen={onFileOpen}
-          />
-        </div>
-      );
-    }
-
-    if (activeFile === '__graph__') {
-      return (
-        <div className="h-full">
-          <ProfessionalGraphView
-            isVisible={true}
-            fileTree={fileTree}
-            activeFile={activeFile}
-            onFileOpen={onFileOpen}
-            workspacePath={workspacePath}
-            onOpenFile={onFileOpen}
-          />
-        </div>
-      );
-    }
-
-    if (activeFile === '__bases__') {
-      return (
-        <div className="h-full">
-          <BasesView isVisible={true} onFileOpen={onFileOpen} />
-        </div>
-      );
-    }
-
-    if (activeFile.startsWith('__plugin_')) {
-      const activeTab = tabs.find(tab => tab.path === activeFile);
-      return (
-        <div className="flex-1 overflow-hidden">
-          {activeTab?.plugin ? (
-            <PluginDetail plugin={activeTab.plugin} />
-          ) : (
-            <div>Plugin not found</div>
-          )}
         </div>
       );
     }
 
     // Regular markdown/text editor
     return (
-      <div
-        ref={scrollRef}
-        className="flex-1 p-4 overflow-y-auto"
-      >
-        <input
-          type="text"
-          value={editorTitle}
-          onChange={(e) => {
-            setEditorTitle(e.target.value);
-            onContentChange && onContentChange(activeFile, true);
-          }}
-          className="w-full bg-transparent text-4xl font-bold mb-6 outline-none text-app-text"
-          placeholder="Untitled"
-        />
+      <div className="flex-1 p-4 overflow-y-auto">
         <Editor
           key={`editor-${group.id}-${activeFile}`}
           ref={editorRef}
-          content={editorContent}
-          onContentChange={(content) => {
-            setEditorContent(content);
-            onContentChange && onContentChange(activeFile, true);
-          }}
+          content={cachedContent?.prosemirrorDoc || ''}
+          onContentChange={handleContentChange}
         />
       </div>
     );
@@ -153,43 +89,21 @@ export default function EditorGroup({
 
   return (
     <div
-      className={`flex flex-col h-full relative ${
-        isFocused ? 'ring-2 ring-app-accent' : ''
-      }`}
-      onClick={() => onFocus && onFocus(group.id)}
+      className={`flex flex-col h-full relative ${isFocused ? 'ring-2 ring-app-accent' : ''}`}
+      onClick={handleFocus}
     >
       {/* Tab Bar */}
-      {TabBarComponent && (
-        <TabBarComponent
-          tabs={tabs}
-          activeTab={activeFile}
-          onTabClick={(path) => onTabClick(group.id, path)}
-          onTabClose={(path) => onTabClose(group.id, path)}
-          unsavedChanges={unsavedChanges}
-          onDragStart={(tab) => onTabDragStart && onTabDragStart(group.id, tab)}
-          onDragEnd={() => onTabDragEnd && onTabDragEnd()}
-          groupId={group.id}
-        />
-      )}
+      <ResponsiveTabBar
+        tabs={tabs}
+        activeTab={activeFile}
+        onTabClick={handleTabClick}
+        onTabClose={handleTabClose}
+        groupId={group.id}
+      />
 
       {/* Content Area */}
       <div className="flex-1 overflow-hidden relative">
         {renderContent()}
-
-        {/* Drop Zone Overlay */}
-        {showDropZones && (
-          <>
-            <DropZoneOverlay
-              isVisible={true}
-              groupId={group.id}
-              onDropZoneHover={onDropZoneHover}
-              onDrop={onDrop}
-            />
-            {dropTarget && dropTarget.groupId === group.id && (
-              <DropZoneHighlight dropTarget={dropTarget} />
-            )}
-          </>
-        )}
       </div>
     </div>
   );
