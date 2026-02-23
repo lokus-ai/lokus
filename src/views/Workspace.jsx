@@ -98,124 +98,18 @@ import { OutputPanel } from "../components/OutputPanel/OutputPanel.jsx";
 import referenceManager from "../core/references/ReferenceManager.js";
 import ReferenceUpdateModal from "../components/ReferenceUpdateModal.jsx";
 import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
+import { useWorkspaceStore } from '../stores/workspace';
+import { useColumnResize } from '../features/layout';
+import { useEditorContent, useSave, EditorModeSwitcher as FeatureEditorModeSwitcher } from '../features/editor';
+import { useFileTree, useFileOperations } from '../features/file-tree';
+import { NewItemInput as FeatureNewItemInput } from '../features/file-tree';
+import { useGraphEngine } from '../features/graph';
+import { useSplitView as useSplitViewHook } from '../features/split-view';
+import { usePanels } from '../features/panels';
+import { ShortcutListener } from '../features/shortcuts';
 
-const MAX_OPEN_TABS = 10;
-
-// Editor Mode Switcher Component for Right Sidebar
-const EditorModeSwitcher = () => {
-  const [editorMode, setEditorMode] = useState('edit');
-
-  useEffect(() => {
-    // Event-driven mode sync instead of polling
-    const handleModeChange = (event) => {
-      setEditorMode(event.detail || 'edit');
-    };
-
-    // Listen for custom event
-    window.addEventListener('lokusEditorModeChange', handleModeChange);
-
-    // Get initial mode
-    if (window.__LOKUS_EDITOR_MODE__) {
-      setEditorMode(window.__LOKUS_EDITOR_MODE__);
-    }
-
-    return () => {
-      window.removeEventListener('lokusEditorModeChange', handleModeChange);
-    };
-  }, []);
-
-  const handleModeChange = (mode) => {
-    if (window.__LOKUS_SET_EDITOR_MODE__) {
-      window.__LOKUS_SET_EDITOR_MODE__(mode);
-    }
-    setEditorMode(mode);
-
-    // Dispatch event so other components can listen
-    window.dispatchEvent(new CustomEvent('lokusEditorModeChange', { detail: mode }));
-  };
-
-  return (
-    <div style={{
-      padding: '0.75rem',
-      borderBottom: '1px solid rgb(var(--border))',
-      background: 'rgb(var(--panel))'
-    }}>
-      <div style={{
-        fontSize: '0.6875rem',
-        fontWeight: 600,
-        textTransform: 'uppercase',
-        letterSpacing: '0.05em',
-        color: 'rgb(var(--muted))',
-        marginBottom: '0.5rem'
-      }}>
-        Editor Mode
-      </div>
-      <div style={{
-        display: 'flex',
-        gap: '0.25rem',
-        background: 'rgb(var(--bg))',
-        border: '1px solid rgb(var(--border))',
-        borderRadius: '0.5rem',
-        padding: '0.25rem'
-      }}>
-        <button
-          onClick={() => handleModeChange('edit')}
-          title="Edit Mode"
-          style={{
-            flex: 1,
-            padding: '0.5rem 0.75rem',
-            borderRadius: '0.375rem',
-            border: 'none',
-            background: editorMode === 'edit' ? 'rgb(var(--accent))' : 'transparent',
-            color: editorMode === 'edit' ? 'white' : 'rgb(var(--text))',
-            cursor: 'pointer',
-            fontSize: '0.8125rem',
-            fontWeight: editorMode === 'edit' ? 600 : 500,
-            transition: 'all 0.15s ease'
-          }}
-        >
-          Edit
-        </button>
-        <button
-          onClick={() => handleModeChange('live')}
-          title="Live Preview Mode"
-          style={{
-            flex: 1,
-            padding: '0.5rem 0.75rem',
-            borderRadius: '0.375rem',
-            border: 'none',
-            background: editorMode === 'live' ? 'rgb(var(--accent))' : 'transparent',
-            color: editorMode === 'live' ? 'white' : 'rgb(var(--text))',
-            cursor: 'pointer',
-            fontSize: '0.8125rem',
-            fontWeight: editorMode === 'live' ? 600 : 500,
-            transition: 'all 0.15s ease'
-          }}
-        >
-          Live
-        </button>
-        <button
-          onClick={() => handleModeChange('reading')}
-          title="Reading Mode"
-          style={{
-            flex: 1,
-            padding: '0.5rem 0.75rem',
-            borderRadius: '0.375rem',
-            border: 'none',
-            background: editorMode === 'reading' ? 'rgb(var(--accent))' : 'transparent',
-            color: editorMode === 'reading' ? 'white' : 'rgb(var(--text))',
-            cursor: 'pointer',
-            fontSize: '0.8125rem',
-            fontWeight: editorMode === 'reading' ? 600 : 500,
-            transition: 'all 0.15s ease'
-          }}
-        >
-          Read
-        </button>
-      </div>
-    </div>
-  );
-};
+// EditorModeSwitcher extracted to src/features/editor/EditorModeSwitcher.jsx
+const EditorModeSwitcher = FeatureEditorModeSwitcher;
 
 // --- Reusable Icon Component ---
 const Icon = ({ path, className = "w-5 h-5" }) => (
@@ -224,85 +118,10 @@ const Icon = ({ path, className = "w-5 h-5" }) => (
   </svg>
 );
 
-// --- Draggable Column Hook ---
-function useDragColumns({ minLeft = 220, maxLeft = 500, minRight = 220, maxRight = 500, initialLeft = 280, initialRight = 280 }) {
-  const [leftW, setLeftW] = useState(initialLeft);
-  const [rightW, setRightW] = useState(initialRight);
-  const dragRef = useRef(null);
+// useDragColumns extracted to src/features/layout/hooks/useColumnResize.js
 
-  const startLeftDrag = useCallback((e) => {
-    dragRef.current = { side: "left", startX: e.clientX, left0: leftW, right0: rightW };
-
-    function onMove(e) {
-      const d = dragRef.current;
-      if (!d) return;
-      setLeftW(Math.min(maxLeft, Math.max(minLeft, d.left0 + (e.clientX - d.startX))));
-    }
-    function onUp() {
-      dragRef.current = null;
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    }
-
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  }, [leftW, rightW, maxLeft, minLeft]);
-
-  const startRightDrag = useCallback((e) => {
-    dragRef.current = { side: "right", startX: e.clientX, left0: leftW, right0: rightW };
-
-    function onMove(e) {
-      const d = dragRef.current;
-      if (!d) return;
-      setRightW(Math.min(maxRight, Math.max(minRight, d.right0 - (e.clientX - d.startX))));
-    }
-    function onUp() {
-      dragRef.current = null;
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    }
-
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  }, [leftW, rightW, maxRight, minRight]);
-
-  return { leftW, rightW, startLeftDrag, startRightDrag };
-}
-
-// --- New Item Input ---
-function NewItemInput({ type, onConfirm, level }) {                                                                                                                    
-  const [name, setName] = useState("");                                                                                                                                
-  const inputRef = useRef(null);                                                                                                                                       
-                                                                                                                                                                        
-  useEffect(() => {                                                                                                                                                    
-    inputRef.current?.focus();                                                                                                                                         
-  }, []);                                                                                                                                                              
-                                                                                                                                                                        
-  const handleKeyDown = (e) => {                                                                                                                                       
-    if (e.key === "Enter") onConfirm(name);                                                                                                                            
-    else if (e.key === "Escape") onConfirm(null);                                                                                                                      
-  };                                                                                                                                                                   
-                                                                                                                                                                        
-  const icon = type === 'folder'                                                                                                                                       
-    ? "M2.25 12.75V12A2.25..."                                                                                                                        
-    : "M19.5 14.25v-2.625...";                                                                                                                        
-                                                                                                                                                                        
-  return (                                                                                                                                                             
-    <li style={{ paddingLeft: `${level * 1.25}rem` }} className="flex items-center gap-2 px-2 py-1">                                                                   
-      <Icon path={icon} className="w-4 h-4" />                                                                                                                         
-      <input                                                                                                                                                           
-        ref={inputRef}                                                                                                                                                 
-        type="text"                                                                                                                                                    
-        value={name}                                                                                                                                                   
-        onChange={(e) => setName(e.target.value)}                                                                                                                      
-        onKeyDown={handleKeyDown}                                                                                                                                      
-        onBlur={() => onConfirm(name)}                                                                                                                                 
-        className="bg-app-bg text-sm text-app-text outline-none w-full"                                                                                                
-        placeholder={type === 'folder' ? "New folder..." : "New file..."}                                                                                              
-      />                                                                                                                                                               
-    </li>                                                                                                                                                              
-  );                                                                                                                                                                   
-}                  
+// NewItemInput extracted to src/features/file-tree/NewItemInput.jsx
+const NewItemInput = FeatureNewItemInput;
 
 // Helper to get filename without extension
 function getNameWithoutExtension(filename) {
@@ -1477,60 +1296,58 @@ function WorkspaceWithScope({ path }) {
   useEffect(() => {
     remoteLinksRef.current = remoteLinks;
   }, [remoteLinks]);
-  const { leftW, rightW, startLeftDrag, startRightDrag } = useDragColumns({
-    initialLeft: layoutDefaults.left_sidebar_width,
-    initialRight: layoutDefaults.right_sidebar_width,
+  // --- Zustand Store Selectors ---
+  // Layout
+  const { leftW, rightW, startLeftDrag, startRightDrag } = useColumnResize({
+    minLeft: 220, maxLeft: 500, minRight: 220, maxRight: 500,
   });
-  const [showLeft, setShowLeft] = useState(layoutDefaults.left_sidebar_visible);
-  const [showRight, setShowRight] = useState(layoutDefaults.right_sidebar_visible);
-  const [refreshId, setRefreshId] = useState(0);
+  const showLeft = useWorkspaceStore((s) => s.showLeft);
+  const showRight = useWorkspaceStore((s) => s.showRight);
+  const refreshId = useWorkspaceStore((s) => s.refreshId);
+  const bottomPanelHeight = useWorkspaceStore((s) => s.bottomPanelHeight);
+  const bottomPanelTab = useWorkspaceStore((s) => s.bottomPanelTab);
 
-  // Toggle right sidebar (outline)
   const toggleRightSidebar = useCallback(() => {
-    setShowRight(prev => !prev);
+    useWorkspaceStore.getState().toggleRight();
   }, []);
 
-  // Version history state
-  const [showVersionHistory, setShowVersionHistory] = useState(false);
-  const [versionHistoryFile, setVersionHistoryFile] = useState(null);
-  const [versionRefreshKey, setVersionRefreshKey] = useState(0); // Force refresh of version panel
-  const [editor, setEditor] = useState(null);
+  // Version history
+  const showVersionHistory = useWorkspaceStore((s) => s.showVersionHistory);
+  const versionHistoryFile = useWorkspaceStore((s) => s.versionHistoryFile);
+  const versionRefreshKey = useWorkspaceStore((s) => s.versionRefreshKey);
+  const editor = useWorkspaceStore((s) => s.editor);
 
   const lastVersionSaveRef = useRef({}); // Track last version save time per file
   const lastVersionContentRef = useRef({}); // Track last saved content per file
 
-  const toggleVersionHistory = useCallback((file = null) => {
-    if (file) {
-      setVersionHistoryFile(file);
-      setShowVersionHistory(true);
-      setShowRight(true); // Ensure right sidebar is visible
-    } else {
-      setShowVersionHistory(prev => !prev);
-    }
-  }, []);
-  const [selectedPath, setSelectedPath] = useState(null);
-  const [fileTree, setFileTree] = useState([]);
-  const [expandedFolders, setExpandedFolders] = useState(new Set());
-  const [creatingItem, setCreatingItem] = useState(null); 
-  const [renamingPath, setRenamingPath] = useState(null);
+  const { toggleVersionHistory } = usePanels();
+
+  // File tree
+  const selectedPath = useWorkspaceStore((s) => s.selectedPath);
+  const fileTree = useWorkspaceStore((s) => s.fileTree);
+  const expandedFolders = useWorkspaceStore((s) => s.expandedFolders);
+  const creatingItem = useWorkspaceStore((s) => s.creatingItem);
+  const renamingPath = useWorkspaceStore((s) => s.renamingPath);
 
   // External file drop state
-  const [isExternalDragActive, setIsExternalDragActive] = useState(false);
-  const [hoveredFolder, setHoveredFolder] = useState(null);
+  const isExternalDragActive = useWorkspaceStore((s) => s.isExternalDragActive);
+  const hoveredFolder = useWorkspaceStore((s) => s.hoveredFolder);
 
   // Check if we're in test mode
   const isTestMode = new URLSearchParams(window.location.search).get('testMode') === 'true';
-  const [keymap, setKeymap] = useState({});
+  const keymap = useWorkspaceStore((s) => s.keymap);
 
-  const [openTabs, setOpenTabs] = useState([]);
-  const [activeFile, setActiveFile] = useState(null);
-  const [unsavedChanges, setUnsavedChanges] = useState(new Set());
-  const [recentlyClosedTabs, setRecentlyClosedTabs] = useState([]);
+  // Tabs
+  const openTabs = useWorkspaceStore((s) => s.openTabs);
+  const activeFile = useWorkspaceStore((s) => s.activeFile);
+  const unsavedChanges = useWorkspaceStore((s) => s.unsavedChanges);
+  const recentlyClosedTabs = useWorkspaceStore((s) => s.recentlyClosedTabs);
 
-  const [editorContent, setEditorContent] = useState("");
-  const [editorTitle, setEditorTitle] = useState("");
-  const [savedContent, setSavedContent] = useState("");
-  const [isLoadingContent, setIsLoadingContent] = useState(false);
+  // Editor
+  const editorContent = useWorkspaceStore((s) => s.editorContent);
+  const editorTitle = useWorkspaceStore((s) => s.editorTitle);
+  const savedContent = useWorkspaceStore((s) => s.savedContent);
+  const isLoadingContent = useWorkspaceStore((s) => s.isLoadingContent);
 
   // Reload current file after version restore
   const reloadCurrentFile = useCallback(async () => {
@@ -1563,65 +1380,52 @@ function WorkspaceWithScope({ path }) {
 
   // Editor groups system for VSCode-style split view
   const editorGroups = useEditorGroups(openTabs);
-  const [recentFiles, setRecentFiles] = useState([]);
+  const recentFiles = useWorkspaceStore((s) => s.recentFiles);
 
-  const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const [showInFileSearch, setShowInFileSearch] = useState(false);
-  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
-  // Removed global context menu state - using component-specific context menus instead
-  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
-  const [templatePickerData, setTemplatePickerData] = useState(null);
-  const [showCreateTemplate, setShowCreateTemplate] = useState(false);
-  const [createTemplateContent, setCreateTemplateContent] = useState('');
-  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
-  // Starts the app with the Editor tab highlighted
-  const [currentView, setCurrentView] = useState('editor');
-  const [showKanban, setShowKanban] = useState(false);
-  const [showPlugins, setShowPlugins] = useState(false);
-  const [showBases, setShowBases] = useState(false);
-  const [showMarketplace, setShowMarketplace] = useState(false);
-  const [showTagModal, setShowTagModal] = useState(false);
-  const [tagModalFile, setTagModalFile] = useState(null);
-  const [showAboutDialog, setShowAboutDialog] = useState(false);
-  const [selectedFileForCompare, setSelectedFileForCompare] = useState(null);
-  // Graph view now opens as a tab instead of sidebar panel
-  const [showGraphView, setShowGraphView] = useState(false);
-  const [showDailyNotesPanel, setShowDailyNotesPanel] = useState(false);
-  const [showCalendarPanel, setShowCalendarPanel] = useState(false);
-  const [showTerminalPanel, setShowTerminalPanel] = useState(false);
-  const [showOutputPanel, setShowOutputPanel] = useState(false);
-  const [bottomPanelTab, setBottomPanelTab] = useState('terminal'); // 'terminal' or 'output'
-  const [bottomPanelHeight, setBottomPanelHeight] = useState(250);
+  // Panels & modals
+  const showCommandPalette = useWorkspaceStore((s) => s.showCommandPalette);
+  const showInFileSearch = useWorkspaceStore((s) => s.showInFileSearch);
+  const showShortcutHelp = useWorkspaceStore((s) => s.showShortcutHelp);
+  const showTemplatePicker = useWorkspaceStore((s) => s.showTemplatePicker);
+  const templatePickerData = useWorkspaceStore((s) => s.templatePickerData);
+  const showCreateTemplate = useWorkspaceStore((s) => s.showCreateTemplate);
+  const createTemplateContent = useWorkspaceStore((s) => s.createTemplateContent);
+  const showGlobalSearch = useWorkspaceStore((s) => s.showGlobalSearch);
+
+  // Views
+  const currentView = useWorkspaceStore((s) => s.currentView);
+  const showKanban = useWorkspaceStore((s) => s.showKanban);
+  const showPlugins = useWorkspaceStore((s) => s.showPlugins);
+  const showBases = useWorkspaceStore((s) => s.showBases);
+  const showMarketplace = useWorkspaceStore((s) => s.showMarketplace);
+  const showTagModal = useWorkspaceStore((s) => s.showTagModal);
+  const tagModalFile = useWorkspaceStore((s) => s.tagModalFile);
+  const showAboutDialog = useWorkspaceStore((s) => s.showAboutDialog);
+  const selectedFileForCompare = useWorkspaceStore((s) => s.selectedFileForCompare);
+  const showGraphView = useWorkspaceStore((s) => s.showGraphView);
+  const showDailyNotesPanel = useWorkspaceStore((s) => s.showDailyNotesPanel);
+  const showCalendarPanel = useWorkspaceStore((s) => s.showCalendarPanel);
+  const showTerminalPanel = useWorkspaceStore((s) => s.showTerminalPanel);
+  const showOutputPanel = useWorkspaceStore((s) => s.showOutputPanel);
   const isResizingBottomPanelRef = useRef(false);
-  const [showDatePickerModal, setShowDatePickerModal] = useState(false);
-  const [currentDailyNoteDate, setCurrentDailyNoteDate] = useState(null);
-  const [graphData, setGraphData] = useState(null);
-  const [isLoadingGraph, setIsLoadingGraph] = useState(false);
+  const showDatePickerModal = useWorkspaceStore((s) => s.showDatePickerModal);
+  const currentDailyNoteDate = useWorkspaceStore((s) => s.currentDailyNoteDate);
 
-  // Reference update modal state
-  const [referenceUpdateModal, setReferenceUpdateModal] = useState({
-    isOpen: false,
-    oldPath: null,
-    newPath: null,
-    affectedFiles: [],
-    isProcessing: false,
-    result: null,
-    pendingOperation: null, // Store the operation to execute after confirmation
-  });
+  // Graph
+  const graphData = useWorkspaceStore((s) => s.graphData);
+  const isLoadingGraph = useWorkspaceStore((s) => s.isLoadingGraph);
 
-  // Image files state for navigation
-  const [allImageFiles, setAllImageFiles] = useState([]);
+  // Reference update modal
+  const referenceUpdateModal = useWorkspaceStore((s) => s.referenceUpdateModal);
 
-  // Canvas preview state
-  const [canvasPreview, setCanvasPreview] = useState(null);
+  // Image files
+  const allImageFiles = useWorkspaceStore((s) => s.allImageFiles);
 
-  // Graph sidebar state
-  const [graphSidebarData, setGraphSidebarData] = useState({
-    selectedNodes: [],
-    hoveredNode: null,
-    graphData: { nodes: [], links: [] },
-    stats: {}
-  });
+  // Canvas preview
+  const canvasPreview = useWorkspaceStore((s) => s.canvasPreview);
+
+  // Graph sidebar
+  const graphSidebarData = useWorkspaceStore((s) => s.graphSidebarData);
 
   // Persistent GraphEngine instance that survives tab switches
   const persistentGraphEngineRef = useRef(null);
@@ -1631,30 +1435,32 @@ function WorkspaceWithScope({ path }) {
 
   // GraphData instance for backlinks
   const graphDataInstanceRef = useRef(null);
-  // Split editor state
-  const [useSplitView, setUseSplitView] = useState(false);
-  const [splitDirection, setSplitDirection] = useState('vertical'); // 'vertical' or 'horizontal'
-  const [leftPaneSize, setLeftPaneSize] = useState(50); // percentage
-  const [draggedTabForSplit, setDraggedTabForSplit] = useState(null);
-  const [splitInitData, setSplitInitData] = useState(null);
-  const [rightPaneFile, setRightPaneFile] = useState(null);
-  const [rightPaneContent, setRightPaneContent] = useState('');
-  const [rightPaneTitle, setRightPaneTitle] = useState('');
-  const [syncScrolling, setSyncScrolling] = useState(false);
+
+  // Split view
+  const useSplitView = useWorkspaceStore((s) => s.useSplitView);
+  const splitDirection = useWorkspaceStore((s) => s.splitDirection);
+  const leftPaneSize = useWorkspaceStore((s) => s.leftPaneSize);
+  const draggedTabForSplit = useWorkspaceStore((s) => s.draggedTabForSplit);
+  const splitInitData = useWorkspaceStore((s) => s.splitInitData);
+  const rightPaneFile = useWorkspaceStore((s) => s.rightPaneFile);
+  const rightPaneContent = useWorkspaceStore((s) => s.rightPaneContent);
+  const rightPaneTitle = useWorkspaceStore((s) => s.rightPaneTitle);
+  const syncScrolling = useWorkspaceStore((s) => s.syncScrolling);
 
   // --- Refs for stable callbacks ---
-  const stateRef = useRef({});
   const editorRef = useRef(null);
   const leftPaneScrollRef = useRef(null);
   const rightPaneScrollRef = useRef(null);
-  stateRef.current = {
-    activeFile,
-    openTabs,
-    unsavedChanges,
-    editorContent,
-    editorTitle,
-    savedContent,
-  };
+
+  // Initialize layout defaults from remote config
+  useEffect(() => {
+    if (layoutDefaults.left_sidebar_visible !== undefined) {
+      useWorkspaceStore.setState({ showLeft: layoutDefaults.left_sidebar_visible });
+    }
+    if (layoutDefaults.right_sidebar_visible !== undefined) {
+      useWorkspaceStore.setState({ showRight: layoutDefaults.right_sidebar_visible });
+    }
+  }, [layoutDefaults]);
 
   // Handler for checking references before file move/rename
   const handleCheckReferences = useCallback(({ oldPath, newPath, affectedFiles, operation }) => {
