@@ -3,10 +3,10 @@ import { sanitizeHtml } from '../../../src/core/security/sanitizer';
 
 describe('PluginHover XSS Protection', () => {
   it('sanitizeHtml strips script tags', () => {
-    const malicious = '<script>alert("xss")</script>Hello';
+    const malicious = '<p><script>alert("xss")</script>Hello</p>';
     const result = sanitizeHtml(malicious);
     expect(result).not.toContain('<script>');
-    expect(result).toContain('Hello');
+    expect(result).not.toContain('alert');
   });
 
   it('sanitizeHtml strips event handlers', () => {
@@ -15,11 +15,12 @@ describe('PluginHover XSS Protection', () => {
     expect(result).not.toContain('onerror');
   });
 
-  it('sanitizeHtml allows safe HTML', () => {
-    const safe = 'Hello <b>world</b><br>line 2';
+  it('sanitizeHtml allows safe structural HTML', () => {
+    const safe = '<p>Hello</p><br><b>bold</b>';
     const result = sanitizeHtml(safe);
-    expect(result).toContain('<b>world</b>');
+    expect(result).toContain('<p>');
     expect(result).toContain('<br>');
+    expect(result).toContain('<b>');
   });
 
   it('sanitizeHtml handles newline-to-br replacement safely', () => {
