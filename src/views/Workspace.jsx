@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { useRemoteLinks, useUIVisibility, useLayoutDefaults, useFeatureFlags } from "../contexts/RemoteConfigContext";
+import { useRemoteLinks, useUIVisibility, useFeatureFlags } from "../contexts/RemoteConfigContext";
 import ServiceStatus from "../components/ServiceStatus";
-import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm, save, open as openDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -28,7 +27,7 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
 } from "../components/ui/context-menu.jsx";
-import { getActiveShortcuts, formatAccelerator } from "../core/shortcuts/registry.js";
+import { formatAccelerator } from "../core/shortcuts/registry.js";
 import CommandPalette from "../components/CommandPalette.jsx";
 import InFileSearch from "../components/InFileSearch.jsx";
 import FullTextSearchPanel from "./FullTextSearchPanel.jsx";
@@ -66,9 +65,8 @@ import BacklinksPanel from "./BacklinksPanel.jsx";
 import { DailyNotesPanel, NavigationButtons, DatePickerModal } from "../components/DailyNotes/index.js";
 import { CalendarWidget, CalendarView } from "../components/Calendar/index.js";
 import { ImageViewerTab } from "../components/ImageViewer/ImageViewerTab.jsx";
-import { isImageFile, findImageFiles } from "../utils/imageUtils.js";
+import { isImageFile } from "../utils/imageUtils.js";
 import CanvasPreviewPopup from '../components/CanvasPreviewPopup.jsx';
-import { generatePreview } from '../core/canvas/preview-generator.js';
 import TagManagementModal from "../components/TagManagementModal.jsx";
 import { OnboardingWizard } from "../components/onboarding/OnboardingWizard.jsx";
 import ExternalDropZone from "../components/ExternalDropZone.jsx";
@@ -92,10 +90,12 @@ import { copyFiles, cutFiles, getClipboardState, getRelativePath } from "../util
 import { isDesktop, isMobile } from '../platform/index.js';
 import TerminalPanel from "../components/TerminalPanel/TerminalPanel.jsx";
 import { OutputPanel } from "../components/OutputPanel/OutputPanel.jsx";
-import referenceManager from "../core/references/ReferenceManager.js";
 import ReferenceUpdateModal from "../components/ReferenceUpdateModal.jsx";
 import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
 import { useWorkspaceStore } from '../stores/workspace';
+import { useWorkspaceSession } from '../features/workspace/useWorkspaceSession';
+import { useWorkspaceEvents } from '../features/workspace/useWorkspaceEvents';
+import { useReferenceModal } from '../features/workspace/useReferenceModal';
 import { useColumnResize } from '../features/layout';
 import { useEditorContent, useExport, useSave, EditorModeSwitcher as FeatureEditorModeSwitcher, EditorDropZone } from '../features/editor';
 import { useFileTree, useFileOperations, FileEntryComponent, FileTreeView, InlineRenameInput } from '../features/file-tree';
@@ -128,6 +128,8 @@ const NewItemInput = FeatureNewItemInput;
 // EditorDropZone extracted to src/features/editor/EditorDropZone.jsx
 
 
+const MAX_OPEN_TABS = 10;
+
 // --- Inner Workspace Component (with folder scope) ---
 function WorkspaceWithScope({ path }) {
   const { theme: currentTheme } = useTheme();
@@ -137,7 +139,6 @@ function WorkspaceWithScope({ path }) {
   const remoteLinks = useRemoteLinks();
   const remoteLinksRef = useRef(remoteLinks);
   const uiVisibility = useUIVisibility();
-  const layoutDefaults = useLayoutDefaults();
   const featureFlags = useFeatureFlags();
 
   // Keep ref updated with latest links for event handlers
@@ -151,7 +152,6 @@ function WorkspaceWithScope({ path }) {
   });
   const showLeft = useWorkspaceStore((s) => s.showLeft);
   const showRight = useWorkspaceStore((s) => s.showRight);
-  const refreshId = useWorkspaceStore((s) => s.refreshId);
   const bottomPanelHeight = useWorkspaceStore((s) => s.bottomPanelHeight);
   const bottomPanelTab = useWorkspaceStore((s) => s.bottomPanelTab);
 
@@ -193,35 +193,6 @@ function WorkspaceWithScope({ path }) {
   const editorTitle = useWorkspaceStore((s) => s.editorTitle);
   const savedContent = useWorkspaceStore((s) => s.savedContent);
   const isLoadingContent = useWorkspaceStore((s) => s.isLoadingContent);
-
-  // Reload current file after version restore
-  const reloadCurrentFile = useCallback(async () => {
-    if (!activeFile) return;
-
-    try {
-      const content = await invoke("read_file_content", { path: activeFile });
-      const activeTab = openTabs.find(tab => tab.path === activeFile);
-
-      if (activeTab) {
-        const compiler = getMarkdownCompiler();
-        let processedContent = content;
-
-        if (activeTab.name.endsWith('.md') && (await compiler.isMarkdown(content))) {
-          processedContent = await compiler.compile(content);
-        }
-
-        useWorkspaceStore.getState().setContent(processedContent);
-        useWorkspaceStore.getState().setSavedContent(content);
-
-        // Clear unsaved changes for this file since we just reloaded
-        useWorkspaceStore.setState((s) => {
-          const newSet = new Set(s.unsavedChanges);
-          newSet.delete(activeFile);
-          return { unsavedChanges: newSet };
-        });
-      }
-    } catch { }
-  }, [activeFile, openTabs]);
 
   // Editor groups system for VSCode-style split view
   const editorGroups = useEditorGroups(openTabs);
@@ -345,813 +316,29 @@ function WorkspaceWithScope({ path }) {
     handleRightPaneScroll,
   } = useSplitViewHook({ workspacePath: path, editorRef, leftPaneScrollRef, rightPaneScrollRef });
 
-  // Initialize layout defaults from remote config
-  useEffect(() => {
-    if (layoutDefaults.left_sidebar_visible !== undefined) {
-      useWorkspaceStore.setState({ showLeft: layoutDefaults.left_sidebar_visible });
-    }
-    if (layoutDefaults.right_sidebar_visible !== undefined) {
-      useWorkspaceStore.setState({ showRight: layoutDefaults.right_sidebar_visible });
-    }
-  }, [layoutDefaults]);
+  // --- Extracted feature hooks ---
+  const {
+    reloadCurrentFile,
+    handleEditorChange,
+    getTabDisplayName,
+    insertImagesIntoEditor,
+  } = useWorkspaceSession({ workspacePath: path, editorRef, plugins });
 
-  // Handler for checking references before file move/rename
-  const handleCheckReferences = useCallback(({ oldPath, newPath, affectedFiles, operation }) => {
-    useWorkspaceStore.getState().setReferenceUpdateModal({
-      isOpen: true,
-      oldPath,
-      newPath,
-      affectedFiles: affectedFiles.map(f => f.filePath),
-      isProcessing: false,
-      result: null,
-      pendingOperation: operation,
-    });
-  }, []);
+  const {
+    handleCheckReferences,
+    handleConfirmReferenceUpdate,
+    handleCloseReferenceModal,
+  } = useReferenceModal();
 
-  // Handler for confirming reference updates
-  const handleConfirmReferenceUpdate = useCallback(async (updateReferences) => {
-    const { oldPath, newPath, pendingOperation } = useWorkspaceStore.getState().referenceUpdateModal;
-
-    useWorkspaceStore.setState((s) => ({ referenceUpdateModal: { ...s.referenceUpdateModal, isProcessing: true } }));
-
-    try {
-      // First, execute the move/rename operation
-      const operationSuccess = await pendingOperation();
-
-      if (!operationSuccess) {
-        useWorkspaceStore.setState((s) => ({
-          referenceUpdateModal: { ...s.referenceUpdateModal, isProcessing: false, result: { success: false, error: 'Operation failed' } }
-        }));
-        return;
-      }
-
-      // If user chose to update references, do it now
-      if (updateReferences) {
-        const result = await referenceManager.updateAllReferences(oldPath, newPath);
-        useWorkspaceStore.setState((s) => ({
-          referenceUpdateModal: { ...s.referenceUpdateModal, isProcessing: false, result: { success: true, updated: result.updated, files: result.files } }
-        }));
-      } else {
-        // Just close after successful operation without updating references
-        useWorkspaceStore.getState().setReferenceUpdateModal({
-          isOpen: false,
-          oldPath: null,
-          newPath: null,
-          affectedFiles: [],
-          isProcessing: false,
-          result: null,
-          pendingOperation: null,
-        });
-      }
-    } catch (err) {
-      useWorkspaceStore.setState((s) => ({
-        referenceUpdateModal: { ...s.referenceUpdateModal, isProcessing: false, result: { success: false, error: err.message || 'Failed to update references' } }
-      }));
-    }
-  }, [referenceUpdateModal]);
-
-  // Handler for closing reference update modal
-  const handleCloseReferenceModal = useCallback(() => {
-    useWorkspaceStore.getState().setReferenceUpdateModal({
-      isOpen: false,
-      oldPath: null,
-      newPath: null,
-      affectedFiles: [],
-      isProcessing: false,
-      result: null,
-      pendingOperation: null,
-    });
-  }, []);
-
-  // Helper function to get proper display name for special tabs
-  const getTabDisplayName = useCallback((tabPath, pluginsList = []) => {
-    if (tabPath === '__graph__') return 'Graph View';
-    if (tabPath === '__kanban__') return 'Task Board';
-    if (tabPath === '__bases__') return 'Bases';
-    if (tabPath.startsWith('__plugin_') && tabPath.endsWith('__')) {
-      // Extract plugin ID and look up name
-      const pluginId = tabPath.slice(9, -2); // Remove "__plugin_" prefix and "__" suffix
-      const plugin = pluginsList.find(p => p.id === pluginId || p.name === pluginId);
-      return plugin ? plugin.name : 'Plugin';
-    }
-    // For regular files, extract filename
-    return tabPath.split('/').pop();
-  }, []);
-
-  // Load session state on initial mount
-  useEffect(() => {
-    if (path) {
-      // Load session and workspace files concurrently for faster startup
-      Promise.all([
-        invoke("load_session_state", { workspacePath: path }),
-        invoke("validate_workspace_path", { path })
-      ]).then(([session, valid]) => {
-        if (session && session.open_tabs) {
-          useWorkspaceStore.setState({ expandedFolders: new Set(session.expanded_folders || []) });
-
-          // Reconstruct tabs - plugin tabs will be hydrated when plugins load
-          const tabsWithNames = session.open_tabs.map(p => ({
-            path: p,
-            name: getTabDisplayName(p, plugins)
-          }));
-
-          useWorkspaceStore.setState({ openTabs: tabsWithNames });
-
-          if (tabsWithNames.length > 0) {
-            useWorkspaceStore.setState({ activeFile: tabsWithNames[0].path });
-          }
-
-          // Load recent files from session state if available, otherwise use open tabs
-          if (session.recent_files && session.recent_files.length > 0) {
-            useWorkspaceStore.setState({ recentFiles: session.recent_files.slice(0, 5).map(p => ({
-              path: p,
-              name: getFilename(p)
-            })) });
-          } else {
-            // Fallback: use open tabs as recent files
-            const actualFiles = session.open_tabs.filter(p =>
-              !p.startsWith('__') &&
-              (p.endsWith('.md') || p.endsWith('.txt') || p.endsWith('.canvas') || p.endsWith('.kanban') || p.endsWith('.pdf'))
-            );
-            useWorkspaceStore.setState({ recentFiles: actualFiles.slice(0, 5).map(p => ({
-              path: p,
-              name: getFilename(p)
-            })) });
-          }
-        }
-      }).catch(err => {
-      });
-    }
-  }, [path]);
-
-  // Rehydrate plugin tabs when plugins become available
-  useEffect(() => {
-    if (plugins.length > 0 && openTabs.length > 0) {
-      useWorkspaceStore.setState((s) => {
-        const prevTabs = s.openTabs;
-        const needsUpdate = prevTabs.some(tab =>
-          tab.path.startsWith('__plugin_') && tab.path.endsWith('__') && !tab.plugin
-        );
-
-        if (!needsUpdate) return {};
-
-        return { openTabs: prevTabs
-          .map(tab => {
-            if (tab.path.startsWith('__plugin_') && tab.path.endsWith('__') && !tab.plugin) {
-              const pluginId = tab.path.slice(9, -2);
-              const plugin = plugins.find(p => p.id === pluginId || p.name === pluginId);
-              if (plugin) {
-                return { ...tab, name: plugin.name, plugin };
-              }
-            }
-            return tab;
-          })
-          .filter(tab => {
-            // Remove plugin tabs where plugin is not found (uninstalled)
-            if (tab.path.startsWith('__plugin_') && tab.path.endsWith('__') && !tab.plugin) {
-              return false;
-            }
-            return true;
-          }) };
-      });
-    }
-  }, [plugins]);
-
-  // Insert images into editor at cursor position
-  // Inserts WikiLink nodes directly with pre-resolved src to avoid race conditions
-  const insertImagesIntoEditor = useCallback(async (imagePaths) => {
-    if (!editorRef.current) return;
-
-    const editor = editorRef.current;
-
-    // Import Tauri fs for reading images as data URLs
-    const { readFile } = await import('@tauri-apps/plugin-fs');
-
-    // Helper to convert extension to MIME type
-    const extToMime = (ext) => {
-      const map = {
-        png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
-        gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
-        bmp: 'image/bmp', tiff: 'image/tiff', avif: 'image/avif'
-      };
-      return map[ext?.toLowerCase()] || 'application/octet-stream';
-    };
-
-    for (const imagePath of imagePaths) {
-      const fileName = imagePath.split('/').pop();
-
-      // Read image as data URL for immediate rendering
-      let src = '';
-      try {
-        const data = await readFile(imagePath);
-        const ext = fileName.split('.').pop();
-        const mime = extToMime(ext);
-        // Convert Uint8Array to base64
-        let binary = '';
-        for (let i = 0; i < data.length; i++) {
-          binary += String.fromCharCode(data[i]);
-        }
-        src = `data:${mime};base64,${btoa(binary)}`;
-      } catch {
-        // If read fails, src stays empty - image won't render but link will work
-      }
-
-      // Insert WikiLink node directly with pre-resolved src
-      const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-      editor.chain()
-        .focus()
-        .insertContent({
-          type: 'wikiLink',
-          attrs: {
-            id,
-            target: fileName,
-            alt: '',
-            embed: true,
-            href: imagePath,
-            src: src
-          }
-        })
-        .run();
-    }
-
-    // Add a newline after all images
-    editor.chain().focus().insertContent({ type: 'paragraph' }).run();
-
-  }, []);
-
-  // Track hovered folder in a ref to avoid re-registering listeners
-  const hoveredFolderRef = useRef(hoveredFolder);
-  useEffect(() => {
-    hoveredFolderRef.current = hoveredFolder;
-  }, [hoveredFolder]);
-
-  // External file drop event listeners (Tauri 2.0 API)
-  useEffect(() => {
-    if (!path) {
-      return;
-    }
-
-    let unlistenDrop;
-    let unlistenOver;
-    let unlistenLeave;
-    let isCleanedUp = false;
-
-    const setupFileDropListeners = async () => {
-      try {
-        // Tauri 2.0: Event names changed from file-drop to drag-drop
-        // tauri://drag-drop - Files dropped
-        unlistenDrop = await listen('tauri://drag-drop', async (event) => {
-          if (isCleanedUp) return; // Guard against stale listeners
-
-          const filePaths = event.payload.paths || event.payload;
-          useWorkspaceStore.setState({ isExternalDragActive: false });
-
-          try {
-            // Determine destination folder (use ref to get current value)
-            const targetFolder = hoveredFolderRef.current || null;
-
-            // Copy files to workspace
-            const result = await invoke('copy_external_files_to_workspace', {
-              filePaths: filePaths,
-              workspacePath: path,
-              targetFolder: targetFolder,
-            });
-
-            // Refresh file tree if files were copied successfully
-            if (result.success.length > 0) {
-              handleRefreshFiles();
-
-              // Auto-insert images into active editor
-              const imageFiles = result.success.filter(p => isImageFile(p));
-              if (imageFiles.length > 0 && editorRef.current) {
-                insertImagesIntoEditor(imageFiles);
-              }
-            }
-
-          } catch { } finally {
-            useWorkspaceStore.setState({ hoveredFolder: null });
-          }
-        });
-
-        // tauri://drag-over - Files being dragged over window
-        unlistenOver = await listen('tauri://drag-over', () => {
-          if (isCleanedUp) return;
-          useWorkspaceStore.setState({ isExternalDragActive: true });
-        });
-
-        // tauri://drag-leave - Drag left window
-        unlistenLeave = await listen('tauri://drag-leave', () => {
-          if (isCleanedUp) return;
-          useWorkspaceStore.setState({ isExternalDragActive: false });
-          useWorkspaceStore.setState({ hoveredFolder: null });
-        });
-
-      } catch { }
-    };
-
-    setupFileDropListeners();
-
-    return () => {
-      isCleanedUp = true;
-      if (unlistenDrop) unlistenDrop();
-      if (unlistenOver) unlistenOver();
-      if (unlistenLeave) unlistenLeave();
-    };
-  }, [path, insertImagesIntoEditor]); // Removed hoveredFolder from deps
-
-  // Load shortcuts map for hints and keep it fresh
-  useEffect(() => {
-    getActiveShortcuts().then(m => useWorkspaceStore.setState({ keymap: m })).catch(() => { });
-    let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch { }
-    if (isTauri) {
-      const sub = listen('shortcuts:updated', async () => {
-        const m = await getActiveShortcuts();
-        useWorkspaceStore.setState({ keymap: m });
-      });
-      return () => { sub.then((un) => un()); };
-    } else {
-      const onDom = async () => { useWorkspaceStore.setState({ keymap: await getActiveShortcuts() }); };
-      window.addEventListener('shortcuts:updated', onDom);
-      return () => window.removeEventListener('shortcuts:updated', onDom);
-    }
-  }, []);
-
-  // Listen for markdown config changes from Preferences window
-  useEffect(() => {
-    let isTauri = false;
-    try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch { }
-
-    if (isTauri) {
-      const sub = listen('lokus:markdown-config-changed', async () => {
-        try {
-          const markdownSyntaxConfig = (await import('../core/markdown/syntax-config.js')).default;
-          await markdownSyntaxConfig.init();
-        } catch { }
-      });
-      return () => { sub.then((un) => un()); };
-    }
-  }, []);
-
-  // Save session state on change (debounced)
-  useEffect(() => {
-    const saveTimeout = setTimeout(() => {
-      if (path) {
-        const tabPaths = openTabs.map(t => t.path);
-        const folderPaths = Array.from(expandedFolders);
-        const recentPaths = recentFiles.map(f => f.path);
-        invoke("save_session_state", { workspacePath: path, openTabs: tabPaths, expandedFolders: folderPaths, recentFiles: recentPaths });
-      }
-    }, 500);
-    return () => clearTimeout(saveTimeout);
-  }, [openTabs, expandedFolders, path, recentFiles]);
-
-  // Fetch file tree
-  useEffect(() => {
-    if (path) {
-      // Debug: Log to backend to see if this runs
-      invoke("validate_workspace_path", { path }).then(valid => {
-        if (valid) {
-        }
-      }).catch(err => {
-      });
-
-      try { window.__LOKUS_WORKSPACE_PATH__ = path; } catch { }
-      invoke("read_workspace_files", { workspacePath: path })
-        .then(files => {
-          const filterIgnored = (entries) => {
-            const ignoredNames = ['.lokus', '.DS_Store'];
-            return entries
-              .filter(entry => !ignoredNames.includes(entry.name))
-              .map(entry => {
-                if (entry.children) {
-                  return { ...entry, children: filterIgnored(entry.children) };
-                }
-                return entry;
-              });
-          };
-          const tree = filterIgnored(files);
-          useWorkspaceStore.getState().setFileTree(tree);
-          // Build flat index for wiki suggestions
-          const flat = [];
-          const walk = (arr) => {
-            for (const e of arr) {
-              if (e.is_directory) { if (e.children) walk(e.children); }
-              else flat.push({ title: e.name, path: e.path });
-            }
-          };
-          walk(tree);
-          try { window.__LOKUS_FILE_INDEX__ = flat; } catch { }
-
-          // Initialize reference manager for tracking file links
-          referenceManager.init(path);
-          referenceManager.buildIndex(flat).catch(() => { });
-
-          // Extract all image files for image viewer navigation
-          const imageFiles = findImageFiles(tree);
-          useWorkspaceStore.getState().setAllImageFiles(imageFiles);
-        })
-        .catch((error) => {
-          // Log to backend instead
-          invoke("get_validated_workspace_path").then(() => {
-            // Just trigger something to see the error in backend
-          });
-        });
-    }
-  }, [path, refreshId]);
-
-  // Fetch content for active file
-  useEffect(() => {
-    if (activeFile) {
-      try { window.__LOKUS_ACTIVE_FILE__ = activeFile; } catch { }
-
-      // Skip loading content for special views and binary files
-      if (
-        activeFile.startsWith('__') ||
-        activeFile.endsWith('.canvas') ||
-        activeFile.endsWith('.kanban') ||
-        activeFile.endsWith('.pdf') ||
-        isImageFile(activeFile)
-      ) {
-        return;
-      }
-
-      // IMMEDIATE: Clear editor and show loading state
-      useWorkspaceStore.getState().setContent("");
-      useWorkspaceStore.getState().setTitle("");
-      useWorkspaceStore.getState().setLoading(true);
-
-      // Capture activeFile in local variable to prevent stale closure issues
-      const fileToLoad = activeFile;
-
-      invoke("read_file_content", { path: fileToLoad })
-        .then(async content => {
-          // Guard against stale promise resolutions - only update if this file is still active
-          if (fileToLoad !== activeFile) {
-            return;
-          }
-
-          const fileName = getFilename(fileToLoad);
-
-          // Show first 10 lines of content
-          const lines = content.split('\n');
-          const preview = lines.slice(0, 10);
-          preview.forEach((line, idx) => {
-          });
-          if (lines.length > 10) {
-          }
-
-          // Process markdown content to ensure proper formatting
-          const compiler = getMarkdownCompiler();
-          let processedContent = content;
-
-          // If this is a markdown file and the content looks like markdown, process it
-          if (fileToLoad.endsWith('.md') && (await compiler.isMarkdown(content))) {
-            processedContent = await compiler.compile(content);
-          }
-
-          useWorkspaceStore.getState().setContent(processedContent);
-          useWorkspaceStore.getState().setTitle(fileName.replace(/\.md$/, ""));
-          useWorkspaceStore.getState().setSavedContent(content); // Keep original content for saving
-          useWorkspaceStore.getState().setLoading(false); // Loading complete
-        })
-        .catch((err) => {
-          if (fileToLoad === activeFile) {
-            useWorkspaceStore.getState().setLoading(false);
-            // Show error message in editor
-            useWorkspaceStore.getState().setContent(`<div class="text-red-500 p-4">Failed to load file: ${err}</div>`);
-            useWorkspaceStore.getState().setTitle("Error");
-          }
-        });
-    } else {
-      useWorkspaceStore.getState().setContent("");
-      useWorkspaceStore.getState().setTitle("");
-      useWorkspaceStore.getState().setLoading(false);
-    }
-  }, [activeFile]);
+  useWorkspaceEvents({
+    workspacePath: path,
+    editorRef,
+    graphProcessorRef,
+    insertImagesIntoEditor,
+  });
 
   // Note: workspace:activate events are handled by useWorkspaceActivation in App.jsx
   // which passes the path down via props to this component
-
-  // Open file events from editor (wiki link clicks)
-  useEffect(() => {
-    const openPath = (p, switchToTab = true) => {
-      if (!p) return;
-
-      useWorkspaceStore.setState((s) => {
-        const name = getFilename(p);
-        const wasAlreadyOpen = s.openTabs.some(t => t.path === p);
-        const newTabs = s.openTabs.filter(t => t.path !== p);
-        newTabs.unshift({ path: p, name });
-        if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
-
-        return { openTabs: newTabs };
-      });
-
-      // Only switch to the new tab if requested (regular click)
-      // For Cmd/Ctrl+Click, keep current tab active
-      if (switchToTab) {
-        useWorkspaceStore.setState({ activeFile: p });
-      } else {
-      }
-    };
-
-    let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch { }
-    if (isTauri) {
-      const un1 = listen('lokus:open-file', (e) => openPath(String(e.payload || ''), true));
-      const un2 = listen('lokus:open-file-new-tab', (e) => openPath(String(e.payload || ''), false));
-      return () => { un1.then(u => u()); un2.then(u => u()); };
-    } else {
-      const onDom1 = (e) => openPath(String(e.detail || ''), true);
-      const onDom2 = (e) => openPath(String(e.detail || ''), false);
-      window.addEventListener('lokus:open-file', onDom1);
-      window.addEventListener('lokus:open-file-new-tab', onDom2);
-      return () => {
-        window.removeEventListener('lokus:open-file', onDom1);
-        window.removeEventListener('lokus:open-file-new-tab', onDom2);
-      };
-    }
-  }, []);
-
-  // Listen for immediate wiki link creation events from WikiLinkSuggest
-  useEffect(() => {
-    const handleWikiLinkCreated = async (event) => {
-      const { sourceFile, targetFile, linkText, timestamp } = event.detail;
-
-      if (graphProcessorRef.current) {
-        try {
-          // Get current editor content for real-time update
-          const currentContent = editorRef.current ?
-            (editorRef.current.getText() || useWorkspaceStore.getState().editorContent) :
-            useWorkspaceStore.getState().editorContent;
-
-          if (currentContent && sourceFile === useWorkspaceStore.getState().activeFile) {
-
-            // Use the real-time update method
-            const updateResult = await graphProcessorRef.current.updateFileContent(sourceFile, currentContent);
-
-            // Update graph data if there were changes and graph is visible
-            if ((updateResult.added > 0 || updateResult.removed > 0) && activeFile === '__graph__') {
-              const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
-              useWorkspaceStore.getState().setGraphData(updatedGraphData);
-            }
-          }
-        } catch { }
-      }
-    };
-
-    // Listen for wiki link creation events
-    window.addEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
-    document.addEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
-
-    // Listen for block scroll requests (from wiki link clicks)
-    const handleScrollToBlock = (e) => {
-      const blockId = e.detail
-      if (!blockId) return
-
-      // Try scrolling multiple times with increasing delays (wait for editor to render)
-      const attemptScroll = (delay, attemptNum) => {
-        setTimeout(() => {
-
-          const editorEl = document.querySelector('.tiptap.ProseMirror')
-          if (!editorEl) {
-            return
-          }
-
-          // Strategy 1: Look for elements with data-block-id attribute
-          const blockWithId = editorEl.querySelector(`[data-block-id="${blockId}"]`)
-          if (blockWithId) {
-            blockWithId.scrollIntoView({ behavior: 'smooth', block: 'center' })
-
-            // Highlight the parent element (usually a paragraph or heading)
-            const target = blockWithId.closest('p, h1, h2, h3, h4, h5, h6, li, blockquote') || blockWithId
-            target.style.backgroundColor = 'rgba(255, 200, 0, 0.3)'
-            setTimeout(() => { target.style.backgroundColor = '' }, 2000)
-
-            return
-          }
-
-          // Strategy 2: Search headings
-          const headings = editorEl.querySelectorAll('h1, h2, h3, h4, h5, h6')
-
-          let foundHeading = null
-
-          for (const heading of headings) {
-            const headingText = heading.textContent.trim()
-
-            // Check for explicit ID in heading (e.g., {#custom-id})
-            const idMatch = headingText.match(/\{#([^}]+)\}/)
-            if (idMatch && idMatch[1] === blockId) {
-              foundHeading = heading
-              break
-            }
-
-            // Generate slug from heading text
-            const headingSlug = headingText
-              .toLowerCase()
-              .replace(/\{#[^}]+\}/g, '') // Remove explicit IDs
-              .replace(/[^\w\s-]/g, '')
-              .replace(/\s+/g, '-')
-              .replace(/-+/g, '-')
-              .trim()
-              .slice(0, 50)
-
-            // Try slug match
-            if (headingSlug === blockId.toLowerCase()) {
-              foundHeading = heading
-              break
-            }
-
-            // Try partial match
-            const searchText = blockId.replace(/-/g, ' ').toLowerCase()
-            if (headingText.toLowerCase().includes(searchText)) {
-              foundHeading = heading
-              break
-            }
-          }
-
-          if (foundHeading) {
-            foundHeading.scrollIntoView({ behavior: 'smooth', block: 'center' })
-
-            // Highlight briefly
-            foundHeading.style.backgroundColor = 'rgba(255, 200, 0, 0.3)'
-            setTimeout(() => {
-              foundHeading.style.backgroundColor = ''
-            }, 2000)
-
-          } else {
-            if (attemptNum === 3) {
-            }
-          }
-        }, delay)
-      }
-
-      // Try multiple times with increasing delays
-      attemptScroll(100, 1)
-      attemptScroll(300, 2)
-      attemptScroll(600, 3)
-    }
-
-    window.addEventListener('lokus:scroll-to-block', handleScrollToBlock)
-
-    return () => {
-      window.removeEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
-      document.removeEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
-      window.removeEventListener('lokus:scroll-to-block', handleScrollToBlock)
-    };
-  }, [activeFile]);
-
-  // Canvas link hover preview
-  useEffect(() => {
-    const handleCanvasLinkHover = async (event) => {
-      const { canvasName, canvasPath, position } = event.detail;
-      useWorkspaceStore.setState({ canvasPreview: { canvasName, canvasPath, position, loading: true } });
-
-      // Generate preview (async)
-      try {
-        const thumbnailUrl = await generatePreview(canvasPath);
-        useWorkspaceStore.setState((s) => ({
-          canvasPreview: s.canvasPreview?.canvasPath === canvasPath
-            ? { ...s.canvasPreview, thumbnailUrl, loading: false }
-            : null
-        }));
-      } catch (error) {
-        useWorkspaceStore.setState((s) => ({
-          canvasPreview: s.canvasPreview?.canvasPath === canvasPath
-            ? { ...s.canvasPreview, error: true, loading: false }
-            : null
-        }));
-      }
-    };
-
-    const handleCanvasLinkHoverEnd = () => {
-      useWorkspaceStore.setState({ canvasPreview: null });
-    };
-
-    const handleOpenCanvas = (event) => {
-      let { canvasPath } = event.detail;
-
-      // Resolve path if it's not absolute (just a canvas name)
-      if (canvasPath && !canvasPath.startsWith('/') && !canvasPath.includes('/')) {
-        const fileIndex = globalThis.__LOKUS_FILE_INDEX__ || [];
-        const canvasFileName = canvasPath.endsWith('.canvas') ? canvasPath : `${canvasPath}.canvas`;
-
-        const matchedFile = fileIndex.find(file => {
-          const fileName = file.name || file.path.split('/').pop();
-          return fileName === canvasFileName || fileName === canvasPath;
-        });
-
-        if (matchedFile) {
-          canvasPath = matchedFile.path;
-        }
-      }
-
-      // Open canvas file directly using the same logic as openPath
-      if (canvasPath) {
-        const name = canvasPath.split('/').pop() || canvasPath;
-        useWorkspaceStore.setState((s) => {
-          const newTabs = s.openTabs.filter(t => t.path !== canvasPath);
-          newTabs.unshift({ path: canvasPath, name });
-          if (newTabs.length > MAX_OPEN_TABS) newTabs.pop();
-          return { openTabs: newTabs };
-        });
-        useWorkspaceStore.setState({ activeFile: canvasPath });
-      }
-    };
-
-    window.addEventListener('canvas-link-hover', handleCanvasLinkHover);
-    window.addEventListener('canvas-link-hover-end', handleCanvasLinkHoverEnd);
-    window.addEventListener('lokus:open-canvas', handleOpenCanvas);
-
-    return () => {
-      window.removeEventListener('canvas-link-hover', handleCanvasLinkHover);
-      window.removeEventListener('canvas-link-hover-end', handleCanvasLinkHoverEnd);
-      window.removeEventListener('lokus:open-canvas', handleOpenCanvas);
-    };
-  }, []);
-
-  // Tab navigation shortcuts with throttling
-  useEffect(() => {
-    // Throttle utility function - executes immediately but prevents rapid successive calls
-    const throttle = (func, wait) => {
-      let lastTime = 0;
-      return function executedFunction(...args) {
-        const now = Date.now();
-        if (now - lastTime >= wait) {
-          lastTime = now;
-          func(...args);
-        }
-      };
-    };
-
-    const handleNextTabImmediate = () => {
-      if (openTabs.length <= 1) return;
-      const currentIndex = openTabs.findIndex(tab => tab.path === activeFile);
-      const nextIndex = (currentIndex + 1) % openTabs.length;
-      useWorkspaceStore.setState({ activeFile: openTabs[nextIndex].path });
-    };
-
-    const handlePrevTabImmediate = () => {
-      if (openTabs.length <= 1) return;
-      const currentIndex = openTabs.findIndex(tab => tab.path === activeFile);
-      const prevIndex = currentIndex === 0 ? openTabs.length - 1 : currentIndex - 1;
-      useWorkspaceStore.setState({ activeFile: openTabs[prevIndex].path });
-    };
-
-    // Throttled versions with 200ms cooldown
-    const handleNextTab = throttle(handleNextTabImmediate, 200);
-    const handlePrevTab = throttle(handlePrevTabImmediate, 200);
-
-    let isTauri = false;
-    try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch { }
-
-    if (isTauri) {
-      const nextTabSub = listen('lokus:next-tab', handleNextTab);
-      const prevTabSub = listen('lokus:prev-tab', handlePrevTab);
-      return () => {
-        nextTabSub.then(u => u());
-        prevTabSub.then(u => u());
-      };
-    } else {
-      const onNextTab = () => handleNextTab();
-      const onPrevTab = () => handlePrevTab();
-
-      window.addEventListener('lokus:next-tab', onNextTab);
-      window.addEventListener('lokus:prev-tab', onPrevTab);
-
-      return () => {
-        window.removeEventListener('lokus:next-tab', onNextTab);
-        window.removeEventListener('lokus:prev-tab', onPrevTab);
-      };
-    }
-  }, [openTabs, activeFile]);
-
-  // Direct keyboard handler for Ctrl+Tab (fallback if menu doesn't work)
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Ctrl+Tab or Ctrl+Shift+Tab
-      if (e.ctrlKey && e.key === 'Tab') {
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (openTabs.length <= 1) return;
-
-        const currentIndex = openTabs.findIndex(tab => tab.path === activeFile);
-
-        if (e.shiftKey) {
-          // Previous tab
-          const prevIndex = currentIndex === 0 ? openTabs.length - 1 : currentIndex - 1;
-          useWorkspaceStore.setState({ activeFile: openTabs[prevIndex].path });
-        } else {
-          // Next tab
-          const nextIndex = (currentIndex + 1) % openTabs.length;
-          useWorkspaceStore.setState({ activeFile: openTabs[nextIndex].path });
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown, true); // Use capture phase
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [openTabs, activeFile]);
 
   // Global right-click context menu
   // Removed global context menu handler - context menus are now component-specific
@@ -1191,20 +378,6 @@ function WorkspaceWithScope({ path }) {
 
   // handleOpenFullKanban removed - use file-based kanban boards instead
 
-
-  const handleEditorChange = useCallback((newContent) => {
-    useWorkspaceStore.getState().setContent(newContent);
-    if (!useWorkspaceStore.getState().activeFile) return;
-    useWorkspaceStore.setState((s) => {
-      const next = new Set(s.unsavedChanges);
-      if (newContent !== s.savedContent) {
-        next.add(s.activeFile);
-      } else {
-        next.delete(s.activeFile);
-      }
-      return { unsavedChanges: next };
-    });
-  }, []);
 
   // Check if a file path is a daily note
   const isDailyNotePath = (filePath) => {
@@ -1290,17 +463,6 @@ function WorkspaceWithScope({ path }) {
 
   // (keyboard + Tauri event listeners removed — handled by ShortcutListener)
 
-  // Template picker DOM event (not in Tauri menu system)
-  useEffect(() => {
-    const handleTemplatePicker = (event) => {
-      const data = event?.detail || event;
-      useWorkspaceStore.setState({ templatePickerData: data });
-      useWorkspaceStore.getState().openPanel('showTemplatePicker');
-    };
-    window.addEventListener('open-template-picker', handleTemplatePicker);
-    return () => window.removeEventListener('open-template-picker', handleTemplatePicker);
-  }, []);
-
   const cols = (() => {
     const mainContent = `minmax(0,1fr)`;
     const leftPanel = showLeft ? `${leftW}px 1px ` : "";
@@ -1372,45 +534,6 @@ function WorkspaceWithScope({ path }) {
     return getBaseAwareFileTree(fileTree);
   }, [fileTree, activeBase?.sourceFolder, openTabs, scopeMode, scopedFolders, filterFileTree]);
 
-  useEffect(() => {
-    const handleInsertTemplate = (event) => {
-      const { content } = event.detail;
-      
-      if (editorRef?.current && content) {
-        // Get the editor instance
-        const editor = editorRef.current;
-        
-        // This searches backwards from cursor to find the last "/" and removes everything after it
-        const { state } = editor;
-        const { from } = state.selection;
-        
-        // Search backwards for the "/" character
-        let slashPos = from;
-        const textBefore = state.doc.textBetween(Math.max(0, from - 50), from);
-        const lastSlashIndex = textBefore.lastIndexOf('/');
-        
-        if (lastSlashIndex !== -1) {
-          slashPos = from - (textBefore.length - lastSlashIndex);
-          
-          // Delete the "/templatename" text first
-          editor
-            .chain()
-            .focus()
-            .deleteRange({ from: slashPos, to: from })
-            .insertContent(content)
-            .run();
-        } else {
-          // No slash found, just insert at cursor
-          editor.chain().focus().insertContent(content).run();
-        }
-      }
-  };
-
-  window.addEventListener('lokus:insert-template', handleInsertTemplate);
-  return () => {
-    window.removeEventListener('lokus:insert-template', handleInsertTemplate);
-  };
-}, []);
   return (
     <PanelManager>
       <ShortcutListener
