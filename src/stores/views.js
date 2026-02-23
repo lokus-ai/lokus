@@ -45,12 +45,16 @@ export const useViewStore = create(
     showVersionHistory: false,
     versionHistoryFile: null,
     canvasPreview: null,
+    versionRefreshKey: 0,
+    showDailyNotesPanel: false,
+    showCalendarPanel: false,
     referenceUpdateModal: {
       isOpen: false, oldPath: null, newPath: null,
       affectedFiles: [], isProcessing: false, result: null, pendingOperation: null,
     },
 
     switchView: (view) => set({ currentView: view }),
+    incrementVersionRefreshKey: () => set((s) => ({ versionRefreshKey: s.versionRefreshKey + 1 })),
 
     openPanel: (name, data) => {
       const entry = PANEL_MAP[name];
