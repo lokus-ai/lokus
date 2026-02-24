@@ -144,6 +144,7 @@ const SearchResultItem = ({ result, query, onClick, onKeyDown }) => {
       <div className="result-header">
         <div className="result-title-row">
           <File size={16} className="result-icon" />
+          {/* eslint-disable-next-line react/no-danger -- output from trusted highlightMatches with escaped input */}
           <h3
             className="result-title"
             dangerouslySetInnerHTML={{
@@ -166,6 +167,7 @@ const SearchResultItem = ({ result, query, onClick, onKeyDown }) => {
       {snippet && (
         <div
           className="result-snippet"
+          // eslint-disable-next-line react/no-danger -- trusted highlightMatches
           dangerouslySetInnerHTML={{
             __html: highlightMatches(snippet, query)
           }}

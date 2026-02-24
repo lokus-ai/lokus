@@ -275,7 +275,7 @@ export class SecurePluginSandbox {
 
     switch (functionName) {
       case 'readFile':
-        return await invoke('read_file_content', { path: args[0] });
+        return await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path: args[0] });
       case 'writeFile':
         return await invoke('write_file', { path: args[0], content: args[1] });
       case 'listFiles':

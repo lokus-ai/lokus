@@ -12,6 +12,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { uiAPI, PANEL_POSITIONS, PANEL_TYPES } from '../api/UIAPI.js';
+import { sanitizeHtml } from '../../core/security/sanitizer';
 
 // Panel Manager Context
 const PanelManagerContext = createContext();
@@ -166,7 +167,7 @@ const PanelContainer = ({ panel, onResize, onMove, onClose, onActivate, style = 
         return (
           <div 
             className="w-full h-full"
-            dangerouslySetInnerHTML={{ __html: panel.html || '' }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(panel.html || '') }}
           />
         );
         

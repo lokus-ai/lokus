@@ -607,7 +607,7 @@ export default function BaseTableView({
 
     try {
       for (const path of selectedRows) {
-        await invoke('delete_file', { path });
+        await invoke('delete_file', { workspacePath: window.__WORKSPACE_PATH__, path });
       }
       setSelectedRows(new Set());
       // Trigger refresh
@@ -622,11 +622,11 @@ export default function BaseTableView({
 
     try {
       for (const path of selectedRows) {
-        const content = await invoke('read_file_content', { path });
+        const content = await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path });
         const writer = new FrontmatterWriter(content);
         writer.setProperty(property, value);
         const newContent = writer.toString();
-        await invoke('write_file_content', { path, content: newContent });
+        await invoke('write_file_content', { workspacePath: window.__WORKSPACE_PATH__, path, content: newContent });
       }
       setSelectedRows(new Set());
       // Trigger refresh
@@ -838,7 +838,7 @@ export default function BaseTableView({
       setSaveStatus('saving')
 
       // Read current file content
-      const fileContent = await invoke('read_file_content', { path: editingCell.rowPath })
+      const fileContent = await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path: editingCell.rowPath })
 
       // Parse value based on column type
       let newValue = editValue.trim()
@@ -859,6 +859,7 @@ export default function BaseTableView({
 
       // Write back to file
       await invoke('write_file_content', {
+        workspacePath: window.__WORKSPACE_PATH__,
         path: editingCell.rowPath,
         content: updatedContent
       })

@@ -86,7 +86,7 @@ export class NoteProvider {
    */
   async loadNoteContent(notePath) {
     try {
-      const content = await invoke('read_file_content', { path: notePath });
+      const content = await invoke('read_file_content', { workspacePath: this.workspacePath, path: notePath });
       const name = notePath.split('/').pop().replace('.md', '');
 
       // Process markdown content

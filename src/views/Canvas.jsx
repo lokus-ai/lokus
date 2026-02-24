@@ -148,7 +148,7 @@ export default function Canvas({
         // Wait a bit for filesystem flush
         await new Promise(resolve => setTimeout(resolve, 50 * attempt))
 
-        const content = await invoke('read_file_content', { path: canvasPath })
+        const content = await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path: canvasPath })
         const savedData = JSON.parse(content)
 
         // Compare node and edge counts

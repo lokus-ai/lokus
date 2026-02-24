@@ -36,7 +36,7 @@ const TagManagementModal = ({ isOpen, onClose, file, onTagsUpdated }) => {
   const loadFileTags = async () => {
     setIsLoading(true);
     try {
-      const content = await invoke('read_file_content', { path: file.path });
+      const content = await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path: file.path });
       const parsed = parseFrontmatter(content);
       setTags(parsed.tags || []);
     } catch (error) {
@@ -145,13 +145,14 @@ const TagManagementModal = ({ isOpen, onClose, file, onTagsUpdated }) => {
     setIsSaving(true);
     try {
       // Read current file content
-      const content = await invoke('read_file_content', { path: file.path });
+      const content = await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path: file.path });
 
       // Update frontmatter with new tags
       const updatedContent = updateFrontmatter(content, tags);
 
       // Write back to file
       await invoke('write_file_content', {
+        workspacePath: window.__WORKSPACE_PATH__,
         path: file.path,
         content: updatedContent
       });

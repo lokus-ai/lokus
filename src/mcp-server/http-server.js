@@ -16,6 +16,8 @@ import { constants } from "fs";
 import { fileURLToPath } from 'url';
 import http from 'http';
 
+import { generateSessionToken, validateBearerToken } from './auth.js';
+
 // Import modular tools (same as index.js)
 import { notesTools, executeNoteTool } from "./tools/notes.js";
 import { workspaceTools, executeWorkspaceTool } from "./tools/workspace.js";
@@ -126,12 +128,33 @@ class WorkspaceDetector {
 
 const workspaceDetector = new WorkspaceDetector();
 
+// ===== CORS ORIGIN WHITELISTING =====
+const ALLOWED_ORIGINS = [
+  'http://localhost',
+  'http://127.0.0.1',
+  'tauri://localhost',
+  'https://tauri.localhost'
+];
+
+function isOriginAllowed(origin) {
+  if (!origin) return false;
+  return ALLOWED_ORIGINS.some(ao =>
+    origin === ao || origin.startsWith(ao + ':')
+  );
+}
+
+// ===== AUTHENTICATION =====
+const TOKEN_PATH = join(CONFIG.lokusConfigDir, 'mcp-token');
+
 // ===== HTTP JSON-RPC SERVER =====
 const server = http.createServer(async (req, res) => {
   // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin || '';
+  if (isOriginAllowed(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   // Handle preflight
   if (req.method === 'OPTIONS') {
@@ -140,10 +163,17 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Health check
+  // Health check (unauthenticated)
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'healthy', service: 'lokus-mcp-http' }));
+    return;
+  }
+
+  // Authenticate all other requests
+  if (!validateBearerToken(req.headers.authorization, TOKEN_PATH)) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Unauthorized. Read token from ~/.lokus/mcp-token' }));
     return;
   }
 
@@ -366,6 +396,9 @@ async function handleMCPRequest(request) {
 // ===== START SERVER =====
 async function main() {
   try {
+    // Generate session token for authentication
+    generateSessionToken(TOKEN_PATH);
+
     server.listen(CONFIG.port, '127.0.0.1', () => {
       logger.info('===========================================');
       logger.info(`Lokus MCP HTTP Server v1.0 started`);

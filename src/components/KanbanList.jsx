@@ -94,7 +94,7 @@ export default function KanbanList({ workspacePath, onBoardOpen, onCreateBoard, 
 
   const handleRenameSubmit = async (board, newName) => {
     try {
-      await invoke('rename_file', { path: board.path, newName })
+      await invoke('rename_file', { workspacePath: window.__WORKSPACE_PATH__, path: board.path, newName })
       loadBoards()
     } catch (err) {
       console.error('Failed to rename board', err)
