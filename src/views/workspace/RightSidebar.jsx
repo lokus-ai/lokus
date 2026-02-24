@@ -1,6 +1,7 @@
 import { useLayoutStore } from '../../stores/layout';
 import { useViewStore } from '../../stores/views';
 import { useEditorGroupStore } from '../../stores/editorGroups';
+import { getEditor } from '../../stores/editorRegistry';
 import DocumentOutline from '../../components/DocumentOutline.jsx';
 import BacklinksPanel from '../BacklinksPanel.jsx';
 import GraphSidebar from '../../components/GraphSidebar.jsx';
@@ -24,7 +25,6 @@ export default function RightSidebar({
   onFileOpen,
   onOpenDailyNoteByDate,
   onReloadCurrentFile,
-  editorRef,
   graphProcessorRef,
 }) {
   const showRight = useLayoutStore((s) => s.showRight);
@@ -36,6 +36,9 @@ export default function RightSidebar({
   const showDailyNotesPanel = useViewStore((s) => s.showDailyNotesPanel);
   const showCalendarPanel = useViewStore((s) => s.showCalendarPanel);
   const currentDailyNoteDate = useViewStore((s) => s.currentDailyNoteDate);
+
+  // Focused group id for registry lookup
+  const focusedGroupId = useEditorGroupStore((s) => s.focusedGroupId);
 
   // Graph sidebar data from useEditorGroupStore
   const graphSidebarData = useEditorGroupStore((s) => s.graphSidebarData);
@@ -86,8 +89,7 @@ export default function RightSidebar({
 
   return (
     <aside
-      className="overflow-y-auto flex flex-col bg-app-panel border-l border-app-border"
-      style={{ width: `${rightW}px` }}
+      className="h-full overflow-y-auto flex flex-col bg-app-bg border-l border-app-border"
     >
       <div className="flex-1 overflow-hidden">
         {showVersionHistory ? (
@@ -141,7 +143,7 @@ export default function RightSidebar({
                 borderBottom: '1px solid var(--border)',
               }}
             >
-              <DocumentOutline editor={editorRef?.current?.editor} />
+              <DocumentOutline editor={getEditor(focusedGroupId)} />
             </div>
 
             {/* Backlinks Panel */}

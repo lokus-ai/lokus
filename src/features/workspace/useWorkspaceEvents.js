@@ -5,6 +5,7 @@ import { useLayoutStore } from "../../stores/layout";
 import { useViewStore } from "../../stores/views";
 import { useEditorGroupStore } from "../../stores/editorGroups";
 import { useFileTreeStore } from "../../stores/fileTree";
+import { getEditor } from "../../stores/editorRegistry";
 import { useLayoutDefaults } from "../../contexts/RemoteConfigContext";
 import { getActiveShortcuts } from "../../core/shortcuts/registry.js";
 import { getFilename } from "../../utils/pathUtils.js";
@@ -25,7 +26,6 @@ function isTauriEnv() {
  */
 export function useWorkspaceEvents({
   workspacePath,
-  editorRef,
   graphProcessorRef,
   insertImagesIntoEditor,
 }) {
@@ -82,9 +82,10 @@ export function useWorkspaceEvents({
 
       if (graphProcessorRef.current) {
         try {
-          const currentContent = editorRef.current?.getText() || '';
           const group = useEditorGroupStore.getState().getFocusedGroup();
           const activeFile = group?.activeTab;
+          const focusedEditor = getEditor(group?.id);
+          const currentContent = focusedEditor?.getText() || '';
 
           if (currentContent && sourceFile === activeFile) {
             const updateResult = await graphProcessorRef.current.updateFileContent(sourceFile, currentContent);
@@ -163,7 +164,7 @@ export function useWorkspaceEvents({
       document.removeEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
       window.removeEventListener('lokus:scroll-to-block', handleScrollToBlock);
     };
-  }, [editorRef, graphProcessorRef]);
+  }, [graphProcessorRef]);
 
   // -------------------------------------------------------------------------
   // Canvas link hover / open
@@ -325,7 +326,7 @@ export function useWorkspaceEvents({
               useFileTreeStore.getState().refreshTree();
 
               const imageFiles = result.success.filter(p => isImageFile(p));
-              if (imageFiles.length > 0 && editorRef.current) {
+              if (imageFiles.length > 0) {
                 insertImagesIntoEditor(imageFiles);
               }
             }
@@ -356,7 +357,7 @@ export function useWorkspaceEvents({
       if (unlistenOver) unlistenOver();
       if (unlistenLeave) unlistenLeave();
     };
-  }, [workspacePath, editorRef, insertImagesIntoEditor]);
+  }, [workspacePath, insertImagesIntoEditor]);
 
   // -------------------------------------------------------------------------
   // Template picker DOM event
@@ -377,31 +378,32 @@ export function useWorkspaceEvents({
   useEffect(() => {
     const handleInsertTemplate = (event) => {
       const { content } = event.detail;
+      if (!content) return;
 
-      if (editorRef?.current && content) {
-        const editor = editorRef.current;
-        const { state } = editor;
-        const { from } = state.selection;
+      const focusedGroupId = useEditorGroupStore.getState().focusedGroupId;
+      const editor = getEditor(focusedGroupId);
+      if (!editor) return;
 
-        let slashPos = from;
-        const textBefore = state.doc.textBetween(Math.max(0, from - 50), from);
-        const lastSlashIndex = textBefore.lastIndexOf('/');
+      const { state } = editor;
+      const { from } = state.selection;
 
-        if (lastSlashIndex !== -1) {
-          slashPos = from - (textBefore.length - lastSlashIndex);
-          editor
-            .chain()
-            .focus()
-            .deleteRange({ from: slashPos, to: from })
-            .insertContent(content)
-            .run();
-        } else {
-          editor.chain().focus().insertContent(content).run();
-        }
+      const textBefore = state.doc.textBetween(Math.max(0, from - 50), from);
+      const lastSlashIndex = textBefore.lastIndexOf('/');
+
+      if (lastSlashIndex !== -1) {
+        const slashPos = from - (textBefore.length - lastSlashIndex);
+        editor
+          .chain()
+          .focus()
+          .deleteRange({ from: slashPos, to: from })
+          .insertContent(content)
+          .run();
+      } else {
+        editor.chain().focus().insertContent(content).run();
       }
     };
 
     window.addEventListener('lokus:insert-template', handleInsertTemplate);
     return () => window.removeEventListener('lokus:insert-template', handleInsertTemplate);
-  }, [editorRef]);
+  }, []);
 }

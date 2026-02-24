@@ -6,8 +6,7 @@
 import pdfExporter from './pdf-exporter.js';
 import JSZip from 'jszip';
 
-// Simple HTML→text fallback for markdown export (markdown-exporter deleted;
-// primary save path now uses @tiptap/markdown on the editor instance).
+// Simple HTML→text fallback used for non-editor export paths (PDF, ZIP, preview).
 const htmlToPlainMarkdown = (html) => {
   const div = document.createElement('div');
   div.innerHTML = html;

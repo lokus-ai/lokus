@@ -5,7 +5,7 @@ import { DndContext, DragOverlay, useDroppable, useSensor, useSensors, PointerSe
 import { ColoredFileIcon } from "../../components/FileIcon.jsx";
 import DropIndicator from "../../components/FileTree/DropIndicator.jsx";
 import { useDropPosition } from "../../hooks/useDropPosition.js";
-import referenceManager from "../../core/references/ReferenceManager.js";
+import referenceWorkerClient from "../../workers/referenceWorkerClient.js";
 import { NewItemInput } from "./NewItemInput.jsx";
 import { FileEntryComponent } from "./FileEntryComponent.jsx";
 
@@ -229,8 +229,11 @@ export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, expa
     const newPath = `${destinationDir}/${fileName}`;
 
     if (onCheckReferences) {
-      const affectedFiles = await referenceManager.findAffectedFiles(oldPath);
-      if (affectedFiles.length > 0) {
+      const backlinkSources = referenceWorkerClient.getBacklinksForFile(oldPath);
+      if (backlinkSources.length > 0) {
+        // Convert the flat source-path list to the shape the modal expects:
+        // { filePath: string }[]
+        const affectedFiles = backlinkSources.map(filePath => ({ filePath }));
         onCheckReferences({
           oldPath,
           newPath,

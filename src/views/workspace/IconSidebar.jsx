@@ -62,7 +62,7 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
 
   return (
     <aside
-      className="flex flex-col items-center gap-1 border-r border-app-border bg-app-panel"
+      className="flex flex-col items-center gap-1 border-r border-app-border bg-app-panel h-full"
       style={{
         paddingTop: platformService.isMacOS() ? '0.5rem' : '0.75rem',
         paddingBottom: '0.75rem',
@@ -79,10 +79,10 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
         }}
         onMouseLeave={(e) => {
           const icon = e.currentTarget.querySelector('svg');
-          if (icon) icon.style.color = showLeft ? 'white' : 'black';
+          if (icon) icon.style.color = showLeft ? 'rgb(var(--accent))' : 'rgb(var(--text))';
         }}
       >
-        <LokusLogo className="w-6 h-6" style={{ color: showLeft ? 'white' : 'black' }} />
+        <LokusLogo className="w-6 h-6" style={{ color: showLeft ? 'rgb(var(--accent))' : 'rgb(var(--text))' }} />
       </button>
 
       {/* Activity Bar */}
@@ -171,7 +171,7 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
         {/* Bases */}
         {uiVisibility.sidebar_bases && (
           <button
-            onClick={onOpenBasesTab}
+            onClick={() => useViewStore.getState().switchView('bases')}
             title="Bases"
             data-tour="bases"
             className="obsidian-button icon-only w-full mb-1"
@@ -202,7 +202,7 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
         {/* Graph View */}
         {uiVisibility.sidebar_graph && (
           <button
-            onClick={onOpenGraphView}
+            onClick={() => useViewStore.getState().switchView('graph')}
             title="Graph View"
             data-tour="graph"
             className="obsidian-button icon-only w-full mb-1"

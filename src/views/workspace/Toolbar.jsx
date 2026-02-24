@@ -55,14 +55,11 @@ export default function Toolbar({
 
   const openTabs = focusedGroup?.tabs ?? [];
   const activeFile = focusedGroup?.activeTab ?? null;
-  const unsavedChanges = focusedGroup
-    ? Object.fromEntries(
-        Object.entries(focusedGroup.contentByTab ?? {}).map(([path, data]) => [
-          path,
-          data?.dirty ?? false,
-        ])
-      )
-    : {};
+  const unsavedChanges = new Set(
+    Object.entries(focusedGroup?.contentByTab ?? {})
+      .filter(([, data]) => data?.dirty)
+      .map(([path]) => path)
+  );
 
   const handleTabClick = (path) => {
     const groupId = useEditorGroupStore.getState().focusedGroupId;
@@ -154,7 +151,10 @@ export default function Toolbar({
       <div className="flex items-center gap-1">
         {uiVisibility.toolbar_split_view && (
           <button
-            onClick={onToggleSplitView}
+            onClick={() => {
+              const { focusedGroupId, splitGroup } = useEditorGroupStore.getState();
+              if (focusedGroupId) splitGroup(focusedGroupId, 'vertical');
+            }}
             className="obsidian-button icon-only small"
             title="Split View"
             data-tauri-drag-region="false"

@@ -1,26 +1,62 @@
 import { useCallback, useRef } from 'react';
 import { useEditorGroupStore } from '../../../stores/editorGroups';
 import { useViewStore } from '../../../stores/views';
+import { getEditor } from '../../../stores/editorRegistry';
+import { createLokusSerializer } from '../../../core/markdown/lokus-md-pipeline';
 import { invoke } from '@tauri-apps/api/core';
 import { confirm, save } from '@tauri-apps/plugin-dialog';
+
+const lokusSerializer = createLokusSerializer();
 
 export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
   const lastVersionContentRef = useRef({});
   const lastVersionSaveRef = useRef({});
 
-  const handleSave = useCallback(async (editor, filePath, groupId) => {
+  const handleSave = useCallback(async (editorArg, filePathArg, groupIdArg) => {
+    // When called from shortcuts with no args, resolve from focused group
+    let editor = editorArg;
+    let filePath = filePathArg;
+    let groupId = groupIdArg;
+
+    if (!editor || !filePath) {
+      const store = useEditorGroupStore.getState();
+      const focusedGroup = store.getFocusedGroup?.() ?? null;
+      if (!focusedGroup) return;
+      groupId = focusedGroup.id;
+      filePath = focusedGroup.activeTab;
+      editor = getEditor(groupId);
+    }
+
     if (!editor || !filePath) return;
 
     let pathToSave = filePath;
 
     try {
-      // Get markdown from editor — try @tiptap/markdown first, fallback to getText
-      let contentToSave;
-      if (editor.storage.markdown?.getMarkdown) {
-        contentToSave = editor.storage.markdown.getMarkdown();
-      } else {
-        contentToSave = editor.getText();
+      // Check if title was changed — if so, rename the file first
+      if (groupId) {
+        const store = useEditorGroupStore.getState();
+        const group = store.findGroup(groupId);
+        const tabContent = group?.contentByTab?.[filePath];
+        if (tabContent?.title) {
+          const currentFileName = filePath.split('/').pop().replace(/\.md$/, '');
+          if (tabContent.title !== currentFileName && tabContent.title.trim()) {
+            const dir = filePath.substring(0, filePath.lastIndexOf('/'));
+            const ext = filePath.includes('.') ? filePath.substring(filePath.lastIndexOf('.')) : '.md';
+            const newPath = `${dir}/${tabContent.title}${ext}`;
+            try {
+              await invoke('rename_file', { oldPath: filePath, newPath });
+              store.updateTabPath(filePath, newPath);
+              pathToSave = newPath;
+              if (onRefreshFiles) onRefreshFiles();
+            } catch (_) {
+              // If rename fails, save to original path
+            }
+          }
+        }
       }
+
+      // Serialize ProseMirror document directly to markdown
+      const contentToSave = lokusSerializer.serialize(editor.state.doc);
 
       await invoke('write_file_content', { path: pathToSave, content: contentToSave });
 
@@ -59,7 +95,18 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
     } catch (_) {}
   }, [workspacePath, graphProcessorRef, onRefreshFiles]);
 
-  const handleSaveAs = useCallback(async (editor, filePath) => {
+  const handleSaveAs = useCallback(async (editorArg, filePathArg) => {
+    let editor = editorArg;
+    let filePath = filePathArg;
+
+    if (!editor || !filePath) {
+      const store = useEditorGroupStore.getState();
+      const focusedGroup = store.getFocusedGroup?.() ?? null;
+      if (!focusedGroup) return;
+      filePath = focusedGroup.activeTab;
+      editor = getEditor(focusedGroup.id);
+    }
+
     if (!editor || !filePath) return;
 
     try {
@@ -79,13 +126,8 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
 
       if (!savePath) return;
 
-      // Get markdown content from the editor
-      let contentToSave;
-      if (editor.storage.markdown?.getMarkdown) {
-        contentToSave = editor.storage.markdown.getMarkdown();
-      } else {
-        contentToSave = editor.getText();
-      }
+      // Serialize ProseMirror document directly to markdown
+      let contentToSave = lokusSerializer.serialize(editor.state.doc);
 
       if (savePath.endsWith('.html')) {
         const htmlContent = editor.getHTML();

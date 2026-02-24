@@ -72,10 +72,12 @@ const evictLRU = (contentByTab) => {
   return Object.fromEntries(entries.slice(0, MAX_CACHED_TABS));
 };
 
+const defaultGroup = createGroup([], null);
+
 export const useEditorGroupStore = create(
   subscribeWithSelector((set, get) => ({
-    layout: createGroup([], null),
-    focusedGroupId: null,
+    layout: defaultGroup,
+    focusedGroupId: defaultGroup.id,
     globalRecentFiles: [],
     recentlyClosedTabs: [],
 

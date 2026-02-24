@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { useStatusBar } from '../../hooks/useStatusBar';
 import { useResponsiveStatusBar, STATUS_BAR_PRIORITY } from '../../hooks/useResponsiveStatusBar';
 import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
+import { useEditorGroupStore } from '../../stores/editorGroups';
 import SyncStatus from '../Auth/SyncStatus.jsx';
 import { isDesktop } from '../../platform/index.js';
 import {
@@ -15,20 +16,38 @@ import {
 import { MoreHorizontal, Terminal } from 'lucide-react';
 
 /**
- * ResponsiveStatusBar - Adaptive status bar with priority-based progressive hiding
- * Maintains all StatusBar functionality while adding overflow menus for hidden items
+ * ResponsiveStatusBar - Self-contained status bar.
+ * Reads editor state directly from useEditorGroupStore.
  */
 export default function ResponsiveStatusBar({
-  activeFile,
-  unsavedChanges,
-  openTabs = [],
-  editor,
   readingSpeed = 200,
   showTerminal = false,
   onToggleTerminal = null
 }) {
   const { leftItems, rightItems } = useStatusBar();
   const featureFlags = useFeatureFlags();
+
+  // Read state directly from EditorGroupStore
+  const layout = useEditorGroupStore((s) => s.layout);
+  const focusedGroupId = useEditorGroupStore((s) => s.focusedGroupId);
+
+  const { activeFile, openTabs, unsavedChanges } = useMemo(() => {
+    const store = useEditorGroupStore.getState();
+    const group = store.getFocusedGroup() || store.getAllGroups()[0];
+    const tabs = group?.tabs ?? [];
+    const active = group?.activeTab ?? null;
+
+    const dirty = new Set();
+    for (const g of store.getAllGroups()) {
+      for (const tab of g.tabs) {
+        if (g.contentByTab?.[tab.path]?.dirty) dirty.add(tab.path);
+      }
+    }
+
+    return { activeFile: active, openTabs: tabs, unsavedChanges: dirty };
+  }, [layout, focusedGroupId]);
+
+  const editor = null;
 
   // Count words and characters
   function countFinder(editor) {

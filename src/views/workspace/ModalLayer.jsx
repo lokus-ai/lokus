@@ -2,6 +2,7 @@ import { useViewStore } from '../../stores/views';
 import { useEditorGroupStore } from '../../stores/editorGroups';
 import { useLayoutStore } from '../../stores/layout';
 import { useFileTreeStore } from '../../stores/fileTree';
+import { getEditor } from '../../stores/editorRegistry';
 import CommandPalette from '../../components/CommandPalette.jsx';
 import InFileSearch from '../../components/InFileSearch.jsx';
 import FullTextSearchPanel from '../FullTextSearchPanel.jsx';
@@ -81,19 +82,12 @@ function applyTemplate(editorInstance, processedContent) {
  */
 export default function ModalLayer({
   workspacePath,
-  filteredFileTree,
   onFileOpen,
   onCreateFile,
-  onCreateFolder,
-  onOpenDailyNote,
-  onCreateTemplate,
   onCreateTemplateSaved,
   onOpenDailyNoteByDate,
-  onSave,
-  onTabClose,
   onConfirmReferenceUpdate,
   onCloseReferenceModal,
-  editorRef,
 }) {
   // Modal visibility flags from useViewStore
   const showCommandPalette = useViewStore((s) => s.showCommandPalette);
@@ -111,12 +105,15 @@ export default function ModalLayer({
   const canvasPreview = useViewStore((s) => s.canvasPreview);
   const referenceUpdateModal = useViewStore((s) => s.referenceUpdateModal);
 
+  // Focused group id for editor registry lookup
+  const focusedGroupId = useEditorGroupStore((s) => s.focusedGroupId);
+
   // Tab/file state from useEditorGroupStore
   const focusedGroup = useEditorGroupStore((s) => {
-    const { layout, focusedGroupId } = s;
-    if (!focusedGroupId) return null;
+    const { layout, focusedGroupId: gid } = s;
+    if (!gid) return null;
     const findGroup = (node) => {
-      if (node.type === 'group' && node.id === focusedGroupId) return node;
+      if (node.type === 'group' && node.id === gid) return node;
       if (node.type === 'container') {
         for (const child of node.children) {
           const found = findGroup(child);
@@ -130,6 +127,40 @@ export default function ModalLayer({
 
   const openTabs = focusedGroup?.tabs ?? [];
   const activeFile = focusedGroup?.activeTab ?? null;
+
+  // filteredFileTree sourced directly from the file tree store
+  const fileTree = useFileTreeStore((s) => s.fileTree);
+
+  // Stable handlers sourced from stores (replaces missing props)
+  const handleSave = () => {
+    // useSave's handleSave resolves editor from registry when called with no args
+    // Dispatch a DOM event that ShortcutListener / useSave already handles,
+    // or call the store-resolved save directly via the registry
+    const store = useEditorGroupStore.getState();
+    const group = store.getFocusedGroup?.();
+    if (!group) return;
+    const editor = getEditor(group.id);
+    if (!editor || !group.activeTab) return;
+    window.dispatchEvent(new CustomEvent('lokus:save', { detail: { editor, filePath: group.activeTab, groupId: group.id } }));
+  };
+
+  const handleTabClose = (path) => {
+    const store = useEditorGroupStore.getState();
+    const groupId = store.focusedGroupId || store.getAllGroups()[0]?.id;
+    if (groupId) store.removeTab(groupId, path);
+  };
+
+  const handleCreateFolder = () => {
+    useFileTreeStore.getState().startCreate('folder', null);
+  };
+
+  const handleOpenDailyNote = () => {
+    window.dispatchEvent(new CustomEvent('lokus:open-daily-note'));
+  };
+
+  const handleCreateTemplate = () => {
+    useViewStore.getState().openPanel('showCreateTemplate');
+  };
 
   const handleOpenPreferences = () => {
     (async () => {
@@ -166,9 +197,10 @@ export default function ModalLayer({
       templateSelection.template &&
       templateSelection.processedContent
     ) {
-      if (editorRef?.current) {
+      const editor = getEditor(focusedGroupId);
+      if (editor) {
         try {
-          applyTemplate(editorRef.current, templateSelection.processedContent);
+          applyTemplate(editor, templateSelection.processedContent);
         } catch {
           // ignore
         }
@@ -177,14 +209,16 @@ export default function ModalLayer({
     }
 
     // Fall back to opening the template picker modal
+    const editor = getEditor(focusedGroupId);
     useViewStore.getState().openPanel('showTemplatePicker');
     useViewStore.setState({
       templatePickerData: {
-        editorState: { editor: editorRef?.current },
+        editorState: { editor },
         onSelect: (template, processedContent) => {
-          if (editorRef?.current && processedContent) {
+          const currentEditor = getEditor(useEditorGroupStore.getState().focusedGroupId);
+          if (currentEditor && processedContent) {
             try {
-              applyTemplate(editorRef.current, processedContent);
+              applyTemplate(currentEditor, processedContent);
             } catch {
               // ignore
             }
@@ -200,26 +234,26 @@ export default function ModalLayer({
       <CommandPalette
         open={showCommandPalette}
         setOpen={(v) => useViewStore.setState({ showCommandPalette: v })}
-        fileTree={filteredFileTree}
+        fileTree={fileTree}
         openFiles={openTabs}
         onFileOpen={onFileOpen}
         onCreateFile={onCreateFile}
-        onCreateFolder={onCreateFolder}
-        onSave={onSave}
+        onCreateFolder={handleCreateFolder}
+        onSave={handleSave}
         onOpenPreferences={handleOpenPreferences}
         onToggleSidebar={() => useLayoutStore.getState().toggleLeft()}
-        onCloseTab={onTabClose}
+        onCloseTab={handleTabClose}
         onOpenGraph={handleOpenGraph}
         onShowTemplatePicker={handleShowTemplatePicker}
-        onCreateTemplate={onCreateTemplate}
-        onOpenDailyNote={onOpenDailyNote}
+        onCreateTemplate={handleCreateTemplate}
+        onOpenDailyNote={handleOpenDailyNote}
         onRefresh={() => useFileTreeStore.getState().refreshTree()}
         activeFile={activeFile}
       />
 
       {/* In-file search */}
       <InFileSearch
-        editor={editorRef?.current}
+        editor={getEditor(focusedGroupId)}
         isVisible={showInFileSearch}
         onClose={() => useViewStore.getState().closePanel('showInFileSearch')}
       />

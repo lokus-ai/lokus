@@ -120,7 +120,7 @@ export default function LeftSidebar({
   // Plugins panel
   if (featureFlags.enable_plugins && showPlugins) {
     return (
-      <aside className="overflow-y-auto flex flex-col">
+      <aside className="h-full overflow-y-auto flex flex-col bg-app-bg border-r border-app-border">
         <div className="flex-1 overflow-hidden">
           <PluginSettings onOpenPluginDetail={onOpenPluginDetail} />
         </div>
@@ -131,7 +131,7 @@ export default function LeftSidebar({
   // Bases panel
   if (showBases) {
     return (
-      <aside className="overflow-y-auto flex flex-col">
+      <aside className="h-full overflow-y-auto flex flex-col bg-app-bg border-r border-app-border">
         <div className="flex-1 overflow-hidden">
           <BasesView isVisible={true} onFileOpen={onFileOpen} />
         </div>
@@ -142,7 +142,7 @@ export default function LeftSidebar({
   // Kanban list panel
   if (showKanban) {
     return (
-      <aside className="overflow-y-auto flex flex-col">
+      <aside className="h-full overflow-y-auto flex flex-col bg-app-bg border-r border-app-border">
         <div className="flex-1 overflow-hidden">
           <KanbanList
             workspacePath={workspacePath}
@@ -158,7 +158,7 @@ export default function LeftSidebar({
   // Graph placeholder panel
   if (showGraphView) {
     return (
-      <aside className="overflow-y-auto flex flex-col">
+      <aside className="h-full overflow-y-auto flex flex-col bg-app-bg border-r border-app-border">
         <div className="flex-1 overflow-hidden p-4">
           <div className="text-center mb-4">
             <button
@@ -195,7 +195,7 @@ export default function LeftSidebar({
   // Daily notes panel
   if (showDailyNotesPanel) {
     return (
-      <aside className="overflow-y-auto flex flex-col">
+      <aside className="h-full overflow-y-auto flex flex-col bg-app-bg border-r border-app-border">
         <div className="flex-1 overflow-hidden">
           <DailyNotesPanel
             workspacePath={workspacePath}
@@ -210,7 +210,7 @@ export default function LeftSidebar({
   // Calendar widget panel
   if (showCalendarPanel) {
     return (
-      <aside className="overflow-y-auto flex flex-col">
+      <aside className="h-full overflow-y-auto flex flex-col bg-app-bg border-r border-app-border">
         <div className="flex-1 overflow-hidden">
           <CalendarWidget
             onOpenCalendarView={handleOpenCalendarView}
@@ -223,7 +223,7 @@ export default function LeftSidebar({
 
   // Default: Explorer / file tree
   return (
-    <aside className="overflow-y-auto flex flex-col">
+    <aside className="h-full overflow-y-auto flex flex-col bg-app-bg border-r border-app-border">
       {/* Explorer Header */}
       <div className="h-10 px-4 flex items-center justify-between border-b border-app-border bg-app-panel">
         <span className="text-xs font-semibold uppercase tracking-wide text-app-muted">

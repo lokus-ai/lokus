@@ -6,18 +6,16 @@
  *
  * Usage
  * -----
- *   import { ReferenceWorkerClient } from '@/workers/referenceWorkerClient'
- *
- *   const client = new ReferenceWorkerClient()
+ *   import referenceWorkerClient from '@/workers/referenceWorkerClient'
  *
  *   // Build a full index (main thread has already read file contents via Tauri)
- *   const index = await client.buildIndex(files)   // files: [{ path, content }]
+ *   await referenceWorkerClient.buildIndex(files)   // files: [{ path, content }]
+ *
+ *   // Look up which files link to a given path (synchronous, uses cached index)
+ *   const sources = referenceWorkerClient.getBacklinksForFile('/workspace/notes/MyNote.md')
  *
  *   // Extract refs from a single file on demand
- *   const refs = await client.extractRefs(path, content)
- *
- *   // Clean up when the component/store is torn down
- *   client.terminate()
+ *   const refs = await referenceWorkerClient.extractRefs(path, content)
  */
 
 export class ReferenceWorkerClient {
@@ -39,12 +37,30 @@ export class ReferenceWorkerClient {
     /** Monotonically increasing id used to correlate requests with responses */
     this.idCounter = 0
 
+    /**
+     * Cached index returned by the last successful buildIndex call.
+     *
+     * Shape:
+     *   forward: Record<string, string[]>  — path → outgoing wiki-link targets
+     *   reverse: Record<string, string[]>  — target name → source paths
+     *   tags:    Record<string, string[]>  — path → tag list
+     *   blocks:  Record<string, string[]>  — path → block id list
+     *
+     * The reverse index keys are the raw wiki-link target strings extracted by
+     * the worker (e.g. "MyNote", "folder/MyNote").  To find all files that link
+     * to a given absolute path we match against the file's basename (with and
+     * without .md extension) and any relative sub-path suffix.
+     *
+     * @type {{ forward: Object, reverse: Object, tags: Object, blocks: Object } | null}
+     */
+    this._index = null
+
     this.worker.onmessage = (e) => this._handleMessage(e.data)
 
     this.worker.onerror = (err) => {
       console.error('[ReferenceWorkerClient] Uncaught worker error:', err)
       // Reject all in-flight promises so callers don't hang
-      for (const [id, { reject }] of this.pending) {
+      for (const [, { reject }] of this.pending) {
         reject(new Error(`Worker error: ${err.message ?? 'unknown'}`))
       }
       this.pending.clear()
@@ -60,6 +76,9 @@ export class ReferenceWorkerClient {
    *
    * The caller is responsible for reading file contents via Tauri (the worker
    * has no access to the Tauri IPC bridge).
+   *
+   * After this promise resolves the index is also cached locally so that
+   * getBacklinksForFile() can answer without a worker round-trip.
    *
    * @param {{ path: string, content: string }[]} files
    * @returns {Promise<{
@@ -103,6 +122,66 @@ export class ReferenceWorkerClient {
   }
 
   /**
+   * Synchronous lookup: return all source file paths that contain a wiki-link
+   * pointing to the file at `absolutePath`.
+   *
+   * Uses the index cached from the last buildIndex() call.  Returns an empty
+   * array if the index has not been built yet or no backlinks are found.
+   *
+   * The worker stores reverse entries keyed by the raw wiki-link target text
+   * (e.g. "MyNote", "folder/MyNote", "MyNote.md").  We normalise `absolutePath`
+   * to every possible form a wiki-link author might have typed and union the
+   * results.
+   *
+   * @param {string} absolutePath - Absolute path of the file to look up
+   * @returns {string[]}          - Deduplicated list of source file paths
+   */
+  getBacklinksForFile(absolutePath) {
+    if (!this._index || !this._index.reverse) return []
+
+    const reverse = this._index.reverse
+
+    // Derive lookup keys from the absolute path
+    const parts = absolutePath.split('/')
+    const basename = parts[parts.length - 1]            // "MyNote.md"
+    const basenameNoExt = basename.replace(/\.md$/i, '') // "MyNote"
+
+    // Workspace-relative sub-paths (every suffix of the path segments)
+    // e.g. for /ws/folder/sub/MyNote.md we check:
+    //   "MyNote.md", "MyNote", "sub/MyNote.md", "sub/MyNote",
+    //   "folder/sub/MyNote.md", "folder/sub/MyNote"
+    const keysToCheck = new Set([basename, basenameNoExt])
+
+    for (let i = parts.length - 2; i >= 1; i--) {
+      const suffix = parts.slice(i).join('/')
+      keysToCheck.add(suffix)                            // "sub/MyNote.md"
+      keysToCheck.add(suffix.replace(/\.md$/i, ''))     // "sub/MyNote"
+    }
+
+    const sources = new Set()
+    for (const key of keysToCheck) {
+      const list = reverse[key]
+      if (Array.isArray(list)) {
+        for (const src of list) {
+          if (src !== absolutePath) {
+            sources.add(src)
+          }
+        }
+      }
+    }
+
+    return Array.from(sources)
+  }
+
+  /**
+   * Check whether the index has been built at least once.
+   * @returns {boolean}
+   */
+  isIndexed() {
+    return this._index !== null
+  }
+
+  /**
    * Terminate the underlying worker.  After this call the client instance
    * must not be used again.
    */
@@ -113,6 +192,7 @@ export class ReferenceWorkerClient {
       reject(new Error('Worker terminated'))
     }
     this.pending.clear()
+    this._index = null
   }
 
   // ---------------------------------------------------------------------------
@@ -128,6 +208,8 @@ export class ReferenceWorkerClient {
         const entry = this.pending.get(-1)
         if (entry) {
           this.pending.delete(-1)
+          // Cache the index for synchronous backlink lookups
+          this._index = data.index
           entry.resolve(data.index)
         }
         break
@@ -160,3 +242,13 @@ export class ReferenceWorkerClient {
     }
   }
 }
+
+/**
+ * Singleton worker client instance.
+ *
+ * Import this directly instead of instantiating ReferenceWorkerClient yourself:
+ *
+ *   import referenceWorkerClient from '@/workers/referenceWorkerClient'
+ */
+const referenceWorkerClient = new ReferenceWorkerClient()
+export default referenceWorkerClient

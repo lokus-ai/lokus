@@ -10,7 +10,7 @@ import { getFilename } from "../../utils/pathUtils.js";
 import { copyFiles, cutFiles, getRelativePath } from "../../utils/clipboard.js";
 import { useViewStore } from "../../stores/views";
 import { useEditorGroupStore } from "../../stores/editorGroups";
-import referenceManager from "../../core/references/ReferenceManager.js";
+import referenceWorkerClient from "../../workers/referenceWorkerClient.js";
 import { InlineRenameInput } from "./InlineRenameInput.jsx";
 import { NewItemInput } from "./NewItemInput.jsx";
 
@@ -148,8 +148,11 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
 
     // Check for references that would need updating
     if (onCheckReferences) {
-      const affectedFiles = await referenceManager.findAffectedFiles(oldPath);
-      if (affectedFiles.length > 0) {
+      const backlinkSources = referenceWorkerClient.getBacklinksForFile(oldPath);
+      if (backlinkSources.length > 0) {
+        // Convert the flat source-path list to the shape the modal expects:
+        // { filePath: string }[]
+        const affectedFiles = backlinkSources.map(filePath => ({ filePath }));
         // Show confirmation modal
         onCheckReferences({
           oldPath,

@@ -2,16 +2,18 @@ import { useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useEditorGroupStore } from "../../stores/editorGroups";
 import { useFileTreeStore } from "../../stores/fileTree";
+import { useLayoutStore } from "../../stores/layout";
+import { useViewStore } from "../../stores/views";
+import { getEditor } from "../../stores/editorRegistry";
 import { getFilename } from "../../utils/pathUtils.js";
 import { isImageFile, findImageFiles } from "../../utils/imageUtils.js";
-import referenceManager from "../../core/references/ReferenceManager.js";
+import referenceWorkerClient from "../../workers/referenceWorkerClient.js";
 
 /**
  * Manages session persistence, file tree fetching, and file content loading.
  *
  * @param {object} params
  * @param {string}  params.workspacePath - The active workspace path.
- * @param {object}  params.editorRef     - Ref to the Tiptap editor instance.
  * @param {Array}   params.plugins       - Loaded plugin list (for tab rehydration).
  *
  * @returns {{
@@ -20,7 +22,7 @@ import referenceManager from "../../core/references/ReferenceManager.js";
  *   insertImagesIntoEditor: (imagePaths: string[]) => Promise<void>,
  * }}
  */
-export function useWorkspaceSession({ workspacePath, editorRef, plugins }) {
+export function useWorkspaceSession({ workspacePath, plugins }) {
   const refreshId = useFileTreeStore((s) => s.refreshId);
 
   // -------------------------------------------------------------------------
@@ -73,6 +75,23 @@ export function useWorkspaceSession({ workspacePath, editorRef, plugins }) {
           useEditorGroupStore.getState().addRecentFile(p);
         });
       }
+
+      // Restore layout store (sidebar widths / visibility)
+      if (session.layout) {
+        const { showLeft, showRight, leftW, rightW, bottomPanelHeight, bottomPanelTab } = session.layout;
+        const layoutStore = useLayoutStore.getState();
+        if (showLeft !== undefined) useLayoutStore.setState({ showLeft });
+        if (showRight !== undefined) useLayoutStore.setState({ showRight });
+        if (leftW !== undefined) layoutStore.setLeftW(leftW);
+        if (rightW !== undefined) layoutStore.setRightW(rightW);
+        if (bottomPanelHeight !== undefined) layoutStore.setBottomHeight(bottomPanelHeight);
+        if (bottomPanelTab !== undefined) layoutStore.setBottomTab(bottomPanelTab);
+      }
+
+      // Restore current view
+      if (session.current_view) {
+        useViewStore.getState().switchView(session.current_view);
+      }
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspacePath]);
@@ -86,6 +105,8 @@ export function useWorkspaceSession({ workspacePath, editorRef, plugins }) {
 
       const { layout, getAllGroups, globalRecentFiles } = useEditorGroupStore.getState();
       const { expandedFolders } = useFileTreeStore.getState();
+      const { showLeft, showRight, leftW, rightW, bottomPanelHeight, bottomPanelTab } = useLayoutStore.getState();
+      const { currentView } = useViewStore.getState();
 
       // Collect all open tab paths from all groups for backward compatibility
       const allGroups = getAllGroups();
@@ -99,6 +120,8 @@ export function useWorkspaceSession({ workspacePath, editorRef, plugins }) {
         expandedFolders: folderPaths,
         recentFiles: recentPaths,
         editorLayout: layout,
+        layout: { showLeft, showRight, leftW, rightW, bottomPanelHeight, bottomPanelTab },
+        currentView,
       });
     }, 500);
     return () => clearTimeout(saveTimeout);
@@ -141,8 +164,21 @@ export function useWorkspaceSession({ workspacePath, editorRef, plugins }) {
         walk(tree);
         try { window.__LOKUS_FILE_INDEX__ = flat; } catch {}
 
-        referenceManager.init(workspacePath);
-        referenceManager.buildIndex(flat).catch(() => {});
+        // Build the reference index in the worker.
+        // The worker cannot call Tauri IPC itself, so we read all markdown
+        // file contents here on the main thread (in parallel) and then hand
+        // the {path, content} pairs to the worker for off-thread indexing.
+        const mdFiles = flat.filter(f => f.path.endsWith('.md'));
+        Promise.all(
+          mdFiles.map(f =>
+            invoke('read_file_content', { path: f.path })
+              .then(content => ({ path: f.path, content: content ?? '' }))
+              .catch(() => null)
+          )
+        ).then(results => {
+          const filesWithContent = results.filter(Boolean);
+          return referenceWorkerClient.buildIndex(filesWithContent);
+        }).catch(() => {});
 
         const imageFiles = findImageFiles(tree);
         useEditorGroupStore.getState().setAllImageFiles(imageFiles);
@@ -172,9 +208,10 @@ export function useWorkspaceSession({ workspacePath, editorRef, plugins }) {
 
   // Insert images into editor at cursor position.
   const insertImagesIntoEditor = useCallback(async (imagePaths) => {
-    if (!editorRef.current) return;
+    const focusedGroupId = useEditorGroupStore.getState().focusedGroupId;
+    const editor = getEditor(focusedGroupId);
+    if (!editor) return;
 
-    const editor = editorRef.current;
     const { readFile } = await import('@tauri-apps/plugin-fs');
 
     const extToMime = (ext) => {
@@ -214,7 +251,7 @@ export function useWorkspaceSession({ workspacePath, editorRef, plugins }) {
     }
 
     editor.chain().focus().insertContent({ type: 'paragraph' }).run();
-  }, [editorRef]);
+  }, []);
 
   return {
     reloadCurrentFile,

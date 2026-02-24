@@ -8,7 +8,7 @@ import { useEditorGroupStore } from '../stores/editorGroups';
  * Reads from useEditorGroupStore instead of prop drilling.
  * Each EditorGroup leaf is wrapped in an ErrorBoundary.
  */
-export default function EditorGroupsContainer({ node, workspacePath }) {
+export default function EditorGroupsContainer({ node, workspacePath, isSingleGroup = false, welcomeProps }) {
   const containerRef = useRef(null);
   const [isResizing, setIsResizing] = useState(false);
 
@@ -22,6 +22,8 @@ export default function EditorGroupsContainer({ node, workspacePath }) {
           group={node}
           isFocused={node.id === focusedGroupId}
           workspacePath={workspacePath}
+          hideTabBar={isSingleGroup}
+          {...welcomeProps}
         />
       </ErrorBoundary>
     );
@@ -84,6 +86,7 @@ export default function EditorGroupsContainer({ node, workspacePath }) {
             <EditorGroupsContainer
               node={child}
               workspacePath={workspacePath}
+              welcomeProps={welcomeProps}
             />
           </div>
 

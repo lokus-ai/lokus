@@ -2,16 +2,18 @@ import { useCallback } from 'react';
 import { useFileTreeStore } from '../../../stores/fileTree';
 import { useEditorGroupStore } from '../../../stores/editorGroups';
 import { useViewStore } from '../../../stores/views';
+import { getEditor } from '../../../stores/editorRegistry';
 import { invoke } from '@tauri-apps/api/core';
 import { confirm } from '@tauri-apps/plugin-dialog';
 import { toast } from '../../../components/ui/enhanced-toast';
-import referenceManager from '../../../core/references/ReferenceManager';
+import referenceWorkerClient from '../../../workers/referenceWorkerClient.js';
+import referenceManager from '../../../core/references/ReferenceManager.js';
 import { canvasManager } from '../../../core/canvas/manager.js';
 import dailyNotesManager from '../../../core/daily-notes/manager.js';
 import posthog from '../../../services/posthog.js';
 import { setGlobalActiveTheme } from '../../../core/theme/manager.js';
 
-export function useFileOperations({ workspacePath, featureFlags, handleFileOpen, editorRef, currentTheme }) {
+export function useFileOperations({ workspacePath, featureFlags, handleFileOpen, currentTheme }) {
   const refreshTree = useFileTreeStore((s) => s.refreshTree);
   const startCreate = useFileTreeStore((s) => s.startCreate);
   const cancelCreate = useFileTreeStore((s) => s.cancelCreate);
@@ -277,12 +279,15 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
   // ---------------------------------------------------------------------------
   const handleCreateTemplate = useCallback(() => {
     const getContentForTemplate = () => {
-      if (editorRef?.current) {
-        const { state } = editorRef.current;
+      const focusedGroup = useEditorGroupStore.getState().getFocusedGroup();
+      const editor = getEditor(focusedGroup?.id);
+
+      if (editor) {
+        const { state } = editor;
         const { selection } = state;
 
         if (!selection.empty) {
-          const selectedHTML = editorRef.current.getHTML ? editorRef.current.getHTML() : '';
+          const selectedHTML = editor.getHTML ? editor.getHTML() : '';
 
           if (!selectedHTML || !selectedHTML.includes('<')) {
             const selectedText = state.doc.textBetween(selection.from, selection.to);
@@ -291,15 +296,14 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
 
           return selectedHTML;
         } else {
-          const activeFile = useEditorGroupStore.getState().getFocusedGroup()?.activeTab;
+          const activeFile = focusedGroup?.activeTab;
           if (activeFile) {
-            const editorHTML = editorRef.current.getHTML ? editorRef.current.getHTML() : null;
+            const editorHTML = editor.getHTML ? editor.getHTML() : null;
 
             if (editorHTML && editorHTML.includes('<')) {
               return editorHTML;
             }
 
-            const focusedGroup = useEditorGroupStore.getState().getFocusedGroup();
             const tabContent = focusedGroup?.contentByTab?.[activeFile];
             const currentContent = tabContent?.savedContent ?? tabContent?.html ?? '';
             return currentContent;
@@ -312,7 +316,7 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
     const contentForTemplate = getContentForTemplate();
     useViewStore.setState({ createTemplateContent: contentForTemplate });
     useViewStore.getState().openPanel('showCreateTemplate');
-  }, [editorRef]);
+  }, []);
 
   const handleCreateTemplateSaved = useCallback(() => {
     useViewStore.getState().closePanel('showCreateTemplate');
@@ -357,13 +361,16 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
 
   const handleCheckReferences = useCallback(async (oldPath, newPath) => {
     try {
-      const affected = await referenceManager.findAffectedFiles(oldPath, workspacePath);
-      if (affected.length > 0) {
+      const backlinkSources = referenceWorkerClient.getBacklinksForFile(oldPath);
+      if (backlinkSources.length > 0) {
+        // Convert flat source-path list to the shape the modal expects:
+        // { filePath: string }[]
+        const affectedFiles = backlinkSources.map(filePath => ({ filePath }));
         useViewStore.getState().setReferenceUpdateModal({
           isOpen: true,
           oldPath,
           newPath,
-          affectedFiles: affected,
+          affectedFiles,
           isProcessing: false,
           result: null,
           pendingOperation: null,
@@ -374,7 +381,7 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
     } catch (e) {
       return false;
     }
-  }, [workspacePath]);
+  }, []);
 
   const handleConfirmReferenceUpdate = useCallback(async () => {
     const viewStore = useViewStore.getState();
@@ -387,11 +394,9 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
     });
 
     try {
-      const result = await referenceManager.updateReferences(
+      const result = await referenceManager.updateAllReferences(
         referenceUpdateModal.oldPath,
         referenceUpdateModal.newPath,
-        referenceUpdateModal.affectedFiles,
-        workspacePath,
       );
       viewStore.setReferenceUpdateModal({
         ...referenceUpdateModal,

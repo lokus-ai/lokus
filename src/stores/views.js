@@ -53,6 +53,8 @@ export const useViewStore = create(
       affectedFiles: [], isProcessing: false, result: null, pendingOperation: null,
     },
 
+    // Valid view values: 'editor' | 'graph' | 'kanban' | 'bases' | 'calendar' |
+    //                    'marketplace' | 'canvas' | 'settings' | 'dailyNotes'
     switchView: (view) => set({ currentView: view }),
     incrementVersionRefreshKey: () => set((s) => ({ versionRefreshKey: s.versionRefreshKey + 1 })),
 

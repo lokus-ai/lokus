@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 // Context providers
@@ -10,6 +10,7 @@ import { PanelManager } from '../plugins/ui/PanelManager.jsx';
 import { useEditorGroupStore } from '../stores/editorGroups';
 import { useFileTreeStore } from '../stores/fileTree';
 import { useLayoutStore } from '../stores/layout';
+import { useViewStore } from '../stores/views';
 
 // Feature hooks
 import { useWorkspaceSession } from '../features/workspace/useWorkspaceSession';
@@ -49,9 +50,6 @@ function WorkspaceInner({ path }) {
   const { plugins } = usePlugins();
   const featureFlags = useFeatureFlags();
 
-  // Stable refs
-  const editorRef = useRef(null);
-
   // Graph engine (owns graphProcessorRef internally)
   const graphEngine = useGraphEngine({ workspacePath: path });
 
@@ -66,7 +64,6 @@ function WorkspaceInner({ path }) {
   // Tabs
   const { handleFileOpen } = useTabs({
     workspacePath: path,
-    editorRef,
     onSave: handleSave,
   });
 
@@ -75,21 +72,18 @@ function WorkspaceInner({ path }) {
     workspacePath: path,
     featureFlags,
     handleFileOpen,
-    editorRef,
     currentTheme,
   });
 
   // Session (file tree loading, session persistence, image insertion)
   const { reloadCurrentFile, insertImagesIntoEditor } = useWorkspaceSession({
     workspacePath: path,
-    editorRef,
     plugins,
   });
 
   // Workspace-level Tauri event listeners
   useWorkspaceEvents({
     workspacePath: path,
-    editorRef,
     graphProcessorRef: graphEngine.graphProcessorRef,
     insertImagesIntoEditor,
   });
@@ -164,7 +158,6 @@ function WorkspaceInner({ path }) {
     <PanelManager>
       <ShortcutListener
         workspacePath={path}
-        editorRef={editorRef}
         onSave={handleSave}
         onSaveAs={handleSaveAs}
         onCreateFile={fileOps.handleCreateFile}
@@ -176,57 +169,69 @@ function WorkspaceInner({ path }) {
         onOpenWorkspace={fileOps.handleOpenWorkspace}
       />
 
-      <WorkspaceShell>
-        <Toolbar
-          onCreateFile={fileOps.handleCreateFile}
-          onCreateFolder={fileOps.handleCreateFolder}
-          onCreateCanvas={fileOps.handleCreateCanvas}
+      <div className="h-full w-full overflow-hidden">
+        <WorkspaceShell
+          toolbar={
+            <Toolbar
+              onCreateFile={fileOps.handleCreateFile}
+              onCreateFolder={fileOps.handleCreateFolder}
+              onCreateCanvas={fileOps.handleCreateCanvas}
+            />
+          }
+          iconSidebar={<IconSidebar />}
+          leftSidebar={
+            <ErrorBoundary name="LeftSidebar" message="Sidebar crashed">
+              <LeftSidebar
+                workspacePath={path}
+                filteredFileTree={filteredFileTree}
+                onFileOpen={handleFileOpen}
+                onCreateFile={fileOps.handleCreateFile}
+                onCreateFolder={fileOps.handleCreateFolder}
+                onCreateCanvas={fileOps.handleCreateCanvas}
+                onOpenDailyNote={fileOps.handleOpenDailyNote}
+                onOpenDailyNoteByDate={fileOps.handleOpenDailyNoteByDate}
+                onRefreshFiles={handleRefreshFiles}
+                onConfirmCreate={fileOps.handleConfirmCreate}
+                onCheckReferences={handleCheckReferences}
+                onViewHistory={() => {}}
+                onOpenPluginDetail={handleOpenPluginDetail}
+                onCreateKanban={fileOps.handleCreateKanban}
+                onKanbanBoardAction={fileOps.handleKanbanBoardAction}
+                editorGroupsUpdateTabPath={(old, next) =>
+                  useEditorGroupStore.getState().updateTabPath(old, next)
+                }
+              />
+            </ErrorBoundary>
+          }
+          mainContent={
+            <ErrorBoundary name="MainContent" message="Editor crashed">
+              <MainContent
+                workspacePath={path}
+                welcomeProps={{
+                  onCreateFile: fileOps.handleCreateFile,
+                  onCreateFolder: fileOps.handleCreateFolder,
+                  onCreateCanvas: fileOps.handleCreateCanvas,
+                  onOpenCommandPalette: () => useViewStore.setState({ showCommandPalette: true }),
+                  onFileOpen: handleFileOpen,
+                }}
+              />
+            </ErrorBoundary>
+          }
+          rightSidebar={
+            <ErrorBoundary name="RightSidebar" message="Panel crashed">
+              <RightSidebar
+                workspacePath={path}
+                onFileOpen={handleFileOpen}
+                onOpenDailyNoteByDate={fileOps.handleOpenDailyNoteByDate}
+                onReloadCurrentFile={reloadCurrentFile}
+                graphProcessorRef={graphEngine.graphProcessorRef}
+              />
+            </ErrorBoundary>
+          }
+          bottomPanel={<BottomPanel workspacePath={path} onResizeStart={handleBottomPanelResizeStart} />}
+          statusBar={<ResponsiveStatusBar workspacePath={path} />}
         />
-
-        <IconSidebar />
-
-        <ErrorBoundary name="LeftSidebar" message="Sidebar crashed">
-          <LeftSidebar
-            workspacePath={path}
-            filteredFileTree={filteredFileTree}
-            onFileOpen={handleFileOpen}
-            onCreateFile={fileOps.handleCreateFile}
-            onCreateFolder={fileOps.handleCreateFolder}
-            onCreateCanvas={fileOps.handleCreateCanvas}
-            onOpenDailyNote={fileOps.handleOpenDailyNote}
-            onOpenDailyNoteByDate={fileOps.handleOpenDailyNoteByDate}
-            onRefreshFiles={handleRefreshFiles}
-            onConfirmCreate={fileOps.handleConfirmCreate}
-            onCheckReferences={handleCheckReferences}
-            onViewHistory={() => {}}
-            onOpenPluginDetail={handleOpenPluginDetail}
-            onCreateKanban={fileOps.handleCreateKanban}
-            onKanbanBoardAction={fileOps.handleKanbanBoardAction}
-            editorGroupsUpdateTabPath={(old, next) =>
-              useEditorGroupStore.getState().updateTabPath(old, next)
-            }
-          />
-        </ErrorBoundary>
-
-        <ErrorBoundary name="MainContent" message="Editor crashed">
-          <MainContent workspacePath={path} editorRef={editorRef} />
-        </ErrorBoundary>
-
-        <ErrorBoundary name="RightSidebar" message="Panel crashed">
-          <RightSidebar
-            workspacePath={path}
-            onFileOpen={handleFileOpen}
-            onOpenDailyNoteByDate={fileOps.handleOpenDailyNoteByDate}
-            onReloadCurrentFile={reloadCurrentFile}
-            editorRef={editorRef}
-            graphProcessorRef={graphEngine.graphProcessorRef}
-          />
-        </ErrorBoundary>
-
-        <BottomPanel workspacePath={path} onResizeStart={handleBottomPanelResizeStart} />
-      </WorkspaceShell>
-
-      <ResponsiveStatusBar workspacePath={path} />
+      </div>
 
       <ErrorBoundary name="ModalLayer" message="Modal crashed">
         <ModalLayer
@@ -237,7 +242,6 @@ function WorkspaceInner({ path }) {
           onOpenDailyNoteByDate={fileOps.handleOpenDailyNoteByDate}
           onConfirmReferenceUpdate={handleConfirmReferenceUpdate}
           onCloseReferenceModal={handleCloseReferenceModal}
-          editorRef={editorRef}
         />
       </ErrorBoundary>
     </PanelManager>
@@ -248,7 +252,8 @@ function WorkspaceInner({ path }) {
 // Workspace — public entry point; sets up context providers and path init.
 // Receives `path` directly from App.jsx (no internal useState needed).
 // ---------------------------------------------------------------------------
-export default function Workspace({ path = '' }) {
+export default function Workspace({ path: pathProp, initialPath, ...rest }) {
+  const path = pathProp || initialPath || '';
   useEffect(() => {
     if (!path) return;
     invoke('validate_workspace_path', { path }).catch(() => {});

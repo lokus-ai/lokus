@@ -4,11 +4,18 @@ import { useLayoutStore } from '../../../stores/layout';
 import { useViewStore } from '../../../stores/views';
 import { useEditorGroupStore } from '../../../stores/editorGroups';
 import { useFileTreeStore } from '../../../stores/fileTree';
+import { getEditor } from '../../../stores/editorRegistry';
 import { setGlobalActiveTheme, getSystemPreferredTheme, setupSystemThemeListener } from '../../../core/theme/manager';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isDesktop } from '../../../platform/index';
 
-export function useShortcuts({ workspacePath, editorRef, onSave, onSaveAs, onCreateFile, onCreateFolder, onCreateCanvas, onOpenDailyNote, onExportPdf, onExportHtml, onOpenWorkspace, onPrint }) {
+/** Returns the currently focused group's editor from the registry. */
+function getFocusedEditor() {
+  const { focusedGroupId } = useEditorGroupStore.getState();
+  return getEditor(focusedGroupId);
+}
+
+export function useShortcuts({ workspacePath, onSave, onSaveAs, onCreateFile, onCreateFolder, onCreateCanvas, onOpenDailyNote, onExportPdf, onExportHtml, onOpenWorkspace, onPrint }) {
   useEffect(() => {
     const unlisteners = [];
 
@@ -85,8 +92,8 @@ export function useShortcuts({ workspacePath, editorRef, onSave, onSaveAs, onCre
     });
 
     // Edit operations
-    on('lokus:edit-undo', () => editorRef?.current?.commands?.undo?.());
-    on('lokus:edit-redo', () => editorRef?.current?.commands?.redo?.());
+    on('lokus:edit-undo', () => getFocusedEditor()?.commands?.undo?.());
+    on('lokus:edit-redo', () => getFocusedEditor()?.commands?.redo?.());
     on('lokus:edit-cut', () => document.execCommand('cut'));
     on('lokus:edit-copy', () => document.execCommand('copy'));
     on('lokus:edit-paste', () => navigator.clipboard?.readText?.().then(t => document.execCommand('insertText', false, t)).catch(() => {}));
@@ -115,36 +122,36 @@ export function useShortcuts({ workspacePath, editorRef, onSave, onSaveAs, onCre
     });
 
     // Insert commands (editor)
-    on('lokus:insert-wikilink', () => editorRef?.current?.commands?.insertWikiLink?.());
-    on('lokus:insert-math-inline', () => editorRef?.current?.chain?.().focus().insertContent('$\\text{}$').run());
-    on('lokus:insert-math-block', () => editorRef?.current?.chain?.().focus().insertContent('$$\n\\text{}\n$$').run());
-    on('lokus:insert-table', () => editorRef?.current?.chain?.().focus().insertTable({ rows: 3, cols: 3 }).run());
+    on('lokus:insert-wikilink', () => getFocusedEditor()?.commands?.insertWikiLink?.());
+    on('lokus:insert-math-inline', () => getFocusedEditor()?.chain?.().focus().insertContent('$\\text{}$').run());
+    on('lokus:insert-math-block', () => getFocusedEditor()?.chain?.().focus().insertContent('$$\n\\text{}\n$$').run());
+    on('lokus:insert-table', () => getFocusedEditor()?.chain?.().focus().insertTable({ rows: 3, cols: 3 }).run());
     on('lokus:insert-image', () => { /* handled by editor image extension */ });
-    on('lokus:insert-code-block', () => editorRef?.current?.chain?.().focus().toggleCodeBlock().run());
-    on('lokus:insert-horizontal-rule', () => editorRef?.current?.chain?.().focus().setHorizontalRule().run());
-    on('lokus:insert-blockquote', () => editorRef?.current?.chain?.().focus().toggleBlockquote().run());
-    on('lokus:insert-bullet-list', () => editorRef?.current?.chain?.().focus().toggleBulletList().run());
-    on('lokus:insert-ordered-list', () => editorRef?.current?.chain?.().focus().toggleOrderedList().run());
-    on('lokus:insert-task-list', () => editorRef?.current?.chain?.().focus().toggleTaskList().run());
+    on('lokus:insert-code-block', () => getFocusedEditor()?.chain?.().focus().toggleCodeBlock().run());
+    on('lokus:insert-horizontal-rule', () => getFocusedEditor()?.chain?.().focus().setHorizontalRule().run());
+    on('lokus:insert-blockquote', () => getFocusedEditor()?.chain?.().focus().toggleBlockquote().run());
+    on('lokus:insert-bullet-list', () => getFocusedEditor()?.chain?.().focus().toggleBulletList().run());
+    on('lokus:insert-ordered-list', () => getFocusedEditor()?.chain?.().focus().toggleOrderedList().run());
+    on('lokus:insert-task-list', () => getFocusedEditor()?.chain?.().focus().toggleTaskList().run());
 
     // Heading inserts
     for (let level = 1; level <= 6; level++) {
       on(`lokus:insert-heading`, (e) => {
         const lvl = e?.payload?.level || level;
-        editorRef?.current?.chain?.().focus().toggleHeading({ level: lvl }).run();
+        getFocusedEditor()?.chain?.().focus().toggleHeading({ level: lvl }).run();
       });
     }
 
     // Format commands
-    on('lokus:format-bold', () => editorRef?.current?.chain?.().focus().toggleBold().run());
-    on('lokus:format-italic', () => editorRef?.current?.chain?.().focus().toggleItalic().run());
-    on('lokus:format-underline', () => editorRef?.current?.chain?.().focus().toggleUnderline().run());
-    on('lokus:format-strikethrough', () => editorRef?.current?.chain?.().focus().toggleStrike().run());
-    on('lokus:format-code', () => editorRef?.current?.chain?.().focus().toggleCode().run());
-    on('lokus:format-highlight', () => editorRef?.current?.chain?.().focus().toggleHighlight().run());
-    on('lokus:format-superscript', () => editorRef?.current?.chain?.().focus().toggleSuperscript().run());
-    on('lokus:format-subscript', () => editorRef?.current?.chain?.().focus().toggleSubscript().run());
-    on('lokus:format-clear', () => editorRef?.current?.chain?.().focus().unsetAllMarks().run());
+    on('lokus:format-bold', () => getFocusedEditor()?.chain?.().focus().toggleBold().run());
+    on('lokus:format-italic', () => getFocusedEditor()?.chain?.().focus().toggleItalic().run());
+    on('lokus:format-underline', () => getFocusedEditor()?.chain?.().focus().toggleUnderline().run());
+    on('lokus:format-strikethrough', () => getFocusedEditor()?.chain?.().focus().toggleStrike().run());
+    on('lokus:format-code', () => getFocusedEditor()?.chain?.().focus().toggleCode().run());
+    on('lokus:format-highlight', () => getFocusedEditor()?.chain?.().focus().toggleHighlight().run());
+    on('lokus:format-superscript', () => getFocusedEditor()?.chain?.().focus().toggleSuperscript().run());
+    on('lokus:format-subscript', () => getFocusedEditor()?.chain?.().focus().toggleSubscript().run());
+    on('lokus:format-clear', () => getFocusedEditor()?.chain?.().focus().unsetAllMarks().run());
 
     // Window operations
     on('lokus:window-minimize', async () => { try { await getCurrentWindow().minimize(); } catch (_) {} });
@@ -200,5 +207,5 @@ export function useShortcuts({ workspacePath, editorRef, onSave, onSaveAs, onCre
       Promise.all(unlisteners.map(u => u.then(fn => fn()).catch(() => {})));
       document.removeEventListener('keydown', handleKeyDown, { capture: true });
     };
-  }, [workspacePath, editorRef, onSave, onSaveAs, onCreateFile, onCreateFolder, onCreateCanvas, onOpenDailyNote, onExportPdf, onExportHtml, onOpenWorkspace, onPrint]);
+  }, [workspacePath, onSave, onSaveAs, onCreateFile, onCreateFolder, onCreateCanvas, onOpenDailyNote, onExportPdf, onExportHtml, onOpenWorkspace, onPrint]);
 }
