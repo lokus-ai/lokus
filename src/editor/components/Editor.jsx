@@ -670,6 +670,10 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
               if (rootFile) {
                 cleanHref = rootFile.path;
                 fileExists = true;
+              } else {
+                // File doesn't exist - construct path in workspace root
+                const fileName = searchTerm.endsWith('.md') ? searchTerm : `${searchTerm}.md`;
+                cleanHref = wsPath ? `${wsPath}/${fileName}` : fileName;
               }
             } else {
               const hasPath = /[/\\]/.test(searchTerm);
@@ -693,8 +697,36 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
                 const sameFolder = candidates.find(f => dirname(f.path) === activeDir);
                 cleanHref = sameFolder ? sameFolder.path : candidates[0].path;
                 fileExists = true;
+              } else {
+                // File doesn't exist - construct absolute path for new file
+                // Create in same folder as current file
+                const wsPath = globalThis.__LOKUS_WORKSPACE_PATH__ || '';
+                const basePath = activeDir || wsPath;
+                const fileName = searchTerm.endsWith('.md') ? searchTerm : `${searchTerm}.md`;
+                cleanHref = basePath ? `${basePath}/${fileName}` : fileName;
               }
             }
+          }
+
+          // If cleanHref is still not an absolute path, construct one
+          // This handles cases where the index is empty or initial href was not found
+          const isAbsolutePath = cleanHref.startsWith('/') || /^[A-Za-z]:/.test(cleanHref);
+          if (!isAbsolutePath && !fileExists) {
+            const wsPath = globalThis.__LOKUS_WORKSPACE_PATH__ || '';
+            const activePath = globalThis.__LOKUS_ACTIVE_FILE__ || '';
+            const dirname = (p) => {
+              if (!p) return '';
+              const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+              return i >= 0 ? p.slice(0, i) : '';
+            };
+            const activeDir = dirname(activePath);
+            const basePath = activeDir || wsPath;
+            // Extract just the filename from cleanHref (remove any path components)
+            let fileName = cleanHref.split(/[\\/]/).pop() || cleanHref;
+            if (!fileName.endsWith('.md')) {
+              fileName = `${fileName}.md`;
+            }
+            cleanHref = basePath ? `${basePath}/${fileName}` : fileName;
           }
 
           // Emit to workspace to open file (Tauri or DOM event)
