@@ -28,11 +28,8 @@ import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
 import BlockId from "../extensions/BlockId.js";
 import WikiLinkEmbed from "../extensions/WikiLinkEmbed.js";
 import TagAutocomplete from "../extensions/TagAutocomplete.js";
-import HeadingAltInput from "../extensions/HeadingAltInput.js";
 import MarkdownPaste from "../extensions/MarkdownPaste.js";
 import MarkdownTablePaste from "../extensions/MarkdownTablePaste.js";
-import SmartTask from "../extensions/SmartTask.js";
-import SimpleTask from "../extensions/SimpleTask.js";
 import TaskSyntaxHighlight from "../extensions/TaskSyntaxHighlight.js";
 import TaskMentionSuggest from "../extensions/TaskMentionSuggest.js";
 import TaskCreationTrigger from "../extensions/TaskCreationTrigger.js";
@@ -725,8 +722,8 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
   }, [extensions, handleEditorUpdate]);
 
   useEffect(() => {
-    if (editor) onEditorReady(editor);
-    return () => onEditorReady(null);
+    if (editor) onEditorReady?.(editor);
+    return () => onEditorReady?.(null);
   }, [editor, onEditorReady]);
 
   // Keyboard shortcuts and event listeners for WikiLink and Task insertion

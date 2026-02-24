@@ -1,72 +1,41 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import EditorGroup from './EditorGroup';
+import ErrorBoundary from './ErrorBoundary';
+import { useEditorGroupStore } from '../stores/editorGroups';
 
 /**
- * EditorGroupsContainer - Recursively renders the layout tree
- * Handles both leaf nodes (EditorGroup) and branch nodes (split containers)
+ * EditorGroupsContainer - Recursively renders the layout tree.
+ * Reads from useEditorGroupStore instead of prop drilling.
+ * Each EditorGroup leaf is wrapped in an ErrorBoundary.
  */
-export default function EditorGroupsContainer({
-  node,
-  focusedGroupId,
-  isDragActive,
-  dropTarget,
-  fileTree,
-  workspacePath,
-  unsavedChanges,
-  onTabClick,
-  onTabClose,
-  onTabDragStart,
-  onTabDragEnd,
-  onDropZoneHover,
-  onDrop,
-  onContentChange,
-  onFocus,
-  onFileOpen,
-  onSizeChange,
-  canvasManager,
-  openTabs,
-  TabBarComponent,
-}) {
+export default function EditorGroupsContainer({ node, workspacePath, isSingleGroup = false, welcomeProps }) {
   const containerRef = useRef(null);
   const [isResizing, setIsResizing] = useState(false);
-  const [resizeIndex, setResizeIndex] = useState(null);
 
-  // If this is a leaf node (group), render the EditorGroup
+  const focusedGroupId = useEditorGroupStore((s) => s.focusedGroupId);
+
+  // Leaf node: render EditorGroup wrapped in ErrorBoundary
   if (node.type === 'group') {
     return (
-      <EditorGroup
-        group={node}
-        isFocused={node.id === focusedGroupId}
-        isDragActive={isDragActive}
-        dropTarget={dropTarget}
-        fileTree={fileTree}
-        workspacePath={workspacePath}
-        unsavedChanges={unsavedChanges}
-        onTabClick={onTabClick}
-        onTabClose={onTabClose}
-        onTabDragStart={onTabDragStart}
-        onTabDragEnd={onTabDragEnd}
-        onDropZoneHover={onDropZoneHover}
-        onDrop={onDrop}
-        onContentChange={onContentChange}
-        onFocus={onFocus}
-        onFileOpen={onFileOpen}
-        canvasManager={canvasManager}
-        openTabs={openTabs}
-        TabBarComponent={TabBarComponent}
-      />
+      <ErrorBoundary key={node.id} name={`group-${node.id}`} message="This pane crashed">
+        <EditorGroup
+          group={node}
+          isFocused={node.id === focusedGroupId}
+          workspacePath={workspacePath}
+          hideTabBar={isSingleGroup}
+          {...welcomeProps}
+        />
+      </ErrorBoundary>
     );
   }
 
-  // Otherwise, this is a container node with children
+  // Container node: render children with resize bars
   const isVertical = node.direction === 'vertical';
   const sizes = node.sizes || node.children.map(() => 100 / node.children.length);
 
-  // Handle mouse down on resizer
   const handleResizerMouseDown = (e, index) => {
     e.preventDefault();
     setIsResizing(true);
-    setResizeIndex(index);
 
     const startPos = isVertical ? e.clientX : e.clientY;
     const containerSize = isVertical
@@ -79,21 +48,18 @@ export default function EditorGroupsContainer({
       const currentPos = isVertical ? moveEvent.clientX : moveEvent.clientY;
       const delta = ((currentPos - startPos) / containerSize) * 100;
 
-      // Update sizes
       const newSizes = [...startSizes];
       newSizes[index] = Math.max(10, Math.min(90, startSizes[index] + delta));
       newSizes[index + 1] = Math.max(10, Math.min(90, startSizes[index + 1] - delta));
 
-      // Normalize to ensure they sum to 100
       const total = newSizes.reduce((a, b) => a + b, 0);
       const normalized = newSizes.map(s => (s / total) * 100);
 
-      onSizeChange && onSizeChange(node.id, normalized);
+      useEditorGroupStore.getState().updateSizes(node.id, normalized);
     };
 
     const handleMouseUp = () => {
       setIsResizing(false);
-      setResizeIndex(null);
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
@@ -110,7 +76,6 @@ export default function EditorGroupsContainer({
     >
       {node.children.map((child, index) => (
         <React.Fragment key={child.id}>
-          {/* Child container or group */}
           <div
             style={{
               [isVertical ? 'width' : 'height']: `${sizes[index]}%`,
@@ -120,29 +85,11 @@ export default function EditorGroupsContainer({
           >
             <EditorGroupsContainer
               node={child}
-              focusedGroupId={focusedGroupId}
-              isDragActive={isDragActive}
-              dropTarget={dropTarget}
-              fileTree={fileTree}
               workspacePath={workspacePath}
-              unsavedChanges={unsavedChanges}
-              onTabClick={onTabClick}
-              onTabClose={onTabClose}
-              onTabDragStart={onTabDragStart}
-              onTabDragEnd={onTabDragEnd}
-              onDropZoneHover={onDropZoneHover}
-              onDrop={onDrop}
-              onContentChange={onContentChange}
-              onFocus={onFocus}
-              onFileOpen={onFileOpen}
-              onSizeChange={onSizeChange}
-              canvasManager={canvasManager}
-              openTabs={openTabs}
-              TabBarComponent={TabBarComponent}
+              welcomeProps={welcomeProps}
             />
           </div>
 
-          {/* Resizer (between children, not after the last one) */}
           {index < node.children.length - 1 && (
             <div
               className={`flex-shrink-0 ${
@@ -152,9 +99,8 @@ export default function EditorGroupsContainer({
               } bg-app-border transition-colors duration-200`}
               onMouseDown={(e) => handleResizerMouseDown(e, index)}
               onDoubleClick={() => {
-                // Reset to equal sizes
                 const equalSizes = node.children.map(() => 100 / node.children.length);
-                onSizeChange && onSizeChange(node.id, equalSizes);
+                useEditorGroupStore.getState().updateSizes(node.id, equalSizes);
               }}
             />
           )}

@@ -3,6 +3,13 @@ import { Plugin } from '@tiptap/pm/state'
 import { getMarkdownCompiler } from '../../core/markdown/compiler.js'
 import { MarkdownCompiler } from '../../core/markdown/compiler-logic.js'
 
+// Singleton — created once on first use, reused on subsequent pastes
+let _syncCompiler = null;
+const getSyncCompiler = () => {
+  if (!_syncCompiler) _syncCompiler = new MarkdownCompiler();
+  return _syncCompiler;
+};
+
 const MarkdownPaste = Extension.create({
   name: 'markdownPaste',
 
@@ -40,7 +47,7 @@ const MarkdownPaste = Extension.create({
             // Use our universal markdown compiler
             if (text) {
               // Use local sync compiler for quick checks
-              const syncCompiler = new MarkdownCompiler()
+              const syncCompiler = getSyncCompiler()
               const workerCompiler = getMarkdownCompiler()
 
               // Check if HTML is actually rich content or just bloated markup
