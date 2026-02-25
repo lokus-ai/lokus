@@ -1,48 +1,63 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback, forwardRef, useImperativeHandle } from "react";
 import * as Sentry from "@sentry/react";
 import { recoverContent } from "../lib/sanitizeHTML.js";
-import { useEditor, EditorContent } from "@tiptap/react";
-import * as StarterKitExt from "@tiptap/starter-kit";
-import * as PlaceholderExt from "@tiptap/extension-placeholder";
-import SlashCommand from "../lib/SlashCommand.js";
+
+// --- ProseMirror core imports (replacing TipTap) ---
+import useProseMirror from '../hooks/useProseMirror.js';
+import { lokusSchema } from '../schema/lokus-schema.js';
+import { createLokusSerializer } from '../../core/markdown/lokus-md-pipeline.js';
+import { keymap } from 'prosemirror-keymap';
+import { baseKeymap, toggleMark, setBlockType, wrapIn } from 'prosemirror-commands';
+import { history } from 'prosemirror-history';
+import { dropCursor } from 'prosemirror-dropcursor';
+import { gapCursor } from 'prosemirror-gapcursor';
+import { inputRules, wrappingInputRule, textblockTypeInputRule } from 'prosemirror-inputrules';
+import { createEditorCommands, insertContent as pmInsertContent } from '../commands/index.js';
+
+// --- TipTap extension imports (commented out — will be ported in Tasks 10-13) ---
+// import { useEditor, EditorContent } from "@tiptap/react";
+// import * as StarterKitExt from "@tiptap/starter-kit";
+// import * as PlaceholderExt from "@tiptap/extension-placeholder";
+// import SlashCommand from "../lib/SlashCommand.js";
+// import * as LinkExt from "@tiptap/extension-link";
+// import * as TaskListExt from "@tiptap/extension-task-list";
+// import * as TaskItemExt from "@tiptap/extension-task-item";
+// import * as ImageExt from "@tiptap/extension-image";
+// import * as SuperscriptExt from "@tiptap/extension-superscript";
+// import * as SubscriptExt from "@tiptap/extension-subscript";
+// import * as TableExt from "@tiptap/extension-table";
+// import * as TableRowExt from "@tiptap/extension-table-row";
+// import * as TableHeaderExt from "@tiptap/extension-table-header";
+// import * as TableCellExt from "@tiptap/extension-table-cell";
+// import * as StrikeExt from "@tiptap/extension-strike";
+// import * as HighlightExt from "@tiptap/extension-highlight";
+// import * as HorizontalRuleExt from "@tiptap/extension-horizontal-rule";
+// import { InputRule, nodeInputRule } from "@tiptap/core";
+// import MathExtension from "@aarkue/tiptap-math-extension";
+// import WikiLink from "../extensions/WikiLink.js";
+// import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
+// import BlockId from "../extensions/BlockId.js";
+// import WikiLinkEmbed from "../extensions/WikiLinkEmbed.js";
+// import TagAutocomplete from "../extensions/TagAutocomplete.js";
+// import MarkdownPaste from "../extensions/MarkdownPaste.js";
+// import MarkdownTablePaste from "../extensions/MarkdownTablePaste.js";
+// import TaskSyntaxHighlight from "../extensions/TaskSyntaxHighlight.js";
+// import TaskMentionSuggest from "../extensions/TaskMentionSuggest.js";
+// import TaskCreationTrigger from "../extensions/TaskCreationTrigger.js";
+// import CustomCodeBlock from "../extensions/CustomCodeBlock.js";
+// import CodeBlockIndent from "../extensions/CodeBlockIndent.js";
+// import Callout from "../extensions/Callout.js";
+// import Folding from "../extensions/Folding.js";
+// import SymbolShortcuts from "../extensions/SymbolShortcuts.js";
+// import MathSnippets from "../extensions/MathSnippets.js";
+// import MermaidDiagram from "../extensions/MermaidDiagram.jsx";
+// import CanvasLink from '../extensions/CanvasLink.js';
+// import PluginCompletion from '../extensions/PluginCompletion.js';
+// import PluginHover from '../extensions/PluginHover.js';
+
+import { convertFileSrc } from "@tauri-apps/api/core";
 import TableBubbleMenu from "./TableBubbleMenu.jsx";
 import EditorContextMenu from "../../components/EditorContextMenu.jsx";
-import * as LinkExt from "@tiptap/extension-link";
-import * as TaskListExt from "@tiptap/extension-task-list";
-import * as TaskItemExt from "@tiptap/extension-task-item";
-import * as ImageExt from "@tiptap/extension-image";
-import * as SuperscriptExt from "@tiptap/extension-superscript";
-import * as SubscriptExt from "@tiptap/extension-subscript";
-import * as TableExt from "@tiptap/extension-table";
-import * as TableRowExt from "@tiptap/extension-table-row";
-import * as TableHeaderExt from "@tiptap/extension-table-header";
-import * as TableCellExt from "@tiptap/extension-table-cell";
-import * as StrikeExt from "@tiptap/extension-strike";
-import * as HighlightExt from "@tiptap/extension-highlight";
-import * as HorizontalRuleExt from "@tiptap/extension-horizontal-rule";
-import { InputRule, nodeInputRule } from "@tiptap/core";
-import { convertFileSrc } from "@tauri-apps/api/core";
-import MathExtension from "@aarkue/tiptap-math-extension";
-import WikiLink from "../extensions/WikiLink.js";
-import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
-import BlockId from "../extensions/BlockId.js";
-import WikiLinkEmbed from "../extensions/WikiLinkEmbed.js";
-import TagAutocomplete from "../extensions/TagAutocomplete.js";
-import MarkdownPaste from "../extensions/MarkdownPaste.js";
-import MarkdownTablePaste from "../extensions/MarkdownTablePaste.js";
-import TaskSyntaxHighlight from "../extensions/TaskSyntaxHighlight.js";
-import TaskMentionSuggest from "../extensions/TaskMentionSuggest.js";
-import TaskCreationTrigger from "../extensions/TaskCreationTrigger.js";
-import CustomCodeBlock from "../extensions/CustomCodeBlock.js";
-import CodeBlockIndent from "../extensions/CodeBlockIndent.js";
-import Callout from "../extensions/Callout.js";
-import Folding from "../extensions/Folding.js";
-import SymbolShortcuts from "../extensions/SymbolShortcuts.js";
-import MathSnippets from "../extensions/MathSnippets.js";
-import MermaidDiagram from "../extensions/MermaidDiagram.jsx";
-import CanvasLink from '../extensions/CanvasLink.js';
-import PluginCompletion from '../extensions/PluginCompletion.js';
-import PluginHover from '../extensions/PluginHover.js';
 import liveEditorSettings from "../../core/editor/live-settings.js";
 import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import TaskCreationModal from "../../components/TaskCreationModal.jsx";
@@ -64,8 +79,16 @@ import "../../styles/page-preview.css";
 import "../../styles/canvas-extensions.css";
 import "../../styles/canvas-preview.css";
 
+// ---------------------------------------------------------------------------
+// Outer Editor component
+//
+// Builds the PM plugins array + nodeViews object, loads settings,
+// and renders the inner Tiptap (now ProseMirror) component.
+// ---------------------------------------------------------------------------
+
 const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading = false }, ref) => {
-  const [extensions, setExtensions] = useState(null);
+  const [plugins, setPlugins] = useState(null);
+  const [nodeViews, setNodeViews] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editorSettings, setEditorSettings] = useState(null);
   const [pluginExtensions, setPluginExtensions] = useState([]);
@@ -127,207 +150,100 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
     };
   }, []);
 
+  // Build PM plugins array and nodeViews object
   useEffect(() => {
-    const pick = (ns, named) => ns?.default ?? ns?.[named] ?? null;
-    const StarterKit = pick(StarterKitExt, 'StarterKit');
-    const Placeholder = pick(PlaceholderExt, 'Placeholder');
-    const Link = pick(LinkExt, 'Link');
-    const TaskList = pick(TaskListExt, 'TaskList');
-    const TaskItem = pick(TaskItemExt, 'TaskItem');
-    const Image = pick(ImageExt, 'Image');
-    const Superscript = pick(SuperscriptExt, 'Superscript');
-    const Subscript = pick(SubscriptExt, 'Subscript');
-    const Table = pick(TableExt, 'Table');
-    const TableRow = pick(TableRowExt, 'TableRow');
-    const TableHeader = pick(TableHeaderExt, 'TableHeader');
-    const TableCell = pick(TableCellExt, 'TableCell');
-    const Strike = pick(StrikeExt, 'Strike');
-    const Highlight = pick(HighlightExt, 'Highlight');
-    const HorizontalRule = pick(HorizontalRuleExt, 'HorizontalRule');
+    const schema = lokusSchema;
 
-    const exts = [
-      StarterKit.configure({
-        // Disable extensions we add separately to avoid duplicates
-        link: false,
-        strike: false,
-        horizontalRule: false,
-        codeBlock: false,
-      })
+    // ── Formatting keybindings ───────────────────────────────────────────
+    const formattingKeymap = keymap({
+      'Mod-b': toggleMark(schema.marks.bold),
+      'Mod-i': toggleMark(schema.marks.italic),
+      'Mod-`': toggleMark(schema.marks.code),
+      'Mod-Shift-s': toggleMark(schema.marks.strike),
+      'Mod-Shift-h': toggleMark(schema.marks.highlight),
+    });
+
+    // ── Input rules ─────────────────────────────────────────────────────
+    // Basic markdown-style input rules for block types
+    const lokusInputRules = inputRules({
+      rules: [
+        // > blockquote
+        wrappingInputRule(/^\s*>\s$/, schema.nodes.blockquote),
+
+        // # heading (levels 1-6)
+        textblockTypeInputRule(/^(#{1,6})\s$/, schema.nodes.heading, (match) => ({
+          level: match[1].length,
+        })),
+
+        // ``` code block
+        textblockTypeInputRule(/^```([a-zA-Z]*)?\s$/, schema.nodes.codeBlock, (match) => ({
+          language: match[1] || null,
+        })),
+
+        // --- or *** horizontal rule
+        // TODO: port to PM — need a custom input rule for leaf node insertion
+
+        // - or * bullet list
+        wrappingInputRule(/^\s*[-*]\s$/, schema.nodes.bulletList),
+
+        // 1. ordered list
+        wrappingInputRule(
+          /^\s*(\d+)\.\s$/,
+          schema.nodes.orderedList,
+          (match) => ({ order: +match[1] }),
+          (match, node) => node.childCount + node.attrs.order === +match[1]
+        ),
+
+        // - [ ] or - [x] task list
+        // TODO: port to PM — wrappingInputRule for taskList/taskItem
+      ],
+    });
+
+    // ── Core plugins array ──────────────────────────────────────────────
+    const pmPlugins = [
+      lokusInputRules,
+      formattingKeymap,
+      keymap(baseKeymap),
+      history(),
+      dropCursor(),
+      gapCursor(),
+      // TODO: port to PM — SlashCommand plugin
+      // TODO: port to PM — WikiLinkSuggest plugin
+      // TODO: port to PM — TagAutocomplete plugin
+      // TODO: port to PM — TaskMentionSuggest plugin
+      // TODO: port to PM — TaskCreationTrigger plugin
+      // TODO: port to PM — MarkdownPaste plugin
+      // TODO: port to PM — MarkdownTablePaste plugin
+      // TODO: port to PM — TaskSyntaxHighlight plugin
+      // TODO: port to PM — BlockId plugin
+      // TODO: port to PM — WikiLinkEmbed plugin
+      // TODO: port to PM — CodeBlockIndent plugin
+      // TODO: port to PM — Callout plugin
+      // TODO: port to PM — Folding plugin
+      // TODO: port to PM — MathSnippets plugin
+      // TODO: port to PM — SymbolShortcuts plugin
+      // TODO: port to PM — MermaidDiagram plugin
+      // TODO: port to PM — PluginCompletion plugin
+      // TODO: port to PM — PluginHover plugin
+      // TODO: port to PM — Placeholder plugin
+      // TODO: port to PM — Link autolink plugin
     ];
-    
-    exts.push(CustomCodeBlock);
 
-    if (Link) exts.push(Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true }));
-    if (TaskList && TaskItem) exts.push(TaskList, TaskItem);
-    if (Image) {
-      // Properly extend Image extension to override addInputRules
-      const CustomImage = Image.extend({
-        addInputRules() {
-          return [
-            nodeInputRule({
-              find: /!\[([^\]]*)\]\(([^)]+)\)$/,
-              type: this.type,
-              getAttributes: (match) => {
-                let src = match[2];
-                const alt = match[1];
-                // Convert local file paths to asset URLs that Tauri can load
-                // URLs and data URIs pass through unchanged
-                if (src && !src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('asset:')) {
-                  src = convertFileSrc(src);
-                }
-                return {
-                  src,
-                  alt
-                };
-              },
-            }),
-          ];
-        },
-      });
+    // TODO: port to PM — add plugin extensions from editorAPI
+    // pluginExtensions would need to be converted to PM plugins
 
-      exts.push(CustomImage.configure({
-        inline: true,
-        allowBase64: true,
-        HTMLAttributes: {
-          class: 'editor-image',
-        },
-      }));
-    }
-    // Superscript and subscript with input rules for H^2^O and H~2~O syntax
-    if (Superscript) {
-      exts.push(Superscript.extend({
-        addInputRules() {
-          return [
-            new InputRule({
-              find: /\^([^^\s]+)\^$/,
-              handler: ({ state, range, match, chain }) => {
-                const text = match[1];
-                chain().deleteRange(range).insertContent(`<sup>${text}</sup>`).run();
-              },
-            }),
-          ];
-        },
-      }));
-    }
+    // ── Node views ──────────────────────────────────────────────────────
+    const pmNodeViews = {
+      // TODO: port to PM — mermaid node view via createReactNodeView
+      // TODO: port to PM — wikiLinkEmbed node view
+      // TODO: port to PM — math node view
+    };
 
-    if (Subscript) {
-      exts.push(Subscript.extend({
-        addInputRules() {
-          return [
-            new InputRule({
-              find: /~([^~\s]+)~$/,
-              handler: ({ state, range, match, chain }) => {
-                const text = match[1];
-                chain().deleteRange(range).insertContent(`<sub>${text}</sub>`).run();
-              },
-            }),
-          ];
-        },
-      }));
-    }
-    if (Table && TableRow && TableHeader && TableCell) {
-      // Extend TableCell and TableHeader to allow empty cells
-      // This prevents "Invalid content for node tableCell: <>" errors
-      const CustomTableCell = TableCell.extend({
-        content: 'block*',  // Allow zero or more blocks (instead of requiring at least one)
-      });
-      const CustomTableHeader = TableHeader.extend({
-        content: 'block*',  // Allow zero or more blocks (instead of requiring at least one)
-      });
-      exts.push(Table.configure({ resizable: true }), TableRow, CustomTableHeader, CustomTableCell);
-    }
-
-    // Additional formatting extensions
-    if (Strike) {
-      exts.push(Strike.extend({
-        addInputRules() {
-          return [
-            new InputRule({
-              find: /~~([^~]+)~~$/,
-              handler: ({ state, range, match, chain }) => {
-                const text = match[1];
-                chain().deleteRange(range).toggleStrike().insertContent(text).toggleStrike().run();
-              },
-            }),
-          ];
-        },
-      }));
-    }
-    if (Highlight) exts.push(Highlight.configure({ multicolor: true }));
-    if (HorizontalRule) exts.push(HorizontalRule);
-
-    // Code blocks (basic, StarterKit includes CodeBlock extension)
-
-    // Math (inline + block) – using @aarkue/tiptap-math-extension
-    exts.push(MathExtension.configure({ evaluation: false }))
-
-    // Obsidian‑style wikilinks and image embeds
-    exts.push(WikiLink);
-    exts.push(WikiLinkSuggest);
-
-    // Canvas links
-    exts.push(CanvasLink);
-
-    // Obsidian-style block IDs (^blockid)
-    exts.push(BlockId);
-
-    // Obsidian-style block embeds (![[File^blockid]])
-    exts.push(WikiLinkEmbed);
-
-    // Tag autocomplete
-    exts.push(TagAutocomplete);
-
-    // Markdown paste functionality
-    exts.push(MarkdownPaste);
-    exts.push(MarkdownTablePaste);
-
-    // Task syntax visual highlighting
-    exts.push(TaskSyntaxHighlight);
-
-    // Task mention autocomplete for @task
-    exts.push(TaskMentionSuggest);
-
-    // Task creation trigger for !task
-    exts.push(TaskCreationTrigger);
-
-    // Code block indentation support (Tab, Shift+Tab, Enter)
-    exts.push(CodeBlockIndent);
-
-    // Callout/Admonition blocks
-    exts.push(Callout);
-
-    // Section folding for headings
-    exts.push(Folding);
-
-    // Math snippets (:mat2: → matrix, :frac: → fraction, etc.)
-    // Must come before SymbolShortcuts to take precedence
-    exts.push(MathSnippets);
-
-    // Symbol shortcuts (:theta: → θ, :arrow: → →, etc.)
-    exts.push(SymbolShortcuts.configure({ customSymbols }));
-
-    // Mermaid diagrams
-    exts.push(MermaidDiagram);
-
-    // Plugin completion and hover providers
-    exts.push(PluginCompletion);
-    exts.push(PluginHover);
-
-    // Add plugin extensions
-    exts.push(...pluginExtensions);
-
-    // Load markdown shortcut prefs and editor settings
+    // ── Load editor settings then finalize ──────────────────────────────
     (async () => {
       try {
-        const { readConfig } = await import('../../core/config/store.js')
-        const cfg = (await readConfig()) || {}
-
-        // Load markdown shortcuts
-        const hs = cfg.markdownShortcuts?.headingAlt
-        const invalid = ['$', '[', '!'] // avoid conflicts with math / wikilinks
-        if (hs?.enabled && hs.marker && !invalid.includes(hs.marker)) {
-          // exts.push(HeadingAltInput({ marker: hs.marker })) // Temporarily disabled
-        }
+        const { readConfig } = await import('../../core/config/store.js');
+        const cfg = (await readConfig()) || {};
 
         // Load editor settings
         const defaultEditorSettings = {
@@ -379,11 +295,10 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
         });
       }
 
-      exts.push(Placeholder.configure({ placeholder: "Press '/' for commands..." }));
-      exts.push(SlashCommand);
-      setExtensions(exts);
+      setPlugins(pmPlugins);
+      setNodeViews(pmNodeViews);
       setLoading(false);
-    })()
+    })();
   }, [pluginExtensions, lastPluginUpdate, customSymbols]);
 
   // Load custom symbols from config and listen for changes
@@ -467,17 +382,36 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
     }
   }, [editorMode]);
 
-  if (loading || !extensions || !editorSettings) {
-    return <div className="m-5 text-app-muted">Loading editor…</div>;
+  if (loading || !plugins || !editorSettings) {
+    return <div className="m-5 text-app-muted">Loading editor...</div>;
   }
 
   return (
-    <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} editorMode={editorMode} onEditorReady={onEditorReady} isLoading={isLoading} showSymbolPicker={showSymbolPicker} setShowSymbolPicker={setShowSymbolPicker} customSymbols={customSymbols} />
+    <PMEditor
+      ref={ref}
+      plugins={plugins}
+      nodeViews={nodeViews}
+      content={content}
+      onContentChange={onContentChange}
+      editorSettings={editorSettings}
+      editorMode={editorMode}
+      onEditorReady={onEditorReady}
+      isLoading={isLoading}
+      showSymbolPicker={showSymbolPicker}
+      setShowSymbolPicker={setShowSymbolPicker}
+      customSymbols={customSymbols}
+    />
   );
 });
 
-const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings, editorMode = 'edit', onEditorReady, isLoading = false, showSymbolPicker = false, setShowSymbolPicker, customSymbols = {} }, ref) => {
-  const isSettingRef = useRef(false);
+// ---------------------------------------------------------------------------
+// Inner PMEditor component (was Tiptap)
+//
+// Creates the ProseMirror EditorView via useProseMirror, handles updates,
+// renders the editor mount point.
+// ---------------------------------------------------------------------------
+
+const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, editorSettings, editorMode = 'edit', onEditorReady, isLoading = false, showSymbolPicker = false, setShowSymbolPicker, customSymbols = {} }, ref) => {
   const [isWikiLinkModalOpen, setIsWikiLinkModalOpen] = useState(false);
   const [isTaskCreationModalOpen, setIsTaskCreationModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -501,52 +435,39 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
 
   const tagIndexTimeoutRef = useRef(null);
 
-  // Memoize callbacks for performance
-  const handleEditorUpdate = useCallback(({ editor }) => {
-    if (isSettingRef.current) {
-      isSettingRef.current = false;
-      return;
-    }
-    onContentChange(editor.getHTML());
+  // ── onContentChange ref for stable callback identity ────────────────
+  const onContentChangeRef = useRef(onContentChange);
+  onContentChangeRef.current = onContentChange;
 
-    // Index tags for autocomplete (Debounced 2s)
+  // ── handleUpdate — called only for user edits (programmatic filtered by useProseMirror) ──
+  const handleUpdate = useCallback((view) => {
+    onContentChangeRef.current(view);
+
+    // Tag indexing (same debounced logic)
     if (tagIndexTimeoutRef.current) clearTimeout(tagIndexTimeoutRef.current);
-
     tagIndexTimeoutRef.current = setTimeout(() => {
       try {
         const activeFile = globalThis.__LOKUS_ACTIVE_FILE__;
         if (activeFile) {
-          // Import tagManager and index the content
           import('../../core/tags/tag-manager.js').then(({ default: tagManager }) => {
-            const content = editor.getText();
-            tagManager.indexNote(activeFile, content);
+            tagManager.indexNote(activeFile, view.state.doc.textContent);
           });
         }
-      } catch { }
+      } catch {}
     }, 2000);
-  }, [onContentChange]);
+  }, []);
 
-  const editor = useEditor({
-    extensions,
-    shouldRerenderOnTransaction: false,
-    onBeforeCreate: ({ editor }) => {
-      // Set editor instance in the plugin API for hot reloading
-      editorAPI.setEditorInstance(editor);
-    },
-    onCreate: ({ editor }) => {
-      // Update editor instance reference
-      editorAPI.setEditorInstance(editor);
-    },
-    onDestroy: () => {
-      // Clear editor instance reference
-      editorAPI.setEditorInstance(null);
-    },
+  // ── useProseMirror hook ─────────────────────────────────────────────
+  const { mountRef, viewRef } = useProseMirror({
+    schema: lokusSchema,
+    plugins,
+    onUpdate: handleUpdate,
+    nodeViews,
     editorProps: {
-      attributes: { class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none tiptap-area obsidian-editor" },
+      attributes: { class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none tiptap-area obsidian-editor' },
       handleDOMEvents: {
         // Prevent browser's default drop handling - Tauri handles external file drops
         drop: (view, event) => {
-          // Check if this is an external file drop (has files in dataTransfer)
           if (event.dataTransfer?.files?.length > 0) {
             event.preventDefault();
             event.stopPropagation();
@@ -555,7 +476,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           return false; // Allow internal editor drops (e.g., text selection drag)
         },
         dragover: (view, event) => {
-          // Prevent default to allow drop, but let Tauri handle it
           if (event.dataTransfer?.types?.includes('Files')) {
             event.preventDefault();
             return true;
@@ -624,17 +544,14 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           const openInNewTab = isMac ? event.metaKey : event.ctrlKey;
 
           // Check if this is a block reference (contains ^)
-          // Check BOTH href and target since target might be empty when loaded from disk
           const hasBlockRef = (href && href.includes('^')) || (target && target.includes('^'));
           let blockId = null;
-          let cleanHref = href;  // Clean path without block reference
+          let cleanHref = href;
 
           if (hasBlockRef) {
-            // Extract blockId from href (format: "/path/to/Filename.md^blockid")
             const parts = href.split('^');
-            cleanHref = parts[0];  // Remove ^blockid from path
-            blockId = parts[1];    // Get the block ID
-
+            cleanHref = parts[0];
+            blockId = parts[1];
           }
 
           // Check if this is a resolved file path that exists in the index
@@ -642,7 +559,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           let fileExists = index.some(f => f.path === cleanHref);
 
           // If href is not a valid path, try to resolve it using the file index
-          // This handles links created before the file index was populated
           if (!fileExists && index.length > 0) {
             let searchTerm = target ? target.split('|')[0].split('^')[0].split('#')[0].trim() : cleanHref;
             const filename = (p) => (p || '').split(/[\\/]/).pop();
@@ -657,7 +573,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
             const isExplicitRoot = searchTerm.startsWith('./');
             if (isExplicitRoot) {
               searchTerm = searchTerm.slice(2);
-              // Find file in workspace root only
               const rootFile = index.find(f => {
                 const name = filename(f.path);
                 const dir = dirname(f.path);
@@ -673,7 +588,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
               const activePath = globalThis.__LOKUS_ACTIVE_FILE__ || '';
               const activeDir = dirname(activePath);
 
-              // Find all matching files
               const candidates = index.filter(f => {
                 if (hasPath) {
                   return f.path.endsWith(searchTerm) ||
@@ -686,7 +600,6 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
               });
 
               if (candidates.length > 0) {
-                // Prefer file in same folder as current file
                 const sameFolder = candidates.find(f => dirname(f.path) === activeDir);
                 cleanHref = sameFolder ? sameFolder.path : candidates[0].path;
                 fileExists = true;
@@ -698,13 +611,12 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           (async () => {
             try {
               const { emit } = await import('@tauri-apps/api/event');
-              // Use different event based on modifier key
               const eventName = openInNewTab ? 'lokus:open-file-new-tab' : 'lokus:open-file';
-              await emit(eventName, cleanHref);  // Use clean path without ^blockid
+              await emit(eventName, cleanHref);
             } catch {
               try {
                 const eventName = openInNewTab ? 'lokus:open-file-new-tab' : 'lokus:open-file';
-                window.dispatchEvent(new CustomEvent(eventName, { detail: cleanHref }));  // Use clean path
+                window.dispatchEvent(new CustomEvent(eventName, { detail: cleanHref }));
               } catch { }
             }
 
@@ -717,14 +629,20 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         },
       },
     },
-    content,
-    onUpdate: handleEditorUpdate,
-  }, [extensions, handleEditorUpdate]);
+    onReady: (view) => {
+      editorAPI.setEditorInstance(view);
+      onEditorReady?.(view);
+    },
+    onDestroy: () => {
+      editorAPI.setEditorInstance(null);
+      onEditorReady?.(null);
+    },
+  });
 
-  useEffect(() => {
-    if (editor) onEditorReady?.(editor);
-    return () => onEditorReady?.(null);
-  }, [editor, onEditorReady]);
+  // NOTE: The content sync useEffect (old lines ~819-867) has been removed.
+  // Content is now set imperatively by EditorGroup via the imperative handle below.
+  // The useProseMirror hook starts with an empty doc, and EditorGroup calls
+  // commands.setContent() to load real content.
 
   // Keyboard shortcuts and event listeners for WikiLink and Task insertion
   useEffect(() => {
@@ -736,8 +654,9 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         return;
       }
 
-      // Task shortcuts - need editor instance
-      if (!editor) return;
+      // Task shortcuts - need view instance
+      const view = viewRef.current;
+      if (!view) return;
 
       // Ctrl+Shift+T: Open task creation modal (!task)
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'T') {
@@ -749,7 +668,7 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
       // Ctrl+Shift+K: Insert @task (triggers task mention autocomplete)
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'K') {
         e.preventDefault();
-        editor.chain().focus().insertContent('@').run();
+        pmInsertContent(view, '@');
         return;
       }
     };
@@ -790,8 +709,9 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
     // Listen for template insertion from Command Palette
     const handleInsertTemplate = (event) => {
       const { content } = event.detail;
-      if (editor && content) {
-        editor.chain().focus().insertContent(content).run();
+      const view = viewRef.current;
+      if (view && content) {
+        pmInsertContent(view, content);
       }
     };
 
@@ -814,98 +734,85 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
       window.removeEventListener('open-math-formula-modal', handleMathFormulaModalEvent);
       window.removeEventListener('lokus:insert-template', handleInsertTemplate);
     };
-  }, [editor]);
+  }, []); // No dependency on editor — viewRef is stable
 
-  useEffect(() => {
-    if (!editor) return;
-
-    // Immediately clear when loading starts
-    if (isLoading && editor.getHTML() !== '') {
-      isSettingRef.current = true;
-      editor.commands.setContent('');
-      return;
-    }
-
-    // Update when new content arrives
-    if (!isLoading && content !== editor.getHTML()) {
-      isSettingRef.current = true;
-
-      try {
-        // Normal path — works for all valid content
-        editor.commands.setContent(content, {
-          parseOptions: { preserveWhitespace: 'full' },
-        });
-      } catch (err) {
-        isSettingRef.current = false;
-        console.warn('[Editor] setContent failed, recovering per-block:', err.message);
-
-        // Per-block recovery: split HTML into blocks, test each one,
-        // render bad blocks as <pre><code> so only they degrade — not the whole file
-        try {
-          const recovered = recoverContent(content, editor);
-          editor.commands.setContent(recovered, {
-            parseOptions: { preserveWhitespace: 'full' },
-          });
-        } catch (err2) {
-          // Even recovery failed — last resort: empty doc
-          console.error('[Editor] Per-block recovery also failed:', err2.message);
-          try { editor.commands.setContent('<p></p>'); } catch {}
-
-          // Only now emit source mode event as absolute last resort
-          window.dispatchEvent(
-            new CustomEvent('lokus:editor-content-error', {
-              detail: { filePath: globalThis.__LOKUS_ACTIVE_FILE__, error: err?.message || String(err) },
-            })
-          );
-        }
-
-        try {
-          Sentry.captureException(err, { extra: { context: 'setContent-per-block-recovery' } });
-        } catch {}
-      }
-    }
-  }, [content, editor, isLoading]);
-
-  // Expose editor instance to parent component via ref
+  // ── Expose editor instance to parent via ref ──────────────────────────
   useImperativeHandle(ref, () => ({
-    commands: editor?.commands,
-    chain: () => editor?.chain(),
-    state: editor?.state,
-    view: editor?.view,
-    getHTML: () => editor?.getHTML(),
-    getText: () => editor?.getText(),
-    setContent: (content) => editor?.commands?.setContent(content),
-    insertContent: (content) => editor?.commands?.insertContent(content),
-    focus: () => editor?.commands?.focus(),
-    editor
-  }), [editor]);
+    view: viewRef.current,
+    state: viewRef.current?.state,
+    dispatch: (tr) => viewRef.current?.dispatch(tr),
+    getJSON: () => viewRef.current?.state?.doc?.toJSON(),
+    getText: () => viewRef.current?.state?.doc?.textContent,
+    focus: () => viewRef.current?.focus(),
+    // Keep backward compat for EditorGroup:
+    commands: {
+      setContent: (content, opts) => {
+        const view = viewRef.current;
+        if (!view) return;
+        let doc;
+        if (typeof content === 'object' && content !== null && content.type) {
+          doc = view.state.schema.nodeFromJSON(content.type === 'doc' ? content : { type: 'doc', content: [content] });
+        } else if (typeof content === 'string') {
+          // Legacy HTML string — shouldn't happen after migration but handle gracefully
+          console.warn('[PMEditor] setContent received HTML string — skipping. Use JSON doc format.');
+          return;
+        }
+        if (!doc) return;
+        const tr = view.state.tr.replaceWith(0, view.state.doc.content.size, doc.content);
+        tr.setMeta('programmatic', true);
+        view.dispatch(tr);
+      },
+      focus: () => viewRef.current?.focus(),
+      scrollIntoView: () => {
+        const view = viewRef.current;
+        if (view) view.dispatch(view.state.tr.scrollIntoView());
+      },
+    },
+    // For backward compat during migration:
+    getHTML: () => {
+      const view = viewRef.current;
+      if (!view) return '';
+      try {
+        const serializer = createLokusSerializer();
+        return serializer.serialize(view.state.doc);
+      } catch (err) {
+        console.warn('[PMEditor] getHTML serialization failed:', err.message);
+        return '';
+      }
+    },
+    // Legacy compat: expose editor-like object for code that expects editor.state, editor.view etc.
+    editor: {
+      get state() { return viewRef.current?.state; },
+      get view() { return viewRef.current; },
+      getHTML() {
+        const view = viewRef.current;
+        if (!view) return '';
+        try {
+          const serializer = createLokusSerializer();
+          return serializer.serialize(view.state.doc);
+        } catch { return ''; }
+      },
+      getText() { return viewRef.current?.state?.doc?.textContent || ''; },
+    },
+  }), []);
 
   const showDebug = useMemo(() => {
     try { const p = new URLSearchParams(window.location.search); if (p.get('dev') === '1') return true; } catch { }
     try { return !!import.meta?.env?.DEV; } catch { return false; }
   }, []);
 
-  async function waitForCommand(cmd, { interval = 100, timeout = 5000 } = {}) {
-    const start = Date.now();
-    for (; ;) {
-      if (editor?.commands?.[cmd]) return true;
-      if (Date.now() - start >= timeout) return false;
-      await new Promise(r => setTimeout(r, interval));
-    }
-  }
   const insertTestTable = async () => {
-    if (editor?.commands?.insertTable) {
-      editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
-      return;
-    }
-    // Fallback: insert HTML table content, which works as long as table nodes are in the schema
-    const body = Array.from({ length: 3 }).map(() => `<tr><td> </td><td> </td><td> </td></tr>`).join('');
-    const html = `<table><thead><tr><th>Header 1</th><th>Header 2</th><th>Header 3</th></tr></thead><tbody>${body}</tbody></table>`;
-    editor.chain().focus().insertContent(html).run();
+    const view = viewRef.current;
+    if (!view) return;
+    const cmds = createEditorCommands(view);
+    cmds.insertTable({ rows: 3, cols: 3 });
   };
 
   const handleEditorAction = (action, data) => {
-    if (!editor) return;
+    const view = viewRef.current;
+    if (!view) return;
+
+    const cmds = createEditorCommands(view);
 
     switch (action) {
       case 'cut':
@@ -918,88 +825,93 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         document.execCommand('paste');
         break;
       case 'selectAll':
-        editor.commands.selectAll();
+        cmds.selectAll();
         break;
       case 'undo':
-        editor.commands.undo();
+        cmds.undo();
         break;
       case 'redo':
-        editor.commands.redo();
+        cmds.redo();
         break;
       case 'toggleBold':
-        editor.chain().focus().toggleBold().run();
+        cmds.toggleBold();
         break;
       case 'toggleItalic':
-        editor.chain().focus().toggleItalic().run();
+        cmds.toggleItalic();
         break;
       case 'toggleStrikethrough':
-        editor.chain().focus().toggleStrike().run();
+        cmds.toggleStrike();
         break;
       case 'toggleCode':
-        editor.chain().focus().toggleCode().run();
+        cmds.toggleCode();
         break;
       case 'clearFormatting':
-        editor.chain().focus().clearNodes().unsetAllMarks().run();
+        cmds.unsetAllMarks();
         break;
       case 'setHeading':
         if (data?.level) {
-          editor.chain().focus().setHeading({ level: data.level }).run();
+          cmds.toggleHeading({ level: data.level });
         }
         break;
       case 'setParagraph':
-        editor.chain().focus().setParagraph().run();
+        // Revert to paragraph
+        cmds.toggleHeading({ level: 1 }); // toggle off — if already heading, reverts to paragraph
         break;
       case 'toggleBulletList':
-        editor.chain().focus().toggleBulletList().run();
+        cmds.toggleBulletList();
         break;
       case 'toggleOrderedList':
-        editor.chain().focus().toggleOrderedList().run();
+        cmds.toggleOrderedList();
         break;
       case 'toggleTaskList':
-        editor.chain().focus().toggleTaskList().run();
+        cmds.toggleTaskList();
         break;
       case 'find':
-        // Trigger in-file search
         window.dispatchEvent(new CustomEvent('lokus:toggle-search'));
         break;
       case 'findAndReplace':
-        // Trigger in-file search with replace mode
         window.dispatchEvent(new CustomEvent('lokus:toggle-search', { detail: { replaceMode: true } }));
         break;
       case 'commandPalette':
-        // Dispatch event to open command palette
         window.dispatchEvent(new CustomEvent('lokus:command-palette'));
         break;
       case 'insertTable':
         insertTestTable();
         break;
       case 'insertCodeBlock':
-        editor.commands.setCodeBlock();
+        cmds.toggleCodeBlock();
         break;
       case 'insertQuote':
-        editor.chain().focus().toggleBlockquote().run();
+        cmds.toggleBlockquote();
         break;
       case 'insertHorizontalRule':
-        editor.chain().focus().setHorizontalRule().run();
+        cmds.setHorizontalRule();
         break;
-      case 'insertLink':
+      case 'insertLink': {
         const url = window.prompt('Enter URL:');
         if (url) {
-          editor.commands.setLink({ href: url });
+          // Apply link mark to selection
+          const linkMark = view.state.schema.marks.link;
+          if (linkMark) {
+            const { from, to } = view.state.selection;
+            if (from !== to) {
+              const tr = view.state.tr.addMark(from, to, linkMark.create({ href: url }));
+              view.dispatch(tr);
+            }
+          }
         }
         break;
+      }
       case 'insertImage':
         // Insert ![[ to trigger image autocomplete dropdown
-        editor.chain().focus().insertContent('![[').run();
+        pmInsertContent(view, '![[');
         break;
       case 'exportMarkdown':
       case 'exportHTML':
       case 'exportPDF':
-        // Open export modal
         setIsExportModalOpen(true);
         break;
-      case 'importFile':
-        // Trigger file import dialog
+      case 'importFile': {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.md,.txt,.html';
@@ -1007,79 +919,62 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
           const file = e.target.files[0];
           if (file) {
             const text = await file.text();
-            editor.commands.setContent(text);
+            // TODO: port to PM — need to parse imported content and set as doc
+            console.warn('[PMEditor] importFile: raw text import not yet ported to PM');
           }
         };
         input.click();
         break;
+      }
       case 'copyBlockReference':
         (async () => {
           try {
-            // Get current block
-            const { state } = editor
-            const { $from } = state.selection
-            const node = $from.parent
+            const { state } = view;
+            const { $from } = state.selection;
+            const node = $from.parent;
 
-            // Import dynamically to avoid circular dependencies
-            const blockIdManager = (await import('../../core/blocks/block-id-manager.js')).default
-            const { queueBlockIdWrite } = await import('../../core/blocks/block-writer.js')
+            const blockIdManager = (await import('../../core/blocks/block-id-manager.js')).default;
+            const { queueBlockIdWrite } = await import('../../core/blocks/block-writer.js');
 
-            // Check if block has ID
-            let blockId = node.attrs.blockId
+            let blockId = node.attrs.blockId;
 
             if (!blockId) {
-              // Generate new ID
-              blockId = blockIdManager.generateId()
+              blockId = blockIdManager.generateId();
 
-              // Add to node
-              const pos = $from.before($from.depth)
-              editor.chain()
-                .focus()
-                .command(({ tr }) => {
-                  tr.setNodeMarkup(pos, null, { ...node.attrs, blockId })
-                  return true
-                })
-                .run()
+              const pos = $from.before($from.depth);
+              const tr = view.state.tr.setNodeMarkup(pos, null, { ...node.attrs, blockId });
+              view.dispatch(tr);
 
-              // Write back to file (if activeFile is available)
               if (typeof window !== 'undefined' && window.__LOKUS_ACTIVE_FILE__) {
-                const activeFile = window.__LOKUS_ACTIVE_FILE__
+                const activeFile = window.__LOKUS_ACTIVE_FILE__;
 
-                // Calculate line number from position
-                let lineNumber = 1
-                state.doc.nodesBetween(0, pos, (node, pos) => {
-                  if (node.isBlock) lineNumber++
-                })
+                let lineNumber = 1;
+                state.doc.nodesBetween(0, pos, (node) => {
+                  if (node.isBlock) lineNumber++;
+                });
 
                 queueBlockIdWrite(activeFile, lineNumber, blockId)
                   .then((success) => {
                     if (success) {
-                      blockIdManager.invalidateFile(activeFile)
+                      blockIdManager.invalidateFile(activeFile);
                     }
                   })
-                  .catch(err => {
-                  })
+                  .catch(() => {});
               }
             }
 
-            // Format reference
-            const activeFile = window.__LOKUS_ACTIVE_FILE__ || ''
-            const fileName = activeFile.split('/').pop()?.replace('.md', '') || 'Unknown'
-            const reference = `[[${fileName}^${blockId}]]`
+            const activeFile = window.__LOKUS_ACTIVE_FILE__ || '';
+            const fileName = activeFile.split('/').pop()?.replace('.md', '') || 'Unknown';
+            const reference = `[[${fileName}^${blockId}]]`;
 
-            // Copy to clipboard
-            await navigator.clipboard.writeText(reference)
-
-            // Optional: Show toast notification (if you have a toast system)
-            // toast.success('Block reference copied to clipboard')
+            await navigator.clipboard.writeText(reference);
           } catch { }
-        })()
+        })();
         break;
       case 'copyCode': {
-        const { state } = editor;
-        const {$from} = state.selection;
-
-        const node = $from.node($from.depth)
+        const { state } = view;
+        const { $from } = state.selection;
+        const node = $from.node($from.depth);
 
         if (node.type.name === 'codeBlock') {
           const codeText = node.textContent;
@@ -1093,49 +988,59 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
 
   // WikiLink modal handlers
   const handleSelectFile = useCallback((file) => {
-    if (editor) {
-      // Use the WikiLink command to create a proper link node
-      const raw = `${file.path}|${file.name}`;
-      editor.commands.setWikiLink(raw, { embed: false });
+    const view = viewRef.current;
+    if (view) {
+      // TODO: port to PM — insert a wikiLink node instead of using TipTap command
+      // For now, insert as text which the wikiLink plugin will process
+      const raw = `[[${file.path}|${file.name}]]`;
+      pmInsertContent(view, raw);
     }
-  }, [editor]);
+  }, []);
 
   // Task creation handler
   const handleCreateTask = useCallback(({ boardName, columnName, taskName }) => {
-    if (editor) {
-      // Insert the task mention in the correct format: @task[BoardName:TaskTitle]
-      editor.chain().focus().insertContent(`@task[${boardName}:${taskName}] `).run();
+    const view = viewRef.current;
+    if (view) {
+      pmInsertContent(view, `@task[${boardName}:${taskName}] `);
     }
-  }, [editor]);
+  }, []);
 
   // Reading mode - show non-editable HTML view
   if (editorMode === 'reading') {
+    const view = viewRef.current;
+    let htmlContent = content;
+    if (view) {
+      try {
+        const serializer = createLokusSerializer();
+        htmlContent = serializer.serialize(view.state.doc);
+      } catch { }
+    }
     return (
       <ReadingModeView
-        content={editor?.getHTML() || content}
+        content={htmlContent}
         editorSettings={editorSettings}
       />
     );
   }
 
-  // Edit and Live Preview modes - show TipTap editor
-  // In live mode, we keep editor editable but could add visual hints
+  // Edit and Live Preview modes - show ProseMirror editor
   return (
     <>
-      {editor && showDebug && (
+      {viewRef.current && showDebug && (
         <div className="m-5 mb-0 flex gap-2">
           <button type="button" onClick={insertTestTable} className="px-2 py-1 text-sm rounded border bg-app-panel border-app-border hover:bg-app-accent/10">Insert Test Table</button>
         </div>
       )}
-      {editor && <TableBubbleMenu editor={editor} />}
+      {/* TODO: port to PM — TableBubbleMenu needs to be converted to a floating menu plugin */}
+      {/* {viewRef.current && <TableBubbleMenu editor={viewRef.current} />} */}
       <EditorContextMenu
         onAction={handleEditorAction}
-        hasSelection={editor?.state?.selection && !editor.state.selection.empty}
-        canUndo={editor?.can().undo()}
-        canRedo={editor?.can().redo()}
+        hasSelection={viewRef.current?.state?.selection && !viewRef.current.state.selection.empty}
+        canUndo={true}  /* TODO: port to PM — check undo history state */
+        canRedo={true}  /* TODO: port to PM — check redo history state */
       >
-        <EditorContent
-          editor={editor}
+        <div
+          ref={mountRef}
           className={editorMode === 'live' ? 'live-preview-mode' : ''}
         />
       </EditorContextMenu>
@@ -1160,7 +1065,14 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
       <ExportModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
-        htmlContent={editor?.getHTML()}
+        htmlContent={(() => {
+          const view = viewRef.current;
+          if (!view) return '';
+          try {
+            const serializer = createLokusSerializer();
+            return serializer.serialize(view.state.doc);
+          } catch { return ''; }
+        })()}
         currentFile={{
           name: globalThis.__LOKUS_ACTIVE_FILE__?.name || 'untitled',
           path: globalThis.__LOKUS_ACTIVE_FILE__?.path,
@@ -1224,8 +1136,9 @@ const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSetting
         onClose={() => setShowSymbolPicker(false)}
         customSymbols={customSymbols}
         onInsert={(symbol) => {
-          if (editor) {
-            editor.chain().focus().insertContent(symbol).run();
+          const view = viewRef.current;
+          if (view) {
+            pmInsertContent(view, symbol);
           }
         }}
       />
