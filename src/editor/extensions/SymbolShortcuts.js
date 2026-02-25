@@ -1,8 +1,8 @@
 /**
- * SymbolShortcuts Extension
+ * SymbolShortcuts Extension (raw ProseMirror)
  *
  * Provides quick symbol input using :shortcode: syntax (like emoji shortcodes)
- * Example: :theta: → θ, :arrow: → →, :inf: → ∞
+ * Example: :theta: -> θ, :arrow: -> →, :inf: -> ∞
  *
  * Supports:
  * - Greek letters (lowercase and uppercase)
@@ -12,262 +12,261 @@
  * - Custom user-defined symbols via preferences
  */
 
-import { Extension } from '@tiptap/core'
-import { InputRule } from '@tiptap/core'
+import { InputRule } from 'prosemirror-inputrules'
+import { inputRules } from 'prosemirror-inputrules'
 
 // Built-in symbols organized by category
 const BUILTIN_SYMBOLS = {
   // Greek lowercase
-  'alpha': 'α',
-  'beta': 'β',
-  'gamma': 'γ',
-  'delta': 'δ',
-  'epsilon': 'ε',
-  'zeta': 'ζ',
-  'eta': 'η',
-  'theta': 'θ',
-  'iota': 'ι',
-  'kappa': 'κ',
-  'lambda': 'λ',
-  'mu': 'μ',
-  'nu': 'ν',
-  'xi': 'ξ',
-  'omicron': 'ο',
-  'pi': 'π',
-  'rho': 'ρ',
-  'sigma': 'σ',
-  'tau': 'τ',
-  'upsilon': 'υ',
-  'phi': 'φ',
-  'chi': 'χ',
-  'psi': 'ψ',
-  'omega': 'ω',
+  'alpha': '\u03B1',
+  'beta': '\u03B2',
+  'gamma': '\u03B3',
+  'delta': '\u03B4',
+  'epsilon': '\u03B5',
+  'zeta': '\u03B6',
+  'eta': '\u03B7',
+  'theta': '\u03B8',
+  'iota': '\u03B9',
+  'kappa': '\u03BA',
+  'lambda': '\u03BB',
+  'mu': '\u03BC',
+  'nu': '\u03BD',
+  'xi': '\u03BE',
+  'omicron': '\u03BF',
+  'pi': '\u03C0',
+  'rho': '\u03C1',
+  'sigma': '\u03C3',
+  'tau': '\u03C4',
+  'upsilon': '\u03C5',
+  'phi': '\u03C6',
+  'chi': '\u03C7',
+  'psi': '\u03C8',
+  'omega': '\u03C9',
 
   // Greek uppercase
-  'Alpha': 'Α',
-  'Beta': 'Β',
-  'Gamma': 'Γ',
-  'Delta': 'Δ',
-  'Epsilon': 'Ε',
-  'Zeta': 'Ζ',
-  'Eta': 'Η',
-  'Theta': 'Θ',
-  'Iota': 'Ι',
-  'Kappa': 'Κ',
-  'Lambda': 'Λ',
-  'Mu': 'Μ',
-  'Nu': 'Ν',
-  'Xi': 'Ξ',
-  'Omicron': 'Ο',
-  'Pi': 'Π',
-  'Rho': 'Ρ',
-  'Sigma': 'Σ',
-  'Tau': 'Τ',
-  'Upsilon': 'Υ',
-  'Phi': 'Φ',
-  'Chi': 'Χ',
-  'Psi': 'Ψ',
-  'Omega': 'Ω',
+  'Alpha': '\u0391',
+  'Beta': '\u0392',
+  'Gamma': '\u0393',
+  'Delta': '\u0394',
+  'Epsilon': '\u0395',
+  'Zeta': '\u0396',
+  'Eta': '\u0397',
+  'Theta': '\u0398',
+  'Iota': '\u0399',
+  'Kappa': '\u039A',
+  'Lambda': '\u039B',
+  'Mu': '\u039C',
+  'Nu': '\u039D',
+  'Xi': '\u039E',
+  'Omicron': '\u039F',
+  'Pi': '\u03A0',
+  'Rho': '\u03A1',
+  'Sigma': '\u03A3',
+  'Tau': '\u03A4',
+  'Upsilon': '\u03A5',
+  'Phi': '\u03A6',
+  'Chi': '\u03A7',
+  'Psi': '\u03A8',
+  'Omega': '\u03A9',
 
   // Arrows
-  'arrow': '→',
-  'rightarrow': '→',
-  'larrow': '←',
-  'leftarrow': '←',
-  'uarrow': '↑',
-  'uparrow': '↑',
-  'darrow': '↓',
-  'downarrow': '↓',
-  'lrarrow': '↔',
-  'leftrightarrow': '↔',
-  'implies': '⇒',
-  'Rightarrow': '⇒',
-  'iff': '⇔',
-  'Leftrightarrow': '⇔',
-  'mapsto': '↦',
-  'to': '→',
+  'arrow': '\u2192',
+  'rightarrow': '\u2192',
+  'larrow': '\u2190',
+  'leftarrow': '\u2190',
+  'uarrow': '\u2191',
+  'uparrow': '\u2191',
+  'darrow': '\u2193',
+  'downarrow': '\u2193',
+  'lrarrow': '\u2194',
+  'leftrightarrow': '\u2194',
+  'implies': '\u21D2',
+  'Rightarrow': '\u21D2',
+  'iff': '\u21D4',
+  'Leftrightarrow': '\u21D4',
+  'mapsto': '\u21A6',
+  'to': '\u2192',
 
   // Comparison & Relations
-  'neq': '≠',
-  'noteq': '≠',
-  'leq': '≤',
-  'le': '≤',
-  'geq': '≥',
-  'ge': '≥',
-  'approx': '≈',
-  'equiv': '≡',
-  'sim': '∼',
-  'simeq': '≃',
-  'propto': '∝',
-  'll': '≪',
-  'gg': '≫',
+  'neq': '\u2260',
+  'noteq': '\u2260',
+  'leq': '\u2264',
+  'le': '\u2264',
+  'geq': '\u2265',
+  'ge': '\u2265',
+  'approx': '\u2248',
+  'equiv': '\u2261',
+  'sim': '\u223C',
+  'simeq': '\u2243',
+  'propto': '\u221D',
+  'll': '\u226A',
+  'gg': '\u226B',
 
   // Operators
-  'pm': '±',
-  'plusminus': '±',
-  'mp': '∓',
-  'times': '×',
-  'div': '÷',
-  'cdot': '·',
-  'dot': '·',
-  'star': '★',
-  'circ': '∘',
-  'bullet': '•',
-  'oplus': '⊕',
-  'otimes': '⊗',
-  'dagger': '†',
-  'ddagger': '‡',
+  'pm': '\u00B1',
+  'plusminus': '\u00B1',
+  'mp': '\u2213',
+  'times': '\u00D7',
+  'div': '\u00F7',
+  'cdot': '\u00B7',
+  'dot': '\u00B7',
+  'star': '\u2605',
+  'circ': '\u2218',
+  'bullet': '\u2022',
+  'oplus': '\u2295',
+  'otimes': '\u2297',
+  'dagger': '\u2020',
+  'ddagger': '\u2021',
 
   // Calculus & Analysis
-  'inf': '∞',
-  'infty': '∞',
-  'infinity': '∞',
-  'partial': '∂',
-  'nabla': '∇',
-  'grad': '∇',
-  'sqrt': '√',
-  'cbrt': '∛',
-  'sum': '∑',
-  'prod': '∏',
-  'integral': '∫',
-  'int': '∫',
-  'iint': '∬',
-  'iiint': '∭',
-  'oint': '∮',
-  'prime': '′',
-  'dprime': '″',
-  'tprime': '‴',
+  'inf': '\u221E',
+  'infty': '\u221E',
+  'infinity': '\u221E',
+  'partial': '\u2202',
+  'nabla': '\u2207',
+  'grad': '\u2207',
+  'sqrt': '\u221A',
+  'cbrt': '\u221B',
+  'sum': '\u2211',
+  'prod': '\u220F',
+  'integral': '\u222B',
+  'int': '\u222B',
+  'iint': '\u222C',
+  'iiint': '\u222D',
+  'oint': '\u222E',
+  'prime': '\u2032',
+  'dprime': '\u2033',
+  'tprime': '\u2034',
 
   // Logic & Set Theory
-  'forall': '∀',
-  'exists': '∃',
-  'nexists': '∄',
-  'in': '∈',
-  'notin': '∉',
-  'ni': '∋',
-  'subset': '⊂',
-  'supset': '⊃',
-  'subseteq': '⊆',
-  'supseteq': '⊇',
-  'cup': '∪',
-  'union': '∪',
-  'cap': '∩',
-  'intersect': '∩',
-  'intersection': '∩',
-  'emptyset': '∅',
-  'empty': '∅',
-  'and': '∧',
-  'land': '∧',
-  'or': '∨',
-  'lor': '∨',
-  'not': '¬',
-  'neg': '¬',
-  'lnot': '¬',
-  'therefore': '∴',
-  'because': '∵',
-  'qed': '∎',
+  'forall': '\u2200',
+  'exists': '\u2203',
+  'nexists': '\u2204',
+  'in': '\u2208',
+  'notin': '\u2209',
+  'ni': '\u220B',
+  'subset': '\u2282',
+  'supset': '\u2283',
+  'subseteq': '\u2286',
+  'supseteq': '\u2287',
+  'cup': '\u222A',
+  'union': '\u222A',
+  'cap': '\u2229',
+  'intersect': '\u2229',
+  'intersection': '\u2229',
+  'emptyset': '\u2205',
+  'empty': '\u2205',
+  'and': '\u2227',
+  'land': '\u2227',
+  'or': '\u2228',
+  'lor': '\u2228',
+  'not': '\u00AC',
+  'neg': '\u00AC',
+  'lnot': '\u00AC',
+  'therefore': '\u2234',
+  'because': '\u2235',
+  'qed': '\u220E',
 
   // Greek-like math symbols
-  'ell': 'ℓ',
-  'hbar': 'ℏ',
-  'Re': 'ℜ',
-  'Im': 'ℑ',
-  'wp': '℘',
-  'aleph': 'ℵ',
+  'ell': '\u2113',
+  'hbar': '\u210F',
+  'Re': '\u211C',
+  'Im': '\u2111',
+  'wp': '\u2118',
+  'aleph': '\u2135',
 
   // Misc Math
-  'degree': '°',
-  'deg': '°',
-  'angle': '∠',
-  'measuredangle': '∡',
-  'perp': '⊥',
-  'parallel': '∥',
-  'cong': '≅',
-  'triangle': '△',
-  'square': '□',
-  'diamond': '◇',
-  'lfloor': '⌊',
-  'rfloor': '⌋',
-  'lceil': '⌈',
-  'rceil': '⌉',
-  'langle': '⟨',
-  'rangle': '⟩',
+  'degree': '\u00B0',
+  'deg': '\u00B0',
+  'angle': '\u2220',
+  'measuredangle': '\u2221',
+  'perp': '\u22A5',
+  'parallel': '\u2225',
+  'cong': '\u2245',
+  'triangle': '\u25B3',
+  'square': '\u25A1',
+  'diamond': '\u25C7',
+  'lfloor': '\u230A',
+  'rfloor': '\u230B',
+  'lceil': '\u2308',
+  'rceil': '\u2309',
+  'langle': '\u27E8',
+  'rangle': '\u27E9',
 
   // Fractions & Numbers
-  'half': '½',
-  'third': '⅓',
-  'quarter': '¼',
-  'twothirds': '⅔',
-  'threequarters': '¾',
+  'half': '\u00BD',
+  'third': '\u2153',
+  'quarter': '\u00BC',
+  'twothirds': '\u2154',
+  'threequarters': '\u00BE',
 
   // Common symbols
-  'check': '✓',
-  'checkmark': '✓',
-  'cross': '✗',
-  'xmark': '✗',
-  'star': '★',
-  'heart': '♥',
-  'spade': '♠',
-  'club': '♣',
-  'diamond': '♦',
-  'ellipsis': '…',
-  'dots': '…',
-  'ldots': '…',
-  'cdots': '⋯',
-  'vdots': '⋮',
-  'ddots': '⋱',
+  'check': '\u2713',
+  'checkmark': '\u2713',
+  'cross': '\u2717',
+  'xmark': '\u2717',
+  'heart': '\u2665',
+  'spade': '\u2660',
+  'club': '\u2663',
+  'ellipsis': '\u2026',
+  'dots': '\u2026',
+  'ldots': '\u2026',
+  'cdots': '\u22EF',
+  'vdots': '\u22EE',
+  'ddots': '\u22F1',
 
   // Legal/Copyright
-  'tm': '™',
-  'trademark': '™',
-  'copyright': '©',
-  'registered': '®',
-  'section': '§',
-  'paragraph': '¶',
+  'tm': '\u2122',
+  'trademark': '\u2122',
+  'copyright': '\u00A9',
+  'registered': '\u00AE',
+  'section': '\u00A7',
+  'paragraph': '\u00B6',
 
   // Currency
-  'euro': '€',
-  'pound': '£',
-  'yen': '¥',
-  'cent': '¢',
-  'rupee': '₹',
-  'bitcoin': '₿',
+  'euro': '\u20AC',
+  'pound': '\u00A3',
+  'yen': '\u00A5',
+  'cent': '\u00A2',
+  'rupee': '\u20B9',
+  'bitcoin': '\u20BF',
 }
 
-export const SymbolShortcuts = Extension.create({
-  name: 'symbolShortcuts',
+/**
+ * Create the symbol shortcuts input rule.
+ *
+ * @param {Object} [customSymbols={}] - User-defined symbols from preferences
+ * @returns {InputRule} A ProseMirror InputRule
+ */
+function createSymbolInputRule(customSymbols = {}) {
+  // Match :word: pattern (letters and numbers allowed in name)
+  return new InputRule(
+    /:([a-zA-Z][a-zA-Z0-9]*):$/,
+    (state, match, start, end) => {
+      const word = match[1]
+      const allSymbols = { ...BUILTIN_SYMBOLS, ...customSymbols }
+      const symbol = allSymbols[word]
 
-  addOptions() {
-    return {
-      customSymbols: {}, // User-defined symbols from preferences
+      if (!symbol) return null
+
+      return state.tr.replaceWith(start, end, state.schema.text(symbol))
     }
-  },
+  )
+}
 
-  addInputRules() {
-    return [
-      new InputRule({
-        // Match :word: pattern (letters and numbers allowed in name)
-        find: /:([a-zA-Z][a-zA-Z0-9]*):$/,
-        handler: ({ range, match, chain }) => {
-          const word = match[1]
-          const allSymbols = { ...BUILTIN_SYMBOLS, ...this.options.customSymbols }
-          const symbol = allSymbols[word]
-
-          if (!symbol) return false
-
-          chain()
-            .deleteRange(range)
-            .insertContent(symbol)
-            .run()
-
-          return true
-        },
-      }),
-    ]
-  },
-})
+/**
+ * Create the symbol shortcuts plugin.
+ *
+ * @param {Object} [config={}] - Configuration object
+ * @param {Object} [config.customSymbols={}] - User-defined symbols
+ * @returns {import('prosemirror-state').Plugin} A ProseMirror inputRules plugin
+ */
+export function createSymbolShortcutsPlugin(config = {}) {
+  const { customSymbols = {} } = config
+  return inputRules({ rules: [createSymbolInputRule(customSymbols)] })
+}
 
 // Export the symbols map for use in preferences UI
 export const getBuiltinSymbols = () => ({ ...BUILTIN_SYMBOLS })
 
-export default SymbolShortcuts
+export default createSymbolShortcutsPlugin

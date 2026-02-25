@@ -1,8 +1,5 @@
-import { Node, mergeAttributes, InputRule } from '@tiptap/core';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { getCalloutConfig } from "@/core/editor/callout-config";
 /**
- * Callout/Admonition Extension for TipTap
+ * Callout Extension (raw ProseMirror)
  *
  * Supports syntax: >[!type] Optional Title
  *
@@ -12,224 +9,203 @@ import { getCalloutConfig } from "@/core/editor/callout-config";
  * - Collapsible callouts with >[!type]- syntax
  * - Nested content support
  * - Dark mode compatible
+ *
+ * Schema is defined in lokus-schema.js. This module only provides:
+ *   - Input rules
+ *   - Keyboard shortcuts
+ *   - Click-handler plugin (toggle collapsed)
+ *   - Command functions
  */
 
+import { InputRule, inputRules } from 'prosemirror-inputrules'
+import { keymap } from 'prosemirror-keymap'
+import { Plugin, PluginKey } from 'prosemirror-state'
+import { Selection } from 'prosemirror-state'
+import { wrapIn, lift } from 'prosemirror-commands'
+
 const CALLOUT_TYPES = {
-  note: { icon: 'ℹ️', color: 'blue', label: 'Note' },
-  tip: { icon: '💡', color: 'green', label: 'Tip' },
-  warning: { icon: '⚠️', color: 'orange', label: 'Warning' },
-  danger: { icon: '🚨', color: 'red', label: 'Danger' },
-  info: { icon: 'ℹ️', color: 'cyan', label: 'Info' },
-  success: { icon: '✅', color: 'green', label: 'Success' },
-  question: { icon: '❓', color: 'purple', label: 'Question' },
-  example: { icon: '📝', color: 'gray', label: 'Example' }
-};
+  note: { icon: '\u2139\uFE0F', color: 'blue', label: 'Note' },
+  tip: { icon: '\uD83D\uDCA1', color: 'green', label: 'Tip' },
+  warning: { icon: '\u26A0\uFE0F', color: 'orange', label: 'Warning' },
+  danger: { icon: '\uD83D\uDEA8', color: 'red', label: 'Danger' },
+  info: { icon: '\u2139\uFE0F', color: 'cyan', label: 'Info' },
+  success: { icon: '\u2705', color: 'green', label: 'Success' },
+  question: { icon: '\u2753', color: 'purple', label: 'Question' },
+  example: { icon: '\uD83D\uDCDD', color: 'gray', label: 'Example' },
+}
 
-export const Callout = Node.create({
-  name: 'callout',
+// ---------------------------------------------------------------------------
+// Commands
+// ---------------------------------------------------------------------------
 
-  group: 'block',
+/**
+ * Wrap the current selection in a callout node.
+ *
+ * @param {import('prosemirror-view').EditorView} view
+ * @param {Object} [attrs]
+ * @param {string} [attrs.type='note']
+ * @param {string|null} [attrs.title=null]
+ * @param {boolean} [attrs.collapsed=false]
+ * @returns {boolean}
+ */
+export function setCallout(view, attrs = {}) {
+  const calloutType = view.state.schema.nodes.callout
+  if (!calloutType) return false
+  const { type = 'note', title = null, collapsed = false } = attrs
+  return wrapIn(calloutType, { type, title, collapsed })(view.state, view.dispatch)
+}
 
-  content: 'block+',
+/**
+ * Toggle wrapping the current selection in a callout.
+ * If already inside a callout, lift out; otherwise wrap in.
+ *
+ * @param {import('prosemirror-view').EditorView} view
+ * @param {Object} [attrs]
+ * @returns {boolean}
+ */
+export function toggleCallout(view, attrs = {}) {
+  const { state } = view
+  const calloutType = state.schema.nodes.callout
+  if (!calloutType) return false
 
-  defining: true,
+  // Check if cursor is already inside a callout
+  const { $from } = state.selection
+  for (let depth = $from.depth; depth > 0; depth--) {
+    if ($from.node(depth).type === calloutType) {
+      return lift(state, view.dispatch)
+    }
+  }
+  const { type = 'note', title = null, collapsed = false } = attrs
+  return wrapIn(calloutType, { type, title, collapsed })(state, view.dispatch)
+}
 
-  addAttributes() {
-    return {
-      type: {
-        default: 'note',
-        parseHTML: element => element.getAttribute('data-callout-type') || 'note',
-        renderHTML: attributes => {
-          return {
-            'data-callout-type': attributes.type
-          };
-        }
-      },
-      title: {
-        default: null,
-        parseHTML: element => element.getAttribute('data-callout-title'),
-        renderHTML: attributes => {
-          if (attributes.title) {
-            return {
-              'data-callout-title': attributes.title
-            };
-          }
-          return {};
-        }
-      },
-      collapsed: {
-        default: false,
-        parseHTML: element => element.getAttribute('data-collapsed') === 'true',
-        renderHTML: attributes => {
-          return {
-            'data-collapsed': attributes.collapsed ? 'true' : 'false'
-          };
-        }
-      }
-    };
-  },
+/**
+ * Lift the current selection out of a callout.
+ *
+ * @param {import('prosemirror-view').EditorView} view
+ * @returns {boolean}
+ */
+export function unsetCallout(view) {
+  return lift(view.state, view.dispatch)
+}
 
-  parseHTML() {
-    return [
-      {
-        tag: 'div[data-callout-type]',
-      }
-    ];
-  },
+// ---------------------------------------------------------------------------
+// Input rule: >[!type](-?) Optional Title
+// ---------------------------------------------------------------------------
 
-  renderHTML({ node, HTMLAttributes }) {
-    const type = node.attrs.type || 'note';
+function calloutInputRule(schema) {
+  return new InputRule(
+    /^>\[!(\w+)\](-?)\s*(.*)$/,
+    (state, match, start, end) => {
+      const [, rawType, collapsedFlag, title] = match
+      const calloutType = CALLOUT_TYPES[rawType.toLowerCase()] ? rawType.toLowerCase() : 'note'
+      const collapsed = collapsedFlag === '-'
 
-    const userConfig = getCalloutConfig();
-    const calloutConfig =
-      userConfig?.[type] || CALLOUT_TYPES[type] || CALLOUT_TYPES.note;
-
-    const title =
-      node.attrs.title || calloutConfig.label || 'Note';
-
-    const collapsed =
-      typeof node.attrs.collapsed === "boolean"
-        ? node.attrs.collapsed
-        : calloutConfig.collapsed ?? false;
-
-    return [
-      'div',
-      mergeAttributes(HTMLAttributes, {
-        class: `callout callout-${type}`,
-        'data-callout-type': type,
-        'data-collapsed': collapsed ? 'true' : 'false'
-      }),
-      [
-        'div',
-        { class: 'callout-header' },
-        ['span', { class: 'callout-icon' }, calloutConfig.icon],
-        ['span', { class: 'callout-title' }, title],
-        [
-          'button',
-          { class: 'callout-toggle', 'data-toggle': 'true' },
-          collapsed ? '▶' : '▼'
-        ]
-      ],
-      [
-        'div',
+      const calloutNode = schema.nodes.callout.create(
         {
-          class: 'callout-content',
-          style: collapsed ? 'display: none;' : ''
+          type: calloutType,
+          title: title || null,
+          collapsed,
         },
-        0
-      ]
-    ];
-  },
+        schema.nodes.paragraph.create()
+      )
 
-  addCommands() {
-    return {
-      setCallout: (attributes) => ({ commands }) => {
-        return commands.wrapIn(this.name, attributes);
-      },
-      toggleCallout: (attributes) => ({ commands }) => {
-        return commands.toggleWrap(this.name, attributes);
-      },
-      unsetCallout: () => ({ commands }) => {
-        return commands.lift(this.name);
+      const tr = state.tr
+        .delete(start, end)
+        .insert(start, calloutNode)
+
+      // Place cursor inside the callout paragraph (start + 2 skips the
+      // callout wrapper opening and the paragraph opening).
+      try {
+        tr.setSelection(Selection.near(tr.doc.resolve(start + 2)))
+      } catch {
+        // Fallback: leave cursor wherever PM puts it
       }
-    };
-  },
 
-  addKeyboardShortcuts() {
-    return {
-      // Mod-Alt-C to create callout
-      'Mod-Alt-c': () => this.editor.commands.setCallout({ type: 'note' })
-    };
-  },
+      return tr
+    }
+  )
+}
 
-  addInputRules() {
-    return [
-      new InputRule({
-        find: /^>\[!(\w+)\](-?)\s*(.*)$/,
-        handler: ({ state, range, match }) => {
-          const [, type, collapsedFlag, title] = match;
-          const calloutType = CALLOUT_TYPES[type.toLowerCase()] ? type.toLowerCase() : 'note';
-          const collapsed = collapsedFlag === '-';
+// ---------------------------------------------------------------------------
+// Click handler plugin (toggle collapsed state)
+// ---------------------------------------------------------------------------
 
-          const { tr } = state;
-          const start = range.from;
-          const end = range.to;
+const calloutClickKey = new PluginKey('callout-click-handler')
 
-          // Delete the input text
-          tr.delete(start, end);
+function calloutClickPlugin() {
+  return new Plugin({
+    key: calloutClickKey,
+    props: {
+      handleDOMEvents: {
+        click: (view, event) => {
+          const target = event.target
 
-          // Insert callout node with a paragraph inside
-          const calloutNode = state.schema.nodes.callout.create(
-            {
-              type: calloutType,
-              title: title || null,
-              collapsed
-            },
-            state.schema.nodes.paragraph.create()
-          );
+          // Check if clicked on toggle button
+          if (
+            target.classList?.contains('callout-toggle') ||
+            target.getAttribute?.('data-toggle')
+          ) {
+            const calloutHeader = target.closest('.callout-header')
+            if (!calloutHeader) return false
 
-          tr.insert(start, calloutNode);
-          // Position cursor inside the callout
-          tr.setSelection(state.selection.constructor.near(tr.doc.resolve(start + 2)));
+            const callout = calloutHeader.parentElement
+            if (!callout || !callout.classList.contains('callout')) return false
 
-          // Dispatch the transaction and return false to prevent further handling
-          this.editor.view.dispatch(tr);
-          return false;
-        }
-      })
-    ];
-  },
+            // Find the callout node in the editor
+            let calloutPos = null
+            let calloutNode = null
 
-  addProseMirrorPlugins() {
-    return [
-      new Plugin({
-        key: new PluginKey('callout-click-handler'),
-        props: {
-          handleDOMEvents: {
-            click: (view, event) => {
-              const target = event.target;
-
-              // Check if clicked on toggle button
-              if (target.classList?.contains('callout-toggle') || target.getAttribute?.('data-toggle')) {
-                const calloutHeader = target.closest('.callout-header');
-                if (!calloutHeader) return false;
-
-                const callout = calloutHeader.parentElement;
-                if (!callout || !callout.classList.contains('callout')) return false;
-
-                // Find the callout node in the editor
-                let calloutPos = null;
-                let calloutNode = null;
-
-                view.state.doc.descendants((node, pos) => {
-                  if (node.type.name === 'callout') {
-                    const nodeDOM = view.nodeDOM(pos);
-                    if (nodeDOM === callout) {
-                      calloutPos = pos;
-                      calloutNode = node;
-                      return false;
-                    }
-                  }
-                });
-
-                if (calloutNode && calloutPos !== null) {
-                  // Toggle collapsed state
-                  const tr = view.state.tr.setNodeMarkup(calloutPos, null, {
-                    ...calloutNode.attrs,
-                    collapsed: !calloutNode.attrs.collapsed
-                  });
-                  view.dispatch(tr);
-                  return true;
+            view.state.doc.descendants((node, pos) => {
+              if (node.type.name === 'callout') {
+                const nodeDOM = view.nodeDOM(pos)
+                if (nodeDOM === callout) {
+                  calloutPos = pos
+                  calloutNode = node
+                  return false
                 }
               }
+            })
 
-              return false;
+            if (calloutNode && calloutPos !== null) {
+              const tr = view.state.tr.setNodeMarkup(calloutPos, null, {
+                ...calloutNode.attrs,
+                collapsed: !calloutNode.attrs.collapsed,
+              })
+              view.dispatch(tr)
+              return true
             }
           }
-        }
-      })
-    ];
-  }
-});
 
-export default Callout;
+          return false
+        },
+      },
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Public factory
+// ---------------------------------------------------------------------------
+
+/**
+ * Create all Callout-related ProseMirror plugins.
+ *
+ * @param {import('prosemirror-model').Schema} schema
+ * @returns {import('prosemirror-state').Plugin[]}
+ */
+export function createCalloutPlugins(schema) {
+  return [
+    inputRules({ rules: [calloutInputRule(schema)] }),
+    keymap({
+      'Mod-Alt-c': (state, dispatch, view) => {
+        if (!view) return false
+        return setCallout(view, { type: 'note' })
+      },
+    }),
+    calloutClickPlugin(),
+  ]
+}
+
+export { CALLOUT_TYPES }
+export default createCalloutPlugins

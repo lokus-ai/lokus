@@ -1,123 +1,34 @@
-import { mergeAttributes, Node, InputRule } from '@tiptap/core';
-import { ReactNodeViewRenderer } from '@tiptap/react';
+import { InputRule, inputRules } from 'prosemirror-inputrules';
+import { createReactNodeView } from '../lib/react-pm-helpers.jsx';
 import MermaidComponent from '../lib/Mermaid';
 
-// Step 1: match only the start trigger
-const MERMAID_START_REGEX = /^``mm$/;
+// Node view factory — pass this to useProseMirror's nodeViews config as:
+//   nodeViews: { mermaid: mermaidNodeView }
+export const mermaidNodeView = createReactNodeView(MermaidComponent);
 
- const MermaidDiagram = Node.create({
-  name: 'mermaid',
-  group: 'block',
-  content: 'text*', // allow editing inside the block
-  code: true,
-  atom: false,
-  selectable: true,
-  isolating: true,
+/**
+ * Returns a prosemirror-inputrules plugin that converts the ``mm shortcut
+ * at the start of a line into a mermaid node.
+ *
+ * Matches the sequence "```mm " (triple-backtick mm space) typed at the
+ * beginning of a block.
+ *
+ * @param {import('prosemirror-model').Schema} schema
+ * @returns {import('prosemirror-state').Plugin}
+ */
+export function createMermaidInputRulesPlugin(schema) {
+  return inputRules({
+    rules: [
+      new InputRule(/^```mm\s$/, (state, _match, start, end) => {
+        const nodeType = schema.nodes.mermaid;
+        if (!nodeType) return null;
 
-  addAttributes() {
-    return {
-      code: {
-        default: '',
-      },
-      theme: {
-        default: 'default',
-      },
-      updatedAt: {
-        default: Date.now(),
-      },
-    };
-  },
-
-  parseHTML() {
-    return [
-      {
-        tag: 'mermaid-block',
-        getAttrs: node => {
-          let code = '';
-
-          // Try new base64 format first
-          const dataCode = node.getAttribute('data-code');
-          if (dataCode) {
-            try {
-              code = atob(dataCode); // Base64 decode
-            } catch (e) {
-              code = '';
-            }
-          } else {
-            // Fallback to old formats for backward compatibility
-            const codeElement = node.querySelector('code');
-            if (codeElement) {
-              code = codeElement.textContent;
-            } else {
-              code = node.getAttribute('code') || '';
-            }
-          }
-
-          return {
-            code: code,
-            theme: node.getAttribute('theme') || 'default',
-            updatedAt: node.getAttribute('updatedat') || Date.now(),
-          };
-        },
-      },
-      // Support for markdown code blocks: ```mermaid
-      {
-        tag: 'pre',
-        preserveWhitespace: 'full',
-        getAttrs: node => {
-          const codeElement = node.querySelector('code.language-mermaid');
-          if (!codeElement) return false;
-
-          return {
-            code: codeElement.textContent || '',
-            theme: 'default',
-            updatedAt: Date.now(),
-          };
-        },
-      },
-    ];
-  },
-
-  renderHTML({ node, HTMLAttributes }) {
-    // Store code as base64-encoded attribute for reliable persistence
-    // Base64 encoding preserves multi-line code and special characters
-    const encodedCode = node.attrs.code ? btoa(node.attrs.code) : '';
-
-    return [
-      'mermaid-block',
-      mergeAttributes(HTMLAttributes, {
-        'data-code': encodedCode,
-        theme: node.attrs.theme || 'default',
-        updatedat: node.attrs.updatedAt || Date.now(),
+        return state.tr.replaceWith(start, end, nodeType.create());
       }),
-    ];
-  },
+    ],
+  });
+}
 
-  // 1 When user types ``mm at line start -> convert to this node
-  addInputRules() {
-    return [
-      new InputRule({
-        find: MERMAID_START_REGEX,
-        handler: ({ state, range }) => {
-          const nodeType = state.schema.nodes.mermaid;
-          if (!nodeType) return null;
-
-          const tr = state.tr.replaceRangeWith(
-            range.from,
-            range.to,
-            nodeType.create()
-          );
-
-          return tr;
-        },
-      }),
-    ];
-  },
-
-  // 2 The React NodeView - renders diagram or editable text
-  addNodeView() {
-    return ReactNodeViewRenderer(MermaidComponent);
-  },
-});
-
-export default MermaidDiagram;
+// Backward-compatible default export so any existing import of
+// `MermaidDiagram` still resolves to something meaningful.
+export default { mermaidNodeView, createMermaidInputRulesPlugin };

@@ -1,7 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { Editor } from '@tiptap/core'
-import StarterKit from '@tiptap/starter-kit'
-import SlashCommand from './SlashCommand'
+import createSlashCommandPlugin from './SlashCommand'
 
 // Mock dependencies
 vi.mock('./slash-command.jsx', () => ({
@@ -11,30 +9,37 @@ vi.mock('./slash-command.jsx', () => ({
     }
 }))
 
-describe('SlashCommand Extension', () => {
-    let editor
+vi.mock('./suggestion-plugin.js', () => ({
+    createSuggestionPlugin: (config) => ({
+        key: { key: config.pluginKey?.key || 'slashCommandSuggestion$' },
+        _config: config,
+    }),
+    PluginKey: class PluginKey {
+        constructor(name) { this.key = name + '$' }
+    },
+}))
 
-    it('should have correct name', () => {
-        expect(SlashCommand.name).toBe('slashCommand')
+describe('createSlashCommandPlugin', () => {
+    it('should be a function', () => {
+        expect(typeof createSlashCommandPlugin).toBe('function')
     })
 
-    it('should register ProseMirror plugins', () => {
-        editor = new Editor({
-            extensions: [
-                StarterKit,
-                SlashCommand
-            ]
-        })
-
-        const plugins = editor.state.plugins
-        const slashPlugin = plugins.find(p => p.key.startsWith('slashCommandSuggestion'))
-        expect(slashPlugin).toBeDefined()
-    })
-
-    it('should handle slash character', () => {
-        // We can't easily test the suggestion popup logic in unit tests without full DOM,
-        // but we can verify the plugin configuration
-        const plugin = SlashCommand.config.addProseMirrorPlugins.call({ editor: {} })[0]
+    it('should return a plugin when called with a view', () => {
+        const mockView = { state: {}, dispatch: () => {}, dom: document.createElement('div') }
+        const plugin = createSlashCommandPlugin(mockView)
         expect(plugin).toBeDefined()
+        expect(plugin.key.key).toContain('slashCommandSuggestion')
+    })
+
+    it('should configure with slash character trigger', () => {
+        const mockView = { state: {}, dispatch: () => {}, dom: document.createElement('div') }
+        const plugin = createSlashCommandPlugin(mockView)
+        expect(plugin._config.char).toBe('/')
+    })
+
+    it('should not allow spaces in query', () => {
+        const mockView = { state: {}, dispatch: () => {}, dom: document.createElement('div') }
+        const plugin = createSlashCommandPlugin(mockView)
+        expect(plugin._config.allowSpaces).toBe(false)
     })
 })

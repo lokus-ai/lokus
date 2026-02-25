@@ -1,5 +1,4 @@
-import { Editor } from "@tiptap/core";
-import { ReactRenderer } from "@tiptap/react";
+import { ReactPopup } from './react-pm-helpers.jsx';
 import { logger } from "../../utils/logger.js";
 import {
   Heading1,
@@ -33,33 +32,74 @@ import tippy from "tippy.js/dist/tippy.esm.js";
 
 import SlashCommandList from "../components/SlashCommandList";
 import { editorAPI } from "../../plugins/api/EditorAPI.js";
+import { createEditorCommands, insertContent } from '../commands/index.js';
+import { TextSelection } from 'prosemirror-state';
 
-// Keep track of the current reference rect so we can open sub‑popovers
+// Keep track of the current reference rect so we can open sub-popovers
 let lastClientRect = null;
 
-function waitForCommand(editor, key, { interval = 100, timeout = 2000 } = {}) {
-  return new Promise((resolve) => {
-    const start = Date.now();
-    const check = () => {
-      if (editor?.commands?.[key]) return resolve(true);
-      if (Date.now() - start >= timeout) return resolve(false);
-      setTimeout(check, interval);
-    };
-    check();
-  });
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Delete a range in the editor view and focus.
+ * Returns the new state after dispatch so subsequent commands operate on fresh state.
+ *
+ * @param {import('prosemirror-view').EditorView} view
+ * @param {{ from: number, to: number }} range
+ */
+function deleteRange(view, range) {
+  if (!view) return;
+  view.dom.focus({ preventScroll: true });
+  const tr = view.state.tr.delete(range.from, range.to);
+  // Place cursor at the deletion point
+  const pos = Math.min(range.from, tr.doc.content.size);
+  tr.setSelection(TextSelection.create(tr.doc, pos));
+  tr.scrollIntoView();
+  view.dispatch(tr);
 }
 
-async function runWhenReady(editor, key, run, options) {
-  const ok = await waitForCommand(editor, key, options);
-  if (!ok) {
-    return false;
+/**
+ * Delete the slash command range and then insert content.
+ *
+ * @param {import('prosemirror-view').EditorView} view
+ * @param {{ from: number, to: number }} range
+ * @param {import('prosemirror-model').Node | Object | string} content
+ */
+function deleteRangeAndInsert(view, range, content) {
+  if (!view) return;
+  view.dom.focus({ preventScroll: true });
+
+  const { schema, tr } = view.state;
+
+  // Delete the slash command text
+  tr.delete(range.from, range.to);
+
+  // Resolve the content
+  let nodes;
+  if (typeof content === 'string') {
+    nodes = [schema.text(content)];
+  } else if (content && typeof content === 'object' && content.type && typeof content.type === 'string') {
+    nodes = [schema.nodeFromJSON(content)];
+  } else if (content && typeof content === 'object' && content.type && content.type.name) {
+    nodes = [content];
+  } else {
+    nodes = [schema.text(String(content))];
   }
-  try {
-    run();
-    return true;
-  } catch (e) {
-    return false;
+
+  // Insert at the mapped deletion point
+  const insertPos = tr.mapping.map(range.from);
+  for (const node of nodes) {
+    if (node.isInline) {
+      tr.insert(insertPos, node);
+    } else {
+      tr.replaceWith(insertPos, insertPos, node);
+    }
   }
+
+  tr.scrollIntoView();
+  view.dispatch(tr);
 }
 
 function buildTableHTML(rows, cols, withHeaderRow = true) {
@@ -70,60 +110,52 @@ function buildTableHTML(rows, cols, withHeaderRow = true) {
   return `<table>${thead}<tbody>${body}</tbody></table>`;
 }
 
-function openTemplatePicker({ editor, range }) {
+function openTemplatePicker({ editor: view, range }) {
   logger.debug('SlashCommand', 'Opening template picker via event');
-  // Store current editor state for template insertion
-  const editorState = { editor, range };
 
   // Dispatch custom event to open template picker
   window.dispatchEvent(new CustomEvent('open-template-picker', {
     detail: {
-      editorState,
+      editorState: { editor: view, range },
       onSelect: (template, processedContent) => {
         logger.debug('SlashCommand', 'Template selected:', template?.name);
         try {
-          // Insert the processed template content
-          editor.chain().focus().deleteRange(range).insertContent(processedContent).run();
+          deleteRangeAndInsert(view, range, processedContent);
         } catch (err) {
           logger.error('SlashCommand', 'Error inserting template:', err);
-          // Fallback: insert raw template content
-          editor.chain().focus().deleteRange(range).insertContent(template.content).run();
+          try {
+            deleteRangeAndInsert(view, range, template.content);
+          } catch {}
         }
       }
     }
   }));
 }
 
-function openFileLinkPicker({ editor, range }) {
-
+function openFileLinkPicker({ editor: view, range }) {
   try {
-    // Get file index for suggestions
     const getIndex = () => {
-      const list = (globalThis.__LOKUS_FILE_INDEX__ || [])
-      return Array.isArray(list) ? list : []
+      const list = (globalThis.__LOKUS_FILE_INDEX__ || []);
+      return Array.isArray(list) ? list : [];
     };
 
     const files = getIndex();
 
     if (files.length === 0) {
-      // No files available, just insert empty wiki link
-      editor.chain().focus().deleteRange(range).insertContent('[[]]').run();
+      deleteRangeAndInsert(view, range, '[[]]');
       return;
     }
 
-    // Create file picker UI
     createFilePicker(files, (selectedFile) => {
       if (selectedFile) {
-        // Insert the selected file as wiki link
         const linkText = `[[${selectedFile.title}]]`;
-        editor.chain().focus().deleteRange(range).insertContent(linkText).run();
+        deleteRangeAndInsert(view, range, linkText);
       }
     });
 
   } catch (error) {
-    // Fallback: just insert something
     try {
-      editor.chain().focus().deleteRange(range).insertContent('[[Link]]').run();
+      deleteRangeAndInsert(view, range, '[[Link]]');
     } catch { }
   }
 }
@@ -292,12 +324,13 @@ function createFilePicker(files, onSelect) {
   document.addEventListener('keydown', handleKeydown);
 }
 
-function openTableSizePicker({ editor, range }) {
+function openTableSizePicker({ editor: view, range }) {
   // If table not ready, wait briefly and insert default; if we can't position a picker, also insert default.
   if (!lastClientRect) {
     try {
-      const html = buildTableHTML(3, 3, true);
-      editor.chain().focus().deleteRange(range).insertContent(html).run();
+      deleteRange(view, range);
+      const cmds = createEditorCommands(view);
+      cmds.insertTable({ rows: 3, cols: 3 });
     } catch { }
     return;
   }
@@ -347,7 +380,7 @@ function openTableSizePicker({ editor, range }) {
       cell.style.background = active ? 'rgb(var(--accent) / 0.25)' : 'rgb(var(--panel))';
       cell.style.borderColor = active ? 'rgb(var(--accent))' : 'rgb(var(--border))';
     }
-    label.textContent = `Insert ${hoverRows} × ${hoverCols} table`;
+    label.textContent = `Insert ${hoverRows} x ${hoverCols} table`;
   }
 
   grid.addEventListener('mousemove', (e) => {
@@ -363,8 +396,9 @@ function openTableSizePicker({ editor, range }) {
   const doInsert = () => {
     if (!hoverRows || !hoverCols) return;
     try {
-      const html = buildTableHTML(hoverRows, hoverCols, true);
-      editor.chain().focus().deleteRange(range).insertContent(html).run();
+      deleteRange(view, range);
+      const cmds = createEditorCommands(view);
+      cmds.insertTable({ rows: hoverRows, cols: hoverCols });
     } catch { }
     try { pick.destroy(); } catch { }
   };
@@ -381,9 +415,13 @@ function openTableSizePicker({ editor, range }) {
     onHidden: (inst) => { try { inst.destroy(); } catch { } },
   });
 
-  // Initial paint so the palette uses 1×1 by default hover
+  // Initial paint so the palette uses 1x1 by default hover
   hoverRows = 1; hoverCols = 1; paint();
 }
+
+// ---------------------------------------------------------------------------
+// Command items — each `command` callback receives { editor: EditorView, range }
+// ---------------------------------------------------------------------------
 
 const commandItems = [
   {
@@ -393,58 +431,63 @@ const commandItems = [
         title: "Heading 1",
         description: "Big section heading.",
         icon: <Heading1 size={18} />,
-        command: ({ editor, range }) => {
-          editor.chain().focus().deleteRange(range).setNode("heading", { level: 1 }).run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          createEditorCommands(view).toggleHeading({ level: 1 });
         },
       },
       {
         title: "Heading 2",
         description: "Medium section heading.",
         icon: <Heading2 size={18} />,
-        command: ({ editor, range }) => {
-          editor.chain().focus().deleteRange(range).setNode("heading", { level: 2 }).run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          createEditorCommands(view).toggleHeading({ level: 2 });
         },
       },
       {
         title: "Heading 3",
         description: "Small section heading.",
         icon: <Heading3 size={18} />,
-        command: ({ editor, range }) => {
-          editor.chain().focus().deleteRange(range).setNode("heading", { level: 3 }).run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          createEditorCommands(view).toggleHeading({ level: 3 });
         },
       },
       {
         title: "Bullet List",
         description: "Create a simple bullet list.",
         icon: <List size={18} />,
-        command: ({ editor, range }) => {
-          editor.chain().focus().deleteRange(range).toggleBulletList().run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          createEditorCommands(view).toggleBulletList();
         },
       },
       {
         title: "Ordered List",
         description: "Create a list with numbers.",
         icon: <ListOrdered size={18} />,
-        command: ({ editor, range }) => {
-          editor.chain().focus().deleteRange(range).toggleOrderedList().run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          createEditorCommands(view).toggleOrderedList();
         },
       },
       {
         title: "Task List",
         description: "Track tasks with checkboxes.",
         icon: <ListTodo size={18} />,
-        command: ({ editor, range }) => {
-          runWhenReady(editor, 'toggleTaskList', () => {
-            editor.chain().focus().deleteRange(range).toggleTaskList().run();
-          }, { timeout: 5000 });
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          createEditorCommands(view).toggleTaskList();
         },
       },
       {
         title: "Quote",
         description: "Capture a quote.",
         icon: <TextQuote size={18} />,
-        command: ({ editor, range }) => {
-          editor.chain().focus().deleteRange(range).toggleBlockquote().run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          createEditorCommands(view).toggleBlockquote();
         },
       },
     ],
@@ -456,45 +499,41 @@ const commandItems = [
         title: "Image",
         description: "Insert image from workspace or URL.",
         icon: <ImageIcon size={18} />,
-        command: ({ editor, range }) => {
+        command: ({ editor: view, range }) => {
           // Delete the slash command and insert ![[ to trigger image autocomplete
-          editor.chain()
-            .focus()
-            .deleteRange(range)
-            .insertContent('![[')
-            .run();
+          deleteRangeAndInsert(view, range, '![[');
         },
       },
       {
         title: "Table",
         description: "Pick size, then insert.",
         icon: <Table2 size={18} />,
-        command: ({ editor, range }) => {
-          openTableSizePicker({ editor, range });
+        command: ({ editor: view, range }) => {
+          openTableSizePicker({ editor: view, range });
         },
       },
       {
         title: "Template",
         description: "Insert a template with variables.",
         icon: <FileText size={18} />,
-        command: ({ editor, range }) => {
-          openTemplatePicker({ editor, range });
+        command: ({ editor: view, range }) => {
+          openTemplatePicker({ editor: view, range });
         },
       },
       {
         title: "Link to File",
         description: "Create a wiki link to another file.",
         icon: <Link size={18} />,
-        command: ({ editor, range }) => {
-          openFileLinkPicker({ editor, range });
+        command: ({ editor: view, range }) => {
+          openFileLinkPicker({ editor: view, range });
         },
       },
       {
         title: "Simple Task",
         description: "Create standalone task (!task).",
         icon: <ListTodo size={18} />,
-        command: ({ editor, range }) => {
-          editor.chain().focus().deleteRange(range).insertContent('!task ').run();
+        command: ({ editor: view, range }) => {
+          deleteRangeAndInsert(view, range, '!task ');
         },
       },
     ],
@@ -506,16 +545,18 @@ const commandItems = [
         title: "Code",
         description: "Capture a code snippet.",
         icon: <Code size={18} />,
-        command: ({ editor, range }) => {
-          editor.chain().focus().deleteRange(range).toggleCode().run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          createEditorCommands(view).toggleCode();
         },
       },
       {
         title: "Code Block",
         description: "Capture a larger code block.",
         icon: <CodeXml size={18} />,
-        command: ({ editor, range }) => {
-          editor.chain().focus().deleteRange(range).toggleCodeBlock().run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          createEditorCommands(view).toggleCodeBlock();
         },
       },
     ],
@@ -527,11 +568,11 @@ const commandItems = [
         title: "Highlight",
         description: "Highlight text (==text==).",
         icon: <Highlighter size={18} />,
-        command: ({ editor, range }) => {
-          if (editor?.commands?.toggleHighlight) {
-            editor.chain().focus().deleteRange(range).toggleHighlight().run();
-          } else {
-            editor.chain().focus().deleteRange(range).insertContent('<mark></mark>').run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          const cmds = createEditorCommands(view);
+          if (!cmds.toggleHighlight()) {
+            insertContent(view, '<mark></mark>');
           }
         },
       },
@@ -539,11 +580,11 @@ const commandItems = [
         title: "Strikethrough",
         description: "Cross out text (~~text~~).",
         icon: <Strikethrough size={18} />,
-        command: ({ editor, range }) => {
-          if (editor?.commands?.toggleStrike) {
-            editor.chain().focus().deleteRange(range).toggleStrike().run();
-          } else {
-            editor.chain().focus().deleteRange(range).insertContent('<s></s>').run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          const cmds = createEditorCommands(view);
+          if (!cmds.toggleStrike()) {
+            insertContent(view, '<s></s>');
           }
         },
       },
@@ -551,24 +592,23 @@ const commandItems = [
         title: "Superscript",
         description: "Raise text (x^2).",
         icon: <SupIcon size={18} />,
-        command: ({ editor, range }) => {
-          if (editor?.commands?.toggleSuperscript) {
-            editor.chain().focus().deleteRange(range).toggleSuperscript().run();
-          } else {
-            // Fallback: wrap selection in <sup>
-            editor.chain().focus().deleteRange(range).insertContent('<sup></sup>').run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          const cmds = createEditorCommands(view);
+          if (!cmds.toggleSuperscript()) {
+            insertContent(view, '<sup></sup>');
           }
         },
       },
       {
         title: "Subscript",
-        description: "Lower text (H₂O).",
+        description: "Lower text (H2O).",
         icon: <SubIcon size={18} />,
-        command: ({ editor, range }) => {
-          if (editor?.commands?.toggleSubscript) {
-            editor.chain().focus().deleteRange(range).toggleSubscript().run();
-          } else {
-            editor.chain().focus().deleteRange(range).insertContent('<sub></sub>').run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          const cmds = createEditorCommands(view);
+          if (!cmds.toggleSubscript()) {
+            insertContent(view, '<sub></sub>');
           }
         },
       },
@@ -576,11 +616,11 @@ const commandItems = [
         title: "Horizontal Rule",
         description: "Insert a horizontal divider.",
         icon: <Minus size={18} />,
-        command: ({ editor, range }) => {
-          if (editor?.commands?.setHorizontalRule) {
-            editor.chain().focus().deleteRange(range).setHorizontalRule().run();
-          } else {
-            editor.chain().focus().deleteRange(range).insertContent('<hr />').run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          const cmds = createEditorCommands(view);
+          if (!cmds.setHorizontalRule()) {
+            insertContent(view, '<hr />');
           }
         },
       },
@@ -593,9 +633,15 @@ const commandItems = [
         title: "Note Callout",
         description: "Insert a note callout block.",
         icon: <Info size={18} />,
-        command: ({ editor, range }) => {
-          if (editor?.commands?.setCallout) {
-            editor.chain().focus().deleteRange(range).setCallout({ type: 'note' }).run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          // Callouts are custom nodes - insert as JSON node spec
+          const schema = view.state.schema;
+          if (schema.nodes.callout) {
+            const tr = view.state.tr.replaceSelectionWith(
+              schema.nodes.callout.create({ type: 'note' }, schema.nodes.paragraph.create())
+            ).scrollIntoView();
+            view.dispatch(tr);
           }
         },
       },
@@ -603,9 +649,14 @@ const commandItems = [
         title: "Tip Callout",
         description: "Insert a tip callout block.",
         icon: <Lightbulb size={18} />,
-        command: ({ editor, range }) => {
-          if (editor?.commands?.setCallout) {
-            editor.chain().focus().deleteRange(range).setCallout({ type: 'tip' }).run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          const schema = view.state.schema;
+          if (schema.nodes.callout) {
+            const tr = view.state.tr.replaceSelectionWith(
+              schema.nodes.callout.create({ type: 'tip' }, schema.nodes.paragraph.create())
+            ).scrollIntoView();
+            view.dispatch(tr);
           }
         },
       },
@@ -613,9 +664,14 @@ const commandItems = [
         title: "Info Callout",
         description: "Insert an info callout block.",
         icon: <Info size={18} />,
-        command: ({ editor, range }) => {
-          if (editor?.commands?.setCallout) {
-            editor.chain().focus().deleteRange(range).setCallout({ type: 'info' }).run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          const schema = view.state.schema;
+          if (schema.nodes.callout) {
+            const tr = view.state.tr.replaceSelectionWith(
+              schema.nodes.callout.create({ type: 'info' }, schema.nodes.paragraph.create())
+            ).scrollIntoView();
+            view.dispatch(tr);
           }
         },
       },
@@ -623,9 +679,14 @@ const commandItems = [
         title: "Warning Callout",
         description: "Insert a warning callout block.",
         icon: <AlertTriangle size={18} />,
-        command: ({ editor, range }) => {
-          if (editor?.commands?.setCallout) {
-            editor.chain().focus().deleteRange(range).setCallout({ type: 'warning' }).run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          const schema = view.state.schema;
+          if (schema.nodes.callout) {
+            const tr = view.state.tr.replaceSelectionWith(
+              schema.nodes.callout.create({ type: 'warning' }, schema.nodes.paragraph.create())
+            ).scrollIntoView();
+            view.dispatch(tr);
           }
         },
       },
@@ -633,9 +694,14 @@ const commandItems = [
         title: "Danger Callout",
         description: "Insert a danger callout block.",
         icon: <AlertCircle size={18} />,
-        command: ({ editor, range }) => {
-          if (editor?.commands?.setCallout) {
-            editor.chain().focus().deleteRange(range).setCallout({ type: 'danger' }).run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          const schema = view.state.schema;
+          if (schema.nodes.callout) {
+            const tr = view.state.tr.replaceSelectionWith(
+              schema.nodes.callout.create({ type: 'danger' }, schema.nodes.paragraph.create())
+            ).scrollIntoView();
+            view.dispatch(tr);
           }
         },
       },
@@ -643,9 +709,14 @@ const commandItems = [
         title: "Success Callout",
         description: "Insert a success callout block.",
         icon: <CheckSquare size={18} />,
-        command: ({ editor, range }) => {
-          if (editor?.commands?.setCallout) {
-            editor.chain().focus().deleteRange(range).setCallout({ type: 'success' }).run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          const schema = view.state.schema;
+          if (schema.nodes.callout) {
+            const tr = view.state.tr.replaceSelectionWith(
+              schema.nodes.callout.create({ type: 'success' }, schema.nodes.paragraph.create())
+            ).scrollIntoView();
+            view.dispatch(tr);
           }
         },
       },
@@ -653,9 +724,14 @@ const commandItems = [
         title: "Question Callout",
         description: "Insert a question callout block.",
         icon: <HelpCircle size={18} />,
-        command: ({ editor, range }) => {
-          if (editor?.commands?.setCallout) {
-            editor.chain().focus().deleteRange(range).setCallout({ type: 'question' }).run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          const schema = view.state.schema;
+          if (schema.nodes.callout) {
+            const tr = view.state.tr.replaceSelectionWith(
+              schema.nodes.callout.create({ type: 'question' }, schema.nodes.paragraph.create())
+            ).scrollIntoView();
+            view.dispatch(tr);
           }
         },
       },
@@ -663,9 +739,14 @@ const commandItems = [
         title: "Example Callout",
         description: "Insert an example callout block.",
         icon: <BookOpen size={18} />,
-        command: ({ editor, range }) => {
-          if (editor?.commands?.setCallout) {
-            editor.chain().focus().deleteRange(range).setCallout({ type: 'example' }).run();
+        command: ({ editor: view, range }) => {
+          deleteRange(view, range);
+          const schema = view.state.schema;
+          if (schema.nodes.callout) {
+            const tr = view.state.tr.replaceSelectionWith(
+              schema.nodes.callout.create({ type: 'example' }, schema.nodes.paragraph.create())
+            ).scrollIntoView();
+            view.dispatch(tr);
           }
         },
       },
@@ -678,20 +759,28 @@ const commandItems = [
         title: "Inline Math",
         description: "Insert $x^2$ (LaTeX).",
         icon: <Sigma size={18} />,
-        command: ({ editor, range }) => {
+        command: ({ editor: view, range }) => {
           // Dispatch event to open math formula modal
           window.dispatchEvent(new CustomEvent('open-math-formula-modal', {
             detail: {
               mode: 'inline',
-              editor,
+              editor: view,
               range,
               onInsert: ({ formula }) => {
-                if (editor?.commands?.setMathInline) {
-                  editor.chain().focus().deleteRange(range).setMathInline(formula).run();
+                const schema = view.state.schema;
+                const mathInlineType = schema.nodes.mathInline ?? schema.nodes.math_inline;
+                if (mathInlineType) {
+                  // Delete the slash command range first, then insert math node
+                  view.dom.focus({ preventScroll: true });
+                  const tr = view.state.tr.delete(range.from, range.to);
+                  const insertPos = tr.mapping.map(range.from);
+                  const mathNode = mathInlineType.create({ src: formula });
+                  tr.insert(insertPos, mathNode);
+                  tr.scrollIntoView();
+                  view.dispatch(tr);
                 } else {
-                  // Fallback: insert as math node HTML
-                  const html = `<span data-type="math-inline" data-src="${formula.replace(/"/g, '&quot;')}">${formula}</span>`;
-                  editor.chain().focus().deleteRange(range).insertContent(html).run();
+                  // Fallback: insert as HTML-like text
+                  deleteRangeAndInsert(view, range, `$${formula}$`);
                 }
               }
             }
@@ -702,20 +791,28 @@ const commandItems = [
         title: "Block Math",
         description: "Insert $$E=mc^2$$ (LaTeX).",
         icon: <Sigma size={18} />,
-        command: ({ editor, range }) => {
+        command: ({ editor: view, range }) => {
           // Dispatch event to open math formula modal
           window.dispatchEvent(new CustomEvent('open-math-formula-modal', {
             detail: {
               mode: 'block',
-              editor,
+              editor: view,
               range,
               onInsert: ({ formula }) => {
-                if (editor?.commands?.setMathBlock) {
-                  editor.chain().focus().deleteRange(range).setMathBlock(formula).run();
+                const schema = view.state.schema;
+                const mathBlockType = schema.nodes.mathBlock ?? schema.nodes.math_block;
+                if (mathBlockType) {
+                  // Delete the slash command range first, then insert math node
+                  view.dom.focus({ preventScroll: true });
+                  const tr = view.state.tr.delete(range.from, range.to);
+                  const insertPos = tr.mapping.map(range.from);
+                  const mathNode = mathBlockType.create({ src: formula });
+                  tr.replaceWith(insertPos, insertPos, mathNode);
+                  tr.scrollIntoView();
+                  view.dispatch(tr);
                 } else {
-                  // Fallback: insert as math block node HTML
-                  const html = `<div data-type="math-block" data-src="${formula.replace(/"/g, '&quot;')}">${formula}</div>`;
-                  editor.chain().focus().deleteRange(range).insertContent(html).run();
+                  // Fallback: insert as text
+                  deleteRangeAndInsert(view, range, `$$${formula}$$`);
                 }
               }
             }
@@ -797,7 +894,7 @@ const slashCommand = {
 
     return {
       onStart: (props) => {
-        // keep latest rect for sub‑popovers (e.g., table size picker)
+        // keep latest rect for sub-popovers (e.g., table size picker)
         if (props.clientRect) lastClientRect = props.clientRect;
 
         // Refresh plugin commands on each open in case they changed
@@ -807,10 +904,7 @@ const slashCommand = {
           items: currentItems
         };
 
-        component = new ReactRenderer(SlashCommandList, {
-          props: enhancedProps,
-          editor: props.editor,
-        });
+        component = new ReactPopup(SlashCommandList, enhancedProps);
 
         if (!props.clientRect) {
           logger.warn('SlashCommand', 'No clientRect in onStart');
@@ -848,7 +942,7 @@ const slashCommand = {
           return;
         }
 
-        // update rect for sub‑popovers
+        // update rect for sub-popovers
         lastClientRect = props.clientRect;
         if (popup && popup[0]) {
           popup[0].setProps({

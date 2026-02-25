@@ -1,219 +1,189 @@
 /**
- * WikiLinkEmbed Extension for TipTap
+ * WikiLinkEmbed Extension (raw ProseMirror)
  *
- * Implements Obsidian-style block embeds: ![[File^blockid]]
+ * Block atom node for Obsidian-style block embeds: ![[File^blockid]]
  * Embeds the actual content of the block inline, not just a link.
  * Supports live updates when source changes.
+ *
+ * Schema is defined in lokus-schema.js. This module provides:
+ *   - setWikiLinkEmbed command
+ *   - Async content resolution plugin
  */
 
-import { Node } from '@tiptap/core'
+import { Plugin, PluginKey } from 'prosemirror-state'
 import { extractBlockContent } from '../../core/blocks/block-parser.js'
 
-export const WikiLinkEmbed = Node.create({
-  name: 'wikiLinkEmbed',
-  group: 'block',
-  atom: true,
-  draggable: true,
+// ---------------------------------------------------------------------------
+// Commands
+// ---------------------------------------------------------------------------
 
-  addAttributes() {
-    return {
-      id: { default: '' },
-      filePath: { default: '' },
-      blockId: { default: '' },
-      content: { default: '' },
-      fileName: { default: '' },
-      loading: { default: false },
-      error: { default: null }
-    }
-  },
+function genId() {
+  return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
+}
 
-  parseHTML() {
-    return [{ tag: 'div[data-type="wiki-embed"]' }]
-  },
+/**
+ * Insert a wiki-link embed node at the current selection.
+ * Resolves content asynchronously and updates the node.
+ *
+ * @param {import('prosemirror-view').EditorView} view
+ * @param {string} fileName
+ * @param {string} blockId
+ * @param {string} filePath
+ * @returns {boolean}
+ */
+export function setWikiLinkEmbed(view, fileName, blockId, filePath) {
+  const { state } = view
+  const embedType = state.schema.nodes.wikiLinkEmbed
+  if (!embedType) return false
 
-  renderHTML({ node }) {
-    const { fileName, blockId, content, loading, error } = node.attrs
+  const id = genId()
+  const node = embedType.create({
+    id,
+    fileName,
+    blockId,
+    filePath,
+    content: '',
+    loading: true,
+    error: null,
+  })
 
-    if (error) {
-      return [
-        'div',
-        {
-          'data-type': 'wiki-embed',
-          class: 'wiki-embed-block wiki-embed-error'
-        },
-        [
-          'div',
-          { class: 'wiki-embed-header' },
-          `![[${fileName}^${blockId}]]`
-        ],
-        [
-          'div',
-          { class: 'wiki-embed-content wiki-embed-error-content' },
-          `❌ ${error}`
-        ]
-      ]
-    }
+  const { from, to } = state.selection
+  const tr = state.tr.replaceWith(from, to, node)
+  view.dispatch(tr)
 
-    if (loading) {
-      return [
-        'div',
-        {
-          'data-type': 'wiki-embed',
-          class: 'wiki-embed-block wiki-embed-loading'
-        },
-        [
-          'div',
-          { class: 'wiki-embed-header' },
-          `![[${fileName}^${blockId}]]`
-        ],
-        [
-          'div',
-          { class: 'wiki-embed-content' },
-          'Loading...'
-        ]
-      ]
+  // Fetch content asynchronously and update the node
+  resolveEmbedContent(view, id, filePath, blockId)
+
+  return true
+}
+
+/**
+ * Resolve embed content asynchronously and update the node in the editor.
+ *
+ * @param {import('prosemirror-view').EditorView} view
+ * @param {string} id - The unique id of the embed node
+ * @param {string} filePath
+ * @param {string} blockId
+ */
+async function resolveEmbedContent(view, id, filePath, blockId) {
+  try {
+    const content = await extractBlockContent(filePath, blockId)
+
+    if (!content) {
+      updateEmbedNode(view, id, { loading: false, error: 'Block not found' })
+      return
     }
 
-    return [
-      'div',
-      {
-        'data-type': 'wiki-embed',
-        class: 'wiki-embed-block'
-      },
-      [
-        'div',
-        { class: 'wiki-embed-header' },
-        [
-          'span',
-          { class: 'wiki-embed-icon' },
-          '📄'
-        ],
-        [
-          'span',
-          { class: 'wiki-embed-title' },
-          `${fileName} › ${blockId}`
-        ]
-      ],
-      [
-        'div',
-        {
-          class: 'wiki-embed-content',
-          // Render HTML content if it's HTML, otherwise markdown
-          ...(content.trim().startsWith('<') ? {} : { 'data-markdown': 'true' })
-        },
-        content || 'Empty block'
-      ]
-    ]
-  },
-
-  addCommands() {
-    return {
-      setWikiLinkEmbed: (fileName, blockId, filePath) => async ({ chain, editor }) => {
-        const id = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)
-
-        // Insert with loading state
-        const insertSuccess = chain()
-          .insertContent({
-            type: this.name,
-            attrs: {
-              id,
-              fileName,
-              blockId,
-              filePath,
-              content: '',
-              loading: true,
-              error: null
-            }
-          })
-          .run()
-
-        if (!insertSuccess) return false
-
-        // Fetch content asynchronously
-        try {
-          const content = await extractBlockContent(filePath, blockId)
-
-          if (!content) {
-            // Update with error
-            editor.commands.command(({ tr, state }) => {
-              let pos = -1
-              state.doc.descendants((node, position) => {
-                if (pos !== -1) return false
-                if (node.type.name === this.name && node.attrs.id === id) {
-                  pos = position
-                  return false
-                }
-                return true
-              })
-
-              if (pos !== -1) {
-                tr.setNodeMarkup(pos, undefined, {
-                  ...state.doc.nodeAt(pos).attrs,
-                  loading: false,
-                  error: 'Block not found'
-                })
-                return true
-              }
-              return false
-            })
-            return false
-          }
-
-          // Update with actual content
-          editor.commands.command(({ tr, state, dispatch }) => {
-            let pos = -1
-            state.doc.descendants((node, position) => {
-              if (pos !== -1) return false
-              if (node.type.name === this.name && node.attrs.id === id) {
-                pos = position
-                return false
-              }
-              return true
-            })
-
-            if (pos !== -1) {
-              tr.setNodeMarkup(pos, undefined, {
-                ...state.doc.nodeAt(pos).attrs,
-                content,
-                loading: false
-              })
-              if (dispatch) dispatch(tr)
-              return true
-            }
-            return false
-          })
-
-          return true
-        } catch (error) {
-
-          // Update with error
-          editor.commands.command(({ tr, state }) => {
-            let pos = -1
-            state.doc.descendants((node, position) => {
-              if (pos !== -1) return false
-              if (node.type.name === this.name && node.attrs.id === id) {
-                pos = position
-                return false
-              }
-              return true
-            })
-
-            if (pos !== -1) {
-              tr.setNodeMarkup(pos, undefined, {
-                ...state.doc.nodeAt(pos).attrs,
-                loading: false,
-                error: error.message || 'Failed to load block'
-              })
-              return true
-            }
-            return false
-          })
-
-          return false
-        }
-      }
-    }
+    updateEmbedNode(view, id, { content, loading: false })
+  } catch (error) {
+    updateEmbedNode(view, id, {
+      loading: false,
+      error: error.message || 'Failed to load block',
+    })
   }
-})
+}
 
-export default WikiLinkEmbed
+/**
+ * Find the embed node by id and update its attrs.
+ *
+ * @param {import('prosemirror-view').EditorView} view
+ * @param {string} id
+ * @param {Object} attrUpdates
+ */
+function updateEmbedNode(view, id, attrUpdates) {
+  const { state } = view
+  let pos = -1
+  state.doc.descendants((node, position) => {
+    if (pos !== -1) return false
+    if (node.type.name === 'wikiLinkEmbed' && node.attrs.id === id) {
+      pos = position
+      return false
+    }
+    return true
+  })
+
+  if (pos !== -1) {
+    const existingNode = state.doc.nodeAt(pos)
+    if (!existingNode) return
+    const tr = state.tr.setNodeMarkup(pos, undefined, {
+      ...existingNode.attrs,
+      ...attrUpdates,
+    })
+    view.dispatch(tr)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Plugin: watches for transactions that insert embed nodes in loading state
+// and triggers async resolution.
+//
+// This handles the case where an embed is inserted via an input rule
+// (from WikiLink.js blockEmbedInputRule) rather than through the command.
+// ---------------------------------------------------------------------------
+
+const wikiLinkEmbedKey = new PluginKey('wikilink-embed-resolver')
+
+function embedResolverPlugin() {
+  return new Plugin({
+    key: wikiLinkEmbedKey,
+    view() {
+      return {
+        update(view, prevState) {
+          // Check for newly inserted embed nodes in loading state
+          const { state } = view
+          if (state.doc === prevState.doc) return
+
+          state.doc.descendants((node, pos) => {
+            if (
+              node.type.name === 'wikiLinkEmbed' &&
+              node.attrs.loading === true &&
+              node.attrs.content === ''
+            ) {
+              // Check if this node existed in the previous state at the same position
+              // and was also loading. If so, skip to avoid duplicate resolution.
+              let wasAlreadyLoading = false
+              try {
+                const prevNode = prevState.doc.nodeAt(pos)
+                if (
+                  prevNode &&
+                  prevNode.type.name === 'wikiLinkEmbed' &&
+                  prevNode.attrs.id === node.attrs.id &&
+                  prevNode.attrs.loading === true
+                ) {
+                  wasAlreadyLoading = true
+                }
+              } catch {
+                // Position out of range in prev doc
+              }
+
+              if (!wasAlreadyLoading) {
+                resolveEmbedContent(
+                  view,
+                  node.attrs.id,
+                  node.attrs.filePath,
+                  node.attrs.blockId
+                )
+              }
+            }
+          })
+        },
+      }
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Public factory
+// ---------------------------------------------------------------------------
+
+/**
+ * Create all WikiLinkEmbed-related ProseMirror plugins.
+ *
+ * @param {import('prosemirror-model').Schema} schema
+ * @returns {import('prosemirror-state').Plugin[]}
+ */
+export function createWikiLinkEmbedPlugins(schema) {
+  return [embedResolverPlugin()]
+}
+
+export default createWikiLinkEmbedPlugins

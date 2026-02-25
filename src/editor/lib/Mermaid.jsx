@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { NodeViewWrapper } from "@tiptap/react";
 import mermaid from "mermaid";
 import { Eye, SquarePen, Maximize2 } from "lucide-react";
 import { MermaidViewerModal } from "../../components/MermaidViewerModal.jsx";
@@ -31,10 +30,23 @@ const getThemeColors = () => {
   };
 };
 
-const MermaidComponent = ({ node, updateAttributes, editor }) => {
-  const { code = "" } = node.attrs;  // Start in edit mode if there's no code or only whitespace
+/**
+ * MermaidComponent
+ *
+ * Rendered by createReactNodeView — props come from the PM NodeView helper:
+ *   node             — the current ProseMirror Node
+ *   view             — the PM EditorView (replaces the old `editor` prop)
+ *   getPos           — () => number | undefined
+ *   updateAttributes — (attrs: object) => void  (dispatches setNodeMarkup)
+ *   selected         — boolean, true when PM has selected this node
+ */
+const MermaidComponent = ({ node, view, getPos, updateAttributes, selected }) => {
+  const { code = "" } = node.attrs;
+
+  // Start in edit mode if there is no code yet
   const [isEditing, setIsEditing] = useState(() => {
-    const hasCode = code && code.trim().length > 0; return !hasCode;
+    const hasCode = code && code.trim().length > 0;
+    return !hasCode;
   });
   const [localCode, setLocalCode] = useState(code);
   const [themeVersion, setThemeVersion] = useState(0);
@@ -42,7 +54,9 @@ const MermaidComponent = ({ node, updateAttributes, editor }) => {
 
   // Fullscreen viewer state
   const [isViewerOpen, setIsViewerOpen] = useState(false);
-  const [svgContent, setSvgContent] = useState(null); const containerRef = useRef(null);
+  const [svgContent, setSvgContent] = useState(null);
+
+  const containerRef = useRef(null);
   const diagramIdRef = useRef(`m-${Math.random().toString(36).substring(2, 9)}`);
   const isMounted = useRef(true);
 
@@ -51,24 +65,24 @@ const MermaidComponent = ({ node, updateAttributes, editor }) => {
     return () => { isMounted.current = false; };
   }, []);
 
-  // On mount, if we have code, force a render after layout
+  // On mount, if we have code force a render after layout so the container
+  // has acquired dimensions by the time mermaid measures it.
   useEffect(() => {
     let timeoutId;
     if (code && code.trim()) {
-      // Force re-render after a tick so container has dimensions
       timeoutId = setTimeout(() => setForceRender(1), 50);
     }
     return () => clearTimeout(timeoutId);
   }, []);
 
-  // Sync localCode when node code changes
+  // Sync localCode when the node's code attribute changes externally
   useEffect(() => {
     if (code !== localCode) {
       setLocalCode(code);
     }
   }, [code]);
 
-  // Watch for theme changes
+  // Watch for theme changes (dark/light class toggled on <html>)
   useEffect(() => {
     const handleThemeChange = () => {
       setThemeVersion(prev => prev + 1);
@@ -83,47 +97,57 @@ const MermaidComponent = ({ node, updateAttributes, editor }) => {
     return () => observer.disconnect();
   }, []);
 
-  // Initialize and render Mermaid diagram
+  // Initialize and render Mermaid diagram whenever code / theme / forceRender changes
   useEffect(() => {
     if (!localCode.trim()) {
       return;
-    } const renderDiagram = async () => {
-      try {        // Get dynamic theme colors
+    }
+
+    const renderDiagram = async () => {
+      try {
         const themeColors = getThemeColors();
-        const isDark = document.documentElement.classList.contains("dark");        // Initialize Mermaid with dynamic theme
+        const isDark = document.documentElement.classList.contains("dark");
+
         mermaid.initialize({
           startOnLoad: false,
           theme: isDark ? "dark" : "default",
           securityLevel: "strict",
           themeVariables: themeColors,
-        });        // Render diagram
-        const { svg } = await mermaid.render(diagramIdRef.current, localCode); if (containerRef.current) {
-          containerRef.current.innerHTML = svg; const dimensions = {
+        });
+
+        const { svg } = await mermaid.render(diagramIdRef.current, localCode);
+
+        if (containerRef.current) {
+          containerRef.current.innerHTML = svg;
+
+          const dimensions = {
             width: containerRef.current.offsetWidth,
             height: containerRef.current.offsetHeight,
             clientHeight: containerRef.current.clientHeight,
-            scrollHeight: containerRef.current.scrollHeight
-          };          const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
-          if (isDev) {
-          }
+            scrollHeight: containerRef.current.scrollHeight,
+          };
 
-          // If container has no dimensions, retry after layout
+          const isDev =
+            typeof import.meta !== 'undefined' && import.meta.env
+              ? import.meta.env.DEV
+              : process.env.NODE_ENV !== 'production';
+
+          // If container has no dimensions yet, retry after layout
           if (dimensions.width === 0 || dimensions.height === 0) {
             if (isDev) {
+              // dimensions not yet available — will retry
             }
             setTimeout(() => {
               if (isMounted.current && containerRef.current) {
                 containerRef.current.innerHTML = svg;
-                if (isDev) {
-                }
               }
             }, 100);
           }
-        } else { }
+        }
       } catch (e) {
         logger.error('MermaidComponent', 'Mermaid render error:', e);
         if (containerRef.current) {
-          // Create error message DOM safely using textContent instead of innerHTML with template strings
+          // Build error DOM safely — no innerHTML with template strings
           const errorDiv = document.createElement('div');
           errorDiv.style.cssText = `
             padding: 8px 12px;
@@ -143,7 +167,6 @@ const MermaidComponent = ({ node, updateAttributes, editor }) => {
           errorDiv.appendChild(errorTitle);
           errorDiv.appendChild(errorMessage);
 
-          // Clear and append safely
           containerRef.current.innerHTML = '';
           containerRef.current.appendChild(errorDiv);
         }
@@ -153,7 +176,8 @@ const MermaidComponent = ({ node, updateAttributes, editor }) => {
     renderDiagram();
   }, [localCode, themeVersion, forceRender]);
 
-  // Handlers
+  // --- Handlers -------------------------------------------------------------
+
   const handleDoubleClick = () => {
     setIsEditing(true);
   };
@@ -161,23 +185,26 @@ const MermaidComponent = ({ node, updateAttributes, editor }) => {
   const handleBlur = () => {
     updateAttributes({ code: localCode });
     setIsEditing(false);
-    editor?.chain().focus().run();
+    // Return focus to the PM editor view (replaces editor?.chain().focus().run())
+    view?.focus();
   };
 
   const handleKeyDown = (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-      e.preventDefault(); updateAttributes({ code: localCode });
+      e.preventDefault();
+      updateAttributes({ code: localCode });
       setIsEditing(false);
-      editor?.chain().focus().run();
+      // Return focus to the PM editor view
+      view?.focus();
     }
   };
 
-  // Fullscreen viewer handlers
+  // --- Fullscreen viewer handlers -------------------------------------------
+
   const handleOpenViewer = () => {
     if (containerRef.current && !isEditing) {
       const svgElement = containerRef.current.querySelector('svg');
       if (svgElement) {
-        // Serialize SVG to string
         const svgString = new XMLSerializer().serializeToString(svgElement);
         setSvgContent(svgString);
         setIsViewerOpen(true);
@@ -196,26 +223,27 @@ const MermaidComponent = ({ node, updateAttributes, editor }) => {
     }
   };
 
+  // --- Render ---------------------------------------------------------------
+
   return (
-    <NodeViewWrapper
+    <div
       className="mermaid-node-view relative rounded-xl border my-4 p-3 shadow-sm transition-colors duration-300"
       style={{
         borderColor: 'rgb(var(--border))',
         backgroundColor: 'rgb(var(--bg))',
         color: 'rgb(var(--text))',
       }}
+      data-selected={selected || undefined}
       onDoubleClick={handleDoubleClick}
     >
       {/* Control buttons */}
       <div className="absolute top-1 right-0 flex gap-1">
-        {/* Fullscreen button - only show when viewing diagram */}
+        {/* Fullscreen button — only show when viewing a rendered diagram */}
         {!isEditing && localCode.trim() && (
           <button
             onClick={handleOpenViewer}
             className="p-1 rounded-md"
-            style={{
-              color: 'rgb(var(--text))',
-            }}
+            style={{ color: 'rgb(var(--text))' }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = 'rgb(var(--panel))';
             }}
@@ -228,13 +256,11 @@ const MermaidComponent = ({ node, updateAttributes, editor }) => {
           </button>
         )}
 
-        {/* Edit/View toggle button */}
+        {/* Edit / View toggle button */}
         <button
           onClick={() => setIsEditing((prev) => !prev)}
           className="p-1 rounded-md"
-          style={{
-            color: 'rgb(var(--text))',
-          }}
+          style={{ color: 'rgb(var(--text))' }}
           onMouseEnter={(e) => {
             e.currentTarget.style.backgroundColor = 'rgb(var(--panel))';
           }}
@@ -278,7 +304,7 @@ const MermaidComponent = ({ node, updateAttributes, editor }) => {
           minHeight: '100px',
           display: isEditing ? 'none' : 'block',
           cursor: !isEditing && localCode.trim() ? 'pointer' : 'default',
-          transition: 'filter 0.2s ease'
+          transition: 'filter 0.2s ease',
         }}
         onClick={handleDiagramClick}
         onMouseEnter={(e) => {
@@ -297,7 +323,7 @@ const MermaidComponent = ({ node, updateAttributes, editor }) => {
         svgContent={svgContent}
         onClose={handleCloseViewer}
       />
-    </NodeViewWrapper>
+    </div>
   );
 };
 
