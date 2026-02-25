@@ -3,6 +3,7 @@ import { useEditorGroupStore } from '../../../stores/editorGroups';
 import { useViewStore } from '../../../stores/views';
 import { getEditor } from '../../../stores/editorRegistry';
 import { createLokusSerializer } from '../../../core/markdown/lokus-md-pipeline';
+import { DOMSerializer } from 'prosemirror-model';
 import { invoke } from '@tauri-apps/api/core';
 import { confirm, save } from '@tauri-apps/plugin-dialog';
 
@@ -130,7 +131,10 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
       let contentToSave = lokusSerializer.serialize(editor.state.doc);
 
       if (savePath.endsWith('.html')) {
-        const htmlContent = editor.getHTML();
+        const fragment = DOMSerializer.fromSchema(editor.state.schema).serializeFragment(editor.state.doc.content);
+        const div = document.createElement('div');
+        div.appendChild(fragment);
+        const htmlContent = div.innerHTML;
         contentToSave = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -152,12 +156,12 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
       } else if (savePath.endsWith('.json')) {
         contentToSave = JSON.stringify({
           title: currentFileName,
-          content: editor.getHTML(),
+          content: lokusSerializer.serialize(editor.state.doc),
           exported: new Date().toISOString(),
           format: 'markdown'
         }, null, 2);
       } else if (savePath.endsWith('.txt')) {
-        contentToSave = editor.getText();
+        contentToSave = editor.state.doc.textContent;
       }
       // .md and other formats use the markdown content already set above
 

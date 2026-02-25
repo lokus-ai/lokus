@@ -11,6 +11,7 @@ import { getActiveShortcuts } from "../../core/shortcuts/registry.js";
 import { getFilename } from "../../utils/pathUtils.js";
 import { isImageFile } from "../../utils/imageUtils.js";
 import { generatePreview } from "../../core/canvas/preview-generator.js";
+import { insertContent, insertText } from "../../editor/commands/index.js";
 
 /** Returns true when the app is running inside Tauri. */
 function isTauriEnv() {
@@ -85,7 +86,7 @@ export function useWorkspaceEvents({
           const group = useEditorGroupStore.getState().getFocusedGroup();
           const activeFile = group?.activeTab;
           const focusedEditor = getEditor(group?.id);
-          const currentContent = focusedEditor?.getText() || '';
+          const currentContent = focusedEditor?.state?.doc?.textContent || '';
 
           if (currentContent && sourceFile === activeFile) {
             const updateResult = await graphProcessorRef.current.updateFileContent(sourceFile, currentContent);
@@ -105,7 +106,7 @@ export function useWorkspaceEvents({
 
       const attemptScroll = (delay) => {
         setTimeout(() => {
-          const editorEl = document.querySelector('.tiptap.ProseMirror');
+          const editorEl = document.querySelector('.ProseMirror');
           if (!editorEl) return;
 
           // Strategy 1: data-block-id attribute
@@ -381,10 +382,10 @@ export function useWorkspaceEvents({
       if (!content) return;
 
       const focusedGroupId = useEditorGroupStore.getState().focusedGroupId;
-      const editor = getEditor(focusedGroupId);
-      if (!editor) return;
+      const view = getEditor(focusedGroupId);
+      if (!view) return;
 
-      const { state } = editor;
+      const { state } = view;
       const { from } = state.selection;
 
       const textBefore = state.doc.textBetween(Math.max(0, from - 50), from);
@@ -392,14 +393,12 @@ export function useWorkspaceEvents({
 
       if (lastSlashIndex !== -1) {
         const slashPos = from - (textBefore.length - lastSlashIndex);
-        editor
-          .chain()
-          .focus()
-          .deleteRange({ from: slashPos, to: from })
-          .insertContent(content)
-          .run();
+        // Delete the slash command text, then insert template content
+        const tr = state.tr.delete(slashPos, from);
+        view.dispatch(tr);
+        insertText(view, content);
       } else {
-        editor.chain().focus().insertContent(content).run();
+        insertText(view, content);
       }
     };
 

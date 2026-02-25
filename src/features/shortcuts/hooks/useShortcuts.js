@@ -8,6 +8,7 @@ import { getEditor } from '../../../stores/editorRegistry';
 import { setGlobalActiveTheme, getSystemPreferredTheme, setupSystemThemeListener } from '../../../core/theme/manager';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isDesktop } from '../../../platform/index';
+import { createEditorCommands } from '../../../editor/commands/index.js';
 
 /** Returns the currently focused group's editor from the registry. */
 function getFocusedEditor() {
@@ -92,8 +93,16 @@ export function useShortcuts({ workspacePath, onSave, onSaveAs, onCreateFile, on
     });
 
     // Edit operations
-    on('lokus:edit-undo', () => getFocusedEditor()?.commands?.undo?.());
-    on('lokus:edit-redo', () => getFocusedEditor()?.commands?.redo?.());
+    on('lokus:edit-undo', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).undo();
+    });
+    on('lokus:edit-redo', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).redo();
+    });
     on('lokus:edit-cut', () => document.execCommand('cut'));
     on('lokus:edit-copy', () => document.execCommand('copy'));
     on('lokus:edit-paste', () => navigator.clipboard?.readText?.().then(t => document.execCommand('insertText', false, t)).catch(() => {}));
@@ -122,36 +131,112 @@ export function useShortcuts({ workspacePath, onSave, onSaveAs, onCreateFile, on
     });
 
     // Insert commands (editor)
-    on('lokus:insert-wikilink', () => getFocusedEditor()?.commands?.insertWikiLink?.());
-    on('lokus:insert-math-inline', () => getFocusedEditor()?.chain?.().focus().insertContent('$\\text{}$').run());
-    on('lokus:insert-math-block', () => getFocusedEditor()?.chain?.().focus().insertContent('$$\n\\text{}\n$$').run());
-    on('lokus:insert-table', () => getFocusedEditor()?.chain?.().focus().insertTable({ rows: 3, cols: 3 }).run());
+    on('lokus:insert-wikilink', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).insertWikiLink();
+    });
+    on('lokus:insert-math-inline', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).insertContent('$\\text{}$');
+    });
+    on('lokus:insert-math-block', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).insertContent('$$\n\\text{}\n$$');
+    });
+    on('lokus:insert-table', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).insertTable({ rows: 3, cols: 3 });
+    });
     on('lokus:insert-image', () => { /* handled by editor image extension */ });
-    on('lokus:insert-code-block', () => getFocusedEditor()?.chain?.().focus().toggleCodeBlock().run());
-    on('lokus:insert-horizontal-rule', () => getFocusedEditor()?.chain?.().focus().setHorizontalRule().run());
-    on('lokus:insert-blockquote', () => getFocusedEditor()?.chain?.().focus().toggleBlockquote().run());
-    on('lokus:insert-bullet-list', () => getFocusedEditor()?.chain?.().focus().toggleBulletList().run());
-    on('lokus:insert-ordered-list', () => getFocusedEditor()?.chain?.().focus().toggleOrderedList().run());
-    on('lokus:insert-task-list', () => getFocusedEditor()?.chain?.().focus().toggleTaskList().run());
+    on('lokus:insert-code-block', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).toggleCodeBlock();
+    });
+    on('lokus:insert-horizontal-rule', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).setHorizontalRule();
+    });
+    on('lokus:insert-blockquote', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).toggleBlockquote();
+    });
+    on('lokus:insert-bullet-list', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).toggleBulletList();
+    });
+    on('lokus:insert-ordered-list', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).toggleOrderedList();
+    });
+    on('lokus:insert-task-list', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).toggleTaskList();
+    });
 
     // Heading inserts
-    for (let level = 1; level <= 6; level++) {
-      on(`lokus:insert-heading`, (e) => {
-        const lvl = e?.payload?.level || level;
-        getFocusedEditor()?.chain?.().focus().toggleHeading({ level: lvl }).run();
-      });
-    }
+    on('lokus:insert-heading', (e) => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      const lvl = e?.payload?.level ?? 1;
+      createEditorCommands(view).toggleHeading({ level: lvl });
+    });
 
     // Format commands
-    on('lokus:format-bold', () => getFocusedEditor()?.chain?.().focus().toggleBold().run());
-    on('lokus:format-italic', () => getFocusedEditor()?.chain?.().focus().toggleItalic().run());
-    on('lokus:format-underline', () => getFocusedEditor()?.chain?.().focus().toggleUnderline().run());
-    on('lokus:format-strikethrough', () => getFocusedEditor()?.chain?.().focus().toggleStrike().run());
-    on('lokus:format-code', () => getFocusedEditor()?.chain?.().focus().toggleCode().run());
-    on('lokus:format-highlight', () => getFocusedEditor()?.chain?.().focus().toggleHighlight().run());
-    on('lokus:format-superscript', () => getFocusedEditor()?.chain?.().focus().toggleSuperscript().run());
-    on('lokus:format-subscript', () => getFocusedEditor()?.chain?.().focus().toggleSubscript().run());
-    on('lokus:format-clear', () => getFocusedEditor()?.chain?.().focus().unsetAllMarks().run());
+    on('lokus:format-bold', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).toggleBold();
+    });
+    on('lokus:format-italic', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).toggleItalic();
+    });
+    on('lokus:format-underline', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).toggleUnderline();
+    });
+    on('lokus:format-strikethrough', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).toggleStrike();
+    });
+    on('lokus:format-code', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).toggleCode();
+    });
+    on('lokus:format-highlight', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).toggleHighlight();
+    });
+    on('lokus:format-superscript', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).toggleSuperscript();
+    });
+    on('lokus:format-subscript', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).toggleSubscript();
+    });
+    on('lokus:format-clear', () => {
+      const view = getFocusedEditor();
+      if (!view) return;
+      createEditorCommands(view).unsetAllMarks();
+    });
 
     // Window operations
     on('lokus:window-minimize', async () => { try { await getCurrentWindow().minimize(); } catch (_) {} });

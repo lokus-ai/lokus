@@ -12,6 +12,7 @@ import { canvasManager } from '../../../core/canvas/manager.js';
 import dailyNotesManager from '../../../core/daily-notes/manager.js';
 import posthog from '../../../services/posthog.js';
 import { setGlobalActiveTheme } from '../../../core/theme/manager.js';
+import { createLokusSerializer } from '../../../core/markdown/lokus-md-pipeline.js';
 
 export function useFileOperations({ workspacePath, featureFlags, handleFileOpen, currentTheme }) {
   const refreshTree = useFileTreeStore((s) => s.refreshTree);
@@ -280,34 +281,25 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
   const handleCreateTemplate = useCallback(() => {
     const getContentForTemplate = () => {
       const focusedGroup = useEditorGroupStore.getState().getFocusedGroup();
-      const editor = getEditor(focusedGroup?.id);
+      const view = getEditor(focusedGroup?.id);
 
-      if (editor) {
-        const { state } = editor;
+      if (view) {
+        const { state } = view;
         const { selection } = state;
 
         if (!selection.empty) {
-          const selectedHTML = editor.getHTML ? editor.getHTML() : '';
+          // Serialize the selected content to markdown
+          const selectedText = state.doc.textBetween(selection.from, selection.to);
+          if (selectedText) return selectedText;
+        }
 
-          if (!selectedHTML || !selectedHTML.includes('<')) {
-            const selectedText = state.doc.textBetween(selection.from, selection.to);
-            return selectedText;
-          }
-
-          return selectedHTML;
-        } else {
-          const activeFile = focusedGroup?.activeTab;
-          if (activeFile) {
-            const editorHTML = editor.getHTML ? editor.getHTML() : null;
-
-            if (editorHTML && editorHTML.includes('<')) {
-              return editorHTML;
-            }
-
-            const tabContent = focusedGroup?.contentByTab?.[activeFile];
-            const currentContent = tabContent?.savedContent ?? tabContent?.html ?? '';
-            return currentContent;
-          }
+        // Serialize the full document to markdown
+        try {
+          const serializer = createLokusSerializer();
+          return serializer.serialize(state.doc);
+        } catch {
+          // Fallback: return the plain text content
+          return state.doc.textContent;
         }
       }
       return '';

@@ -1,5 +1,7 @@
 import clipboard from './index.js';
 import { safeSetTextContent } from '../security/index.js';
+import { exec, deleteSelection } from '../../editor/commands/index.js';
+import { selectTextblockStart, selectTextblockEnd } from 'prosemirror-commands';
 
 /**
  * Keyboard shortcut handler for clipboard operations
@@ -134,22 +136,22 @@ class ClipboardShortcuts {
 
     // First copy the content
     const copySuccess = await this.handleCopy();
-    
+
     if (copySuccess) {
       const { state } = this.editor;
-      const { from, to, empty } = state.selection;
-      
+      const { empty } = state.selection;
+
       if (empty) {
-        // Delete current line/paragraph
-        this.editor.commands.selectTextblockStart();
-        this.editor.commands.selectTextblockEnd();
-        this.editor.commands.deleteSelection();
+        // Select current line/paragraph, then delete
+        exec(this.editor, selectTextblockStart);
+        exec(this.editor, selectTextblockEnd);
+        deleteSelection(this.editor);
       } else {
         // Delete selected content
-        this.editor.commands.deleteSelection();
+        deleteSelection(this.editor);
       }
     }
-    
+
     return copySuccess;
   }
 

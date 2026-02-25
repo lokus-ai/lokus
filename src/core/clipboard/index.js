@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { stripHtml, sanitizeHtml } from '../security/index.js';
+import { insertContent, selectAll as pmSelectAll } from '../../editor/commands/index.js';
+import { createLokusSerializer } from '../markdown/lokus-md-pipeline.js';
 
 /**
  * Custom clipboard manager that syncs with macOS system clipboard
@@ -95,48 +97,53 @@ class ClipboardManager {
   }
 
   /**
-   * Copy selected content from editor
+   * Copy selected content from editor (PM EditorView)
    */
-  async copyFromEditor(editor) {
-    if (!editor) return false;
+  async copyFromEditor(view) {
+    if (!view) return false;
 
-    const { state } = editor;
+    const { state } = view;
     const { from, to } = state.selection;
-    
+
     if (from === to) {
-      // No selection, copy entire document
-      const html = editor.getHTML();
-      const text = editor.getText();
-      return await this.writeHTML(html, text);
+      // No selection, copy entire document as markdown
+      try {
+        const serializer = createLokusSerializer();
+        const markdown = serializer.serialize(state.doc);
+        const text = state.doc.textContent;
+        return await this.writeHTML(markdown, text);
+      } catch {
+        const text = state.doc.textContent;
+        return await this.writeText(text);
+      }
     } else {
       // Copy selected content
-      const selectedHTML = editor.getHTML().slice(from, to);
-      const selectedText = editor.getText().slice(from, to);
-      return await this.writeHTML(selectedHTML, selectedText);
+      const selectedText = state.doc.textBetween(from, to);
+      return await this.writeText(selectedText);
     }
   }
 
   /**
-   * Paste content to editor
+   * Paste content to editor (PM EditorView)
    */
-  async pasteToEditor(editor) {
-    if (!editor) return false;
+  async pasteToEditor(view) {
+    if (!view) return false;
 
     try {
       // Try to read HTML first, fallback to text
       let content = await this.readHTML();
-      
+
       if (!content) {
         content = await this.readText();
       }
 
       if (content) {
-        // Insert content at current cursor position
-        editor.commands.insertContent(content);
+        // Insert content at current cursor position using PM command helper
+        insertContent(view, content);
         this._notifyListeners('paste', { content });
         return true;
       }
-      
+
       return false;
     } catch (error) {
       return false;
@@ -144,12 +151,12 @@ class ClipboardManager {
   }
 
   /**
-   * Select all content in editor
+   * Select all content in editor (PM EditorView)
    */
-  selectAll(editor) {
-    if (!editor) return false;
-    
-    editor.commands.selectAll();
+  selectAll(view) {
+    if (!view) return false;
+
+    pmSelectAll(view);
     this._notifyListeners('selectAll', null);
     return true;
   }

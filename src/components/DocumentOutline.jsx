@@ -1,25 +1,28 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { setTextSelection } from '../editor/commands/index.js';
 
 /**
  * Efficient Document Outline Component
  *
  * Performance optimizations:
- * - Extracts headings from TipTap's document state (not HTML parsing)
+ * - Extracts headings from ProseMirror document state (not HTML parsing)
  * - Memoized computation
  * - Debounced updates (500ms)
  * - Shallow rendering
+ *
+ * Receives a raw ProseMirror EditorView as the `editor` prop.
  */
 export default function DocumentOutline({ editor }) {
   const [headings, setHeadings] = useState([]);
   const updateTimeoutRef = useRef(null);
 
-  // Extract headings from TipTap document
+  // Extract headings from ProseMirror document
   const extractHeadings = useCallback((doc) => {
     if (!doc) return [];
 
     const headingsList = [];
 
-    // Traverse TipTap document nodes
+    // Traverse ProseMirror document nodes
     doc.descendants((node, pos) => {
       if (node.type.name === 'heading') {
         const level = node.attrs.level;
@@ -66,12 +69,10 @@ export default function DocumentOutline({ editor }) {
 
     // Debounced update handler
     const handleUpdate = () => {
-      // Clear existing timeout
       if (updateTimeoutRef.current) {
         clearTimeout(updateTimeoutRef.current);
       }
 
-      // Set new timeout (500ms debounce)
       updateTimeoutRef.current = setTimeout(() => {
         updateHeadings();
       }, 500);
@@ -80,11 +81,15 @@ export default function DocumentOutline({ editor }) {
     // Initial extraction
     updateHeadings();
 
-    // Listen to editor updates (debounced)
-    editor.on('update', handleUpdate);
+    // Observe DOM mutations to detect editor content changes
+    // (PM EditorView does not have a TipTap-style .on('update') API)
+    const observer = new MutationObserver(handleUpdate);
+    if (editor.dom) {
+      observer.observe(editor.dom, { childList: true, subtree: true, characterData: true });
+    }
 
     return () => {
-      editor.off('update', handleUpdate);
+      observer.disconnect();
       if (updateTimeoutRef.current) {
         clearTimeout(updateTimeoutRef.current);
       }
@@ -95,13 +100,11 @@ export default function DocumentOutline({ editor }) {
   const scrollToHeading = useCallback((pos) => {
     if (!editor) return;
 
-    // Focus editor and set cursor position
-    editor.commands.focus();
-    editor.commands.setTextSelection(pos);
+    // Focus editor and set cursor position via PM command helper
+    setTextSelection(editor, pos);
 
     // Scroll into view
-    const { view } = editor;
-    const coords = view.coordsAtPos(pos);
+    const coords = editor.coordsAtPos(pos);
 
     if (coords) {
       window.scrollTo({

@@ -443,6 +443,10 @@ const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, edi
   const handleUpdate = useCallback((view) => {
     onContentChangeRef.current(view);
 
+    // Notify the plugin EditorAPI so SDK listeners fire
+    editorAPI.notifyUpdate();
+    editorAPI.notifySelectionUpdate();
+
     // Tag indexing (same debounced logic)
     if (tagIndexTimeoutRef.current) clearTimeout(tagIndexTimeoutRef.current);
     tagIndexTimeoutRef.current = setTimeout(() => {

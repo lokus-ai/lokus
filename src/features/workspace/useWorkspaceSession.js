@@ -8,6 +8,7 @@ import { getEditor } from "../../stores/editorRegistry";
 import { getFilename } from "../../utils/pathUtils.js";
 import { isImageFile, findImageFiles } from "../../utils/imageUtils.js";
 import referenceWorkerClient from "../../workers/referenceWorkerClient.js";
+import { insertContent } from "../../editor/commands/index.js";
 
 /**
  * Manages session persistence, file tree fetching, and file content loading.
@@ -198,7 +199,7 @@ export function useWorkspaceSession({ workspacePath, plugins }) {
     try {
       const content = await invoke("read_file_content", { path: file });
       // Store raw markdown in the group's content cache — the EditorGroup
-      // component will pick this up and set it into the TipTap editor.
+      // component will pick this up and set it into the ProseMirror editor.
       useEditorGroupStore.getState().setTabContent(group.id, file, {
         rawMarkdown: content,
         dirty: false,
@@ -209,8 +210,8 @@ export function useWorkspaceSession({ workspacePath, plugins }) {
   // Insert images into editor at cursor position.
   const insertImagesIntoEditor = useCallback(async (imagePaths) => {
     const focusedGroupId = useEditorGroupStore.getState().focusedGroupId;
-    const editor = getEditor(focusedGroupId);
-    if (!editor) return;
+    const view = getEditor(focusedGroupId);
+    if (!view) return;
 
     const { readFile } = await import('@tauri-apps/plugin-fs');
 
@@ -241,16 +242,13 @@ export function useWorkspaceSession({ workspacePath, plugins }) {
       }
 
       const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-      editor.chain()
-        .focus()
-        .insertContent({
-          type: 'wikiLink',
-          attrs: { id, target: fileName, alt: '', embed: true, href: imagePath, src }
-        })
-        .run();
+      insertContent(view, {
+        type: 'wikiLink',
+        attrs: { id, target: fileName, alt: '', embed: true, href: imagePath, src }
+      });
     }
 
-    editor.chain().focus().insertContent({ type: 'paragraph' }).run();
+    insertContent(view, { type: 'paragraph' });
   }, []);
 
   return {
