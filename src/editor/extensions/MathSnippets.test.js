@@ -1,62 +1,93 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { Editor } from '@tiptap/core'
-import StarterKit from '@tiptap/starter-kit'
-import MathSnippets from './MathSnippets'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { EditorState, TextSelection } from 'prosemirror-state'
+import { EditorView } from 'prosemirror-view'
+import { lokusSchema } from '../schema/lokus-schema.js'
+import {
+    createMathSnippetsPlugins,
+    insertMathSnippet,
+    MathSnippetsPluginKey,
+    parseTemplate,
+} from './MathSnippets'
 import { mathSnippets, mathSnippetCategories, getAllMathSnippets, searchMathSnippets } from '../lib/math-snippets-data'
 
-describe('MathSnippets Extension', () => {
-  let editor
+describe('MathSnippets Extension (ProseMirror)', () => {
+  let view
 
   beforeEach(() => {
-    editor = new Editor({
-      extensions: [
-        StarterKit,
-        MathSnippets
-      ],
-      content: '<p></p>'
+    const state = EditorState.create({
+      schema: lokusSchema,
+      plugins: createMathSnippetsPlugins(lokusSchema),
+    })
+    view = new EditorView(document.createElement('div'), { state })
+  })
+
+  afterEach(() => {
+    view.destroy()
+  })
+
+  it('should create plugins array', () => {
+    const plugins = createMathSnippetsPlugins(lokusSchema)
+    expect(Array.isArray(plugins)).toBe(true)
+    expect(plugins.length).toBe(3) // inputRules + decoration plugin + keymap
+  })
+
+  it('should export MathSnippetsPluginKey', () => {
+    expect(MathSnippetsPluginKey).toBeDefined()
+  })
+
+  it('should have initial snippet state as inactive', () => {
+    const pluginState = MathSnippetsPluginKey.getState(view.state)
+    expect(pluginState).toBeDefined()
+    expect(pluginState.snippet.active).toBe(false)
+    expect(pluginState.snippet.placeholders).toEqual([])
+    expect(pluginState.snippet.currentIndex).toBe(0)
+    expect(pluginState.snippet.basePos).toBe(0)
+  })
+
+  describe('insertMathSnippet command', () => {
+    it('should insert a math snippet by name', () => {
+      const result = insertMathSnippet(view, 'frac')
+      expect(result).toBe(true)
+
+      // The snippet text should be in the document
+      const text = view.state.doc.textContent
+      expect(text).toContain('\\frac')
+    })
+
+    it('should return false for unknown snippet', () => {
+      const result = insertMathSnippet(view, 'nonexistent_snippet_xyz')
+      expect(result).toBe(false)
+    })
+
+    it('should activate snippet mode when placeholders exist', () => {
+      insertMathSnippet(view, 'frac')
+      const pluginState = MathSnippetsPluginKey.getState(view.state)
+      expect(pluginState.snippet.active).toBe(true)
+      expect(pluginState.snippet.placeholders.length).toBeGreaterThan(0)
     })
   })
 
-  it('should have correct name', () => {
-    expect(MathSnippets.name).toBe('mathSnippets')
-  })
-
-  it('should have input rules defined', () => {
-    expect(MathSnippets.config.addInputRules).toBeDefined()
-  })
-
-  it('should have keyboard shortcuts defined', () => {
-    expect(MathSnippets.config.addKeyboardShortcuts).toBeDefined()
-  })
-
-  it('should have commands defined', () => {
-    expect(MathSnippets.config.addCommands).toBeDefined()
-  })
-
-  it('should have storage for active snippet state', () => {
-    expect(MathSnippets.config.addStorage).toBeDefined()
-    const storage = MathSnippets.config.addStorage()
-    expect(storage.active).toBe(false)
-    expect(storage.placeholders).toEqual([])
-    expect(storage.currentIndex).toBe(0)
-    expect(storage.basePos).toBe(0)
-  })
-
-  describe('Commands', () => {
-    it('should have insertMathSnippet command', () => {
-      expect(editor.commands.insertMathSnippet).toBeDefined()
+  describe('parseTemplate', () => {
+    it('should parse template with placeholders', () => {
+      const result = parseTemplate('$\\frac{${1:num}}{${2:den}}$')
+      expect(result.text).toBe('$\\frac{num}{den}$')
+      expect(result.placeholders.length).toBe(2)
+      expect(result.placeholders[0].index).toBe(1)
+      expect(result.placeholders[0].defaultText).toBe('num')
+      expect(result.placeholders[1].index).toBe(2)
+      expect(result.placeholders[1].defaultText).toBe('den')
     })
 
-    it('should have nextPlaceholder command', () => {
-      expect(editor.commands.nextPlaceholder).toBeDefined()
+    it('should parse template without placeholders', () => {
+      const result = parseTemplate('$\\pi$')
+      expect(result.text).toBe('$\\pi$')
+      expect(result.placeholders.length).toBe(0)
     })
 
-    it('should have prevPlaceholder command', () => {
-      expect(editor.commands.prevPlaceholder).toBeDefined()
-    })
-
-    it('should have exitSnippetMode command', () => {
-      expect(editor.commands.exitSnippetMode).toBeDefined()
+    it('should sort placeholders by index', () => {
+      const result = parseTemplate('${2:b} ${1:a}')
+      expect(result.placeholders[0].index).toBe(1)
+      expect(result.placeholders[1].index).toBe(2)
     })
   })
 })
@@ -85,7 +116,7 @@ describe('Math Snippets Data', () => {
   describe('Matrices & Vectors', () => {
     it('should have 2x2 matrix', () => {
       expect(mathSnippets.mat2).toBeDefined()
-      expect(mathSnippets.mat2.name).toBe('2×2 Matrix')
+      expect(mathSnippets.mat2.name).toBe('2\u00D72 Matrix')
       expect(mathSnippets.mat2.category).toBe('matrices')
       expect(mathSnippets.mat2.template).toContain('pmatrix')
       expect(mathSnippets.mat2.template).toContain('${1:')

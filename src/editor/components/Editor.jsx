@@ -14,46 +14,6 @@ import { gapCursor } from 'prosemirror-gapcursor';
 import { inputRules, wrappingInputRule, textblockTypeInputRule } from 'prosemirror-inputrules';
 import { createEditorCommands, insertContent as pmInsertContent } from '../commands/index.js';
 
-// --- TipTap extension imports (commented out — will be ported in Tasks 10-13) ---
-// import { useEditor, EditorContent } from "@tiptap/react";
-// import * as StarterKitExt from "@tiptap/starter-kit";
-// import * as PlaceholderExt from "@tiptap/extension-placeholder";
-// import SlashCommand from "../lib/SlashCommand.js";
-// import * as LinkExt from "@tiptap/extension-link";
-// import * as TaskListExt from "@tiptap/extension-task-list";
-// import * as TaskItemExt from "@tiptap/extension-task-item";
-// import * as ImageExt from "@tiptap/extension-image";
-// import * as SuperscriptExt from "@tiptap/extension-superscript";
-// import * as SubscriptExt from "@tiptap/extension-subscript";
-// import * as TableExt from "@tiptap/extension-table";
-// import * as TableRowExt from "@tiptap/extension-table-row";
-// import * as TableHeaderExt from "@tiptap/extension-table-header";
-// import * as TableCellExt from "@tiptap/extension-table-cell";
-// import * as StrikeExt from "@tiptap/extension-strike";
-// import * as HighlightExt from "@tiptap/extension-highlight";
-// import * as HorizontalRuleExt from "@tiptap/extension-horizontal-rule";
-// import { InputRule, nodeInputRule } from "@tiptap/core";
-// import MathExtension from "@aarkue/tiptap-math-extension";
-// import WikiLink from "../extensions/WikiLink.js";
-// import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
-// import BlockId from "../extensions/BlockId.js";
-// import WikiLinkEmbed from "../extensions/WikiLinkEmbed.js";
-// import TagAutocomplete from "../extensions/TagAutocomplete.js";
-// import MarkdownPaste from "../extensions/MarkdownPaste.js";
-// import MarkdownTablePaste from "../extensions/MarkdownTablePaste.js";
-// import TaskSyntaxHighlight from "../extensions/TaskSyntaxHighlight.js";
-// import TaskMentionSuggest from "../extensions/TaskMentionSuggest.js";
-// import TaskCreationTrigger from "../extensions/TaskCreationTrigger.js";
-// import CustomCodeBlock from "../extensions/CustomCodeBlock.js";
-// import CodeBlockIndent from "../extensions/CodeBlockIndent.js";
-// import Callout from "../extensions/Callout.js";
-// import Folding from "../extensions/Folding.js";
-// import SymbolShortcuts from "../extensions/SymbolShortcuts.js";
-// import MathSnippets from "../extensions/MathSnippets.js";
-// import MermaidDiagram from "../extensions/MermaidDiagram.jsx";
-// import CanvasLink from '../extensions/CanvasLink.js';
-// import PluginCompletion from '../extensions/PluginCompletion.js';
-// import PluginHover from '../extensions/PluginHover.js';
 
 import { convertFileSrc } from "@tauri-apps/api/core";
 import TableBubbleMenu from "./TableBubbleMenu.jsx";
@@ -468,7 +428,7 @@ const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, edi
     onUpdate: handleUpdate,
     nodeViews,
     editorProps: {
-      attributes: { class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none tiptap-area obsidian-editor' },
+      attributes: { class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none lokus-editor obsidian-editor' },
       handleDOMEvents: {
         // Prevent browser's default drop handling - Tauri handles external file drops
         drop: (view, event) => {

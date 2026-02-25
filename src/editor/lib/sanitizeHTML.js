@@ -7,7 +7,7 @@
  * renders normally.
  */
 
-import { DOMParser as ProseMirrorDOMParser } from '@tiptap/pm/model';
+import { DOMParser as ProseMirrorDOMParser } from 'prosemirror-model';
 
 /**
  * Escape HTML entities for safe display inside <code>.

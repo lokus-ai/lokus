@@ -232,7 +232,7 @@ The tools automatically discover the active TipTap editor instance through multi
 
 1. Global `__LOKUS_EDITOR_INSTANCE__`
 2. Plugin API `editorAPI.getEditorInstance()`
-3. DOM element lookup (`.tiptap-area`)
+3. DOM element lookup (`.lokus-editor`)
 
 ### Command Execution
 

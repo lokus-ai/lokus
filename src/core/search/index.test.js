@@ -6,10 +6,10 @@ import {
   searchCommands,
   searchPluginKey 
 } from './index.js'
-import { DecorationSet } from '@tiptap/pm/view'
+import { DecorationSet } from 'prosemirror-view'
 
 // Mock ProseMirror
-vi.mock('@tiptap/pm/view', () => ({
+vi.mock('prosemirror-view', () => ({
   Decoration: {
     inline: vi.fn((from, to, attrs) => ({ from, to, attrs, type: 'inline' }))
   },
@@ -19,9 +19,9 @@ vi.mock('@tiptap/pm/view', () => ({
   }
 }))
 
-vi.mock('@tiptap/pm/state', () => ({
+vi.mock('prosemirror-state', () => ({
   Plugin: vi.fn(),
-  PluginKey: vi.fn(() => ({ 
+  PluginKey: vi.fn(() => ({
     getState: vi.fn(),
     toString: () => 'search'
   }))

@@ -1,75 +1,247 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { Editor } from '@tiptap/core'
-import StarterKit from '@tiptap/starter-kit'
-import WikiLink from './WikiLink'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { EditorState } from 'prosemirror-state'
+import { EditorView } from 'prosemirror-view'
+import { lokusSchema } from '../schema/lokus-schema.js'
+import {
+    createWikiLinkPlugins,
+    insertWikiLink,
+    createWikiLinkNodeView,
+    parseParts,
+    toHref,
+    buildWikiLinkPattern,
+} from './WikiLink'
 
 // Mock the wiki resolver
 vi.mock('../../core/wiki/resolve.js', () => ({
-  resolveWikiTarget: vi.fn().mockResolvedValue({
-    href: 'test-page',
-    src: '',
-    isImage: false
-  })
+    resolveWikiTarget: vi.fn().mockResolvedValue({
+        href: 'test-page',
+        src: '',
+        isImage: false
+    })
 }))
 
-describe('WikiLink Extension', () => {
-  let editor
+// Mock markdown syntax config
+vi.mock('../../core/markdown/syntax-config.js', () => ({
+    default: {
+        get: vi.fn((category, key) => {
+            if (category === 'link' && key === 'wikiLink') {
+                return { open: '[[', close: ']]' }
+            }
+            if (category === 'image' && key === 'marker') {
+                return '!'
+            }
+            return null
+        }),
+        onChange: vi.fn(() => () => {}),
+    }
+}))
 
-  beforeEach(() => {
-    editor = new Editor({
-      extensions: [
-        StarterKit,
-        WikiLink
-      ],
-      content: '<p>Test</p>'
+// ---------------------------------------------------------------------------
+// Test helper
+// ---------------------------------------------------------------------------
+
+function createTestView() {
+    const state = EditorState.create({
+        schema: lokusSchema,
+        plugins: createWikiLinkPlugins(lokusSchema),
     })
-  })
+    const view = new EditorView(document.createElement('div'), { state })
+    return view
+}
 
-  it('should have correct name', () => {
-    expect(WikiLink.name).toBe('wikiLink')
-  })
+describe('WikiLink Extension (ProseMirror)', () => {
+    let view
 
-  it('should parse wiki link syntax [[Page]]', () => {
-    editor.commands.setContent('<p>[[Page]]</p>')
+    beforeEach(() => {
+        view = createTestView()
+    })
 
-    // Note: Input rules trigger on typing, setContent parses HTML. 
-    // WikiLink extension might not have a parser for [[Page]] text content directly unless input rules are triggered.
-    // However, we can test the command.
+    afterEach(() => {
+        view.destroy()
+    })
 
-    editor.commands.setWikiLink('Page')
+    it('should create plugins array', () => {
+        const plugins = createWikiLinkPlugins(lokusSchema)
+        expect(Array.isArray(plugins)).toBe(true)
+        expect(plugins.length).toBe(3) // inputRules + asyncResolve + configChange
+    })
 
-    const json = editor.getJSON()
-    // Find the wiki link node
-    // Structure: doc -> paragraph -> text + wikiLink
+    it('should insert a wikiLink node via insertWikiLink', () => {
+        const result = insertWikiLink(view, 'My Page')
+        expect(result).toBe(true)
 
-    // Since setWikiLink inserts content, let's check if it inserted a node
-    // It might be an inline node
+        const json = view.state.doc.toJSON()
+        // Find the wikiLink node
+        const findWikiLink = (nodes) => {
+            for (const node of nodes || []) {
+                if (node.type === 'wikiLink') return node
+                if (node.content) {
+                    const found = findWikiLink(node.content)
+                    if (found) return found
+                }
+            }
+            return null
+        }
+        const wl = findWikiLink(json.content)
+        expect(wl).toBeDefined()
+        expect(wl.attrs.target).toBe('My Page')
+        expect(wl.attrs.href).toBe('My Page')
+        expect(wl.attrs.embed).toBe(false)
+    })
 
-    // Let's verify via HTML output
-    const html = editor.getHTML()
-    expect(html).toContain('data-type="wiki-link"')
-    expect(html).toContain('href="Page"')
-  })
+    it('should insert an embed wikiLink when embed option is true', () => {
+        insertWikiLink(view, 'Image.png', { embed: true })
 
-  it('should handle input rules', () => {
-    editor.commands.clearContent()
-    editor.commands.focus()
+        const json = view.state.doc.toJSON()
+        const findWikiLink = (nodes) => {
+            for (const node of nodes || []) {
+                if (node.type === 'wikiLink') return node
+                if (node.content) {
+                    const found = findWikiLink(node.content)
+                    if (found) return found
+                }
+            }
+            return null
+        }
+        const wl = findWikiLink(json.content)
+        expect(wl).toBeDefined()
+        expect(wl.attrs.embed).toBe(true)
+    })
 
-    // Simulate typing [[Page]]
-    // This is hard to simulate perfectly in unit tests without a real DOM, 
-    // but we can check if input rules are defined
-    expect(WikiLink.config.addInputRules).toBeDefined()
-    const rules = WikiLink.config.addInputRules()
-    expect(rules.length).toBeGreaterThan(0)
-  })
+    it('should handle piped aliases', () => {
+        insertWikiLink(view, 'Long Page Name|Alias')
 
-  it('should render HTML correctly', () => {
-    const attrs = { href: 'My Page', embed: false }
-    // Use the renderHTML function directly
-    const rendered = WikiLink.config.renderHTML({ HTMLAttributes: attrs })
+        const json = view.state.doc.toJSON()
+        const findWikiLink = (nodes) => {
+            for (const node of nodes || []) {
+                if (node.type === 'wikiLink') return node
+                if (node.content) {
+                    const found = findWikiLink(node.content)
+                    if (found) return found
+                }
+            }
+            return null
+        }
+        const wl = findWikiLink(json.content)
+        expect(wl).toBeDefined()
+        expect(wl.attrs.alt).toBe('Alias')
+        expect(wl.attrs.target).toBe('Long Page Name|Alias')
+    })
+})
 
-    expect(rendered[0]).toBe('a')
-    expect(rendered[1].href).toBe('My Page')
-    expect(rendered[1].class).toContain('wiki-link')
-  })
+describe('WikiLink parseParts', () => {
+    it('should parse simple target', () => {
+        const result = parseParts('My Page')
+        expect(result.path).toBe('My Page')
+        expect(result.hash).toBe('')
+        expect(result.alt).toBe('')
+    })
+
+    it('should parse target with alias', () => {
+        const result = parseParts('My Page|Alias')
+        expect(result.path).toBe('My Page')
+        expect(result.alt).toBe('Alias')
+    })
+
+    it('should parse target with heading', () => {
+        const result = parseParts('My Page#Heading')
+        expect(result.path).toBe('My Page')
+        expect(result.hash).toBe('Heading')
+        expect(result.separator).toBe('#')
+    })
+
+    it('should parse target with block reference', () => {
+        const result = parseParts('My Page^blockid')
+        expect(result.path).toBe('My Page')
+        expect(result.hash).toBe('blockid')
+        expect(result.separator).toBe('^')
+    })
+})
+
+describe('WikiLink toHref', () => {
+    it('should return path when no hash', () => {
+        expect(toHref({ path: 'My Page', hash: '', separator: '' })).toBe('My Page')
+    })
+
+    it('should return path#hash when hash present', () => {
+        expect(toHref({ path: 'My Page', hash: 'Heading', separator: '#' })).toBe('My Page#Heading')
+    })
+
+    it('should return path^hash for block refs', () => {
+        expect(toHref({ path: 'My Page', hash: 'blockid', separator: '^' })).toBe('My Page^blockid')
+    })
+})
+
+describe('WikiLink buildWikiLinkPattern', () => {
+    it('should build a regex for file links', () => {
+        const pattern = buildWikiLinkPattern(false)
+        expect(pattern).toBeInstanceOf(RegExp)
+        expect(pattern.test('[[Page]]')).toBe(true)
+    })
+
+    it('should build a regex for image embeds', () => {
+        const pattern = buildWikiLinkPattern(true)
+        expect(pattern).toBeInstanceOf(RegExp)
+        expect(pattern.test('![[Image.png]]')).toBe(true)
+    })
+})
+
+describe('WikiLink createWikiLinkNodeView', () => {
+    it('should create a link node view', () => {
+        const mockNode = {
+            attrs: {
+                embed: false,
+                src: '',
+                alt: '',
+                target: 'My Page',
+                href: 'My Page',
+            }
+        }
+        const mockView = {}
+        const mockGetPos = () => 0
+
+        const nodeView = createWikiLinkNodeView(mockNode, mockView, mockGetPos)
+        expect(nodeView.dom).toBeInstanceOf(HTMLElement)
+        expect(nodeView.dom.tagName).toBe('A')
+        expect(nodeView.dom.classList.contains('wiki-link')).toBe(true)
+        expect(nodeView.dom.getAttribute('data-type')).toBe('wiki-link')
+        expect(nodeView.dom.textContent).toBe('My Page')
+
+        // Clean up
+        nodeView.destroy?.()
+    })
+
+    it('should create an image node view for embeds with src', () => {
+        const mockNode = {
+            attrs: {
+                embed: true,
+                src: '/path/to/image.png',
+                alt: 'Alt text',
+                target: 'image.png',
+                href: 'image.png',
+            }
+        }
+        const mockView = {}
+        const mockGetPos = () => 0
+
+        const nodeView = createWikiLinkNodeView(mockNode, mockView, mockGetPos)
+        expect(nodeView.dom.tagName).toBe('IMG')
+        expect(nodeView.dom.classList.contains('wiki-image')).toBe(true)
+        expect(nodeView.dom.getAttribute('src')).toBe('/path/to/image.png')
+    })
+
+    it('should display alias text when present', () => {
+        const mockNode = {
+            attrs: {
+                embed: false,
+                src: '',
+                alt: 'Custom Alias',
+                target: 'My Page|Custom Alias',
+                href: 'My Page',
+            }
+        }
+        const nodeView = createWikiLinkNodeView(mockNode, {}, () => 0)
+        expect(nodeView.dom.textContent).toBe('Custom Alias')
+        nodeView.destroy?.()
+    })
 })

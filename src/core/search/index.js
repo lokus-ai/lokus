@@ -1,6 +1,6 @@
 // Search utilities for Lokus editor
-import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from 'prosemirror-view';
+import { Plugin, PluginKey } from 'prosemirror-state';
 
 export const searchPluginKey = new PluginKey('search');
 
