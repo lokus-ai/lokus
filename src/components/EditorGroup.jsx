@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react';
+import React, { useRef, useCallback, useEffect, useState, useMemo, lazy, Suspense } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { EditorState } from 'prosemirror-state';
 import Editor from '../editor';
@@ -10,6 +10,10 @@ import WelcomeScreen from './WelcomeScreen';
 import { canvasManager } from '../core/canvas/manager';
 import { createLokusParser, createLokusSerializer } from '../core/markdown/lokus-md-pipeline';
 import { registerEditor } from '../stores/editorRegistry';
+
+// Lazy-loaded special tab views
+const BasesView = lazy(() => import('../bases/BasesView'));
+const ProfessionalGraphView = lazy(() => import('../views/ProfessionalGraphView').then(m => ({ default: m.ProfessionalGraphView })));
 
 /**
  * EditorGroup — a single editor pane with its own tabs, content cache,
@@ -341,6 +345,8 @@ export default function EditorGroup({
 
   const isEditorFile = !!(activeFile && !activeFile.startsWith('__') && !activeFile.endsWith('.canvas'));
   const isCanvasFile = !!(activeFile?.endsWith('.canvas'));
+  const isBasesTab = activeFile === '__bases__';
+  const isGraphTab = activeFile === '__graph__';
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -390,6 +396,24 @@ export default function EditorGroup({
                 useEditorGroupStore.getState().markTabDirty(group.id, activeFile, true);
               }}
             />
+          </div>
+        )}
+
+        {/* Bases view — rendered as a tab */}
+        {isBasesTab && (
+          <div className="flex-1 overflow-hidden h-full">
+            <Suspense fallback={<div className="flex-1 flex items-center justify-center text-app-muted">Loading...</div>}>
+              <BasesView isVisible={true} onFileOpen={onFileOpen} />
+            </Suspense>
+          </div>
+        )}
+
+        {/* Graph view — rendered as a tab */}
+        {isGraphTab && (
+          <div className="flex-1 overflow-hidden h-full">
+            <Suspense fallback={<div className="flex-1 flex items-center justify-center text-app-muted">Loading...</div>}>
+              <ProfessionalGraphView workspacePath={workspacePath} />
+            </Suspense>
           </div>
         )}
 
