@@ -13,6 +13,7 @@ const DailyNotesPanel = lazy(() => import('../../components/DailyNotes').then(m 
 
 export default function MainContent({ workspacePath, welcomeProps }) {
   const currentView = useViewStore((s) => s.currentView);
+  const onFileOpen = welcomeProps?.onFileOpen;
 
   const fallback = <div className="flex-1 flex items-center justify-center text-app-muted">Loading...</div>;
 
@@ -22,7 +23,7 @@ export default function MainContent({ workspacePath, welcomeProps }) {
         {currentView === 'editor' && <EditorGroupsView workspacePath={workspacePath} welcomeProps={welcomeProps} />}
         {currentView === 'graph' && <ProfessionalGraphView workspacePath={workspacePath} />}
         {currentView === 'kanban' && <KanbanBoard workspacePath={workspacePath} />}
-        {currentView === 'bases' && <BasesView />}
+        {currentView === 'bases' && <BasesView isVisible={true} onFileOpen={onFileOpen} />}
         {currentView === 'calendar' && <CalendarView />}
         {currentView === 'canvas' && <Canvas workspacePath={workspacePath} />}
         {currentView === 'settings' && <Preferences workspacePath={workspacePath} />}
