@@ -68,8 +68,10 @@ const removeGroupFromTree = (node, groupId) => {
 const evictLRU = (contentByTab) => {
   const entries = Object.entries(contentByTab);
   if (entries.length <= MAX_CACHED_TABS) return contentByTab;
-  entries.sort((a, b) => (b[1].lastAccessed || 0) - (a[1].lastAccessed || 0));
-  return Object.fromEntries(entries.slice(0, MAX_CACHED_TABS));
+  const dirty = entries.filter(([, v]) => v.dirty);
+  const clean = entries.filter(([, v]) => !v.dirty);
+  clean.sort((a, b) => (b[1].lastAccessed || 0) - (a[1].lastAccessed || 0));
+  return Object.fromEntries([...dirty, ...clean.slice(0, MAX_CACHED_TABS - dirty.length)]);
 };
 
 const defaultGroup = createGroup([], null);

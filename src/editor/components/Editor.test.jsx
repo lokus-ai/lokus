@@ -16,7 +16,7 @@ vi.mock('../hooks/useProseMirror.js', () => ({
 import useProseMirror from '../hooks/useProseMirror.js'
 
 // Mock extensions (now PM plugin factories — return empty arrays)
-vi.mock('../extensions/WikiLink.js', () => ({ default: () => [], createWikiLinkPlugins: () => [] }))
+vi.mock('../extensions/WikiLink.js', () => ({ default: () => [], createWikiLinkPlugins: () => [], createWikiLinkNodeView: () => ({}) }))
 vi.mock('../lib/WikiLinkSuggest.js', () => ({ default: {} }))
 vi.mock('../extensions/HeadingAltInput.js', () => ({ default: vi.fn() }))
 vi.mock('../lib/SlashCommand.js', () => ({ default: {} }))

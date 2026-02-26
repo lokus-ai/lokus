@@ -14,6 +14,32 @@ import { gapCursor } from 'prosemirror-gapcursor';
 import { inputRules, wrappingInputRule, textblockTypeInputRule } from 'prosemirror-inputrules';
 import { createEditorCommands, insertContent as pmInsertContent } from '../commands/index.js';
 
+// --- Extension plugin factories ---
+import { createBlockIdPlugin } from '../extensions/BlockId.js';
+import { createTaskSyntaxHighlightPlugin } from '../extensions/TaskSyntaxHighlight.js';
+import { createFoldingPlugins } from '../extensions/Folding.js';
+import { createMarkdownPastePlugin } from '../extensions/MarkdownPaste.js';
+import { createMarkdownTablePastePlugin } from '../extensions/MarkdownTablePaste.js';
+import { createPluginHoverPlugin } from '../extensions/PluginHover.js';
+import { createTaskCreationTriggerPlugin } from '../extensions/TaskCreationTrigger.js';
+import { createCalloutPlugins } from '../extensions/Callout.js';
+import { createWikiLinkPlugins } from '../extensions/WikiLink.js';
+import { createWikiLinkEmbedPlugins } from '../extensions/WikiLinkEmbed.js';
+import { createCanvasLinkPlugins } from '../extensions/CanvasLink.js';
+import { createCodeBlockPlugins } from '../extensions/CustomCodeBlock.js';
+import { createCodeBlockIndentPlugin } from '../extensions/CodeBlockIndent.js';
+import { createMathSnippetsPlugins } from '../extensions/MathSnippets.js';
+import { createSymbolShortcutsPlugin } from '../extensions/SymbolShortcuts.js';
+import { createMermaidInputRulesPlugin, mermaidNodeView } from '../extensions/MermaidDiagram.jsx';
+import { inlineMathNodeView } from '../extensions/InlineMath.jsx';
+import { createWikiLinkNodeView } from '../extensions/WikiLink.js';
+import { createCanvasLinkNodeView } from '../extensions/CanvasLink.js';
+// View-dependent plugin factories (need EditorView, created in onReady)
+import { createSlashCommandPlugin } from '../lib/SlashCommand.js';
+import { createWikiLinkSuggestPlugins } from '../lib/WikiLinkSuggest.js';
+import { createTagAutocompletePlugin } from '../extensions/TagAutocomplete.js';
+import { createTaskMentionSuggestPlugin } from '../extensions/TaskMentionSuggest.js';
+import { createPluginCompletionPlugin } from '../extensions/PluginCompletion.js';
 
 import { convertFileSrc } from "@tauri-apps/api/core";
 import TableBubbleMenu from "./TableBubbleMenu.jsx";
@@ -160,6 +186,7 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
     });
 
     // ── Core plugins array ──────────────────────────────────────────────
+    // Static plugins (no EditorView needed at creation time)
     const pmPlugins = [
       lokusInputRules,
       formattingKeymap,
@@ -167,36 +194,36 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       history(),
       dropCursor(),
       gapCursor(),
-      // TODO: port to PM — SlashCommand plugin
-      // TODO: port to PM — WikiLinkSuggest plugin
-      // TODO: port to PM — TagAutocomplete plugin
-      // TODO: port to PM — TaskMentionSuggest plugin
-      // TODO: port to PM — TaskCreationTrigger plugin
-      // TODO: port to PM — MarkdownPaste plugin
-      // TODO: port to PM — MarkdownTablePaste plugin
-      // TODO: port to PM — TaskSyntaxHighlight plugin
-      // TODO: port to PM — BlockId plugin
-      // TODO: port to PM — WikiLinkEmbed plugin
-      // TODO: port to PM — CodeBlockIndent plugin
-      // TODO: port to PM — Callout plugin
-      // TODO: port to PM — Folding plugin
-      // TODO: port to PM — MathSnippets plugin
-      // TODO: port to PM — SymbolShortcuts plugin
-      // TODO: port to PM — MermaidDiagram plugin
-      // TODO: port to PM — PluginCompletion plugin
-      // TODO: port to PM — PluginHover plugin
-      // TODO: port to PM — Placeholder plugin
-      // TODO: port to PM — Link autolink plugin
+      // Trivial extensions
+      createBlockIdPlugin(),
+      createTaskSyntaxHighlightPlugin(),
+      ...createFoldingPlugins(),
+      createMarkdownPastePlugin(),
+      createMarkdownTablePastePlugin(),
+      createPluginHoverPlugin(),
+      createTaskCreationTriggerPlugin(),
+      // Schema-dependent extensions
+      ...createCalloutPlugins(schema),
+      ...createWikiLinkPlugins(schema),
+      ...createWikiLinkEmbedPlugins(schema),
+      ...createCanvasLinkPlugins(schema),
+      ...createCodeBlockPlugins(schema),
+      createCodeBlockIndentPlugin(),
+      ...createMathSnippetsPlugins(schema, { customSnippets: customSymbols }),
+      createSymbolShortcutsPlugin({ customSymbols }),
+      createMermaidInputRulesPlugin(schema),
     ];
 
-    // TODO: port to PM — add plugin extensions from editorAPI
-    // pluginExtensions would need to be converted to PM plugins
+    // View-dependent plugins (SlashCommand, WikiLinkSuggest, TagAutocomplete,
+    // TaskMentionSuggest, PluginCompletion) are added in PMEditor's onReady
+    // callback via view.state.reconfigure() since they need the EditorView.
 
     // ── Node views ──────────────────────────────────────────────────────
     const pmNodeViews = {
-      // TODO: port to PM — mermaid node view via createReactNodeView
-      // TODO: port to PM — wikiLinkEmbed node view
-      // TODO: port to PM — math node view
+      mermaid: mermaidNodeView,
+      inlineMath: inlineMathNodeView,
+      wikiLink: createWikiLinkNodeView,
+      canvasLink: createCanvasLinkNodeView,
     };
 
     // ── Load editor settings then finalize ──────────────────────────────
@@ -573,6 +600,32 @@ const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, edi
 
           // Emit to workspace to open file (Tauri or DOM event)
           (async () => {
+            // If file doesn't exist, create it first
+            if (!fileExists) {
+              const activePath = globalThis.__LOKUS_ACTIVE_FILE__ || '';
+              const activeDir = activePath
+                ? activePath.substring(0, Math.max(activePath.lastIndexOf('/'), activePath.lastIndexOf('\\')))
+                : (globalThis.__LOKUS_WORKSPACE_PATH__ || '');
+
+              // Build target path: same folder as current file, ensure .md extension
+              if (!cleanHref.includes('/') && !cleanHref.includes('\\')) {
+                cleanHref = `${activeDir}/${cleanHref}`;
+              }
+              if (!cleanHref.endsWith('.md')) {
+                cleanHref = `${cleanHref}.md`;
+              }
+
+              try {
+                const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
+                await tauriInvoke('write_file_content', { path: cleanHref, content: '' });
+                // Refresh file tree so the new file appears in the sidebar
+                try {
+                  const { useFileTreeStore } = await import('../../stores/fileTree');
+                  useFileTreeStore.getState().refreshTree?.();
+                } catch {}
+              } catch {}
+            }
+
             try {
               const { emit } = await import('@tauri-apps/api/event');
               const eventName = openInNewTab ? 'lokus:open-file-new-tab' : 'lokus:open-file';
@@ -596,6 +649,24 @@ const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, edi
     onReady: (view) => {
       editorAPI.setEditorInstance(view);
       onEditorReady?.(view);
+
+      // Create view-dependent plugins (suggestion-based) now that the view exists
+      try {
+        const viewPlugins = [
+          createSlashCommandPlugin(view),
+          ...createWikiLinkSuggestPlugins(view),
+          createTagAutocompletePlugin(view),
+          createTaskMentionSuggestPlugin(view),
+          createPluginCompletionPlugin(view),
+        ];
+        // Reconfigure state to add these plugins alongside the static ones
+        const newState = view.state.reconfigure({
+          plugins: [...view.state.plugins, ...viewPlugins],
+        });
+        view.updateState(newState);
+      } catch (err) {
+        console.error('[PMEditor] Failed to initialize view-dependent plugins:', err);
+      }
     },
     onDestroy: () => {
       editorAPI.setEditorInstance(null);

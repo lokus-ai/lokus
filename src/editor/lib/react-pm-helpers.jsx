@@ -269,17 +269,15 @@ export function createReactNodeView(Component) {
       },
 
       /**
-       * For atom nodes (node.isAtom === true) we absorb all browser events
-       * so ProseMirror does not interfere with React's own event handling
+       * React owns the entire DOM subtree — absorb all browser events so
+       * ProseMirror does not interfere with React's event handling
        * (e.g. textarea input inside Mermaid edit mode).
-       *
-       * For non-atom nodes we let PM handle events normally.
        *
        * @param {Event} _event
        * @returns {boolean}
        */
       stopEvent(_event) {
-        return currentNode.isAtom
+        return true
       },
 
       /**

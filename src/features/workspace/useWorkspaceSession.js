@@ -115,12 +115,26 @@ export function useWorkspaceSession({ workspacePath, plugins }) {
       const folderPaths = Array.from(expandedFolders);
       const recentPaths = globalRecentFiles.slice(0, 5);
 
+      // Strip contentByTab from persisted layout — EditorState is rebuilt
+      // from disk on restart; cached metadata (json, savedContent) is stale.
+      const stripContent = (node) => {
+        if (node.type === 'group') {
+          const { contentByTab, ...rest } = node;
+          return rest;
+        }
+        if (node.type === 'container') {
+          return { ...node, children: node.children.map(stripContent) };
+        }
+        return node;
+      };
+      const cleanLayout = stripContent(layout);
+
       invoke("save_session_state", {
         workspacePath,
         openTabs: tabPaths,
         expandedFolders: folderPaths,
         recentFiles: recentPaths,
-        editorLayout: layout,
+        editorLayout: cleanLayout,
         layout: { showLeft, showRight, leftW, rightW, bottomPanelHeight, bottomPanelTab },
         currentView,
       });

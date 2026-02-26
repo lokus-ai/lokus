@@ -1,5 +1,6 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { EditorState } from 'prosemirror-state';
 import Editor from '../editor';
 import Canvas from '../views/Canvas';
 import { useEditorGroupStore } from '../stores/editorGroups';
@@ -14,17 +15,14 @@ import { registerEditor } from '../stores/editorRegistry';
  * EditorGroup — a single editor pane with its own tabs, content cache,
  * and ONE persistent ProseMirror EditorView for the group's lifetime.
  *
- * Tab switching strategy:
- *   1. Snapshot the departing tab as ProseMirror JSON → stored in
- *      contentByTab[path].json via setTabContent().
- *   2. Load the arriving tab:
- *        a. If json cache exists  → dispatch PM transaction with cached JSON  [instant]
- *        b. No cache              → read from disk, parse md→PM JSON, then dispatch  [async]
+ * Tab switching strategy (EditorState-per-tab):
+ *   1. Save the departing tab's full EditorState into an in-memory Map.
+ *   2. Restore the arriving tab's EditorState via view.updateState().
+ *      - If cached in Map  → instant restore (undo history, cursor preserved)
+ *      - If not cached     → load from disk, parse, create fresh EditorState
  *
- * The <Editor> component is NEVER remounted on tab switches. Display is
- * toggled with CSS (display:none / display:block) so the ProseMirror
- * DOM is never torn down between tabs. Content is swapped imperatively
- * via view.dispatch() with tr.setMeta('programmatic', true).
+ * The <Editor> component is NEVER remounted on tab switches. The EditorView
+ * persists for the group's lifetime; only its state is swapped.
  */
 export default function EditorGroup({
   group,
@@ -40,24 +38,24 @@ export default function EditorGroup({
   // ── Refs ─────────────────────────────────────────────────────────────────
 
   // Raw ProseMirror EditorView instance, set via the onEditorReady callback.
-  // Used for imperative content replacement via view.dispatch().
   const rawEditorRef = useRef(null);
 
   // Forwarded ref handle exposed by <Editor> via useImperativeHandle.
-  // Not used directly in this component — kept for future use / ref prop requirement.
   const editorHandleRef = useRef(null);
 
   // The active file that was last loaded into the editor DOM.
-  const prevActiveFileRef = useRef(null);
+  // Also used by handleContentChange to avoid reading activeTab from the store (race-free).
+  const activeFileRef = useRef(null);
 
-  // Lokus markdown→ProseMirror parser, created once when the editor mounts
-  // and reused for every subsequent file load. Created lazily in handleEditorReady
-  // so that editor.schema is guaranteed to be available.
+  // Per-tab EditorState cache. Each tab gets its own independent EditorState
+  // with its own undo history, selection, and plugin state.
+  // Key = file path, Value = EditorState
+  const editorStatesRef = useRef(new Map());
+
+  // Lokus markdown→ProseMirror parser, created once when the editor mounts.
   const lokusParserRef = useRef(null);
 
   // Lokus ProseMirror→markdown serializer, created lazily on first dirty check.
-  // Used by handleContentChange to serialize the doc to markdown for comparison
-  // with the saved source content.
   const lokusSerializerRef = useRef(null);
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -84,6 +82,13 @@ export default function EditorGroup({
     setEditorTitle(title);
     setOriginalTitle(title);
   }, [activeFile, group.id]);
+
+  // ── Set global active file for wiki-link resolution, tag indexing, etc. ──
+  useEffect(() => {
+    if (activeFile) {
+      try { globalThis.__LOKUS_ACTIVE_FILE__ = activeFile; } catch {}
+    }
+  }, [activeFile]);
 
   const handleTitleChange = useCallback((e) => {
     const newTitle = e.target.value;
@@ -115,85 +120,72 @@ export default function EditorGroup({
   // ── Core imperatives ──────────────────────────────────────────────────────
 
   /**
-   * Load content into the persistent ProseMirror EditorView without remounting it.
-   * Accepts a PM JSON object (from cache) or a markdown string (from disk load).
-   * All programmatic content changes set tr.setMeta('programmatic', true) so the
-   * dispatchTransaction handler in useProseMirror does NOT fire onUpdate.
+   * Restore an EditorState into the shared EditorView.
+   * Uses view.updateState() — a single atomic swap of the entire state.
+   * No transactions, no undo-stack pollution, no race conditions.
    */
-  const setEditorContent = useCallback((content) => {
+  const restoreEditorState = useCallback((editorState) => {
     const view = rawEditorRef.current;
-    if (!view) return;
-
-    let doc;
-    if (content && typeof content === 'object') {
-      // PM JSON -> PM Node
-      if (content.type === 'doc') {
-        doc = view.state.schema.nodeFromJSON(content);
-      } else {
-        // Wrapped content (e.g. a single block node)
-        doc = view.state.schema.nodeFromJSON({ type: 'doc', content: [content] });
-      }
-    } else if (typeof content === 'string') {
-      // Markdown string -> PM Node (disk load path)
-      if (!lokusParserRef.current) {
-        lokusParserRef.current = createLokusParser(view.state.schema);
-      }
-      doc = lokusParserRef.current.parse(content);
-    } else {
-      return;
-    }
-
-    const tr = view.state.tr.replaceWith(0, view.state.doc.content.size, doc.content);
-    tr.setMeta('programmatic', true);
-    view.dispatch(tr);
+    if (!view || !editorState) return;
+    view.updateState(editorState);
   }, []);
 
   /**
-   * Capture the current editor state as ProseMirror JSON and persist it in
-   * the store so the next visit to this tab can restore it instantly.
+   * Create a fresh EditorState from a parsed ProseMirror doc.
+   * Reuses the current view's plugins so all extensions are active.
    */
-  const snapshotTabJSON = useCallback((filePath) => {
+  const createEditorStateFromDoc = useCallback((doc) => {
+    const view = rawEditorRef.current;
+    if (!view) return null;
+    return EditorState.create({
+      schema: view.state.schema,
+      doc,
+      plugins: view.state.plugins,
+    });
+  }, []);
+
+  /**
+   * Save the current view's EditorState for the given file path.
+   */
+  const snapshotEditorState = useCallback((filePath) => {
     const view = rawEditorRef.current;
     if (!view || !filePath || filePath.startsWith('__') || filePath.endsWith('.canvas')) return;
-    const json = view.state.doc.toJSON();
-    useEditorGroupStore.getState().setTabContent(group.id, filePath, { json });
-  }, [group.id]);
+    editorStatesRef.current.set(filePath, view.state);
+  }, []);
 
   // ── Tab-switching effect ──────────────────────────────────────────────────
 
   useEffect(() => {
     // Canvas / special files don't involve the ProseMirror instance
     if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas')) {
-      prevActiveFileRef.current = activeFile;
+      activeFileRef.current = activeFile;
       return;
     }
 
-    const prevFile = prevActiveFileRef.current;
-    prevActiveFileRef.current = activeFile;
+    const prevFile = activeFileRef.current;
+    activeFileRef.current = activeFile;
 
-    // Step 1 — Snapshot the departing tab before we load a new one
+    // Step 1 — Snapshot the departing tab's full EditorState
     if (
       prevFile &&
       prevFile !== activeFile &&
       !prevFile.startsWith('__') &&
       !prevFile.endsWith('.canvas')
     ) {
-      snapshotTabJSON(prevFile);
+      snapshotEditorState(prevFile);
     }
 
-    // Step 2 — Resolve content for the arriving tab
-    const store = useEditorGroupStore.getState();
-    const grp = store.findGroup(group.id);
-    const cached = grp?.contentByTab?.[activeFile];
+    // Step 2 — Restore the arriving tab
+    const cachedState = editorStatesRef.current.get(activeFile);
 
-    // Case A: ProseMirror JSON cache — instant, no reparse
-    if (cached?.json) {
+    // Case A: EditorState cached in memory — instant restore
+    if (cachedState) {
       setIsLoading(false);
-      setEditorContent(cached.json);
+      restoreEditorState(cachedState);
       return;
     }
 
-    // Case B: No cache — load from disk
+    // Case B: No cached state — load from disk
     setIsLoading(true);
     let cancelled = false;
 
@@ -202,30 +194,36 @@ export default function EditorGroup({
         const raw = await invoke('read_file_content', { path: activeFile });
         if (cancelled) return;
 
-        // Wait for the editor (and therefore the parser) to be ready.
-        // In practice lokusParserRef is set synchronously in handleEditorReady
-        // before any async I/O resolves, but we guard just in case.
+        // Ensure parser is ready
         if (!lokusParserRef.current) {
-          console.warn('EditorGroup: parser not ready when file resolved — skipping load');
-          if (!cancelled) setIsLoading(false);
-          return;
+          const view = rawEditorRef.current;
+          if (!view) {
+            // Editor not mounted yet — store raw markdown for handleEditorReady
+            useEditorGroupStore.getState().setTabContent(group.id, activeFile, {
+              rawMarkdown: raw,
+              savedContent: raw,
+              title: activeFile.split('/').pop().replace(/\.md$/, ''),
+            });
+            return;
+          }
+          lokusParserRef.current = createLokusParser(view.state.schema);
         }
 
-        // Parse markdown directly to ProseMirror JSON (no HTML round-trip).
+        // Parse markdown → PM doc → fresh EditorState
         const doc = lokusParserRef.current.parse(raw);
-        const json = doc.toJSON();
+        const newState = createEditorStateFromDoc(doc);
+        if (!newState || cancelled) return;
 
-        // Store ProseMirror JSON so future visits hit Case A immediately.
+        // Cache the EditorState and store metadata
+        editorStatesRef.current.set(activeFile, newState);
         useEditorGroupStore.getState().setTabContent(group.id, activeFile, {
-          json,
           savedContent: raw,
           title: activeFile.split('/').pop().replace(/\.md$/, ''),
-          loading: false,
         });
 
         if (cancelled) return;
         setIsLoading(false);
-        setEditorContent(json);
+        restoreEditorState(newState);
       } catch (e) {
         console.error('Failed to load file:', activeFile, e);
         if (!cancelled) setIsLoading(false);
@@ -233,7 +231,6 @@ export default function EditorGroup({
     })();
 
     return () => { cancelled = true; };
-  // setEditorContent and snapshotTabJSON are stable (useCallback with stable deps).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFile, group.id]);
 
@@ -244,18 +241,17 @@ export default function EditorGroup({
   }, [group.id]);
 
   const handleTabClose = useCallback((path) => {
-    // Snapshot before the store removes the entry so we don't lose edits
     if (path === activeFile) {
-      snapshotTabJSON(path);
+      snapshotEditorState(path);
     }
     const tab = tabs.find((t) => t.path === path);
     if (tab) {
       useEditorGroupStore.getState().addRecentlyClosed(tab);
     }
-    // removeTab cleans up contentByTab[path] — JSON snapshot is discarded
-    // intentionally (the tab is being closed)
+    // Clean up cached EditorState for the closed tab
+    editorStatesRef.current.delete(path);
     useEditorGroupStore.getState().removeTab(group.id, path);
-  }, [group.id, tabs, activeFile, snapshotTabJSON]);
+  }, [group.id, tabs, activeFile, snapshotEditorState]);
 
   const handleFocus = useCallback(() => {
     useEditorGroupStore.getState().setFocusedGroupId(group.id);
@@ -277,9 +273,6 @@ export default function EditorGroup({
     if (view) {
       registerEditor(group.id, view);
 
-      // Create the parser and serializer once using the now-available schema.
-      // Any in-flight disk loads that started before the editor was ready
-      // will pick up lokusParserRef.current when they resolve.
       if (!lokusParserRef.current) {
         lokusParserRef.current = createLokusParser(view.state.schema);
       }
@@ -287,54 +280,60 @@ export default function EditorGroup({
         lokusSerializerRef.current = createLokusSerializer();
       }
 
-      // The editor just mounted. If a tab switch already resolved content
-      // (Case A: JSON cache) before the editor was ready, setEditorContent()
-      // would have been a no-op (rawEditorRef.current was null). Apply now.
-      // The tab-switching effect fires before onEditorReady because the effect
-      // runs synchronously after the first render, while onReady fires
-      // after the EditorView is created. Cover the race.
-      const file = prevActiveFileRef.current;
+      // If a tab was set active before the editor mounted, load it now.
+      const file = activeFileRef.current;
       if (file && !file.startsWith('__') && !file.endsWith('.canvas')) {
-        const cached = useEditorGroupStore.getState().findGroup(group.id)?.contentByTab?.[file];
-        if (cached?.json) {
-          setEditorContent(cached.json);
+        const cachedState = editorStatesRef.current.get(file);
+        if (cachedState) {
+          restoreEditorState(cachedState);
+          setIsLoading(false);
+        } else {
+          // Check if raw markdown was stored while editor was mounting
+          const cached = useEditorGroupStore.getState().findGroup(group.id)?.contentByTab?.[file];
+          if (cached?.rawMarkdown) {
+            const doc = lokusParserRef.current.parse(cached.rawMarkdown);
+            const newState = createEditorStateFromDoc(doc);
+            if (newState) {
+              editorStatesRef.current.set(file, newState);
+              useEditorGroupStore.getState().setTabContent(group.id, file, {
+                savedContent: cached.savedContent ?? cached.rawMarkdown,
+                title: cached.title ?? file.split('/').pop().replace(/\.md$/, ''),
+              });
+              restoreEditorState(newState);
+              setIsLoading(false);
+            }
+          }
         }
-        // If no cache yet, disk I/O is in flight and will call setEditorContent()
-        // once complete — by then rawEditorRef.current is set so it will work.
       }
     } else {
       registerEditor(group.id, null);
     }
-  }, [group.id, setEditorContent]);
+  }, [group.id, restoreEditorState, createEditorStateFromDoc]);
 
   /**
-   * Called by <Editor> on every user edit. Receives the PM EditorView,
-   * snapshots the doc as JSON, and marks the tab dirty by serializing
-   * the doc to markdown and comparing with the saved source.
+   * Called by <Editor> on every user edit. Saves the EditorState and
+   * performs a dirty check.
    *
-   * IMPORTANT: `activeFile` is NOT in the dependency array. The active file
-   * is read from the store to avoid the dependency cascade that caused the
-   * original tab-switching bug (activeFile -> onContentChange -> onUpdate
-   * -> dependency change -> editor recreation).
+   * Uses activeFileRef (a ref, not store state) so it can never race
+   * with tab switches.
    */
   const handleContentChange = useCallback((view) => {
-    const store = useEditorGroupStore.getState();
-    const grp = store.findGroup(group.id);
-    const currentActiveFile = grp?.activeTab;
-    if (!currentActiveFile) return;
+    const currentFile = activeFileRef.current;
+    if (!currentFile) return;
 
-    // Snapshot current doc as PM JSON
-    const json = view.state.doc.toJSON();
-    store.setTabContent(group.id, currentActiveFile, { json });
+    // Save the latest EditorState for this file
+    editorStatesRef.current.set(currentFile, view.state);
 
     // Dirty check: serialize to md and compare with saved source
-    const saved = grp?.contentByTab?.[currentActiveFile]?.savedContent;
+    const store = useEditorGroupStore.getState();
+    const grp = store.findGroup(group.id);
+    const saved = grp?.contentByTab?.[currentFile]?.savedContent;
     if (saved !== undefined) {
       if (!lokusSerializerRef.current) {
         lokusSerializerRef.current = createLokusSerializer();
       }
       const currentMd = lokusSerializerRef.current.serialize(view.state.doc);
-      store.markTabDirty(group.id, currentActiveFile, currentMd !== saved);
+      store.markTabDirty(group.id, currentFile, currentMd !== saved);
     }
   }, [group.id]);
 
@@ -399,8 +398,8 @@ export default function EditorGroup({
 
           Visibility is controlled with display:none rather than conditional
           rendering so the ProseMirror EditorView is NEVER unmounted during
-          tab switches. Content is swapped imperatively via view.dispatch()
-          in the tab-switching effect above.
+          tab switches. Content is swapped via view.updateState() which
+          atomically replaces the entire EditorState (doc, undo, selection).
 
           The <Editor> component itself has no key prop, ensuring it lives
           for the entire lifetime of this EditorGroup.
@@ -431,10 +430,9 @@ export default function EditorGroup({
             {/*
               No key prop — persistent for the group's lifetime.
 
-              Content is managed imperatively via setEditorContent() which
-              dispatches PM transactions with tr.setMeta('programmatic', true).
-              The Editor component creates the EditorView once and never
-              recreates it on tab switches.
+              Content is managed via view.updateState() which atomically
+              swaps the entire EditorState. The EditorView is created once
+              and never recreated on tab switches.
             */}
             <Editor
               ref={editorHandleRef}

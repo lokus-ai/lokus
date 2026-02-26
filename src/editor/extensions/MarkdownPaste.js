@@ -68,27 +68,21 @@ export function createMarkdownPastePlugin() {
 
               // Parse markdown directly to a ProseMirror doc, then insert as a slice
               const parser = createLokusParser(state.schema)
+              const doc = parser.parse(text)
+              if (!doc) return false
 
-              // Parse asynchronously to keep the pattern consistent with the
-              // async worker path, but use the synchronous parser directly
-              Promise.resolve().then(() => {
-                try {
-                  const doc = parser.parse(text)
-                  if (!doc) return
-
-                  const slice = new Slice(doc.content, 0, 0)
-                  const tr = view.state.tr.replaceSelection(slice)
-                  view.dispatch(tr)
-                } catch (err) {
-                  // Fallback: insert as plain text if parsing fails
-                  const tr = view.state.tr.insertText(text)
-                  view.dispatch(tr)
-                }
-              })
+              const slice = new Slice(doc.content, 0, 0)
+              const tr = view.state.tr.replaceSelection(slice)
+              view.dispatch(tr)
 
               return true
             } catch (error) {
-              return false
+              // Fallback: insert as plain text if parsing fails
+              try {
+                const tr = view.state.tr.insertText(text)
+                view.dispatch(tr)
+              } catch { /* last resort — let browser handle it */ }
+              return true
             }
           }
         }
