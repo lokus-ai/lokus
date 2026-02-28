@@ -14,6 +14,7 @@ import { registerEditor } from '../stores/editorRegistry';
 // Lazy-loaded special tab views
 const BasesView = lazy(() => import('../bases/BasesView'));
 const ProfessionalGraphView = lazy(() => import('../views/ProfessionalGraphView').then(m => ({ default: m.ProfessionalGraphView })));
+const KanbanBoard = lazy(() => import('./KanbanBoard'));
 
 /**
  * EditorGroup — a single editor pane with its own tabs, content cache,
@@ -32,7 +33,7 @@ export default function EditorGroup({
   group,
   isFocused,
   workspacePath,
-  hideTabBar = false,
+  hideTabBar = false, // kept for WelcomeScreen: true = single group (show welcome), false = split
   onCreateFile,
   onCreateFolder,
   onCreateCanvas,
@@ -76,7 +77,7 @@ export default function EditorGroup({
   const [originalTitle, setOriginalTitle] = useState('');
 
   useEffect(() => {
-    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas')) {
+    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas') || activeFile.endsWith('.kanban')) {
       setEditorTitle('');
       setOriginalTitle('');
       return;
@@ -153,15 +154,15 @@ export default function EditorGroup({
    */
   const snapshotEditorState = useCallback((filePath) => {
     const view = rawEditorRef.current;
-    if (!view || !filePath || filePath.startsWith('__') || filePath.endsWith('.canvas')) return;
+    if (!view || !filePath || filePath.startsWith('__') || filePath.endsWith('.canvas') || filePath.endsWith('.kanban')) return;
     editorStatesRef.current.set(filePath, view.state);
   }, []);
 
   // ── Tab-switching effect ──────────────────────────────────────────────────
 
   useEffect(() => {
-    // Canvas / special files don't involve the ProseMirror instance
-    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas')) {
+    // Canvas / kanban / special files don't involve the ProseMirror instance
+    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas') || activeFile.endsWith('.kanban')) {
       activeFileRef.current = activeFile;
       return;
     }
@@ -174,7 +175,8 @@ export default function EditorGroup({
       prevFile &&
       prevFile !== activeFile &&
       !prevFile.startsWith('__') &&
-      !prevFile.endsWith('.canvas')
+      !prevFile.endsWith('.canvas') &&
+      !prevFile.endsWith('.kanban')
     ) {
       snapshotEditorState(prevFile);
     }
@@ -197,6 +199,13 @@ export default function EditorGroup({
       try {
         const raw = await invoke('read_file_content', { path: activeFile });
         if (cancelled) return;
+
+        // Check if handleEditorReady already loaded this file while we were awaiting
+        if (editorStatesRef.current.has(activeFile)) {
+          setIsLoading(false);
+          restoreEditorState(editorStatesRef.current.get(activeFile));
+          return;
+        }
 
         // Ensure parser is ready
         if (!lokusParserRef.current) {
@@ -285,8 +294,10 @@ export default function EditorGroup({
       }
 
       // If a tab was set active before the editor mounted, load it now.
+      // This handles the case where the component re-mounts after a split
+      // (React changes tree position → unmount/remount → lost EditorView).
       const file = activeFileRef.current;
-      if (file && !file.startsWith('__') && !file.endsWith('.canvas')) {
+      if (file && !file.startsWith('__') && !file.endsWith('.canvas') && !file.endsWith('.kanban')) {
         const cachedState = editorStatesRef.current.get(file);
         if (cachedState) {
           restoreEditorState(cachedState);
@@ -306,6 +317,30 @@ export default function EditorGroup({
               restoreEditorState(newState);
               setIsLoading(false);
             }
+          } else {
+            // No rawMarkdown cached yet — load directly from disk.
+            // This happens after a split when the component re-mounts and
+            // the tab-switching effect's async was cancelled by cleanup.
+            (async () => {
+              try {
+                const raw = await invoke('read_file_content', { path: file });
+                // Verify file is still active and view still exists
+                if (activeFileRef.current !== file || !rawEditorRef.current) return;
+                const doc = lokusParserRef.current.parse(raw);
+                const newState = createEditorStateFromDoc(doc);
+                if (!newState) return;
+                editorStatesRef.current.set(file, newState);
+                useEditorGroupStore.getState().setTabContent(group.id, file, {
+                  savedContent: raw,
+                  title: file.split('/').pop().replace(/\.md$/, ''),
+                });
+                restoreEditorState(newState);
+                setIsLoading(false);
+              } catch (e) {
+                console.error('handleEditorReady: failed to load file:', file, e);
+                setIsLoading(false);
+              }
+            })();
           }
         }
       }
@@ -343,8 +378,9 @@ export default function EditorGroup({
 
   // ── Derived display flags ─────────────────────────────────────────────────
 
-  const isEditorFile = !!(activeFile && !activeFile.startsWith('__') && !activeFile.endsWith('.canvas'));
+  const isEditorFile = !!(activeFile && !activeFile.startsWith('__') && !activeFile.endsWith('.canvas') && !activeFile.endsWith('.kanban'));
   const isCanvasFile = !!(activeFile?.endsWith('.canvas'));
+  const isKanbanFile = !!(activeFile?.endsWith('.kanban'));
   const isBasesTab = activeFile === '__bases__';
   const isGraphTab = activeFile === '__graph__';
 
@@ -355,22 +391,35 @@ export default function EditorGroup({
       className={`flex flex-col h-full relative bg-app-bg ${isFocused ? 'ring-2 ring-app-accent' : ''}`}
       onClick={handleFocus}
     >
-      {/* Tab Bar — hidden in single-pane mode */}
+      {/* Per-pane tab bar — shown in split mode (hideTabBar=false).
+          In single-group mode (hideTabBar=true), tabs are in the Toolbar titlebar instead.
+          In split mode this acts as the titlebar: drag region + panel background. */}
       {!hideTabBar && (
-        <ResponsiveTabBar
-          tabs={tabs}
-          activeTab={activeFile}
-          onTabClick={handleTabClick}
-          onTabClose={handleTabClose}
-          unsavedChanges={unsavedChanges}
-        />
+        <div
+          data-tauri-drag-region
+          style={{
+            backgroundColor: 'rgb(var(--panel))',
+            borderBottom: '1px solid rgb(var(--border))',
+            flexShrink: 0,
+          }}
+        >
+          <ResponsiveTabBar
+            tabs={tabs}
+            activeTab={activeFile}
+            onTabClick={handleTabClick}
+            onTabClose={handleTabClose}
+            unsavedChanges={unsavedChanges}
+          />
+        </div>
       )}
 
       {/* Content Area */}
       <div className="flex-1 min-h-0 overflow-hidden relative">
 
-        {/* Welcome screen — shown when no tab is active */}
-        {!activeFile && (
+        {/* Welcome screen — shown when no tab is active in single-group mode only.
+            In split mode, empty groups auto-close when the last tab is removed.
+            The brief empty state after a fresh split shows a minimal placeholder. */}
+        {!activeFile && hideTabBar && (
           <WelcomeScreen
             onCreateFile={onCreateFile}
             onCreateFolder={onCreateFolder}
@@ -378,6 +427,11 @@ export default function EditorGroup({
             onOpenCommandPalette={onOpenCommandPalette}
             onFileOpen={onFileOpen}
           />
+        )}
+        {!activeFile && !hideTabBar && (
+          <div className="flex-1 flex items-center justify-center text-app-muted text-sm">
+            Open a file to get started
+          </div>
         )}
 
         {/* Canvas viewer — rendered only for .canvas files */}
@@ -396,6 +450,19 @@ export default function EditorGroup({
                 useEditorGroupStore.getState().markTabDirty(group.id, activeFile, true);
               }}
             />
+          </div>
+        )}
+
+        {/* Kanban board — rendered for .kanban files */}
+        {isKanbanFile && (
+          <div className="flex-1 overflow-hidden h-full">
+            <Suspense fallback={<div className="flex-1 flex items-center justify-center text-app-muted">Loading...</div>}>
+              <KanbanBoard
+                workspacePath={workspacePath}
+                boardPath={activeFile}
+                onFileOpen={onFileOpen}
+              />
+            </Suspense>
           </div>
         )}
 

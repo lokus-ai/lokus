@@ -108,15 +108,13 @@ export class ReactPopup {
 
   _render() {
     const Component = this._Component
-    const innerRef = this._innerRef
 
-    // We use a thin wrapper so we can capture the ref without modifying the
-    // caller's props object or requiring the Component to accept a special prop.
-    const Wrapper = () => (
-      <Component ref={innerRef} {...this._props} />
+    // Render the component directly (not via a wrapper function) so that
+    // React sees the same component type on every call and UPDATES rather
+    // than REMOUNTING. This preserves the imperative ref across re-renders.
+    this._root.render(
+      <Component ref={this._innerRef} {...this._props} />
     )
-
-    this._root.render(<Wrapper />)
   }
 }
 

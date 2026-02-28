@@ -118,7 +118,7 @@ const SlashCommandList = forwardRef((props, ref) => {
                         : ""
                     }
                   >
-                    <div className="flex items-center justify-center w-7 h-7 bg-app-bg rounded-md mr-3">
+                    <div className="flex items-center justify-center w-7 h-7 bg-app-bg rounded-md mr-3 !text-app-text">
                       {item.icon}
                     </div>
                     <div className="flex flex-col">

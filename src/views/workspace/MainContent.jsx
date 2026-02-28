@@ -3,7 +3,6 @@ import { useViewStore } from '../../stores/views';
 import ErrorBoundary from '../../components/ErrorBoundary';
 
 const EditorGroupsView = lazy(() => import('./EditorGroupsView'));
-const KanbanBoard = lazy(() => import('../../components/KanbanBoard'));
 const CalendarView = lazy(() => import('../../components/Calendar').then(m => ({ default: m.CalendarView })));
 const Canvas = lazy(() => import('../Canvas'));
 const Preferences = lazy(() => import('../Preferences'));
@@ -14,19 +13,19 @@ export default function MainContent({ workspacePath, welcomeProps }) {
 
   const fallback = <div className="flex-1 flex items-center justify-center text-app-muted">Loading...</div>;
 
-  // Bases and Graph are rendered as tabs inside EditorGroupsView,
-  // not as separate full-screen views. They open via addTab('__bases__')
-  // and addTab('__graph__') in IconSidebar.
+  // Kanban boards open as .kanban tabs inside EditorGroupsView.
+  // The kanban icon sidebar button switches the left sidebar to the board list,
+  // but keeps EditorGroupsView as the main content.
+  const showEditor = currentView === 'editor' || currentView === 'kanban' || currentView === 'marketplace';
+
   return (
     <ErrorBoundary name="MainContent" message="View crashed">
       <Suspense fallback={fallback}>
-        {currentView === 'editor' && <EditorGroupsView workspacePath={workspacePath} welcomeProps={welcomeProps} />}
-        {currentView === 'kanban' && <KanbanBoard workspacePath={workspacePath} />}
+        {showEditor && <EditorGroupsView workspacePath={workspacePath} welcomeProps={welcomeProps} />}
         {currentView === 'calendar' && <CalendarView />}
         {currentView === 'canvas' && <Canvas workspacePath={workspacePath} />}
         {currentView === 'settings' && <Preferences workspacePath={workspacePath} />}
         {currentView === 'dailyNotes' && <DailyNotesPanel workspacePath={workspacePath} />}
-        {currentView === 'marketplace' && <div className="flex-1 flex items-center justify-center text-app-muted">Marketplace coming soon</div>}
       </Suspense>
     </ErrorBoundary>
   );

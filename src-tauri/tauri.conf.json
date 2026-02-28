@@ -20,6 +20,7 @@
         "visible": false,
         "decorations": true,
         "transparent": false,
+        "hiddenTitle": true,
         "titleBarStyle": "Overlay",
         "alwaysOnTop": false,
         "skipTaskbar": false

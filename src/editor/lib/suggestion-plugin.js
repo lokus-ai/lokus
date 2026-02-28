@@ -298,8 +298,8 @@ export function createSuggestionPlugin({
     view() {
       return {
         update: async (view, prevState) => {
-          const prev = plugin.key?.getState(prevState);
-          const next = plugin.key?.getState(view.state);
+          const prev = pluginKey.getState(prevState);
+          const next = pluginKey.getState(view.state);
 
           if (!prev || !next) return;
 
@@ -354,6 +354,15 @@ export function createSuggestionPlugin({
               editor,
               query: state.query,
             });
+
+            // After the async item fetch, the state may have changed
+            // (e.g., user typed more, suggestion was dismissed, or a
+            // plugin reconfiguration occurred). Re-check current state
+            // to avoid acting on stale data.
+            const currentState = pluginKey.getState(view.state);
+            if (!currentState?.active) {
+              return;
+            }
           }
 
           if (handleExit) {

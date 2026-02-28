@@ -187,6 +187,7 @@ export function ResponsiveTabBar({
     <div
       ref={containerRef}
       className="responsive-tab-bar"
+      data-tauri-drag-region
       style={{
         width: '100%',
         minWidth: 0,

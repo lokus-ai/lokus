@@ -7,8 +7,6 @@ import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
 import { FileTreeView } from '../../features/file-tree';
 import PluginSettings from '../PluginSettings.jsx';
 import KanbanList from '../../components/KanbanList.jsx';
-import { DailyNotesPanel } from '../../components/DailyNotes/index.js';
-import { CalendarWidget } from '../../components/Calendar/index.js';
 import { toast } from '../../components/ui/enhanced-toast';
 import { formatAccelerator } from '../../core/shortcuts/registry.js';
 import { isDesktop } from '../../platform/index.js';
@@ -24,10 +22,9 @@ import {
  * LeftSidebar — the resizable left panel.
  *
  * Shows the file explorer by default, and conditionally renders
- * DailyNotesPanel, CalendarWidget, KanbanList, or PluginSettings
- * based on the active view from useViewStore and panel flags.
- * Bases and Graph views render only in MainContent — the sidebar
- * stays as the file explorer for those views.
+ * KanbanList or PluginSettings based on the active view.
+ * Daily Notes and Calendar render only in the right sidebar.
+ * Bases and Graph render as tabs in EditorGroup.
  */
 export default function LeftSidebar({
   workspacePath,
@@ -52,9 +49,6 @@ export default function LeftSidebar({
 
   // View state from useViewStore
   const currentView = useViewStore((s) => s.currentView);
-  const showDailyNotesPanel = useViewStore((s) => s.showDailyNotesPanel);
-  const showCalendarPanel = useViewStore((s) => s.showCalendarPanel);
-  const currentDailyNoteDate = useViewStore((s) => s.currentDailyNoteDate);
 
   // Derive boolean view flags from currentView
   const showKanban = currentView === 'kanban';
@@ -91,31 +85,6 @@ export default function LeftSidebar({
   const toggleFolder = (path) => useFileTreeStore.getState().toggleFolder(path);
   const closeAllFolders = () => useFileTreeStore.getState().closeAllFolders();
 
-  const handleOpenCalendarView = () => {
-    const calendarPath = '__calendar__';
-    const calendarName = 'Calendar';
-    const { focusedGroupId } = useEditorGroupStore.getState();
-    if (focusedGroupId) {
-      useEditorGroupStore.getState().addTab(
-        focusedGroupId,
-        { path: calendarPath, name: calendarName },
-        true
-      );
-    }
-  };
-
-  const handleOpenCalendarSettings = async () => {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('open_preferences_window', {
-        workspacePath,
-        section: 'Connections',
-      });
-    } catch (e) {
-      console.error('Failed to open preferences:', e);
-    }
-  };
-
   // Plugins panel
   if (featureFlags.enable_plugins && showPlugins) {
     return (
@@ -137,35 +106,6 @@ export default function LeftSidebar({
             onBoardOpen={onFileOpen}
             onCreateBoard={onCreateKanban}
             onBoardAction={onKanbanBoardAction}
-          />
-        </div>
-      </aside>
-    );
-  }
-
-  // Daily notes panel
-  if (showDailyNotesPanel) {
-    return (
-      <aside className="h-full overflow-y-auto flex flex-col bg-app-bg border-r border-app-border">
-        <div className="flex-1 overflow-hidden">
-          <DailyNotesPanel
-            workspacePath={workspacePath}
-            onOpenDailyNote={onOpenDailyNoteByDate}
-            currentDate={currentDailyNoteDate}
-          />
-        </div>
-      </aside>
-    );
-  }
-
-  // Calendar widget panel
-  if (showCalendarPanel) {
-    return (
-      <aside className="h-full overflow-y-auto flex flex-col bg-app-bg border-r border-app-border">
-        <div className="flex-1 overflow-hidden">
-          <CalendarWidget
-            onOpenCalendarView={handleOpenCalendarView}
-            onOpenSettings={handleOpenCalendarSettings}
           />
         </div>
       </aside>
