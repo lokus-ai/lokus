@@ -8,6 +8,7 @@ class AuthManager {
     this.user = null;
     this.session = null;
     this.isAuthenticated = false;
+    this.isGuest = false;
     this.isInitialized = false;
 
     // Throttling for auth checks to prevent excessive calls
@@ -31,9 +32,9 @@ class AuthManager {
         email: 'dev@localhost',
         user_metadata: { name: 'Local Developer' }
       };
-      this.session = { 
+      this.session = {
         access_token: 'local-dev-token',
-        user: this.user 
+        user: this.user
       };
       this.isAuthenticated = true;
       this.isInitialized = true;
@@ -41,9 +42,21 @@ class AuthManager {
       return;
     }
 
+    // Check for persisted guest mode
+    if (localStorage.getItem('lokus-guest-mode') === 'true') {
+      console.log('[AuthManager] Restoring guest mode from localStorage');
+      this._enterGuestMode();
+      return;
+    }
+
     // Set up Supabase auth state listener
     supabase.auth.onAuthStateChange((event, session) => {
       console.log('[AuthManager] Auth state changed:', event, session?.user?.email);
+
+      // Real sign-in clears guest mode
+      if (session && this.isGuest) {
+        this._clearGuestMode();
+      }
 
       this.session = session;
       this.user = session?.user || null;
@@ -84,11 +97,16 @@ class AuthManager {
 
   async checkAuthStatus() {
     // Check for local dev mode
-    const isLocalDev = import.meta.env.VITE_LOCAL_DEV_MODE === 'true' || 
+    const isLocalDev = import.meta.env.VITE_LOCAL_DEV_MODE === 'true' ||
                        import.meta.env.DEV && import.meta.env.VITE_SUPABASE_URL?.includes('dummy');
-    
+
     if (isLocalDev) {
       // Always return authenticated in local dev mode
+      return true;
+    }
+
+    // Guest mode — no Supabase session to check
+    if (this.isGuest) {
       return true;
     }
 
@@ -349,6 +367,16 @@ class AuthManager {
    */
   async signOut() {
     try {
+      // If guest, just clear guest mode — no Supabase session to revoke
+      if (this.isGuest) {
+        this._clearGuestMode();
+        this.isAuthenticated = false;
+        this.user = null;
+        this.session = null;
+        this.notifyListeners();
+        return;
+      }
+
       const { error } = await supabase.auth.signOut();
 
       if (error) {
@@ -444,6 +472,29 @@ class AuthManager {
     }
   }
 
+  /**
+   * Continue as guest — bypasses Supabase auth entirely
+   */
+  continueAsGuest() {
+    console.log('[AuthManager] Entering guest mode');
+    this._enterGuestMode();
+  }
+
+  _enterGuestMode() {
+    this.isGuest = true;
+    this.isAuthenticated = true;
+    this.user = { id: 'guest', email: null, user_metadata: { name: 'Guest' } };
+    this.session = null;
+    this.isInitialized = true;
+    localStorage.setItem('lokus-guest-mode', 'true');
+    this.notifyListeners();
+  }
+
+  _clearGuestMode() {
+    this.isGuest = false;
+    localStorage.removeItem('lokus-guest-mode');
+  }
+
   // Event system for auth state changes
   onAuthStateChange(callback) {
     this.listeners.add(callback);
@@ -452,7 +503,8 @@ class AuthManager {
     if (this.isInitialized) {
       callback({
         isAuthenticated: this.isAuthenticated,
-        user: this.user
+        user: this.user,
+        isGuest: this.isGuest
       });
     }
 
@@ -467,7 +519,8 @@ class AuthManager {
       try {
         callback({
           isAuthenticated: this.isAuthenticated,
-          user: this.user
+          user: this.user,
+          isGuest: this.isGuest
         });
       } catch (err) {
         console.error('[AuthManager] Listener error:', err);

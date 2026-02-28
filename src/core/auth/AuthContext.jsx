@@ -16,6 +16,7 @@ export const AuthProvider = ({ children }) => {
   const [authState, setAuthState] = useState({
     isAuthenticated: false,
     user: null,
+    isGuest: false,
     isLoading: true
   });
 
@@ -28,13 +29,14 @@ export const AuthProvider = ({ children }) => {
           ...prev,
           isAuthenticated: newState.isAuthenticated,
           user: newState.user,
+          isGuest: newState.isGuest,
           isLoading: false
         };
         return newAuthState;
       });
 
-      // Identify user in PostHog when authenticated
-      if (newState.isAuthenticated && newState.user) {
+      // Identify user in PostHog when authenticated (skip for guests — they get anonymous tracking)
+      if (newState.isAuthenticated && newState.user && !newState.isGuest) {
         posthog.identify(newState.user.id, {
           email: newState.user.email
         });
@@ -48,6 +50,7 @@ export const AuthProvider = ({ children }) => {
           ...prev,
           isAuthenticated: authManager.isLoggedIn,
           user: authManager.currentUser,
+          isGuest: authManager.isGuest,
           isLoading: false
         };
         return newAuthState;
@@ -114,6 +117,11 @@ export const AuthProvider = ({ children }) => {
     return await authManager.authenticatedFetch(url, options);
   };
 
+  // Continue as guest
+  const continueAsGuest = () => {
+    authManager.continueAsGuest();
+  };
+
   // Reset password
   const resetPassword = async (email) => {
     try {
@@ -130,6 +138,7 @@ export const AuthProvider = ({ children }) => {
     signUpWithEmail,
     signInWithGoogle,
     signOut,
+    continueAsGuest,
     getAccessToken,
     authenticatedFetch,
     resetPassword
