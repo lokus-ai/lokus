@@ -100,15 +100,31 @@ export const useEditorGroupStore = create(
       })),
 
     removeTab: (groupId, tabPath) =>
-      set((s) => ({
-        layout: updateGroupInTree(s.layout, groupId, (g) => {
+      set((s) => {
+        const updatedLayout = updateGroupInTree(s.layout, groupId, (g) => {
           const newTabs = g.tabs.filter((t) => t.path !== tabPath);
           const newActive = g.activeTab === tabPath ? (newTabs[0]?.path || null) : g.activeTab;
           const newContent = { ...g.contentByTab };
           delete newContent[tabPath];
           return { ...g, tabs: newTabs, activeTab: newActive, contentByTab: newContent };
-        }),
-      })),
+        });
+
+        // Auto-close empty split groups (like VS Code)
+        const group = findGroupInTree(updatedLayout, groupId);
+        if (group && group.tabs.length === 0 && updatedLayout.type === 'container') {
+          const result = removeGroupFromTree(updatedLayout, groupId);
+          // Find a remaining group to focus
+          const findFirstGroup = (node) => {
+            if (node.type === 'group') return node.id;
+            if (node.type === 'container' && node.children.length > 0) return findFirstGroup(node.children[0]);
+            return null;
+          };
+          const newLayout = result || createGroup([], null);
+          return { layout: newLayout, focusedGroupId: findFirstGroup(newLayout) || s.focusedGroupId };
+        }
+
+        return { layout: updatedLayout };
+      }),
 
     setActiveTab: (groupId, tabPath) =>
       set((s) => ({

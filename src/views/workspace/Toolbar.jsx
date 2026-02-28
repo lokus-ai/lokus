@@ -53,8 +53,12 @@ export default function Toolbar({
     return findGroup(layout);
   });
 
+  // Single group = tabs in titlebar. Split = each pane has its own tab bar.
+  const isSingleGroup = useEditorGroupStore((s) => s.layout.type === 'group');
+
   const openTabs = focusedGroup?.tabs ?? [];
   const activeFile = focusedGroup?.activeTab ?? null;
+  const hasActiveTabs = openTabs.length > 0;
   const unsavedChanges = new Set(
     Object.entries(focusedGroup?.contentByTab ?? {})
       .filter(([, data]) => data?.dirty)
@@ -75,6 +79,64 @@ export default function Toolbar({
     }
   };
 
+  // ── Split mode: panes extend to the top, each pane has its own tab bar.
+  //    Only render a small floating overlay with action buttons at top-right. ──
+  if (!isSingleGroup) {
+    return (
+      <div
+        className="fixed top-0 right-0 flex items-center gap-1 z-50"
+        data-tauri-drag-region
+        style={{
+          height: '32px',
+          paddingRight: '8px',
+          paddingLeft: '8px',
+          backgroundColor: 'rgb(var(--panel) / 0.85)',
+          borderBottomLeftRadius: '6px',
+          backdropFilter: 'blur(8px)',
+        }}
+      >
+        {uiVisibility.toolbar_split_view && hasActiveTabs && (
+          <button
+            onClick={() => {
+              const { focusedGroupId, splitGroup } = useEditorGroupStore.getState();
+              if (focusedGroupId) splitGroup(focusedGroupId, 'vertical');
+            }}
+            className="obsidian-button icon-only small"
+            title="Split View"
+            data-tauri-drag-region="false"
+            data-tour="split-view"
+            style={{ pointerEvents: 'auto' }}
+          >
+            <SquareSplitHorizontal className="w-5 h-5" strokeWidth={2} />
+          </button>
+        )}
+        <button
+          onClick={() => useLayoutStore.getState().toggleRight()}
+          className={`obsidian-button icon-only small ${showRight ? 'active' : ''}`}
+          title={showRight ? 'Hide Right Sidebar' : 'Show Right Sidebar'}
+          data-tauri-drag-region="false"
+          style={{ pointerEvents: 'auto' }}
+        >
+          {showRight ? (
+            <PanelRightClose className="w-5 h-5" strokeWidth={2} />
+          ) : (
+            <PanelRightOpen className="w-5 h-5" strokeWidth={2} />
+          )}
+        </button>
+        <button
+          onClick={onCreateFile}
+          className="obsidian-button icon-only small"
+          title="New Tab"
+          data-tauri-drag-region="false"
+          style={{ pointerEvents: 'auto' }}
+        >
+          <Plus className="w-5 h-5" strokeWidth={2.5} />
+        </button>
+      </div>
+    );
+  }
+
+  // ── Single-group mode: full toolbar bar with tab bar in the titlebar ──
   return (
     <div
       className="fixed top-0 left-0 right-0 flex items-center justify-between z-50"
@@ -125,9 +187,10 @@ export default function Toolbar({
         )}
       </div>
 
-      {/* Center: responsive tab bar */}
+      {/* Center: tab bar in titlebar */}
       <div
         className="absolute flex items-center overflow-hidden px-2"
+        data-tauri-drag-region
         style={{
           left: showLeft
             ? `${leftW + 57}px`
@@ -149,7 +212,7 @@ export default function Toolbar({
 
       {/* Right: split view toggle, sidebar toggle, new tab */}
       <div className="flex items-center gap-1">
-        {uiVisibility.toolbar_split_view && (
+        {uiVisibility.toolbar_split_view && hasActiveTabs && (
           <button
             onClick={() => {
               const { focusedGroupId, splitGroup } = useEditorGroupStore.getState();

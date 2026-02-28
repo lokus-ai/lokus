@@ -267,15 +267,9 @@ export default function useProseMirror({
     const view = viewRef.current;
     if (!view) return;
 
-    // On the initial mount, plugins are already set from creation.
-    // This effect only matters for subsequent changes.
-    // We compare against what the view currently has.
     const currentPlugins = view.state.plugins;
     if (plugins === currentPlugins) return;
 
-    // Skip reconfiguration if the array reference hasn't changed.
-    // (pluginsRef.current is updated during render, but this effect
-    // compares the prop value directly.)
     const newState = view.state.reconfigure({ plugins });
     view.updateState(newState);
   }, [plugins]);

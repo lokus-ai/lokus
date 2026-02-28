@@ -80,7 +80,21 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
   const [pluginExtensions, setPluginExtensions] = useState([]);
   const [lastPluginUpdate, setLastPluginUpdate] = useState(0);
   const [customSymbols, setCustomSymbols] = useState({});
+
   const [showSymbolPicker, setShowSymbolPicker] = useState(false);
+
+  // Lazy view ref for suggestion plugins. The proxy forwards all property
+  // accesses to the actual EditorView once it's available. This lets us
+  // create suggestion plugins as static plugins (no onReady reconfigure).
+  const viewRefForPlugins = useRef(null);
+  const viewProxy = useMemo(() => new Proxy({}, {
+    get(_, prop) {
+      const view = viewRefForPlugins.current;
+      if (!view) return undefined;
+      const val = view[prop];
+      return typeof val === 'function' ? val.bind(view) : val;
+    },
+  }), []);
 
   // Reading mode state: 'edit', 'live', 'reading'
   const [editorMode, setEditorMode] = useState(() => {
@@ -212,11 +226,15 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       ...createMathSnippetsPlugins(schema, { customSnippets: customSymbols }),
       createSymbolShortcutsPlugin({ customSymbols }),
       createMermaidInputRulesPlugin(schema),
+      // Suggestion plugins use a lazy view proxy — they access the
+      // EditorView through the proxy at runtime, so they can be
+      // created statically here (no onReady reconfigure needed).
+      createSlashCommandPlugin(viewProxy),
+      ...createWikiLinkSuggestPlugins(viewProxy),
+      createTagAutocompletePlugin(viewProxy),
+      createTaskMentionSuggestPlugin(viewProxy),
+      createPluginCompletionPlugin(viewProxy),
     ];
-
-    // View-dependent plugins (SlashCommand, WikiLinkSuggest, TagAutocomplete,
-    // TaskMentionSuggest, PluginCompletion) are added in PMEditor's onReady
-    // callback via view.state.reconfigure() since they need the EditorView.
 
     // ── Node views ──────────────────────────────────────────────────────
     const pmNodeViews = {
@@ -227,10 +245,17 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
     };
 
     // ── Load editor settings then finalize ──────────────────────────────
+    // Stale flag: if this effect re-runs before the async work finishes,
+    // the previous invocation's setPlugins is skipped to prevent a late
+    // reconfigure from racing with user interaction.
+    let stale = false;
+
     (async () => {
       try {
         const { readConfig } = await import('../../core/config/store.js');
+        if (stale) return;
         const cfg = (await readConfig()) || {};
+        if (stale) return;
 
         // Load editor settings
         const defaultEditorSettings = {
@@ -273,6 +298,7 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
         setEditorSettings(mergedSettings);
 
       } catch (e) {
+        if (stale) return;
         // Use defaults if loading fails
         setEditorSettings({
           font: { family: 'ui-sans-serif', size: 16, lineHeight: 1.7, letterSpacing: 0.003 },
@@ -282,10 +308,13 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
         });
       }
 
+      if (stale) return;
       setPlugins(pmPlugins);
       setNodeViews(pmNodeViews);
       setLoading(false);
     })();
+
+    return () => { stale = true; };
   }, [pluginExtensions, lastPluginUpdate, customSymbols]);
 
   // Load custom symbols from config and listen for changes
@@ -387,6 +416,7 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       showSymbolPicker={showSymbolPicker}
       setShowSymbolPicker={setShowSymbolPicker}
       customSymbols={customSymbols}
+      viewRefForPlugins={viewRefForPlugins}
     />
   );
 });
@@ -398,7 +428,7 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
 // renders the editor mount point.
 // ---------------------------------------------------------------------------
 
-const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, editorSettings, editorMode = 'edit', onEditorReady, isLoading = false, showSymbolPicker = false, setShowSymbolPicker, customSymbols = {} }, ref) => {
+const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, editorSettings, editorMode = 'edit', onEditorReady, isLoading = false, showSymbolPicker = false, setShowSymbolPicker, customSymbols = {}, viewRefForPlugins }, ref) => {
   const [isWikiLinkModalOpen, setIsWikiLinkModalOpen] = useState(false);
   const [isTaskCreationModalOpen, setIsTaskCreationModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -647,28 +677,13 @@ const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, edi
       },
     },
     onReady: (view) => {
+      // Wire up the lazy view proxy so suggestion plugins can access the view.
+      if (viewRefForPlugins) viewRefForPlugins.current = view;
       editorAPI.setEditorInstance(view);
       onEditorReady?.(view);
-
-      // Create view-dependent plugins (suggestion-based) now that the view exists
-      try {
-        const viewPlugins = [
-          createSlashCommandPlugin(view),
-          ...createWikiLinkSuggestPlugins(view),
-          createTagAutocompletePlugin(view),
-          createTaskMentionSuggestPlugin(view),
-          createPluginCompletionPlugin(view),
-        ];
-        // Reconfigure state to add these plugins alongside the static ones
-        const newState = view.state.reconfigure({
-          plugins: [...view.state.plugins, ...viewPlugins],
-        });
-        view.updateState(newState);
-      } catch (err) {
-        console.error('[PMEditor] Failed to initialize view-dependent plugins:', err);
-      }
     },
     onDestroy: () => {
+      if (viewRefForPlugins) viewRefForPlugins.current = null;
       editorAPI.setEditorInstance(null);
       onEditorReady?.(null);
     },

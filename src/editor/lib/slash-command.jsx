@@ -930,7 +930,7 @@ const slashCommand = {
           items: currentItems
         };
 
-        component.updateProps(enhancedProps);
+        component?.updateProps(enhancedProps);
 
         if (!props.clientRect) {
           logger.warn('SlashCommand', 'No clientRect in onUpdate');
@@ -957,7 +957,7 @@ const slashCommand = {
           return true;
         }
 
-        return component.ref?.onKeyDown(props);
+        return component?.ref?.onKeyDown(props);
       },
 
       onExit() {

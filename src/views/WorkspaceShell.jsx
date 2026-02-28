@@ -1,5 +1,7 @@
 import React from 'react';
 import { useLayoutStore } from '../stores/layout';
+import { useEditorGroupStore } from '../stores/editorGroups';
+import { useColumnResize } from '../features/layout';
 
 /**
  * WorkspaceShell — pure CSS grid layout container.
@@ -35,6 +37,16 @@ export default function WorkspaceShell({
   const bottomPanelHeight = useLayoutStore((s) => s.bottomPanelHeight);
 
   const showBottom = showTerminalPanel || showOutputPanel;
+  const { startLeftDrag, startRightDrag } = useColumnResize({});
+
+  // In split mode, collapse toolbar row so panes extend to the very top.
+  // Also toggle a body class so the app-titlebar (in App.jsx) collapses too.
+  const isSplitMode = useEditorGroupStore((s) => s.layout.type !== 'group');
+
+  React.useEffect(() => {
+    document.body.classList.toggle('split-mode', isSplitMode);
+    return () => document.body.classList.remove('split-mode');
+  }, [isSplitMode]);
 
   const gridTemplateColumns = [
     '48px',                                    // icon-sidebar — always visible
@@ -44,7 +56,7 @@ export default function WorkspaceShell({
   ].join(' ');
 
   const gridTemplateRows = [
-    'auto',                                    // toolbar
+    isSplitMode ? '0px' : 'auto',              // toolbar — collapsed in split mode
     '1fr',                                     // main content expands here
     showBottom ? `${bottomPanelHeight}px` : '0px', // bottom-panel
     'auto',                                    // status-bar
@@ -80,8 +92,22 @@ export default function WorkspaceShell({
       </div>
 
       {/* ── left-sidebar ── */}
-      <div style={{ gridArea: 'left-sidebar', minWidth: 0, overflow: 'hidden' }}>
+      <div style={{ gridArea: 'left-sidebar', minWidth: 0, overflow: 'hidden', position: 'relative' }}>
         {showLeft && leftSidebar}
+        {showLeft && (
+          <div
+            onMouseDown={startLeftDrag}
+            style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              width: 4,
+              height: '100%',
+              cursor: 'col-resize',
+              zIndex: 10,
+            }}
+          />
+        )}
       </div>
 
       {/* ── main content ── */}
@@ -95,8 +121,22 @@ export default function WorkspaceShell({
       </div>
 
       {/* ── right-sidebar ── */}
-      <div style={{ gridArea: 'right-sidebar', minWidth: 0, overflow: 'hidden' }}>
+      <div style={{ gridArea: 'right-sidebar', minWidth: 0, overflow: 'hidden', position: 'relative' }}>
         {showRight && rightSidebar}
+        {showRight && (
+          <div
+            onMouseDown={startRightDrag}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: 4,
+              height: '100%',
+              cursor: 'col-resize',
+              zIndex: 10,
+            }}
+          />
+        )}
       </div>
 
       {/* ── status-bar ── */}
