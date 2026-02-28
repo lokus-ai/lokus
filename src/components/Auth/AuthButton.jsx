@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useAuth } from '../../core/auth/AuthContext';
 
 export default function AuthButton() {
-  const { isAuthenticated, user, signIn, signOut, isLoading } = useAuth();
+  const { isAuthenticated, user, signIn, signOut, isGuest, isLoading } = useAuth();
   const [showDropdown, setShowDropdown] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
@@ -49,6 +49,61 @@ export default function AuthButton() {
         <LogIn className="w-4 h-4" />
         <span className="hidden sm:inline">Sign In</span>
       </button>
+    );
+  }
+
+  // Guest mode: show Guest label with option to sign in
+  if (isGuest) {
+    return (
+      <div className="relative">
+        <button
+          onClick={() => setShowDropdown(!showDropdown)}
+          className="flex items-center gap-2 px-2 py-1.5 text-sm bg-app-panel hover:bg-app-panel/80 border border-app-border rounded-md transition-colors"
+          title="Guest"
+        >
+          <div className="w-6 h-6 bg-app-muted/30 rounded-full flex items-center justify-center">
+            <User className="w-4 h-4 text-app-muted" />
+          </div>
+          <span className="hidden sm:inline text-app-muted">Guest</span>
+        </button>
+
+        {showDropdown && (
+          <>
+            <div
+              className="fixed inset-0 z-10"
+              onClick={() => setShowDropdown(false)}
+            />
+            <div className="absolute right-0 top-full mt-1 w-48 bg-app-panel border border-app-border rounded-md shadow-lg z-20">
+              <div className="p-3 border-b border-app-border">
+                <div className="font-medium text-app-text text-sm">Guest</div>
+                <div className="text-xs text-app-muted">Not signed in</div>
+              </div>
+              <div className="py-1">
+                <button
+                  className="w-full px-3 py-2 text-left text-sm text-app-text hover:bg-app-bg flex items-center gap-2"
+                  onClick={() => {
+                    setShowDropdown(false);
+                    handleSignOut(); // Clears guest mode → returns to login screen
+                  }}
+                >
+                  <LogIn className="w-4 h-4" />
+                  Sign in to sync
+                </button>
+                <button
+                  className="w-full px-3 py-2 text-left text-sm text-app-text hover:bg-app-bg flex items-center gap-2"
+                  onClick={() => {
+                    setShowDropdown(false);
+                    invoke('open_preferences_window', { workspacePath: window.__WORKSPACE_PATH__ || null });
+                  }}
+                >
+                  <Settings className="w-4 h-4" />
+                  Account Settings
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     );
   }
 

@@ -33,7 +33,7 @@ export default function Preferences() {
   const [originalTokens, setOriginalTokens] = useState({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [section, setSection] = useState("Appearance");
-  const { isAuthenticated, user, signIn, signOut, isLoading, getAccessToken } = useAuth();
+  const { isAuthenticated, user, signIn, signOut, isLoading, isGuest, getAccessToken } = useAuth();
   const featureFlags = useFeatureFlags();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [showQuickImport, setShowQuickImport] = useState(false);
@@ -3178,6 +3178,30 @@ export default function Preferences() {
                 {isLoading ? (
                   <div className="flex items-center justify-center py-12">
                     <div className="w-6 h-6 border-2 border-app-accent border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                ) : isGuest ? (
+                  /* Guest Mode State */
+                  <div className="bg-app-panel border border-app-border rounded-xl p-8">
+                    <div className="text-center">
+                      <div className="w-16 h-16 bg-app-muted/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <User className="w-8 h-8 text-app-muted" />
+                      </div>
+                      <h2 className="text-xl font-semibold text-app-text mb-3">Guest Mode</h2>
+                      <p className="text-app-text-secondary mb-8 max-w-md mx-auto">
+                        You're using Lokus as a guest. Sign in to sync your notes across devices.
+                      </p>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await signOut(); // Clears guest mode → returns to login screen
+                          } catch { }
+                        }}
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-app-accent text-white font-medium rounded-lg hover:bg-app-accent/90 transition-colors"
+                      >
+                        <LogIn className="w-4 h-4" />
+                        Sign In
+                      </button>
+                    </div>
                   </div>
                 ) : !isAuthenticated ? (
                   /* Sign In State */

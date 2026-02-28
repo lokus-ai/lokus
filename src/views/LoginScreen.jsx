@@ -3,7 +3,7 @@ import { useAuth } from "../core/auth/AuthContext.jsx";
 import LokusLogo from "../components/LokusLogo.jsx";
 
 export default function LoginScreen() {
-  const { signInWithEmail, signUpWithEmail, signInWithGoogle, resetPassword, isLoading } = useAuth();
+  const { signInWithEmail, signUpWithEmail, signInWithGoogle, resetPassword, continueAsGuest, isLoading } = useAuth();
 
   const [mode, setMode] = useState('signin'); // 'signin', 'signup', 'reset'
   const [email, setEmail] = useState('');
@@ -287,6 +287,24 @@ export default function LoginScreen() {
               Back to sign in
             </button>
           )}
+        </div>
+
+        {/* Continue as Guest */}
+        <div className="mt-8">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="flex-1 h-px bg-app-border"></div>
+            <span className="text-app-muted text-sm">or</span>
+            <div className="flex-1 h-px bg-app-border"></div>
+          </div>
+          <button
+            onClick={continueAsGuest}
+            className="w-full px-4 py-2.5 rounded-lg border border-app-border text-app-text hover:bg-app-panel transition-colors"
+          >
+            Continue as Guest
+          </button>
+          <p className="text-center text-xs text-app-muted mt-2">
+            Your notes stay on this device
+          </p>
         </div>
       </div>
     </div>
