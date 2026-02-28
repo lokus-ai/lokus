@@ -542,13 +542,16 @@ export class PluginCompatibilityTester extends EventEmitter {
       
       const testContent = '<p>Test content that should be preserved</p>'
       
-      // Simulate hot reload with content
+      // Simulate hot reload with a mock PM EditorView-like object
       const mockEditor = {
-        getHTML: () => testContent,
+        state: {
+          doc: { textContent: testContent, content: { size: testContent.length } },
+          schema: { nodes: {}, marks: {} },
+        },
+        dom: null,
         destroy: () => {},
-        options: {}
       }
-      
+
       // Set mock editor
       editorAPI.setEditorInstance(mockEditor)
       
@@ -699,11 +702,14 @@ export class PluginCompatibilityTester extends EventEmitter {
       // For now, we'll test the API behavior
       
       const mockEditor = {
-        getHTML: () => '<p>Test content</p>',
+        state: {
+          doc: { textContent: 'Test content', content: { size: 12 } },
+          schema: { nodes: {}, marks: {} },
+        },
+        dom: null,
         destroy: () => {},
-        options: { test: true }
       }
-      
+
       editorAPI.setEditorInstance(mockEditor)
       
       // Trigger hot reload

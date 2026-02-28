@@ -85,7 +85,7 @@ export default function WorkspaceShell({
       </div>
 
       {/* ── main content ── */}
-      <div style={{ gridArea: 'main', minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
+      <div className="bg-app-bg" style={{ gridArea: 'main', minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
         {mainContent}
       </div>
 

@@ -1,72 +1,73 @@
-import { Extension } from '@tiptap/core';
-
 /**
- * CodeBlockIndent Extension
- * Adds proper tab indentation support inside code blocks
+ * CodeBlockIndent Plugin (raw ProseMirror)
+ *
+ * Adds proper tab indentation support inside code blocks.
  * - Tab key inserts 2 spaces (or configurable)
  * - Shift+Tab removes indentation
  * - Works like VS Code inside code blocks
  */
-const CodeBlockIndent = Extension.create({
-  name: 'codeBlockIndent',
 
-  addOptions() {
-    return {
-      tabSize: 2, // Number of spaces per tab
-    };
-  },
+import { keymap } from 'prosemirror-keymap'
 
-  addKeyboardShortcuts() {
-    return {
-      // Handle Tab key in code blocks
-      Tab: ({ editor }) => {
-        // Check if we're inside a code block using TipTap's built-in check
-        if (editor.isActive('codeBlock')) {
-          // Insert spaces instead of tab character
-          const spaces = ' '.repeat(this.options.tabSize);
-          editor.commands.insertContent(spaces);
-          return true; // Prevent default tab behavior
-        }
+/**
+ * Check whether the current selection is inside a codeBlock node.
+ *
+ * @param {import('prosemirror-state').EditorState} state
+ * @returns {boolean}
+ */
+function isInCodeBlock(state) {
+  const { $from } = state.selection
+  for (let depth = $from.depth; depth >= 0; depth--) {
+    if ($from.node(depth).type.name === 'codeBlock') return true
+  }
+  return false
+}
 
-        return false; // Allow default tab behavior outside code blocks
-      },
+/**
+ * Create the code-block indent keymap plugin.
+ *
+ * @param {Object} [options]
+ * @param {number} [options.tabSize=2] - Number of spaces per tab
+ * @returns {import('prosemirror-state').Plugin} A ProseMirror keymap plugin
+ */
+export function createCodeBlockIndentPlugin(options = {}) {
+  const { tabSize = 2 } = options
+  const spaces = ' '.repeat(tabSize)
 
-      // Handle Shift+Tab (outdent) in code blocks
-      'Shift-Tab': ({ editor }) => {
-        if (editor.isActive('codeBlock')) {
-          const { state } = editor;
-          const { selection, tr } = state;
-          const { $from } = selection;
+  return keymap({
+    // Tab: insert spaces inside code blocks
+    Tab: (state, dispatch) => {
+      if (!isInCodeBlock(state)) return false
+      if (dispatch) {
+        const { $from, $to } = state.selection
+        dispatch(state.tr.insertText(spaces, $from.pos, $to.pos))
+      }
+      return true
+    },
 
-          // Get current line text
-          const textBeforeCursor = state.doc.textBetween(
-            $from.start(),
-            $from.pos,
-            '\n'
-          );
+    // Shift-Tab: remove leading spaces on the current line
+    'Shift-Tab': (state, dispatch) => {
+      if (!isInCodeBlock(state)) return false
 
-          // Get the current line by finding last newline
-          const lines = textBeforeCursor.split('\n');
-          const currentLine = lines[lines.length - 1];
+      const { $from } = state.selection
+      // Get text from start of the text block to the cursor
+      const textBefore = state.doc.textBetween($from.start(), $from.pos, '\n')
 
-          // Check if line starts with spaces
-          const indentMatch = currentLine.match(/^(\s+)/);
-          if (indentMatch) {
-            const spacesToRemove = Math.min(this.options.tabSize, indentMatch[1].length);
-            const lineStartPos = $from.pos - currentLine.length;
+      // Find the current line (text after last newline)
+      const lines = textBefore.split('\n')
+      const currentLine = lines[lines.length - 1]
 
-            // Remove spaces
-            tr.delete(lineStartPos, lineStartPos + spacesToRemove);
-            editor.view.dispatch(tr);
-          }
+      // Check if the line starts with spaces
+      const indentMatch = currentLine.match(/^(\s+)/)
+      if (indentMatch && dispatch) {
+        const spacesToRemove = Math.min(tabSize, indentMatch[1].length)
+        const lineStartPos = $from.pos - currentLine.length
+        dispatch(state.tr.delete(lineStartPos, lineStartPos + spacesToRemove))
+      }
 
-          return true;
-        }
+      return true
+    },
+  })
+}
 
-        return false;
-      },
-    };
-  },
-});
-
-export default CodeBlockIndent;
+export default createCodeBlockIndentPlugin

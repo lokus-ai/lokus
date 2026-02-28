@@ -27,11 +27,16 @@ vi.mock("../core/search/index.js", () => ({
   },
 }));
 
-// Mock TipTap
-vi.mock("@tiptap/pm/state", () => ({
+// Mock ProseMirror state
+vi.mock("prosemirror-state", () => ({
   TextSelection: {
     create: vi.fn((doc, from, to) => ({ from, to, type: "selection" })),
   },
+  Plugin: vi.fn(),
+  PluginKey: vi.fn(() => ({
+    getState: vi.fn(),
+    toString: () => 'search'
+  })),
 }));
 
 describe("InFileSearch", () => {

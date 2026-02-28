@@ -10,6 +10,7 @@
  */
 
 import { editorAPI } from './EditorAPI.js';
+import { insertContent, deleteSelection } from '../../editor/commands/index.js';
 
 /**
  * Create a bridged API instance for a specific plugin
@@ -70,15 +71,13 @@ export function createBridgedEditorAPI(pluginId) {
          * Insert a node at the current cursor position
          */
         insertNode: async (type, attrs = {}, content = '') => {
-            const editor = editorAPI.editorInstance;
-            if (!editor) {
+            const view = editorAPI.editorInstance;
+            if (!view) {
                 throw new Error('Editor instance not available');
             }
 
-            // If content is provided, we might need to construct a node with content
-            // For simplicity, we just insert the node type with attrs for now
-            // Complex content insertion might require more logic
-            editor.chain().focus().insertContent({ type, attrs, content }).run();
+            // Insert a node spec via PM command helper
+            insertContent(view, { type, attrs, content });
             return true;
         },
 
@@ -86,10 +85,10 @@ export function createBridgedEditorAPI(pluginId) {
          * Get the current selection
          */
         getSelection: async () => {
-            const editor = editorAPI.editorInstance;
-            if (!editor) return null;
+            const view = editorAPI.editorInstance;
+            if (!view) return null;
 
-            const { from, to, empty } = editor.state.selection;
+            const { from, to, empty } = view.state.selection;
             return { from, to, empty };
         },
 
@@ -97,12 +96,13 @@ export function createBridgedEditorAPI(pluginId) {
          * Replace the current selection with content
          */
         replaceSelection: async (content) => {
-            const editor = editorAPI.editorInstance;
-            if (!editor) {
+            const view = editorAPI.editorInstance;
+            if (!view) {
                 throw new Error('Editor instance not available');
             }
 
-            editor.chain().focus().deleteSelection().insertContent(content).run();
+            deleteSelection(view);
+            insertContent(view, content);
             return true;
         },
 
@@ -124,9 +124,9 @@ export function createBridgedEditorAPI(pluginId) {
          * Get the full text content of the editor
          */
         getText: async () => {
-            const editor = editorAPI.editorInstance;
-            if (!editor) return '';
-            return editor.getText();
+            const view = editorAPI.editorInstance;
+            if (!view) return '';
+            return view.state.doc.textContent;
         },
 
         /**

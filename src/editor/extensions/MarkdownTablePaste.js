@@ -1,5 +1,5 @@
-import { Extension } from '@tiptap/core'
-import { Plugin } from '@tiptap/pm/state'
+import { Plugin } from 'prosemirror-state'
+import { DOMParser as ProseMirrorDOMParser } from 'prosemirror-model'
 
 function parseMarkdownTable(text) {
   if (!text || typeof text !== 'string') return null;
@@ -49,37 +49,48 @@ function tableToHTML({ headers, rows }) {
   return `<table>${thead}${tbody}</table>`;
 }
 
-const MarkdownTablePaste = Extension.create({
-  name: 'markdownTablePaste',
-  addProseMirrorPlugins() {
-    const editor = this.editor;
-    return [
-      new Plugin({
-        props: {
-          handlePaste(view, event) {
-            try {
-              // Don't intercept paste inside code blocks
-              const { state } = view
-              const { $from } = state.selection
-              if ($from.parent.type.name === 'codeBlock') {
-                return false
-              }
+/**
+ * Creates the MarkdownTablePaste ProseMirror plugin.
+ *
+ * Intercepts paste events and converts Markdown table syntax to a ProseMirror
+ * table, inserting it via view.dispatch().
+ *
+ * @returns {Plugin}
+ */
+export function createMarkdownTablePastePlugin() {
+  return new Plugin({
+    props: {
+      handlePaste(view, event) {
+        try {
+          // Don't intercept paste inside code blocks
+          const { state } = view
+          const { $from } = state.selection
+          if ($from.parent.type.name === 'codeBlock') {
+            return false
+          }
 
-              const text = event.clipboardData?.getData('text/plain');
-              const parsed = parseMarkdownTable(text);
-              if (!parsed) return false;
-              const html = tableToHTML(parsed);
-              event.preventDefault();
-              editor.chain().focus().insertContent(html).run();
-              return true;
-            } catch (e) {
-              return false;
-            }
-          },
-        },
-      }),
-    ];
-  },
-});
+          const text = event.clipboardData?.getData('text/plain');
+          const parsed = parseMarkdownTable(text);
+          if (!parsed) return false;
 
-export default MarkdownTablePaste
+          const html = tableToHTML(parsed);
+          event.preventDefault();
+
+          // Parse the HTML table string into PM nodes via the browser DOM parser
+          const domNode = document.createElement('div')
+          domNode.innerHTML = html
+          const pmParser = ProseMirrorDOMParser.fromSchema(state.schema)
+          const slice = pmParser.parseSlice(domNode)
+
+          const tr = state.tr.replaceSelection(slice)
+          view.dispatch(tr)
+          return true;
+        } catch (e) {
+          return false;
+        }
+      },
+    },
+  });
+}
+
+export default createMarkdownTablePastePlugin

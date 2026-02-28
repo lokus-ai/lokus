@@ -1,7 +1,7 @@
 /**
- * Editor Plugin API - Comprehensive TipTap Editor Integration
- * 
- * This API enables plugins to deeply integrate with the TipTap editor by providing:
+ * Editor Plugin API - ProseMirror EditorView Integration
+ *
+ * This API enables plugins to deeply integrate with the ProseMirror editor by providing:
  * - Custom nodes, marks, and extensions registration
  * - Slash command integration
  * - Toolbar and menu contributions
@@ -9,12 +9,24 @@
  * - Node views and custom rendering
  * - Editor lifecycle hooks
  * - Hot-reloading support with validation
+ *
+ * NOTE: `this.editorInstance` is a raw ProseMirror EditorView (not a TipTap editor).
  */
 
 import { EventEmitter } from '../../utils/EventEmitter.js'
 
 import { Disposable } from '../../utils/Disposable.js';
 import { errorHandler } from './ErrorHandler.js'
+import { Plugin as PMPlugin, PluginKey } from 'prosemirror-state'
+import { inputRules as pmInputRules, InputRule } from 'prosemirror-inputrules'
+import { keymap } from 'prosemirror-keymap'
+import {
+  insertContent as pmInsertContent,
+  setContent as pmSetContent,
+  setTextSelection as pmSetTextSelection,
+  insertText as pmInsertText,
+} from '../../editor/commands/index.js'
+import { createLokusSerializer } from '../../core/markdown/lokus-md-pipeline.js'
 
 export class EditorPluginAPI extends EventEmitter {
   constructor() {
@@ -55,7 +67,7 @@ export class EditorPluginAPI extends EventEmitter {
   // === ADAPTERS FOR SDK COMPATIBILITY ===
 
   /**
-   * Create a TextDocument adapter from TipTap state
+   * Create a TextDocument adapter from ProseMirror editor state
    */
   _createDocumentAdapter(state, uri = 'untitled:default') {
     const self = this
@@ -128,11 +140,12 @@ export class EditorPluginAPI extends EventEmitter {
   }
 
   /**
-   * Create a TextEditor adapter from TipTap view
+   * Create a TextEditor adapter from ProseMirror EditorView
    */
   _createEditorAdapter(view) {
     if (!view) return undefined
 
+    // view is a raw PM EditorView — view.state gives us the EditorState
     return {
       document: this._createDocumentAdapter(view.state),
       selection: {
@@ -176,14 +189,16 @@ export class EditorPluginAPI extends EventEmitter {
   }
 
   /**
-   * Get editor content
-   * @returns {Promise<string>} Current editor content
+   * Get editor content as Markdown
+   * @returns {Promise<string>} Current editor content serialized to Markdown
    */
   async getContent() {
     if (!this.editorInstance) {
       throw new Error('Editor not initialized')
     }
-    return this.editorInstance.getHTML()
+    const view = this.editorInstance
+    const serializer = createLokusSerializer()
+    return serializer.serialize(view.state.doc)
   }
 
   /**
@@ -193,7 +208,8 @@ export class EditorPluginAPI extends EventEmitter {
     if (!this.editorInstance) {
       throw new Error('Editor not initialized')
     }
-    this.editorInstance.commands.setContent(content)
+    const view = this.editorInstance
+    pmSetContent(view, content, view.state.schema)
     this.emit('content-changed', { content })
   }
 
@@ -205,7 +221,8 @@ export class EditorPluginAPI extends EventEmitter {
     if (!this.editorInstance) {
       throw new Error('Editor not initialized')
     }
-    this.editorInstance.commands.insertContent(content)
+    const view = this.editorInstance
+    pmInsertContent(view, content)
     this.emit('content-inserted', { content })
   }
 
@@ -217,11 +234,12 @@ export class EditorPluginAPI extends EventEmitter {
       throw new Error('Editor not initialized')
     }
 
-    // Convert from SDK Selection format to TipTap format
+    // Convert from SDK Selection format to PM positions
     const from = this._positionToOffset(selection.start || selection.anchor)
     const to = this._positionToOffset(selection.end || selection.active)
 
-    this.editorInstance.commands.setTextSelection({ from, to })
+    const view = this.editorInstance
+    pmSetTextSelection(view, from, to)
     this.emit('selection-changed', { from, to })
   }
 
@@ -234,7 +252,7 @@ export class EditorPluginAPI extends EventEmitter {
       throw new Error('Editor not initialized')
     }
 
-    const selection = this._createSelectionFromEditor(this.editorInstance)
+    const selection = this._createSelectionFromView(this.editorInstance)
     return [selection]
   }
 
@@ -269,13 +287,12 @@ export class EditorPluginAPI extends EventEmitter {
     const from = this._positionToOffset(range.start)
     const to = this._positionToOffset(range.end)
 
-    // Delete the range and insert new text
-    this.editorInstance
-      .chain()
-      .focus()
-      .deleteRange({ from, to })
-      .insertContentAt(from, text)
-      .run()
+    // Direct PM transaction: delete the range and insert new text
+    const view = this.editorInstance
+    const tr = view.state.tr
+      .replaceWith(from, to, view.state.schema.text(text))
+      .scrollIntoView()
+    view.dispatch(tr)
 
     this.emit('text-replaced', { range, text })
   }
@@ -291,6 +308,7 @@ export class EditorPluginAPI extends EventEmitter {
     const from = this._positionToOffset(range.start)
     const to = this._positionToOffset(range.end)
 
+    // view.state.doc.textBetween is the same PM API
     return this.editorInstance.state.doc.textBetween(from, to)
   }
 
@@ -356,129 +374,86 @@ export class EditorPluginAPI extends EventEmitter {
   }
 
   /**
-   * Listen to selection changes
+   * Listen to selection changes.
+   * The EditorView's dispatchTransaction handler calls
+   * `editorAPI.notifySelectionUpdate()` which emits 'editor-selection-update'.
    */
   onDidChangeTextEditorSelection(listener) {
-    if (!this.editorInstance) {
-      // Queue for when editor is ready
-      const setupListener = () => {
-        this.editorInstance.on('selectionUpdate', ({ editor }) => {
-          const event = {
-            textEditor: this._createEditorAdapter(editor.view),
-            selections: [this._createSelectionFromEditor(editor)],
-            kind: 1 // Keyboard
-          }
-          listener(event)
-        })
-      }
-
-      this.once('editor-attached', setupListener)
-      return new Disposable(() => {
-        this.off('editor-attached', setupListener)
-      })
-    }
-
-    const handler = ({ editor }) => {
+    const handler = () => {
+      if (!this.editorInstance) return
+      const view = this.editorInstance
       const event = {
-        textEditor: this._createEditorAdapter(editor.view),
-        selections: [this._createSelectionFromEditor(editor)],
-        kind: 1
+        textEditor: this._createEditorAdapter(view),
+        selections: [this._createSelectionFromView(view)],
+        kind: 1 // Keyboard
       }
       listener(event)
     }
 
-    this.editorInstance.on('selectionUpdate', handler)
+    this.on('editor-selection-update', handler)
 
     return new Disposable(() => {
-      this.editorInstance?.off('selectionUpdate', handler)
+      this.off('editor-selection-update', handler)
     })
   }
 
   /**
-   * Listen to text document changes
+   * Listen to text document changes.
+   * The EditorView's dispatchTransaction handler calls
+   * `editorAPI.notifyUpdate()` which emits 'editor-update'.
+   *
    * @param {Function} listener - Callback function
    * @returns {Disposable} Disposable to unregister the listener
    */
   onDidChangeTextDocument(listener) {
-    if (!this.editorInstance) {
-      // Queue for when editor is ready
-      const setupListener = () => {
-        this.editorInstance.on('update', ({ editor }) => {
-          const event = {
-            document: this._createDocumentAdapter(editor.state),
-            contentChanges: [],
-            reason: undefined
-          }
-          listener(event)
-        })
-      }
-
-      this.once('editor-attached', setupListener)
-      return new Disposable(() => {
-        this.off('editor-attached', setupListener)
-      })
-    }
-
-    const handler = ({ editor }) => {
+    const handler = () => {
+      if (!this.editorInstance) return
+      const view = this.editorInstance
       const event = {
-        document: this._createDocumentAdapter(editor.state),
+        document: this._createDocumentAdapter(view.state),
         contentChanges: [],
         reason: undefined
       }
       listener(event)
     }
 
-    this.editorInstance.on('update', handler)
+    this.on('editor-update', handler)
 
     return new Disposable(() => {
-      this.editorInstance?.off('update', handler)
+      this.off('editor-update', handler)
     })
   }
 
   /**
-   * Listen to visible range changes
+   * Listen to visible range changes.
+   * Piggy-backs on 'editor-update' since PM has no separate visible-range event.
+   *
    * @param {Function} listener - Callback function
    * @returns {Disposable} Disposable to unregister the listener
    */
   onDidChangeTextEditorVisibleRanges(listener) {
-    if (!this.editorInstance) {
-      // Queue for when editor is ready
-      const setupListener = () => {
-        this.editorInstance.on('update', ({ editor }) => {
-          const event = {
-            textEditor: this._createEditorAdapter(editor.view),
-            visibleRanges: []
-          }
-          listener(event)
-        })
-      }
-
-      this.once('editor-attached', setupListener)
-      return new Disposable(() => {
-        this.off('editor-attached', setupListener)
-      })
-    }
-
-    const handler = ({ editor }) => {
+    const handler = () => {
+      if (!this.editorInstance) return
+      const view = this.editorInstance
       const event = {
-        textEditor: this._createEditorAdapter(editor.view),
+        textEditor: this._createEditorAdapter(view),
         visibleRanges: []
       }
       listener(event)
     }
 
-    this.editorInstance.on('update', handler)
+    this.on('editor-update', handler)
 
     return new Disposable(() => {
-      this.editorInstance?.off('update', handler)
+      this.off('editor-update', handler)
     })
   }
 
   /**
-   * Create selection from TipTap editor
+   * Create selection from ProseMirror EditorView
    */
-  _createSelectionFromEditor(editor) {
-    const { from, to } = editor.state.selection
+  _createSelectionFromView(view) {
+    const { from, to } = view.state.selection
     return {
       start: this._offsetToPosition(from),
       end: this._offsetToPosition(to),
@@ -712,10 +687,10 @@ export class EditorPluginAPI extends EventEmitter {
     }
   }
 
-  // === TIPTAP EXTENSION REGISTRATION METHODS ===
+  // === PM EXTENSION REGISTRATION METHODS ===
 
   /**
-   * Register a custom TipTap node
+   * Register a custom ProseMirror node
    */
   registerNode(pluginId, nodeConfig) {
     this.validatePluginId(pluginId)
@@ -727,7 +702,7 @@ export class EditorPluginAPI extends EventEmitter {
       throw new Error(`Node ${nodeId} is already registered`)
     }
 
-    // Create TipTap node with validation and error handling
+    // Create PM node spec with validation and error handling
     const nodeDefinition = this.createSecureNode(nodeConfig, pluginId)
 
     this.nodes.set(nodeId, {
@@ -759,7 +734,7 @@ export class EditorPluginAPI extends EventEmitter {
   }
 
   /**
-   * Register a custom TipTap mark
+   * Register a custom ProseMirror mark
    */
   registerMark(pluginId, markConfig) {
     this.validatePluginId(pluginId)
@@ -798,7 +773,7 @@ export class EditorPluginAPI extends EventEmitter {
   }
 
   /**
-   * Register a custom TipTap extension
+   * Register a custom ProseMirror extension (plugins only, no schema)
    */
   registerExtension(pluginId, extensionConfig) {
     this.validatePluginId(pluginId)
@@ -1058,7 +1033,10 @@ export class EditorPluginAPI extends EventEmitter {
   // === SECURE EXTENSION CREATORS ===
 
   /**
-   * Create a secure TipTap node with validation
+   * Create a secure ProseMirror node specification with validation.
+   *
+   * Returns `{ nodeSpec, plugins }` where `nodeSpec` is a PM NodeSpec and
+   * `plugins` is an array of PM Plugins (input rules, keymaps, nodeViews).
    */
   createSecureNode(config, pluginId) {
     const startTime = performance.now()
@@ -1070,11 +1048,18 @@ export class EditorPluginAPI extends EventEmitter {
     })
 
     if (securityViolations.length > 0) {
+      // Log but continue — caller decides how to handle
     }
 
     try {
-      const nodeDefinition = Node.create({
-        name: config.name,
+      // Build ProseMirror NodeSpec
+      const attrs = this.validateAttributes(config.attributes || {})
+      const parsedAttrs = {}
+      for (const [name, attrConfig] of Object.entries(attrs)) {
+        parsedAttrs[name] = { default: attrConfig?.default ?? null }
+      }
+
+      const nodeSpec = {
         group: config.group || 'block',
         content: config.content,
         marks: config.marks,
@@ -1084,96 +1069,45 @@ export class EditorPluginAPI extends EventEmitter {
         draggable: config.draggable || false,
         defining: config.defining || false,
         isolating: config.isolating || false,
-
-        addAttributes() {
-          return this.validateAttributes(config.attributes || {})
-        },
-
-        parseHTML() {
-          return this.validateParseHTML(config.parseHTML || [])
-        },
-
-        renderHTML({ HTMLAttributes }) {
+        attrs: parsedAttrs,
+        parseDOM: this.validateParseHTML(config.parseHTML || []),
+        toDOM: (node) => {
           try {
             if (config.renderHTML) {
-              return config.renderHTML({ HTMLAttributes })
+              return config.renderHTML({ HTMLAttributes: node.attrs })
             }
-            return [config.tag || 'div', HTMLAttributes]
+            return [config.tag || 'div', node.attrs, 0]
           } catch (error) {
-            return [config.tag || 'div', HTMLAttributes, '[Render Error]']
-          }
-        },
-
-        addCommands() {
-          if (!config.commands) return {}
-
-          const commands = {}
-          for (const [name, handler] of Object.entries(config.commands)) {
-            commands[name] = (...args) => this.wrapCommandHandler(handler, pluginId)(...args)
-          }
-          return commands
-        },
-
-        addInputRules() {
-          if (!config.inputRules) return []
-
-          return config.inputRules.map(rule => {
-            return new InputRule({
-              find: rule.find,
-              handler: this.wrapInputRuleHandler(rule.handler, pluginId)
-            })
-          })
-        },
-
-        addPasteRules() {
-          if (!config.pasteRules) return []
-
-          return config.pasteRules.map(rule => ({
-            find: rule.find,
-            handler: this.wrapInputRuleHandler(rule.handler, pluginId)
-          }))
-        },
-
-        addKeyboardShortcuts() {
-          if (!config.keyboardShortcuts) return {}
-
-          const shortcuts = {}
-          for (const [key, handler] of Object.entries(config.keyboardShortcuts)) {
-            shortcuts[key] = this.wrapCommandHandler(handler, pluginId)
-          }
-          return shortcuts
-        },
-
-        addNodeView() {
-          if (!config.nodeView) return null
-
-          return this.wrapNodeView(config.nodeView, pluginId)
-        },
-
-        onBeforeCreate() {
-          if (config.onBeforeCreate) {
-            this.wrapLifecycleHandler(config.onBeforeCreate, pluginId)()
-          }
-        },
-
-        onCreate() {
-          if (config.onCreate) {
-            this.wrapLifecycleHandler(config.onCreate, pluginId)()
-          }
-        },
-
-        onUpdate() {
-          if (config.onUpdate) {
-            this.wrapLifecycleHandler(config.onUpdate, pluginId)()
-          }
-        },
-
-        onDestroy() {
-          if (config.onDestroy) {
-            this.wrapLifecycleHandler(config.onDestroy, pluginId)()
+            return [config.tag || 'div', {}, '[Render Error]']
           }
         }
-      })
+      }
+
+      // Build PM plugins array
+      const plugins = []
+
+      // Input rules
+      if (config.inputRules && config.inputRules.length > 0) {
+        const rules = config.inputRules.map(rule =>
+          new InputRule(rule.find, this.wrapInputRuleHandler(rule.handler, pluginId))
+        )
+        plugins.push(pmInputRules({ rules }))
+      }
+
+      // Keyboard shortcuts
+      if (config.keyboardShortcuts && Object.keys(config.keyboardShortcuts).length > 0) {
+        const bindings = {}
+        for (const [key, handler] of Object.entries(config.keyboardShortcuts)) {
+          bindings[key] = this.wrapCommandHandler(handler, pluginId)
+        }
+        plugins.push(keymap(bindings))
+      }
+
+      // NodeView — stored separately for the view to pick up
+      let nodeViewFactory = null
+      if (config.nodeView) {
+        nodeViewFactory = this.wrapNodeView(config.nodeView, pluginId)
+      }
 
       const loadTime = performance.now() - startTime
       this.loadTimes.set(`${pluginId}.${config.name}`, loadTime)
@@ -1184,10 +1118,10 @@ export class EditorPluginAPI extends EventEmitter {
         extensionName: config.name
       })
 
-      return nodeDefinition
+      return { name: config.name, nodeSpec, plugins, nodeViewFactory }
     } catch (error) {
       // Handle error with context
-      const errorInfo = errorHandler.handleError(pluginId, error, {
+      errorHandler.handleError(pluginId, error, {
         operation: 'node-creation',
         extensionName: config.name,
         config
@@ -1198,162 +1132,109 @@ export class EditorPluginAPI extends EventEmitter {
   }
 
   /**
-   * Create a secure TipTap mark with validation
+   * Create a secure ProseMirror mark specification with validation.
+   *
+   * Returns `{ name, markSpec, plugins }` where `markSpec` is a PM MarkSpec
+   * and `plugins` is an array of PM Plugins (input rules, keymaps).
    */
   createSecureMark(config, pluginId) {
     const startTime = performance.now()
 
     try {
-      const markDefinition = Mark.create({
-        name: config.name,
+      const attrs = this.validateAttributes(config.attributes || {})
+      const parsedAttrs = {}
+      for (const [name, attrConfig] of Object.entries(attrs)) {
+        parsedAttrs[name] = { default: attrConfig?.default ?? null }
+      }
+
+      const markSpec = {
         inclusive: config.inclusive !== false,
         excludes: config.excludes || '',
         group: config.group,
         spanning: config.spanning !== false,
-
-        addAttributes() {
-          return this.validateAttributes(config.attributes || {})
-        },
-
-        parseHTML() {
-          return this.validateParseHTML(config.parseHTML || [])
-        },
-
-        renderHTML({ HTMLAttributes }) {
+        attrs: parsedAttrs,
+        parseDOM: this.validateParseHTML(config.parseHTML || []),
+        toDOM: (mark) => {
           try {
             if (config.renderHTML) {
-              return config.renderHTML({ HTMLAttributes })
+              return config.renderHTML({ HTMLAttributes: mark.attrs })
             }
-            return [config.tag || 'span', HTMLAttributes]
+            return [config.tag || 'span', mark.attrs, 0]
           } catch (error) {
-            return [config.tag || 'span', HTMLAttributes]
+            return [config.tag || 'span', {}, 0]
           }
-        },
-
-        addCommands() {
-          if (!config.commands) return {}
-
-          const commands = {}
-          for (const [name, handler] of Object.entries(config.commands)) {
-            commands[name] = (...args) => this.wrapCommandHandler(handler, pluginId)(...args)
-          }
-          return commands
-        },
-
-        addInputRules() {
-          if (!config.inputRules) return []
-
-          return config.inputRules.map(rule => {
-            return new InputRule({
-              find: rule.find,
-              handler: this.wrapInputRuleHandler(rule.handler, pluginId)
-            })
-          })
-        },
-
-        addKeyboardShortcuts() {
-          if (!config.keyboardShortcuts) return {}
-
-          const shortcuts = {}
-          for (const [key, handler] of Object.entries(config.keyboardShortcuts)) {
-            shortcuts[key] = this.wrapCommandHandler(handler, pluginId)
-          }
-          return shortcuts
         }
-      })
+      }
+
+      // Build PM plugins array
+      const plugins = []
+
+      // Input rules
+      if (config.inputRules && config.inputRules.length > 0) {
+        const rules = config.inputRules.map(rule =>
+          new InputRule(rule.find, this.wrapInputRuleHandler(rule.handler, pluginId))
+        )
+        plugins.push(pmInputRules({ rules }))
+      }
+
+      // Keyboard shortcuts
+      if (config.keyboardShortcuts && Object.keys(config.keyboardShortcuts).length > 0) {
+        const bindings = {}
+        for (const [key, handler] of Object.entries(config.keyboardShortcuts)) {
+          bindings[key] = this.wrapCommandHandler(handler, pluginId)
+        }
+        plugins.push(keymap(bindings))
+      }
 
       const loadTime = performance.now() - startTime
       this.loadTimes.set(`${pluginId}.${config.name}`, loadTime)
 
-      return markDefinition
+      return { name: config.name, markSpec, plugins }
     } catch (error) {
       throw new Error(`Failed to create mark: ${error.message}`)
     }
   }
 
   /**
-   * Create a secure TipTap extension with validation
+   * Create a secure ProseMirror extension (plugins only — no schema contribution).
+   *
+   * Returns `{ name, plugins }` where `plugins` is an array of PM Plugin instances.
    */
   createSecureExtension(config, pluginId) {
     const startTime = performance.now()
 
     try {
-      const extensionDefinition = Extension.create({
-        name: config.name,
-        priority: config.priority || 100,
+      const plugins = []
 
-        addOptions() {
-          return this.validateOptions(config.options || {})
-        },
-
-        addCommands() {
-          if (!config.commands) return {}
-
-          const commands = {}
-          for (const [name, handler] of Object.entries(config.commands)) {
-            commands[name] = (...args) => this.wrapCommandHandler(handler, pluginId)(...args)
-          }
-          return commands
-        },
-
-        addKeyboardShortcuts() {
-          if (!config.keyboardShortcuts) return {}
-
-          const shortcuts = {}
-          for (const [key, handler] of Object.entries(config.keyboardShortcuts)) {
-            shortcuts[key] = this.wrapCommandHandler(handler, pluginId)
-          }
-          return shortcuts
-        },
-
-        addInputRules() {
-          if (!config.inputRules) return []
-
-          return config.inputRules.map(rule => {
-            return new InputRule({
-              find: rule.find,
-              handler: this.wrapInputRuleHandler(rule.handler, pluginId)
-            })
-          })
-        },
-
-        addProseMirrorPlugins() {
-          if (!config.proseMirrorPlugins) return []
-
-          return config.proseMirrorPlugins.map(pluginFactory => {
-            return this.wrapProseMirrorPlugin(pluginFactory, pluginId)
-          })
-        },
-
-        onBeforeCreate() {
-          if (config.onBeforeCreate) {
-            this.wrapLifecycleHandler(config.onBeforeCreate, pluginId)()
-          }
-        },
-
-        onCreate() {
-          if (config.onCreate) {
-            this.wrapLifecycleHandler(config.onCreate, pluginId)()
-          }
-        },
-
-        onUpdate() {
-          if (config.onUpdate) {
-            this.wrapLifecycleHandler(config.onUpdate, pluginId)()
-          }
-        },
-
-        onDestroy() {
-          if (config.onDestroy) {
-            this.wrapLifecycleHandler(config.onDestroy, pluginId)()
-          }
+      // Keyboard shortcuts
+      if (config.keyboardShortcuts && Object.keys(config.keyboardShortcuts).length > 0) {
+        const bindings = {}
+        for (const [key, handler] of Object.entries(config.keyboardShortcuts)) {
+          bindings[key] = this.wrapCommandHandler(handler, pluginId)
         }
-      })
+        plugins.push(keymap(bindings))
+      }
+
+      // Input rules
+      if (config.inputRules && config.inputRules.length > 0) {
+        const rules = config.inputRules.map(rule =>
+          new InputRule(rule.find, this.wrapInputRuleHandler(rule.handler, pluginId))
+        )
+        plugins.push(pmInputRules({ rules }))
+      }
+
+      // Raw PM plugins supplied by the third-party plugin author
+      if (config.proseMirrorPlugins && config.proseMirrorPlugins.length > 0) {
+        for (const pluginFactory of config.proseMirrorPlugins) {
+          const p = this.wrapProseMirrorPlugin(pluginFactory, pluginId)
+          if (p) plugins.push(p)
+        }
+      }
 
       const loadTime = performance.now() - startTime
       this.loadTimes.set(`${pluginId}.${config.name}`, loadTime)
 
-      return extensionDefinition
+      return { name: config.name, plugins }
     } catch (error) {
       throw new Error(`Failed to create extension: ${error.message}`)
     }
@@ -1520,25 +1401,39 @@ export class EditorPluginAPI extends EventEmitter {
   // === EDITOR INTEGRATION ===
 
   /**
-   * Set the editor instance for hot reloading
+   * Set the editor instance (a raw ProseMirror EditorView).
+   *
+   * Unlike the old TipTap editor, PM views do not have their own event
+   * emitter. Instead the Editor component's `dispatchTransaction` handler
+   * should call `editorAPI.notifyUpdate()` and
+   * `editorAPI.notifySelectionUpdate()` so that SDK listeners fire.
    */
-  setEditorInstance(editor) {
-    this.editorInstance = editor
+  setEditorInstance(view) {
+    this.editorInstance = view
 
-    if (!editor) {
+    if (!view) {
       return
     }
 
-    this.emit('editor-attached', { editor })
+    this.emit('editor-attached', { editor: view })
+  }
 
-    // Listen for editor updates
-    editor.on('update', () => {
-      this.emit('editor-update')
-    })
+  /**
+   * Called by the Editor component's dispatchTransaction when the document
+   * content changes. Fires the 'editor-update' event consumed by
+   * `onDidChangeTextDocument` / `onDidChangeTextEditorVisibleRanges`.
+   */
+  notifyUpdate() {
+    this.emit('editor-update')
+  }
 
-    editor.on('selectionUpdate', () => {
-      this.emit('editor-selection-update')
-    })
+  /**
+   * Called by the Editor component's dispatchTransaction when the selection
+   * changes. Fires the 'editor-selection-update' event consumed by
+   * `onDidChangeTextEditorSelection`.
+   */
+  notifySelectionUpdate() {
+    this.emit('editor-selection-update')
   }
 
   /**
@@ -1601,7 +1496,12 @@ export class EditorPluginAPI extends EventEmitter {
   }
 
   /**
-   * Hot reload extensions in the editor
+   * Hot reload extensions in the editor.
+   *
+   * With raw ProseMirror we serialize the current doc to Markdown, then emit
+   * a 'hot-reload-requested' event so that the Editor component can recreate
+   * the view with the updated plugin set.  We do NOT destroy the view here
+   * because the React component owns the lifecycle.
    */
   async hotReloadExtensions() {
     if (!this.editorInstance) {
@@ -1611,9 +1511,10 @@ export class EditorPluginAPI extends EventEmitter {
     const startTime = performance.now()
 
     try {
-
-      // Get current content
-      const content = this.editorInstance.getHTML()
+      // Get current content as Markdown via the Lokus serializer
+      const view = this.editorInstance
+      const serializer = createLokusSerializer()
+      const content = serializer.serialize(view.state.doc)
 
       // Get all extensions
       const extensions = this.getAllExtensions()
@@ -1621,24 +1522,14 @@ export class EditorPluginAPI extends EventEmitter {
       // Validate extensions before reload
       const validExtensions = this.validateExtensionsForReload(extensions)
 
-      // Create new editor configuration
-      const editorConfig = {
-        extensions: validExtensions,
-        content,
-        // Preserve other editor options
-        ...this.editorInstance.options
-      }
-
-      // Recreate editor with new extensions
-      this.editorInstance.destroy()
-
       // Monitor performance
       const duration = performance.now() - startTime
       errorHandler.monitorPerformance('system', 'hotReload', duration, {
         extensionCount: validExtensions.length
       })
 
-      // Emit event for editor recreation
+      // Emit event for editor recreation — the Editor component listens for
+      // this and rebuilds the EditorView with the new plugins + content.
       this.emit('hot-reload-requested', { extensions: validExtensions, content })
 
     } catch (error) {
@@ -1677,7 +1568,7 @@ export class EditorPluginAPI extends EventEmitter {
   }
 
   /**
-   * Get all visible editors
+   * Get all visible editors (PM EditorView instances wrapped in SDK adapter)
    */
   getVisibleEditors() {
     // Currently only one editor is supported
@@ -1685,7 +1576,7 @@ export class EditorPluginAPI extends EventEmitter {
   }
 
   /**
-   * Get active text document
+   * Get active text document (PM state wrapped in SDK adapter)
    */
   getActiveDocument() {
     return this.editorInstance ? Promise.resolve(this._createDocumentAdapter(this.editorInstance.state)) : Promise.resolve(undefined)

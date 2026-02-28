@@ -1,62 +1,125 @@
-# Workspace Architecture Findings
+# TipTap → ProseMirror Migration Findings
 
-## Investigation Date: 2026-02-23
+## Investigation Date: 2026-02-24
+## Method: 4 parallel Opus agents, each investigating one aspect
 
-## Bug 1: Tab Content Cross-Contamination
-- **Root cause**: Single `editorContent`/`savedContent` in store for ALL tabs (workspace.js:337-338)
-- **Race**: handleSave snapshots stale `activeFile`, closeTab switches `activeFile` synchronously before save's async IPC resolves (useSave.js:13, useTabs.js:169)
-- **Dead code**: `onSave` param in useTabs is never called (useTabs.js:10)
-- **No abort guard** in save path after async write (useSave.js:42-46)
+---
 
-## Bug 2: Slow Loading
-- **56 Zustand selectors** in WorkspaceWithScope, each fires on ANY store change (Workspace.jsx:153-304)
-- **7 separate setState calls** to open one file = 7 × 56 = 392 selector evals (useWorkspaceSession.js:210-231)
-- **Double worker IPC**: isMarkdown + compile as 2 round-trips instead of 1 (useWorkspaceSession.js:224-225)
-- **New Set() every keystroke** for unsavedChanges = 56 selector evals per keystroke (workspace.js:241)
-- **3 synchronous tree traversals** on workspace load (useWorkspaceSession.js:159-188)
+## Agent 1: React Integration Layer
 
-## Bug 3: Split Pane Crashes
-- **Right pane writes to global store** on every keystroke → full workspace re-render (Workspace.jsx:1113)
-- **Both panes overwrite same editor ref** (Workspace.jsx:1010 + 1114)
-- **EditorPane feedback loop**: useEffect on editorContent resets TipTap cursor (EditorPane.jsx:41-48)
-- **Two competing split systems** coexist — legacy JSX + SplitEditor.jsx
+### Tab Switching Bug Root Cause
+- `useEditor` in Editor.jsx has dep array `[extensions, handleEditorUpdate]`
+- `handleEditorUpdate` depends on `[onContentChange]`
+- `onContentChange` = `handleContentChange` from EditorGroup with `[group.id, activeFile]` deps
+- **Every tab switch → new activeFile → new callback chain → useEditor recreates editor → content lost**
+- With raw PM: EditorView created once in ref, `view.updateState()` on tab switch — bug ceases to exist
 
-## Bug 4: Graph/Bases View Glitches
-- **Dual state**: `showGraphView` boolean vs `activeFile='__graph__'` tab, never synced (workspace.js:125-158, useGraphEngine.js:100-115)
-- **Stale closure in cleanup**: graphDataManager is null when cleanup runs → leaks 4 listeners + ResizeObserver (ProfessionalGraphView.jsx:112-166)
-- **`isVisible={true}` hardcoded**: graph reload effect fires on every file-tree change even when hidden (Workspace.jsx:1192)
+### isSettingRef Pattern
+- Guard at lines 480, 506-507, 824, 831 of Editor.jsx
+- Prevents infinite loops when programmatically setting content
+- **Elimination**: use `tr.setMeta('programmatic', true)` in dispatch, check in update handler
 
-## Existing Editor Groups Infrastructure (Unused)
-- `src/hooks/useEditorGroups.js` (381 lines) — complete VSCode-style tree layout, split ops, drag-drop
-- `src/components/EditorGroupsContainer.jsx` (165 lines) — recursive renderer with resize
-- `src/components/EditorGroup.jsx` (196 lines) — individual group UI
-- Instantiated at Workspace.jsx:198 but NEVER rendered. Output ignored.
-- Only active usage: `updateTabPath` for file rename (Workspace.jsx:946)
-- Gaps: local state duplication, no session persistence, no Zustand integration
+### React-in-PM Replacements
+- `EditorContent` → `<div ref={mountRef}>` where `new EditorView(mountRef.current, ...)`
+- `ReactRenderer` (5 files) → `createRoot()` from react-dom/client
+- `ReactNodeViewRenderer` (MermaidDiagram) → custom `NodeView` class using createRoot
+- `BubbleMenu` (TableBubbleMenu) → PM plugin + tippy.js + createRoot
 
-## Main Thread Blocking (11 findings)
-- **HIGH**: MarkdownPaste.js:43 — `new MarkdownCompiler()` on every paste event (sync, main thread)
-- **HIGH**: useSave.js:38 + markdown-exporter.js — sync DOM parse + recursive walk on every Ctrl+S
-- **HIGH**: ReferenceManager.js:215 — serial readTextFile + 4 regex scans per file on load (500 files = 500 sequential IPC calls)
-- **MEDIUM**: useEditorContent.js:28 — `compiler.compile()` not awaited (returns Promise object, not HTML)
-- **MEDIUM**: PropertyIndexer.js:122 — JSON.stringify per-property in O(n^2) hot loop
-- **MEDIUM**: useWorkspaceEvents.js:128 — 3 non-cancelling setTimeouts doing querySelectorAll on all headings
-- **MEDIUM**: Workspace.jsx:1639 — compiler.processTemplate() not awaited (inserts "[object Promise]")
-- **MEDIUM**: TemplatePicker.jsx:16 — imports sync MarkdownCompiler instead of worker client
+---
 
-## tiptap-markdown Assessment
-- `tiptap-markdown` (community) — DEPRECATED, maintainer says use official
-- `@tiptap/markdown` (official) — v3.20.0, explicitly beta, tables broken (issue #5750)
-- App has 5 custom node types needing serializers: WikiLink, WikiLinkEmbed, Callout, MermaidDiagram, CanvasLink
-- App has 26 total TipTap extensions, only 5 affect schema
-- Current MarkdownExporter (650 lines) already handles all custom nodes including 23 SmartTask states
-- **Verdict**: Keep current md pipeline for this overhaul. Direct md↔ProseMirror is a future initiative.
+## Agent 2: Extension Migration Paths
 
-## Session Persistence Assessment
-- Current: Rust `SessionState` struct with `open_tabs: Vec<String>`, `expanded_folders`, `recent_files`
-- Storage: `tauri_plugin_store` (SQLite-backed), keyed by `session_state_{hash(workspace_path)}`
-- **New layout is a SIMPLE EXTENSION**: add optional `editor_layout: Option<serde_json::Value>` field
-- Zero new Tauri commands needed — serde auto-serializes
-- Backward compatible: old sessions fall back to single-group layout
-- Do NOT store ProseMirror JSON in session (2-5x larger than source md, goes stale)
-- Store only: layout tree + lightweight metadata (scrollTop, selection per tab)
+### Categorization (36 total extensions)
+**DELETE (5)** — dead/unused code:
+- SimpleTask, SmartTask, HeadingAltInput, TaskMarkdownInput, Template
+
+**TRIVIAL (7)** — direct PM plugin port, <1hr each:
+- BlockId, TaskSyntaxHighlight, Folding, MarkdownPaste, MarkdownTablePaste, PluginHover, TaskCreationTrigger
+
+**MODERATE (8)** — need PM transaction patterns, 2-4hr each:
+- Callout, WikiLink, WikiLinkEmbed, CanvasLink, CustomCodeBlock, CodeBlockIndent, MathSnippets, SymbolShortcuts
+
+**HARD (7)** — need infrastructure first:
+- WikiLinkSuggest (16-24hr) — 4 suggestion instances, 1000+ lines, most complex
+- SlashCommand (8-16hr) — 30 commands, popup positioning
+- TagAutocomplete (4hr), TaskMentionSuggest (4hr), PluginCompletion (4hr) — use suggestion factory
+- MermaidDiagram (8-12hr) — React NodeView in PM
+- TableBubbleMenu (4-8hr) — floating UI
+
+### 3 Infrastructure Pieces Needed First
+1. **Suggestion plugin factory** (~300 lines) — replaces @tiptap/suggestion, reusable by 5 extensions
+2. **React-in-PM helpers** (~100 lines) — createRoot-based NodeView + popup rendering
+3. **Floating menu plugin** (~150 lines) — replaces BubbleMenu for tables
+
+### Estimated Total: 10-15 working days
+
+---
+
+## Agent 3: Markdown Pipeline & Schema
+
+### lokus-md-pipeline.js — Already the Right Foundation
+- Load path: md → md-it → PM doc (NO HTML) ✓
+- Save path: PM doc → md (NO HTML) ✓
+- 8 custom markdown-it plugins: wikiLink, callout, mermaid, canvasLink, inlineMath, blockId, etc.
+- `createLokusParser(schema)` and `createLokusSerializer()` already exist and work
+
+### Schema Gap — Critical
+- Pipeline defines parser/serializer MAPPINGS but NO standalone ProseMirror schema
+- Raw PM requires explicit `createLokusSchema()` function
+- **25 types needed:**
+  - Nodes (17): doc, paragraph, heading, blockquote, codeBlock, hardBreak, horizontalRule, image, bulletList, orderedList, listItem, taskList, taskItem, table, tableRow, tableHeader, tableCell
+  - Custom nodes (6): wikiLink, wikiLinkEmbed, canvasLink, callout, mermaidDiagram, mathBlock
+  - Marks (6): bold, italic, code, strike, link, inlineMath
+
+### 17 editor.getHTML() Call Sites (7 files)
+All must be replaced with `lokusSerializer.serialize(editor.state.doc)`:
+- useSave.js: lines 133, 155 (Save As exports)
+- EditorGroup.jsx: handleContentChange still stores HTML
+- Editor.jsx: handleEditorUpdate passes HTML to onContentChange
+- Various export/reading mode functions
+
+### Deletable After Migration
+- `compiler.js` — old md→HTML compiler
+- `compiler-logic.js` — compiler helpers
+- `MarkdownExporter` class — HTML→md exporter (650 lines)
+- `markdown-exporter.js` — DOM-based md export
+
+### MarkdownPaste Still Uses Old Pipeline
+- MarkdownPaste.js imports old compiler.js (md → HTML → TipTap)
+- Must be updated to use lokus-md-pipeline (md → PM doc directly)
+
+---
+
+## Agent 4: External Editor Consumers
+
+### Outside src/editor/ — Only 3 TipTap Imports
+All are just re-exports of PM primitives. Clean boundary.
+
+### editorRegistry.js
+- Simple `Map<groupId, editor>` with registerEditor/getEditor
+- 10+ files use getEditor()
+- Change: stores PM EditorView instead of TipTap Editor instance
+- API surface is the same (.state, .dispatch, .dom)
+
+### HIGH RISK Files
+- **EditorAPI.js** (2048 lines) — central plugin API, single adaptation point
+  - Uses `this.editorInstance.getHTML()`, `.commands.setContent()`, `.commands.insertContent()`, `.chain().focus()...`
+  - `createSecureNode()`, `createSecureMark()`, `createSecureExtension()` use TipTap APIs
+- **PluginBridge.js** — bridges plugins to editor, update access pattern
+- **useShortcuts.js** — ~20 commands use `editor.chain().focus()...`, convert to PM transactions
+- **ModalLayer.jsx** — reads editor state for modals
+- **useWorkspaceEvents.js** — CSS selector `.tiptap.ProseMirror` needs updating
+
+### Already PM-Native
+- Store format: `contentByTab` already stores PM JSON
+- useSave.js line 59: `lokusSerializer.serialize(editor.state.doc)` — already correct
+- EditorGroup.jsx: snapshotTabJSON uses `editor.getJSON()` → PM JSON
+
+### Plugin System Has Abstraction Barrier
+- EditorPluginAPI acts as single adapter between plugins and editor
+- Plugins don't touch TipTap directly — they go through EditorAPI
+- Single file to adapt, not scattered changes
+
+### Tests
+- 10+ editor tests inside src/editor/ need complete rewrite
+- Tests use TipTap test utilities that won't exist

@@ -1,5 +1,5 @@
 /**
- * MathSnippets Extension
+ * MathSnippets Extension (raw ProseMirror)
  *
  * Provides math snippet insertion with tab-stop placeholders.
  * Uses :shortcode: syntax (e.g., :mat2: for 2x2 matrix)
@@ -9,444 +9,431 @@
  * - Tab/Shift+Tab to navigate between placeholders
  * - Escape to exit snippet mode
  * - Auto-wraps in $ for inline math
+ *
+ * Schema is defined in lokus-schema.js. This module provides:
+ *   - Input rule for :shortcode: trigger
+ *   - Placeholder decoration plugin
+ *   - Keyboard shortcuts for placeholder navigation
+ *   - insertMathSnippet command
  */
 
-import { Extension } from '@tiptap/core';
-import { InputRule } from '@tiptap/core';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import { mathSnippets } from '../lib/math-snippets-data';
+import { InputRule, inputRules } from 'prosemirror-inputrules'
+import { keymap } from 'prosemirror-keymap'
+import { Plugin, PluginKey } from 'prosemirror-state'
+import { Decoration, DecorationSet } from 'prosemirror-view'
+import { TextSelection } from 'prosemirror-state'
+import { mathSnippets } from '../lib/math-snippets-data'
 
-export const MathSnippetsPluginKey = new PluginKey('mathSnippets');
+export const MathSnippetsPluginKey = new PluginKey('mathSnippets')
+
+// ---------------------------------------------------------------------------
+// Snippet state -- stored in a plugin's state rather than TipTap storage
+// ---------------------------------------------------------------------------
 
 /**
- * Parse template string for placeholders
- * Format: ${n:default} where n is the tab order
- * Returns { text: string, placeholders: [{index, start, end, defaultText}] }
+ * @typedef {Object} SnippetState
+ * @property {boolean} active
+ * @property {Array<{index: number, start: number, end: number, defaultText: string}>} placeholders
+ * @property {number} currentIndex
+ * @property {number} basePos
  */
-function parseTemplate(template) {
-  const placeholders = [];
-  let result = '';
-  let i = 0;
-  let offset = 0;
 
-  // Regex to match ${n:text} or ${n}
-  const placeholderRegex = /\$\{(\d+)(?::([^}]*))?\}/g;
-  let match;
-  let lastEnd = 0;
-
-  while ((match = placeholderRegex.exec(template)) !== null) {
-    // Add text before this placeholder
-    result += template.substring(lastEnd, match.index);
-
-    const index = parseInt(match[1], 10);
-    const defaultText = match[2] || '';
-    const start = result.length;
-
-    result += defaultText;
-    const end = result.length;
-
-    placeholders.push({
-      index,
-      start,
-      end,
-      defaultText,
-    });
-
-    lastEnd = match.index + match[0].length;
-  }
-
-  // Add remaining text
-  result += template.substring(lastEnd);
-
-  // Sort placeholders by index
-  placeholders.sort((a, b) => a.index - b.index);
-
-  return { text: result, placeholders };
+/** @returns {SnippetState} */
+function emptySnippetState() {
+  return { active: false, placeholders: [], currentIndex: 0, basePos: 0 }
 }
 
+// ---------------------------------------------------------------------------
+// Template parser
+// ---------------------------------------------------------------------------
+
 /**
- * Create decorations for placeholders
+ * Parse template string for placeholders.
+ * Format: ${n:default} where n is the tab order.
+ *
+ * @param {string} template
+ * @returns {{ text: string, placeholders: Array<{index: number, start: number, end: number, defaultText: string}> }}
+ */
+function parseTemplate(template) {
+  const placeholders = []
+  let result = ''
+  const placeholderRegex = /\$\{(\d+)(?::([^}]*))?\}/g
+  let match
+  let lastEnd = 0
+
+  while ((match = placeholderRegex.exec(template)) !== null) {
+    result += template.substring(lastEnd, match.index)
+    const index = parseInt(match[1], 10)
+    const defaultText = match[2] || ''
+    const start = result.length
+    result += defaultText
+    const end = result.length
+    placeholders.push({ index, start, end, defaultText })
+    lastEnd = match.index + match[0].length
+  }
+
+  result += template.substring(lastEnd)
+  placeholders.sort((a, b) => a.index - b.index)
+  return { text: result, placeholders }
+}
+
+// ---------------------------------------------------------------------------
+// Decoration builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Create decorations for placeholder regions.
+ *
+ * @param {Array} placeholders
+ * @param {number} basePos
+ * @param {number} activeIndex
+ * @returns {Decoration[]}
  */
 function createPlaceholderDecorations(placeholders, basePos, activeIndex) {
-  const decorations = [];
-
+  const decorations = []
   placeholders.forEach((p, i) => {
-    const from = basePos + p.start;
-    const to = basePos + p.end;
-
-    // Different style for active placeholder
-    const className = i === activeIndex
-      ? 'math-snippet-placeholder math-snippet-placeholder-active'
-      : 'math-snippet-placeholder';
-
+    const from = basePos + p.start
+    const to = basePos + p.end
+    if (from >= to) return // skip empty placeholders
+    const className =
+      i === activeIndex
+        ? 'math-snippet-placeholder math-snippet-placeholder-active'
+        : 'math-snippet-placeholder'
     decorations.push(
       Decoration.inline(from, to, {
         class: className,
         'data-placeholder-index': String(i),
       })
-    );
-  });
-
-  return decorations;
+    )
+  })
+  return decorations
 }
 
-export const MathSnippets = Extension.create({
-  name: 'mathSnippets',
+// ---------------------------------------------------------------------------
+// Meta key for snippet operations
+// ---------------------------------------------------------------------------
 
-  addOptions() {
-    return {
-      // Custom snippets can be added here
-      customSnippets: {},
-    };
-  },
+const SNIPPET_META = 'mathSnippetAction'
 
-  addStorage() {
-    return {
-      // Active snippet state
-      active: false,
-      placeholders: [],
+/**
+ * @typedef {'activate'|'next'|'prev'|'exit'|'update'} SnippetAction
+ */
+
+// ---------------------------------------------------------------------------
+// Commands
+// ---------------------------------------------------------------------------
+
+/**
+ * Insert a math snippet by name.
+ *
+ * @param {import('prosemirror-view').EditorView} view
+ * @param {string} snippetName
+ * @param {Object} [customSnippets={}]
+ * @returns {boolean}
+ */
+export function insertMathSnippet(view, snippetName, customSnippets = {}) {
+  const allSnippets = { ...mathSnippets, ...customSnippets }
+  const snippet = allSnippets[snippetName]
+  if (!snippet) return false
+
+  const { state } = view
+  let template = snippet.template
+  const { text, placeholders } = parseTemplate(template)
+  const pos = state.selection.from
+
+  const tr = state.tr.insertText(text, pos, state.selection.to)
+
+  if (placeholders.length > 0) {
+    const firstP = placeholders[0]
+    tr.setSelection(
+      TextSelection.create(tr.doc, pos + firstP.start, pos + firstP.end)
+    )
+    tr.setMeta(SNIPPET_META, {
+      action: 'activate',
+      placeholders,
+      basePos: pos,
       currentIndex: 0,
-      basePos: 0,
-    };
-  },
+    })
+  }
 
-  addCommands() {
-    return {
-      // Navigate to next placeholder
-      nextPlaceholder: () => ({ editor, tr, dispatch }) => {
-        const storage = this.storage;
-        if (!storage.active || storage.placeholders.length === 0) {
-          return false;
+  view.dispatch(tr)
+  return true
+}
+
+// ---------------------------------------------------------------------------
+// Main plugin
+// ---------------------------------------------------------------------------
+
+/**
+ * Create the MathSnippets ProseMirror plugins.
+ *
+ * @param {import('prosemirror-model').Schema} schema
+ * @param {Object} [options]
+ * @param {Object} [options.customSnippets={}]
+ * @returns {import('prosemirror-state').Plugin[]}
+ */
+export function createMathSnippetsPlugins(schema, options = {}) {
+  const { customSnippets = {} } = options
+
+  // -- Stateful decoration plugin ------------------------------------------
+
+  const decorationPlugin = new Plugin({
+    key: MathSnippetsPluginKey,
+
+    state: {
+      init() {
+        return {
+          snippet: emptySnippetState(),
+          decorations: DecorationSet.empty,
         }
-
-        const nextIndex = (storage.currentIndex + 1) % storage.placeholders.length;
-
-        // If we've cycled through all placeholders, exit snippet mode
-        if (nextIndex === 0 && storage.currentIndex === storage.placeholders.length - 1) {
-          storage.active = false;
-          storage.placeholders = [];
-          storage.currentIndex = 0;
-          // Move cursor to end of snippet
-          const lastP = storage.placeholders[storage.placeholders.length - 1];
-          if (lastP) {
-            const endPos = storage.basePos + lastP.end;
-            editor.commands.setTextSelection(endPos);
-          }
-          return true;
-        }
-
-        storage.currentIndex = nextIndex;
-        const placeholder = storage.placeholders[nextIndex];
-
-        if (placeholder) {
-          const from = storage.basePos + placeholder.start;
-          const to = storage.basePos + placeholder.end;
-          editor.commands.setTextSelection({ from, to });
-        }
-
-        return true;
       },
 
-      // Navigate to previous placeholder
-      prevPlaceholder: () => ({ editor }) => {
-        const storage = this.storage;
-        if (!storage.active || storage.placeholders.length === 0) {
-          return false;
-        }
+      apply(tr, pluginState, _oldState, newState) {
+        let snippet = { ...pluginState.snippet }
 
-        const prevIndex = storage.currentIndex === 0
-          ? storage.placeholders.length - 1
-          : storage.currentIndex - 1;
-
-        storage.currentIndex = prevIndex;
-        const placeholder = storage.placeholders[prevIndex];
-
-        if (placeholder) {
-          const from = storage.basePos + placeholder.start;
-          const to = storage.basePos + placeholder.end;
-          editor.commands.setTextSelection({ from, to });
-        }
-
-        return true;
-      },
-
-      // Exit snippet mode
-      exitSnippetMode: () => ({ editor }) => {
-        const storage = this.storage;
-        storage.active = false;
-        storage.placeholders = [];
-        storage.currentIndex = 0;
-        return true;
-      },
-
-      // Insert a math snippet by name
-      insertMathSnippet: (snippetName) => ({ editor, chain }) => {
-        const allSnippets = { ...mathSnippets, ...this.options.customSnippets };
-        const snippet = allSnippets[snippetName];
-
-        if (!snippet) {
-          return false;
-        }
-
-        const { text, placeholders } = parseTemplate(snippet.template);
-        const pos = editor.state.selection.from;
-
-        // Insert the snippet text
-        chain().insertContent(text).run();
-
-        // Set up placeholder tracking
-        if (placeholders.length > 0) {
-          const storage = this.storage;
-          storage.active = true;
-          storage.placeholders = placeholders;
-          storage.currentIndex = 0;
-          storage.basePos = pos;
-
-          // Select first placeholder
-          const firstP = placeholders[0];
-          editor.commands.setTextSelection({
-            from: pos + firstP.start,
-            to: pos + firstP.end,
-          });
-        }
-
-        return true;
-      },
-    };
-  },
-
-  addInputRules() {
-    return [
-      new InputRule({
-        // Match :word: pattern - same as SymbolShortcuts but check math snippets first
-        find: /:([a-zA-Z][a-zA-Z0-9]*):$/,
-        handler: ({ range, match, chain, state }) => {
-          const word = match[1];
-          const allSnippets = { ...mathSnippets, ...this.options.customSnippets };
-          const snippet = allSnippets[word];
-
-          if (!snippet) {
-            // Not a math snippet, let SymbolShortcuts handle it
-            return false;
-          }
-
-          // Check if we're inside a math context - either in a math node or typing after an unmatched $
-          let template = snippet.template;
-          const $pos = state.selection.$from;
-          let insideMath = false;
-
-          // Walk up the node tree to check if we're inside a math node
-          for (let d = $pos.depth; d >= 0; d--) {
-            const node = $pos.node(d);
-            if (node.type.name === 'inlineMath' || node.type.name === 'math') {
-              insideMath = true;
-              break;
-            }
-          }
-
-          // Also check if the parent node indicates math context
-          if (!insideMath) {
-            const parent = $pos.parent;
-            if (parent && (parent.type.name === 'inlineMath' || parent.type.name === 'math')) {
-              insideMath = true;
-            }
-          }
-
-          // Check for unmatched $ in the current text node (user is typing inside $...$)
-          if (!insideMath) {
-            const textBefore = $pos.parent.textBetween(0, $pos.parentOffset, null, '\ufffc');
-            // Count $ signs - odd number means we're inside a math expression
-            const dollarCount = (textBefore.match(/\$/g) || []).length;
-            if (dollarCount % 2 === 1) {
-              insideMath = true;
-            }
-          }
-
-          // If inside math, strip the outer $ or $$ delimiters from the template
-          if (insideMath) {
-            // Remove leading $$ or $
-            if (template.startsWith('$$')) {
-              template = template.slice(2);
-            } else if (template.startsWith('$')) {
-              template = template.slice(1);
-            }
-            // Remove trailing $$ or $
-            if (template.endsWith('$$')) {
-              template = template.slice(0, -2);
-            } else if (template.endsWith('$')) {
-              template = template.slice(0, -1);
-            }
-          }
-
-          const { text, placeholders } = parseTemplate(template);
-          const insertPos = range.from;
-
-          // Delete the trigger text and insert snippet
-          chain()
-            .deleteRange(range)
-            .insertContent(text)
-            .run();
-
-          // Set up placeholder tracking
-          if (placeholders.length > 0) {
-            const storage = this.storage;
-            storage.active = true;
-            storage.placeholders = placeholders;
-            storage.currentIndex = 0;
-            storage.basePos = insertPos;
-
-            // We need to select the first placeholder after the transaction
-            // Use setTimeout to ensure the content is inserted first
-            setTimeout(() => {
-              const firstP = placeholders[0];
-              const editor = this.editor;
-              if (editor && firstP) {
-                editor.commands.setTextSelection({
-                  from: insertPos + firstP.start,
-                  to: insertPos + firstP.end,
-                });
+        // Handle explicit snippet meta actions
+        const meta = tr.getMeta(SNIPPET_META)
+        if (meta) {
+          switch (meta.action) {
+            case 'activate':
+              snippet = {
+                active: true,
+                placeholders: meta.placeholders,
+                currentIndex: meta.currentIndex ?? 0,
+                basePos: meta.basePos,
               }
-            }, 0);
-          }
+              break
 
-          return true;
-        },
-      }),
-    ];
-  },
-
-  addKeyboardShortcuts() {
-    return {
-      // Tab: next placeholder (only when snippet is active)
-      Tab: ({ editor }) => {
-        if (!this.storage.active) {
-          return false; // Let default Tab behavior happen
-        }
-        return editor.commands.nextPlaceholder();
-      },
-
-      // Shift+Tab: previous placeholder
-      'Shift-Tab': ({ editor }) => {
-        if (!this.storage.active) {
-          return false;
-        }
-        return editor.commands.prevPlaceholder();
-      },
-
-      // Escape: exit snippet mode
-      Escape: ({ editor }) => {
-        if (!this.storage.active) {
-          return false;
-        }
-        return editor.commands.exitSnippetMode();
-      },
-    };
-  },
-
-  addProseMirrorPlugins() {
-    const extension = this;
-
-    return [
-      new Plugin({
-        key: MathSnippetsPluginKey,
-
-        state: {
-          init() {
-            return DecorationSet.empty;
-          },
-
-          apply(tr, oldDecorations) {
-            const storage = extension.storage;
-
-            // If no active snippet, clear decorations
-            if (!storage.active || storage.placeholders.length === 0) {
-              return DecorationSet.empty;
+            case 'next': {
+              if (!snippet.active) break
+              const nextIndex = (snippet.currentIndex + 1) % snippet.placeholders.length
+              if (nextIndex === 0 && snippet.currentIndex === snippet.placeholders.length - 1) {
+                // Cycled through all -- exit
+                snippet = emptySnippetState()
+              } else {
+                snippet = { ...snippet, currentIndex: nextIndex }
+              }
+              break
             }
 
-            // Create decorations for placeholders
-            const decorations = createPlaceholderDecorations(
-              storage.placeholders,
-              storage.basePos,
-              storage.currentIndex
-            );
+            case 'prev': {
+              if (!snippet.active) break
+              const prevIndex =
+                snippet.currentIndex === 0
+                  ? snippet.placeholders.length - 1
+                  : snippet.currentIndex - 1
+              snippet = { ...snippet, currentIndex: prevIndex }
+              break
+            }
 
-            return DecorationSet.create(tr.doc, decorations);
-          },
-        },
+            case 'exit':
+              snippet = emptySnippetState()
+              break
 
-        props: {
-          decorations(state) {
-            return this.getState(state);
-          },
-        },
-      }),
-    ];
-  },
+            case 'update':
+              if (meta.basePos !== undefined) snippet.basePos = meta.basePos
+              break
+          }
+        }
 
-  // Watch for cursor movement outside placeholders to exit snippet mode
-  onSelectionUpdate({ editor }) {
-    const storage = this.storage;
-    if (!storage.active) return;
+        // Map basePos through document changes
+        if (snippet.active && tr.docChanged && !meta) {
+          snippet = { ...snippet, basePos: tr.mapping.map(snippet.basePos) }
+        }
 
-    const { from, to } = editor.state.selection;
+        // Check if cursor moved outside snippet area (auto-exit)
+        if (snippet.active && snippet.placeholders.length > 0) {
+          const { from, to } = newState.selection
+          const firstP = snippet.placeholders[0]
+          const lastP = snippet.placeholders[snippet.placeholders.length - 1]
+          const snippetStart = snippet.basePos + firstP.start
+          const snippetEnd = snippet.basePos + lastP.end
+          const nearSnippet = from >= snippetStart - 5 && to <= snippetEnd + 5
+          const inPlaceholder = snippet.placeholders.some(p => {
+            const pFrom = snippet.basePos + p.start
+            const pTo = snippet.basePos + p.end
+            return from >= pFrom && to <= pTo
+          })
 
-    // Check if cursor is still within any placeholder
-    const inPlaceholder = storage.placeholders.some(p => {
-      const pFrom = storage.basePos + p.start;
-      const pTo = storage.basePos + p.end;
-      return from >= pFrom && to <= pTo;
-    });
+          if (!nearSnippet && !inPlaceholder) {
+            snippet = emptySnippetState()
+          }
+        }
 
-    // Also check if cursor is near the snippet (within reasonable bounds)
-    const firstP = storage.placeholders[0];
-    const lastP = storage.placeholders[storage.placeholders.length - 1];
-    if (firstP && lastP) {
-      const snippetStart = storage.basePos + firstP.start;
-      const snippetEnd = storage.basePos + lastP.end;
-      const nearSnippet = from >= snippetStart - 5 && to <= snippetEnd + 5;
+        // Build decorations
+        let decorations = DecorationSet.empty
+        if (snippet.active && snippet.placeholders.length > 0) {
+          try {
+            const decs = createPlaceholderDecorations(
+              snippet.placeholders,
+              snippet.basePos,
+              snippet.currentIndex
+            )
+            if (decs.length > 0) {
+              decorations = DecorationSet.create(newState.doc, decs)
+            }
+          } catch {
+            // If positions are out of range, exit snippet mode
+            snippet = emptySnippetState()
+          }
+        }
 
-      if (!nearSnippet && !inPlaceholder) {
-        // Cursor moved outside snippet area, exit snippet mode
-        storage.active = false;
-        storage.placeholders = [];
-        storage.currentIndex = 0;
-      }
-    }
-  },
+        return { snippet, decorations }
+      },
+    },
 
-  // Update placeholder positions when content changes
-  onUpdate({ editor, transaction }) {
-    const storage = this.storage;
-    if (!storage.active) return;
+    props: {
+      decorations(state) {
+        return this.getState(state).decorations
+      },
+    },
+  })
 
-    // If there was a text change, update placeholder positions
-    if (transaction.docChanged) {
-      // For simplicity, we'll recalculate based on document changes
-      // This handles the case where user types to replace placeholder text
+  // -- Input rule ----------------------------------------------------------
 
-      // Get the mapping from old positions to new
-      const mapping = transaction.mapping;
+  const snippetInputRule = new InputRule(
+    /:([a-zA-Z][a-zA-Z0-9]*):$/,
+    (state, match, start, end) => {
+      const word = match[1]
+      const allSnippets = { ...mathSnippets, ...customSnippets }
+      const snippet = allSnippets[word]
+      if (!snippet) return null // Let SymbolShortcuts handle it
 
-      // Update basePos
-      storage.basePos = mapping.map(storage.basePos);
+      // Check if we're inside a math context
+      let template = snippet.template
+      const $pos = state.selection.$from
+      let insideMath = false
 
-      // Check if the snippet area is still valid
-      const firstP = storage.placeholders[0];
-      if (firstP) {
-        const newStart = mapping.map(storage.basePos + firstP.start);
-        // If mapping failed significantly, exit snippet mode
-        if (Math.abs(newStart - (storage.basePos + firstP.start)) > 100) {
-          storage.active = false;
-          storage.placeholders = [];
-          storage.currentIndex = 0;
+      for (let d = $pos.depth; d >= 0; d--) {
+        const node = $pos.node(d)
+        if (node.type.name === 'inlineMath' || node.type.name === 'math') {
+          insideMath = true
+          break
         }
       }
+
+      if (!insideMath) {
+        const textBefore = $pos.parent.textBetween(0, $pos.parentOffset, null, '\ufffc')
+        const dollarCount = (textBefore.match(/\$/g) || []).length
+        if (dollarCount % 2 === 1) {
+          insideMath = true
+        }
+      }
+
+      // Strip outer $ delimiters if already inside math
+      if (insideMath) {
+        if (template.startsWith('$$')) {
+          template = template.slice(2)
+        } else if (template.startsWith('$')) {
+          template = template.slice(1)
+        }
+        if (template.endsWith('$$')) {
+          template = template.slice(0, -2)
+        } else if (template.endsWith('$')) {
+          template = template.slice(0, -1)
+        }
+      }
+
+      const { text, placeholders } = parseTemplate(template)
+      const insertPos = start
+
+      // Delete trigger text and insert snippet text
+      const tr = state.tr
+        .delete(start, end)
+        .insertText(text, insertPos)
+
+      if (placeholders.length > 0) {
+        // Select first placeholder
+        const firstP = placeholders[0]
+        tr.setSelection(
+          TextSelection.create(tr.doc, insertPos + firstP.start, insertPos + firstP.end)
+        )
+
+        tr.setMeta(SNIPPET_META, {
+          action: 'activate',
+          placeholders,
+          basePos: insertPos,
+          currentIndex: 0,
+        })
+      }
+
+      return tr
     }
-  },
-});
+  )
+
+  // -- Keyboard shortcuts --------------------------------------------------
+
+  const snippetKeymap = keymap({
+    Tab: (state, dispatch, view) => {
+      const pluginState = decorationPlugin.getState(state)
+      if (!pluginState?.snippet?.active) return false
+
+      const snippet = pluginState.snippet
+      const nextIndex = (snippet.currentIndex + 1) % snippet.placeholders.length
+
+      if (dispatch) {
+        // If we cycled through all, exit
+        if (nextIndex === 0 && snippet.currentIndex === snippet.placeholders.length - 1) {
+          const lastP = snippet.placeholders[snippet.placeholders.length - 1]
+          const endPos = snippet.basePos + lastP.end
+          const tr = state.tr
+            .setSelection(TextSelection.create(state.doc, endPos))
+            .setMeta(SNIPPET_META, { action: 'exit' })
+          dispatch(tr)
+        } else {
+          const placeholder = snippet.placeholders[nextIndex]
+          const from = snippet.basePos + placeholder.start
+          const to = snippet.basePos + placeholder.end
+          const tr = state.tr
+            .setSelection(TextSelection.create(state.doc, from, to))
+            .setMeta(SNIPPET_META, { action: 'next' })
+          dispatch(tr)
+        }
+      }
+      return true
+    },
+
+    'Shift-Tab': (state, dispatch) => {
+      const pluginState = decorationPlugin.getState(state)
+      if (!pluginState?.snippet?.active) return false
+
+      const snippet = pluginState.snippet
+      const prevIndex =
+        snippet.currentIndex === 0
+          ? snippet.placeholders.length - 1
+          : snippet.currentIndex - 1
+
+      if (dispatch) {
+        const placeholder = snippet.placeholders[prevIndex]
+        const from = snippet.basePos + placeholder.start
+        const to = snippet.basePos + placeholder.end
+        const tr = state.tr
+          .setSelection(TextSelection.create(state.doc, from, to))
+          .setMeta(SNIPPET_META, { action: 'prev' })
+        dispatch(tr)
+      }
+      return true
+    },
+
+    Escape: (state, dispatch) => {
+      const pluginState = decorationPlugin.getState(state)
+      if (!pluginState?.snippet?.active) return false
+
+      if (dispatch) {
+        dispatch(state.tr.setMeta(SNIPPET_META, { action: 'exit' }))
+      }
+      return true
+    },
+  })
+
+  return [
+    inputRules({ rules: [snippetInputRule] }),
+    decorationPlugin,
+    snippetKeymap,
+  ]
+}
 
 // Export for use in other components
-export { mathSnippets };
+export { mathSnippets, parseTemplate }
 
-export default MathSnippets;
+export default createMathSnippetsPlugins

@@ -9,16 +9,20 @@ vi.mock('../../plugins/api/EditorAPI.js', () => ({
   }
 }))
 
-vi.mock('@tiptap/react', () => ({
-  ReactRenderer: class {
-    constructor(component, { props }) {
+// Mock ReactPopup (replaces @tiptap/react's ReactRenderer)
+vi.mock('./react-pm-helpers.jsx', () => ({
+  ReactPopup: class {
+    constructor(component, props) {
       this.component = component
-      this.props = props
+      this._props = props
       this.element = document.createElement('div')
-      this.ref = { onKeyDown: vi.fn() }
+      this._innerRef = { current: { onKeyDown: vi.fn() } }
+    }
+    get ref() {
+      return this._innerRef.current
     }
     updateProps(props) {
-      this.props = props
+      this._props = props
     }
     destroy() { }
   }
@@ -88,7 +92,7 @@ describe('slashCommand', () => {
       }
 
       renderer.onStart(props)
-      // Verify ReactRenderer was instantiated (implied by no error in mock)
+      // Verify ReactPopup was instantiated (implied by no error in mock)
     })
 
     it('updates props on update', () => {

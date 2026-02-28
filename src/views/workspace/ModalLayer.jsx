@@ -16,51 +16,44 @@ import CanvasPreviewPopup from '../../components/CanvasPreviewPopup.jsx';
 import { DatePickerModal } from '../../components/DailyNotes/index.js';
 import { getMarkdownCompiler } from '../../core/markdown/compiler.js';
 import { getFilename } from '../../utils/pathUtils.js';
+import { insertContent, setTextSelection, insertText } from '../../editor/commands/index.js';
 
 /**
- * Inserts template content into the editor, handling the {{cursor}} placeholder.
+ * Inserts template content into the editor (PM EditorView), handling the {{cursor}} placeholder.
  */
-function insertTemplateContent(editorInstance, content) {
+function insertTemplateContent(view, content) {
   const cursorIndex = content.indexOf('{{cursor}}');
   if (cursorIndex !== -1) {
     const beforeCursor = content.substring(0, cursorIndex);
     const afterCursor = content.substring(cursorIndex + 10);
-    return editorInstance
-      .chain()
-      .focus()
-      .insertContent(beforeCursor)
-      .insertContent(afterCursor)
-      .setTextSelection(beforeCursor.length + editorInstance.state.selection.from)
-      .run();
+    const startPos = view.state.selection.from;
+    insertText(view, beforeCursor + afterCursor);
+    // Place cursor where {{cursor}} was
+    setTextSelection(view, startPos + beforeCursor.length);
+    return true;
   }
-  return editorInstance.chain().focus().insertContent(content).run();
+  insertText(view, content);
+  return true;
 }
 
 /**
  * Processes and inserts template content through the markdown compiler,
  * trying multiple insertion strategies as fallbacks.
  */
-function applyTemplate(editorInstance, processedContent) {
-  if (!editorInstance || !processedContent) return;
+function applyTemplate(view, processedContent) {
+  if (!view || !processedContent) return;
 
   const compiler = getMarkdownCompiler();
   const processedWithMarkdown = compiler.processTemplate(processedContent);
 
   const methods = [
-    () => insertTemplateContent(editorInstance, processedWithMarkdown),
-    () => editorInstance.chain().focus().insertContent(processedWithMarkdown).run(),
+    () => insertTemplateContent(view, processedWithMarkdown),
+    () => insertText(view, processedWithMarkdown),
     () => {
-      editorInstance.commands.focus();
-      return editorInstance.commands.insertContent(processedWithMarkdown);
-    },
-    () => editorInstance.commands.insertContent(processedWithMarkdown),
-    () => {
-      const { view } = editorInstance;
       const { state } = view;
-      const { tr } = state;
       const pos = state.selection.from;
       const cleanContent = processedWithMarkdown.replace(/\{\{cursor\}\}/g, '');
-      view.dispatch(tr.insertText(cleanContent, pos));
+      view.dispatch(state.tr.insertText(cleanContent, pos));
     },
   ];
 

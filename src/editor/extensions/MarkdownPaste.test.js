@@ -1,76 +1,138 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import MarkdownPaste from './MarkdownPaste.js';
+import createMarkdownPastePlugin from './MarkdownPaste.js';
 
-// Mock MarkdownIt and its plugins
-const mockMarkdownIt = {
-  render: vi.fn(),
-  use: vi.fn()
-};
-
-mockMarkdownIt.use.mockReturnValue(mockMarkdownIt);
-
-vi.mock('markdown-it', () => ({
-  default: vi.fn(() => mockMarkdownIt)
-}));
-
-vi.mock('markdown-it-mark', () => ({
-  default: 'mock-mark-plugin'
-}));
-
-vi.mock('markdown-it-strikethrough-alt', () => ({
-  default: 'mock-strikethrough-plugin'
-}));
-
-// Mock markdown compiler
-vi.mock('../../core/markdown/compiler.js', () => ({
-  getMarkdownCompiler: vi.fn(() => ({
+// Mock the compiler logic
+vi.mock('../../core/markdown/compiler-logic.js', () => ({
+  MarkdownCompiler: vi.fn().mockImplementation(() => ({
     compile: vi.fn().mockResolvedValue('<p>compiled html</p>'),
-    isMarkdown: vi.fn().mockReturnValue(true)
+    isMarkdown: vi.fn().mockImplementation((text) => {
+      // Simple markdown detection for testing
+      return /(\*\*|__|~~|==|`|^#|^>|^-\s|^\d+\.\s|^\|)/m.test(text || '')
+    })
   }))
 }));
 
-// Mock TipTap
-const mockEditor = {
-  chain: vi.fn(() => ({
-    focus: vi.fn(() => ({
-      insertContent: vi.fn(() => ({
-        run: vi.fn()
-      }))
-    }))
+// Mock the lokus-md-pipeline parser
+vi.mock('../../core/markdown/lokus-md-pipeline.js', () => ({
+  createLokusParser: vi.fn(() => ({
+    parse: vi.fn().mockReturnValue({
+      content: { size: 10 }
+    })
   }))
-};
+}));
 
-const mockView = {
-  // Mock ProseMirror view
-};
+describe('MarkdownPaste Plugin (ProseMirror)', () => {
+  let plugin;
+  let mockView;
+  let mockClipboardEvent;
+  let mockClipboardData;
 
-describe('MarkdownPaste Extension', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockMarkdownIt.render.mockReturnValue('<p>rendered html</p>');
+    plugin = createMarkdownPastePlugin();
+
+    mockView = {
+      state: {
+        schema: { text: vi.fn((t) => t) },
+        selection: {
+          from: 0,
+          to: 0,
+          $from: { parent: { type: { name: 'paragraph' } }, pos: 0 },
+          $to: { pos: 0 },
+        },
+        tr: {
+          insertText: vi.fn().mockReturnThis(),
+          replaceSelection: vi.fn().mockReturnThis(),
+          setMeta: vi.fn().mockReturnThis(),
+        },
+      },
+      dispatch: vi.fn(),
+    };
+
+    mockClipboardData = {
+      getData: vi.fn()
+    };
+
+    mockClipboardEvent = {
+      clipboardData: mockClipboardData,
+      preventDefault: vi.fn()
+    };
   });
 
-  describe('Extension Creation', () => {
-    it('should create extension with correct name', () => {
-      const extension = MarkdownPaste;
-      expect(extension.name).toBe('markdownPaste');
+  describe('Plugin Creation', () => {
+    it('should create ProseMirror plugin successfully', () => {
+      expect(plugin).toBeDefined();
+      expect(plugin.spec).toBeDefined();
+      expect(plugin.props).toBeDefined();
+      expect(plugin.props.handlePaste).toBeInstanceOf(Function);
     });
 
-    it('should have onCreate method', () => {
-      const extension = MarkdownPaste;
+    it('should have proper handlePaste function', () => {
+      const handlePaste = plugin.props.handlePaste;
+      expect(handlePaste).toBeDefined();
+      expect(typeof handlePaste).toBe('function');
+    });
+  });
 
-      // Verify onCreate exists and is callable
-      expect(extension.config.onCreate).toBeDefined();
-      expect(typeof extension.config.onCreate).toBe('function');
+  describe('Clipboard Event Handling', () => {
+    it('should handle paste events with markdown content', () => {
+      mockClipboardData.getData.mockImplementation((type) => {
+        if (type === 'text/plain') return '**bold text**';
+        if (type === 'text/html') return '';
+        return '';
+      });
 
-      // Calling onCreate should not throw
-      expect(() => extension.config.onCreate()).not.toThrow();
+      const handlePaste = plugin.props.handlePaste;
+      const result = handlePaste(mockView, mockClipboardEvent);
+
+      expect(mockClipboardData.getData).toHaveBeenCalledWith('text/plain');
+      expect(mockClipboardData.getData).toHaveBeenCalledWith('text/html');
+      // Should return true because markdown was detected
+      expect(result).toBe(true);
+    });
+
+    it('should not process plain text without markdown', () => {
+      mockClipboardData.getData.mockImplementation((type) => {
+        if (type === 'text/plain') return 'just plain text';
+        if (type === 'text/html') return '';
+        return '';
+      });
+
+      const handlePaste = plugin.props.handlePaste;
+      const result = handlePaste(mockView, mockClipboardEvent);
+
+      expect(result).toBe(false);
+    });
+
+    it('should handle clipboard data absence gracefully', () => {
+      const eventWithoutClipboard = {
+        clipboardData: null,
+        preventDefault: vi.fn()
+      };
+
+      const handlePaste = plugin.props.handlePaste;
+      const result = handlePaste(mockView, eventWithoutClipboard);
+
+      expect(result).toBe(false);
+    });
+
+    it('should handle paste with both HTML and markdown text', () => {
+      mockClipboardData.getData.mockImplementation((type) => {
+        if (type === 'text/plain') return '**bold text**';
+        if (type === 'text/html') return '<p><strong>bold text</strong></p>';
+        return '';
+      });
+
+      const handlePaste = plugin.props.handlePaste;
+      const result = handlePaste(mockView, mockClipboardEvent);
+
+      // Should return true because we prefer Markdown processing when valid Markdown is detected
+      expect(result).toBe(true);
     });
   });
 
   describe('Markdown Detection', () => {
     it('should detect bold markdown', () => {
-      // Since isMarkdownContent is not exported, we test through the paste handler
       const testCases = [
         '**bold text**',
         '*italic text*',
@@ -85,8 +147,7 @@ describe('MarkdownPaste Extension', () => {
       ];
 
       testCases.forEach(text => {
-        // We'll test this functionality through the paste handler in integration tests
-        expect(text).toBeTruthy(); // Basic check that text exists
+        expect(text).toBeTruthy();
       });
     });
 
@@ -99,219 +160,26 @@ describe('MarkdownPaste Extension', () => {
       ];
 
       regularTexts.forEach(text => {
-        expect(text).toBeTruthy(); // Basic check
+        expect(text).toBeTruthy();
       });
-    });
-
-    it('should handle edge cases in markdown detection', () => {
-      const edgeCases = [
-        '',
-        null,
-        undefined,
-        123,
-        {},
-        []
-      ];
-
-      edgeCases.forEach(input => {
-        // These should not cause errors in the actual extension
-        expect(typeof input !== 'string' || input === '').toBeTruthy();
-      });
-    });
-  });
-
-  describe('Markdown Conversion', () => {
-    it('should configure MarkdownIt with correct plugins', async () => {
-      const MarkdownItConstructor = vi.mocked(await import('markdown-it')).default;
-
-      // Create extension and get plugins
-      const extension = MarkdownPaste;
-      const plugins = extension.config.addProseMirrorPlugins ? extension.config.addProseMirrorPlugins.call({ editor: mockEditor }) : [];
-
-      expect(plugins).toHaveLength(1);
-      expect(plugins[0]).toBeDefined();
-    });
-
-    it('should render markdown to HTML', () => {
-      const markdownText = '**bold** and *italic*';
-      const expectedHtml = '<p><strong>bold</strong> and <em>italic</em></p>';
-
-      mockMarkdownIt.render.mockReturnValue(expectedHtml);
-
-      // This tests the markdown-it functionality indirectly
-      expect(mockMarkdownIt.render).toBeDefined();
-    });
-
-    it('should handle markdown conversion errors gracefully', () => {
-      mockMarkdownIt.render.mockImplementation(() => {
-        throw new Error('Markdown conversion failed');
-      });
-
-      // The extension should handle errors without crashing
-      expect(() => {
-        try {
-          mockMarkdownIt.render('invalid markdown');
-        } catch (error) {
-          // Extension should catch and log errors
-          return false;
-        }
-      }).not.toThrow();
-    });
-  });
-
-  describe('Clipboard Event Handling', () => {
-    let mockClipboardEvent;
-    let mockClipboardData;
-
-    beforeEach(() => {
-      mockClipboardData = {
-        getData: vi.fn()
-      };
-
-      mockClipboardEvent = {
-        clipboardData: mockClipboardData,
-        preventDefault: vi.fn()
-      };
-    });
-
-    it('should handle paste events with markdown content', () => {
-      mockClipboardData.getData.mockImplementation((type) => {
-        if (type === 'text/plain') return '**bold text**';
-        if (type === 'text/html') return '';
-        return '';
-      });
-
-      const extension = MarkdownPaste;
-      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
-      const plugin = plugins[0];
-      const handlePaste = plugin.props.handlePaste;
-
-      const result = handlePaste(mockView, mockClipboardEvent);
-
-      expect(mockClipboardData.getData).toHaveBeenCalledWith('text/plain');
-      expect(mockClipboardData.getData).toHaveBeenCalledWith('text/html');
-    });
-
-    it('should not process HTML content', () => {
-      mockClipboardData.getData.mockImplementation((type) => {
-        if (type === 'text/plain') return '**bold text**';
-        if (type === 'text/html') return '<p><strong>bold text</strong></p>';
-        return '';
-      });
-
-      const extension = MarkdownPaste;
-      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
-      const plugin = plugins[0];
-      const handlePaste = plugin.props.handlePaste;
-
-      const result = handlePaste(mockView, mockClipboardEvent);
-
-      // Should return true because we prefer Markdown processing when valid Markdown is detected
-      // even if HTML is present (unless the HTML ratio is very high)
-      expect(result).toBe(true);
-    });
-
-    it('should not process plain text without markdown', () => {
-      mockClipboardData.getData.mockImplementation((type) => {
-        if (type === 'text/plain') return 'just plain text';
-        if (type === 'text/html') return '';
-        return '';
-      });
-
-      const extension = MarkdownPaste;
-      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
-      const plugin = plugins[0];
-      const handlePaste = plugin.props.handlePaste;
-
-      const result = handlePaste(mockView, mockClipboardEvent);
-
-      expect(result).toBe(false);
-    });
-
-    it('should handle clipboard data absence gracefully', () => {
-      const eventWithoutClipboard = {
-        clipboardData: null,
-        preventDefault: vi.fn()
-      };
-
-      const extension = MarkdownPaste;
-      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
-      const plugin = plugins[0];
-      const handlePaste = plugin.props.handlePaste;
-
-      const result = handlePaste(mockView, eventWithoutClipboard);
-
-      expect(result).toBe(false);
     });
   });
 
   describe('Editor Integration', () => {
-    let mockClipboardData;
-
-    beforeEach(() => {
-      mockClipboardData = {
-        getData: vi.fn()
-      };
-    });
-
-    it('should insert converted content into editor', async () => {
+    it('should prevent default and process markdown paste', async () => {
       const markdownText = '**bold text**';
-      const convertedHtml = '<p><strong>bold text</strong></p>';
 
-      mockMarkdownIt.render.mockReturnValue(convertedHtml);
       mockClipboardData.getData.mockImplementation((type) => {
         if (type === 'text/plain') return markdownText;
         if (type === 'text/html') return '';
         return '';
       });
 
-      const mockClipboardEvent = {
-        clipboardData: mockClipboardData,
-        preventDefault: vi.fn()
-      };
-
-      const extension = MarkdownPaste;
-      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
-      const plugin = plugins[0];
       const handlePaste = plugin.props.handlePaste;
-
       handlePaste(mockView, mockClipboardEvent);
 
-      // Wait for async compilation
-      await new Promise(resolve => setTimeout(resolve, 0));
-
-      expect(mockEditor.chain).toHaveBeenCalled();
+      // Should have prevented default because markdown was detected
       expect(mockClipboardEvent.preventDefault).toHaveBeenCalled();
-    });
-
-    it('should preserve whitespace in content insertion', () => {
-      const extension = MarkdownPaste;
-      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
-
-      // The extension should configure insertContent with preserveWhitespace: 'full'
-      expect(plugins[0]).toBeDefined();
-    });
-  });
-
-  describe('Plugin Creation', () => {
-    it('should create ProseMirror plugin successfully', () => {
-      const extension = MarkdownPaste;
-      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
-
-      // Verify plugin is created and has the expected structure
-      expect(plugins).toHaveLength(1);
-      expect(plugins[0]).toBeDefined();
-      expect(plugins[0].props).toBeDefined();
-      expect(plugins[0].props.handlePaste).toBeInstanceOf(Function);
-    });
-
-    it('should have proper plugin structure', () => {
-      const extension = MarkdownPaste;
-      const plugins = extension.config.addProseMirrorPlugins.call({ editor: mockEditor });
-
-      // Verify plugin structure for proper integration
-      const plugin = plugins[0];
-      expect(plugin.props.handlePaste).toBeDefined();
     });
   });
 });

@@ -2,44 +2,21 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, waitFor } from '@testing-library/react'
 import Editor from './Editor.jsx'
 
-// Mock TipTap
-const mockEditor = {
-  commands: {
-    setContent: vi.fn(),
-    insertContent: vi.fn(),
-    focus: vi.fn(),
-    undo: vi.fn(),
-    redo: vi.fn(),
-    selectAll: vi.fn()
-  },
-  can: vi.fn().mockReturnValue({
-    undo: vi.fn().mockReturnValue(true),
-    redo: vi.fn().mockReturnValue(true)
-  }),
-  getHTML: vi.fn().mockReturnValue('<p>test content</p>'),
-  chain: vi.fn().mockReturnValue({
-    focus: vi.fn().mockReturnValue({ 
-      run: vi.fn(),
-      insertContent: vi.fn().mockReturnValue({ run: vi.fn() })
-    })
-  }),
-  state: {
-    selection: { empty: false }
-  }
-}
+// Mock useProseMirror hook
+const mockViewRef = { current: null }
+const mockMountRef = vi.fn()
 
-vi.mock('@tiptap/react', () => ({
-  useEditor: vi.fn(),
-  EditorContent: ({ editor }) => <div data-testid="editor-content" />
+vi.mock('../hooks/useProseMirror.js', () => ({
+  default: vi.fn(() => ({
+    mountRef: mockMountRef,
+    viewRef: mockViewRef,
+  }))
 }))
 
-// Get the mocked useEditor function
-import { useEditor } from '@tiptap/react'
-const mockUseEditor = vi.mocked(useEditor)
+import useProseMirror from '../hooks/useProseMirror.js'
 
-// Mock extensions
-vi.mock('@aarkue/tiptap-math-extension', () => ({ default: { configure: () => ({}) } }))
-vi.mock('../extensions/WikiLink.js', () => ({ default: {} }))
+// Mock extensions (now PM plugin factories — return empty arrays)
+vi.mock('../extensions/WikiLink.js', () => ({ default: () => [], createWikiLinkPlugins: () => [], createWikiLinkNodeView: () => ({}) }))
 vi.mock('../lib/WikiLinkSuggest.js', () => ({ default: {} }))
 vi.mock('../extensions/HeadingAltInput.js', () => ({ default: vi.fn() }))
 vi.mock('../lib/SlashCommand.js', () => ({ default: {} }))
@@ -82,109 +59,107 @@ vi.mock('markdown-it', () => ({
 vi.mock('markdown-it-mark', () => ({ default: {} }))
 vi.mock('markdown-it-strikethrough-alt', () => ({ default: {} }))
 
-describe('Editor Component', () => {  
+describe('Editor Component', () => {
   beforeEach(() => {
-    // Reset mocks
     vi.clearAllMocks()
+    mockViewRef.current = null
   })
 
-  it('should render loading state initially', () => {
-    // Mock useEditor to return null for loading state
-    mockUseEditor.mockReturnValue(null)
-    
+  it('should render loading state initially', async () => {
     const { getByText } = render(
       <Editor content="" onContentChange={() => {}} />
     )
-    
-    expect(getByText('Loading editor…')).toBeInTheDocument()
+
+    // The Editor component shows a loading message while plugins are being built
+    expect(getByText('Loading editor...')).toBeInTheDocument()
   })
 
-  it('should accept content and onContentChange props', () => {
-    // Mock useEditor to return mockEditor for this test
-    mockUseEditor.mockReturnValue(mockEditor)
-    
+  it('should accept content and onContentChange props', async () => {
     const onContentChange = vi.fn()
     const content = '<p>Test content</p>'
-    
+
     expect(() => {
       render(<Editor content={content} onContentChange={onContentChange} />)
     }).not.toThrow()
   })
 
   it('should handle empty content', () => {
-    // Mock useEditor to return mockEditor for this test
-    mockUseEditor.mockReturnValue(mockEditor)
-    
     const onContentChange = vi.fn()
-    
+
     expect(() => {
       render(<Editor content="" onContentChange={onContentChange} />)
     }).not.toThrow()
   })
 
   it('should handle undefined content', () => {
-    // Mock useEditor to return mockEditor for this test
-    mockUseEditor.mockReturnValue(mockEditor)
-    
     const onContentChange = vi.fn()
-    
+
     expect(() => {
       render(<Editor content={undefined} onContentChange={onContentChange} />)
     }).not.toThrow()
   })
 
   it('should call onContentChange when provided', () => {
-    // Mock useEditor to return mockEditor for this test
-    mockUseEditor.mockReturnValue(mockEditor)
-    
     const onContentChange = vi.fn()
-    
+
     render(<Editor content="" onContentChange={onContentChange} />)
-    
-    // The actual call would happen through TipTap's onUpdate
+
+    // The actual call would happen through ProseMirror's onUpdate
     // This test verifies the prop is accepted without error
     expect(typeof onContentChange).toBe('function')
   })
 })
 
-// Test the Tiptap component separately
-describe('Tiptap Component', () => {
-  let mockEditor
+// Test the PMEditor component behaviour
+describe('PMEditor Component', () => {
+  let mockView
 
   beforeEach(() => {
-    mockEditor = {
-      commands: {
-        setContent: vi.fn(),
-        insertContent: vi.fn(),
-        insertTable: vi.fn()
+    mockView = {
+      state: {
+        doc: {
+          textContent: 'content',
+          content: { size: 7 },
+          toJSON: vi.fn().mockReturnValue({ type: 'doc', content: [] }),
+          nodeAt: vi.fn(),
+          nodesBetween: vi.fn(),
+        },
+        tr: {
+          replaceWith: vi.fn().mockReturnThis(),
+          setMeta: vi.fn().mockReturnThis(),
+          scrollIntoView: vi.fn().mockReturnThis(),
+        },
+        selection: { empty: true, from: 0, to: 0, $from: { depth: 0, parent: { type: { name: 'paragraph' } } } },
+        schema: {
+          nodes: {},
+          marks: {},
+          text: vi.fn((t) => ({ type: 'text', text: t })),
+        },
       },
-      getHTML: vi.fn().mockReturnValue('<p>content</p>'),
-      chain: vi.fn().mockReturnValue({
-        focus: vi.fn().mockReturnValue({
-          insertTable: vi.fn().mockReturnValue({ run: vi.fn() }),
-          insertContent: vi.fn().mockReturnValue({ run: vi.fn() }),
-          run: vi.fn()
-        })
-      })
+      dispatch: vi.fn(),
+      focus: vi.fn(),
+      dom: document.createElement('div'),
     }
   })
 
-  it('should handle editor prop changes', () => {
-    // This would test the Tiptap component's editor prop handling
-    // In a real test, we'd render Tiptap directly with mock props
-    expect(mockEditor).toBeDefined()
-    expect(mockEditor.commands.setContent).toBeDefined()
+  it('should handle editor view creation', () => {
+    // Verify the mock view structure is valid
+    expect(mockView).toBeDefined()
+    expect(mockView.state.doc.textContent).toBe('content')
+    expect(mockView.dispatch).toBeDefined()
   })
 
-  it('should handle content synchronization', () => {
-    // Test that content changes are properly synchronized
-    const newContent = '<p>new content</p>'
-    
-    // Simulate content change
-    if (mockEditor.getHTML() !== newContent) {
-      mockEditor.commands.setContent(newContent)
-    }
-    
-    expect(mockEditor.commands.setContent).toHaveBeenCalledWith(newContent)
+  it('should handle content synchronization via setContent', () => {
+    // Simulate what the imperative handle's commands.setContent does
+    const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'new content' }] }] }
+
+    // Schema nodeFromJSON would be called — just verify the transaction path
+    mockView.state.tr.replaceWith(0, 7, { content: [] })
+    mockView.state.tr.setMeta('programmatic', true)
+    mockView.dispatch(mockView.state.tr)
+
+    expect(mockView.state.tr.replaceWith).toHaveBeenCalled()
+    expect(mockView.state.tr.setMeta).toHaveBeenCalledWith('programmatic', true)
+    expect(mockView.dispatch).toHaveBeenCalled()
   })
 })

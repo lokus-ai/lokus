@@ -6,13 +6,12 @@ import { useLayoutStore } from '../../stores/layout';
 import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
 import { FileTreeView } from '../../features/file-tree';
 import PluginSettings from '../PluginSettings.jsx';
-import BasesView from '../../bases/BasesView.jsx';
 import KanbanList from '../../components/KanbanList.jsx';
 import { DailyNotesPanel } from '../../components/DailyNotes/index.js';
 import { CalendarWidget } from '../../components/Calendar/index.js';
-import { isDesktop } from '../../platform/index.js';
 import { toast } from '../../components/ui/enhanced-toast';
 import { formatAccelerator } from '../../core/shortcuts/registry.js';
+import { isDesktop } from '../../platform/index.js';
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -25,8 +24,10 @@ import {
  * LeftSidebar — the resizable left panel.
  *
  * Shows the file explorer by default, and conditionally renders
- * DailyNotesPanel, CalendarWidget, KanbanList, PluginSettings, or BasesView
+ * DailyNotesPanel, CalendarWidget, KanbanList, or PluginSettings
  * based on the active view from useViewStore and panel flags.
+ * Bases and Graph views render only in MainContent — the sidebar
+ * stays as the file explorer for those views.
  */
 export default function LeftSidebar({
   workspacePath,
@@ -58,8 +59,6 @@ export default function LeftSidebar({
   // Derive boolean view flags from currentView
   const showKanban = currentView === 'kanban';
   const showPlugins = currentView === 'marketplace';
-  const showBases = currentView === 'bases';
-  const showGraphView = currentView === 'graph';
 
   // Active file from the focused editor group
   const activeFile = useEditorGroupStore((s) => {
@@ -128,17 +127,6 @@ export default function LeftSidebar({
     );
   }
 
-  // Bases panel
-  if (showBases) {
-    return (
-      <aside className="h-full overflow-y-auto flex flex-col bg-app-bg border-r border-app-border">
-        <div className="flex-1 overflow-hidden">
-          <BasesView isVisible={true} onFileOpen={onFileOpen} />
-        </div>
-      </aside>
-    );
-  }
-
   // Kanban list panel
   if (showKanban) {
     return (
@@ -150,43 +138,6 @@ export default function LeftSidebar({
             onCreateBoard={onCreateKanban}
             onBoardAction={onKanbanBoardAction}
           />
-        </div>
-      </aside>
-    );
-  }
-
-  // Graph placeholder panel
-  if (showGraphView) {
-    return (
-      <aside className="h-full overflow-y-auto flex flex-col bg-app-bg border-r border-app-border">
-        <div className="flex-1 overflow-hidden p-4">
-          <div className="text-center mb-4">
-            <button
-              onClick={() => {
-                const { focusedGroupId } = useEditorGroupStore.getState();
-                if (focusedGroupId) {
-                  useEditorGroupStore.getState().setActiveTab(focusedGroupId, '__graph__');
-                }
-              }}
-              className="obsidian-button primary w-full"
-            >
-              Open Graph View
-            </button>
-          </div>
-          <div className="text-sm text-app-muted">
-            <p className="mb-2">
-              The graph view shows the connections between your notes.
-            </p>
-            {isDesktop() && (
-              <p>
-                Use{' '}
-                <kbd className="px-1 py-0.5 text-xs bg-app-panel rounded">
-                  Cmd+Shift+G
-                </kbd>{' '}
-                to quickly open the graph view.
-              </p>
-            )}
-          </div>
         </div>
       </aside>
     );

@@ -2,6 +2,7 @@ import { FolderOpen, LayoutGrid, Puzzle, Database, Network, Calendar, CalendarDa
 import LokusLogo from '../../components/LokusLogo.jsx';
 import { useLayoutStore } from '../../stores/layout';
 import { useViewStore } from '../../stores/views';
+import { useEditorGroupStore } from '../../stores/editorGroups';
 import { useUIVisibility, useFeatureFlags } from '../../contexts/RemoteConfigContext';
 import platformService from '../../services/platform/PlatformService.js';
 
@@ -26,8 +27,25 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
   // Derive boolean view flags from currentView
   const showKanban = currentView === 'kanban';
   const showPlugins = currentView === 'marketplace';
-  const showBases = currentView === 'bases';
-  const showGraphView = currentView === 'graph';
+
+  // Bases and Graph are tabs, not view switches — check the active tab
+  const activeTab = useEditorGroupStore((s) => {
+    const { layout, focusedGroupId } = s;
+    if (!focusedGroupId) return null;
+    const findGroup = (node) => {
+      if (node.type === 'group' && node.id === focusedGroupId) return node;
+      if (node.type === 'container') {
+        for (const child of node.children) {
+          const found = findGroup(child);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return findGroup(layout)?.activeTab ?? null;
+  });
+  const showBases = activeTab === '__bases__';
+  const showGraphView = activeTab === '__graph__';
 
   const isExplorer = !showKanban && !showPlugins && !showBases && !showGraphView && showLeft;
 
@@ -171,7 +189,13 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
         {/* Bases */}
         {uiVisibility.sidebar_bases && (
           <button
-            onClick={() => useViewStore.getState().switchView('bases')}
+            onClick={() => {
+              useViewStore.getState().switchView('editor');
+              const { focusedGroupId } = useEditorGroupStore.getState();
+              if (focusedGroupId) {
+                useEditorGroupStore.getState().addTab(focusedGroupId, { path: '__bases__', name: 'Bases' }, true);
+              }
+            }}
             title="Bases"
             data-tour="bases"
             className="obsidian-button icon-only w-full mb-1"
@@ -202,7 +226,13 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
         {/* Graph View */}
         {uiVisibility.sidebar_graph && (
           <button
-            onClick={() => useViewStore.getState().switchView('graph')}
+            onClick={() => {
+              useViewStore.getState().switchView('editor');
+              const { focusedGroupId } = useEditorGroupStore.getState();
+              if (focusedGroupId) {
+                useEditorGroupStore.getState().addTab(focusedGroupId, { path: '__graph__', name: 'Graph' }, true);
+              }
+            }}
             title="Graph View"
             data-tour="graph"
             className="obsidian-button icon-only w-full mb-1"

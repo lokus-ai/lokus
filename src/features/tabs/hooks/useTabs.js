@@ -4,6 +4,7 @@ import { getEditor } from '../../../stores/editorRegistry';
 import { confirm } from '@tauri-apps/plugin-dialog';
 import { getFilename } from '../../../utils/pathUtils.js';
 import { isImageFile } from '../../../utils/imageUtils.js';
+import { TextSelection } from 'prosemirror-state';
 
 export function useTabs({ workspacePath, onSave }) {
   const lastCloseTimeRef = useRef(0);
@@ -28,14 +29,13 @@ export function useTabs({ workspacePath, onSave }) {
           if (file.lineNumber) {
             try {
               const focusedGroupId = useEditorGroupStore.getState().focusedGroupId;
-              const editor = getEditor(focusedGroupId);
-              if (!editor) return;
-              const doc = editor.state.doc;
+              const view = getEditor(focusedGroupId);
+              if (!view) return;
+              const doc = view.state.doc;
               const linePos = doc.line(file.lineNumber).from + (file.column || 0);
-              const selection = editor.state.selection.constructor.create(doc, linePos, linePos);
-              const tr = editor.state.tr.setSelection(selection);
-              editor.view.dispatch(tr);
-              editor.commands.scrollIntoView();
+              const selection = TextSelection.create(doc, linePos, linePos);
+              const tr = view.state.tr.setSelection(selection).scrollIntoView();
+              view.dispatch(tr);
             } catch {}
           }
         }, 100);

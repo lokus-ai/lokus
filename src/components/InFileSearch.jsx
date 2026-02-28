@@ -7,7 +7,7 @@ import {
   Replace,
   ToggleLeft,
 } from "lucide-react";
-import { TextSelection } from "@tiptap/pm/state";
+import { TextSelection } from "prosemirror-state";
 import { toast } from "sonner";
 
 export default function InFileSearch({ editor, isVisible, onClose }) {
@@ -98,9 +98,8 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
           match.from,
           match.to
         );
-        const tr = editor.state.tr.setSelection(selection);
-        editor.view.dispatch(tr);
-        editor.commands.scrollIntoView();
+        const tr = editor.state.tr.setSelection(selection).scrollIntoView();
+        editor.dispatch(tr);
       } catch (error) {
         console.error("Failed to jump a specific match:", error);
         toast.error(
@@ -138,9 +137,9 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
       const tr = editor.state.tr.replaceWith(
         match.from,
         match.to,
-        editor.schema.text(replaceQuery)
+        editor.state.schema.text(replaceQuery)
       );
-      editor.view.dispatch(tr);
+      editor.dispatch(tr);
       toast.success(`Replaced: "${match.text}" → "${replaceQuery}"`);
       // Re-search after replacing
       setTimeout(() => performSearch(), 100);
@@ -163,11 +162,11 @@ export default function InFileSearch({ editor, isVisible, onClose }) {
         tr = tr.replaceWith(
           match.from,
           match.to,
-          editor.schema.text(replaceQuery)
+          editor.state.schema.text(replaceQuery)
         );
       }
 
-      editor.view.dispatch(tr);
+      editor.dispatch(tr);
       toast.success(`Replaced all ${matches.length} matches`);
       // Re-search after replacing
       setTimeout(() => performSearch(), 100);

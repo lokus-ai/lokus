@@ -11,9 +11,9 @@ vi.mock('mermaid', () => ({
     }
 }))
 
-vi.mock('@tiptap/react', () => ({
-    NodeViewWrapper: ({ children, ...props }) => <div data-testid="node-view-wrapper" {...props}>{children}</div>
-}))
+// No longer need to mock @tiptap/react NodeViewWrapper.
+// MermaidComponent now renders a plain div wrapper and receives PM node-view props
+// directly from createReactNodeView: node, view, getPos, updateAttributes, selected.
 
 vi.mock('../../components/MermaidViewerModal.jsx', () => ({
     MermaidViewerModal: ({ isOpen }) => isOpen ? <div data-testid="mermaid-modal">Modal</div> : null
@@ -27,9 +27,13 @@ vi.mock('lucide-react', () => ({
 
 describe('MermaidComponent', () => {
     const mockUpdateAttributes = vi.fn()
+    const mockView = { focus: vi.fn() }
     const defaultProps = {
         node: { attrs: { code: 'graph TD; A-->B;' } },
-        updateAttributes: mockUpdateAttributes
+        view: mockView,
+        getPos: () => 0,
+        updateAttributes: mockUpdateAttributes,
+        selected: false,
     }
 
     beforeEach(() => {
@@ -83,16 +87,14 @@ describe('MermaidComponent', () => {
         render(<MermaidComponent {...defaultProps} />)
 
         await waitFor(() => {
-            expect(screen.getByTestId('node-view-wrapper')).toHaveTextContent('Syntax Error')
+            // The component renders error text into the container div
+            const container = document.querySelector('.mermaid-node-view')
+            expect(container).toBeTruthy()
+            expect(container.textContent).toContain('Syntax Error')
         })
     })
 
     it('opens fullscreen viewer', async () => {
-        // We need to mock containerRef.current.querySelector('svg')
-        // But since we can't easily access ref, we rely on component setting innerHTML
-        // and JSDOM updating it.
-        // However, XMLSerializer might not work in JSDOM without polyfill or mock.
-        // We'll mock XMLSerializer.
         global.XMLSerializer = class {
             serializeToString() { return '<svg>serialized</svg>' }
         }
@@ -102,14 +104,9 @@ describe('MermaidComponent', () => {
         // Wait for render
         await waitFor(() => expect(mermaid.render).toHaveBeenCalled())
 
-        // We need to ensure the DOM has the SVG.
-        // The component does containerRef.current.innerHTML = svg.
-        // JSDOM should handle this.
-
         const maxBtn = await screen.findByTitle('View fullscreen')
         fireEvent.click(maxBtn)
 
         expect(screen.getByTestId('mermaid-modal')).toBeInTheDocument()
     })
 })
-

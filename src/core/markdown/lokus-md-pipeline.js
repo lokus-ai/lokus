@@ -249,8 +249,10 @@ function markdownItCallout(md) {
         continue
       }
 
-      // Check if the first inline starts with [!type]
-      const headerMatch = inlineToken.content.match(/^\[!(\w+)\](-?)\s*(.*)$/)
+      // Check if the first line starts with [!type] — match first line only
+      // (using [ \t]* instead of \s* to avoid consuming \n)
+      const firstLine = inlineToken.content.split('\n')[0]
+      const headerMatch = firstLine.match(/^\[!(\w+)\](-?)[ \t]*(.*)$/)
       if (!headerMatch) {
         i++
         continue
@@ -260,16 +262,33 @@ function markdownItCallout(md) {
       const collapsed = collapsedFlag === '-'
       const title = titleText.trim() || null
 
+      // Check if there's remaining body content in the same paragraph
+      // (happens when markdown-it merges `> [!note]\n> body` into one inline token)
+      const remainingContent = inlineToken.content.slice(firstLine.length + 1) // skip first line + \n
+      const hasRemainingInSameParagraph = remainingContent.length > 0
+
       // Collect the inner content tokens (everything between the first paragraph and blockquote_close)
-      // Skip the first paragraph (which contains the header line)
       let contentStart = -1
       for (let j = i + 1; j < closeIdx; j++) {
         if (tokens[j].type === 'paragraph_open') {
-          // Skip first paragraph (header)
           if (contentStart === -1) {
-            // Find and skip this paragraph
-            while (j < closeIdx && tokens[j].type !== 'paragraph_close') j++
-            contentStart = j + 1
+            if (hasRemainingInSameParagraph) {
+              // Strip the [!type] header line from the inline token, keeping the body text
+              inlineToken.content = remainingContent
+              // Remove children tokens up to and including the first softbreak
+              if (inlineToken.children) {
+                const sbIdx = inlineToken.children.findIndex(t => t.type === 'softbreak')
+                if (sbIdx !== -1) {
+                  inlineToken.children = inlineToken.children.slice(sbIdx + 1)
+                }
+              }
+              // Don't skip this paragraph — it now contains the body text
+              contentStart = j
+            } else {
+              // Header is the entire paragraph — skip it as before
+              while (j < closeIdx && tokens[j].type !== 'paragraph_close') j++
+              contentStart = j + 1
+            }
             break
           }
         }
@@ -334,7 +353,7 @@ function markdownItMath(md) {
       // Single-line block math: $$formula$$
       if (lineText.length > 4 && lineText.startsWith('$$') && lineText.endsWith('$$')) {
         const formula = lineText.slice(2, lineText.length - 2).trim()
-        const token = state.push('math_inline', '', 0)
+        const token = state.push('math_block', '', 0)
         token.attrSet('display', 'yes')
         token.content = formula
         token.markup = lineText
@@ -361,7 +380,7 @@ function markdownItMath(md) {
         contentLines.push(state.src.slice(lPos, state.eMarks[l]))
       }
 
-      const token = state.push('math_inline', '', 0)
+      const token = state.push('math_block', '', 0)
       token.attrSet('display', 'yes')
       token.content = contentLines.join('\n')
       token.markup = '$$'
@@ -515,6 +534,19 @@ export function createLokusParser(schema) {
     hardbreak: { node: nodeType('hardBreak') ? 'hardBreak' : 'hard_break' },
 
     // -----------------------------------------------------------------------
+    // GFM tables
+    //
+    // markdown-it emits table / thead / tbody / tr / th / td tokens.
+    // Map them to the camelCase schema names (tableRow, tableHeader, tableCell).
+    // thead and tbody are structural wrappers handled by adding no-op
+    // handlers after parser construction (see below).
+    // -----------------------------------------------------------------------
+    table: { block: nodeType('table') ? 'table' : 'table' },
+    tr: { block: nodeType('tableRow') ? 'tableRow' : 'table_row' },
+    // th and td are handled by custom token handlers added after parser
+    // construction (see below) because their content needs paragraph wrapping.
+
+    // -----------------------------------------------------------------------
     // Standard inline marks
     //
     // TipTap renames 'em'→'italic', 'strong'→'bold', 's'→'strike'.
@@ -635,7 +667,80 @@ export function createLokusParser(schema) {
     filteredTokens[name] = spec
   }
 
-  return new MarkdownParser(schema, tokenizer, filteredTokens)
+  const parser = new MarkdownParser(schema, tokenizer, filteredTokens)
+
+  // ── GFM table fixups ─────────────────────────────────────────────────
+  //
+  // markdown-it emits thead/tbody structural wrappers that have no PM
+  // equivalent. Table cells (th/td) expect `block*` content in the schema,
+  // but markdown-it only sends an `inline` token inside them. The default
+  // MarkdownParser block handler would add inline text directly, which
+  // violates the schema. We override the handlers to wrap cell inline
+  // content in a paragraph automatically.
+
+  const noop = () => {}
+  parser.tokenHandlers.thead_open = noop
+  parser.tokenHandlers.thead_close = noop
+  parser.tokenHandlers.tbody_open = noop
+  parser.tokenHandlers.tbody_close = noop
+
+  // Shared schema types used by custom handlers below
+  const paraType = schema.nodes.paragraph
+  const thType = schema.nodes.tableHeader ?? schema.nodes.table_header
+  const tdType = schema.nodes.tableCell ?? schema.nodes.table_cell
+  const inlineMathType = schema.nodes.inlineMath
+
+  // ── Block math handler ────────────────────────────────────────────────
+  //
+  // Block math ($$...$$) emits a 'math_block' token at block level.
+  // The inlineMath node is inline, so we wrap it in a paragraph to satisfy
+  // the doc's block+ content requirement.
+  if (inlineMathType && paraType) {
+    parser.tokenHandlers.math_block = (state, tok) => {
+      state.openNode(paraType, { blockId: null })
+      const attrs = {
+        latex: tok.content ?? '',
+        display: tok.attrGet?.('display') === 'yes' ? 'yes' : 'no',
+      }
+      state.addNode(inlineMathType, attrs)
+      state.closeNode()
+    }
+  }
+
+  // Override th/td handlers to wrap inline content in a paragraph.
+  // prosemirror-markdown token handlers receive (state, tok, toks, i).
+  // The state is a MarkdownParseState with openNode/closeNode/addText methods
+  // and a `stack` array.
+
+  function makeCellOpenHandler(cellType) {
+    return (state, tok) => {
+      const attrs = {
+        colspan: +(tok.attrGet?.('colspan') ?? 1),
+        rowspan: +(tok.attrGet?.('rowspan') ?? 1),
+        colwidth: null,
+      }
+      state.openNode(cellType, attrs)
+      // Open a paragraph wrapper so inline content has a valid container
+      state.openNode(paraType, { blockId: null })
+    }
+  }
+
+  function cellCloseHandler(state) {
+    // Close the paragraph, then close the cell
+    state.closeNode() // paragraph
+    state.closeNode() // cell
+  }
+
+  if (thType && paraType) {
+    parser.tokenHandlers.th_open = makeCellOpenHandler(thType)
+    parser.tokenHandlers.th_close = cellCloseHandler
+  }
+  if (tdType && paraType) {
+    parser.tokenHandlers.td_open = makeCellOpenHandler(tdType)
+    parser.tokenHandlers.td_close = cellCloseHandler
+  }
+
+  return parser
 }
 
 // ---------------------------------------------------------------------------

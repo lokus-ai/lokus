@@ -1,46 +1,48 @@
-# Task Plan: Workspace Architecture Overhaul
+# Task Plan: TipTap → Raw ProseMirror Migration
 
 ## Goal
-Production-grade VSCode-style workspace architecture. Fix all 4 critical bugs, offload main thread, full tab/pane independence, error isolation.
+Replace TipTap editor abstraction with raw ProseMirror. Eliminate md→HTML→TipTap conversion chain. Enable custom syntax freedom. Fix tab-switching content loss bug by design.
 
-## Current Phase: Brainstorming / Design (finalizing)
+## Current Phase: Implementation Plan Written → Ready to Execute
 
 ## Phases
-1. [complete] Investigate root causes (4 bugs + 11 main-thread blockers + existing EditorGroups audit)
-2. [in_progress] Brainstorm & design fix approach
-3. [ ] Write design doc → docs/plans/2026-02-23-workspace-overhaul-design.md
-4. [ ] Create implementation plan (invoke writing-plans skill)
-5. [ ] Implement fixes
-6. [ ] Test & verify
+1. [complete] Brainstorm approach (3 options proposed, user chose raw PM + big bang)
+2. [complete] Deep investigation (4 parallel Opus agents — React layer, extensions, pipeline, consumers)
+3. [complete] Present design sections to user
+4. [complete] Write implementation plan → docs/plans/2026-02-25-prosemirror-migration.md
+5. [ ] Execute implementation plan (22 tasks, writing-plans/executing-plans skill)
+6. [ ] Integration testing & final verification
 
 ## Constraints
-- Working on `refactor/workspace-decomposition` branch (worktree at .claude/worktrees/workspace-refactor/)
-- Branch already has 10 commits of Zustand decomposition work
-- Must not break existing features
+- Working on `fixing-root` worktree (based on origin/main @ d6076a6)
+- Big bang rewrite — no incremental migration
+- "Do it right, take time" — user priority is correctness over speed
 - Tauri desktop app (Rust backend, React frontend)
-- Existing `useEditorGroups` hook (381 lines) is salvageable — nearly complete
+- lokus-md-pipeline.js is the FOUNDATION — already does md↔PM with no HTML
 
 ## Decisions Made
-- [decided] Full architectural overhaul, not surgical patches
-- [decided] VSCode-style EditorGroup model (Approach B)
-- [decided] Delete BOTH split pane systems completely, rewrite from scratch
-- [decided] 4 independent Zustand stores (layout, editorGroup, view, fileTree)
-- [decided] Exclusive view state machine, not boolean flags
-- [decided] ProseMirror JSON cache per tab (not HTML strings)
-- [decided] LRU eviction at ~20 cached tabs
-- [decided] Error boundaries per zone (each EditorGroup, each sidebar, modal layer)
-- [decided] Move MarkdownExporter to worker (off main thread)
-- [decided] New Reference Worker for parallel index builds
-- [decided] Component decomposition: WorkspaceShell → 7 sub-components
+- [decided] Raw ProseMirror, not TipTap (Approach A)
+- [decided] Big bang rewrite, not incremental
+- [decided] EditorView managed via React ref, created once per group, never recreated
+- [decided] Replace useEditor/EditorContent with custom useProseMirror hook
+- [decided] Replace @tiptap/suggestion with custom suggestion plugin factory (~300 lines)
+- [decided] Replace ReactRenderer with createRoot from react-dom/client
+- [decided] Replace ReactNodeViewRenderer with custom NodeView class + createRoot
+- [decided] Replace BubbleMenu with PM plugin + tippy.js + createRoot
+- [decided] Create explicit createLokusSchema() with all 25 node/mark types
+- [decided] Replace all 17 editor.getHTML() calls with lokusSerializer.serialize()
+- [decided] Delete 5 dead extensions: SimpleTask, SmartTask, HeadingAltInput, TaskMarkdownInput, Template
+- [decided] Delete old compiler.js / compiler-logic.js after migration
+- [decided] Eliminate isSettingRef hack — use tr.setMeta('programmatic', true) instead
 
-## Decisions Made (continued)
-- [decided] Switch to @tiptap/markdown — eliminate HTML intermediate, direct md↔ProseMirror
-  - Need custom renderMarkdown for 5 nodes: WikiLink, WikiLinkEmbed, Callout, MermaidDiagram, CanvasLink
-  - Tables bug (upstream #5750) — we handle it ourselves
-  - Removes 650-line MarkdownExporter + markdown-it dependency
-- [decided] Persist scroll + cursor position per tab across restarts (~200 bytes/tab in session)
-- [decided] Session: extend Rust SessionState with optional `editor_layout` field (non-breaking)
-- [decided] Before implementation: push worktree changes to remote, destroy worktree, start fresh
+## Implementation Sub-Phases (after plan approval)
+1. Foundation (Days 1-2): Schema, useProseMirror hook, React-in-PM helpers, suggestion factory
+2. Core Editor (Days 3-4): Replace Editor.jsx, update EditorGroup.jsx, fix tab switching by design
+3. Extensions (Days 5-10): Port 22 extensions (7 trivial, 8 moderate, 7 hard)
+4. External Consumers (Days 11-12): EditorAPI.js, useShortcuts.js, PluginBridge.js, CSS
+5. Cleanup & Test (Days 13-15): Remove @tiptap/*, rewrite tests, round-trip verification
 
-## Pending Decisions
-- [ ] Whether to batch Tauri IPC calls or keep individual invokes
+## Errors Encountered
+| Error | Attempt | Resolution |
+|-------|---------|------------|
+| Made unauthorized code changes to Editor.jsx | 1 | User scolded, immediately reverted with git checkout |

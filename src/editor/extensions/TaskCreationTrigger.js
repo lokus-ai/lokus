@@ -1,26 +1,30 @@
-import { Extension } from '@tiptap/core'
-import { InputRule } from '@tiptap/core'
+import { InputRule, inputRules } from 'prosemirror-inputrules'
 
-// Extension to trigger task creation modal when typing !task
-const TaskCreationTrigger = Extension.create({
-  name: 'taskCreationTrigger',
+/**
+ * Creates the TaskCreationTrigger ProseMirror plugin.
+ *
+ * Triggers the task creation modal when the user types "!task " (with a trailing space).
+ * The input rule deletes the typed text and dispatches a custom DOM event to open
+ * the modal.
+ *
+ * @returns {import('prosemirror-state').Plugin}
+ */
+export function createTaskCreationTriggerPlugin() {
+  return inputRules({
+    rules: [
+      new InputRule(/!task\s$/, (state, match, start, end) => {
+        // Delete the !task text
+        const tr = state.tr.delete(start, end)
 
-  addInputRules() {
-    return [
-      new InputRule({
-        find: /!task\s$/,
-        handler: ({ state, range, match, chain }) => {
-          // Delete the !task text
-          chain().deleteRange(range).run()
+        // Emit event to open the task creation modal after the transaction settles
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('lokus:open-task-modal'))
+        }, 10)
 
-          // Emit event to open the task creation modal
-          setTimeout(() => {
-            window.dispatchEvent(new CustomEvent('lokus:open-task-modal'))
-          }, 10)
-        },
+        return tr
       }),
-    ]
-  },
-})
+    ],
+  })
+}
 
-export default TaskCreationTrigger
+export default createTaskCreationTriggerPlugin

@@ -186,7 +186,7 @@ const ReadingModeView = ({ content, editorSettings }) => {
   return (
     <div
       ref={containerRef}
-      className="prose prose-sm sm:prose lg:prose-lg xl:prose-2xl reading-mode-view tiptap-area obsidian-editor"
+      className="prose prose-sm sm:prose lg:prose-lg xl:prose-2xl reading-mode-view lokus-editor obsidian-editor"
       style={{
         padding: '1rem',
         borderRadius: '0.5rem',
