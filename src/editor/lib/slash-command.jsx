@@ -516,6 +516,7 @@ const commandItems = [
         title: "Template",
         description: "Insert a template with variables.",
         icon: <FileText size={18} />,
+        featureFlag: "enable_templates",
         command: ({ editor: view, range }) => {
           openTemplatePicker({ editor: view, range });
         },
@@ -862,7 +863,13 @@ const slashCommand = {
       return 0;
     };
 
-    const available = (_item) => true; // Always show; execution is guarded.
+    const available = (item) => {
+      if (item.featureFlag) {
+        const flags = globalThis.__LOKUS_FEATURE_FLAGS__ || {};
+        if (flags[item.featureFlag] === false) return false;
+      }
+      return true;
+    };
 
     // Get plugin slash commands
     const pluginCommandGroups = editorAPI.getSlashCommands();

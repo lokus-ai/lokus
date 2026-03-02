@@ -127,7 +127,7 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
         </button>
 
         {/* Task Board (Kanban) */}
-        {uiVisibility.sidebar_kanban && (
+        {featureFlags.enable_kanban && uiVisibility.sidebar_kanban && (
           <button
             onClick={handleKanbanClick}
             title="Task Board"
@@ -187,7 +187,7 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
         )}
 
         {/* Bases */}
-        {uiVisibility.sidebar_bases && (
+        {featureFlags.enable_bases && uiVisibility.sidebar_bases && (
           <button
             onClick={() => {
               useViewStore.getState().switchView('editor');
@@ -224,7 +224,7 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
         )}
 
         {/* Graph View */}
-        {uiVisibility.sidebar_graph && (
+        {featureFlags.enable_graph && uiVisibility.sidebar_graph && (
           <button
             onClick={() => {
               useViewStore.getState().switchView('editor');
@@ -250,7 +250,7 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
         )}
 
         {/* Daily Notes */}
-        {uiVisibility.sidebar_daily_notes && (
+        {featureFlags.enable_daily_notes && uiVisibility.sidebar_daily_notes && (
           <button
             onClick={handleDailyNotesClick}
             title="Daily Notes"
@@ -273,7 +273,7 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
         )}
 
         {/* Calendar */}
-        <button
+        {featureFlags.enable_calendar && <button
           onClick={handleCalendarClick}
           title="Calendar"
           className={`obsidian-button icon-only w-full mb-1 ${showCalendarPanel ? 'active' : ''}`}
@@ -290,7 +290,7 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
             className="w-5 h-5"
             style={showCalendarPanel ? { color: 'rgb(var(--accent))' } : {}}
           />
-        </button>
+        </button>}
       </div>
     </aside>
   );

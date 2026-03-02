@@ -2,11 +2,6 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 // Default configuration values (fallback if offline or fetch fails)
 const DEFAULT_CONFIG = {
-    // Legacy flags
-    enable_new_features: false,
-    welcome_message_variant: 'default',
-    promo_banner_active: false,
-
     // Announcements
     announcements: [],
 
@@ -54,7 +49,18 @@ const DEFAULT_CONFIG = {
         enable_sync: true,
         enable_plugins: true,
         enable_canvas: true,
-        beta_features: false,
+        enable_graph: true,
+        enable_kanban: true,
+        enable_bases: true,
+        enable_daily_notes: true,
+        enable_calendar: true,
+        enable_meetings: true,
+        enable_templates: true,
+        enable_mcp: true,
+        enable_terminal: true,
+        enable_backlinks: true,
+        enable_version_history: true,
+        enable_import_export: true,
     },
 
     // Service status for maintenance mode
@@ -103,14 +109,10 @@ const DEFAULT_CONFIG = {
         sidebar_bases: true,
         sidebar_graph: true,
         sidebar_daily_notes: true,
-        sidebar_explorer: true,
         toolbar_split_view: true,
         toolbar_new_file: true,
         toolbar_new_folder: true,
         toolbar_new_canvas: true,
-        menu_ai_assistant: true,
-        menu_share: true,
-        editor_mode_switcher: true,
     },
 
     // UI strings (server-controllable text labels)

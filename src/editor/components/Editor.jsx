@@ -49,6 +49,7 @@ import liveEditorSettings from "../../core/editor/live-settings.js";
 import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import TaskCreationModal from "../../components/TaskCreationModal.jsx";
 import ExportModal from "../../views/ExportModal.jsx";
+import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
 import ImageInsertModal from "../../components/ImageInsertModal.jsx";
 import ImageUrlModal from "./ImageUrlModal.jsx";
 import MathFormulaModal from "../../components/MathFormulaModal.jsx";
@@ -658,6 +659,7 @@ const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, edi
   const [isWikiLinkModalOpen, setIsWikiLinkModalOpen] = useState(false);
   const [isTaskCreationModalOpen, setIsTaskCreationModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const featureFlags = useFeatureFlags();
   const [imageViewerState, setImageViewerState] = useState({ isOpen: false, imagePath: null });
   const [imageInsertModalState, setImageInsertModalState] = useState({ isOpen: false, onInsert: null });
   const [imageUrlModalState, setImageUrlModalState] = useState({ isOpen: false, onSubmit: null });
@@ -1338,24 +1340,26 @@ const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, edi
       />
 
       {/* Export Modal */}
-      <ExportModal
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        htmlContent={(() => {
-          const view = viewRef.current;
-          if (!view) return '';
-          try {
-            const serializer = createLokusSerializer();
-            return serializer.serialize(view.state.doc);
-          } catch { return ''; }
-        })()}
-        currentFile={{
-          name: globalThis.__LOKUS_ACTIVE_FILE__?.name || 'untitled',
-          path: globalThis.__LOKUS_ACTIVE_FILE__?.path,
-        }}
-        workspacePath={globalThis.__LOKUS_WORKSPACE_PATH__}
-        exportType="single"
-      />
+      {featureFlags.enable_import_export && (
+        <ExportModal
+          isOpen={isExportModalOpen}
+          onClose={() => setIsExportModalOpen(false)}
+          htmlContent={(() => {
+            const view = viewRef.current;
+            if (!view) return '';
+            try {
+              const serializer = createLokusSerializer();
+              return serializer.serialize(view.state.doc);
+            } catch { return ''; }
+          })()}
+          currentFile={{
+            name: globalThis.__LOKUS_ACTIVE_FILE__?.name || 'untitled',
+            path: globalThis.__LOKUS_ACTIVE_FILE__?.path,
+          }}
+          workspacePath={globalThis.__LOKUS_WORKSPACE_PATH__}
+          exportType="single"
+        />
+      )}
 
       {/* Page Preview on Hover */}
       {previewData && (

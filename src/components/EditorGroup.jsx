@@ -13,6 +13,7 @@ import { registerEditor } from '../stores/editorRegistry';
 import { isImageFile } from '../utils/imageUtils';
 import { isPDFFile } from '../utils/pdfUtils';
 import { LazyImageViewer, LazyPDFViewer } from './OptimizedWrapper';
+import { useFeatureFlags } from '../contexts/RemoteConfigContext';
 
 // Lazy-loaded special tab views
 const BasesView = lazy(() => import('../bases/BasesView'));
@@ -43,6 +44,8 @@ export default function EditorGroup({
   onOpenCommandPalette,
   onFileOpen,
 }) {
+  const featureFlags = useFeatureFlags();
+
   // ── Refs ─────────────────────────────────────────────────────────────────
 
   // Raw ProseMirror EditorView instance, set via the onEditorReady callback.
@@ -404,9 +407,9 @@ export default function EditorGroup({
   // DEPRECATED: .canvas (TLDraw) format is no longer supported
   const isCanvasFile = !!(activeFile?.endsWith('.canvas'));
   const isExcalidrawFile = !!(activeFile?.endsWith('.excalidraw'));
-  const isKanbanFile = !!(activeFile?.endsWith('.kanban'));
-  const isBasesTab = activeFile === '__bases__';
-  const isGraphTab = activeFile === '__graph__';
+  const isKanbanFile = !!(activeFile?.endsWith('.kanban')) && featureFlags.enable_kanban;
+  const isBasesTab = activeFile === '__bases__' && featureFlags.enable_bases;
+  const isGraphTab = activeFile === '__graph__' && featureFlags.enable_graph;
 
   // ── Render ────────────────────────────────────────────────────────────────
 

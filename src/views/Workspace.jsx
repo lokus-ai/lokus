@@ -97,6 +97,11 @@ function WorkspaceInner({ path }) {
     if (path) dailyNotesManager.init(path);
   }, [path]);
 
+  // Sync feature flags to globalThis for non-React code (slash commands, shortcuts)
+  useEffect(() => {
+    globalThis.__LOKUS_FEATURE_FLAGS__ = featureFlags;
+  }, [featureFlags]);
+
   // ---------------------------------------------------------------------------
   // File tree filtering (base scope > folder scope)
   // ---------------------------------------------------------------------------
@@ -105,15 +110,25 @@ function WorkspaceInner({ path }) {
     const groups = useEditorGroupStore.getState().getAllGroups();
     const hasBasesTab = groups.some((g) => g.tabs.some((t) => t.path === '__bases__'));
 
+    // Hide files for disabled features (.kanban, .canvas)
+    const filterByFeatureFlags = (entries) =>
+      entries
+        .filter((e) => {
+          if (!featureFlags.enable_kanban && e.path?.endsWith('.kanban')) return false;
+          if (!featureFlags.enable_canvas && e.path?.endsWith('.canvas')) return false;
+          return true;
+        })
+        .map((e) => (e.children?.length ? { ...e, children: filterByFeatureFlags(e.children) } : e));
+
     if (activeBase?.sourceFolder && hasBasesTab) {
       const filterToBase = (entries) =>
         entries
           .filter((e) => e.path === activeBase.sourceFolder || e.path.startsWith(activeBase.sourceFolder + '/'))
           .map((e) => (e.children?.length ? { ...e, children: filterToBase(e.children) } : e));
-      return filterToBase(fileTree);
+      return filterByFeatureFlags(filterToBase(fileTree));
     }
-    return filterFileTree(fileTree);
-  }, [fileTree, activeBase?.sourceFolder, scopeMode, scopedFolders, filterFileTree]);
+    return filterByFeatureFlags(filterFileTree(fileTree));
+  }, [fileTree, activeBase?.sourceFolder, scopeMode, scopedFolders, filterFileTree, featureFlags.enable_kanban, featureFlags.enable_canvas]);
 
   // ---------------------------------------------------------------------------
   // Callbacks delegated to sub-components

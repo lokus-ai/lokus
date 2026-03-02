@@ -24,6 +24,7 @@ import { AuthProvider } from "./core/auth/AuthContext.jsx";
 import { CalendarProvider } from "./contexts/CalendarContext.jsx";
 import { ScheduleProvider } from "./contexts/ScheduleContext.jsx";
 import { MeetingProvider } from "./contexts/MeetingContext.jsx";
+import { useFeatureFlags } from "./contexts/RemoteConfigContext.jsx";
 import platformService from "./services/platform/PlatformService.js";
 import markdownSyntaxConfig from "./core/markdown/syntax-config.js";
 import editorConfigCache from "./core/editor/config-cache.js";
@@ -44,6 +45,20 @@ const LoadingFallback = () => (
     </div>
   </div>
 );
+
+// Conditionally wrap providers based on feature flags
+const FeatureGatedProviders = ({ children }) => {
+  const featureFlags = useFeatureFlags();
+  let content = children;
+  if (featureFlags.enable_meetings) {
+    content = <MeetingProvider>{content}</MeetingProvider>;
+  }
+  content = <ScheduleProvider>{content}</ScheduleProvider>;
+  if (featureFlags.enable_calendar) {
+    content = <CalendarProvider>{content}</CalendarProvider>;
+  }
+  return content;
+};
 
 // Auth gate component - must be inside AuthProvider
 const AuthGate = ({ children, isPrefsWindow }) => {
@@ -213,21 +228,17 @@ function App() {
         <AuthProvider>
           <AuthGate isPrefsWindow={isPrefsWindow}>
             <PluginProvider>
-              <CalendarProvider>
-                <ScheduleProvider>
-                  <MeetingProvider>
-                    <Suspense fallback={<LoadingFallback />}>
-                      {isPrefsWindow ? (
-                        <Preferences />
-                      ) : activePath ? (
-                        <Workspace initialPath={activePath} />
-                      ) : (
-                        <Launcher />
-                      )}
-                    </Suspense>
-                  </MeetingProvider>
-                </ScheduleProvider>
-              </CalendarProvider>
+              <FeatureGatedProviders>
+                <Suspense fallback={<LoadingFallback />}>
+                  {isPrefsWindow ? (
+                    <Preferences />
+                  ) : activePath ? (
+                    <Workspace initialPath={activePath} />
+                  ) : (
+                    <Launcher />
+                  )}
+                </Suspense>
+              </FeatureGatedProviders>
             </PluginProvider>
           </AuthGate>
         </AuthProvider>

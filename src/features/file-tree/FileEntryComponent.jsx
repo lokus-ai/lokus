@@ -271,6 +271,8 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
         }
         break;
       case 'openInTerminal':
+        const ff = globalThis.__LOKUS_FEATURE_FLAGS__ || {};
+        if (ff.enable_terminal === false) return;
         try {
           const terminalPath = file.is_directory ? file.path : file.path.split("/").slice(0, -1).join("/");
           await invoke('platform_open_terminal', { path: terminalPath });

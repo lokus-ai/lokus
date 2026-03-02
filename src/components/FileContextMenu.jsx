@@ -45,6 +45,7 @@ import {
 } from 'lucide-react';
 import platformService from '../services/platform/PlatformService';
 import { isDesktop } from '../services/platform/PlatformService';
+import { useFeatureFlags } from '../contexts/RemoteConfigContext';
 
 export default function FileContextMenu({
   children,
@@ -57,6 +58,7 @@ export default function FileContextMenu({
   selectedPaths = new Set(),
   isSelected = false,
 }) {
+  const featureFlags = useFeatureFlags();
   const isFile = file?.type === 'file';
   const isFolder = file?.type === 'folder';
   const isWindows = platformService.isWindows();
@@ -143,15 +145,19 @@ export default function FileContextMenu({
 
             <ContextMenuSeparator />
 
+            {featureFlags.enable_import_export && (
             <ContextMenuItem onClick={() => handleAction('exportSelected')}>
               <Download className="mr-2 h-4 w-4" />
               Export {selectedCount} Items...
             </ContextMenuItem>
+            )}
 
+            {featureFlags.enable_import_export && (
             <ContextMenuItem onClick={() => handleAction('archiveSelected')}>
               <Archive className="mr-2 h-4 w-4" />
               Create Archive...
             </ContextMenuItem>
+            )}
           </>
         )}
 
@@ -194,11 +200,13 @@ export default function FileContextMenu({
                   {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+Enter' : '⌘Enter'}</ContextMenuShortcut>)}
                 </ContextMenuItem>
 
+                {featureFlags.enable_version_history && (
                 <ContextMenuItem onClick={() => handleAction('viewHistory')}>
                   <Clock className="mr-2 h-4 w-4" />
                   View History
                   {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Ctrl+H' : '⌘H'}</ContextMenuShortcut>)}
                 </ContextMenuItem>
+                )}
 
                 <ContextMenuSub>
                   <ContextMenuSubTrigger>
@@ -236,7 +244,7 @@ export default function FileContextMenu({
               {isDesktop() && (<ContextMenuShortcut>{isWindows ? 'Alt+R' : '⌥R'}</ContextMenuShortcut>)}
             </ContextMenuItem>
 
-            {isDesktop() && (
+            {isDesktop() && featureFlags.enable_terminal && (
               <ContextMenuItem onClick={() => handleAction('openInTerminal')}>
                 <Terminal className="mr-2 h-4 w-4" />
                 Open in {isWindows ? 'Command Prompt' : isMac ? 'Terminal' : 'Terminal'}
@@ -422,7 +430,7 @@ export default function FileContextMenu({
         )}
 
         {/* Export/Import */}
-        {file && (
+        {file && featureFlags.enable_import_export && (
           <>
             <ContextMenuSub>
               <ContextMenuSubTrigger>

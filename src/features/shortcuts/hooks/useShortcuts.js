@@ -73,8 +73,21 @@ export function useShortcuts({ workspacePath, onSave, onSaveAs, onCreateFile, on
     on('lokus:refresh-files', () => useFileTreeStore.getState().refreshTree());
 
     // Views
-    on('lokus:graph-view', () => useViewStore.getState().switchView('graph'));
-    on('lokus:daily-note', () => onOpenDailyNote?.());
+    on('lokus:graph-view', () => {
+      const ff = globalThis.__LOKUS_FEATURE_FLAGS__ || {};
+      if (ff.enable_graph === false) return;
+      useViewStore.getState().switchView('graph');
+    });
+    on('lokus:open-kanban', () => {
+      const ff = globalThis.__LOKUS_FEATURE_FLAGS__ || {};
+      if (ff.enable_kanban === false) return;
+      useViewStore.getState().switchView('kanban');
+    });
+    on('lokus:daily-note', () => {
+      const ff = globalThis.__LOKUS_FEATURE_FLAGS__ || {};
+      if (ff.enable_daily_notes === false) return;
+      onOpenDailyNote?.();
+    });
 
     // Split view — now handled via EditorGroupStore
     on('lokus:toggle-split-view', () => {
@@ -84,8 +97,16 @@ export function useShortcuts({ workspacePath, onSave, onSaveAs, onCreateFile, on
     });
 
     // Export / workspace
-    on('lokus:export-pdf', () => onExportPdf?.());
-    on('lokus:export-html', () => onExportHtml?.());
+    on('lokus:export-pdf', () => {
+      const ff = globalThis.__LOKUS_FEATURE_FLAGS__ || {};
+      if (ff.enable_import_export === false) return;
+      onExportPdf?.();
+    });
+    on('lokus:export-html', () => {
+      const ff = globalThis.__LOKUS_FEATURE_FLAGS__ || {};
+      if (ff.enable_import_export === false) return;
+      onExportHtml?.();
+    });
     on('lokus:print', () => onPrint?.());
     on('lokus:open-workspace', () => onOpenWorkspace?.());
     on('lokus:close-window', async () => {
@@ -267,6 +288,8 @@ export function useShortcuts({ workspacePath, onSave, onSaveAs, onCreateFile, on
         return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'h' && !e.shiftKey && !e.altKey) {
+        const ff = globalThis.__LOKUS_FEATURE_FLAGS__ || {};
+        if (ff.enable_version_history === false) return;
         e.preventDefault();
         const group = useEditorGroupStore.getState().getFocusedGroup();
         const file = group?.activeTab;
@@ -281,6 +304,8 @@ export function useShortcuts({ workspacePath, onSave, onSaveAs, onCreateFile, on
         return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key === '`' && !e.shiftKey && !e.altKey && isDesktop()) {
+        const ff = globalThis.__LOKUS_FEATURE_FLAGS__ || {};
+        if (ff.enable_terminal === false) return;
         e.preventDefault();
         useLayoutStore.getState().setBottomTab('terminal');
         return;

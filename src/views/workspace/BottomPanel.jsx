@@ -1,4 +1,5 @@
 import { useLayoutStore } from '../../stores/layout';
+import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
 import TerminalPanel from '../../components/TerminalPanel/TerminalPanel.jsx';
 import { OutputPanel } from '../../components/OutputPanel/OutputPanel.jsx';
 import { isDesktop } from '../../platform/index.js';
@@ -14,6 +15,7 @@ export default function BottomPanel({ workspacePath, onResizeStart }) {
   const bottomPanelTab = useLayoutStore((s) => s.bottomPanelTab);
   const showTerminalPanel = useLayoutStore((s) => s.showTerminalPanel);
   const showOutputPanel = useLayoutStore((s) => s.showOutputPanel);
+  const featureFlags = useFeatureFlags();
 
   if (!isDesktop() || (!showTerminalPanel && !showOutputPanel)) {
     return null;
@@ -79,7 +81,7 @@ export default function BottomPanel({ workspacePath, onResizeStart }) {
         }}
       >
         {/* Terminal tab — desktop only */}
-        {isDesktop() && (
+        {featureFlags.enable_terminal && isDesktop() && (
           <button
             onClick={handleSelectTerminal}
             style={{
@@ -151,7 +153,7 @@ export default function BottomPanel({ workspacePath, onResizeStart }) {
 
       {/* Panel Content */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        {isDesktop() && bottomPanelTab === 'terminal' && showTerminalPanel && (
+        {featureFlags.enable_terminal && isDesktop() && bottomPanelTab === 'terminal' && showTerminalPanel && (
           <TerminalPanel
             isOpen={showTerminalPanel}
             onClose={handleClosePanel}
