@@ -200,10 +200,12 @@ export function useWorkspaceEvents({
 
       if (canvasPath && !canvasPath.startsWith('/') && !canvasPath.includes('/')) {
         const fileIndex = globalThis.__LOKUS_FILE_INDEX__ || [];
-        const canvasFileName = canvasPath.endsWith('.canvas') ? canvasPath : `${canvasPath}.canvas`;
+        const variants = [canvasPath];
+        if (!canvasPath.endsWith('.excalidraw')) variants.push(`${canvasPath}.excalidraw`);
+        if (!canvasPath.endsWith('.canvas')) variants.push(`${canvasPath}.canvas`);
         const matchedFile = fileIndex.find(file => {
           const fileName = file.name || file.path.split('/').pop();
-          return fileName === canvasFileName || fileName === canvasPath;
+          return variants.includes(fileName);
         });
         if (matchedFile) canvasPath = matchedFile.path;
       }

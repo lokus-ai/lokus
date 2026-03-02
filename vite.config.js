@@ -13,17 +13,27 @@ export default defineConfig(async () => ({
     },
   },
 
+  // Excalidraw 0.18+ uses `export { english as "en-us" }` in locale modules
+  // which requires es2022 target for both esbuild (dev) and rollup (build)
+  optimizeDeps: {
+    esbuildOptions: {
+      target: 'es2022',
+    },
+  },
+
   // Build configuration
   build: {
+    target: 'es2022',
     // Generate source maps for production (hidden by default, only visible to Sentry)
     sourcemap: 'hidden',
-    // Improve build performance
+    // Excalidraw chunk is ~3MB, suppress warning
+    chunkSizeWarningLimit: 3000,
     rollupOptions: {
       output: {
-        // Manual chunking for better caching
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom'],
-          'sentry': ['@sentry/react'],
+        manualChunks(id) {
+          if (id.includes('@excalidraw')) return 'excalidraw-vendor'
+          if (id.includes('react-dom') || id.includes('react/')) return 'react-vendor'
+          if (id.includes('@sentry')) return 'sentry'
         },
       },
     },

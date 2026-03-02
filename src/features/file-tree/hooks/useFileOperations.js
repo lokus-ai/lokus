@@ -144,7 +144,7 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
       const targetPath = getTargetPath();
       const newCanvasPath = await canvasManager.createCanvas(targetPath, 'Untitled Canvas');
       refreshTree();
-      handleFileOpen?.({ path: newCanvasPath, name: 'Untitled Canvas.canvas', is_directory: false });
+      handleFileOpen?.({ path: newCanvasPath, name: 'Untitled Canvas.excalidraw', is_directory: false });
       posthog.trackFeatureActivation('canvas');
     } catch { }
   }, [featureFlags, getTargetPath, refreshTree, handleFileOpen]);

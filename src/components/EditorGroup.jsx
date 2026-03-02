@@ -84,7 +84,7 @@ export default function EditorGroup({
   const [originalTitle, setOriginalTitle] = useState('');
 
   useEffect(() => {
-    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas') || activeFile.endsWith('.kanban') || isImageFile(activeFile) || isPDFFile(activeFile)) {
+    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas') || activeFile.endsWith('.excalidraw') || activeFile.endsWith('.kanban') || isImageFile(activeFile) || isPDFFile(activeFile)) {
       setEditorTitle('');
       setOriginalTitle('');
       return;
@@ -161,7 +161,7 @@ export default function EditorGroup({
    */
   const snapshotEditorState = useCallback((filePath) => {
     const view = rawEditorRef.current;
-    if (!view || !filePath || filePath.startsWith('__') || filePath.endsWith('.canvas') || filePath.endsWith('.kanban') || isImageFile(filePath) || isPDFFile(filePath)) return;
+    if (!view || !filePath || filePath.startsWith('__') || filePath.endsWith('.canvas') || filePath.endsWith('.excalidraw') || filePath.endsWith('.kanban') || isImageFile(filePath) || isPDFFile(filePath)) return;
     editorStatesRef.current.set(filePath, view.state);
   }, []);
 
@@ -169,7 +169,7 @@ export default function EditorGroup({
 
   useEffect(() => {
     // Canvas / kanban / image / PDF / special files don't involve the ProseMirror instance
-    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas') || activeFile.endsWith('.kanban') || isImageFile(activeFile) || isPDFFile(activeFile)) {
+    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas') || activeFile.endsWith('.excalidraw') || activeFile.endsWith('.kanban') || isImageFile(activeFile) || isPDFFile(activeFile)) {
       activeFileRef.current = activeFile;
       return;
     }
@@ -183,6 +183,7 @@ export default function EditorGroup({
       prevFile !== activeFile &&
       !prevFile.startsWith('__') &&
       !prevFile.endsWith('.canvas') &&
+      !prevFile.endsWith('.excalidraw') &&
       !prevFile.endsWith('.kanban') &&
       !isImageFile(prevFile) &&
       !isPDFFile(prevFile)
@@ -313,7 +314,7 @@ export default function EditorGroup({
       // This handles the case where the component re-mounts after a split
       // (React changes tree position → unmount/remount → lost EditorView).
       const file = activeFileRef.current;
-      if (file && !file.startsWith('__') && !file.endsWith('.canvas') && !file.endsWith('.kanban') && !isImageFile(file) && !isPDFFile(file)) {
+      if (file && !file.startsWith('__') && !file.endsWith('.canvas') && !file.endsWith('.excalidraw') && !file.endsWith('.kanban') && !isImageFile(file) && !isPDFFile(file)) {
         const cachedState = editorStatesRef.current.get(file);
         if (cachedState) {
           restoreEditorState(cachedState);
@@ -399,8 +400,10 @@ export default function EditorGroup({
 
   const isImageFileActive = !!(activeFile && isImageFile(activeFile));
   const isPDFFileActive = !!(activeFile && isPDFFile(activeFile));
-  const isEditorFile = !!(activeFile && !activeFile.startsWith('__') && !activeFile.endsWith('.canvas') && !activeFile.endsWith('.kanban') && !isImageFileActive && !isPDFFileActive);
+  const isEditorFile = !!(activeFile && !activeFile.startsWith('__') && !activeFile.endsWith('.canvas') && !activeFile.endsWith('.excalidraw') && !activeFile.endsWith('.kanban') && !isImageFileActive && !isPDFFileActive);
+  // DEPRECATED: .canvas (TLDraw) format is no longer supported
   const isCanvasFile = !!(activeFile?.endsWith('.canvas'));
+  const isExcalidrawFile = !!(activeFile?.endsWith('.excalidraw'));
   const isKanbanFile = !!(activeFile?.endsWith('.kanban'));
   const isBasesTab = activeFile === '__bases__';
   const isGraphTab = activeFile === '__graph__';
@@ -455,8 +458,22 @@ export default function EditorGroup({
           </div>
         )}
 
-        {/* Canvas viewer — rendered only for .canvas files */}
+        {/* DEPRECATED: .canvas (TLDraw) format is no longer supported */}
         {isCanvasFile && (
+          <div className="flex-1 flex items-center justify-center bg-app-bg">
+            <div className="text-center max-w-md">
+              <div className="text-4xl mb-4">{'\u{1F6AB}'}</div>
+              <h2 className="text-lg font-semibold text-app-text mb-2">Legacy Canvas Format</h2>
+              <p className="text-sm text-app-muted">
+                This .canvas file uses the old TLDraw format which is no longer supported.
+                Create a new Excalidraw canvas instead.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Excalidraw canvas viewer — rendered for .excalidraw files */}
+        {isExcalidrawFile && (
           <div className="flex-1 overflow-hidden h-full">
             <Canvas
               canvasPath={activeFile}

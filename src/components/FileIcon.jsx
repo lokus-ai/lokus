@@ -122,7 +122,8 @@ const FILE_ICON_MAP = {
   'bz2': FileArchive,
 
   // Special Lokus Files
-  'canvas': Layout,
+  'excalidraw': Layout,
+  'canvas': Layout,  // deprecated: use .excalidraw
   'kanban': Trello,
 
   // Other
@@ -228,7 +229,8 @@ export function getFileIconColor(fileName, isDirectory) {
     'svg': 'text-orange-400',
 
     // Special Lokus
-    'canvas': 'text-green-500',
+    'excalidraw': 'text-green-500',
+    'canvas': 'text-green-500',  // deprecated: use .excalidraw
     'kanban': 'text-teal-500',
 
     // Database

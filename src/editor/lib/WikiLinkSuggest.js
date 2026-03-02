@@ -12,7 +12,7 @@ const WIKI_SUGGESTION_KEY = new PluginKey('wikiLinkSuggestion')
 export const IMAGE_EMBED_KEY = new PluginKey('imageEmbedSuggestion')
 
 // Extensions that make sense as [[ wikilink targets
-const LINKABLE_EXT = /\.(md|markdown|canvas)$/i
+const LINKABLE_EXT = /\.(md|markdown|canvas|excalidraw)$/i
 
 function getIndex() {
   const list = (globalThis.__LOKUS_FILE_INDEX__ || [])
@@ -711,7 +711,7 @@ export function createWikiLinkSuggestPlugins(view) {
           try { focusAndDelete(editorView, from, to) } catch (e) { /* silent */ }
 
           // Check if this is a canvas file
-          const isCanvasFile = fullPath.endsWith('.canvas')
+          const isCanvasFile = fullPath.endsWith('.excalidraw') || fullPath.endsWith('.canvas')
 
           if (isCanvasFile) {
             // Create CanvasLink node
@@ -956,7 +956,7 @@ export function createWikiLinkSuggestPlugins(view) {
         const idx = getIndex()
 
         // Filter to only canvas files
-        const canvasFiles = idx.filter(f => f.path.endsWith('.canvas'))
+        const canvasFiles = idx.filter(f => f.path.endsWith('.excalidraw') || f.path.endsWith('.canvas'))
 
         // Clean query
         const cleanQuery = query.toLowerCase()
@@ -999,7 +999,7 @@ export function createWikiLinkSuggestPlugins(view) {
         const hasClosingBracket = textAfter.startsWith(']')
         const deleteEnd = hasClosingBracket ? to + 1 : to
 
-        const fileName = props.title || props.path.split('/').pop()?.replace('.canvas', '')
+        const fileName = props.title || props.path.split('/').pop()?.replace(/\.(excalidraw|canvas)$/, '')
         const fullPath = props.path || ''
 
         // Delete ![...] and insert CanvasLink node

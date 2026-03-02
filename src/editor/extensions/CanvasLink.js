@@ -23,15 +23,28 @@ async function resolveCanvasPath(canvasName) {
   }
 
   const fileIndex = window.__LOKUS_FILE_INDEX__
-  const canvasFileName = `${canvasName}.canvas`
 
-  const matchedFile = fileIndex.find(file => {
+  // Prefer .excalidraw; fall back to .canvas (deprecated)
+  const excalidrawFileName = `${canvasName}.excalidraw`
+  const canvasFileName = `${canvasName}.canvas` // deprecated
+
+  const matchedExcalidraw = fileIndex.find(file => {
     const fileName = file.name || file.path.split('/').pop()
-    return fileName === canvasFileName || fileName === canvasName
+    return fileName === excalidrawFileName || fileName === canvasName
   })
 
-  if (matchedFile) {
-    return { exists: true, path: matchedFile.path, name: canvasName }
+  if (matchedExcalidraw) {
+    return { exists: true, path: matchedExcalidraw.path, name: canvasName }
+  }
+
+  // Fallback: .canvas (deprecated)
+  const matchedCanvas = fileIndex.find(file => {
+    const fileName = file.name || file.path.split('/').pop()
+    return fileName === canvasFileName
+  })
+
+  if (matchedCanvas) {
+    return { exists: true, path: matchedCanvas.path, name: canvasName }
   }
 
   return { exists: false, path: '', name: canvasName }

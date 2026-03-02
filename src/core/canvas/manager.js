@@ -1,11 +1,13 @@
+// NOTE: .canvas (TLDraw) format is DEPRECATED and unsupported. All new canvases use .excalidraw format.
+
 import { invoke } from '@tauri-apps/api/core';
-import { isValidCanvasData, isValidFilePath, sanitizeUserInput } from '../security/index.js';
+import { isValidFilePath, sanitizeUserInput } from '../security/index.js';
 import { joinPath, ensureExtension } from '../../utils/pathUtils.js';
 import { invalidateCache } from './preview-generator.js';
 
 /**
  * Canvas File Manager
- * Handles .canvas file operations and JSON Canvas format
+ * Handles .excalidraw file operations (Excalidraw format)
  */
 
 export class CanvasManager {
@@ -13,6 +15,23 @@ export class CanvasManager {
     this.canvasCache = new Map();
     this.saveQueue = new Map(); // Track concurrent saves per file
     this.loadQueue = new Map(); // Track concurrent loads per file
+  }
+
+  /**
+   * Create an empty Excalidraw document
+   * @returns {Object} - Empty Excalidraw JSON
+   */
+  createEmptyExcalidrawData() {
+    return {
+      type: 'excalidraw',
+      version: 2,
+      source: 'lokus',
+      elements: [],
+      appState: {
+        viewBackgroundColor: 'transparent'
+      },
+      files: {}
+    };
   }
 
   /**
@@ -33,7 +52,7 @@ export class CanvasManager {
         throw new Error('Invalid canvas name');
       }
 
-      const fileName = ensureExtension(sanitizedName, '.canvas');
+      const fileName = ensureExtension(sanitizedName, '.excalidraw');
       const canvasPath = joinPath(workspacePath, fileName);
 
       // Validate final path
@@ -41,8 +60,8 @@ export class CanvasManager {
         throw new Error('Invalid canvas path');
       }
 
-      // Create empty canvas with JSON Canvas format
-      const emptyCanvas = this.createEmptyCanvasData();
+      // Create empty canvas with Excalidraw format
+      const emptyCanvas = this.createEmptyExcalidrawData();
       const content = JSON.stringify(emptyCanvas, null, 2);
 
       await invoke('write_file_content', {
@@ -60,7 +79,7 @@ export class CanvasManager {
   /**
    * Load canvas data from file with queue management
    * @param {string} canvasPath - Path to the canvas file
-   * @returns {Promise<Object>} - Canvas data in JSON Canvas format
+   * @returns {Promise<Object>} - Canvas data (Excalidraw JSON)
    */
   async loadCanvas(canvasPath) {
     // Prevent concurrent loads of same file
@@ -87,9 +106,6 @@ export class CanvasManager {
     try {
       // Validate file path
       if (!isValidFilePath(canvasPath)) {
-        const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
-        if (isDev) {
-        }
         throw new Error('Invalid canvas path');
       }
 
@@ -101,63 +117,31 @@ export class CanvasManager {
       // ALWAYS clear cache before loading to ensure fresh data after saves
       this.canvasCache.delete(canvasPath);
 
-      const content = await invoke('read_file_content', { workspacePath: window.__WORKSPACE_PATH__, path: canvasPath }); let tldrawSnapshot;
+      const content = await invoke('read_file_content', {
+        workspacePath: window.__WORKSPACE_PATH__,
+        path: canvasPath
+      });
+
+      let canvasData;
       try {
-        tldrawSnapshot = JSON.parse(content);        // If snapshot is missing schema, add it (for backwards compatibility)
-        if (!tldrawSnapshot.schema) {
-          const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
-          if (isDev) {
-          }
-          tldrawSnapshot.schema = this.createEmptyTldrawSnapshot().schema;
-        }
+        canvasData = JSON.parse(content);
       } catch (parseError) {
-        tldrawSnapshot = this.createEmptyTldrawSnapshot();
+        canvasData = this.createEmptyExcalidrawData();
       }
 
-      // Cache the loaded snapshot
-      this.canvasCache.set(canvasPath, tldrawSnapshot);
+      // Cache the loaded data
+      this.canvasCache.set(canvasPath, canvasData);
 
-      return tldrawSnapshot;
+      return canvasData;
     } catch (error) {
-      return this.createEmptyTldrawSnapshot();
+      return this.createEmptyExcalidrawData();
     }
-  }
-
-  /**
-   * Create empty TLDraw snapshot
-   * @returns {Object} - Empty TLDraw snapshot
-   */
-  createEmptyTldrawSnapshot() {
-    return {
-      records: [],
-      schema: {
-        schemaVersion: 1,
-        storeVersion: 4,
-        recordVersions: {
-          asset: { version: 1, subTypeKey: 'type', subTypeVersions: { image: 2, video: 2, bookmark: 0 } },
-          camera: { version: 1 },
-          document: { version: 2 },
-          instance: { version: 22 },
-          instance_page_state: { version: 5 },
-          page: { version: 1 },
-          shape: {
-            version: 3,
-            subTypeKey: 'type',
-            subTypeVersions: {
-              group: 0, geo: 1, arrow: 1, highlight: 0, embed: 4, image: 2, video: 1, text: 1
-            }
-          },
-          instance_presence: { version: 5 },
-          pointer: { version: 1 }
-        }
-      }
-    };
   }
 
   /**
    * Save canvas data to file with queue management
    * @param {string} canvasPath - Path to the canvas file
-   * @param {Object} canvasData - Canvas data to save
+   * @param {Object} canvasData - Canvas data to save (Excalidraw JSON)
    * @returns {Promise<void>}
    */
   async saveCanvas(canvasPath, canvasData) {
@@ -180,25 +164,24 @@ export class CanvasManager {
    * Internal save implementation
    * @private
    */
-  async _saveCanvasInternal(canvasPath, tldrawSnapshot) {
+  async _saveCanvasInternal(canvasPath, canvasData) {
     try {
       // Validate file path
       if (!isValidFilePath(canvasPath)) {
-        const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
-        if (isDev) {
-        }
         throw new Error('Invalid canvas path');
-      }      // Save TLDraw snapshot directly - no conversion!
-      const content = JSON.stringify(tldrawSnapshot, null, 2);
+      }
+
+      const content = JSON.stringify(canvasData, null, 2);
 
       await invoke('write_file_content', {
         workspacePath: window.__WORKSPACE_PATH__,
         path: canvasPath,
         content
-      });      // Clear cache to force fresh read next time
+      });
+
+      // Clear cache to force fresh read next time
       this.canvasCache.delete(canvasPath);
       invalidateCache(canvasPath);
-
     } catch (error) {
       throw error;
     }
@@ -216,215 +199,6 @@ export class CanvasManager {
     } catch (error) {
       throw error;
     }
-  }
-
-  /**
-   * Create empty canvas data in JSON Canvas format
-   * @returns {Object} - Empty canvas data
-   */
-  createEmptyCanvasData() {
-    return {
-      // JSON Canvas format specification
-      nodes: [],
-      edges: [],
-
-      // Canvas metadata
-      metadata: {
-        version: '1.0.0',
-        created: new Date().toISOString(),
-        modified: new Date().toISOString(),
-        createdWith: 'Lokus',
-        viewport: {
-          x: 0,
-          y: 0,
-          zoom: 1
-        }
-      }
-    };
-  }
-
-  /**
-   * Validate and normalize canvas data
-   * @param {Object} data - Canvas data to validate
-   * @returns {Object} - Validated canvas data
-   */
-  validateCanvasData(data) {
-    if (!data || typeof data !== 'object') {
-      return this.createEmptyCanvasData();
-    }
-
-    // Ensure required properties exist
-    const validated = {
-      nodes: Array.isArray(data.nodes) ? data.nodes : [],
-      edges: Array.isArray(data.edges) ? data.edges : [],
-      metadata: {
-        version: data.metadata?.version || '1.0.0',
-        created: data.metadata?.created || new Date().toISOString(),
-        modified: new Date().toISOString(),
-        createdWith: data.metadata?.createdWith || 'Lokus',
-        viewport: {
-          x: data.metadata?.viewport?.x || 0,
-          y: data.metadata?.viewport?.y || 0,
-          zoom: data.metadata?.viewport?.zoom || 1
-        }
-      }
-    };
-
-    // Validate individual nodes
-    validated.nodes = validated.nodes.filter((node, index) => {
-      const isValid = this._validateNode(node);
-      if (!isValid) {
-      }
-      return isValid;
-    });
-
-    // Validate individual edges
-    validated.edges = validated.edges.filter((edge, index) => {
-      const isValid = this._validateEdge(edge);
-      if (!isValid) {
-      }
-      return isValid;
-    });
-
-    // Verify edge references
-    const nodeIds = new Set(validated.nodes.map(n => n.id));
-    validated.edges = validated.edges.filter((edge) => {
-      const fromExists = nodeIds.has(edge.fromNode);
-      const toExists = nodeIds.has(edge.toNode);
-      if (!fromExists || !toExists) {
-        return false;
-      }
-      return true;
-    });
-
-    return validated;
-  }
-
-  /**
-   * Validate individual node
-   * @private
-   */
-  _validateNode(node) {
-    if (!node || typeof node !== 'object') return false;
-    if (!node.id || typeof node.id !== 'string') return false;
-    if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return false;
-    if (!Number.isFinite(node.width) || !Number.isFinite(node.height)) return false;
-    if (node.width < 0 || node.height < 0) return false;
-    if (!node.type || typeof node.type !== 'string') return false;
-    return true;
-  }
-
-  /**
-   * Validate individual edge
-   * @private
-   */
-  _validateEdge(edge) {
-    if (!edge || typeof edge !== 'object') return false;
-    if (!edge.id || typeof edge.id !== 'string') return false;
-    if (!edge.fromNode || typeof edge.fromNode !== 'string') return false;
-    if (!edge.toNode || typeof edge.toNode !== 'string') return false;
-    return true;
-  }
-
-  /**
-   * Convert tldraw store data to JSON Canvas format
-   * @param {Object} storeData - Tldraw store snapshot
-   * @returns {Object} - JSON Canvas format data
-   */
-  convertToJsonCanvas(storeData) {
-    // If already in JSON Canvas format, return as-is
-    if (storeData.nodes && storeData.edges) {
-      return storeData;
-    }
-
-    // Convert from tldraw format
-    const nodes = [];
-    const edges = [];
-
-    if (storeData.records) {
-      storeData.records.forEach(record => {
-        switch (record.typeName) {
-          case 'shape':
-            nodes.push(this.convertShapeToNode(record));
-            break;
-          case 'arrow':
-            edges.push(this.convertArrowToEdge(record));
-            break;
-        }
-      });
-    }
-
-    return {
-      nodes,
-      edges,
-      metadata: {
-        version: '1.0.0',
-        created: storeData.metadata?.created || new Date().toISOString(),
-        modified: new Date().toISOString(),
-        createdWith: 'Lokus'
-      }
-    };
-  }
-
-  /**
-   * Convert tldraw shape to JSON Canvas node
-   * @param {Object} shape - Tldraw shape record
-   * @returns {Object} - JSON Canvas node
-   */
-  convertShapeToNode(shape) {
-    const baseNode = {
-      id: shape.id,
-      x: shape.x || 0,
-      y: shape.y || 0,
-      width: shape.props?.w || 100,
-      height: shape.props?.h || 50,
-      color: shape.props?.color || 'black'
-    };
-
-    switch (shape.type) {
-      case 'text':
-        return {
-          ...baseNode,
-          type: 'text',
-          text: shape.props?.text || ''
-        };
-
-      case 'note':
-        return {
-          ...baseNode,
-          type: 'text',
-          text: shape.props?.text || ''
-        };
-
-      case 'geo':
-        return {
-          ...baseNode,
-          type: 'text',
-          text: shape.props?.text || ''
-        };
-
-      default:
-        return {
-          ...baseNode,
-          type: 'text',
-          text: ''
-        };
-    }
-  }
-
-  /**
-   * Convert tldraw arrow to JSON Canvas edge
-   * @param {Object} arrow - Tldraw arrow record
-   * @returns {Object} - JSON Canvas edge
-   */
-  convertArrowToEdge(arrow) {
-    return {
-      id: arrow.id,
-      fromNode: arrow.props?.start?.boundShapeId || null,
-      toNode: arrow.props?.end?.boundShapeId || null,
-      color: arrow.props?.color || 'black',
-      label: arrow.props?.text || ''
-    };
   }
 
   /**
@@ -488,7 +262,7 @@ export class CanvasManager {
    */
   getAllCanvasFiles() {
     const fileIndex = globalThis.__LOKUS_FILE_INDEX__ || [];
-    return fileIndex.filter(f => f.path.endsWith('.canvas'));
+    return fileIndex.filter(f => f.path.endsWith('.excalidraw'));
   }
 }
 
