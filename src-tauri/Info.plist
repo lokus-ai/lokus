@@ -3,6 +3,12 @@
 <plist version="1.0">
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Lokus needs microphone access to capture meeting audio for real-time transcription.</string>
+	<string>Lokus uses the microphone to record meeting audio for real-time transcription. Audio is sent to Deepgram for processing and is not stored on our servers.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Lokus needs access to your Desktop folder to open and manage note files you have saved there.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Lokus needs access to your Documents folder to open and manage your note workspaces stored there.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Lokus needs access to your Downloads folder to import files you have downloaded into your notes.</string>
 </dict>
 </plist>

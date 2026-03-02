@@ -157,7 +157,7 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
         )}
 
         {/* Extensions (Plugins) */}
-        {featureFlags.enable_plugins && uiVisibility.sidebar_plugins && (
+        {featureFlags.enable_plugins && uiVisibility.sidebar_plugins && import.meta.env.VITE_APPSTORE !== 'true' && (
           <button
             onClick={handlePluginsClick}
             title="Extensions"

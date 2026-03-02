@@ -134,12 +134,15 @@ function App() {
       posthog.trackAppStartup(startupTime, true);
     });
 
-    // Check for updates 3 seconds after startup
-    const updateTimer = setTimeout(() => {
-      window.dispatchEvent(new Event('check-for-update'));
-    }, 3000);
+    // Check for updates 3 seconds after startup (disabled for Mac App Store builds)
+    let updateTimer;
+    if (import.meta.env.VITE_DISABLE_UPDATE_CHECKER !== 'true') {
+      updateTimer = setTimeout(() => {
+        window.dispatchEvent(new Event('check-for-update'));
+      }, 3000);
+    }
 
-    return () => clearTimeout(updateTimer);
+    return () => { if (updateTimer) clearTimeout(updateTimer); };
   }, []);
 
   useEffect(() => {

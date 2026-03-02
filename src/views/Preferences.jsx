@@ -33,7 +33,7 @@ export default function Preferences() {
   const [originalTokens, setOriginalTokens] = useState({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [section, setSection] = useState("Appearance");
-  const { isAuthenticated, user, signIn, signOut, isLoading, isGuest, getAccessToken } = useAuth();
+  const { isAuthenticated, user, signIn, signOut, deleteAccount, isLoading, isGuest, getAccessToken } = useAuth();
   const featureFlags = useFeatureFlags();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [showQuickImport, setShowQuickImport] = useState(false);
@@ -1004,7 +1004,7 @@ export default function Preferences() {
               "Account",
               ...(featureFlags.enable_meetings ? ["Meeting Notes"] : []),
               ...(featureFlags.enable_ai_assistant ? ["AI Assistant"] : []),
-              "Updates",
+              ...(import.meta.env.VITE_DISABLE_UPDATE_CHECKER !== 'true' ? ["Updates"] : []),
             ].map((name) => (
               <button
                 key={name}
@@ -3303,6 +3303,28 @@ export default function Preferences() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Danger Zone */}
+                    <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-6">
+                      <h3 className="text-lg font-semibold text-red-500 mb-2">Danger Zone</h3>
+                      <p className="text-sm text-app-text-secondary mb-4">
+                        Permanently delete your account and all associated data. This action cannot be undone.
+                      </p>
+                      <button
+                        onClick={async () => {
+                          if (window.confirm('Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently removed.')) {
+                            try {
+                              await deleteAccount();
+                            } catch (err) {
+                              console.error('Failed to delete account:', err);
+                            }
+                          }
+                        }}
+                        className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
+                      >
+                        Delete Account
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -4204,6 +4226,20 @@ export default function Preferences() {
                       <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-app-accent/70"></div>
                     </label>
                   </div>
+                </section>
+
+                {/* Privacy & Legal */}
+                <section className="pt-2">
+                  <button
+                    onClick={() => {
+                      import('@tauri-apps/plugin-opener').then(({ open }) => {
+                        open('https://lokusmd.com/privacy');
+                      });
+                    }}
+                    className="text-sm text-app-muted hover:text-app-accent transition-colors"
+                  >
+                    Privacy Policy
+                  </button>
                 </section>
               </div>
             )}

@@ -21,8 +21,8 @@ if (import.meta.env.VITE_ENABLE_CRASH_REPORTS === 'true') {
       integrations: [
         Sentry.browserTracingIntegration(),
         Sentry.replayIntegration({
-          maskAllText: false,
-          blockAllMedia: false,
+          maskAllText: true,
+          blockAllMedia: true,
         }),
       ],
       // Performance Monitoring

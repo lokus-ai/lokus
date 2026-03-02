@@ -3,6 +3,8 @@ import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 import pluginManager from "../core/plugins/PluginStateAdapter.js";
 
+const IS_APPSTORE = import.meta.env.VITE_APPSTORE === 'true';
+
 const PluginContext = createContext(null);
 
 export function PluginProvider({ children }) {
@@ -41,14 +43,16 @@ export function PluginProvider({ children }) {
     } catch { }
 
     // Expose manual loader for dev mode
-    window.loadDevPlugin = async (url) => {
-      try {
-        await pluginManager.loadDevPlugin(url);
-        return "Success";
-      } catch (e) {
-        throw e;
-      }
-    };
+    if (!IS_APPSTORE) {
+      window.loadDevPlugin = async (url) => {
+        try {
+          await pluginManager.loadDevPlugin(url);
+          return "Success";
+        } catch (e) {
+          throw e;
+        }
+      };
+    }
 
     // Handle plugin installation from registry (triggered by deep links)
     const handleRegistryInstall = async (event) => {
@@ -87,7 +91,9 @@ export function PluginProvider({ children }) {
       }
     };
 
-    window.addEventListener('plugin-install-from-registry', handleRegistryInstall);
+    if (!IS_APPSTORE) {
+      window.addEventListener('plugin-install-from-registry', handleRegistryInstall);
+    }
 
     if (isTauri) {
       const unlistenPromise = listen("plugins:updated", () => {
@@ -95,33 +101,37 @@ export function PluginProvider({ children }) {
       });
 
       // Listen for deep links (e.g. lokus://plugin-dev?url=...)
-      const deepLinkUnlistenPromise = listen("deep-link-received", async (event) => {
-        const urlStr = event.payload;
-        if (typeof urlStr === 'string' && urlStr.startsWith('lokus://plugin-dev')) {
-          try {
-            const urlObj = new URL(urlStr);
-            const devUrl = urlObj.searchParams.get('url');
-            if (devUrl) {
-              toast.info("Loading Dev Plugin", {
-                description: `Connecting to ${devUrl}...`,
-              });
+      const deepLinkUnlistenPromise = !IS_APPSTORE
+        ? listen("deep-link-received", async (event) => {
+            const urlStr = event.payload;
+            if (typeof urlStr === 'string' && urlStr.startsWith('lokus://plugin-dev')) {
+              try {
+                const urlObj = new URL(urlStr);
+                const devUrl = urlObj.searchParams.get('url');
+                if (devUrl) {
+                  toast.info("Loading Dev Plugin", {
+                    description: `Connecting to ${devUrl}...`,
+                  });
 
-              await pluginManager.loadDevPlugin(devUrl);
+                  await pluginManager.loadDevPlugin(devUrl);
 
-              toast.success("Plugin Loaded", {
-                description: "Development plugin loaded successfully.",
-              });
+                  toast.success("Plugin Loaded", {
+                    description: "Development plugin loaded successfully.",
+                  });
+                }
+              } catch (error) {
+                toast.error("Plugin Load Failed", {
+                  description: error.message,
+                });
+              }
             }
-          } catch (error) {
-            toast.error("Plugin Load Failed", {
-              description: error.message,
-            });
-          }
-        }
-      });
+          })
+        : Promise.resolve(null);
 
       return () => {
-        window.removeEventListener('plugin-install-from-registry', handleRegistryInstall);
+        if (!IS_APPSTORE) {
+          window.removeEventListener('plugin-install-from-registry', handleRegistryInstall);
+        }
         unlistenPromise.then(unlisten => {
           if (typeof unlisten === 'function') unlisten();
         }).catch(() => {});
@@ -133,7 +143,9 @@ export function PluginProvider({ children }) {
       const onDom = () => pluginManager.loadPlugins(true);
       window.addEventListener('plugins:updated', onDom);
       return () => {
-        window.removeEventListener('plugin-install-from-registry', handleRegistryInstall);
+        if (!IS_APPSTORE) {
+          window.removeEventListener('plugin-install-from-registry', handleRegistryInstall);
+        }
         window.removeEventListener('plugins:updated', onDom);
       };
     }

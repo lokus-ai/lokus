@@ -96,12 +96,31 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Sign in with Apple
+  const signInWithApple = async () => {
+    try {
+      return await authManager.signInWithApple();
+    } catch (error) {
+      throw error;
+    }
+  };
+
   // Sign out
   const signOut = async () => {
     try {
       // Reset PostHog to anonymous tracking
       posthog.reset();
       await authManager.signOut();
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  // Delete account
+  const deleteAccount = async () => {
+    try {
+      posthog.reset();
+      await authManager.deleteAccount();
     } catch (error) {
       throw error;
     }
@@ -137,7 +156,9 @@ export const AuthProvider = ({ children }) => {
     signInWithEmail,
     signUpWithEmail,
     signInWithGoogle,
+    signInWithApple,
     signOut,
+    deleteAccount,
     continueAsGuest,
     getAccessToken,
     authenticatedFetch,

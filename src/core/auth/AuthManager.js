@@ -289,6 +289,32 @@ class AuthManager {
   }
 
   /**
+   * Sign in with Apple OAuth
+   */
+  async signInWithApple() {
+    try {
+      const redirectUrl = 'http://127.0.0.1:9080/auth-callback';
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+        },
+      });
+      if (error) throw error;
+      if (data?.url) {
+        console.log('[AuthManager] Opening Apple OAuth URL in browser');
+        await open(data.url);
+        this.pollForAuthCallback();
+      }
+      return data;
+    } catch (error) {
+      console.error('[AuthManager] signInWithApple error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Poll for the Supabase auth callback file
    * The OAuth server writes the code to ~/.lokus/temp/supabase_auth_callback.json
    */
@@ -389,6 +415,28 @@ class AuthManager {
       this.notifyListeners();
     } catch (error) {
       console.error('[AuthManager] signOut error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete the current user's account and all associated data
+   */
+  async deleteAccount() {
+    try {
+      const { error } = await supabase.auth.admin.deleteUser(
+        (await supabase.auth.getUser()).data.user.id
+      );
+      // If admin delete isn't available, use the RPC approach
+      if (error) {
+        // Try calling a Supabase Edge Function or RPC for account deletion
+        const { error: rpcError } = await supabase.rpc('delete_user_account');
+        if (rpcError) throw rpcError;
+      }
+      // Clear all local data
+      await this.signOut();
+    } catch (error) {
+      console.error('[AuthManager] deleteAccount error:', error);
       throw error;
     }
   }
