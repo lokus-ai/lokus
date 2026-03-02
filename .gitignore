@@ -2,7 +2,7 @@
 node_modules/
 */node_modules/
 
-# Package files (don't ignore our own package files)
+# Package files
 yarn.lock
 pnpm-lock.yaml
 
@@ -10,8 +10,6 @@ pnpm-lock.yaml
 .env
 .env.*
 !.env.example
-
-r/*
 
 # Build outputs
 dist/
@@ -35,19 +33,11 @@ pids/
 *.seed
 *.pid.lock
 
-# Coverage directory used by tools like istanbul
+# Coverage
 coverage/
 *.lcov
 
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
 # Tauri
-src-tauri/target/
 src-tauri/Cargo.lock
 
 # Editor directories and files
@@ -70,7 +60,6 @@ Thumbs.db
 # Test reports
 test-results/
 playwright-report/
-coverage/
 
 # Temporary files
 *.tmp
@@ -78,76 +67,45 @@ coverage/
 /tmp/
 temp/
 
-# Test workspace (user testing area - not part of codebase)
-Lokus-Full-Scale-Test/
-/Lokus-Full-Scale-Test/
-
-# MCP server test files
-test-mcp-server.js
-test-simple-mcp.js
-test-complete-mcp.js
-
-# Generated API documentation
-openapi.yaml
-
-# User workspace state file
-.lokus-active-workspaces.json
-
-
-# Personal files
-*_internship_emails.md
-*summer_*.md
-*personal*.md
-*internship*.md
-*research*.md
-*NSF*.md
-*REU*.md
-test-email*.md
-*-email*.md
-
-# Temporary documentation files
-*ANSWER_*.md
-*FIX_*.md
-*TEST_*.md
-*TRANSPORT_*.md
-*VERIFICATION_*.md
-*QUANTUM_*.md
-*PERFORMANCE_*.md
-*LOKUS_QUANTUM*.md
-Progress.md
-*DOCUMENTATION_UPDATE*.md
-*DUAL_CONFIG*.md
-*AUTO_START*.md
-
 # Backup and old files
 *.bak
 *-old.*
 *-backup.*
 *.backup
 
-# Date-stamped temporary files
-20[0-9][0-9]-*-*.txt
-20[0-9][0-9]-*-*.md
-
-# AI Assistant
+# AI / Claude artifacts
 .claude/
 *.claude
+.mcp.json
+findings.md
+progress.md
+task_plan.md
+schema.md
 
-# Personal VS Code settings (keep only extensions.json)
-.vscode/*
-!.vscode/extensions.json
+# Docs and examples (hosted separately)
+docs/
+examples/
 
-# Dev Container
-# Keep .devcontainer/ directory committed, but ignore any local overrides
+# Generated API documentation
+openapi.yaml
+
+# User workspace state
+.lokus-active-workspaces.json
+
+# Dev Container local overrides
 .devcontainer/.env
 .devcontainer/*.local.*
 
+# Test artifacts
+Lokus-Full-Scale-Test/
+test-mcp-server.js
+test-simple-mcp.js
+test-complete-mcp.js
 nul
-Guide-To-Fix-Domain.md
-packages/lokus-plugin-cli/my-react-plugin-sixteen
-packages/lokus-plugin-cli/my-react-plugin-ten
-packages/lokus-plugin-cli/test-plugin
 *.tgz
 test-plugins/*/package-lock.json
 test-plugin-v3/package-lock.json
 temp-plugins/
+packages/lokus-plugin-cli/my-react-plugin-sixteen
+packages/lokus-plugin-cli/my-react-plugin-ten
+packages/lokus-plugin-cli/test-plugin
