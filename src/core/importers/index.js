@@ -7,6 +7,7 @@
 // Import importers as they are created
 import LogseqImporter from './logseq-importer.js';
 import RoamImporter from './roam-importer.js';
+import ObsidianImporter from './obsidian-importer.js';
 
 /**
  * Available importers registry
@@ -80,6 +81,7 @@ export function getAllImporterInfo() {
 // Register importers when they're created
 registerImporter('logseq', LogseqImporter);
 registerImporter('roam', RoamImporter);
+registerImporter('obsidian', ObsidianImporter);
 
 export default {
   registerImporter,

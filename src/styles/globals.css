@@ -19,150 +19,168 @@
   --text-2xl: 24px;
 
   /* The new variable for the top bar */
-  --app-titlebar: 32 32 32; /* Obsidian dark titlebar */
+  --app-titlebar: 24 22 31; /* Lokus Dark titlebar */
 
-  /* Core theme tokens - Obsidian Dark */
-  --bg: 30 30 30;          /* #1e1e1e - Obsidian main bg */
-  --panel: 42 42 42;       /* #2a2a2a - Obsidian sidebar */
-  --panel-secondary: 54 54 54; /* #363636 - Secondary panels */
-  --border: 58 58 58;      /* #3a3a3a - Obsidian borders */
-  --border-hover: 74 74 74; /* #4a4a4a - Hover borders */
-  --text: 220 221 222;     /* #dcddde - Obsidian text */
-  --text-secondary: 136 136 136; /* #888888 - Secondary text */
-  --muted: 85 85 85;       /* #555555 - Muted text */
-  --accent: 124 58 237;    /* #7c3aed - Purple accent like Obsidian */
-  --accent-hover: 109 40 217; /* #6d28d9 - Darker purple */
-  --accent-fg: 255 255 255;
-
-  /* Task status colors */
-  --task-todo: 107 114 128;     /* gray-500 */
-  --task-progress: 59 130 246;  /* blue-500 */
-  --task-urgent: 239 68 68;     /* red-500 */
-  --task-question: 245 158 11;  /* amber-500 */
-  --task-completed: 16 185 129; /* green-500 */
-  --task-cancelled: 107 114 128; /* gray-500 */
-  --task-delegated: 139 92 246; /* violet-500 */
-
-  /* Semantic colors */
-  --danger: 239 68 68;      /* red-500 */
-  --success: 16 185 129;    /* green-500 */
-  --warning: 245 158 11;    /* amber-500 */
-  --info: 59 130 246;       /* blue-500 */
-
-  /* Editor colors */
-  --editor-placeholder: 148 163 184; /* slate-400 */
-
-  /* Canvas colors */
-  --canvas-bg: 38 38 38;           /* #262626 - Lighter than main bg for canvas */
-  --canvas-grid: rgba(255, 255, 255, 0.15); /* Subtle white grid dots */
-
-  /* Graph visualization colors */
-  --graph-bg-primary: #1e1e1e;
-  --graph-bg-secondary: #6366f1;
-  --graph-node-document: #10b981;
-  --graph-node-placeholder: #6b7280;
-  --graph-node-tag: #ef4444;
-  --graph-node-folder: #f59e0b;
-  --graph-link: #6b7280;
-  --graph-link-hover: #6366f1;
-}
-
-:root[data-theme="light"] {
-  --app-titlebar: 226 232 240; /* slate-200 */
-
-  /* Core theme tokens */
-  --bg: 248 250 252;       /* slate-50 */
-  --panel: 241 245 249;    /* slate-100 */
-  --border: 203 213 225;   /* slate-300 */
-  --border-hover: 148 163 184; /* slate-400 */
-  --text: 17 24 39;        /* slate-900 */
-  --muted: 71 85 105;      /* slate-600 */
-  --accent: 99 102 241;    /* indigo-500 */
+  /* Core theme tokens - Lokus Dark */
+  --bg: 24 22 31;           /* #18161f */
+  --panel: 32 30 41;        /* #201e29 */
+  --panel-secondary: 40 38 51; /* #282633 */
+  --border: 54 51 67;       /* #363343 */
+  --border-hover: 70 67 85; /* #464355 */
+  --text: 224 221 240;      /* #e0ddf0 */
+  --text-secondary: 174 171 192; /* #aeabc0 */
+  --muted: 120 117 142;     /* #78758e */
+  --accent: 224 168 114;    /* #e0a872 */
+  --accent-hover: 212 149 96; /* #d49560 */
   --accent-fg: 255 255 255;
 
   /* Tab colors */
-  --tab-active: 241 245 249;   /* slate-100 - Active tab background (same as panel) */
+  --tab-active: 40 38 51;        /* #282633 */
 
   /* Task status colors */
-  --task-todo: 107 114 128;     /* gray-500 */
-  --task-progress: 59 130 246;  /* blue-500 */
-  --task-urgent: 239 68 68;     /* red-500 */
-  --task-question: 245 158 11;  /* amber-500 */
-  --task-completed: 34 197 94;  /* green-500 */
-  --task-cancelled: 107 114 128; /* gray-500 */
-  --task-delegated: 99 102 241; /* indigo-500 */
+  --task-todo: 120 117 142;      /* #78758e */
+  --task-progress: 224 168 114;  /* #e0a872 */
+  --task-urgent: 235 111 146;    /* #eb6f92 */
+  --task-question: 246 193 119;  /* #f6c177 */
+  --task-completed: 110 201 143; /* #6ec98f */
+  --task-cancelled: 120 117 142; /* #78758e */
+  --task-delegated: 196 167 231; /* #c4a7e7 */
 
   /* Semantic colors */
-  --danger: 239 68 68;      /* red-500 */
-  --success: 34 197 94;     /* green-500 */
-  --warning: 245 158 11;    /* amber-500 */
-  --info: 59 130 246;       /* blue-500 */
+  --danger: 235 111 146;    /* #eb6f92 */
+  --success: 110 201 143;   /* #6ec98f */
+  --warning: 246 193 119;   /* #f6c177 */
+  --info: 140 170 238;      /* #8caaee */
 
   /* Editor colors */
-  --editor-placeholder: 107 114 128; /* gray-500 */
+  --editor-placeholder: 120 117 142; /* #78758e */
+
+  /* Shadow */
+  --shadow: 0 0 0;
 
   /* Canvas colors */
-  --canvas-bg: 255 255 255;         /* #ffffff - Pure white for light mode canvas */
-  --canvas-grid: rgba(0, 0, 0, 0.12); /* Subtle dark grid dots */
+  --canvas-bg: 32 30 41;            /* #201e29 */
+  --canvas-grid: rgba(224, 221, 240, 0.06);
 
   /* Graph visualization colors */
-  --graph-bg-primary: #f8fafc;
-  --graph-bg-secondary: #6366f1;
-  --graph-node-document: #10b981;
-  --graph-node-placeholder: #cbd5e1;
-  --graph-node-tag: #ef4444;
-  --graph-node-folder: #f59e0b;
-  --graph-link: #cbd5e1;
-  --graph-link-hover: #6366f1;
+  --graph-bg-primary: #18161f;
+  --graph-bg-secondary: #e0a872;
+  --graph-node-document: #6ec98f;
+  --graph-node-placeholder: #78758e;
+  --graph-node-tag: #c4a7e7;
+  --graph-node-folder: #f6c177;
+  --graph-link: #363343;
+  --graph-link-hover: #e0a872;
+}
+
+:root[data-theme="light"] {
+  --app-titlebar: 240 235 227; /* #f0ebe3 */
+
+  /* Core theme tokens - Lokus Light (warm parchment) */
+  --bg: 249 245 239;        /* #f9f5ef */
+  --panel: 240 235 227;     /* #f0ebe3 */
+  --panel-secondary: 232 226 217; /* #e8e2d9 */
+  --border: 212 206 197;    /* #d4cec5 */
+  --border-hover: 192 186 176; /* #c0bab0 */
+  --text: 43 39 56;         /* #2b2738 */
+  --text-secondary: 87 82 121; /* #575279 */
+  --muted: 129 124 156;     /* #817c9c */
+  --accent: 194 120 48;     /* #c27830 */
+  --accent-hover: 168 102 42; /* #a8662a */
+  --accent-fg: 255 255 255;
+
+  /* Tab colors */
+  --tab-active: 240 235 227;    /* #f0ebe3 */
+
+  /* Task status colors */
+  --task-todo: 129 124 156;      /* #817c9c */
+  --task-progress: 194 120 48;   /* #c27830 */
+  --task-urgent: 194 60 90;      /* #c23c5a */
+  --task-question: 184 132 37;   /* #b88425 */
+  --task-completed: 40 160 110;  /* #28a06e */
+  --task-cancelled: 129 124 156; /* #817c9c */
+  --task-delegated: 139 92 246;  /* #8b5cf6 */
+
+  /* Semantic colors */
+  --danger: 194 60 90;      /* #c23c5a */
+  --success: 40 160 110;    /* #28a06e */
+  --warning: 184 132 37;    /* #b88425 */
+  --info: 90 127 232;       /* #5a7fe8 */
+
+  /* Editor colors */
+  --editor-placeholder: 129 124 156; /* #817c9c */
+
+  /* Shadow */
+  --shadow: 43 39 56;
+
+  /* Canvas colors */
+  --canvas-bg: 240 235 227;          /* #f0ebe3 */
+  --canvas-grid: rgba(43, 39, 56, 0.06);
+
+  /* Graph visualization colors */
+  --graph-bg-primary: #f9f5ef;
+  --graph-bg-secondary: #c27830;
+  --graph-node-document: #28a06e;
+  --graph-node-placeholder: #817c9c;
+  --graph-node-tag: #8b5cf6;
+  --graph-node-folder: #b88425;
+  --graph-link: #d4cec5;
+  --graph-link-hover: #c27830;
 }
 
 :root[data-theme="dark"] {
-  --app-titlebar: 32 32 32; /* Obsidian dark titlebar */
+  --app-titlebar: 24 22 31; /* #18161f */
 
-  /* Core theme tokens - Obsidian Dark */
-  --bg: 30 30 30;          /* #1e1e1e - Obsidian main bg */
-  --panel: 42 42 42;       /* #2a2a2a - Obsidian sidebar */
-  --panel-secondary: 54 54 54; /* #363636 - Secondary panels */
-  --border: 58 58 58;      /* #3a3a3a - Obsidian borders */
-  --border-hover: 74 74 74; /* #4a4a4a - Hover borders */
-  --text: 220 221 222;     /* #dcddde - Obsidian text */
-  --text-secondary: 136 136 136; /* #888888 - Secondary text */
-  --muted: 85 85 85;       /* #555555 - Muted text */
-  --accent: 124 58 237;    /* #7c3aed - Purple accent like Obsidian */
-  --accent-hover: 109 40 217; /* #6d28d9 - Darker purple */
+  /* Core theme tokens - Lokus Dark */
+  --bg: 24 22 31;           /* #18161f */
+  --panel: 32 30 41;        /* #201e29 */
+  --panel-secondary: 40 38 51; /* #282633 */
+  --border: 54 51 67;       /* #363343 */
+  --border-hover: 70 67 85; /* #464355 */
+  --text: 224 221 240;      /* #e0ddf0 */
+  --text-secondary: 174 171 192; /* #aeabc0 */
+  --muted: 120 117 142;     /* #78758e */
+  --accent: 224 168 114;    /* #e0a872 */
+  --accent-hover: 212 149 96; /* #d49560 */
   --accent-fg: 255 255 255;
 
+  /* Tab colors */
+  --tab-active: 40 38 51;        /* #282633 */
+
   /* Task status colors */
-  --task-todo: 107 114 128;     /* gray-500 */
-  --task-progress: 59 130 246;  /* blue-500 */
-  --task-urgent: 239 68 68;     /* red-500 */
-  --task-question: 245 158 11;  /* amber-500 */
-  --task-completed: 16 185 129; /* green-500 */
-  --task-cancelled: 107 114 128; /* gray-500 */
-  --task-delegated: 139 92 246; /* violet-500 */
+  --task-todo: 120 117 142;      /* #78758e */
+  --task-progress: 224 168 114;  /* #e0a872 */
+  --task-urgent: 235 111 146;    /* #eb6f92 */
+  --task-question: 246 193 119;  /* #f6c177 */
+  --task-completed: 110 201 143; /* #6ec98f */
+  --task-cancelled: 120 117 142; /* #78758e */
+  --task-delegated: 196 167 231; /* #c4a7e7 */
 
   /* Semantic colors */
-  --danger: 239 68 68;      /* red-500 */
-  --success: 16 185 129;    /* green-500 */
-  --warning: 245 158 11;    /* amber-500 */
-  --info: 59 130 246;       /* blue-500 */
+  --danger: 235 111 146;    /* #eb6f92 */
+  --success: 110 201 143;   /* #6ec98f */
+  --warning: 246 193 119;   /* #f6c177 */
+  --info: 140 170 238;      /* #8caaee */
 
   /* Editor colors */
-  --editor-placeholder: 148 163 184; /* slate-400 */
+  --editor-placeholder: 120 117 142; /* #78758e */
+
+  /* Shadow */
+  --shadow: 0 0 0;
 
   /* Canvas colors */
-  --canvas-bg: 38 38 38;           /* #262626 - Lighter than main bg for canvas */
-  --canvas-grid: rgba(255, 255, 255, 0.15); /* Subtle white grid dots */
+  --canvas-bg: 32 30 41;            /* #201e29 */
+  --canvas-grid: rgba(224, 221, 240, 0.06);
 
   /* Graph visualization colors */
-  --graph-bg-primary: #1e1e1e;
-  --graph-bg-secondary: #7c3aed;
-  --graph-node-document: #10b981;
-  --graph-node-placeholder: #6b7280;
-  --graph-node-tag: #ef4444;
-  --graph-node-folder: #f59e0b;
-  --graph-link: #6b7280;
-  --graph-link-hover: #7c3aed;
+  --graph-bg-primary: #18161f;
+  --graph-bg-secondary: #e0a872;
+  --graph-node-document: #6ec98f;
+  --graph-node-placeholder: #78758e;
+  --graph-node-tag: #c4a7e7;
+  --graph-node-folder: #f6c177;
+  --graph-link: #363343;
+  --graph-link-hover: #e0a872;
 }
 
 ::selection { background: rgb(var(--accent) / 0.25); }
@@ -590,6 +608,37 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   }
 }
 
+/* Responsive tab bar tab styling (theme-aware) */
+.responsive-tab {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  background-color: rgb(var(--panel));
+  color: rgb(var(--muted));
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  border: 1px solid rgb(var(--border));
+  border-bottom: 1px solid rgb(var(--border));
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.responsive-tab:hover {
+  background-color: rgb(var(--panel-secondary) / 0.5);
+  color: rgb(var(--text));
+  transform: translateY(-1px);
+  box-shadow: 0 -1px 4px rgb(var(--shadow) / 0.08);
+}
+
+.responsive-tab-active {
+  background-color: rgb(var(--panel-secondary));
+  color: rgb(var(--text));
+  border-bottom: 2px solid rgb(var(--panel-secondary));
+  box-shadow: 0 -2px 8px rgb(var(--shadow) / 0.15);
+}
+
+.responsive-tab-active:hover {
+  transform: none;
+}
+
 /* Overflow menu button */
 .overflow-menu-button {
   flex-shrink: 0;
@@ -604,7 +653,7 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   cursor: pointer;
   border: none;
   background-color: transparent;
-  color: rgb(var(--text-muted));
+  color: rgb(var(--muted));
 }
 
 .overflow-menu-button:hover {

@@ -25,7 +25,7 @@ Local-first. Privacy-focused. Blazing fast.
 
 ## Why Lokus?
 
-Most note-taking apps fall into two categories: **powerful but closed-source** (Obsidian) or **open but cloud-dependent** (Notion). Lokus is neither.
+Most note-taking apps fall into two categories: **powerful but cloud-dependent** (Notion) or **local but closed-source** (Obsidian). Lokus is neither.
 
 - **Fair Source** — FCL 1.0 licensed. Read every line. Fork it. Make it yours.
 - **Local-First** — Your notes are markdown files on YOUR device. No proprietary format.

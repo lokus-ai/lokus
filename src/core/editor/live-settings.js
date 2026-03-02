@@ -17,13 +17,13 @@ class LiveEditorSettings {
       h3Weight: 600,
 
       // Colors
-      textColor: '#inherit',
-      headingColor: '#inherit',
-      linkColor: '#inherit',
-      linkHoverColor: '#inherit',
-      codeColor: '#inherit',
+      textColor: 'inherit',
+      headingColor: 'inherit',
+      linkColor: 'inherit',
+      linkHoverColor: 'inherit',
+      codeColor: 'inherit',
       codeBackground: '#f5f5f5',
-      blockquoteColor: '#inherit',
+      blockquoteColor: 'inherit',
       blockquoteBorder: '#e5e5e5',
 
       // Spacing
@@ -42,7 +42,7 @@ class LiveEditorSettings {
 
       // Highlights
       highlightColor: '#fff3cd',
-      highlightTextColor: '#inherit',
+      highlightTextColor: 'inherit',
 
       // Code Blocks
       codeBlockBg: '#f8f9fa',
@@ -62,12 +62,12 @@ class LiveEditorSettings {
       // Text Decorations
       strikethroughColor: '#6c757d',
       strikethroughThickness: 2,
-      underlineColor: '#inherit',
+      underlineColor: 'inherit',
       underlineThickness: 1,
 
       // Bold & Italic
-      boldColor: '#inherit',
-      italicColor: '#inherit',
+      boldColor: 'inherit',
+      italicColor: 'inherit',
 
       // Blockquotes
       blockquoteBorderWidth: 4,

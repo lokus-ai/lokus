@@ -342,10 +342,10 @@ export class ThemeProvider {
         themesDirectory: themesDir,
         availableThemesCount: this.availableThemes.length,
         builtInThemes: this.availableThemes.filter(t => 
-          ['dracula', 'nord', 'one-dark-pro', 'minimal-light', 'neon-dark'].includes(t.id)
+          ['lokus-dark', 'lokus-light', 'rose-pine', 'tokyo-night'].includes(t.id)
         ),
         customThemes: this.availableThemes.filter(t => 
-          !['dracula', 'nord', 'one-dark-pro', 'minimal-light', 'neon-dark'].includes(t.id)
+          !['lokus-dark', 'lokus-light', 'rose-pine', 'tokyo-night'].includes(t.id)
         ),
         lastUpdated: new Date().toISOString()
       };
@@ -523,10 +523,10 @@ export class ThemeProvider {
     const stats = {
       totalThemes: this.availableThemes.length,
       builtInThemes: this.availableThemes.filter(t => 
-        ['dracula', 'nord', 'one-dark-pro', 'minimal-light', 'neon-dark'].includes(t.id)
+        ['lokus-dark', 'lokus-light', 'rose-pine', 'tokyo-night'].includes(t.id)
       ).length,
       customThemes: this.availableThemes.filter(t => 
-        !['dracula', 'nord', 'one-dark-pro', 'minimal-light', 'neon-dark'].includes(t.id)
+        !['lokus-dark', 'lokus-light', 'rose-pine', 'tokyo-night'].includes(t.id)
       ).length,
       currentTheme: this.currentTheme,
       tokenCount: Object.keys(this.themeTokens).length,

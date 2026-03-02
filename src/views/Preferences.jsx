@@ -1051,7 +1051,6 @@ export default function Preferences() {
                     value={activeTheme}
                     onChange={handleThemeChange}
                   >
-                    <option value="">Built-in</option>
                     {themes.map((theme) => (
                       <option key={theme.id} value={theme.id}>
                         {theme.name}

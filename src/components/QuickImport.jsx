@@ -27,7 +27,7 @@ const PLATFORMS = {
   },
   obsidian: {
     name: 'Obsidian',
-    description: 'Already compatible - no conversion needed',
+    description: 'Convert canvas, callouts, and plugin syntax',
     color: '#7c3aed'
   }
 };
@@ -112,17 +112,6 @@ export default function QuickImport({ onClose, onWorkspaceOpen }) {
     setProgress({ current: 0, total: 0, message: 'Starting conversion...' });
 
     try {
-      // Obsidian doesn't need conversion
-      if (selectedPlatform === 'obsidian') {
-        setResult({
-          success: true,
-          workspacePath: selectedPath,
-          message: 'Obsidian vault is already compatible with Lokus!'
-        });
-        setIsConverting(false);
-        return;
-      }
-
       // Get the importer
       const ImporterClass = getImporter(selectedPlatform);
       if (!ImporterClass) {
@@ -146,9 +135,7 @@ export default function QuickImport({ onClose, onWorkspaceOpen }) {
 
       setResult({
         success: true,
-        workspacePath: selectedPlatform === 'roam'
-          ? conversionResult.workspacePath
-          : selectedPath,
+        workspacePath: conversionResult.workspacePath || selectedPath,
         stats: conversionResult.stats,
         message: `Converted ${conversionResult.stats.processedFiles} files successfully!`
       });
@@ -322,9 +309,6 @@ export default function QuickImport({ onClose, onWorkspaceOpen }) {
                         <p className="text-sm font-medium text-app-text">
                           {platform.name}
                         </p>
-                        {key === 'obsidian' && (
-                          <p className="text-xs text-green-500 mt-1">No conversion</p>
-                        )}
                       </button>
                     ))}
                   </div>
@@ -332,7 +316,7 @@ export default function QuickImport({ onClose, onWorkspaceOpen }) {
               )}
 
               {/* Conversion Note */}
-              {selectedPlatform && selectedPlatform !== 'obsidian' && (
+              {selectedPlatform && (
                 <div className="p-3 bg-app-bg rounded-lg border border-app-border">
                   <p className="text-sm text-app-muted">
                     A backup will be created before conversion. Your original files will be converted in place.
@@ -424,11 +408,6 @@ export default function QuickImport({ onClose, onWorkspaceOpen }) {
                   <>
                     <Loader className="w-4 h-4 animate-spin" />
                     Converting...
-                  </>
-                ) : selectedPlatform === 'obsidian' ? (
-                  <>
-                    Open as Workspace
-                    <ArrowRight className="w-4 h-4" />
                   </>
                 ) : (
                   <>

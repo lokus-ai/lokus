@@ -45,27 +45,6 @@ export function ResponsiveTabBar({
     const isHovered = hoveredTab === tab.path;
     const hasUnsavedChanges = unsavedChanges.has(tab.path);
 
-    const baseStyles = {
-      pointerEvents: 'auto',
-      marginLeft: index > 0 && isVisible ? '-12px' : '0',
-      flexShrink: 1,
-      paddingTop: '6px',
-      paddingBottom: '6px',
-      backgroundColor: isActive ? '#3d3d3d' : (isHovered ? '#353535' : '#2a2a2a'),
-      color: isActive ? '#ffffff' : (isHovered ? '#ffffff' : '#808080'),
-      borderTopLeftRadius: '8px',
-      borderTopRightRadius: '8px',
-      borderBottomLeftRadius: '0',
-      borderBottomRightRadius: '0',
-      border: '1px solid #555555',
-      borderBottom: isActive ? '2px solid #3d3d3d' : '1px solid #555555',
-      boxShadow: isActive
-        ? '0 -2px 8px rgba(0, 0, 0, 0.4), 0 1px 0 0 #3d3d3d'
-        : (isHovered ? '0 -1px 4px rgba(0, 0, 0, 0.2)' : '0 0 0 0 transparent'),
-      transform: isHovered && !isActive ? 'translateY(-1px)' : 'translateY(0)',
-      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
-    };
-
     return (
       <div
         key={tab.path}
@@ -75,11 +54,16 @@ export function ResponsiveTabBar({
         onKeyDown={(e) => e.key === 'Enter' && onTabClick?.(tab.path)}
         data-tauri-drag-region="false"
         className={`
-          relative flex items-center gap-2 px-4 h-8 text-xs whitespace-nowrap cursor-pointer  max-w-[80px] sm:max-w-[100px] md:max-w-[180px]
+          responsive-tab relative flex items-center gap-2 px-4 h-8 text-xs whitespace-nowrap cursor-pointer
+          max-w-[80px] sm:max-w-[100px] md:max-w-[180px]
           min-w-[60px] sm:min-w-[80px] md:min-w-[120px]
-          ${isActive ? 'z-10' : 'z-0'}
+          ${isActive ? 'responsive-tab-active z-10' : 'z-0'}
         `}
-        style={baseStyles}
+        style={{
+          pointerEvents: 'auto',
+          marginLeft: index > 0 && isVisible ? '-12px' : '0',
+          flexShrink: 1,
+        }}
         onMouseEnter={() => !isActive && setHoveredTab(tab.path)}
         onMouseLeave={() => setHoveredTab(null)}
       >

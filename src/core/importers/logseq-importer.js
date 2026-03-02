@@ -1,39 +1,32 @@
 /**
  * Logseq Importer
  *
- * Imports notes from Logseq to Lokus format
+ * Converts a Logseq graph to a Lokus workspace using the unified pipeline:
+ *   LogseqParser → IR → LokusTransformer → output files
  */
 
 import { BaseImporter } from './base-importer.js';
-import { parseLogseqProperties, addFrontmatter } from './utils/frontmatter.js';
-import { transformLogseqContent } from './utils/markdown-transformer.js';
-import { BlockReferenceMap, convertBlockReferences, extractUUIDs } from './utils/block-resolver.js';
+import { parseLogseqGraph } from './parsers/logseq-parser.js';
+import { transformDocument } from './transformer/lokus-transformer.js';
+import { convertBlockReferences } from './utils/block-resolver.js';
 import { ProgressTracker } from './utils/progress-tracker.js';
 import { invoke } from '@tauri-apps/api/core';
 
 export class LogseqImporter extends BaseImporter {
   constructor(options = {}) {
     super(options);
-    this.blockMap = new BlockReferenceMap();
     this.progressTracker = new ProgressTracker();
   }
 
-  /**
-   * Get platform name
-   */
   getPlatformName() {
     return 'Logseq';
   }
 
-  /**
-   * Validate Logseq source folder
-   */
   async validate(sourcePath) {
     const errors = [];
     const warnings = [];
 
     try {
-      // Check if path exists and is a directory
       const exists = await invoke('path_exists', { path: sourcePath });
       if (!exists) {
         errors.push('Source path does not exist');
@@ -46,36 +39,24 @@ export class LogseqImporter extends BaseImporter {
         return { valid: false, errors, warnings };
       }
 
-      // Check for Logseq markers
-      const hasLogseqFolder = await invoke('path_exists', { path: `${sourcePath}/logseq` });
       const hasConfig = await invoke('path_exists', { path: `${sourcePath}/logseq/config.edn` });
-
-      if (!hasLogseqFolder || !hasConfig) {
+      if (!hasConfig) {
         warnings.push('This may not be a Logseq graph folder (missing logseq/config.edn)');
       }
 
-      // Count markdown files
       const files = await this.findMarkdownFiles(sourcePath);
       if (files.length === 0) {
         errors.push('No markdown files found in source folder');
         return { valid: false, errors, warnings };
       }
 
-      return {
-        valid: true,
-        errors,
-        warnings,
-        fileCount: files.length
-      };
+      return { valid: true, errors, warnings, fileCount: files.length };
     } catch (error) {
       errors.push(`Validation error: ${error.message}`);
       return { valid: false, errors, warnings };
     }
   }
 
-  /**
-   * Find all markdown files in directory
-   */
   async findMarkdownFiles(dirPath) {
     try {
       const entries = await invoke('read_directory', { path: dirPath });
@@ -83,283 +64,69 @@ export class LogseqImporter extends BaseImporter {
 
       for (const entry of entries) {
         const fullPath = `${dirPath}/${entry.name}`;
-
         if (entry.is_dir) {
-          // Skip logseq system folders
-          if (entry.name === 'logseq' || entry.name === '.logseq') {
-            continue;
-          }
-          // Recursively find files in subdirectories
+          if (entry.name === 'logseq' || entry.name === '.logseq' || entry.name.startsWith('.')) continue;
           const subFiles = await this.findMarkdownFiles(fullPath);
           files.push(...subFiles);
         } else if (entry.name.endsWith('.md')) {
           files.push(fullPath);
         }
       }
-
       return files;
-    } catch (error) {
+    } catch {
       return [];
     }
   }
 
-  /**
-   * Preview conversion
-   */
   async preview(sourcePath, sampleSize = 5) {
-    const files = await this.findMarkdownFiles(sourcePath);
-    const sampleFiles = files.slice(0, sampleSize);
-    const previews = [];
+    const { serializePage } = await import('./transformer/lokus-transformer.js');
+    const { document } = await parseLogseqGraph(sourcePath);
+    const samplePages = document.pages.slice(0, sampleSize);
 
-    for (const filePath of sampleFiles) {
-      try {
-        const content = await invoke('read_file_content', { path: filePath });
-        const converted = await this.convertFile(content, filePath);
-
-        const fileName = filePath.split('/').pop();
-        previews.push({
-          fileName,
-          original: content.substring(0, 500) + (content.length > 500 ? '...' : ''),
-          converted: converted.content.substring(0, 500) + (converted.content.length > 500 ? '...' : ''),
-          properties: converted.properties
-        });
-      } catch (error) {
-        this.addError(filePath, error);
-      }
-    }
-
-    return previews;
+    return samplePages.map(page => ({
+      fileName: page.path,
+      original: `(Logseq source: ${page.sourceFile})`,
+      converted: serializePage(page).substring(0, 500),
+      properties: page.frontmatter
+    }));
   }
 
   /**
-   * Convert a single file's content
-   */
-  async convertFile(content, filePath) {
-    // Step 1: Parse Logseq properties
-    const { properties, content: contentWithoutProps } = parseLogseqProperties(content);
-
-    // Step 2: Extract and register block references
-    const uuids = extractUUIDs(contentWithoutProps);
-    for (const uuid of uuids) {
-      if (!this.blockMap.hasUUID(uuid)) {
-        // Register placeholder, will be resolved in second pass
-        this.blockMap.registerBlock(uuid, '[Referenced block]', filePath);
-      }
-    }
-
-    // Step 3: Transform markdown structure
-    let transformedContent = transformLogseqContent(contentWithoutProps);
-
-    // Step 4: Add frontmatter if properties exist
-    if (Object.keys(properties).length > 0) {
-      transformedContent = addFrontmatter(transformedContent, properties);
-    }
-
-    return {
-      content: transformedContent,
-      properties,
-      uuids
-    };
-  }
-
-  /**
-   * Main import method
+   * Import to a separate destination folder.
    */
   async import(sourcePath, destPath) {
-    this.resetStats();
-    this.blockMap = new BlockReferenceMap(); // Reset block map
-
-    try {
-      // Step 1: Validate source
-      const validation = await this.validate(sourcePath);
-      if (!validation.valid) {
-        throw new Error(`Invalid source: ${validation.errors.join(', ')}`);
-      }
-
-      // Step 2: Find all markdown files
-      const files = await this.findMarkdownFiles(sourcePath);
-      this.stats.totalFiles = files.length;
-      this.progressTracker.setTotal(files.length);
-      this.progressTracker.start();
-
-      // Step 3: First pass - Convert all files and build block map
-      const convertedFiles = [];
-      for (const filePath of files) {
-        try {
-          const fileName = filePath.split('/').pop();
-          this.updateProgress(convertedFiles.length + 1, files.length, `Converting ${fileName}`);
-          this.progressTracker.update(fileName);
-
-          const content = await invoke('read_file_content', { path: filePath });
-          const converted = await this.convertFile(content, filePath);
-
-          convertedFiles.push({
-            originalPath: filePath,
-            fileName,
-            ...converted
-          });
-        } catch (error) {
-          this.addError(filePath, error);
-        }
-      }
-
-      // Step 4: Second pass - Resolve block references
-      for (const file of convertedFiles) {
-        try {
-          const { content, unresolvedRefs } = convertBlockReferences(
-            file.content,
-            this.blockMap,
-            file.originalPath
-          );
-
-          file.content = content;
-
-          if (unresolvedRefs.length > 0) {
-            this.addWarning(file.fileName, `${unresolvedRefs.length} unresolved block references`);
-          }
-        } catch (error) {
-          this.addError(file.fileName, error);
-        }
-      }
-
-      // Step 5: Write files to destination
-      await this.ensureDestinationExists(destPath);
-
-      for (const file of convertedFiles) {
-        try {
-          const destFilePath = `${destPath}/${file.fileName}`;
-          await invoke('write_file', {
-            path: destFilePath,
-            content: file.content
-          });
-
-          this.stats.processedFiles++;
-        } catch (error) {
-          this.addError(file.fileName, error);
-        }
-      }
-
-      this.progressTracker.complete();
-
-      return {
-        success: true,
-        stats: this.getStats(),
-        blockStats: this.blockMap.getStats()
-      };
-    } catch (error) {
-      this.progressTracker.error(error.message);
-      throw error;
-    }
+    return this._runPipeline(sourcePath, destPath);
   }
 
   /**
-   * Ensure destination directory exists
-   */
-  async ensureDestinationExists(destPath) {
-    try {
-      const exists = await invoke('path_exists', { path: destPath });
-      if (!exists) {
-        await invoke('create_directory', { path: destPath, recursive: true });
-      }
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  /**
-   * Convert files in place (modifies original folder)
-   * Creates a backup before conversion
-   * @param {string} folderPath - Path to the Logseq graph folder
-   * @returns {Promise<Object>} Conversion results
+   * Convert in place — creates a backup then writes converted files
+   * back into the original graph folder.
    */
   async convertInPlace(folderPath) {
     this.resetStats();
-    this.blockMap = new BlockReferenceMap();
+    this.progressTracker.reset();
 
     try {
-      // Step 1: Validate source
       const validation = await this.validate(folderPath);
       if (!validation.valid) {
         throw new Error(`Invalid source: ${validation.errors.join(', ')}`);
       }
 
-      // Step 2: Create backup
+      // Backup
       const backupPath = await this.createBackup(folderPath);
       this.updateProgress(0, 100, 'Created backup');
 
-      // Step 3: Find all markdown files
-      const files = await this.findMarkdownFiles(folderPath);
-      this.stats.totalFiles = files.length;
-      this.progressTracker.setTotal(files.length);
-      this.progressTracker.start();
+      // Run pipeline writing to same folder
+      await this._runPipeline(folderPath, folderPath, true);
 
-      // Step 4: First pass - Convert all files and build block map
-      const convertedFiles = [];
-      for (let i = 0; i < files.length; i++) {
-        const filePath = files[i];
-        try {
-          const fileName = filePath.split('/').pop();
-          this.updateProgress(i + 1, files.length, `Converting ${fileName}`);
-          this.progressTracker.update(fileName);
-
-          const content = await invoke('read_file_content', { path: filePath });
-          const converted = await this.convertFile(content, filePath);
-
-          convertedFiles.push({
-            originalPath: filePath,
-            fileName,
-            ...converted
-          });
-        } catch (error) {
-          this.addError(filePath, error);
-        }
-      }
-
-      // Step 5: Second pass - Resolve block references
-      for (const file of convertedFiles) {
-        try {
-          const { content, unresolvedRefs } = convertBlockReferences(
-            file.content,
-            this.blockMap,
-            file.originalPath
-          );
-
-          file.content = content;
-
-          if (unresolvedRefs.length > 0) {
-            this.addWarning(file.fileName, `${unresolvedRefs.length} unresolved block references`);
-          }
-        } catch (error) {
-          this.addError(file.fileName, error);
-        }
-      }
-
-      // Step 6: Write converted files back in place
-      for (const file of convertedFiles) {
-        try {
-          await invoke('write_file', {
-            path: file.originalPath,
-            content: file.content
-          });
-
-          this.stats.processedFiles++;
-        } catch (error) {
-          this.addError(file.fileName, error);
-        }
-      }
-
-      // Step 7: Create .lokus folder to mark as Lokus workspace
+      // Create .lokus marker
       await this.createLokusMarker(folderPath);
-
-      // Step 8: Clean up Logseq-specific folders (optional - keep for reference)
-      // We don't delete logseq folder, just mark as converted
 
       this.progressTracker.complete();
 
       return {
         success: true,
         stats: this.getStats(),
-        blockStats: this.blockMap.getStats(),
         backupPath
       };
     } catch (error) {
@@ -368,36 +135,117 @@ export class LogseqImporter extends BaseImporter {
     }
   }
 
+  async _runPipeline(sourcePath, destPath, isInPlace = false) {
+    if (!isInPlace) {
+      this.resetStats();
+      this.progressTracker.reset();
+    }
+
+    try {
+      if (!isInPlace) {
+        const validation = await this.validate(sourcePath);
+        if (!validation.valid) {
+          throw new Error(`Invalid source: ${validation.errors.join(', ')}`);
+        }
+      }
+
+      // Parse
+      this.updateProgress(0, 1, 'Parsing Logseq graph...');
+      const { document, blockMap } = await parseLogseqGraph(sourcePath, {
+        onProgress: (cur, tot, msg) => {
+          this.updateProgress(cur, tot, `Parsing: ${msg}`);
+          this.progressTracker.update(msg);
+        }
+      });
+
+      this.stats.totalFiles = document.pages.length;
+      this.progressTracker.setTotal(document.pages.length);
+      this.progressTracker.start();
+
+      // Transform (writes files)
+      await this.ensureDestinationExists(destPath);
+      const result = await transformDocument(document, destPath, {
+        onProgress: (cur, tot, msg) => {
+          this.updateProgress(cur, tot, `Writing: ${msg}`);
+        }
+      });
+
+      this.stats.processedFiles = result.pagesWritten;
+
+      // Second pass: resolve block references in written files
+      // (block refs are left as ((uuid)) by the parser and need post-processing)
+      await this.resolveBlockRefs(destPath, document, blockMap);
+
+      if (!isInPlace) {
+        await this.createLokusMarker(destPath);
+        this.progressTracker.complete();
+      }
+
+      return {
+        success: true,
+        stats: this.getStats(),
+        blockStats: blockMap.getStats()
+      };
+    } catch (error) {
+      if (!isInPlace) {
+        this.progressTracker.error(error.message);
+      }
+      throw error;
+    }
+  }
+
   /**
-   * Create backup of the folder before conversion
+   * Post-process written files to resolve ((uuid)) block references.
    */
+  async resolveBlockRefs(destPath, document, blockMap) {
+    for (const page of document.pages) {
+      try {
+        const filePath = `${destPath}/${page.path}`;
+        const content = await invoke('read_file_content', { path: filePath });
+        const { content: resolved, unresolvedRefs } = convertBlockReferences(
+          content, blockMap, page.sourceFile
+        );
+
+        if (resolved !== content) {
+          await invoke('write_file', { path: filePath, content: resolved });
+        }
+
+        if (unresolvedRefs.length > 0) {
+          this.addWarning(page.path, `${unresolvedRefs.length} unresolved block references`);
+        }
+      } catch {
+        // non-fatal
+      }
+    }
+  }
+
+  // -- Helpers ---------------------------------------------------------------
+
+  async ensureDestinationExists(destPath) {
+    const exists = await invoke('path_exists', { path: destPath });
+    if (!exists) {
+      await invoke('create_directory', { path: destPath, recursive: true });
+    }
+  }
+
   async createBackup(folderPath) {
     const date = new Date().toISOString().split('T')[0];
     const backupPath = `${folderPath}/.lokus-backup-${date}`;
 
     try {
       await invoke('create_directory', { path: backupPath, recursive: true });
-
-      // Copy markdown files to backup
       const files = await this.findMarkdownFiles(folderPath);
       for (const file of files) {
         const fileName = file.split('/').pop();
         const content = await invoke('read_file_content', { path: file });
-        await invoke('write_file', {
-          path: `${backupPath}/${fileName}`,
-          content
-        });
+        await invoke('write_file', { path: `${backupPath}/${fileName}`, content });
       }
-
       return backupPath;
     } catch (error) {
       throw new Error(`Failed to create backup: ${error.message}`);
     }
   }
 
-  /**
-   * Create .lokus folder to mark as Lokus workspace
-   */
   async createLokusMarker(folderPath) {
     const lokusPath = `${folderPath}/.lokus`;
     try {
@@ -405,8 +253,6 @@ export class LogseqImporter extends BaseImporter {
       if (!exists) {
         await invoke('create_directory', { path: lokusPath, recursive: true });
       }
-
-      // Write a marker file
       await invoke('write_file', {
         path: `${lokusPath}/converted.json`,
         content: JSON.stringify({
@@ -415,15 +261,11 @@ export class LogseqImporter extends BaseImporter {
           version: '1.0'
         }, null, 2)
       });
-    } catch (error) {
-      // Non-fatal, just log
-      console.error('Failed to create Lokus marker:', error);
+    } catch {
+      // non-fatal
     }
   }
 
-  /**
-   * Register progress callback for tracker
-   */
   onProgress(callback) {
     super.onProgress(callback);
     this.progressTracker.onProgress(callback);

@@ -3,6 +3,9 @@ import { invoke } from '@tauri-apps/api/core'
 import { Trello, Plus, ExternalLink, RefreshCw } from 'lucide-react'
 import KanbanContextMenu from './KanbanContextMenu'
 
+// Module-level cache so the list renders instantly on subsequent views
+let _boardsCache = { workspacePath: null, boards: [] }
+
 // Inline rename input for kanban boards
 function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
   const [value, setValue] = useState(initialValue.replace(/\.kanban$/, ''))
@@ -57,19 +60,25 @@ function InlineRenameInput({ initialValue, onSubmit, onCancel }) {
 }
 
 export default function KanbanList({ workspacePath, onBoardOpen, onCreateBoard, onBoardAction }) {
-  const [boards, setBoards] = useState([])
-  const [loading, setLoading] = useState(true)
+  const hasCached = _boardsCache.workspacePath === workspacePath && _boardsCache.boards.length > 0
+  const [boards, setBoards] = useState(hasCached ? _boardsCache.boards : [])
+  const [loading, setLoading] = useState(!hasCached)
   const [renamingBoardPath, setRenamingBoardPath] = useState(null)
 
   const loadBoards = useCallback(async () => {
     if (!workspacePath) return
 
     try {
-      setLoading(true)
+      // Only show spinner if we have no cached data to display
+      if (!_boardsCache.boards.length || _boardsCache.workspacePath !== workspacePath) {
+        setLoading(true)
+      }
       const boardList = await invoke('list_kanban_boards', {
         workspacePath
       })
-      setBoards(boardList || [])
+      const result = boardList || []
+      _boardsCache = { workspacePath, boards: result }
+      setBoards(result)
     } catch (error) {
       setBoards([])
     } finally {
