@@ -73,7 +73,7 @@
 .ProseMirror h4,
 .ProseMirror h5,
 .ProseMirror h6 {
-    color: var(--editor-heading-color, inherit) !important;
+    color: var(--editor-heading-color, rgb(var(--text))) !important;
     margin-top: var(--editor-heading-margin-top, 1.5rem) !important;
     margin-bottom: var(--editor-heading-margin-bottom, 0.5rem) !important;
     transition: font-size .15s ease, color .15s ease, margin .15s ease;
@@ -591,7 +591,7 @@ ul[data-type="taskList"] li.task-started {
 .ProseMirror hr {
     border: none;
     height: 2px;
-    background: linear-gradient(to right, transparent, rgb(var(--border)), transparent);
+    background: linear-gradient(to right, transparent, rgb(var(--text) / 0.2), transparent);
     margin: 2rem 0;
     border-radius: 1px;
 }
@@ -646,12 +646,12 @@ ul[data-type="taskList"] li.task-started {
 }
 
 .ProseMirror h1 {
-    border-bottom: 2px solid rgb(var(--border));
+    border-bottom: 2px solid rgb(var(--text) / 0.15);
     padding-bottom: 0.5rem;
 }
 
 .ProseMirror h2 {
-    border-bottom: 1px solid rgb(var(--border) / 0.5);
+    border-bottom: 1px solid rgb(var(--text) / 0.1);
     padding-bottom: 0.25rem;
 }
 
