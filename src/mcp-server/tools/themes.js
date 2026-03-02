@@ -51,7 +51,7 @@ export async function listThemes() {
     return {
       themes: themes,
       count: themes.length,
-      builtIn: ["dracula", "nord", "one-dark-pro", "minimal-light", "neon-dark"]
+      builtIn: ["lokus-dark", "lokus-light", "rose-pine", "tokyo-night"]
     };
   } catch (error) {
     throw new Error(`Failed to list themes: ${error.message}`);
@@ -179,7 +179,7 @@ export async function deleteTheme(themeId) {
   }
 
   // Prevent deleting built-in themes
-  const builtIn = ["dracula", "nord", "one-dark-pro", "minimal-light", "neon-dark"];
+  const builtIn = ["lokus-dark", "lokus-light", "rose-pine", "tokyo-night"];
   if (builtIn.includes(themeId)) {
     throw new Error(`Cannot delete built-in theme "${themeId}"`);
   }

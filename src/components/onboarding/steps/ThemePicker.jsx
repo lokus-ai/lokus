@@ -3,12 +3,10 @@ import { Check } from "lucide-react";
 import { useTheme } from "../../../hooks/theme.jsx";
 
 const THEMES = [
-  { id: "lokus-dark", name: "Lokus Dark", bg: "#0f172a", text: "#f1f5f9", accent: "#8b5cf6", panel: "#1e293b" },
-  { id: "dracula", name: "Dracula", bg: "#282a36", text: "#f8f8f2", accent: "#bd93f9", panel: "#21222c" },
-  { id: "nord", name: "Nord", bg: "#2E3440", text: "#ECEFF4", accent: "#88C0D0", panel: "#3B4252" },
-  { id: "one-dark-pro", name: "One Dark Pro", bg: "#282c34", text: "#abb2bf", accent: "#61afef", panel: "#21252b" },
-  { id: "minimal-light", name: "Minimal Light", bg: "#ffffff", text: "#1a1a1a", accent: "#3b82f6", panel: "#f8f9fa" },
-  { id: "neon-dark", name: "Neon Dark", bg: "#0a0a0f", text: "#e0e0e0", accent: "#00d4ff", panel: "#141420" },
+  { id: "lokus-dark", name: "Lokus Dark", bg: "#18161f", text: "#e0ddf0", accent: "#e0a872", panel: "#201e29" },
+  { id: "lokus-light", name: "Lokus Light", bg: "#f9f5ef", text: "#2b2738", accent: "#c27830", panel: "#f0ebe3" },
+  { id: "rose-pine", name: "Rosé Pine", bg: "#191724", text: "#e0def4", accent: "#c4a7e7", panel: "#1f1d2e" },
+  { id: "tokyo-night", name: "Tokyo Night", bg: "#1a1b26", text: "#a9b1d6", accent: "#7aa2f7", panel: "#1f2335" },
 ];
 
 const container = {
@@ -36,7 +34,7 @@ export function ThemePicker({ selections, updateSelection }) {
         <h2 className="text-xl font-bold text-app-text">Pick your theme</h2>
         <p className="text-sm text-app-muted">You can always change this later in settings</p>
       </div>
-      <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-3 gap-3">
+      <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-2 gap-3">
         {THEMES.map((t) => {
           const isSelected = selectedTheme === t.id;
           return (
