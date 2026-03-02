@@ -3,6 +3,7 @@ import { useEditorGroupStore } from '../../stores/editorGroups';
 import { useLayoutStore } from '../../stores/layout';
 import { useFileTreeStore } from '../../stores/fileTree';
 import { getEditor } from '../../stores/editorRegistry';
+import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
 import CommandPalette from '../../components/CommandPalette.jsx';
 import InFileSearch from '../../components/InFileSearch.jsx';
 import FullTextSearchPanel from '../FullTextSearchPanel.jsx';
@@ -100,6 +101,7 @@ export default function ModalLayer({
 
   // Focused group id for editor registry lookup
   const focusedGroupId = useEditorGroupStore((s) => s.focusedGroupId);
+  const featureFlags = useFeatureFlags();
 
   // Tab/file state from useEditorGroupStore
   const focusedGroup = useEditorGroupStore((s) => {
@@ -148,6 +150,7 @@ export default function ModalLayer({
   };
 
   const handleOpenDailyNote = () => {
+    if (!featureFlags.enable_daily_notes) return;
     window.dispatchEvent(new CustomEvent('lokus:open-daily-note'));
   };
 
@@ -171,6 +174,7 @@ export default function ModalLayer({
   };
 
   const handleOpenGraph = () => {
+    if (!featureFlags.enable_graph) return;
     const graphPath = '__professional_graph__';
     const graphName = 'Professional Graph';
     const { focusedGroupId } = useEditorGroupStore.getState();
@@ -252,7 +256,7 @@ export default function ModalLayer({
       />
 
       {/* Template picker */}
-      {showTemplatePicker && templatePickerData && (
+      {featureFlags.enable_templates && showTemplatePicker && templatePickerData && (
         <TemplatePicker
           open={showTemplatePicker}
           onClose={() => {
@@ -296,7 +300,7 @@ export default function ModalLayer({
 
       {/* Create template */}
       <CreateTemplate
-        open={showCreateTemplate}
+        open={featureFlags.enable_templates && showCreateTemplate}
         onClose={() => useViewStore.getState().closePanel('showCreateTemplate')}
         initialContent={createTemplateContent}
         onSaved={onCreateTemplateSaved}
@@ -304,7 +308,7 @@ export default function ModalLayer({
 
       {/* Date picker for daily notes */}
       <DatePickerModal
-        isOpen={showDatePickerModal}
+        isOpen={featureFlags.enable_daily_notes && showDatePickerModal}
         onClose={() => useViewStore.getState().closePanel('showDatePickerModal')}
         onDateSelect={onOpenDailyNoteByDate}
         workspacePath={workspacePath}

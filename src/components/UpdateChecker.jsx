@@ -244,16 +244,23 @@ export default function UpdateChecker() {
             totalBytes = event.data.contentLength || 0;
             toast.loading('Downloading update...', {
               id: 'update-download',
-              description: '0% complete',
+              description: totalBytes > 0 ? '0% complete' : 'Downloading...',
             });
             break;
           case 'Progress':
             downloadedBytes += event.data.chunkLength || 0;
             if (totalBytes > 0) {
-              const progress = Math.round((downloadedBytes / totalBytes) * 100);
+              const progress = Math.min(99, Math.round((downloadedBytes / totalBytes) * 100));
               toast.loading('Downloading update...', {
                 id: 'update-download',
                 description: `${progress}% complete`,
+              });
+            } else {
+              // No content length — show downloaded size instead
+              const mb = (downloadedBytes / (1024 * 1024)).toFixed(1);
+              toast.loading('Downloading update...', {
+                id: 'update-download',
+                description: `${mb} MB downloaded`,
               });
             }
             break;

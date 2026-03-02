@@ -312,11 +312,13 @@ export default function CommandPalette({
               <span>New Folder</span>
               {isDesktop() && (<CommandShortcut>{formatAccelerator(shortcuts['new-folder'])}</CommandShortcut>)}
             </CommandItem>
-            <CommandItem onSelect={() => runCommandWithHistory(onOpenDailyNote, 'Open Daily Note')}>
-              <Calendar className="mr-2 h-4 w-4" />
-              <span>Open Daily Note</span>
-              {isDesktop() && (<CommandShortcut>{formatAccelerator(shortcuts['daily-note'])}</CommandShortcut>)}
-            </CommandItem>
+            {featureFlags.enable_daily_notes && (
+              <CommandItem onSelect={() => runCommandWithHistory(onOpenDailyNote, 'Open Daily Note')}>
+                <Calendar className="mr-2 h-4 w-4" />
+                <span>Open Daily Note</span>
+                {isDesktop() && (<CommandShortcut>{formatAccelerator(shortcuts['daily-note'])}</CommandShortcut>)}
+              </CommandItem>
+            )}
             {activeFile && (
               <>
                 <CommandItem onSelect={() => runCommandWithHistory(onSave, 'Save File', { fileName: activeFile.name })}>
@@ -330,7 +332,7 @@ export default function CommandPalette({
                   {isDesktop() && (<CommandShortcut>{formatAccelerator(shortcuts['close-tab'])}</CommandShortcut>)}
                 </CommandItem>
                 {/* Individual template commands */}
-                {templates.map((template) => (
+                {featureFlags.enable_templates && templates.map((template) => (
                   <CommandItem
                     key={template.id}
                     onSelect={() => runCommandWithHistory(() => handleTemplateSelect(template), `Template: ${template.name}`, { templateId: template.id })}
@@ -342,14 +344,16 @@ export default function CommandPalette({
                   </CommandItem>
                 ))}
                 {/* Save as Template command */}
-                <CommandItem
-                  onSelect={() => runCommandWithHistory(() => onCreateTemplate && onCreateTemplate(), 'Save as Template')}
-                  disabled={!onCreateTemplate}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  <span>Save as Template</span>
-                  {isDesktop() && <CommandShortcut>S</CommandShortcut>}
-                </CommandItem>
+                {featureFlags.enable_templates && (
+                  <CommandItem
+                    onSelect={() => runCommandWithHistory(() => onCreateTemplate && onCreateTemplate(), 'Save as Template')}
+                    disabled={!onCreateTemplate}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    <span>Save as Template</span>
+                    {isDesktop() && <CommandShortcut>S</CommandShortcut>}
+                  </CommandItem>
+                )}
               </>
             )}
           </CommandGroup>
@@ -368,11 +372,13 @@ export default function CommandPalette({
               <span>Open Preferences</span>
               {isDesktop() && (<CommandShortcut>{formatAccelerator(shortcuts['open-preferences'])}</CommandShortcut>)}
             </CommandItem>
-            <CommandItem onSelect={() => runCommandWithHistory(onOpenGraph, 'Open Graph View')}>
-              <Network className="mr-2 h-4 w-4" />
-              <span>Professional Graph View</span>
-              {isDesktop() && <CommandShortcut>⌘G</CommandShortcut>}
-            </CommandItem>
+            {featureFlags.enable_graph && (
+              <CommandItem onSelect={() => runCommandWithHistory(onOpenGraph, 'Open Graph View')}>
+                <Network className="mr-2 h-4 w-4" />
+                <span>Professional Graph View</span>
+                {isDesktop() && <CommandShortcut>⌘G</CommandShortcut>}
+              </CommandItem>
+            )}
           </CommandGroup>
 
           <CommandSeparator />
@@ -401,34 +407,38 @@ export default function CommandPalette({
           <CommandSeparator />
 
           {/* Bases Commands */}
-          <CommandGroup heading="Bases">
-            <CommandItem onSelect={() => runCommandWithHistory(async () => {
-              try {
-                const result = await createBase('New Base', {
-                  description: 'A new base for organizing notes'
-                });
-                if (result.success) {
-                }
-              } catch { }
-            }, 'Create New Base')}>
-              <Database className="mr-2 h-4 w-4" />
-              <span>Create New Base</span>
-              {isDesktop() && <CommandShortcut>⌘⇧B</CommandShortcut>}
-            </CommandItem>
-            {bases && bases.length > 0 && bases.map((base) => (
-              <CommandItem
-                key={base.path}
-                onSelect={() => runCommandWithHistory(() => {
-                  loadBase(base.path);
-                }, `Open Base: ${base.name}`)}
-              >
-                <Database className="mr-2 h-4 w-4" />
-                <span>Open {base.name}</span>
-                {isDesktop() && <CommandShortcut className="text-xs">{base.description || 'Base'}</CommandShortcut>}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-          <CommandSeparator />
+          {featureFlags.enable_bases && (
+            <>
+              <CommandGroup heading="Bases">
+                <CommandItem onSelect={() => runCommandWithHistory(async () => {
+                  try {
+                    const result = await createBase('New Base', {
+                      description: 'A new base for organizing notes'
+                    });
+                    if (result.success) {
+                    }
+                  } catch { }
+                }, 'Create New Base')}>
+                  <Database className="mr-2 h-4 w-4" />
+                  <span>Create New Base</span>
+                  {isDesktop() && <CommandShortcut>⌘⇧B</CommandShortcut>}
+                </CommandItem>
+                {bases && bases.length > 0 && bases.map((base) => (
+                  <CommandItem
+                    key={base.path}
+                    onSelect={() => runCommandWithHistory(() => {
+                      loadBase(base.path);
+                    }, `Open Base: ${base.name}`)}
+                  >
+                    <Database className="mr-2 h-4 w-4" />
+                    <span>Open {base.name}</span>
+                    {isDesktop() && <CommandShortcut className="text-xs">{base.description || 'Base'}</CommandShortcut>}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              <CommandSeparator />
+            </>
+          )}
 
           {/* Plugin Commands - only show when plugins are enabled */}
           {featureFlags.enable_plugins && pluginCommands.length > 0 && (

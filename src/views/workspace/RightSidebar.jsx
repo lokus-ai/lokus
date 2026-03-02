@@ -2,6 +2,7 @@ import { useLayoutStore } from '../../stores/layout';
 import { useViewStore } from '../../stores/views';
 import { useEditorGroupStore } from '../../stores/editorGroups';
 import { getEditor } from '../../stores/editorRegistry';
+import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
 import DocumentOutline from '../../components/DocumentOutline.jsx';
 import BacklinksPanel from '../BacklinksPanel.jsx';
 import GraphSidebar from '../../components/GraphSidebar.jsx';
@@ -60,6 +61,8 @@ export default function RightSidebar({
     return findGroup(layout)?.activeTab ?? null;
   });
 
+  const featureFlags = useFeatureFlags();
+
   if (!showRight) return null;
 
   const handleOpenCalendarView = () => {
@@ -92,7 +95,7 @@ export default function RightSidebar({
       className="h-full overflow-y-auto flex flex-col bg-app-bg border-l border-app-border"
     >
       <div className="flex-1 overflow-hidden">
-        {showVersionHistory ? (
+        {featureFlags.enable_version_history && showVersionHistory ? (
           <VersionHistoryPanel
             key={`version-${activeFile}-${versionRefreshKey}`}
             workspacePath={workspacePath}
@@ -100,18 +103,18 @@ export default function RightSidebar({
             onClose={() => useViewStore.getState().closePanel('showVersionHistory')}
             onRestore={onReloadCurrentFile}
           />
-        ) : showDailyNotesPanel ? (
+        ) : featureFlags.enable_daily_notes && showDailyNotesPanel ? (
           <DailyNotesPanel
             workspacePath={workspacePath}
             onOpenDailyNote={onOpenDailyNoteByDate}
             currentDate={currentDailyNoteDate}
           />
-        ) : showCalendarPanel ? (
+        ) : featureFlags.enable_calendar && showCalendarPanel ? (
           <CalendarWidget
             onOpenCalendarView={handleOpenCalendarView}
             onOpenSettings={handleOpenCalendarSettings}
           />
-        ) : activeFile === '__graph__' ? (
+        ) : featureFlags.enable_graph && activeFile === '__graph__' ? (
           <GraphSidebar
             selectedNodes={graphSidebarData?.selectedNodes}
             hoveredNode={graphSidebarData?.hoveredNode}
@@ -147,13 +150,15 @@ export default function RightSidebar({
             </div>
 
             {/* Backlinks Panel */}
-            <div style={{ minHeight: '200px', flex: 1, overflowY: 'auto' }}>
-              <BacklinksPanel
-                graphData={graphProcessorRef?.current?.getGraphDatabase()}
-                currentFile={activeFile}
-                onOpenFile={onFileOpen}
-              />
-            </div>
+            {featureFlags.enable_backlinks && (
+              <div style={{ minHeight: '200px', flex: 1, overflowY: 'auto' }}>
+                <BacklinksPanel
+                  graphData={graphProcessorRef?.current?.getGraphDatabase()}
+                  currentFile={activeFile}
+                  onOpenFile={onFileOpen}
+                />
+              </div>
+            )}
           </>
         )}
       </div>

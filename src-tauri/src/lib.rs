@@ -1347,7 +1347,12 @@ pub fn run() {
     })
     .on_window_event(|window, event| {
       if let WindowEvent::CloseRequested { api, .. } = event {
-        window.hide().unwrap();
+        // Let modal windows (preferences) close and be destroyed.
+        // Only hide the main workspace windows to preserve state.
+        if window.label() == "prefs" {
+          return;
+        }
+        let _ = window.hide();
         api.prevent_close();
       }
     })

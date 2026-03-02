@@ -47,6 +47,7 @@ import {
 } from 'lucide-react';
 import platformService from '../services/platform/PlatformService';
 import { isDesktop } from '../platform/index.js';
+import { useFeatureFlags } from '../contexts/RemoteConfigContext';
 
 
 export default function EditorContextMenu({
@@ -58,6 +59,7 @@ export default function EditorContextMenu({
   editor = null
 }) {
   const isWindows = platformService.isWindows();
+  const featureFlags = useFeatureFlags();
 
   const handleAction = (action, data = {}) => {
     if (onAction) {
@@ -325,31 +327,35 @@ export default function EditorContextMenu({
         <ContextMenuSeparator />
 
         {/* Export */}
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <Download className="mr-2 h-4 w-4" />
-            Export
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="w-56">
-            <ContextMenuItem onClick={() => handleAction('exportMarkdown')}>
-              <FileText className="mr-2 h-4 w-4" />
-              Export as Markdown
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => handleAction('exportHTML')}>
-              <FileCode className="mr-2 h-4 w-4" />
-              Export as HTML
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => handleAction('exportPDF')}>
-              <FileText className="mr-2 h-4 w-4" />
-              Export as PDF
-            </ContextMenuItem>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
+        {featureFlags.enable_import_export && (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <Download className="mr-2 h-4 w-4" />
+              Export
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="w-56">
+              <ContextMenuItem onClick={() => handleAction('exportMarkdown')}>
+                <FileText className="mr-2 h-4 w-4" />
+                Export as Markdown
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => handleAction('exportHTML')}>
+                <FileCode className="mr-2 h-4 w-4" />
+                Export as HTML
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => handleAction('exportPDF')}>
+                <FileText className="mr-2 h-4 w-4" />
+                Export as PDF
+              </ContextMenuItem>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        )}
 
-        <ContextMenuItem onClick={() => handleAction('importFile')}>
-          <Upload className="mr-2 h-4 w-4" />
-          Import File...
-        </ContextMenuItem>
+        {featureFlags.enable_import_export && (
+          <ContextMenuItem onClick={() => handleAction('importFile')}>
+            <Upload className="mr-2 h-4 w-4" />
+            Import File...
+          </ContextMenuItem>
+        )}
       </ContextMenuContent>
     </ContextMenu>
   );

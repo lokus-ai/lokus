@@ -97,7 +97,7 @@ export default function LeftSidebar({
   }
 
   // Kanban list panel
-  if (showKanban) {
+  if (featureFlags.enable_kanban && showKanban) {
     return (
       <aside className="h-full overflow-y-auto flex flex-col bg-app-bg border-r border-app-border">
         <div className="flex-1 overflow-hidden">
@@ -209,14 +209,16 @@ export default function LeftSidebar({
               </span>
             )}
           </ContextMenuItem>
-          <ContextMenuItem onClick={onOpenDailyNote}>
-            Open Daily Note
-            {isDesktop() && (
-              <span className="ml-auto text-xs text-app-muted">
-                {formatAccelerator(keymap['daily-note'])}
-              </span>
-            )}
-          </ContextMenuItem>
+          {featureFlags.enable_daily_notes && (
+            <ContextMenuItem onClick={onOpenDailyNote}>
+              Open Daily Note
+              {isDesktop() && (
+                <span className="ml-auto text-xs text-app-muted">
+                  {formatAccelerator(keymap['daily-note'])}
+                </span>
+              )}
+            </ContextMenuItem>
+          )}
           <ContextMenuSeparator />
           <ContextMenuItem onClick={onRefreshFiles}>Refresh</ContextMenuItem>
         </ContextMenuContent>
