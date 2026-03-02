@@ -44,7 +44,7 @@ export async function detectPlatform(folderPath) {
         confidence: obsidianResult.confidence,
         reason: obsidianResult.reason,
         fileCount: obsidianResult.fileCount,
-        needsConversion: false // Obsidian is already compatible
+        needsConversion: true // Convert canvas, callouts, and plugin syntax
       };
     }
 

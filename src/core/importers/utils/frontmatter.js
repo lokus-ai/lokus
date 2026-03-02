@@ -200,9 +200,69 @@ export function extractFrontmatter(content) {
   return { data, content: contentWithoutFrontmatter };
 }
 
+// Obsidian-specific frontmatter keys that have no meaning in Lokus
+const OBSIDIAN_STRIP_KEYS = new Set([
+  'cssclass', 'cssclasses', 'publish', 'permalink',
+  'kanban-plugin', 'excalidraw-plugin'
+]);
+
+/**
+ * Strip Obsidian-specific frontmatter keys.
+ * @param {Object} properties
+ * @returns {Object} Cleaned properties
+ */
+export function stripObsidianKeys(properties) {
+  const cleaned = {};
+  for (const [key, value] of Object.entries(properties)) {
+    if (!OBSIDIAN_STRIP_KEYS.has(key.toLowerCase())) {
+      cleaned[key] = value;
+    }
+  }
+  return cleaned;
+}
+
+// Month names for Roam date parsing
+const MONTH_NAMES = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december'
+];
+
+/**
+ * Try to parse a Roam date-page title like "January 1st, 2024" → Date.
+ * Returns null if it doesn't match.
+ */
+export function parseRoamDateTitle(title) {
+  const match = title.match(/^(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$/i);
+  if (!match) return null;
+
+  const monthIdx = MONTH_NAMES.indexOf(match[1].toLowerCase());
+  if (monthIdx === -1) return null;
+
+  const day = parseInt(match[2], 10);
+  const year = parseInt(match[3], 10);
+
+  const date = new Date(year, monthIdx, day);
+  if (isNaN(date.getTime())) return null;
+
+  return date;
+}
+
+/**
+ * Format a Date as YYYY-MM-DD.
+ */
+export function formatDateSlug(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export default {
   parseLogseqProperties,
   propertiesToYAML,
   addFrontmatter,
-  extractFrontmatter
+  extractFrontmatter,
+  stripObsidianKeys,
+  parseRoamDateTitle,
+  formatDateSlug
 };

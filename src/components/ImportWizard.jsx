@@ -217,18 +217,6 @@ export default function ImportWizard({ onClose, initialWorkspacePath }) {
                 </button>
               ))}
 
-              {/* Obsidian - Special case (no conversion needed) */}
-              <button
-                className="platform-card obsidian-card"
-                onClick={() => {
-                  // Show Obsidian compatibility info
-                  alert('Obsidian vaults are already compatible with Lokus!\n\nJust open your Obsidian vault folder in Lokus - no import needed.');
-                }}
-              >
-                <FileText className="platform-icon" />
-                <h3>Obsidian</h3>
-                <p className="obsidian-note">Already compatible! ✨</p>
-              </button>
             </div>
           </div>
         );
