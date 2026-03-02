@@ -7,11 +7,12 @@ import useProseMirror from '../hooks/useProseMirror.js';
 import { lokusSchema } from '../schema/lokus-schema.js';
 import { createLokusSerializer } from '../../core/markdown/lokus-md-pipeline.js';
 import { keymap } from 'prosemirror-keymap';
-import { baseKeymap, toggleMark, setBlockType, wrapIn } from 'prosemirror-commands';
-import { history } from 'prosemirror-history';
+import { baseKeymap, toggleMark, setBlockType, wrapIn, chainCommands } from 'prosemirror-commands';
+import { history, undo, redo } from 'prosemirror-history';
+import { splitListItem, liftListItem, sinkListItem } from 'prosemirror-schema-list';
 import { dropCursor } from 'prosemirror-dropcursor';
 import { gapCursor } from 'prosemirror-gapcursor';
-import { inputRules, wrappingInputRule, textblockTypeInputRule } from 'prosemirror-inputrules';
+import { InputRule, inputRules, wrappingInputRule, textblockTypeInputRule } from 'prosemirror-inputrules';
 import { createEditorCommands, insertContent as pmInsertContent } from '../commands/index.js';
 
 // --- Extension plugin factories ---
@@ -163,8 +164,95 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       'Mod-Shift-h': toggleMark(schema.marks.highlight),
     });
 
+    // ── Block-reset keymap ───────────────────────────────────────────────
+    // Backspace at the start of a non-paragraph textblock (heading,
+    // blockquote, etc.) converts it back to a plain paragraph.
+    // ProseMirror's baseKeymap only joins/lifts — it never resets the
+    // block type. TipTap's extensions provided this; raw PM needs it
+    // explicitly.
+    const blockResetKeymap = keymap({
+      Backspace: (state, dispatch) => {
+        const { $cursor } = state.selection;
+        // Only act on a collapsed cursor at the very start of a textblock
+        if (!$cursor || $cursor.parentOffset !== 0) return false;
+        const parent = $cursor.parent;
+        const paragraphType = schema.nodes.paragraph;
+        // Already a paragraph or not a textblock — let baseKeymap handle it
+        if (parent.type === paragraphType || !parent.isTextblock) return false;
+        // Convert heading / code-block / etc. → paragraph
+        if (dispatch) {
+          dispatch(state.tr.setBlockType($cursor.before(), $cursor.after(), paragraphType));
+        }
+        return true;
+      },
+    });
+
+    // ── List keymap ────────────────────────────────────────────────────
+    // Enter inside a list item splits it into two items (new checkbox / bullet).
+    // Tab / Shift-Tab indent / dedent list items.
+    // Must come BEFORE baseKeymap so Enter doesn't just split the paragraph.
+    const listKeymap = keymap({
+      Enter: chainCommands(
+        splitListItem(schema.nodes.taskItem),
+        splitListItem(schema.nodes.listItem),
+      ),
+      Tab: sinkListItem(schema.nodes.listItem),
+      'Shift-Tab': liftListItem(schema.nodes.listItem),
+    });
+
     // ── Input rules ─────────────────────────────────────────────────────
     // Basic markdown-style input rules for block types
+
+    /**
+     * Creates an InputRule that applies a mark to the text captured between
+     * markdown delimiters when the closing delimiter is typed.
+     *
+     * The regex must:
+     *   - End with `$` so it matches at the cursor position.
+     *   - Capture the content between delimiters in group 1 (match[1]).
+     *
+     * @param {RegExp} regexp - Pattern matched against the text from the start
+     *   of the current textblock up to (and including) the character just typed.
+     * @param {import('prosemirror-model').MarkType} markType - The mark to apply.
+     * @returns {InputRule}
+     */
+    function markInputRule(regexp, markType) {
+      return new InputRule(regexp, (state, match, start, end) => {
+        // match[1] is the text that should carry the mark.
+        // match[0] is the full matched string (delimiters + content).
+        const content = match[1];
+        if (!content) return null;
+
+        // Locate where the captured content begins inside the full match.
+        const textStart = start + match[0].indexOf(content);
+        const textEnd = textStart + content.length;
+
+        let tr = state.tr;
+
+        // Remove trailing delimiter(s) that sit between textEnd and end.
+        if (textEnd < end) tr = tr.delete(textEnd, end);
+
+        // Remove leading delimiter(s) that sit between start and textStart.
+        if (textStart > start) tr = tr.delete(start, textStart);
+
+        // After the deletions the content now occupies [start, start + content.length].
+        const markStart = start;
+        const markEnd = markStart + content.length;
+
+        tr = tr.addMark(markStart, markEnd, markType.create());
+
+        // Prevent the mark from continuing to subsequent typed text.
+        // We use setStoredMarks instead of removeStoredMark because
+        // removeStoredMark silently no-ops when no stored marks exist
+        // (ensureMarks sees no change and doesn't set storedMarksSet).
+        // setStoredMarks always sets the flag, ensuring the next keystroke
+        // does NOT inherit the mark from the document structure.
+        const activeMarks = state.storedMarks || state.doc.resolve(end).marks();
+        tr = tr.setStoredMarks(activeMarks.filter(m => m.type !== markType));
+        return tr;
+      });
+    }
+
     const lokusInputRules = inputRules({
       rules: [
         // > blockquote
@@ -180,11 +268,92 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
           language: match[1] || null,
         })),
 
-        // --- or *** horizontal rule
-        // TODO: port to PM — need a custom input rule for leaf node insertion
+        // --- horizontal rule — fires immediately on the third dash
+        new InputRule(/^---$/, (state, match, start, end) => {
+          const { horizontalRule, paragraph } = schema.nodes;
+          if (!horizontalRule) return null;
+          const $start = state.doc.resolve(start);
+          const blockStart = $start.before($start.depth);
+          const blockEnd = $start.after($start.depth);
+          return state.tr.replaceWith(blockStart, blockEnd, [
+            horizontalRule.create(),
+            paragraph.create(),
+          ]);
+        }),
 
-        // - or * bullet list
+        // ___ / *** horizontal rule — requires trailing space (*** would
+        // conflict with bold-italic if fired immediately)
+        new InputRule(/^(___|\*\*\*)\s$/, (state, match, start, end) => {
+          const { horizontalRule, paragraph } = schema.nodes;
+          if (!horizontalRule) return null;
+          const $start = state.doc.resolve(start);
+          const blockStart = $start.before($start.depth);
+          const blockEnd = $start.after($start.depth);
+          return state.tr.replaceWith(blockStart, blockEnd, [
+            horizontalRule.create(),
+            paragraph.create(),
+          ]);
+        }),
+
+        // - or * bullet list  (fires when user types "- " or "* ")
         wrappingInputRule(/^\s*[-*]\s$/, schema.nodes.bulletList),
+
+        // [] / [ ] / [x] / - [] / - [ ] task list
+        // Matches bracket patterns at start of a textblock.
+        // Works in TWO contexts:
+        //   A) Plain paragraph → creates taskList > taskItem directly
+        //   B) Inside bulletList > listItem → converts bulletList to taskList
+        new InputRule(/^\[([ xX!?/]?)\](\s?)$/, (state, match, start, end) => {
+          const { taskList, taskItem, bulletList, listItem, paragraph } = schema.nodes;
+          if (!taskList || !taskItem) return null;
+
+          const checkChar = match[1] || ' ';
+          const checked = checkChar.toLowerCase() === 'x';
+          const taskState = checkChar === ' ' ? null : checkChar;
+
+          const $pos = state.doc.resolve(start);
+
+          // Check if we're inside a bulletList
+          let listItemDepth = -1, bulletListDepth = -1;
+          for (let d = $pos.depth; d > 0; d--) {
+            if (listItem && $pos.node(d).type === listItem && listItemDepth === -1) listItemDepth = d;
+            if (bulletList && $pos.node(d).type === bulletList && bulletListDepth === -1) { bulletListDepth = d; break; }
+          }
+
+          if (bulletListDepth !== -1 && listItemDepth !== -1) {
+            // ── Context B: inside a bullet list → convert to task list ──
+            const currentItemIndex = $pos.index(bulletListDepth);
+            let tr = state.tr.delete(start, end);
+
+            const mappedBlStart = tr.mapping.map($pos.before(bulletListDepth));
+            const blNode = tr.doc.nodeAt(mappedBlStart);
+            if (!blNode || blNode.type !== bulletList) return null;
+
+            const blEnd = mappedBlStart + blNode.nodeSize;
+            const items = [];
+            let idx = 0;
+            blNode.forEach((child) => {
+              const attrs = idx === currentItemIndex
+                ? { checked, taskState }
+                : { checked: false, taskState: null };
+              items.push(taskItem.create(attrs, child.content));
+              idx++;
+            });
+
+            return tr.replaceWith(mappedBlStart, blEnd, taskList.create(null, items));
+          }
+
+          // ── Context A: plain paragraph → create task list directly ──
+          if (!paragraph) return null;
+          const blockStart = $pos.before($pos.depth);
+          const blockEnd = $pos.after($pos.depth);
+
+          const item = taskItem.create(
+            { checked, taskState },
+            paragraph.create(),
+          );
+          return state.tr.replaceWith(blockStart, blockEnd, taskList.create(null, item));
+        }),
 
         // 1. ordered list
         wrappingInputRule(
@@ -194,18 +363,83 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
           (match, node) => node.childCount + node.attrs.order === +match[1]
         ),
 
-        // - [ ] or - [x] task list
-        // TODO: port to PM — wrappingInputRule for taskList/taskItem
+        // ── Mark input rules ────────────────────────────────────────────
+        // Each rule fires when the user types the closing delimiter of an
+        // inline mark pair.  The content between the delimiters is captured
+        // in group 1 and receives the corresponding mark.
+
+        // **bold**
+        markInputRule(/(?:^|\s)\*\*([^*\s][^*]*)\*\*$/, schema.marks.bold),
+
+        // *italic*  — lookbehind prevents matching inside **bold**
+        markInputRule(/(?:^|\s)(?<!\*)\*([^*\s][^*]*)\*(?!\*)$/, schema.marks.italic),
+
+        // ~~strikethrough~~
+        markInputRule(/(?:^|\s)~~([^~\s][^~]*)~~$/, schema.marks.strike),
+
+        // ==highlight==
+        markInputRule(/(?:^|\s)==([^=\s][^=]*)==$/, schema.marks.highlight),
+
+        // `inline code`
+        markInputRule(/(?:^|\s)`([^`\s][^`]*)`$/, schema.marks.code),
+
+        // ^superscript^
+        markInputRule(/(?:^|\s)\^([^^]+)\^$/, schema.marks.superscript),
+
+        // ~subscript~  — lookbehind prevents matching inside ~~strike~~
+        markInputRule(/(?:^|\s)(?<!~)~([^~\s][^~]*)~(?!~)$/, schema.marks.subscript),
+
+        // ── Inline math ─────────────────────────────────────────────────
+        // $$formula$$  →  inlineMath node with display mode (MUST come before single-$ rule)
+        new InputRule(/(?:^|\s)\$\$([^$\s][^$]*)\$\$$/, (state, match, start, end) => {
+          const { inlineMath } = schema.nodes;
+          if (!inlineMath) return null;
+          const fullMatch = match[0];
+          const leadingSpace = fullMatch.length - fullMatch.trimStart().length;
+          const dollarStart = start + leadingSpace;
+          const node = inlineMath.create({ latex: match[1], display: 'yes' });
+          return state.tr.replaceWith(dollarStart, end, node);
+        }),
+
+        // $formula$  →  inlineMath node (inline mode)
+        // Negative lookbehind prevents matching inside $$block math$$
+        new InputRule(/(?:^|\s)(?<!\$)\$([^$\s][^$]*)\$(?!\$)$/, (state, match, start, end) => {
+          const { inlineMath } = schema.nodes;
+          if (!inlineMath) return null;
+
+          // Offset past any leading whitespace that was consumed by the regex.
+          const fullMatch = match[0];
+          const leadingSpace = fullMatch.length - fullMatch.trimStart().length;
+          const dollarStart = start + leadingSpace;
+
+          const node = inlineMath.create({ latex: match[1], display: 'no' });
+          return state.tr.replaceWith(dollarStart, end, node);
+        }),
       ],
     });
 
     // ── Core plugins array ──────────────────────────────────────────────
-    // Static plugins (no EditorView needed at creation time)
+    // Plugin ordering matters: ProseMirror calls handleKeyDown from
+    // plugins in registration order — first to return true wins.
+    // Suggestion plugins MUST come before keymap(baseKeymap) so they
+    // can intercept Enter/Tab while a suggestion popup is active.
+    // When no suggestion is active they return false and keys fall
+    // through to the base keymap normally.
     const pmPlugins = [
       lokusInputRules,
       formattingKeymap,
+      // ── Suggestion plugins (must precede baseKeymap) ────────────────
+      createSlashCommandPlugin(viewProxy),
+      ...createWikiLinkSuggestPlugins(viewProxy),
+      createTagAutocompletePlugin(viewProxy),
+      createTaskMentionSuggestPlugin(viewProxy),
+      createPluginCompletionPlugin(viewProxy),
+      // ── Base keymap & core ──────────────────────────────────────────
+      listKeymap,
+      blockResetKeymap,
       keymap(baseKeymap),
       history(),
+      keymap({ 'Mod-z': undo, 'Mod-y': redo, 'Mod-Shift-z': redo }),
       dropCursor(),
       gapCursor(),
       // Trivial extensions
@@ -226,14 +460,6 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       ...createMathSnippetsPlugins(schema, { customSnippets: customSymbols }),
       createSymbolShortcutsPlugin({ customSymbols }),
       createMermaidInputRulesPlugin(schema),
-      // Suggestion plugins use a lazy view proxy — they access the
-      // EditorView through the proxy at runtime, so they can be
-      // created statically here (no onReady reconfigure needed).
-      createSlashCommandPlugin(viewProxy),
-      ...createWikiLinkSuggestPlugins(viewProxy),
-      createTagAutocompletePlugin(viewProxy),
-      createTaskMentionSuggestPlugin(viewProxy),
-      createPluginCompletionPlugin(viewProxy),
     ];
 
     // ── Node views ──────────────────────────────────────────────────────

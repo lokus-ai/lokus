@@ -172,6 +172,8 @@ export function createSuggestionPlugin({
   /**
    * Fallback clientRect using the current anchor position.
    */
+  const ZERO_RECT = new DOMRect(0, 0, 0, 0);
+
   const getAnchorClientRect = () => {
     try {
       const view = resolveView();
@@ -180,7 +182,7 @@ export function createSuggestionPlugin({
       const { top, right, bottom, left } = coords;
       return new DOMRect(left, top, right - left, bottom - top);
     } catch {
-      return null;
+      return ZERO_RECT;
     }
   };
 
@@ -199,9 +201,9 @@ export function createSuggestionPlugin({
         const currentNode = view.dom.querySelector(
           `[data-decoration-id="${decorationId}"]`,
         );
-        return currentNode?.getBoundingClientRect() || null;
+        return currentNode?.getBoundingClientRect() || ZERO_RECT;
       } catch {
-        return null;
+        return ZERO_RECT;
       }
     };
   };

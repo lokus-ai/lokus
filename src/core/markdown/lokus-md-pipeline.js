@@ -116,6 +116,153 @@ function markdownItSub(md) {
 }
 
 // ---------------------------------------------------------------------------
+// markdown-it plugin: task lists   - [ ] unchecked / - [x] checked
+//
+// Hooks into md.core.ruler to post-process tokens after inline parsing.
+// Converts bullet_list tokens to task_list tokens when ALL immediate
+// list_item children contain a checkbox pattern ([ ], [x], [X], [!], etc.).
+// This matches Obsidian behaviour: mixed lists stay as regular bullet lists.
+// ---------------------------------------------------------------------------
+
+/** Regex that matches any task checkbox prefix at the start of an inline token. */
+const TASK_PREFIX_RE = /^\[(.)\] /
+
+/**
+ * Strip the checkbox prefix from an inline token's content string and from
+ * the first child text token's content/children.
+ *
+ * @param {object} inlineTok - The markdown-it inline token to mutate.
+ */
+function stripTaskPrefix(inlineTok) {
+  // Strip from the raw content string
+  inlineTok.content = inlineTok.content.replace(TASK_PREFIX_RE, '')
+
+  // Strip from the first child token (which holds the actual rendered text)
+  if (Array.isArray(inlineTok.children) && inlineTok.children.length > 0) {
+    const firstChild = inlineTok.children[0]
+    if (firstChild.type === 'text') {
+      firstChild.content = firstChild.content.replace(TASK_PREFIX_RE, '')
+    }
+  }
+}
+
+/**
+ * markdown-it core rule that converts matching bullet_list token sequences
+ * into task_list token sequences understood by the Lokus ProseMirror schema.
+ *
+ * @param {object} md - The markdown-it instance.
+ */
+function markdownItTaskList(md) {
+  md.core.ruler.after('inline', 'task-list', state => {
+    const tokens = state.tokens
+
+    let i = 0
+    while (i < tokens.length) {
+      // Only process bullet_list_open tokens
+      if (tokens[i].type !== 'bullet_list_open') {
+        i++
+        continue
+      }
+
+      const listOpenIdx = i
+
+      // Find the matching bullet_list_close
+      let listCloseIdx = listOpenIdx + 1
+      let depth = 1
+      while (listCloseIdx < tokens.length && depth > 0) {
+        if (tokens[listCloseIdx].type === 'bullet_list_open') depth++
+        if (tokens[listCloseIdx].type === 'bullet_list_close') depth--
+        listCloseIdx++
+      }
+      listCloseIdx-- // now points at bullet_list_close
+
+      // Collect all direct list_item_open indices inside this list (depth=1 only)
+      const itemOpenIndices = []
+      let innerDepth = 0
+      for (let j = listOpenIdx + 1; j < listCloseIdx; j++) {
+        if (tokens[j].type === 'bullet_list_open') { innerDepth++; continue }
+        if (tokens[j].type === 'bullet_list_close') { innerDepth--; continue }
+        if (innerDepth === 0 && tokens[j].type === 'list_item_open') {
+          itemOpenIndices.push(j)
+        }
+      }
+
+      if (itemOpenIndices.length === 0) {
+        i = listCloseIdx + 1
+        continue
+      }
+
+      // For each list_item, find the first inline token and check for task prefix.
+      // We need ALL items to match for the whole list to be converted.
+      const itemData = [] // { itemOpenIdx, itemCloseIdx, inlineTokIdx, taskState }
+
+      let allAreTaskItems = true
+
+      for (const itemOpenIdx of itemOpenIndices) {
+        // Find matching list_item_close
+        let itemCloseIdx = itemOpenIdx + 1
+        let d = 1
+        while (itemCloseIdx < tokens.length && d > 0) {
+          if (tokens[itemCloseIdx].type === 'list_item_open') d++
+          if (tokens[itemCloseIdx].type === 'list_item_close') d--
+          itemCloseIdx++
+        }
+        itemCloseIdx-- // points at list_item_close
+
+        // Find the first inline token directly inside this item (skip nested lists)
+        let inlineTokIdx = -1
+        let innerD = 0
+        for (let j = itemOpenIdx + 1; j < itemCloseIdx; j++) {
+          if (tokens[j].type === 'bullet_list_open' || tokens[j].type === 'ordered_list_open') innerD++
+          if (tokens[j].type === 'bullet_list_close' || tokens[j].type === 'ordered_list_close') innerD--
+          if (innerD === 0 && tokens[j].type === 'inline') {
+            inlineTokIdx = j
+            break
+          }
+        }
+
+        if (inlineTokIdx === -1) {
+          allAreTaskItems = false
+          break
+        }
+
+        const match = tokens[inlineTokIdx].content.match(TASK_PREFIX_RE)
+        if (!match) {
+          allAreTaskItems = false
+          break
+        }
+
+        const taskChar = match[1]  // the character between [ and ]
+        itemData.push({ itemOpenIdx, itemCloseIdx, inlineTokIdx, taskChar })
+      }
+
+      if (!allAreTaskItems) {
+        i = listCloseIdx + 1
+        continue
+      }
+
+      // All items are task items — mutate tokens in place
+      tokens[listOpenIdx].type = 'task_list_open'
+      tokens[listCloseIdx].type = 'task_list_close'
+
+      for (const { itemOpenIdx, itemCloseIdx, inlineTokIdx, taskChar } of itemData) {
+        const isChecked = taskChar === 'x' || taskChar === 'X'
+
+        tokens[itemOpenIdx].type = 'task_list_item_open'
+        tokens[itemOpenIdx].attrSet('checked', String(isChecked))
+        tokens[itemOpenIdx].attrSet('taskState', taskChar)
+
+        tokens[itemCloseIdx].type = 'task_list_item_close'
+
+        stripTaskPrefix(tokens[inlineTokIdx])
+      }
+
+      i = listCloseIdx + 1
+    }
+  })
+}
+
+// ---------------------------------------------------------------------------
 // markdown-it plugin: canvas links   ![[name.canvas]]
 // (Must be registered BEFORE the general wiki-link plugin so it takes priority)
 // ---------------------------------------------------------------------------
@@ -456,6 +603,7 @@ function buildTokenizer(schemaNodes) {
   if (has('inlineMath') || has('math')) md.use(markdownItMath) // $…$ and $$…$$
   if (has('superscript')) md.use(markdownItSup)         // ^text^
   if (has('subscript')) md.use(markdownItSub)           // ~text~
+  if (has('taskList') || has('taskItem')) md.use(markdownItTaskList) // - [ ] / - [x]
 
   return md
 }
@@ -651,6 +799,20 @@ export function createLokusParser(schema) {
       getAttrs: tok => ({
         latex: tok.content ?? '',
         display: tok.attrGet('display') === 'yes' ? 'yes' : 'no',
+      }),
+    },
+
+    // -----------------------------------------------------------------------
+    // Task list / task item  (emitted by markdownItTaskList plugin)
+    // -----------------------------------------------------------------------
+    task_list: {
+      block: nodeType('taskList') ? 'taskList' : 'task_list',
+    },
+    task_list_item: {
+      block: nodeType('taskItem') ? 'taskItem' : 'task_item',
+      getAttrs: tok => ({
+        checked: tok.attrGet('checked') === 'true',
+        taskState: tok.attrGet('taskState') ?? (tok.attrGet('checked') === 'true' ? 'x' : ' '),
       }),
     },
   }

@@ -36,7 +36,30 @@ const DANGEROUS_GLOBAL_SHORTCUTS = [
 // Action IDs that should not be registered as global shortcuts
 const NON_GLOBAL_ACTIONS = [
   'copy', 'paste', 'cut', 'select-all', 'undo', 'redo',
-  'next-tab', 'prev-tab'  // Handled by menu bar
+  'next-tab', 'prev-tab',  // Handled by menu bar
+  'close-tab',             // Handled by Tauri menu accelerator (CmdOrCtrl+W)
+  'save-file',             // Handled by Tauri menu accelerator (CmdOrCtrl+S)
+  'new-file',              // Handled by Tauri menu accelerator (CmdOrCtrl+N)
+  'new-folder',            // Handled by Tauri menu accelerator (CmdOrCtrl+Shift+N)
+  'new-canvas',            // Handled by Tauri menu accelerator (CmdOrCtrl+Shift+C)
+  'open-preferences',      // Handled by Tauri menu accelerator (CmdOrCtrl+,)
+  'in-file-search',        // Handled by Tauri menu accelerator (CmdOrCtrl+F)
+  'command-palette',       // Handled by Tauri menu accelerator (CmdOrCtrl+K)
+  'wikilink-modal',        // Handled by Tauri menu accelerator (CmdOrCtrl+L)
+  'graph-view',            // Handled by Tauri menu accelerator (CmdOrCtrl+Shift+G)
+  'open-kanban',           // Handled by Tauri menu accelerator (CmdOrCtrl+Shift+K)
+  'toggle-sidebar',        // Handled by Tauri menu accelerator (CmdOrCtrl+B)
+  'toggle-split-view',     // Handled by Tauri menu accelerator (CmdOrCtrl+\)
+  'zoom-in',               // Handled by Tauri menu accelerator (CmdOrCtrl+Plus)
+  'zoom-out',              // Handled by Tauri menu accelerator (CmdOrCtrl+-)
+  'actual-size',           // Handled by Tauri menu accelerator (CmdOrCtrl+0)
+  'print',                 // Handled by Tauri menu accelerator (CmdOrCtrl+P)
+  'format-bold',           // Handled by Tauri menu accelerator (CmdOrCtrl+B)
+  'format-italic',         // Handled by Tauri menu accelerator (CmdOrCtrl+I)
+  'format-underline',      // Handled by Tauri menu accelerator (CmdOrCtrl+U)
+  'format-strikethrough',  // Handled by Tauri menu accelerator (CmdOrCtrl+Shift+X)
+  'format-code',           // Handled by Tauri menu accelerator (CmdOrCtrl+E)
+  'insert-math-inline',    // Handled by Tauri menu accelerator (CmdOrCtrl+M)
 ];
 
 // Action catalog: add here as you grow

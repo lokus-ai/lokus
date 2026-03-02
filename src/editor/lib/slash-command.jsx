@@ -912,7 +912,7 @@ const slashCommand = {
         }
 
         popup = tippy("body", {
-          getReferenceClientRect: props.clientRect,
+          getReferenceClientRect: () => props.clientRect?.() ?? new DOMRect(0, 0, 0, 0),
           appendTo: () => document.body,
           content: component.element,
           showOnCreate: true,
@@ -946,7 +946,7 @@ const slashCommand = {
         lastClientRect = props.clientRect;
         if (popup && popup[0]) {
           popup[0].setProps({
-            getReferenceClientRect: props.clientRect,
+            getReferenceClientRect: () => props.clientRect?.() ?? new DOMRect(0, 0, 0, 0),
           });
         }
       },

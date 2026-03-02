@@ -1,6 +1,8 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle, useMemo } from 'react'
 import { Command, CommandList, CommandItem, CommandEmpty, CommandSeparator } from '../../components/ui/command'
 import { Link2 } from 'lucide-react'
+import { exitSuggestion } from '../lib/suggestion-plugin.js'
+import { IMAGE_EMBED_KEY } from '../lib/WikiLinkSuggest.js'
 
 const IMPORT_URL_KEY = '__import_url__'
 
@@ -34,7 +36,6 @@ const WikiLinkList = forwardRef((props, ref) => {
 
   const select = (path) => {
     if (path === IMPORT_URL_KEY) {
-      // Store editor reference and current position for later use
       const editor = props.editor
       const { state } = editor
       const $pos = state.selection.$from
@@ -49,27 +50,26 @@ const WikiLinkList = forwardRef((props, ref) => {
       const hasClosing = textAfter.startsWith(']]')
       const to = hasClosing ? $pos.pos + 2 : $pos.pos
 
-      // Open URL input modal with callback that handles insertion directly
+      // Dismiss the image embed suggestion dropdown first
+      try {
+        exitSuggestion(editor, IMAGE_EMBED_KEY)
+      } catch {}
+
+      // Open URL modal with PM-based insertion callback
       window.dispatchEvent(new CustomEvent('lokus:open-image-url-modal', {
         detail: {
           onSubmit: (url) => {
-            // Insert wikiLink node directly with the URL
             const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
-            editor.chain()
-              .focus()
-              .deleteRange({ from, to })
-              .insertContent({
-                type: 'wikiLink',
-                attrs: {
-                  id,
-                  target: url,
-                  alt: '',
-                  embed: true,
-                  href: url,
-                  src: url
-                }
-              })
-              .run()
+            editor.dom.focus({ preventScroll: true })
+            const tr = editor.state.tr.delete(from, to)
+            const insertPos = tr.mapping.map(from)
+            const node = editor.state.schema.nodeFromJSON({
+              type: 'wikiLink',
+              attrs: { id, target: url, alt: '', embed: true, href: url, src: url }
+            })
+            tr.insert(insertPos, node)
+            tr.scrollIntoView()
+            editor.dispatch(tr)
           }
         }
       }))

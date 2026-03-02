@@ -5,12 +5,19 @@ import WikiLinkList from '../components/WikiLinkList.jsx'
 import { debounce } from '../../core/search/index.js'
 import blockIdManager from '../../core/blocks/block-id-manager.js'
 import { insertContent } from '../commands/index.js'
+import { useEditorGroupStore } from '../../stores/editorGroups.js'
+import referenceWorkerClient from '../../workers/referenceWorkerClient.js'
 
 const WIKI_SUGGESTION_KEY = new PluginKey('wikiLinkSuggestion')
+export const IMAGE_EMBED_KEY = new PluginKey('imageEmbedSuggestion')
+
+// Extensions that make sense as [[ wikilink targets
+const LINKABLE_EXT = /\.(md|markdown|canvas)$/i
 
 function getIndex() {
   const list = (globalThis.__LOKUS_FILE_INDEX__ || [])
-  return Array.isArray(list) ? list : []
+  if (!Array.isArray(list)) return []
+  return list.filter(f => LINKABLE_EXT.test(f.path))
 }
 
 async function getFileBlocks(fileName) {
@@ -60,18 +67,58 @@ function scoreItem(item, query, activePath) {
   const path = item.path.toLowerCase()
   const q = query.toLowerCase()
   let score = 0
-  // same folder boost
+
+  // ── Context signals (query-independent) ─────────────────────────────
+
+  // Recency: recently opened files get a large decaying boost
   try {
-    const same = dirname(activePath) === dirname(item.path)
-    if (same) score += 100
+    const { globalRecentFiles, getAllGroups } = useEditorGroupStore.getState()
+    const recentIdx = globalRecentFiles.indexOf(item.path)
+    if (recentIdx !== -1) score += Math.max(200 - recentIdx * 4, 20)
+
+    // Open tabs: files the user is actively working on
+    const isOpen = getAllGroups().some(g => g.tabs.some(t => t.path === item.path))
+    if (isOpen) score += 150
   } catch {}
-  // prefix match on name
-  if (name.startsWith(q)) score += 50
-  // substring in name or path
-  if (name.includes(q)) score += 20
-  if (path.includes(q)) score += 10
-  // shorter names slightly preferred
-  score -= Math.min(name.length, 20) * 0.1
+
+  // Same folder as active file
+  try {
+    if (dirname(activePath) === dirname(item.path)) score += 80
+  } catch {}
+
+  // Backlink popularity: frequently linked files are more relevant
+  try {
+    if (referenceWorkerClient.isIndexed()) {
+      const backlinks = referenceWorkerClient.getBacklinksForFile(item.path)
+      score += Math.min(backlinks.length * 15, 120)
+    }
+  } catch {}
+
+  if (!q) return score // empty query → rank purely by context signals
+
+  // ── Text matching signals ───────────────────────────────────────────
+
+  // Exact name match
+  if (name === q || name === q + '.md') score += 500
+
+  // Prefix match on file name (strongest text signal)
+  if (name.startsWith(q)) score += 200
+
+  // Word-boundary prefix match (e.g., "Te" matches "Test Notes")
+  const words = name.split(/[\s\-_.\/\\]+/)
+  for (const word of words) {
+    if (word.startsWith(q)) { score += 120; break }
+  }
+
+  // Substring in name
+  if (name.includes(q)) score += 50
+
+  // Substring in path (weaker)
+  else if (path.includes(q)) score += 20
+
+  // Shorter names preferred (less noise in results)
+  score -= Math.min(name.length, 30) * 0.5
+
   return score
 }
 
@@ -395,11 +442,11 @@ export function createWikiLinkSuggestPlugins(view) {
 
         // Use textBetween with absolute positions to properly handle inline nodes like WikiLinks
         // (parentOffset doesn't align with textContent when WikiLinks are present)
-        const textBefore = state.doc.textBetween(Math.max(parentStart, pos - 2), pos)
         const fullTextBefore = state.doc.textBetween(parentStart, pos)
 
-        // Check for [[ pattern (file linking)
-        const isAfterDoubleBracket = textBefore.endsWith('[[')
+        // Check for [[ pattern (file linking), but NOT ![[  (image embed — handled by Plugin 2)
+        // Use fullTextBefore so the check still passes while the user types a query after [[
+        const isAfterDoubleBracket = /\[\[[^\]]*$/.test(fullTextBefore) && !/!\[\[[^\]]*$/.test(fullTextBefore)
 
         // Check for ^ pattern within [[ ]] (block linking)
         // Look for pattern: [[Filename^ or [[Filename.md^
@@ -701,7 +748,7 @@ export function createWikiLinkSuggestPlugins(view) {
 
     // Plugin 2: Handle ![[ for image embed suggestions
     createSuggestionPlugin({
-      pluginKey: new PluginKey('imageEmbedSuggestion'),
+      pluginKey: IMAGE_EMBED_KEY,
       editor: view,
       char: '[',
       allowSpaces: true,

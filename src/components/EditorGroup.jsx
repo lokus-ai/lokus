@@ -10,6 +10,9 @@ import WelcomeScreen from './WelcomeScreen';
 import { canvasManager } from '../core/canvas/manager';
 import { createLokusParser, createLokusSerializer } from '../core/markdown/lokus-md-pipeline';
 import { registerEditor } from '../stores/editorRegistry';
+import { isImageFile } from '../utils/imageUtils';
+import { isPDFFile } from '../utils/pdfUtils';
+import { LazyImageViewer, LazyPDFViewer } from './OptimizedWrapper';
 
 // Lazy-loaded special tab views
 const BasesView = lazy(() => import('../bases/BasesView'));
@@ -63,6 +66,10 @@ export default function EditorGroup({
   // Lokus ProseMirror→markdown serializer, created lazily on first dirty check.
   const lokusSerializerRef = useRef(null);
 
+  // Loading lock — prevents duplicate async file loads from the tab-switch effect
+  // and handleEditorReady racing against each other.
+  const loadingFileRef = useRef(null);
+
   // ── State ─────────────────────────────────────────────────────────────────
 
   // True while waiting for disk I/O for the current tab.
@@ -77,7 +84,7 @@ export default function EditorGroup({
   const [originalTitle, setOriginalTitle] = useState('');
 
   useEffect(() => {
-    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas') || activeFile.endsWith('.kanban')) {
+    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas') || activeFile.endsWith('.kanban') || isImageFile(activeFile) || isPDFFile(activeFile)) {
       setEditorTitle('');
       setOriginalTitle('');
       return;
@@ -154,15 +161,15 @@ export default function EditorGroup({
    */
   const snapshotEditorState = useCallback((filePath) => {
     const view = rawEditorRef.current;
-    if (!view || !filePath || filePath.startsWith('__') || filePath.endsWith('.canvas') || filePath.endsWith('.kanban')) return;
+    if (!view || !filePath || filePath.startsWith('__') || filePath.endsWith('.canvas') || filePath.endsWith('.kanban') || isImageFile(filePath) || isPDFFile(filePath)) return;
     editorStatesRef.current.set(filePath, view.state);
   }, []);
 
   // ── Tab-switching effect ──────────────────────────────────────────────────
 
   useEffect(() => {
-    // Canvas / kanban / special files don't involve the ProseMirror instance
-    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas') || activeFile.endsWith('.kanban')) {
+    // Canvas / kanban / image / PDF / special files don't involve the ProseMirror instance
+    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas') || activeFile.endsWith('.kanban') || isImageFile(activeFile) || isPDFFile(activeFile)) {
       activeFileRef.current = activeFile;
       return;
     }
@@ -176,7 +183,9 @@ export default function EditorGroup({
       prevFile !== activeFile &&
       !prevFile.startsWith('__') &&
       !prevFile.endsWith('.canvas') &&
-      !prevFile.endsWith('.kanban')
+      !prevFile.endsWith('.kanban') &&
+      !isImageFile(prevFile) &&
+      !isPDFFile(prevFile)
     ) {
       snapshotEditorState(prevFile);
     }
@@ -194,11 +203,12 @@ export default function EditorGroup({
     // Case B: No cached state — load from disk
     setIsLoading(true);
     let cancelled = false;
+    loadingFileRef.current = activeFile;
 
     (async () => {
       try {
         const raw = await invoke('read_file_content', { path: activeFile });
-        if (cancelled) return;
+        if (cancelled || loadingFileRef.current !== activeFile) return;
 
         // Check if handleEditorReady already loaded this file while we were awaiting
         if (editorStatesRef.current.has(activeFile)) {
@@ -217,6 +227,8 @@ export default function EditorGroup({
               savedContent: raw,
               title: activeFile.split('/').pop().replace(/\.md$/, ''),
             });
+            loadingFileRef.current = null;
+            setIsLoading(false);
             return;
           }
           lokusParserRef.current = createLokusParser(view.state.schema);
@@ -225,7 +237,7 @@ export default function EditorGroup({
         // Parse markdown → PM doc → fresh EditorState
         const doc = lokusParserRef.current.parse(raw);
         const newState = createEditorStateFromDoc(doc);
-        if (!newState || cancelled) return;
+        if (!newState || cancelled || loadingFileRef.current !== activeFile) return;
 
         // Cache the EditorState and store metadata
         editorStatesRef.current.set(activeFile, newState);
@@ -235,15 +247,19 @@ export default function EditorGroup({
         });
 
         if (cancelled) return;
+        loadingFileRef.current = null;
         setIsLoading(false);
         restoreEditorState(newState);
       } catch (e) {
         console.error('Failed to load file:', activeFile, e);
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled) {
+          loadingFileRef.current = null;
+          setIsLoading(false);
+        }
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => { cancelled = true; loadingFileRef.current = null; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFile, group.id]);
 
@@ -297,7 +313,7 @@ export default function EditorGroup({
       // This handles the case where the component re-mounts after a split
       // (React changes tree position → unmount/remount → lost EditorView).
       const file = activeFileRef.current;
-      if (file && !file.startsWith('__') && !file.endsWith('.canvas') && !file.endsWith('.kanban')) {
+      if (file && !file.startsWith('__') && !file.endsWith('.canvas') && !file.endsWith('.kanban') && !isImageFile(file) && !isPDFFile(file)) {
         const cachedState = editorStatesRef.current.get(file);
         if (cachedState) {
           restoreEditorState(cachedState);
@@ -317,15 +333,16 @@ export default function EditorGroup({
               restoreEditorState(newState);
               setIsLoading(false);
             }
-          } else {
-            // No rawMarkdown cached yet — load directly from disk.
+          } else if (!loadingFileRef.current) {
+            // No rawMarkdown cached yet and no load in progress — load from disk.
             // This happens after a split when the component re-mounts and
             // the tab-switching effect's async was cancelled by cleanup.
+            loadingFileRef.current = file;
             (async () => {
               try {
                 const raw = await invoke('read_file_content', { path: file });
-                // Verify file is still active and view still exists
-                if (activeFileRef.current !== file || !rawEditorRef.current) return;
+                // Verify file is still active, view still exists, and no other load took over
+                if (activeFileRef.current !== file || !rawEditorRef.current || loadingFileRef.current !== file) return;
                 const doc = lokusParserRef.current.parse(raw);
                 const newState = createEditorStateFromDoc(doc);
                 if (!newState) return;
@@ -334,10 +351,12 @@ export default function EditorGroup({
                   savedContent: raw,
                   title: file.split('/').pop().replace(/\.md$/, ''),
                 });
+                loadingFileRef.current = null;
                 restoreEditorState(newState);
                 setIsLoading(false);
               } catch (e) {
                 console.error('handleEditorReady: failed to load file:', file, e);
+                loadingFileRef.current = null;
                 setIsLoading(false);
               }
             })();
@@ -378,7 +397,9 @@ export default function EditorGroup({
 
   // ── Derived display flags ─────────────────────────────────────────────────
 
-  const isEditorFile = !!(activeFile && !activeFile.startsWith('__') && !activeFile.endsWith('.canvas') && !activeFile.endsWith('.kanban'));
+  const isImageFileActive = !!(activeFile && isImageFile(activeFile));
+  const isPDFFileActive = !!(activeFile && isPDFFile(activeFile));
+  const isEditorFile = !!(activeFile && !activeFile.startsWith('__') && !activeFile.endsWith('.canvas') && !activeFile.endsWith('.kanban') && !isImageFileActive && !isPDFFileActive);
   const isCanvasFile = !!(activeFile?.endsWith('.canvas'));
   const isKanbanFile = !!(activeFile?.endsWith('.kanban'));
   const isBasesTab = activeFile === '__bases__';
@@ -480,6 +501,24 @@ export default function EditorGroup({
           <div className="flex-1 overflow-hidden h-full">
             <Suspense fallback={<div className="flex-1 flex items-center justify-center text-app-muted">Loading...</div>}>
               <ProfessionalGraphView workspacePath={workspacePath} />
+            </Suspense>
+          </div>
+        )}
+
+        {/* Image viewer — rendered for image files */}
+        {isImageFileActive && (
+          <div className="flex-1 overflow-hidden h-full">
+            <Suspense fallback={<div className="flex-1 flex items-center justify-center text-app-muted">Loading...</div>}>
+              <LazyImageViewer imagePath={activeFile} />
+            </Suspense>
+          </div>
+        )}
+
+        {/* PDF viewer — rendered for PDF files */}
+        {isPDFFileActive && (
+          <div className="flex-1 overflow-hidden h-full">
+            <Suspense fallback={<div className="flex-1 flex items-center justify-center text-app-muted">Loading...</div>}>
+              <LazyPDFViewer file={activeFile} />
             </Suspense>
           </div>
         )}

@@ -733,6 +733,7 @@ const marks = {
 
   // -- Code ------------------------------------------------------------------
   code: {
+    inclusive: false,
     parseDOM: [{ tag: 'code' }],
     toDOM() {
       return ['code', 0]
@@ -810,6 +811,7 @@ const marks = {
 
   // -- Superscript (^text^) --------------------------------------------------
   superscript: {
+    inclusive: false,
     parseDOM: [
       { tag: 'sup' },
       {
@@ -824,6 +826,7 @@ const marks = {
 
   // -- Subscript (~text~) ----------------------------------------------------
   subscript: {
+    inclusive: false,
     parseDOM: [
       { tag: 'sub' },
       {

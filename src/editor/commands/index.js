@@ -396,7 +396,7 @@ function insertTableNode(view, rows, cols) {
 
   const { state } = view;
   const { schema } = state;
-  const { table, table_row: tableRow, table_cell: tableCell, table_header: tableHeader } = schema.nodes;
+  const { table, tableRow, tableCell, tableHeader } = schema.nodes;
 
   if (!table || !tableRow || !tableCell) {
     // Schema does not include table nodes

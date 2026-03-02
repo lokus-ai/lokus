@@ -6,8 +6,11 @@ import 'katex/dist/katex.min.css'
  * Renders LaTeX via KaTeX into a <span>.
  */
 export function inlineMathNodeView(node) {
-  const dom = document.createElement('span')
-  dom.style.cssText = 'display:inline-block;cursor:pointer'
+  const isDisplay = node.attrs.display === 'yes'
+  const dom = document.createElement(isDisplay ? 'div' : 'span')
+  dom.style.cssText = isDisplay
+    ? 'text-align:center;cursor:pointer;margin:0.5em 0'
+    : 'display:inline-block;cursor:pointer'
 
   function renderKatex(n) {
     try {
@@ -16,7 +19,8 @@ export function inlineMathNodeView(node) {
         throwOnError: false,
       })
     } catch {
-      dom.textContent = `$${n.attrs.latex || ''}$`
+      const delim = n.attrs.display === 'yes' ? '$$' : '$'
+      dom.textContent = `${delim}${n.attrs.latex || ''}${delim}`
     }
   }
 
