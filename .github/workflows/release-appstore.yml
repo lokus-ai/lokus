@@ -33,6 +33,9 @@ jobs:
         with:
           node-version: 'lts/*'
 
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0"
+
       - name: Install frontend dependencies
         run: npm install
 
