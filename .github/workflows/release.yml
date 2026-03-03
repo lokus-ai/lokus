@@ -220,8 +220,9 @@ jobs:
           # Analytics (PostHog)
           VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
           VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
-          # Mac App Store - disable update checker
+          # Mac App Store flags
           VITE_DISABLE_UPDATE_CHECKER: 'true'
+          VITE_APPSTORE: 'true'
         run: |
           npm run build
           cd src-tauri
