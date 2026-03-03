@@ -64,8 +64,10 @@ jobs:
           security import $RUNNER_TEMP/installer.p12 -P "$APPLE_CERTIFICATE_PASSWORD" \
             -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
 
-          security list-keychain -d user -s $KEYCHAIN_PATH
-          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+          # Add temp keychain to search list (keep system keychains for cert chain validation)
+          security list-keychain -d user -s $KEYCHAIN_PATH $(security list-keychain -d user | tr -d '"')
+          security default-keychain -s $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple:,codesign:,productbuild: \
             -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
           # Install provisioning profile
@@ -73,8 +75,11 @@ jobs:
           echo "$APPLE_PROVISIONING_PROFILE" | base64 --decode > \
             ~/Library/MobileDevice/Provisioning\ Profiles/embedded.provisionprofile
 
-          # Verify certificates
+          # Verify all identities (codesigning + installer)
+          echo "=== Codesigning identities ==="
           security find-identity -v -p codesigning $KEYCHAIN_PATH
+          echo "=== All identities ==="
+          security find-identity -v $KEYCHAIN_PATH
 
       - name: Build App Store Version
         env:
