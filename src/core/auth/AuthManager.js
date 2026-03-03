@@ -150,7 +150,7 @@ class AuthManager {
 
   async handleDeepLinkCallback(url) {
     try {
-      console.log('[AuthManager] Handling deep link callback:', url);
+      console.log('[AuthManager] Handling deep link callback');
 
       // Parse the URL to extract tokens or code
       const urlObj = new URL(url.replace('lokus://', 'https://lokus.app/'));
@@ -424,15 +424,8 @@ class AuthManager {
    */
   async deleteAccount() {
     try {
-      const { error } = await supabase.auth.admin.deleteUser(
-        (await supabase.auth.getUser()).data.user.id
-      );
-      // If admin delete isn't available, use the RPC approach
-      if (error) {
-        // Try calling a Supabase Edge Function or RPC for account deletion
-        const { error: rpcError } = await supabase.rpc('delete_user_account');
-        if (rpcError) throw rpcError;
-      }
+      const { error } = await supabase.rpc('delete_user_account');
+      if (error) throw error;
       // Clear all local data
       await this.signOut();
     } catch (error) {

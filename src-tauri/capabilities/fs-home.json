@@ -16,10 +16,28 @@
       "identifier": "fs:scope",
       "allow": [
         {
-          "path": "$HOME"
+          "path": "$HOME/.lokus"
         },
         {
-          "path": "$HOME/**/*"
+          "path": "$HOME/.lokus/**/*"
+        },
+        {
+          "path": "$DOCUMENT"
+        },
+        {
+          "path": "$DOCUMENT/**/*"
+        },
+        {
+          "path": "$DESKTOP"
+        },
+        {
+          "path": "$DESKTOP/**/*"
+        },
+        {
+          "path": "$DOWNLOAD"
+        },
+        {
+          "path": "$DOWNLOAD/**/*"
         }
       ]
     }

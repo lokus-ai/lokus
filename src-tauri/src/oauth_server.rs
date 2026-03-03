@@ -344,6 +344,13 @@ fn write_supabase_auth_callback(code: &str) -> Result<(), Box<dyn std::error::Er
 
     fs::write(&auth_file, serde_json::to_string_pretty(&auth_data)?)?;
 
+    // Restrict file permissions to owner-only (0600)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&auth_file, fs::Permissions::from_mode(0o600))?;
+    }
+
     Ok(())
 }
 
@@ -364,6 +371,13 @@ fn write_calendar_auth_callback(code: &str, state: &str) -> Result<(), Box<dyn s
     });
 
     fs::write(&auth_file, serde_json::to_string_pretty(&auth_data)?)?;
+
+    // Restrict file permissions to owner-only (0600)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&auth_file, fs::Permissions::from_mode(0o600))?;
+    }
 
     Ok(())
 }

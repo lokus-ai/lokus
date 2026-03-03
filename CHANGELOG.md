@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Editor
 - **ProseMirror Migration** — Replaced TipTap with raw ProseMirror for full control over the editing pipeline. All extensions (slash commands, wiki links, callouts, code blocks, tables, markdown paste, mermaid) ported to native ProseMirror plugins.
 - **Per-Tab Editor State** — Each tab now has independent undo history, cursor position, and scroll state. Switching tabs preserves your exact editing context.
-- **Crash-Proof Editor** — Malformed or corrupt markdown files no longer crash the editor. Error boundaries catch failures gracefully.
+- **Crash-Proof Editor** — Malformed or corrupt markdown files no longer crash the editor. Error boundaries catch failures gracefully with per-block content recovery.
 - **Input Rules & Suggestions** — Fixed markdown shortcuts (headings, lists, code blocks) and autocomplete popups that broke during the ProseMirror migration.
 
 ### Canvas
@@ -37,20 +37,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Remote Feature Flags** — ~85% of app features controlled via server-side flags. Includes kill switches for Canvas, Plugins, Sync, and AI Assistant.
 
 ### Architecture
-- **Workspace Refactor** — Workspace.jsx reduced from monolith to ~240-line orchestrator. State split into 4 independent stores. 6 sub-components extracted with error boundaries.
+- **Workspace Refactor** — Workspace.jsx reduced from monolith to ~240-line orchestrator. State split into 4 independent Zustand stores. 6 sub-components extracted with error boundaries.
 - **Bases & Graph as Tabs** — Database and graph views now render as tabs instead of full-screen view swaps, keeping the file explorer sidebar visible.
 
+### Calendar & Tasks
+- **Task Calendar Scheduling** — Tasks with due dates appear on the calendar view.
+- **Meeting Attendee Linking** — Calendar meeting attendees auto-link to people pages.
+- **AI Meeting Notes** — Auto-detection, transcription, and smart summaries for meeting notes.
+- **Callout Customization** — Configurable callout styles in Preferences.
+
+### Security
+- **Filesystem Scope Hardening** — Narrowed Tauri FS permissions from `$HOME/**` to specific directories (`~/.lokus`, Documents, Desktop, Downloads).
+- **Asset Protocol Scope** — Restricted asset protocol access to `$HOME/.lokus/**` instead of entire home directory.
+- **Auth Token File Permissions** — OAuth callback files written with `0600` (owner-only) permissions on Unix.
+- **Sensitive Log Redaction** — Auth callback URLs no longer logged with tokens/codes.
+- **Dead Code Removal** — Removed unused `admin.deleteUser()` call from AuthManager; uses server-side RPC only.
+- **Workspace Path Validation** — All Tauri IPC file commands validate workspace paths to prevent traversal.
+- **Rust Error Handling** — Replaced 22 `unwrap()` calls with proper error handling.
+
 ### Quality
-- **Test Suite** — 2237 tests passing, 0 failures across 114 files. Fixed all 136 broken tests from ProseMirror migration, plugin permission mismatches, and component mock issues.
+- **Test Suite** — 2246 tests passing, 0 failures across 115 files. Fixed all 136 broken tests from ProseMirror migration, plugin permission mismatches, and component mock issues.
 - **ESLint** — 0 errors across entire `src/` directory.
-- **Security** — Resolved critical jspdf vulnerability, updated MCP SDK, ran npm audit fix. 16 remaining vulnerabilities are all dev-only or locked to Excalidraw transitive deps.
+- **Dependencies** — Resolved critical jspdf vulnerability, updated MCP SDK, ran npm audit fix. 16 remaining vulnerabilities are all dev-only or locked to Excalidraw transitive deps.
 
 ### Bug Fixes
 - Fixed plugin API permission name mismatches (singular vs plural)
-- Fixed TaskAPI.js using wrong permission names in source (`commands:register` → `tasks:register`)
+- Fixed TaskAPI.js using wrong permission names (`commands:register` → `tasks:register`)
 - Fixed TabBar CSS classes and KanbanList caching
-- Fixed Apple App Store compliance issues
-- Fixed update checker bugs
+- Fixed Apple App Store compliance issues (entitlements, capabilities, signing)
+- Fixed update checker bugs and preferences window reopen
+- Fixed mobile tab close button visibility on touch devices
+- Fixed mobile workspace validation and logging issues
+- Fixed iOS plugin panel width responsiveness
+- Resolved top user-reported bugs and removed discontinued features
 
 ## [1.0.2] - 2026-03-01
 
