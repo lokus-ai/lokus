@@ -107,6 +107,17 @@ vi.mock("../core/markdown/compiler.js", () => ({
   })),
 }));
 
+// Mock platform to enable desktop shortcuts
+vi.mock("../platform/index.js", () => ({
+  isDesktop: vi.fn().mockReturnValue(true),
+  isMobile: vi.fn().mockReturnValue(false),
+  isWindows: vi.fn().mockReturnValue(false),
+  isMacOS: vi.fn().mockReturnValue(true),
+  isLinux: vi.fn().mockReturnValue(false),
+  getModifierKey: vi.fn().mockReturnValue('Cmd'),
+  getModifierSymbol: vi.fn().mockReturnValue('⌘'),
+}));
+
 // Mock the useCommandHistory hook
 const mockAddToHistory = vi.fn();
 const mockRemoveFromHistory = vi.fn();

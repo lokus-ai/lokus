@@ -3,37 +3,92 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
+
+// Mock the editor commands module so tests don't require a real PM environment.
+// The source EditorAPI.js imports and calls these PM commands directly.
+vi.mock('../../../src/editor/commands/index.js', () => ({
+  insertContent: vi.fn(),
+  setContent: vi.fn(),
+  setTextSelection: vi.fn(),
+  insertText: vi.fn(),
+  exec: vi.fn(),
+}));
+
+// Mock the markdown serializer to avoid real PM doc traversal.
+vi.mock('../../../src/core/markdown/lokus-md-pipeline.js', () => ({
+  createLokusSerializer: vi.fn(() => ({
+    serialize: vi.fn(() => 'serialized markdown content'),
+  })),
+  createLokusParser: vi.fn(),
+}));
+
 import { EditorPluginAPI } from '../../../src/plugins/api/EditorAPI.js';
+import { setContent as mockSetContent, insertContent as mockInsertContent, setTextSelection as mockSetTextSelection } from '../../../src/editor/commands/index.js';
+import { createLokusSerializer } from '../../../src/core/markdown/lokus-md-pipeline.js';
 
 describe('EditorAPI', () => {
   let editorAPI;
   let mockEditor;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     editorAPI = new EditorPluginAPI();
 
-    // Create mock TipTap editor
+    // Create a ProseMirror EditorView-compatible mock.
+    // The source (EditorAPI.js) treats `editorInstance` as a raw PM EditorView.
+    const mockTr = {
+      replaceWith: vi.fn().mockReturnThis(),
+      scrollIntoView: vi.fn().mockReturnThis(),
+      setSelection: vi.fn().mockReturnThis(),
+      insertText: vi.fn().mockReturnThis(),
+      setMeta: vi.fn().mockReturnThis(),
+    };
+
+    const mockDoc = {
+      textContent: 'Line 1\nLine 2\nLine 3',
+      textBetween: vi.fn((from, to) => {
+        const text = 'Line 1\nLine 2\nLine 3';
+        return text.substring(from, to);
+      }),
+      resolve: vi.fn((pos) => ({
+        pos,
+        depth: 0,
+        parent: { inlineContent: true },
+        nodeBefore: null,
+        nodeAfter: null,
+      })),
+      content: {
+        forEach: vi.fn(),
+        size: 20,
+      },
+      childCount: 3,
+      type: { name: 'doc' },
+      nodeSize: 22,
+    };
+
+    const mockSchema = {
+      text: vi.fn((t) => ({ type: { name: 'text' }, text: t })),
+      nodes: {},
+      marks: {},
+    };
+
     mockEditor = {
       state: {
-        doc: {
-          textContent: 'Line 1\nLine 2\nLine 3',
-          textBetween: vi.fn((from, to) => {
-            const text = 'Line 1\nLine 2\nLine 3';
-            return text.substring(from, to);
-          })
-        },
+        doc: mockDoc,
+        tr: mockTr,
+        schema: mockSchema,
         selection: {
           from: 0,
-          to: 6
-        }
+          to: 6,
+          anchor: 0,
+          head: 6,
+          empty: false,
+        },
       },
-      commands: {
-        setContent: vi.fn(),
-        setTextSelection: vi.fn()
-      },
+      dispatch: vi.fn(),
+      dom: { focus: vi.fn() },
       on: vi.fn(),
       off: vi.fn(),
-      view: {}
     };
 
     editorAPI.setEditorInstance(mockEditor);
@@ -44,13 +99,12 @@ describe('EditorAPI', () => {
   });
 
   describe('getContent()', () => {
-    test('should get editor content', async () => {
-      mockEditor.getHTML = vi.fn(() => '<p>Test content</p>');
-
+    test('should return serialized content from editor doc', async () => {
+      // getContent() calls createLokusSerializer().serialize(view.state.doc)
       const content = await editorAPI.getContent();
 
-      expect(mockEditor.getHTML).toHaveBeenCalled();
-      expect(content).toBe('<p>Test content</p>');
+      expect(createLokusSerializer).toHaveBeenCalled();
+      expect(content).toBe('serialized markdown content');
     });
 
     test('should throw error if editor not initialized', async () => {
@@ -61,20 +115,22 @@ describe('EditorAPI', () => {
   });
 
   describe('setContent()', () => {
-    test('should set editor content', async () => {
-      const content = 'New content';
+    test('should call pmSetContent with editor view and content', async () => {
+      const content = { type: 'doc', content: [] };
+
       await editorAPI.setContent(content);
 
-      expect(mockEditor.commands.setContent).toHaveBeenCalledWith(content);
+      expect(mockSetContent).toHaveBeenCalledWith(mockEditor, content, mockEditor.state.schema);
     });
 
     test('should emit content-changed event', async () => {
       const listener = vi.fn();
       editorAPI.on('content-changed', listener);
 
-      await editorAPI.setContent('New content');
+      const content = { type: 'doc', content: [] };
+      await editorAPI.setContent(content);
 
-      expect(listener).toHaveBeenCalledWith({ content: 'New content' });
+      expect(listener).toHaveBeenCalledWith({ content });
     });
 
     test('should throw error if editor not initialized', async () => {
@@ -85,17 +141,13 @@ describe('EditorAPI', () => {
   });
 
   describe('insertContent()', () => {
-    test('should insert content at cursor', async () => {
-      mockEditor.commands.insertContent = vi.fn();
-      const content = 'Inserted text';
+    test('should call pmInsertContent with editor view and content', async () => {
+      await editorAPI.insertContent('Inserted text');
 
-      await editorAPI.insertContent(content);
-
-      expect(mockEditor.commands.insertContent).toHaveBeenCalledWith(content);
+      expect(mockInsertContent).toHaveBeenCalledWith(mockEditor, 'Inserted text');
     });
 
     test('should emit content-inserted event', async () => {
-      mockEditor.commands.insertContent = vi.fn();
       const listener = vi.fn();
       editorAPI.on('content-inserted', listener);
 
@@ -112,7 +164,7 @@ describe('EditorAPI', () => {
   });
 
   describe('setSelection()', () => {
-    test('should set selection with start and end', async () => {
+    test('should call pmSetTextSelection with computed positions', async () => {
       const selection = {
         start: { line: 0, character: 0 },
         end: { line: 0, character: 6 }
@@ -120,10 +172,11 @@ describe('EditorAPI', () => {
 
       await editorAPI.setSelection(selection);
 
-      expect(mockEditor.commands.setTextSelection).toHaveBeenCalled();
+      // pmSetTextSelection is called with (view, from, to)
+      expect(mockSetTextSelection).toHaveBeenCalledWith(mockEditor, 0, 6);
     });
 
-    test('should set selection with anchor and active', async () => {
+    test('should support anchor/active selection format', async () => {
       const selection = {
         anchor: { line: 0, character: 0 },
         active: { line: 0, character: 6 }
@@ -131,7 +184,7 @@ describe('EditorAPI', () => {
 
       await editorAPI.setSelection(selection);
 
-      expect(mockEditor.commands.setTextSelection).toHaveBeenCalled();
+      expect(mockSetTextSelection).toHaveBeenCalledWith(mockEditor, 0, 6);
     });
 
     test('should emit selection-changed event', async () => {
@@ -155,7 +208,7 @@ describe('EditorAPI', () => {
   });
 
   describe('getTextInRange()', () => {
-    test('should extract text in range', async () => {
+    test('should extract text in range using doc.textBetween', async () => {
       const range = {
         start: { line: 0, character: 0 },
         end: { line: 0, character: 6 }
@@ -275,9 +328,10 @@ describe('EditorAPI', () => {
     });
   });
 
-  describe('_createSelectionFromEditor()', () => {
-    test('should create selection from editor state', () => {
-      const selection = editorAPI._createSelectionFromEditor(mockEditor);
+  describe('_createSelectionFromView()', () => {
+    test('should create selection from PM EditorView state', () => {
+      // Source has _createSelectionFromView(view), not _createSelectionFromEditor
+      const selection = editorAPI._createSelectionFromView(mockEditor);
 
       expect(selection).toHaveProperty('start');
       expect(selection).toHaveProperty('end');
@@ -291,7 +345,7 @@ describe('EditorAPI', () => {
       mockEditor.state.selection.from = 5;
       mockEditor.state.selection.to = 5;
 
-      const selection = editorAPI._createSelectionFromEditor(mockEditor);
+      const selection = editorAPI._createSelectionFromView(mockEditor);
 
       expect(selection.isEmpty).toBe(true);
     });
@@ -300,7 +354,7 @@ describe('EditorAPI', () => {
       mockEditor.state.selection.from = 0;
       mockEditor.state.selection.to = 6;
 
-      const selection = editorAPI._createSelectionFromEditor(mockEditor);
+      const selection = editorAPI._createSelectionFromView(mockEditor);
 
       expect(selection.isEmpty).toBe(false);
     });
@@ -395,7 +449,7 @@ describe('EditorAPI', () => {
   });
 
   describe('setSelections()', () => {
-    test('should set multiple selections', async () => {
+    test('should set multiple selections by delegating to setSelection', async () => {
       const selections = [
         {
           start: { line: 0, character: 0 },
@@ -405,14 +459,15 @@ describe('EditorAPI', () => {
 
       await editorAPI.setSelections(selections);
 
-      expect(mockEditor.commands.setTextSelection).toHaveBeenCalled();
+      // setSelections delegates to setSelection which calls pmSetTextSelection
+      expect(mockSetTextSelection).toHaveBeenCalled();
     });
 
     test('should handle empty selections array', async () => {
       await editorAPI.setSelections([]);
 
-      // Should not throw
-      expect(mockEditor.commands.setTextSelection).not.toHaveBeenCalled();
+      // With empty array, setSelection is never called
+      expect(mockSetTextSelection).not.toHaveBeenCalled();
     });
 
     test('should throw error if editor not initialized', async () => {
@@ -424,16 +479,8 @@ describe('EditorAPI', () => {
   });
 
   describe('replaceText()', () => {
-    test('should replace text in range', async () => {
-      const mockChain = {
-        focus: vi.fn(() => mockChain),
-        deleteRange: vi.fn(() => mockChain),
-        insertContentAt: vi.fn(() => mockChain),
-        run: vi.fn()
-      };
-
-      mockEditor.chain = vi.fn(() => mockChain);
-
+    test('should replace text via PM transaction', async () => {
+      // replaceText calls view.state.tr.replaceWith(...).scrollIntoView() then view.dispatch(tr)
       const range = {
         start: { line: 0, character: 0 },
         end: { line: 0, character: 6 }
@@ -441,23 +488,12 @@ describe('EditorAPI', () => {
 
       await editorAPI.replaceText(range, 'New text');
 
-      expect(mockEditor.chain).toHaveBeenCalled();
-      expect(mockChain.focus).toHaveBeenCalled();
-      expect(mockChain.deleteRange).toHaveBeenCalled();
-      expect(mockChain.insertContentAt).toHaveBeenCalled();
-      expect(mockChain.run).toHaveBeenCalled();
+      expect(mockEditor.state.tr.replaceWith).toHaveBeenCalled();
+      expect(mockEditor.state.tr.scrollIntoView).toHaveBeenCalled();
+      expect(mockEditor.dispatch).toHaveBeenCalled();
     });
 
     test('should emit text-replaced event', async () => {
-      const mockChain = {
-        focus: vi.fn(() => mockChain),
-        deleteRange: vi.fn(() => mockChain),
-        insertContentAt: vi.fn(() => mockChain),
-        run: vi.fn()
-      };
-
-      mockEditor.chain = vi.fn(() => mockChain);
-
       const listener = vi.fn();
       editorAPI.on('text-replaced', listener);
 

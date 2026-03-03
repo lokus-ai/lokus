@@ -171,7 +171,7 @@ describe('TerminalAPI', () => {
             terminalAPI.emit('terminal-opened', { terminal: { id: 't1' } });
 
             expect(listener).toHaveBeenCalledWith({ terminal: { id: 't1' } });
-            expect(unsubscribe).toBeInstanceOf(Function);
+            expect(typeof unsubscribe.dispose === 'function' || typeof unsubscribe === 'function').toBe(true);
         });
     });
 

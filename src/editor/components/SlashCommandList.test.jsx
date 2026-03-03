@@ -9,10 +9,13 @@ vi.mock('../../components/ui/command', () => ({
     CommandList: React.forwardRef(({ children, ...props }, ref) => (
         <div data-testid="command-list" ref={ref} {...props}>{children}</div>
     )),
-    CommandItem: ({ children, onSelect, ...props }) => (
+    // The real CommandItem renders with className prop. We preserve it so the
+    // test can check for the selection highlight class.
+    CommandItem: ({ children, onSelect, className, ...props }) => (
         <div
             data-testid="command-item"
-            onClick={() => onSelect(props.value?.toLowerCase())}
+            className={className || ''}
+            onClick={() => onSelect && onSelect(props.value?.toLowerCase())}
             {...props}
         >
             {children}
@@ -66,60 +69,60 @@ describe('SlashCommandList', () => {
         expect(screen.getByText('No results found.')).toBeInTheDocument()
     })
 
-    it('handles keyboard navigation via ref', () => {
+    it('handles keyboard navigation via ref — first item is selected initially', () => {
         const ref = React.createRef()
         render(<SlashCommandList items={mockItems} command={mockCommand} ref={ref} />)
 
-        // Initial selection should be first item
+        // Initial selection: first item has the highlight class, others do not
         let items = screen.getAllByTestId('command-item')
-        expect(items[0]).toHaveAttribute('aria-selected', 'true')
-        expect(items[1]).toHaveAttribute('aria-selected', 'false')
+        expect(items[0].className).toContain('bg-app-accent')
+        expect(items[1].className).not.toContain('bg-app-accent')
 
-        // ArrowDown
+        // ArrowDown moves selection to second item
         act(() => {
             ref.current.onKeyDown({ event: { key: 'ArrowDown', preventDefault: vi.fn() } })
         })
 
         items = screen.getAllByTestId('command-item')
-        expect(items[0]).toHaveAttribute('aria-selected', 'false')
-        expect(items[1]).toHaveAttribute('aria-selected', 'true') // Heading 1
+        expect(items[0].className).not.toContain('bg-app-accent')
+        expect(items[1].className).toContain('bg-app-accent') // Heading 1
 
-        // ArrowDown again (to Advanced group item)
+        // ArrowDown again moves to third item (Code Block in Advanced group)
         act(() => {
             ref.current.onKeyDown({ event: { key: 'ArrowDown', preventDefault: vi.fn() } })
         })
 
         items = screen.getAllByTestId('command-item')
-        expect(items[2]).toHaveAttribute('aria-selected', 'true') // Code Block
+        expect(items[2].className).toContain('bg-app-accent') // Code Block
 
-        // ArrowUp (back to Heading 1)
+        // ArrowUp moves back to Heading 1
         act(() => {
             ref.current.onKeyDown({ event: { key: 'ArrowUp', preventDefault: vi.fn() } })
         })
 
         items = screen.getAllByTestId('command-item')
-        expect(items[1]).toHaveAttribute('aria-selected', 'true')
+        expect(items[1].className).toContain('bg-app-accent')
     })
 
     it('loops navigation', () => {
         const ref = React.createRef()
         render(<SlashCommandList items={mockItems} command={mockCommand} ref={ref} />)
 
-        // ArrowUp from first item should go to last
+        // ArrowUp from first item should wrap to last
         act(() => {
             ref.current.onKeyDown({ event: { key: 'ArrowUp', preventDefault: vi.fn() } })
         })
 
         let items = screen.getAllByTestId('command-item')
-        expect(items[2]).toHaveAttribute('aria-selected', 'true') // Last item (Code Block)
+        expect(items[2].className).toContain('bg-app-accent') // Last item (Code Block)
 
-        // ArrowDown from last item should go to first
+        // ArrowDown from last item should wrap to first
         act(() => {
             ref.current.onKeyDown({ event: { key: 'ArrowDown', preventDefault: vi.fn() } })
         })
 
         items = screen.getAllByTestId('command-item')
-        expect(items[0]).toHaveAttribute('aria-selected', 'true') // First item (Text)
+        expect(items[0].className).toContain('bg-app-accent') // First item (Text)
     })
 
     it('triggers command on Enter', () => {
@@ -147,7 +150,7 @@ describe('SlashCommandList', () => {
         expect(mockCommand).toHaveBeenCalledWith(expect.objectContaining({ title: 'Code Block' }))
     })
 
-    it('updates selection when items change', () => {
+    it('resets selection to first item when items change', () => {
         const { rerender } = render(<SlashCommandList items={mockItems} command={mockCommand} />)
 
         expect(screen.getByText('Text')).toBeInTheDocument()
@@ -167,6 +170,7 @@ describe('SlashCommandList', () => {
         expect(screen.queryByText('Text')).not.toBeInTheDocument()
 
         const items = screen.getAllByTestId('command-item')
-        expect(items[0]).toHaveAttribute('aria-selected', 'true')
+        // After re-render with new items, the first (and only) item is selected
+        expect(items[0].className).toContain('bg-app-accent')
     })
 })

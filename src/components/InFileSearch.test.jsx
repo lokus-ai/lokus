@@ -20,14 +20,7 @@ vi.mock("lucide-react", () => ({
   Replace: () => <div data-testid="replace-icon" />,
 }));
 
-// Mock search utilities
-vi.mock("../core/search/index.js", () => ({
-  searchPluginKey: {
-    getState: vi.fn(),
-  },
-}));
-
-// Mock ProseMirror state
+// Mock ProseMirror state — TextSelection.create is called in jumpToMatch
 vi.mock("prosemirror-state", () => ({
   TextSelection: {
     create: vi.fn((doc, from, to) => ({ from, to, type: "selection" })),
@@ -49,39 +42,31 @@ describe("InFileSearch", () => {
 
     mockOnClose = vi.fn();
 
+    // The component calls:
+    //   editor.state.doc.textContent          — for the search content
+    //   editor.state.tr.setSelection(sel)     — returns the transaction (chainable)
+    //   editor.state.tr.scrollIntoView()      — returns the transaction (chainable)
+    //   editor.state.tr.replaceWith(...)      — returns the transaction (chainable)
+    //   editor.state.schema.text(str)         — creates a text node
+    //   editor.dispatch(tr)                   — dispatches the transaction (NOT editor.view.dispatch)
+    const mockTr = {
+      setMeta: vi.fn().mockReturnThis(),
+      setSelection: vi.fn().mockReturnThis(),
+      scrollIntoView: vi.fn().mockReturnThis(),
+      replaceWith: vi.fn().mockReturnThis(),
+    };
+
     mockEditor = {
       state: {
         doc: {
           textContent: "Hello world this is a test hello again",
-          descendants: vi.fn((callback) => {
-            callback(
-              { isText: true, text: "Hello world this is a test hello again" },
-              1,
-            );
-          }),
         },
-        tr: {
-          setMeta: vi.fn().mockReturnThis(),
-          setSelection: vi.fn().mockReturnThis(),
-          replaceWith: vi.fn().mockReturnThis(),
-        },
-        selection: {
-          constructor: {
-            create: vi.fn((doc, from, to) => ({ from, to, type: "selection" })),
-          },
+        tr: mockTr,
+        schema: {
+          text: vi.fn((text) => ({ type: "text", text })),
         },
       },
-      schema: {
-        text: vi.fn((text) => ({ type: "text", text })),
-      },
-      view: {
-        dispatch: vi.fn(),
-        coordsAtPos: vi.fn(() => ({ top: 100, left: 50 })),
-        scrollPosIntoView: vi.fn(),
-      },
-      commands: {
-        scrollIntoView: vi.fn(),
-      },
+      dispatch: vi.fn(),
     };
   });
 
@@ -123,7 +108,7 @@ describe("InFileSearch", () => {
     expect(screen.getByPlaceholderText("Find in file...")).toHaveFocus();
   });
 
-  it("should perform search when typing", async () => {
+  it("should perform search and dispatch via editor.dispatch when typing", async () => {
     render(
       <InFileSearch
         editor={mockEditor}
@@ -138,11 +123,12 @@ describe("InFileSearch", () => {
     });
 
     await waitFor(() => {
-      expect(mockEditor.view.dispatch).toHaveBeenCalled();
+      // The component uses editor.dispatch(tr), not editor.view.dispatch
+      expect(mockEditor.dispatch).toHaveBeenCalled();
     });
   });
 
-  it("should show match count", async () => {
+  it("should show match count after typing a query", async () => {
     render(
       <InFileSearch
         editor={mockEditor}
@@ -161,7 +147,7 @@ describe("InFileSearch", () => {
     });
   });
 
-  it("should navigate to next match", async () => {
+  it("should navigate to next match via the Next button", async () => {
     render(
       <InFileSearch
         editor={mockEditor}
@@ -175,22 +161,22 @@ describe("InFileSearch", () => {
       await user.type(searchInput, "hello");
     });
 
-    // Wait for search to complete
+    // Wait for the initial search dispatch
     await waitFor(() => {
-      expect(mockEditor.view.dispatch).toHaveBeenCalled();
+      expect(mockEditor.dispatch).toHaveBeenCalled();
     });
 
-    mockEditor.view.dispatch.mockClear();
+    mockEditor.dispatch.mockClear();
 
     const nextButton = screen.getByTitle("Next match (Enter)");
     await act(async () => {
       await user.click(nextButton);
     });
 
-    expect(mockEditor.view.dispatch).toHaveBeenCalled();
+    expect(mockEditor.dispatch).toHaveBeenCalled();
   });
 
-  it("should navigate to previous match", async () => {
+  it("should navigate to previous match via the Prev button", async () => {
     render(
       <InFileSearch
         editor={mockEditor}
@@ -204,19 +190,19 @@ describe("InFileSearch", () => {
       await user.type(searchInput, "hello");
     });
 
-    // Wait for search to complete
+    // Wait for the initial search dispatch
     await waitFor(() => {
-      expect(mockEditor.view.dispatch).toHaveBeenCalled();
+      expect(mockEditor.dispatch).toHaveBeenCalled();
     });
 
-    mockEditor.view.dispatch.mockClear();
+    mockEditor.dispatch.mockClear();
 
     const prevButton = screen.getByTitle("Previous match (Shift+Enter)");
     await act(async () => {
       await user.click(prevButton);
     });
 
-    expect(mockEditor.view.dispatch).toHaveBeenCalled();
+    expect(mockEditor.dispatch).toHaveBeenCalled();
   });
 
   it("should close when close button clicked", async () => {
@@ -252,7 +238,7 @@ describe("InFileSearch", () => {
     expect(mockOnClose).toHaveBeenCalled();
   });
 
-  it("should navigate with Enter and Shift+Enter", async () => {
+  it("should navigate with Enter and Shift+Enter keyboard shortcuts", async () => {
     render(
       <InFileSearch
         editor={mockEditor}
@@ -268,28 +254,28 @@ describe("InFileSearch", () => {
 
     // Wait for search to complete
     await waitFor(() => {
-      expect(mockEditor.view.dispatch).toHaveBeenCalled();
+      expect(mockEditor.dispatch).toHaveBeenCalled();
     });
 
-    mockEditor.view.dispatch.mockClear();
+    mockEditor.dispatch.mockClear();
 
-    // Enter for next match
+    // Enter moves to next match
     await act(async () => {
       await user.keyboard("{Enter}");
     });
 
-    expect(mockEditor.view.dispatch).toHaveBeenCalled();
+    expect(mockEditor.dispatch).toHaveBeenCalled();
 
-    mockEditor.view.dispatch.mockClear();
+    mockEditor.dispatch.mockClear();
 
-    // Shift+Enter for previous match
+    // Shift+Enter moves to previous match
     await act(async () => {
       await user.keyboard("{Shift>}{Enter}{/Shift}");
     });
-    expect(mockEditor.view.dispatch).toHaveBeenCalled();
+    expect(mockEditor.dispatch).toHaveBeenCalled();
   });
 
-  it("should toggle search options", async () => {
+  it("should toggle search options (case sensitive checkbox)", async () => {
     render(
       <InFileSearch
         editor={mockEditor}
@@ -298,7 +284,6 @@ describe("InFileSearch", () => {
       />,
     );
 
-    const caseSensitiveCheckbox = screen.getByDisplayValue(""); // Find checkbox by type
     const checkboxes = screen.getAllByRole("checkbox");
     const caseSensitiveBox = checkboxes[0]; // First checkbox is case sensitive
 
@@ -309,7 +294,7 @@ describe("InFileSearch", () => {
     expect(caseSensitiveBox).toBeChecked();
   });
 
-  it("should show replace interface when toggled", async () => {
+  it("should show replace interface when toggle replace button is clicked", async () => {
     render(
       <InFileSearch
         editor={mockEditor}
@@ -328,7 +313,7 @@ describe("InFileSearch", () => {
     expect(screen.getByText("All")).toBeInTheDocument();
   });
 
-  it("should perform single replace", async () => {
+  it("should perform single replace via editor.dispatch and tr.replaceWith", async () => {
     render(
       <InFileSearch
         editor={mockEditor}
@@ -342,34 +327,37 @@ describe("InFileSearch", () => {
       await user.type(searchInput, "hello");
     });
 
-    // Wait for search to complete and find matches
+    // Wait for search to complete
     await waitFor(() => {
-      expect(mockEditor.view.dispatch).toHaveBeenCalled();
+      expect(mockEditor.dispatch).toHaveBeenCalled();
     });
 
-    mockEditor.view.dispatch.mockClear();
+    mockEditor.dispatch.mockClear();
     mockEditor.state.tr.replaceWith.mockClear();
 
-    const replaceButton = screen.getByTitle("Toggle replace (Ctrl+H)");
+    // Open replace panel
+    const toggleReplaceButton = screen.getByTitle("Toggle replace (Ctrl+H)");
     await act(async () => {
-      await user.click(replaceButton);
+      await user.click(toggleReplaceButton);
     });
 
+    // Type replacement text
     const replaceInput = screen.getByPlaceholderText("Replace with...");
     await act(async () => {
       await user.type(replaceInput, "hi");
     });
 
+    // Click Replace
     const replaceOneButton = screen.getByText("Replace");
     await act(async () => {
       await user.click(replaceOneButton);
     });
 
     expect(mockEditor.state.tr.replaceWith).toHaveBeenCalled();
-    expect(mockEditor.view.dispatch).toHaveBeenCalled();
+    expect(mockEditor.dispatch).toHaveBeenCalled();
   });
 
-  it("should perform replace all", async () => {
+  it("should perform replace all via editor.dispatch and tr.replaceWith", async () => {
     render(
       <InFileSearch
         editor={mockEditor}
@@ -383,31 +371,34 @@ describe("InFileSearch", () => {
       await user.type(searchInput, "hello");
     });
 
-    // Wait for search to complete and find matches
+    // Wait for search to complete
     await waitFor(() => {
-      expect(mockEditor.view.dispatch).toHaveBeenCalled();
+      expect(mockEditor.dispatch).toHaveBeenCalled();
     });
 
-    mockEditor.view.dispatch.mockClear();
+    mockEditor.dispatch.mockClear();
     mockEditor.state.tr.replaceWith.mockClear();
 
-    const replaceButton = screen.getByTitle("Toggle replace (Ctrl+H)");
+    // Open replace panel
+    const toggleReplaceButton = screen.getByTitle("Toggle replace (Ctrl+H)");
     await act(async () => {
-      await user.click(replaceButton);
+      await user.click(toggleReplaceButton);
     });
 
+    // Type replacement text
     const replaceInput = screen.getByPlaceholderText("Replace with...");
     await act(async () => {
       await user.type(replaceInput, "hi");
     });
 
+    // Click Replace All
     const replaceAllButton = screen.getByText("All");
     await act(async () => {
       await user.click(replaceAllButton);
     });
 
     expect(mockEditor.state.tr.replaceWith).toHaveBeenCalled();
-    expect(mockEditor.view.dispatch).toHaveBeenCalled();
+    expect(mockEditor.dispatch).toHaveBeenCalled();
   });
 
   it("should handle regex search option", async () => {
@@ -419,9 +410,10 @@ describe("InFileSearch", () => {
       />,
     );
 
-    const regexButton = screen.getByTitle("Regular expression");
+    // Enable regex mode
+    const regexLabel = screen.getByTitle("Regular expression");
     await act(async () => {
-      await user.click(regexButton);
+      await user.click(regexLabel);
     });
 
     const searchInput = screen.getByPlaceholderText("Find in file...");
@@ -430,7 +422,7 @@ describe("InFileSearch", () => {
     });
 
     await waitFor(() => {
-      expect(mockEditor.view.dispatch).toHaveBeenCalled();
+      expect(mockEditor.dispatch).toHaveBeenCalled();
     });
   });
 
@@ -443,9 +435,10 @@ describe("InFileSearch", () => {
       />,
     );
 
-    const wholeWordButton = screen.getByTitle("Whole word");
+    // Enable whole word mode
+    const wholeWordLabel = screen.getByTitle("Whole word");
     await act(async () => {
-      await user.click(wholeWordButton);
+      await user.click(wholeWordLabel);
     });
 
     const searchInput = screen.getByPlaceholderText("Find in file...");
@@ -454,11 +447,11 @@ describe("InFileSearch", () => {
     });
 
     await waitFor(() => {
-      expect(mockEditor.view.dispatch).toHaveBeenCalled();
+      expect(mockEditor.dispatch).toHaveBeenCalled();
     });
   });
 
-  it("should clear search when closed", async () => {
+  it("should not render search panel when isVisible toggles to false", async () => {
     const { rerender } = render(
       <InFileSearch
         editor={mockEditor}
@@ -467,20 +460,8 @@ describe("InFileSearch", () => {
       />,
     );
 
-    // Type something to trigger search
-    const searchInput = screen.getByPlaceholderText("Find in file...");
-    await act(async () => {
-      await user.type(searchInput, "hello");
-    });
+    expect(screen.getByPlaceholderText("Find in file...")).toBeInTheDocument();
 
-    // Wait for search to complete
-    await waitFor(() => {
-      expect(mockEditor.view.dispatch).toHaveBeenCalled();
-    });
-
-    mockEditor.view.dispatch.mockClear();
-
-    // Close the search panel
     rerender(
       <InFileSearch
         editor={mockEditor}
@@ -489,8 +470,8 @@ describe("InFileSearch", () => {
       />,
     );
 
-    // Should not clear search automatically when closing
-    // (This component doesn't have a clear-on-close functionality)
-    expect(true).toBe(true); // Placeholder assertion
+    expect(
+      screen.queryByPlaceholderText("Find in file..."),
+    ).not.toBeInTheDocument();
   });
 });

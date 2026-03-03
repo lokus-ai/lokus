@@ -3,6 +3,34 @@ import { render, fireEvent } from "@testing-library/react";
 import React from "react";
 import EditorContextMenu from "./EditorContextMenu.jsx";
 
+// Mock platform service (used for isWindows() check in component)
+vi.mock("../services/platform/PlatformService", () => ({
+  default: {
+    isWindows: vi.fn().mockReturnValue(false),
+  },
+}));
+
+// Mock platform index (used for isDesktop() check in component)
+vi.mock("../platform/index.js", () => ({
+  isDesktop: vi.fn().mockReturnValue(true),
+  isMobile: vi.fn().mockReturnValue(false),
+  isWindows: vi.fn().mockReturnValue(false),
+  isMacOS: vi.fn().mockReturnValue(true),
+  isLinux: vi.fn().mockReturnValue(false),
+}));
+
+// Mock RemoteConfigContext feature flags
+vi.mock("../contexts/RemoteConfigContext", () => ({
+  useFeatureFlags: vi.fn().mockReturnValue({
+    enable_import_export: true,
+    enable_graph: false,
+    enable_bases: false,
+    enable_templates: false,
+    enable_plugins: false,
+    enable_daily_notes: false,
+  }),
+}));
+
 // Mock context menu UI components
 vi.mock("./ui/context-menu", () => ({
   ContextMenu: ({ children, ...props }) => {

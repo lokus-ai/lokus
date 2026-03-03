@@ -121,8 +121,8 @@ describe('KanbanBoard Component', () => {
         const addButtons = screen.getAllByTitle('Add task')
         fireEvent.click(addButtons[0])
 
-        // Find input
-        const input = screen.getByPlaceholderText('Task title...')
+        // Find input (placeholder is "Task title" in the source)
+        const input = screen.getByPlaceholderText('Task title')
         fireEvent.change(input, { target: { value: 'New Task' } })
         fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })
 

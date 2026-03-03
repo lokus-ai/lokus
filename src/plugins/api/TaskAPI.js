@@ -50,7 +50,7 @@ export class TaskAPI extends EventEmitter {
      * Register a task provider
      */
     registerTaskProvider(type, provider) {
-        this._requirePermission('tasks.registerTaskProvider', 'commands:register');
+        this._requirePermission('tasks.registerTaskProvider', 'tasks:register');
 
         if (this.taskProviders.has(type)) {
             throw new Error(`Task provider for type '${type}' already registered`);
@@ -95,7 +95,7 @@ export class TaskAPI extends EventEmitter {
      * Execute a task
      */
     async executeTask(task) {
-        this._requirePermission('tasks.executeTask', 'commands:execute');
+        this._requirePermission('tasks.executeTask', 'tasks:execute');
 
         if (!task || !task.name) {
             throw new Error('Task must have a name');
@@ -135,7 +135,7 @@ export class TaskAPI extends EventEmitter {
      * Get all tasks from all providers
      */
     async getTasks() {
-        this._requirePermission('tasks.getTasks', 'commands:list');
+        this._requirePermission('tasks.getTasks', 'tasks:read');
 
         const allTasks = [];
 

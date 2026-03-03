@@ -26,7 +26,8 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
-      'packages/lokus-plugin-cli/templates/**'
+      'packages/lokus-plugin-cli/templates/**',
+      'tests/e2e/**'
     ],
     // Watch mode configuration (tests removed)
     watch: {

@@ -349,7 +349,7 @@ describe('TemplateLoops', () => {
       const template = '{{#each outer}}{{#each this.inner}}{{this}}{{/each}}{{/each}}';
       const stats = loops.getStatistics(template);
       expect(stats.totalLoops).toBe(2);
-      expect(stats.maxNestingDepth).toBe(0); // Changed: top level blocks have depth 0
+      expect(stats.maxNestingDepth).toBe(1); // Inner loop is nested 1 level deep
     });
 
     it('should return zero statistics for template without loops', () => {

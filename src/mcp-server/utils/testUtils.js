@@ -9,9 +9,9 @@
  */
 
 import { EventEmitter } from '../../utils/EventEmitter.js';
-import { MCPProtocol, MCPMethod, MCPErrorCode } from '../MCPProtocol.js';
-import { MCPServerHost, MCPServerType, MCPServerStatus } from '../MCPServerHost.js';
-import { MCPClient } from '../MCPClient.js';
+import { MCPProtocol, MCPMethod, MCPErrorCode } from '../../plugins/mcp/MCPProtocol.js';
+import { MCPServerHost, MCPServerType, MCPServerStatus } from '../../plugins/mcp/MCPServerHost.js';
+import { MCPClient } from '../../plugins/mcp/MCPClient.js';
 
 /**
  * Mock WebSocket implementation for testing

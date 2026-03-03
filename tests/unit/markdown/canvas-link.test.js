@@ -1,114 +1,13 @@
 /**
- * Tests for Canvas Link Markdown Export and Parsing
- * Tests the round-trip: HTML canvas-link -> Markdown ![name] -> HTML canvas-link
+ * Tests for Canvas Link Markdown Pattern Recognition and Parsing
+ *
+ * Note: The MarkdownExporter (src/core/export/markdown-exporter.js) was removed
+ * from this codebase. Tests for the export functionality have been removed.
+ * This file tests the canvas link pattern recognition logic used by the
+ * markdown compiler.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { MarkdownExporter } from '../../../src/core/export/markdown-exporter.js';
-
-describe('Canvas Link Markdown', () => {
-  let exporter;
-
-  beforeEach(() => {
-    exporter = new MarkdownExporter();
-  });
-
-  describe('Export to Markdown', () => {
-    it('should export canvas-link span to ![name] format', () => {
-      const html = '<p><span data-type="canvas-link" class="canvas-link" href="/path/to/canvas.canvas">My Canvas</span></p>';
-
-      const markdown = exporter.export(html);
-
-      expect(markdown).toContain('![My Canvas]');
-    });
-
-    it('should export canvas-link anchor (legacy) to ![name] format', () => {
-      const html = '<p><a data-type="canvas-link" class="canvas-link" href="/path/to/canvas.canvas">Legacy Canvas</a></p>';
-
-      const markdown = exporter.export(html);
-
-      expect(markdown).toContain('![Legacy Canvas]');
-    });
-
-    it('should preserve canvas name with spaces', () => {
-      const html = '<p><span data-type="canvas-link" class="canvas-link" href="/path.canvas">Lecture 1 Notes</span></p>';
-
-      const markdown = exporter.export(html);
-
-      expect(markdown).toContain('![Lecture 1 Notes]');
-    });
-
-    it('should handle broken canvas links', () => {
-      const html = '<p><span data-type="canvas-link" class="canvas-link canvas-link-broken" href="">Missing Canvas</span></p>';
-
-      const markdown = exporter.export(html);
-
-      expect(markdown).toContain('![Missing Canvas]');
-    });
-
-    it('should not confuse canvas links with wiki links', () => {
-      const html = `
-        <p>
-          <span data-type="canvas-link" class="canvas-link" href="/canvas.canvas">My Canvas</span>
-          and
-          <a data-type="wiki-link" href="/note.md" target="Note|Note">Note</a>
-        </p>
-      `;
-
-      const markdown = exporter.export(html);
-
-      expect(markdown).toContain('![My Canvas]');
-      expect(markdown).toContain('[[Note|Note]]');
-    });
-
-    it('should handle multiple canvas links in same paragraph', () => {
-      const html = `
-        <p>
-          <span data-type="canvas-link" class="canvas-link" href="/a.canvas">Canvas A</span>
-          and
-          <span data-type="canvas-link" class="canvas-link" href="/b.canvas">Canvas B</span>
-        </p>
-      `;
-
-      const markdown = exporter.export(html);
-
-      expect(markdown).toContain('![Canvas A]');
-      expect(markdown).toContain('![Canvas B]');
-    });
-
-    it('should handle canvas link with special characters in name', () => {
-      const html = '<p><span data-type="canvas-link" class="canvas-link" href="/path.canvas">Canvas (Draft) - v2</span></p>';
-
-      const markdown = exporter.export(html);
-
-      expect(markdown).toContain('![Canvas (Draft) - v2]');
-    });
-  });
-
-  describe('HTML to Markdown Conversion', () => {
-    it('should handle canvas link within formatted text', () => {
-      const html = `
-        <p>Check out <strong>this</strong> <span data-type="canvas-link" class="canvas-link" href="/test.canvas">Test Canvas</span> for details.</p>
-      `;
-
-      const markdown = exporter.export(html);
-
-      expect(markdown).toContain('**this**');
-      expect(markdown).toContain('![Test Canvas]');
-    });
-
-    it('should handle canvas link in heading', () => {
-      const html = `
-        <h2>Overview <span data-type="canvas-link" class="canvas-link" href="/overview.canvas">Diagram</span></h2>
-      `;
-
-      const markdown = exporter.export(html);
-
-      expect(markdown).toContain('## ');
-      expect(markdown).toContain('![Diagram]');
-    });
-  });
-});
 
 describe('Canvas Link Markdown Parsing', () => {
   // Test the markdown-it plugin that parses ![CanvasName] back to canvas-link spans
@@ -201,35 +100,5 @@ describe('Canvas Link Markdown Parsing', () => {
       expect(matches[0][1]).toBe('Canvas A');
       expect(matches[1][1]).toBe('Canvas B');
     });
-  });
-});
-
-describe('Canvas Link Round-trip', () => {
-  // Test export works correctly - parsing is handled by MarkdownCompiler
-
-  it('should export canvas link to markdown format', () => {
-    const exporter = new MarkdownExporter();
-
-    // Start with HTML
-    const originalHtml = '<p><span data-type="canvas-link" class="canvas-link" href="/test.canvas">Test Canvas</span></p>';
-
-    // Export to markdown
-    const markdown = exporter.export(originalHtml);
-    expect(markdown).toContain('![Test Canvas]');
-  });
-
-  it('should preserve canvas name through export', () => {
-    const exporter = new MarkdownExporter();
-
-    const htmlCases = [
-      { html: '<p><span data-type="canvas-link" class="canvas-link" href="/a.canvas">Simple</span></p>', expected: '![Simple]' },
-      { html: '<p><span data-type="canvas-link" class="canvas-link" href="/a.canvas">With Spaces</span></p>', expected: '![With Spaces]' },
-      { html: '<p><span data-type="canvas-link" class="canvas-link" href="/a.canvas">Special (chars) - v1</span></p>', expected: '![Special (chars) - v1]' },
-    ];
-
-    for (const { html, expected } of htmlCases) {
-      const markdown = exporter.export(html);
-      expect(markdown).toContain(expected);
-    }
   });
 });

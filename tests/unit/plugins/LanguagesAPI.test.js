@@ -261,7 +261,7 @@ describe('LanguagesAPI', () => {
 
     it('should work without language manager', () => {
       const apiWithoutManager = new LanguagesAPI(null);
-      apiWithoutManager.currentPluginId = 'test-plugin';
+      apiWithoutManager._setPermissionContext('test-plugin', new Set(['languages:register', 'languages:diagnostics', 'languages:read', 'events:listen', 'events:emit']));
 
       const language = { id: 'mylang', extensions: ['.ml'] };
       expect(() => apiWithoutManager.registerLanguage(language)).not.toThrow();
@@ -352,7 +352,7 @@ describe('LanguagesAPI', () => {
 
     it('should work without language manager', () => {
       const apiWithoutManager = new LanguagesAPI(null);
-      apiWithoutManager.currentPluginId = 'test-plugin';
+      apiWithoutManager._setPermissionContext('test-plugin', new Set(['languages:register', 'languages:diagnostics', 'languages:read', 'events:listen', 'events:emit']));
 
       const config = { comments: { lineComment: '//' } };
       expect(() => apiWithoutManager.setLanguageConfiguration('javascript', config)).not.toThrow();
@@ -392,7 +392,7 @@ describe('LanguagesAPI', () => {
       languagesAPI.registerHoverProvider('markdown', provider2);
 
       const otherAPI = new LanguagesAPI(mockLanguageManager);
-      otherAPI.currentPluginId = 'other-plugin';
+      otherAPI._setPermissionContext('other-plugin', new Set(['languages:register', 'languages:diagnostics', 'languages:read', 'events:listen', 'events:emit']));
       const provider3 = { provideCompletionItems: vi.fn() };
       otherAPI.registerCompletionProvider('javascript', provider3);
 
@@ -416,7 +416,7 @@ describe('LanguagesAPI', () => {
       languagesAPI.registerLanguage({ id: 'lang2', extensions: ['.l2'] });
 
       const otherAPI = new LanguagesAPI(mockLanguageManager);
-      otherAPI.currentPluginId = 'other-plugin';
+      otherAPI._setPermissionContext('other-plugin', new Set(['languages:register', 'languages:diagnostics', 'languages:read', 'events:listen', 'events:emit']));
       otherAPI.registerLanguage({ id: 'lang3', extensions: ['.l3'] });
 
       // Merge languages for testing
@@ -438,7 +438,7 @@ describe('LanguagesAPI', () => {
       languagesAPI.setLanguageConfiguration('python', { comments: { lineComment: '#' } });
 
       const otherAPI = new LanguagesAPI(mockLanguageManager);
-      otherAPI.currentPluginId = 'other-plugin';
+      otherAPI._setPermissionContext('other-plugin', new Set(['languages:register', 'languages:diagnostics', 'languages:read', 'events:listen', 'events:emit']));
       otherAPI.setLanguageConfiguration('ruby', { comments: { lineComment: '#' } });
 
       // Merge configurations for testing

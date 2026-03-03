@@ -9,32 +9,76 @@
  * - Error handling and recovery
  */
 
-import { jest } from '@jest/globals';
-import { 
-  MCPServerHost, 
-  MCPServerInstance, 
-  MCPServerType, 
-  MCPServerStatus 
+import { describe, it, test, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  MCPServerHost,
+  MCPServerInstance,
+  MCPServerType,
+  MCPServerStatus
 } from '../../src/plugins/mcp/MCPServerHost.js';
-import { 
+import {
   TestEnvironment,
   TestDataGenerator,
   PerformanceTestUtils
 } from '../../src/mcp-server/utils/testUtils.js';
 
+// Helper: create a mock sandbox that acts as a real EventEmitter and
+// auto-responds to MCP initialization messages so mcpProtocol.initialize()
+// resolves instead of hanging.
+function createMockSandbox(serverId, manifest, options) {
+  const events = new Map();
+  const sandbox = {
+    serverId,
+    manifest,
+    options,
+    initialize: vi.fn().mockResolvedValue(),
+    terminate: vi.fn().mockResolvedValue(),
+    handleMessage: vi.fn((message) => {
+      // Auto-respond to JSON-RPC requests/notifications
+      try {
+        const parsed = typeof message === 'string' ? JSON.parse(message) : message;
+        if (parsed?.method === 'initialize') {
+          setTimeout(() => {
+            sandbox.emit('send-message', JSON.stringify({
+              jsonrpc: '2.0',
+              id: parsed.id,
+              result: {
+                protocolVersion: '2024-11-05',
+                capabilities: {},
+                serverInfo: { name: serverId, version: '1.0.0' }
+              }
+            }));
+          }, 0);
+        } else if (parsed?.method === 'shutdown') {
+          // Simulate graceful shutdown — emit 'exit' so waitForShutdown resolves
+          setTimeout(() => sandbox.emit('exit', 0), 0);
+        }
+      } catch { /* ignore parse errors */ }
+    }),
+    on(event, listener) {
+      if (!events.has(event)) events.set(event, []);
+      events.get(event).push(listener);
+      return () => sandbox.off(event, listener);
+    },
+    off(event, listener) {
+      const arr = events.get(event);
+      if (arr) {
+        const idx = arr.indexOf(listener);
+        if (idx !== -1) arr.splice(idx, 1);
+      }
+    },
+    emit(event, ...args) {
+      const arr = events.get(event);
+      if (arr) arr.forEach(fn => fn(...args));
+    }
+  };
+  return sandbox;
+}
+
 // Mock dependencies
-jest.mock('../../src/plugins/security/PluginSandbox.js', () => {
+vi.mock('../../src/plugins/security/PluginSandbox.js', () => {
   return {
-    PluginSandbox: jest.fn().mockImplementation((serverId, manifest, options) => ({
-      serverId,
-      manifest,
-      options,
-      initialize: jest.fn().mockResolvedValue(),
-      terminate: jest.fn().mockResolvedValue(),
-      handleMessage: jest.fn(),
-      on: jest.fn(),
-      emit: jest.fn()
-    }))
+    PluginSandbox: vi.fn().mockImplementation((...args) => createMockSandbox(...args))
   };
 });
 
@@ -47,9 +91,9 @@ describe('MCPServerHost', () => {
     testEnv = new TestEnvironment();
     
     mockSecurityManager = {
-      validatePlugin: jest.fn().mockResolvedValue(true),
-      createSandbox: jest.fn(),
-      checkPermissions: jest.fn().mockReturnValue(true)
+      validatePlugin: vi.fn().mockResolvedValue(true),
+      createSandbox: vi.fn(),
+      checkPermissions: vi.fn().mockReturnValue(true)
     };
 
     serverHost = new MCPServerHost(mockSecurityManager, {
@@ -66,6 +110,10 @@ describe('MCPServerHost', () => {
       await serverHost.shutdown();
     }
     await testEnv.tearDown();
+    // Restore PluginSandbox mock to prevent cross-test contamination
+    // (e.g. Error Handling test changes mockImplementation to reject)
+    const { PluginSandbox } = await import('../../src/plugins/security/PluginSandbox.js');
+    PluginSandbox.mockImplementation((...args) => createMockSandbox(...args));
   });
 
   describe('Initialization', () => {
@@ -94,7 +142,7 @@ describe('MCPServerHost', () => {
     });
 
     test('should start health monitoring on initialization', async () => {
-      jest.spyOn(serverHost, 'startHealthMonitoring');
+      vi.spyOn(serverHost, 'startHealthMonitoring');
       
       await serverHost.initialize();
       
@@ -103,7 +151,7 @@ describe('MCPServerHost', () => {
     });
 
     test('should emit initialized event', async () => {
-      const initSpy = jest.fn();
+      const initSpy = vi.fn();
       serverHost.on('initialized', initSpy);
       
       await serverHost.initialize();
@@ -221,13 +269,14 @@ describe('MCPServerHost', () => {
       };
 
       await serverHost.startServer('stubborn-server', config);
-      
-      // Mock graceful shutdown to fail
-      jest.spyOn(serverHost, 'gracefulShutdown').mockRejectedValue(new Error('Shutdown timeout'));
-      jest.spyOn(serverHost, 'forceShutdown').mockResolvedValue();
-      
+
+      // Mock waitForShutdown to reject (simulates timeout).
+      // gracefulShutdown's internal catch block then calls forceShutdown.
+      vi.spyOn(serverHost, 'waitForShutdown').mockRejectedValue(new Error('Shutdown timeout'));
+      vi.spyOn(serverHost, 'forceShutdown').mockResolvedValue();
+
       await serverHost.stopServer('stubborn-server', false);
-      
+
       expect(serverHost.forceShutdown).toHaveBeenCalled();
     });
 
@@ -248,9 +297,9 @@ describe('MCPServerHost', () => {
     });
 
     test('should emit server lifecycle events', async () => {
-      const startSpy = jest.fn();
-      const stopSpy = jest.fn();
-      const restartSpy = jest.fn();
+      const startSpy = vi.fn();
+      const stopSpy = vi.fn();
+      const restartSpy = vi.fn();
       
       serverHost.on('server-started', startSpy);
       serverHost.on('server-stopped', stopSpy);
@@ -295,7 +344,7 @@ describe('MCPServerHost', () => {
       
       // Mock protocol with ping method
       serverInstance.protocol = {
-        sendRequest: jest.fn().mockResolvedValue({ pong: true })
+        sendRequest: vi.fn().mockResolvedValue({ pong: true })
       };
 
       // Wait for at least one health check
@@ -318,7 +367,7 @@ describe('MCPServerHost', () => {
       
       // Mock protocol to fail health checks
       serverInstance.protocol = {
-        sendRequest: jest.fn().mockRejectedValue(new Error('Health check failed'))
+        sendRequest: vi.fn().mockRejectedValue(new Error('Health check failed'))
       };
 
       // Wait for health check
@@ -339,7 +388,7 @@ describe('MCPServerHost', () => {
 
       const serverInstance = await serverHost.startServer('crash-test', config);
       
-      jest.spyOn(serverHost, 'restartServer').mockResolvedValue(serverInstance);
+      vi.spyOn(serverHost, 'restartServer').mockResolvedValue(serverInstance);
       
       // Simulate server crash
       serverInstance.setStatus(MCPServerStatus.CRASHED);
@@ -421,7 +470,7 @@ describe('MCPServerHost', () => {
       // Mock sandbox initialization to fail
       const { PluginSandbox } = await import('../../src/plugins/security/PluginSandbox.js');
       PluginSandbox.mockImplementation(() => ({
-        initialize: jest.fn().mockRejectedValue(new Error('Sandbox failed'))
+        initialize: vi.fn().mockRejectedValue(new Error('Sandbox failed'))
       }));
 
       await expect(serverHost.startServer('failing-server', config))
@@ -440,7 +489,7 @@ describe('MCPServerHost', () => {
 
       const serverInstance = await serverHost.startServer('crash-prone', config);
       
-      const errorSpy = jest.fn();
+      const errorSpy = vi.fn();
       serverHost.on('server-error', errorSpy);
       
       // Simulate process crash
@@ -556,7 +605,7 @@ describe('MCPServerHost', () => {
     test('should track status changes correctly', () => {
       const instance = new MCPServerInstance('status-test', {}, {});
       
-      const statusSpy = jest.fn();
+      const statusSpy = vi.fn();
       instance.on('status-changed', statusSpy);
       
       instance.setStatus(MCPServerStatus.STARTING);
@@ -608,7 +657,7 @@ describe('MCPServerHost', () => {
 
       expect(serverHost.servers.size).toBe(3);
       
-      const shutdownSpy = jest.fn();
+      const shutdownSpy = vi.fn();
       serverHost.on('shutdown', shutdownSpy);
       
       await serverHost.shutdown();
@@ -627,7 +676,7 @@ describe('MCPServerHost', () => {
       });
 
       // Mock stopServer to throw an error
-      jest.spyOn(serverHost, 'stopServer').mockRejectedValue(new Error('Stop failed'));
+      vi.spyOn(serverHost, 'stopServer').mockRejectedValue(new Error('Stop failed'));
       
       // Shutdown should not throw despite server stop errors
       await expect(serverHost.shutdown()).resolves.not.toThrow();

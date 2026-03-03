@@ -1,28 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import EnhancedSearchPanel from './EnhancedSearchPanel'
+import SearchPanel from './SearchPanel'
 import { invoke } from '@tauri-apps/api/core'
-import { providerManager } from '../plugins/data/ProviderRegistry.js'
+
+/**
+ * Additional tests for SearchPanel component.
+ * SearchPanel.test.jsx covers core functionality.
+ * These tests cover additional edge cases and behaviors.
+ */
 
 vi.mock('@tauri-apps/api/core', () => ({
     invoke: vi.fn()
 }))
 
-vi.mock('../plugins/data/ProviderRegistry.js', () => ({
-    providerManager: {
-        initialize: vi.fn(),
-        registry: {
-            getProvidersByType: vi.fn(),
-            getProvider: vi.fn(),
-            getActiveProvider: vi.fn()
-        },
-        executeSearchOperation: vi.fn()
-    }
+vi.mock('../platform/index.js', () => ({
+    isDesktop: vi.fn().mockReturnValue(true),
+    isMobile: vi.fn().mockReturnValue(false),
 }))
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
-describe('EnhancedSearchPanel Component', () => {
+describe('SearchPanel Additional Coverage', () => {
     const defaultProps = {
         isOpen: true,
         onClose: vi.fn(),
@@ -30,108 +28,144 @@ describe('EnhancedSearchPanel Component', () => {
         workspacePath: '/test/workspace'
     }
 
-    afterEach(() => {
-        vi.useRealTimers()
-    })
-
     beforeEach(() => {
         vi.clearAllMocks()
-
-        // Mock provider registry
-        providerManager.registry.getProvidersByType.mockReturnValue([])
     })
 
-    it('renders correctly', () => {
-        render(<EnhancedSearchPanel {...defaultProps} />)
-        expect(screen.getByText('Enhanced Search')).toBeInTheDocument()
+    it('does not render when isOpen is false', () => {
+        render(<SearchPanel {...defaultProps} isOpen={false} />)
+        expect(screen.queryByPlaceholderText('Search in files...')).not.toBeInTheDocument()
     })
 
-    it('initializes providers on mount', () => {
-        render(<EnhancedSearchPanel {...defaultProps} />)
-        expect(providerManager.initialize).toHaveBeenCalled()
+    it('closes on Escape key press', () => {
+        render(<SearchPanel {...defaultProps} />)
+        const input = screen.getByPlaceholderText('Search in files...')
+        fireEvent.keyDown(input, { key: 'Escape' })
+        expect(defaultProps.onClose).toHaveBeenCalled()
     })
 
-    it('performs local search', async () => {
+    it('closes when close button is clicked', () => {
+        render(<SearchPanel {...defaultProps} />)
+        const closeBtn = screen.getByTitle('Close search')
+        fireEvent.click(closeBtn)
+        expect(defaultProps.onClose).toHaveBeenCalled()
+    })
+
+    it('shows search title', () => {
+        render(<SearchPanel {...defaultProps} />)
+        expect(screen.getByText('Search Files')).toBeInTheDocument()
+    })
+
+    it('shows no results message when search returns empty', async () => {
+        invoke.mockResolvedValue([])
+
+        render(<SearchPanel {...defaultProps} />)
+
+        const input = screen.getByPlaceholderText('Search in files...')
+        fireEvent.change(input, { target: { value: 'nomatch' } })
+
+        await sleep(600)
+
+        await waitFor(() => {
+            expect(screen.getByText('No results found')).toBeInTheDocument()
+        })
+    })
+
+    it('shows result count when results found', async () => {
         invoke.mockResolvedValue([
             {
-                file: '/test/local.md',
-                fileName: 'local.md',
-                matchCount: 1,
-                matches: [{ line: 1, column: 0, text: 'local match', context: [] }]
-            }
-        ])
-
-        render(<EnhancedSearchPanel {...defaultProps} />)
-
-        const input = screen.getByPlaceholderText('Search in files...')
-        fireEvent.change(input, { target: { value: 'query' } })
-
-        await sleep(600)
-
-        expect(invoke).toHaveBeenCalledWith('search_in_files', expect.any(Object))
-        await waitFor(() => screen.getByText('local.md'))
-    })
-
-    it('debounces search queries', async () => {
-        vi.useFakeTimers()
-        render(<EnhancedSearchPanel isOpen={true} onClose={vi.fn()} workspacePath="/test/path" />)
-
-        const input = screen.getByPlaceholderText('Search in files...')
-        fireEvent.change(input, { target: { value: 'query' } })
-
-        // Should not search immediately
-        expect(invoke).not.toHaveBeenCalled()
-
-        // Fast forward time
-        vi.advanceTimersByTime(500)
-
-        // Should have searched
-        expect(invoke).toHaveBeenCalledTimes(1)
-
-        vi.useRealTimers()
-    })
-
-    it('performs provider search', async () => {
-        const mockProvider = {
-            id: 'test-provider',
-            config: { name: 'Test Provider' },
-            isConnected: true,
-            getCapabilities: () => ['semantic-search']
-        }
-
-        providerManager.registry.getProvidersByType.mockReturnValue([mockProvider])
-        providerManager.registry.getActiveProvider.mockReturnValue(mockProvider)
-
-        providerManager.executeSearchOperation.mockResolvedValue([
+                file: '/test/file1.md',
+                fileName: 'file1.md',
+                matchCount: 2,
+                matches: [
+                    { line: 1, column: 0, text: 'match1', context: [] },
+                    { line: 2, column: 0, text: 'match2', context: [] }
+                ]
+            },
             {
-                file: 'external-doc',
-                title: 'External Doc',
-                matches: [{ text: 'external match' }],
-                score: 0.9
+                file: '/test/file2.md',
+                fileName: 'file2.md',
+                matchCount: 1,
+                matches: [{ line: 3, column: 0, text: 'match3', context: [] }]
             }
         ])
 
-        render(<EnhancedSearchPanel {...defaultProps} />)
+        render(<SearchPanel {...defaultProps} />)
 
-        // Wait for provider init
-        await waitFor(() => expect(providerManager.registry.getActiveProvider).toHaveBeenCalled())
+        const input = screen.getByPlaceholderText('Search in files...')
+        fireEvent.change(input, { target: { value: 'match' } })
+
+        await sleep(600)
+
+        await waitFor(() => {
+            expect(screen.getByText('2 files found')).toBeInTheDocument()
+        })
+    })
+
+    it('toggles whole word search option', async () => {
+        render(<SearchPanel {...defaultProps} />)
+
+        // Open filters
+        const settingsBtn = screen.getByTitle('Search filters')
+        fireEvent.click(settingsBtn)
+
+        // Toggle Whole Word
+        const wholeWordCheckbox = screen.getByLabelText('Whole word')
+        fireEvent.click(wholeWordCheckbox)
 
         const input = screen.getByPlaceholderText('Search in files...')
         fireEvent.change(input, { target: { value: 'query' } })
 
         await sleep(600)
 
-        expect(providerManager.executeSearchOperation).toHaveBeenCalled()
-        await waitFor(() => screen.getByText('External Doc'))
+        await waitFor(() => {
+            expect(invoke).toHaveBeenCalledWith('search_in_files', expect.objectContaining({
+                options: expect.objectContaining({
+                    wholeWord: true
+                })
+            }))
+        })
     })
 
-    it('toggles filters', () => {
-        render(<EnhancedSearchPanel {...defaultProps} />)
+    it('shows searching indicator while search is in progress', async () => {
+        // Use a slow mock to catch the loading state
+        invoke.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve([]), 300)))
 
-        const filterBtn = screen.getByTitle('Search filters')
-        fireEvent.click(filterBtn)
+        render(<SearchPanel {...defaultProps} />)
 
-        expect(screen.getByText('Search Options')).toBeInTheDocument()
-        expect(screen.getByText('Case sensitive')).toBeInTheDocument()
+        const input = screen.getByPlaceholderText('Search in files...')
+        fireEvent.change(input, { target: { value: 'loading' } })
+
+        await sleep(600)
+
+        await waitFor(() => {
+            expect(screen.getByText('Searching...')).toBeInTheDocument()
+        })
+    })
+
+    it('clears results when query is empty', async () => {
+        invoke.mockResolvedValue([
+            {
+                file: '/test/file.md',
+                fileName: 'file.md',
+                matchCount: 1,
+                matches: [{ line: 1, column: 0, text: 'match', context: [] }]
+            }
+        ])
+
+        render(<SearchPanel {...defaultProps} />)
+
+        const input = screen.getByPlaceholderText('Search in files...')
+        fireEvent.change(input, { target: { value: 'query' } })
+        await sleep(600)
+
+        await waitFor(() => screen.getByText('file.md'))
+
+        // Clear the query
+        fireEvent.change(input, { target: { value: '' } })
+
+        await waitFor(() => {
+            expect(screen.queryByText('file.md')).not.toBeInTheDocument()
+        })
     })
 })

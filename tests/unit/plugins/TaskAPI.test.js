@@ -20,7 +20,9 @@ describe('TaskAPI', () => {
         // Grant task permissions for testing
         const allPermissions = new Set([
             'tasks:register',
-            'tasks:execute'
+            'tasks:execute',
+            'tasks:read',
+            'events:listen'
         ]);
         taskAPI._setPermissionContext('test-plugin', allPermissions);
     });

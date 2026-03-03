@@ -62,7 +62,7 @@ describe('StorageAPI', () => {
     it('should fallback to localStorage when database unavailable', async () => {
       // Create a storage API without data manager
       const fallbackStorage = new DataAPI(null);
-      fallbackStorage.currentPluginId = 'test-plugin';
+      fallbackStorage._setPermissionContext('test-plugin', new Set(['storage:read', 'storage:write']));
 
       // Set value directly in localStorage
       localStorage.setItem('lokus_plugin_test-plugin_testKey', JSON.stringify({ value: 123 }));
@@ -74,7 +74,7 @@ describe('StorageAPI', () => {
 
     it('should return undefined for invalid JSON in localStorage', async () => {
       const fallbackStorage = new DataAPI(null);
-      fallbackStorage.currentPluginId = 'test-plugin';
+      fallbackStorage._setPermissionContext('test-plugin', new Set(['storage:read', 'storage:write']));
 
       localStorage.setItem('lokus_plugin_test-plugin_badKey', 'not valid json');
 
@@ -127,7 +127,7 @@ describe('StorageAPI', () => {
 
     it('should fallback to localStorage when database unavailable', async () => {
       const fallbackStorage = new DataAPI(null);
-      fallbackStorage.currentPluginId = 'test-plugin';
+      fallbackStorage._setPermissionContext('test-plugin', new Set(['storage:read', 'storage:write']));
 
       await fallbackStorage.set('testKey', { stored: true });
 
@@ -147,7 +147,7 @@ describe('StorageAPI', () => {
 
     it('should fallback to localStorage when database unavailable', async () => {
       const fallbackStorage = new DataAPI(null);
-      fallbackStorage.currentPluginId = 'test-plugin';
+      fallbackStorage._setPermissionContext('test-plugin', new Set(['storage:read', 'storage:write']));
 
       localStorage.setItem('lokus_plugin_test-plugin_deleteMe', 'value');
 
@@ -183,7 +183,7 @@ describe('StorageAPI', () => {
         getPluginDatabase: vi.fn().mockResolvedValue(mockDb)
       };
       const storage = new DataAPI(mockManager);
-      storage.currentPluginId = 'test-plugin';
+      storage._setPermissionContext('test-plugin', new Set(['storage:read', 'storage:write']));
 
       const result = await storage.keys();
 
@@ -212,7 +212,7 @@ describe('StorageAPI', () => {
         getPluginDatabase: vi.fn().mockResolvedValue(mockDb)
       };
       const storage = new DataAPI(mockManager);
-      storage.currentPluginId = 'test-plugin';
+      storage._setPermissionContext('test-plugin', new Set(['storage:read', 'storage:write']));
 
       await storage.clear();
 
@@ -237,7 +237,7 @@ describe('StorageAPI', () => {
 
     it('should throw error when data manager unavailable', async () => {
       const noManagerStorage = new DataAPI(null);
-      noManagerStorage.currentPluginId = 'test-plugin';
+      noManagerStorage._setPermissionContext('test-plugin', new Set(['storage:read', 'storage:write']));
 
       await expect(noManagerStorage.getDatabase('mydb')).rejects.toThrow('Data access not available');
     });
@@ -261,10 +261,10 @@ describe('StorageAPI', () => {
   describe('plugin isolation', () => {
     it('should isolate storage between plugins', async () => {
       const storageA = new DataAPI(null);
-      storageA.currentPluginId = 'plugin-a';
+      storageA._setPermissionContext('plugin-a', new Set(['storage:read', 'storage:write']));
 
       const storageB = new DataAPI(null);
-      storageB.currentPluginId = 'plugin-b';
+      storageB._setPermissionContext('plugin-b', new Set(['storage:read', 'storage:write']));
 
       await storageA.set('sharedKey', 'value-a');
       await storageB.set('sharedKey', 'value-b');

@@ -19,9 +19,10 @@ describe('ThemeAPI', () => {
     themeAPI = new ThemeAPI(mockThemeManager);
     // Grant theme permissions for testing
     const allPermissions = new Set([
-      'theme:read',
-      'theme:write',
-      'theme:register'
+      'themes:read',
+      'themes:register',
+      'themes:set',
+      'events:listen'
     ]);
     themeAPI._setPermissionContext('test-plugin', allPermissions);
   });
@@ -137,7 +138,7 @@ describe('ThemeAPI', () => {
 
     it('should work without theme manager', () => {
       const apiWithoutManager = new ThemeAPI(null);
-      apiWithoutManager.currentPluginId = 'test-plugin';
+      apiWithoutManager._setPermissionContext('test-plugin', new Set(['themes:register', 'themes:read', 'themes:set', 'events:listen']));
 
       const theme = { id: 'theme', label: 'Theme', uiTheme: 'vs-dark' };
       expect(() => apiWithoutManager.registerTheme(theme)).not.toThrow();
@@ -157,6 +158,7 @@ describe('ThemeAPI', () => {
 
     it('should return default theme if no manager', async () => {
       const apiWithoutManager = new ThemeAPI(null);
+      apiWithoutManager._setPermissionContext('test-plugin', new Set(['themes:read']));
 
       const result = await apiWithoutManager.getActiveTheme();
 
@@ -165,6 +167,7 @@ describe('ThemeAPI', () => {
 
     it('should return stored active theme', async () => {
       const apiWithoutManager = new ThemeAPI(null);
+      apiWithoutManager._setPermissionContext('test-plugin', new Set(['themes:read']));
       apiWithoutManager.activeThemeId = 'custom-theme';
 
       const result = await apiWithoutManager.getActiveTheme();
@@ -223,7 +226,7 @@ describe('ThemeAPI', () => {
 
     it('should work without theme manager', async () => {
       const apiWithoutManager = new ThemeAPI(null);
-      apiWithoutManager.currentPluginId = 'test-plugin';
+      apiWithoutManager._setPermissionContext('test-plugin', new Set(['themes:register', 'themes:read', 'themes:set', 'events:listen']));
       const theme = { id: 'theme', label: 'Theme', uiTheme: 'vs-dark' };
       apiWithoutManager.registerTheme(theme);
 
@@ -316,7 +319,7 @@ describe('ThemeAPI', () => {
       themeAPI.registerTheme({ id: 'theme2', label: 'Theme 2', uiTheme: 'vs-dark' });
 
       const otherAPI = new ThemeAPI(mockThemeManager);
-      otherAPI.currentPluginId = 'other-plugin';
+      otherAPI._setPermissionContext('other-plugin', new Set(['themes:register', 'themes:read', 'themes:set', 'events:listen']));
       otherAPI.registerTheme({ id: 'theme3', label: 'Theme 3', uiTheme: 'vs' });
 
       // Merge the themes for testing

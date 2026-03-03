@@ -1,6 +1,6 @@
 /**
  * Tests for Canvas Preview Generator
- * Tests SVG generation from TLDraw canvas snapshots
+ * Tests SVG generation from Excalidraw canvas files
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -30,12 +30,12 @@ describe('Canvas Preview Generator', () => {
 
   describe('Cache Management', () => {
     it('should return null for uncached path', () => {
-      const result = getCachedPreview('/nonexistent/path.canvas');
+      const result = getCachedPreview('/nonexistent/path.excalidraw');
       expect(result).toBeNull();
     });
 
     it('should invalidate cache entry', () => {
-      const removed = invalidateCache('/some/path.canvas');
+      const removed = invalidateCache('/some/path.excalidraw');
       expect(removed).toBe(false); // Nothing to remove
     });
 
@@ -55,48 +55,44 @@ describe('Canvas Preview Generator', () => {
   });
 
   describe('generatePreview', () => {
-    it('should throw error for invalid canvas path', async () => {
+    it('should return error SVG for invalid canvas path', async () => {
       const result = await generatePreview('');
       // Should return error SVG data URL
       expect(result).toContain('data:image/svg+xml;base64,');
+      const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
+      expect(svg).toContain('Preview Error');
     });
 
     it('should generate preview for empty canvas', async () => {
       canvasManager.loadCanvas.mockResolvedValue({
-        document: {
-          store: {}
-        }
+        elements: []
       });
 
-      const result = await generatePreview('/test/empty.canvas');
+      const result = await generatePreview('/test/empty.excalidraw');
 
       expect(result).toContain('data:image/svg+xml;base64,');
-      // Check for empty canvas message in base64 - "Empty Canvas" encodes to "RW1wdHkgQ2FudmFz"
-      expect(result).toContain('RW1wdHkgQ2FudmFz');
+      const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
+      expect(svg).toContain('Empty Canvas');
     });
 
-    it('should generate preview for canvas with shapes', async () => {
+    it('should generate preview for canvas with rectangle element', async () => {
       canvasManager.loadCanvas.mockResolvedValue({
-        document: {
-          store: {
-            'shape:1': {
-              id: 'shape:1',
-              typeName: 'shape',
-              type: 'geo',
-              x: 100,
-              y: 100,
-              props: {
-                geo: 'rectangle',
-                w: 200,
-                h: 100,
-                color: 'black'
-              }
-            }
+        elements: [
+          {
+            id: 'el1',
+            type: 'rectangle',
+            x: 100,
+            y: 100,
+            width: 200,
+            height: 100,
+            strokeColor: '#e1e1e1',
+            backgroundColor: 'transparent',
+            isDeleted: false
           }
-        }
+        ]
       });
 
-      const result = await generatePreview('/test/shapes.canvas');
+      const result = await generatePreview('/test/shapes.excalidraw');
 
       expect(result).toContain('data:image/svg+xml;base64,');
       const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
@@ -105,311 +101,323 @@ describe('Canvas Preview Generator', () => {
 
     it('should cache preview after generation', async () => {
       canvasManager.loadCanvas.mockResolvedValue({
-        document: { store: {} }
+        elements: []
       });
 
-      await generatePreview('/test/cached.canvas');
+      await generatePreview('/test/cached.excalidraw');
 
       // Second call should return cached result
-      const cached = getCachedPreview('/test/cached.canvas');
+      const cached = getCachedPreview('/test/cached.excalidraw');
       expect(cached).not.toBeNull();
       expect(cached).toContain('data:image/svg+xml;base64,');
     });
 
-    it('should handle canvas with records array format', async () => {
+    it('should filter out deleted elements', async () => {
       canvasManager.loadCanvas.mockResolvedValue({
-        records: [
+        elements: [
           {
-            id: 'shape:1',
-            typeName: 'shape',
-            type: 'text',
-            x: 50,
-            y: 50,
-            props: {
-              richText: {
-                content: [
-                  { content: [{ text: 'Hello World' }] }
-                ]
-              },
-              w: 100,
-              size: 'm'
-            }
+            id: 'el1',
+            type: 'rectangle',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            strokeColor: '#e1e1e1',
+            isDeleted: true
           }
         ]
       });
 
-      const result = await generatePreview('/test/records.canvas');
-
+      const result = await generatePreview('/test/deleted.excalidraw');
+      // Deleted element means canvas is effectively empty
       expect(result).toContain('data:image/svg+xml;base64,');
       const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
-      expect(svg).toContain('Hello World');
+      expect(svg).toContain('Empty Canvas');
     });
   });
 
   describe('Shape Conversion', () => {
-    it('should convert draw shapes with path segments', async () => {
+    it('should convert rectangle shapes', async () => {
       canvasManager.loadCanvas.mockResolvedValue({
-        document: {
-          store: {
-            'shape:draw1': {
-              id: 'shape:draw1',
-              typeName: 'shape',
-              type: 'draw',
-              x: 0,
-              y: 0,
-              props: {
-                segments: [
-                  {
-                    type: 'free',
-                    points: [
-                      { x: 0, y: 0, z: 0.5 },
-                      { x: 10, y: 10, z: 0.5 },
-                      { x: 20, y: 5, z: 0.5 }
-                    ]
-                  }
-                ],
-                color: 'black'
-              }
-            }
+        elements: [
+          {
+            id: 'rect1',
+            type: 'rectangle',
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 100,
+            strokeColor: '#e1e1e1',
+            backgroundColor: 'transparent',
+            isDeleted: false
           }
-        }
+        ]
       });
 
-      const result = await generatePreview('/test/draw.canvas');
+      const result = await generatePreview('/test/rect.excalidraw');
       const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
 
-      expect(svg).toContain('<path');
-      expect(svg).toContain('M 0 0');
-      expect(svg).toContain('L 10 10');
+      expect(svg).toContain('<rect');
     });
 
-    it('should convert text shapes with richText format', async () => {
+    it('should convert ellipse shapes', async () => {
       canvasManager.loadCanvas.mockResolvedValue({
-        document: {
-          store: {
-            'shape:text1': {
-              id: 'shape:text1',
-              typeName: 'shape',
-              type: 'text',
-              x: 100,
-              y: 100,
-              props: {
-                richText: {
-                  content: [
-                    {
-                      type: 'paragraph',
-                      content: [{ type: 'text', text: 'Test Label' }]
-                    }
-                  ]
-                },
-                w: 100,
-                size: 's',
-                scale: 1,
-                color: 'black'
-              }
-            }
+        elements: [
+          {
+            id: 'ellipse1',
+            type: 'ellipse',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            strokeColor: '#e1e1e1',
+            backgroundColor: 'transparent',
+            isDeleted: false
           }
-        }
+        ]
       });
 
-      const result = await generatePreview('/test/text.canvas');
+      const result = await generatePreview('/test/ellipse.excalidraw');
+      const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
+
+      expect(svg).toContain('<ellipse');
+    });
+
+    it('should convert diamond shapes', async () => {
+      canvasManager.loadCanvas.mockResolvedValue({
+        elements: [
+          {
+            id: 'diamond1',
+            type: 'diamond',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            strokeColor: '#e1e1e1',
+            backgroundColor: 'transparent',
+            isDeleted: false
+          }
+        ]
+      });
+
+      const result = await generatePreview('/test/diamond.excalidraw');
+      const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
+
+      expect(svg).toContain('<polygon');
+    });
+
+    it('should convert text shapes', async () => {
+      canvasManager.loadCanvas.mockResolvedValue({
+        elements: [
+          {
+            id: 'text1',
+            type: 'text',
+            x: 100,
+            y: 100,
+            width: 200,
+            height: 30,
+            text: 'Test Label',
+            strokeColor: '#e1e1e1',
+            fontSize: 20,
+            isDeleted: false
+          }
+        ]
+      });
+
+      const result = await generatePreview('/test/text.excalidraw');
       const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
 
       expect(svg).toContain('<text');
       expect(svg).toContain('Test Label');
     });
 
-    it('should convert geo shapes (rectangle, ellipse, triangle)', async () => {
-      canvasManager.loadCanvas.mockResolvedValue({
-        document: {
-          store: {
-            'shape:rect': {
-              id: 'shape:rect',
-              typeName: 'shape',
-              type: 'geo',
-              x: 0,
-              y: 0,
-              props: { geo: 'rectangle', w: 100, h: 50, color: 'blue' }
-            },
-            'shape:ellipse': {
-              id: 'shape:ellipse',
-              typeName: 'shape',
-              type: 'geo',
-              x: 150,
-              y: 0,
-              props: { geo: 'ellipse', w: 80, h: 80, color: 'red' }
-            },
-            'shape:triangle': {
-              id: 'shape:triangle',
-              typeName: 'shape',
-              type: 'geo',
-              x: 250,
-              y: 0,
-              props: { geo: 'triangle', w: 60, h: 60, color: 'green' }
-            }
-          }
-        }
-      });
-
-      const result = await generatePreview('/test/geo.canvas');
-      const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
-
-      expect(svg).toContain('<rect');
-      expect(svg).toContain('<ellipse');
-      expect(svg).toContain('<polygon');
-    });
-
     it('should convert arrow shapes', async () => {
       canvasManager.loadCanvas.mockResolvedValue({
-        document: {
-          store: {
-            'shape:arrow': {
-              id: 'shape:arrow',
-              typeName: 'shape',
-              type: 'arrow',
-              x: 0,
-              y: 0,
-              props: {
-                start: { x: 0, y: 0 },
-                end: { x: 100, y: 50 },
-                color: 'black'
-              }
-            }
+        elements: [
+          {
+            id: 'arrow1',
+            type: 'arrow',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+            points: [[0, 0], [100, 50]],
+            strokeColor: '#e1e1e1',
+            isDeleted: false
           }
-        }
+        ]
       });
 
-      const result = await generatePreview('/test/arrow.canvas');
+      const result = await generatePreview('/test/arrow.excalidraw');
       const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
 
-      expect(svg).toContain('<line');
+      expect(svg).toContain('<path');
       expect(svg).toContain('<polygon'); // arrowhead
+    });
+
+    it('should convert line shapes', async () => {
+      canvasManager.loadCanvas.mockResolvedValue({
+        elements: [
+          {
+            id: 'line1',
+            type: 'line',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+            points: [[0, 0], [100, 50]],
+            strokeColor: '#e1e1e1',
+            isDeleted: false
+          }
+        ]
+      });
+
+      const result = await generatePreview('/test/line.excalidraw');
+      const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
+
+      expect(svg).toContain('<path');
+    });
+
+    it('should convert freedraw shapes', async () => {
+      canvasManager.loadCanvas.mockResolvedValue({
+        elements: [
+          {
+            id: 'freedraw1',
+            type: 'freedraw',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+            points: [[0, 0], [10, 10], [20, 5]],
+            strokeColor: '#e1e1e1',
+            isDeleted: false
+          }
+        ]
+      });
+
+      const result = await generatePreview('/test/freedraw.excalidraw');
+      const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
+
+      expect(svg).toContain('<path');
     });
   });
 
-  describe('Color Mapping', () => {
-    it('should map TLDraw colors to hex values', async () => {
+  describe('SVG Structure', () => {
+    it('should have dark background in generated SVG', async () => {
       canvasManager.loadCanvas.mockResolvedValue({
-        document: {
-          store: {
-            'shape:1': {
-              id: 'shape:1',
-              typeName: 'shape',
-              type: 'geo',
-              x: 0,
-              y: 0,
-              props: { geo: 'rectangle', w: 50, h: 50, color: 'blue' }
-            }
+        elements: [
+          {
+            id: 'el1',
+            type: 'rectangle',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            strokeColor: '#e1e1e1',
+            isDeleted: false
           }
-        }
+        ]
       });
 
-      const result = await generatePreview('/test/colors.canvas');
+      const result = await generatePreview('/test/bg.excalidraw');
       const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
 
-      expect(svg).toContain('#4dabf7'); // blue color
+      expect(svg).toContain('#1e1e2e'); // Dark background color
     });
 
-    it('should map black to light color for dark mode visibility', async () => {
+    it('should include viewBox in generated SVG', async () => {
       canvasManager.loadCanvas.mockResolvedValue({
-        document: {
-          store: {
-            'shape:1': {
-              id: 'shape:1',
-              typeName: 'shape',
-              type: 'geo',
-              x: 0,
-              y: 0,
-              props: { geo: 'rectangle', w: 50, h: 50, color: 'black' }
-            }
+        elements: [
+          {
+            id: 'el1',
+            type: 'rectangle',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            strokeColor: '#e1e1e1',
+            isDeleted: false
           }
-        }
+        ]
       });
 
-      const result = await generatePreview('/test/black.canvas');
+      const result = await generatePreview('/test/viewbox.excalidraw');
       const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
 
-      expect(svg).toContain('#e1e1e1'); // light gray for black
+      expect(svg).toContain('viewBox');
+    });
+
+    it('should use stroke color from element', async () => {
+      canvasManager.loadCanvas.mockResolvedValue({
+        elements: [
+          {
+            id: 'el1',
+            type: 'rectangle',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            strokeColor: '#ff0000',
+            backgroundColor: 'transparent',
+            isDeleted: false
+          }
+        ]
+      });
+
+      const result = await generatePreview('/test/stroke.excalidraw');
+      const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
+
+      expect(svg).toContain('#ff0000');
     });
   });
 
   describe('Bounds Calculation', () => {
-    it('should calculate correct bounds for draw shapes', async () => {
-      canvasManager.loadCanvas.mockResolvedValue({
-        document: {
-          store: {
-            'shape:draw': {
-              id: 'shape:draw',
-              typeName: 'shape',
-              type: 'draw',
-              x: 100,
-              y: 100,
-              props: {
-                segments: [
-                  {
-                    points: [
-                      { x: 0, y: 0 },
-                      { x: 50, y: -50 }, // Goes up
-                      { x: 100, y: 25 }
-                    ]
-                  }
-                ]
-              }
-            }
-          }
-        }
-      });
-
-      const result = await generatePreview('/test/bounds.canvas');
-      expect(result).toContain('data:image/svg+xml;base64,');
-      // Should not throw error - bounds should be calculated correctly
-    });
-
     it('should add padding to bounds', async () => {
       canvasManager.loadCanvas.mockResolvedValue({
-        document: {
-          store: {
-            'shape:1': {
-              id: 'shape:1',
-              typeName: 'shape',
-              type: 'geo',
-              x: 0,
-              y: 0,
-              props: { w: 100, h: 100 }
-            }
+        elements: [
+          {
+            id: 'el1',
+            type: 'rectangle',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            strokeColor: '#e1e1e1',
+            isDeleted: false
           }
-        }
+        ]
       });
 
-      const result = await generatePreview('/test/padding.canvas');
+      const result = await generatePreview('/test/padding.excalidraw');
       const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
 
-      // Check viewBox includes padding (should be larger than just 100x100)
+      // viewBox should include padding (larger than 100x100)
       expect(svg).toContain('viewBox');
     });
-  });
 
-  describe('SVG Background', () => {
-    it('should have dark background in generated SVG', async () => {
+    it('should calculate correct bounds for freedraw shapes', async () => {
       canvasManager.loadCanvas.mockResolvedValue({
-        document: {
-          store: {
-            'shape:1': {
-              id: 'shape:1',
-              typeName: 'shape',
-              type: 'geo',
-              x: 0,
-              y: 0,
-              props: { w: 50, h: 50 }
-            }
+        elements: [
+          {
+            id: 'freedraw1',
+            type: 'freedraw',
+            x: 100,
+            y: 100,
+            width: 100,
+            height: 100,
+            points: [
+              [0, 0],
+              [50, -50],
+              [100, 25]
+            ],
+            strokeColor: '#e1e1e1',
+            isDeleted: false
           }
-        }
+        ]
       });
 
-      const result = await generatePreview('/test/bg.canvas');
-      const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
-
-      expect(svg).toContain('#1e1e2e'); // Dark background color
+      const result = await generatePreview('/test/bounds.excalidraw');
+      expect(result).toContain('data:image/svg+xml;base64,');
     });
   });
 
@@ -417,19 +425,28 @@ describe('Canvas Preview Generator', () => {
     it('should return error SVG when canvas load fails', async () => {
       canvasManager.loadCanvas.mockRejectedValue(new Error('File not found'));
 
-      const result = await generatePreview('/test/error.canvas');
+      const result = await generatePreview('/test/error.excalidraw');
       const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
 
       expect(svg).toContain('Preview Error');
     });
 
-    it('should handle invalid canvas data structure', async () => {
+    it('should handle invalid canvas data structure (null)', async () => {
       canvasManager.loadCanvas.mockResolvedValue(null);
 
-      const result = await generatePreview('/test/invalid.canvas');
+      const result = await generatePreview('/test/invalid.excalidraw');
       const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
 
       expect(svg).toContain('Preview Error');
+    });
+
+    it('should handle canvas with no elements property', async () => {
+      canvasManager.loadCanvas.mockResolvedValue({});
+
+      const result = await generatePreview('/test/noelements.excalidraw');
+      expect(result).toContain('data:image/svg+xml;base64,');
+      const svg = Buffer.from(result.split(',')[1], 'base64').toString('utf-8');
+      expect(svg).toContain('Empty Canvas');
     });
   });
 });
