@@ -5,9 +5,56 @@ All notable changes to Lokus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-03-02
+
+### Editor
+- **ProseMirror Migration** — Replaced TipTap with raw ProseMirror for full control over the editing pipeline. All extensions (slash commands, wiki links, callouts, code blocks, tables, markdown paste, mermaid) ported to native ProseMirror plugins.
+- **Per-Tab Editor State** — Each tab now has independent undo history, cursor position, and scroll state. Switching tabs preserves your exact editing context.
+- **Crash-Proof Editor** — Malformed or corrupt markdown files no longer crash the editor. Error boundaries catch failures gracefully.
+- **Input Rules & Suggestions** — Fixed markdown shortcuts (headings, lists, code blocks) and autocomplete popups that broke during the ProseMirror migration.
+
+### Canvas
+- **Excalidraw Canvas** — Replaced TLDraw with Excalidraw for drawing and diagramming. Full support for shapes, arrows, text, freehand, and collaboration-ready state format.
+
+### Themes
+- **4 Distinctive Themes** — Lokus Dark, Lokus Light, Rose Pine, and Tokyo Night. Each theme is a complete, cohesive palette across all surfaces (editor, sidebar, modals, canvas, graph, kanban, tasks).
+- **Custom Theme Support** — Drop `.json` theme files into `~/.lokus/themes/` and they appear in the theme picker automatically.
+
+### Import System
+- **Unified Importer Pipeline** — Complete rewrite using Parser → IR → Transformer architecture. All three platforms (Obsidian, Logseq, Roam) now use the same intermediate representation.
+- **Obsidian Import** — Full conversion of callouts, dataview queries (preserved in info callouts), comments, Tasks plugin metadata, and `.canvas` → `.excalidraw` files.
+- **Logseq Import** — Outline-to-heading conversion, `parent/child` namespace → folder structure, block reference resolution, task state mapping (TODO/DOING/DONE/LATER/NOW/WAIT/CANCELLED).
+- **Roam Import** — JSON export parsing, date page titles → `daily-notes/YYYY-MM-DD.md`, nested block hierarchy, `{{[[TODO]]}}` task conversion, multi-word tag slugification.
+- **Zero Data Loss** — Unsupported syntax is wrapped in `> [!info]` callouts, never deleted.
+- **Asset Handling** — Attachments copied to `attachments/` directory with path remapping.
+
+### Authentication & Preferences
+- **Guest Mode** — "Continue as Guest" bypasses authentication for fully local, offline usage.
+- **Preferences Sign-In** — Fixed inline authentication flow in Account section. Sign-in form works directly in preferences without browser redirect.
+- **Window Reopen Fix** — Preferences window now reopens correctly after being closed.
+
+### Feature Flags
+- **Remote Feature Flags** — ~85% of app features controlled via server-side flags. Includes kill switches for Canvas, Plugins, Sync, and AI Assistant.
+
+### Architecture
+- **Workspace Refactor** — Workspace.jsx reduced from monolith to ~240-line orchestrator. State split into 4 independent stores. 6 sub-components extracted with error boundaries.
+- **Bases & Graph as Tabs** — Database and graph views now render as tabs instead of full-screen view swaps, keeping the file explorer sidebar visible.
+
+### Quality
+- **Test Suite** — 2237 tests passing, 0 failures across 114 files. Fixed all 136 broken tests from ProseMirror migration, plugin permission mismatches, and component mock issues.
+- **ESLint** — 0 errors across entire `src/` directory.
+- **Security** — Resolved critical jspdf vulnerability, updated MCP SDK, ran npm audit fix. 16 remaining vulnerabilities are all dev-only or locked to Excalidraw transitive deps.
+
+### Bug Fixes
+- Fixed plugin API permission name mismatches (singular vs plural)
+- Fixed TaskAPI.js using wrong permission names in source (`commands:register` → `tasks:register`)
+- Fixed TabBar CSS classes and KanbanList caching
+- Fixed Apple App Store compliance issues
+- Fixed update checker bugs
+
 ## [1.0.2] - 2026-03-01
 
-*Release notes to be added.*
+Maintenance release with bug fixes for TabBar, KanbanList, and editor.
 
 ## [1.0.1] - 2026-01-26
 
