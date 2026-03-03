@@ -93,7 +93,7 @@ jobs:
         run: |
           npm run build
           cd src-tauri
-          cargo tauri build --config tauri.appstore.conf.json
+          cargo tauri build --config tauri.appstore.conf.json --config '{"build":{"beforeBuildCommand":""}}'
 
       - name: Sign and Package for App Store
         env:
