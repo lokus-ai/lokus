@@ -217,14 +217,12 @@ describe('SecureTemplateSandbox', () => {
     });
 
     it('should timeout long-running code', async () => {
-      const shortTimeoutSandbox = new SecureTemplateSandbox({ timeout: 1000 });
+      const shortTimeoutSandbox = new SecureTemplateSandbox({ timeout: 100 });
       await shortTimeoutSandbox.initialize();
 
       const code = `
         let x = 0;
-        for (let i = 0; i < 1000000000; i++) {
-          x += i;
-        }
+        while (true) { x++; }
         return x;
       `;
 

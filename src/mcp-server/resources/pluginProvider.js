@@ -31,7 +31,7 @@ export class PluginProvider {
       // Setup plugin event listeners
       this.setupPluginListeners();
     } catch (error) {
-      logger.warn('PluginProvider', Failed to initialize plugin monitoring:', error);
+      logger.warn('PluginProvider', `Failed to initialize plugin monitoring:`, error);
     }
   }
 
@@ -58,7 +58,7 @@ export class PluginProvider {
       
       this.notifySubscribers('plugins:loaded');
     } catch (error) {
-      logger.error('PluginProvider', Failed to load plugin states:', error);
+      logger.error('PluginProvider', `Failed to load plugin states:`, error);
     }
   }
 
@@ -88,7 +88,7 @@ export class PluginProvider {
         this.loadPluginStates();
       });
     } catch (error) {
-      logger.warn('PluginProvider', Failed to setup plugin listeners:', error);
+      logger.warn('PluginProvider', `Failed to setup plugin listeners:`, error);
     }
   }
 
@@ -207,7 +207,7 @@ export class PluginProvider {
           throw new Error(`Unknown resource path: ${path}`);
       }
     } catch (error) {
-      logger.error('PluginProvider', Error reading resource:', error);
+      logger.error('PluginProvider', `Error reading resource:`, error);
       return {
         contents: [{
           type: 'text',
@@ -560,7 +560,7 @@ export class PluginProvider {
       try {
         callback(event, data);
       } catch (error) {
-        logger.error('PluginProvider', Error notifying subscriber:', error);
+        logger.error('PluginProvider', `Error notifying subscriber:`, error);
       }
     }
   }

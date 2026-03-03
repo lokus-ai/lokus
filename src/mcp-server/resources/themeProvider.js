@@ -42,7 +42,7 @@ export class ThemeProvider {
       // Setup theme change listeners
       this.setupThemeListeners();
     } catch (error) {
-      logger.warn('ThemeProvider', Failed to initialize theme monitoring:', error);
+      logger.warn('ThemeProvider', `Failed to initialize theme monitoring:`, error);
     }
   }
 
@@ -66,7 +66,7 @@ export class ThemeProvider {
       
       this.notifySubscribers('theme:loaded');
     } catch (error) {
-      logger.error('ThemeProvider', Failed to load current theme:', error);
+      logger.error('ThemeProvider', `Failed to load current theme:`, error);
     }
   }
 
@@ -78,7 +78,7 @@ export class ThemeProvider {
       this.availableThemes = await listAvailableThemes();
       this.notifySubscribers('themes:loaded');
     } catch (error) {
-      logger.error('ThemeProvider', Failed to load available themes:', error);
+      logger.error('ThemeProvider', `Failed to load available themes:`, error);
     }
   }
 
@@ -151,7 +151,7 @@ export class ThemeProvider {
         }
       }
     } catch (error) {
-      logger.warn('ThemeProvider', Failed to setup theme listeners:', error);
+      logger.warn('ThemeProvider', `Failed to setup theme listeners:`, error);
     }
   }
 
@@ -237,7 +237,7 @@ export class ThemeProvider {
           throw new Error(`Unknown resource path: ${path}`);
       }
     } catch (error) {
-      logger.error('ThemeProvider', Error reading resource:', error);
+      logger.error('ThemeProvider', `Error reading resource:`, error);
       return {
         contents: [{
           type: 'text',
@@ -419,7 +419,7 @@ export class ThemeProvider {
       this.notifySubscribers('theme:applied', { themeId });
       return true;
     } catch (error) {
-      logger.error('ThemeProvider', Failed to apply theme:', error);
+      logger.error('ThemeProvider', `Failed to apply theme:`, error);
       return false;
     }
   }
@@ -482,7 +482,7 @@ export class ThemeProvider {
       try {
         callback(event, data);
       } catch (error) {
-        logger.error('ThemeProvider', Error notifying subscriber:', error);
+        logger.error('ThemeProvider', `Error notifying subscriber:`, error);
       }
     }
   }

@@ -9,7 +9,7 @@ export { CLITemplateGenerator, CLICommands } from './CLITemplateGenerator.js'
 /**
  * Register CLI commands with the lokus-plugin-cli
  */
-export function registerCLICommands(cli) {
+export async function registerCLICommands(cli) {
   const { CLICommands } = await import('./CLITemplateGenerator.js')
   
   for (const command of Object.values(CLICommands)) {

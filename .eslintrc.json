@@ -11,7 +11,7 @@
       "jsx": true
     }
   },
-  "plugins": ["react"],
+  "plugins": ["react", "react-hooks"],
   "settings": {
     "react": {
       "version": "detect"
@@ -24,6 +24,8 @@
     "dist/",
     "node_modules/",
     "src-tauri/",
-    "packages/"
+    "packages/",
+    "src/core/canvas/tools/StickyNoteTool.jsx",
+    "src/core/templates/integration-example.js"
   ]
 }

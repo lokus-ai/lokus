@@ -45,7 +45,7 @@ export class ConfigProvider {
       // Setup configuration change monitoring
       this.setupConfigListeners();
     } catch (error) {
-      logger.warn('ConfigProvider', Failed to initialize config monitoring:', error);
+      logger.warn('ConfigProvider', `Failed to initialize config monitoring:`, error);
     }
   }
 
@@ -57,7 +57,7 @@ export class ConfigProvider {
       this.globalConfig = await readConfig();
       this.notifySubscribers('config:global-loaded');
     } catch (error) {
-      logger.error('ConfigProvider', Failed to load global config:', error);
+      logger.error('ConfigProvider', `Failed to load global config:`, error);
       this.globalConfig = {};
     }
   }
@@ -115,7 +115,7 @@ export class ConfigProvider {
         }, 5000);
       }
     } catch (error) {
-      logger.warn('ConfigProvider', Failed to setup config listeners:', error);
+      logger.warn('ConfigProvider', `Failed to setup config listeners:`, error);
     }
   }
 
@@ -201,7 +201,7 @@ export class ConfigProvider {
           throw new Error(`Unknown resource path: ${path}`);
       }
     } catch (error) {
-      logger.error('ConfigProvider', Error reading resource:', error);
+      logger.error('ConfigProvider', `Error reading resource:`, error);
       return {
         contents: [{
           type: 'text',
@@ -363,7 +363,7 @@ export class ConfigProvider {
       this.notifySubscribers('config:global-updated', updates);
       return true;
     } catch (error) {
-      logger.error('ConfigProvider', Failed to update global config:', error);
+      logger.error('ConfigProvider', `Failed to update global config:`, error);
       return false;
     }
   }
@@ -403,7 +403,7 @@ export class ConfigProvider {
       
       return await this.updateGlobalConfig(updates);
     } catch (error) {
-      logger.error('ConfigProvider', Failed to set config value:', error);
+      logger.error('ConfigProvider', `Failed to set config value:`, error);
       return false;
     }
   }
@@ -456,7 +456,7 @@ export class ConfigProvider {
       try {
         callback(event, data);
       } catch (error) {
-        logger.error('ConfigProvider', Error notifying subscriber:', error);
+        logger.error('ConfigProvider', `Error notifying subscriber:`, error);
       }
     }
   }

@@ -781,13 +781,3 @@ export class DataProviderFactory {
   }
 }
 
-// Export all classes and interfaces
-export {
-  BaseDataProvider,
-  GraphDataProvider,
-  KanbanDataProvider,
-  SearchDataProvider,
-  FileSystemDataProvider,
-  DataTransformProvider,
-  DataProviderFactory
-}
