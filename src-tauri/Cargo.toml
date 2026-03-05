@@ -72,10 +72,6 @@ tracing-appender = "0.2"
 tauri-plugin-shell = "2.3.3"
 blake3 = "1.5"
 getrandom = "0.2"
-# Compression
-zstd = "0.13"
-# Retry logic
-backoff = { version = "0.4", features = ["tokio"] }
 # Audio capture
 cpal = "0.15"
 ringbuf = "0.4"
@@ -102,20 +98,8 @@ quoted_printable = "0.5"
 # iCal parsing
 ical = "0.11"
 axum = "0.7"
-git2 = { version = "0.18", default-features = false }
 # Crash reporting
 sentry = { version = "0.34", default-features = false, features = ["backtrace", "contexts", "panic", "rustls", "reqwest"] }
-# File watching for sync
-notify = "6.0"
-notify-debouncer-full = "0.3"
-# Iroh sync dependencies
-iroh = "0.28"
-iroh-docs = "0.28"
-iroh-blobs = "0.28"
-# Network monitoring
-sysinfo = "0.32"
-# Delta sync
-rdiff = "0.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 screencapturekit = "0.3"
