@@ -14,9 +14,9 @@ function joinPath(workspacePath, relativePath) {
   return workspacePath + sep + relativePath.replace(/\//g, sep);
 }
 
-function encodeStoragePath(userId, workspaceId, filePath) {
-  const encodedSegments = filePath.split('/').map(s => encodeURIComponent(s));
-  return `${userId}/${workspaceId}/${encodedSegments.join('/')}`;
+/** Build storage path — no encoding needed, Supabase JS client handles it */
+function storagePath(userId, workspaceId, filePath) {
+  return `${userId}/${workspaceId}/${filePath}`;
 }
 
 /** Run async tasks with concurrency limit */
@@ -66,17 +66,30 @@ export class SyncEngine {
       }
     } catch {}
 
-    // 2. Check remote for matching workspace name
+    // 2. Check remote — first try exact name match, then fall back to user's only workspace
     try {
-      const { data } = await supabase
+      const { data: nameMatch } = await supabase
         .from('user_workspaces')
         .select('workspace_id')
         .eq('user_id', userId)
         .eq('name', workspaceName)
         .maybeSingle();
-      if (data?.workspace_id) {
-        this.workspaceId = data.workspace_id;
+      if (nameMatch?.workspace_id) {
+        this.workspaceId = nameMatch.workspace_id;
         await this._writeSyncId();
+        await this._registerWorkspace(workspaceName);
+        return;
+      }
+
+      // No name match — if user has exactly one workspace, link to it automatically
+      const { data: allWorkspaces } = await supabase
+        .from('user_workspaces')
+        .select('workspace_id, name')
+        .eq('user_id', userId);
+      if (allWorkspaces?.length === 1) {
+        this.workspaceId = allWorkspaces[0].workspace_id;
+        await this._writeSyncId();
+        await this._registerWorkspace(workspaceName);
         return;
       }
     } catch {}
@@ -145,7 +158,7 @@ export class SyncEngine {
 
         try {
           const encrypted = await encryptFile(mek, local.content.buffer);
-          const storagePath = encodeStoragePath(this.userId, this.workspaceId, filePath);
+          const storagePath = storagePath(this.userId, this.workspaceId, filePath);
 
           await supabase.storage
             .from('vaults')
@@ -235,7 +248,7 @@ export class SyncEngine {
           }
 
           const encrypted = await encryptFile(mek, local.content.buffer);
-          const storagePath = encodeStoragePath(this.userId, this.workspaceId, filePath);
+          const storagePath = storagePath(this.userId, this.workspaceId, filePath);
 
           await supabase.storage.from('vaults')
             .upload(storagePath, encrypted, { contentType: 'application/octet-stream', upsert: true });
@@ -405,7 +418,7 @@ export class SyncEngine {
   }
 
   async _downloadFile(filePath, remote, mek) {
-    const storagePath = encodeStoragePath(this.userId, this.workspaceId, filePath);
+    const storagePath = storagePath(this.userId, this.workspaceId, filePath);
     const { data, error } = await supabase.storage.from('vaults').download(storagePath);
     if (error) throw error;
 
@@ -427,7 +440,7 @@ export class SyncEngine {
   }
 
   async _mergeFile(filePath, local, mek) {
-    const storagePath = encodeStoragePath(this.userId, this.workspaceId, filePath);
+    const storagePath = storagePath(this.userId, this.workspaceId, filePath);
     const { data, error } = await supabase.storage.from('vaults').download(storagePath);
     if (error) throw error;
 
