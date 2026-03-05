@@ -3,6 +3,19 @@ import { deriveWrappingKey, generateMEK, wrapMEK, unwrapMEK } from './encryption
 
 const MEK_CACHE_KEY = 'lokus-mek-cache';
 
+function toBase64(uint8Array) {
+  let binary = '';
+  for (let i = 0; i < uint8Array.length; i++) binary += String.fromCharCode(uint8Array[i]);
+  return btoa(binary);
+}
+
+function fromBase64(b64) {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
 export class KeyManager {
   constructor() {
     this.mek = null;
@@ -38,9 +51,9 @@ export class KeyManager {
 
     const { error } = await supabase.from('user_encryption_keys').upsert({
       user_id: userId,
-      wrapped_key: Array.from(wrapped),
-      wrapping_nonce: Array.from(nonce),
-      wrapping_salt: Array.from(salt),
+      wrapped_key: toBase64(new Uint8Array(wrapped)),
+      wrapping_nonce: toBase64(nonce),
+      wrapping_salt: toBase64(salt),
       key_version: 1,
     });
 
@@ -57,14 +70,24 @@ export class KeyManager {
 
     if (error || !data) return null;
 
-    const kwk = await deriveWrappingKey(userId, new Uint8Array(data.wrapping_salt));
-    return unwrapMEK(new Uint8Array(data.wrapped_key), new Uint8Array(data.wrapping_nonce), kwk);
+    try {
+      const salt = fromBase64(data.wrapping_salt);
+      const kwk = await deriveWrappingKey(userId, salt);
+      return await unwrapMEK(
+        fromBase64(data.wrapped_key),
+        fromBase64(data.wrapping_nonce),
+        kwk
+      );
+    } catch (err) {
+      console.error('[KeyManager] Failed to unwrap key from server:', err.message);
+      return null;
+    }
   }
 
   async _saveToCache(mek) {
     try {
       const exported = await crypto.subtle.exportKey('raw', mek);
-      localStorage.setItem(MEK_CACHE_KEY, JSON.stringify(Array.from(new Uint8Array(exported))));
+      localStorage.setItem(MEK_CACHE_KEY, toBase64(new Uint8Array(exported)));
     } catch { /* cache is best-effort */ }
   }
 
@@ -72,7 +95,7 @@ export class KeyManager {
     try {
       const cached = localStorage.getItem(MEK_CACHE_KEY);
       if (!cached) return null;
-      const keyBytes = new Uint8Array(JSON.parse(cached));
+      const keyBytes = fromBase64(cached);
       return crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
     } catch { return null; }
   }
