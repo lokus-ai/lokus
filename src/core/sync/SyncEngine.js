@@ -8,6 +8,12 @@ import DiffMatchPatch from 'diff-match-patch';
 const dmp = new DiffMatchPatch();
 const MAX_CONCURRENT = 3;
 
+/** Join workspace path with relative file path (handles Windows backslashes) */
+function joinPath(workspacePath, relativePath) {
+  const sep = workspacePath.includes('\\') ? '\\' : '/';
+  return workspacePath + sep + relativePath.replace(/\//g, sep);
+}
+
 function encodeStoragePath(userId, workspaceId, filePath) {
   const encodedSegments = filePath.split('/').map(s => encodeURIComponent(s));
   return `${userId}/${workspaceId}/${encodedSegments.join('/')}`;
@@ -45,7 +51,8 @@ export class SyncEngine {
     // Load local hash cache
     await syncCache.load(workspacePath);
 
-    const workspaceName = workspacePath.split('/').pop() || workspacePath.split('\\').pop();
+    // Handle both Unix (/) and Windows (\) path separators
+    const workspaceName = workspacePath.split(/[/\\]/).filter(Boolean).pop();
 
     // 1. Try reading existing sync-id
     try {
@@ -217,7 +224,7 @@ export class SyncEngine {
 
           // If content is null (cache hit but hash differs from remote), re-read
           if (!local.content) {
-            const absPath = `${this.workspacePath}/${filePath}`;
+            const absPath = joinPath(this.workspacePath, filePath);
             if (local.isBinary) {
               const raw = await invoke('read_binary_file', { path: absPath });
               local = { ...local, content: new Uint8Array(raw) };
@@ -277,7 +284,7 @@ export class SyncEngine {
         try {
           let local = localFiles.get(filePath);
           if (!local.content) {
-            const text = await invoke('read_file_content', { path: `${this.workspacePath}/${filePath}` });
+            const text = await invoke('read_file_content', { path: joinPath(this.workspacePath, filePath) });
             local = { ...local, content: new TextEncoder().encode(text) };
           }
           await this._mergeFile(filePath, local, mek);
@@ -404,10 +411,11 @@ export class SyncEngine {
 
     const encryptedBuffer = await data.arrayBuffer();
     const plaintext = await decryptFile(mek, encryptedBuffer);
-    const fullPath = `${this.workspacePath}/${filePath}`;
+    const fullPath = joinPath(this.workspacePath, filePath);
 
     // Ensure parent directory exists
-    const dir = fullPath.substring(0, fullPath.lastIndexOf('/'));
+    const lastSep = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
+    const dir = fullPath.substring(0, lastSep);
     try { await invoke('create_directory', { path: dir, recursive: true }); } catch {}
 
     if (remote.is_binary) {
@@ -432,7 +440,7 @@ export class SyncEngine {
     if (localText === remoteText) return;
 
     const merged = this._autoMerge(localText, remoteText);
-    const fullPath = `${this.workspacePath}/${filePath}`;
+    const fullPath = joinPath(this.workspacePath, filePath);
     await invoke('write_file_content', { path: fullPath, content: merged });
 
     const mergedBytes = new TextEncoder().encode(merged);

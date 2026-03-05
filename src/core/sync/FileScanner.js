@@ -84,7 +84,8 @@ export class FileScanner {
   async scanFiles(workspacePath, absolutePaths) {
     const files = new Map();
     for (const absPath of absolutePaths) {
-      const relativePath = absPath.replace(workspacePath + '/', '');
+      // Handle both / and \ separators, normalize to /
+      const relativePath = absPath.replace(workspacePath, '').replace(/^[/\\]/, '').replace(/\\/g, '/');
       const name = relativePath.split('/').pop();
       const binary = isBinaryExt(name);
 
@@ -139,7 +140,8 @@ export class FileScanner {
 
       if (entry.size > MAX_FILE_SIZE) continue;
 
-      const relativePath = entry.path.replace(workspacePath + '/', '');
+      // Handle both / and \ separators, normalize to /
+      const relativePath = entry.path.replace(workspacePath, '').replace(/^[/\\]/, '').replace(/\\/g, '/');
       const mtime = entry.modified || 0;
       const binary = isBinaryExt(name);
 
