@@ -1,10 +1,9 @@
 import React, { useMemo } from 'react';
 import { useStatusBar } from '../../hooks/useStatusBar';
 import { useResponsiveStatusBar, STATUS_BAR_PRIORITY } from '../../hooks/useResponsiveStatusBar';
-import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
 import { useEditorGroupStore } from '../../stores/editorGroups';
-import SyncStatus from '../Auth/SyncStatus.jsx';
 import { isDesktop } from '../../platform/index.js';
+import SyncIndicator from '../SyncIndicator';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -25,7 +24,6 @@ export default function ResponsiveStatusBar({
   onToggleTerminal = null
 }) {
   const { leftItems, rightItems } = useStatusBar();
-  const featureFlags = useFeatureFlags();
 
   // Read state directly from EditorGroupStore
   const layout = useEditorGroupStore((s) => s.layout);
@@ -396,13 +394,8 @@ export default function ResponsiveStatusBar({
           </>
         )}
 
-        {/* Sync Status (CRITICAL - always visible when enabled) */}
-        {featureFlags.enable_sync && (
-          <>
-            <div className="obsidian-status-bar-separator" />
-            <SyncStatus />
-          </>
-        )}
+        <div className="obsidian-status-bar-separator" />
+        <SyncIndicator />
       </div>
     </div>
   );

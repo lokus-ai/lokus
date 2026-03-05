@@ -525,6 +525,33 @@ pub async fn read_all_files(paths: Vec<String>) -> Result<std::collections::Hash
 }
 
 #[tauri::command]
+pub async fn write_binary_file(path: String, content: Vec<u8>) -> Result<(), String> {
+    use std::io::Write;
+
+    let file_path = std::path::Path::new(&path);
+
+    // Ensure parent directory exists
+    if let Some(parent) = file_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create directory: {}", e))?;
+    }
+
+    // Atomic write: temp file + rename
+    let temp_path = file_path.with_extension("tmp_sync");
+    let mut file = std::fs::File::create(&temp_path)
+        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+    file.write_all(&content)
+        .map_err(|e| format!("Failed to write content: {}", e))?;
+    file.sync_all()
+        .map_err(|e| format!("Failed to sync file: {}", e))?;
+
+    std::fs::rename(&temp_path, file_path)
+        .map_err(|e| format!("Failed to rename temp file: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn find_workspace_images(workspace_path: String) -> Result<Vec<String>, String> {
     const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "ico"];
 
