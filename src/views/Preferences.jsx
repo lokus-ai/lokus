@@ -18,6 +18,7 @@ import calendarService from "../services/calendar.js";
 import { useAuth } from "../core/auth/AuthContext";
 import { User, LogIn, LogOut, Crown, Shield, Settings as SettingsIcon } from "lucide-react";
 import QuickImport from "../components/QuickImport.jsx";
+import SyncPreferences from "./preferences/SyncPreferences.jsx";
 import { getAppVersion } from "../utils/appInfo.js";
 import { isDesktop } from '../platform/index.js';
 import { getCalloutConfig, saveCalloutConfig } from "@/core/editor/callout-config.js";
@@ -3091,37 +3092,30 @@ export default function Preferences() {
                       </div>
                     </div>
 
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="bg-app-panel border border-app-border rounded-xl p-4 text-center">
-                        <div className="text-2xl font-bold text-app-text">247</div>
-                        <div className="text-sm text-app-text-secondary">Notes</div>
-                      </div>
-                      <div className="bg-app-panel border border-app-border rounded-xl p-4 text-center">
-                        <div className="text-2xl font-bold text-app-text">12</div>
-                        <div className="text-sm text-app-text-secondary">Days</div>
-                      </div>
-                      <div className="bg-app-panel border border-app-border rounded-xl p-4 text-center">
-                        <div className="text-2xl font-bold text-app-text">1.2GB</div>
-                        <div className="text-sm text-app-text-secondary">Storage</div>
-                      </div>
-                    </div>
-
-                    {/* Features */}
+                    {/* Account Features */}
                     <div className="bg-app-panel border border-app-border rounded-xl p-6">
-                      <h3 className="text-lg font-semibold text-app-text mb-4">Account Features</h3>
+                      <h3 className="text-lg font-semibold text-app-text mb-4">Your Plan</h3>
                       <div className="space-y-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-2 h-2 bg-app-accent rounded-full"></div>
-                          <span className="text-app-text">Cross-device sync</span>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span className="text-app-text">End-to-end encrypted sync</span>
+                          </div>
+                          <Shield className="w-4 h-4 text-green-500" />
                         </div>
-                        <div className="flex items-center gap-3">
-                          <div className="w-2 h-2 bg-app-accent rounded-full"></div>
-                          <span className="text-app-text">Cloud backup</span>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span className="text-app-text">Cross-device sync</span>
+                          </div>
+                          <Shield className="w-4 h-4 text-green-500" />
                         </div>
-                        <div className="flex items-center gap-3">
-                          <div className="w-2 h-2 bg-app-accent rounded-full"></div>
-                          <span className="text-app-text">Collaboration tools</span>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span className="text-app-text">Cloud backup</span>
+                          </div>
+                          <Shield className="w-4 h-4 text-green-500" />
                         </div>
                       </div>
                     </div>
@@ -3153,14 +3147,7 @@ export default function Preferences() {
             )}
 
             {featureFlags.enable_sync && section === "Sync" && (
-              <div className="space-y-6 max-w-2xl">
-                <div>
-                  <h2 className="text-lg font-semibold mb-2 text-app-text">Workspace Sync</h2>
-                  <p className="text-sm text-app-muted mb-6">
-                    Sync is currently unavailable.
-                  </p>
-                </div>
-              </div>
+              <SyncPreferences isAuthenticated={isAuthenticated} isGuest={isGuest} />
             )}
 
 

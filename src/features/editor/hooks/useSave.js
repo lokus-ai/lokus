@@ -62,8 +62,8 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
 
       await invoke('write_file_content', { path: pathToSave, content: contentToSave });
 
-      // Trigger sync after save (debounced 3s inside scheduler)
-      syncScheduler.onFileSaved();
+      // Trigger sync for this specific file (debounced + batched inside scheduler)
+      syncScheduler.onFileSaved(pathToSave);
 
       // Mark tab as saved in the store
       if (groupId) {
