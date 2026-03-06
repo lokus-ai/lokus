@@ -54,7 +54,15 @@ jobs:
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-          # Import App Store Application certificate
+          # Install Apple WWDR intermediate certificates (required for chain validation)
+          curl -sL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o $RUNNER_TEMP/AppleWWDRCAG3.cer
+          curl -sL https://www.apple.com/certificateauthority/AppleWWDRCAG4.cer -o $RUNNER_TEMP/AppleWWDRCAG4.cer
+          curl -sL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o $RUNNER_TEMP/DeveloperIDG2CA.cer
+          security import $RUNNER_TEMP/AppleWWDRCAG3.cer -k $KEYCHAIN_PATH -T /usr/bin/codesign -T /usr/bin/productbuild
+          security import $RUNNER_TEMP/AppleWWDRCAG4.cer -k $KEYCHAIN_PATH -T /usr/bin/codesign -T /usr/bin/productbuild
+          security import $RUNNER_TEMP/DeveloperIDG2CA.cer -k $KEYCHAIN_PATH -T /usr/bin/codesign -T /usr/bin/productbuild
+
+          # Import certificates
           echo "$APPLE_APPSTORE_CERTIFICATE" | base64 --decode > $RUNNER_TEMP/appstore.p12
           security import $RUNNER_TEMP/appstore.p12 -P "$APPLE_CERTIFICATE_PASSWORD" \
             -A -t cert -f pkcs12 -k $KEYCHAIN_PATH

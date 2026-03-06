@@ -6,6 +6,7 @@ import { createLokusSerializer } from '../../../core/markdown/lokus-md-pipeline'
 import { DOMSerializer } from 'prosemirror-model';
 import { invoke } from '@tauri-apps/api/core';
 import { confirm, save } from '@tauri-apps/plugin-dialog';
+import { syncScheduler } from '../../../core/sync/SyncScheduler';
 
 const lokusSerializer = createLokusSerializer();
 
@@ -60,6 +61,9 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
       const contentToSave = lokusSerializer.serialize(editor.state.doc);
 
       await invoke('write_file_content', { path: pathToSave, content: contentToSave });
+
+      // Trigger sync for this specific file (debounced + batched inside scheduler)
+      syncScheduler.onFileSaved(pathToSave);
 
       // Mark tab as saved in the store
       if (groupId) {

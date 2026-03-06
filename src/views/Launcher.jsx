@@ -9,6 +9,8 @@ import { readGlobalVisuals, setGlobalActiveTheme } from "../core/theme/manager.j
 import LokusLogo from "../components/LokusLogo.jsx";
 import { toast } from "sonner";
 import { isMobile, isDesktop } from "../platform/index.js";
+import { useAuth } from "../core/auth/AuthContext.jsx";
+import { syncEngine } from "../core/sync/SyncEngine.js";
 
 // --- Reusable Icon Component ---
 const Icon = ({ path, className = "w-5 h-5" }) => (
@@ -61,6 +63,50 @@ export default function Launcher() {
   const [recents, setRecents] = useState([]);
   const [isTestMode, setIsTestMode] = useState(false);
   const [reauthWorkspace, setReauthWorkspace] = useState(null); // { path, name } of workspace needing re-auth
+  const [syncedWorkspace, setSyncedWorkspace] = useState(null); // { workspace_id, name } from cloud
+  const [pulling, setPulling] = useState(false);
+  const [pullProgress, setPullProgress] = useState(null); // { current, total }
+  const { isAuthenticated, user, isGuest } = useAuth();
+
+  // Check if user has a synced workspace in the cloud
+  useEffect(() => {
+    if (!isAuthenticated || isGuest || !user?.id) {
+      setSyncedWorkspace(null);
+      return;
+    }
+    syncEngine.getSyncedWorkspace(user.id).then(ws => {
+      setSyncedWorkspace(ws);
+    }).catch(() => setSyncedWorkspace(null));
+  }, [isAuthenticated, isGuest, user?.id]);
+
+  const handlePullWorkspace = async () => {
+    if (!syncedWorkspace || !user?.id) return;
+
+    const targetPath = await open({
+      directory: true,
+      defaultPath: await homeDir(),
+      title: `Choose folder for "${syncedWorkspace.name}"`,
+    });
+    if (!targetPath) return;
+
+    setPulling(true);
+    try {
+      await syncEngine.pullWorkspace(targetPath, user.id, (current, total) => {
+        setPullProgress({ current, total });
+      });
+      addRecent(targetPath);
+      setRecents(readRecents());
+      await WorkspaceManager.saveWorkspacePath(targetPath);
+      toast.success(`Pulled "${syncedWorkspace.name}" successfully!`);
+      await openWorkspace(targetPath);
+    } catch (err) {
+      console.error('[Sync] Pull failed:', err);
+      toast.error(`Failed to pull workspace: ${err.message}`);
+    } finally {
+      setPulling(false);
+      setPullProgress(null);
+    }
+  };
 
   useEffect(() => {
     // The ThemeProvider now handles initial theme loading.
@@ -320,7 +366,7 @@ This is your new mobile workspace. Start taking notes!
     );
   }
 
-  // Desktop layout (original)
+  // Desktop layout
   return (
     <div className="h-full bg-app-bg text-app-text flex items-center justify-center p-8 transition-colors duration-300">
       {/* Test Mode Indicator */}
@@ -448,6 +494,31 @@ This is your new mobile workspace. Start taking notes!
                 <div className="text-sm text-app-muted group-hover:text-app-accent-fg/80 mt-1">Continue working with an existing folder of notes</div>
               </div>
             </button>
+
+            {/* Pull Workspace from Cloud */}
+            {syncedWorkspace && (
+              <button
+                onClick={handlePullWorkspace}
+                disabled={pulling}
+                className="w-full text-left p-5 flex items-center gap-4 rounded-xl bg-app-panel hover:bg-app-accent hover:text-app-accent-fg border border-app-border hover:border-app-accent transition-all duration-200 group disabled:opacity-50"
+              >
+                <div className="w-12 h-12 rounded-lg bg-blue-500/10 group-hover:bg-app-accent-fg/20 flex items-center justify-center transition-colors">
+                  <Icon path="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" className="w-6 h-6 text-blue-500 group-hover:text-app-accent-fg" />
+                </div>
+                <div className="flex-1">
+                  <div className="font-semibold text-lg group-hover:text-app-accent-fg">
+                    {pulling ? (
+                      pullProgress
+                        ? `Pulling... ${pullProgress.current}/${pullProgress.total} files`
+                        : 'Pulling...'
+                    ) : `Pull "${syncedWorkspace.name}" from Cloud`}
+                  </div>
+                  <div className="text-sm text-app-muted group-hover:text-app-accent-fg/80 mt-1">
+                    Download your synced workspace to this device
+                  </div>
+                </div>
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -2,8 +2,6 @@
 import React, { useMemo, useState } from 'react';
 import { useStatusBar } from '../hooks/useStatusBar';
 import { usePluginStatusItems } from '../hooks/usePluginStatusItems.js';
-import { useFeatureFlags } from '../contexts/RemoteConfigContext';
-import SyncStatus from './Auth/SyncStatus.jsx';
 import StatusBarContextMenu from './StatusBarContextMenu.jsx';
 import pluginStateAdapter from '../core/plugins/PluginStateAdapter.js';
 import { commandRegistry } from '../plugins/registry/CommandRegistry.js';
@@ -16,7 +14,6 @@ import { commandRegistry } from '../plugins/registry/CommandRegistry.js';
 export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], editor, readingSpeed = 200 }) {
   const { leftItems, rightItems } = useStatusBar();
   const pluginStatusItems = usePluginStatusItems();
-  const featureFlags = useFeatureFlags();
 
   // Context Menu State
   const [contextMenu, setContextMenu] = useState({
@@ -304,13 +301,6 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
           <span>Settings</span>
         </div>
 
-        {/* Sync Component */}
-        {featureFlags.enable_sync && (
-          <>
-            <div className="obsidian-status-bar-separator" />
-            <SyncStatus />
-          </>
-        )}
       </div>
 
       <StatusBarContextMenu

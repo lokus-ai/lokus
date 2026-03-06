@@ -30,10 +30,6 @@ mod secure_storage;
 #[cfg(desktop)]
 mod api_server;
 mod logging;
-#[cfg(desktop)]
-mod sync;
-#[cfg(desktop)]
-mod credentials;
 pub(crate) mod file_locking;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -801,6 +797,7 @@ pub fn run() {
       handlers::files::read_file_content,
       handlers::files::read_binary_file,
       handlers::files::write_file_content,
+      handlers::files::write_binary_file,
       handlers::files::save_file_version_manual,
       handlers::files::rename_file,
       handlers::files::move_file,
@@ -827,73 +824,6 @@ pub fn run() {
       handlers::version_history::get_diff,
       handlers::version_history::restore_version,
       handlers::version_history::cleanup_old_versions,
-      #[cfg(desktop)]
-      sync::git_init,
-      #[cfg(desktop)]
-      sync::git_add_remote,
-      #[cfg(desktop)]
-      sync::git_commit,
-      #[cfg(desktop)]
-      sync::git_push,
-      #[cfg(desktop)]
-      sync::git_pull,
-      #[cfg(desktop)]
-      sync::git_status,
-      #[cfg(desktop)]
-      sync::detect_conflicts,
-      #[cfg(desktop)]
-      sync::git_get_current_branch,
-      #[cfg(desktop)]
-      sync::git_force_push,
-      #[cfg(desktop)]
-      sync::git_force_pull,
-      // Iroh sync commands
-      #[cfg(desktop)]
-      sync::iroh_check_saved_document,
-      #[cfg(desktop)]
-      sync::iroh_init_document,
-      #[cfg(desktop)]
-      sync::iroh_join_document,
-      #[cfg(desktop)]
-      sync::iroh_leave_document,
-      #[cfg(desktop)]
-      sync::iroh_get_ticket,
-      #[cfg(desktop)]
-      sync::iroh_sync_status,
-      #[cfg(desktop)]
-      sync::iroh_list_peers,
-      #[cfg(desktop)]
-      sync::iroh_manual_sync,
-      #[cfg(desktop)]
-      sync::iroh_start_auto_sync,
-      #[cfg(desktop)]
-      sync::iroh_stop_auto_sync,
-      #[cfg(desktop)]
-      sync::iroh_notify_file_save,
-      #[cfg(desktop)]
-      sync::iroh_force_sync_all,
-      #[cfg(desktop)]
-      sync::iroh_get_sync_metrics,
-      #[cfg(desktop)]
-      sync::iroh_get_version,
-      #[cfg(desktop)]
-      sync::iroh_migrate_to_v2,
-      #[cfg(desktop)]
-      sync::iroh_configure_sync,
-      #[cfg(desktop)]
-      sync::iroh_get_metrics,
-      #[cfg(desktop)]
-      credentials::store_git_credentials,
-      #[cfg(desktop)]
-      credentials::retrieve_git_credentials,
-      #[cfg(desktop)]
-      credentials::delete_git_credentials,
-      #[cfg(desktop)]
-      credentials::store_iroh_keys,
-      #[cfg(desktop)]
-      credentials::retrieve_iroh_keys,
-      #[cfg(desktop)]
-      credentials::delete_iroh_keys,
       clipboard::clipboard_write_text,
       clipboard::clipboard_read_text,
       clipboard::clipboard_write_html,
@@ -1199,11 +1129,6 @@ pub fn run() {
         let calendar_state = calendar::SharedCalendarAuthState::default();
         app.manage(calendar_state);
 
-        // Initialize Iroh sync provider (V1 or V2 based on configuration)
-        // Initialize Iroh provider synchronously (it will be initialized on first use)
-        let provider = sync::wrapper::IrohProviderWrapper::new(sync::wrapper::SyncProviderConfig::default());
-        let iroh_provider = tokio::sync::Mutex::new(provider);
-        app.manage(iroh_provider);
 
         // Initialize OAuth Server
         let oauth_server = oauth_server::OAuthServer::new();
