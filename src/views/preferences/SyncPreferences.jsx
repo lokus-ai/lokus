@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { syncEngine } from '../../core/sync/SyncEngine';
+import { keyManager } from '../../core/sync/KeyManager';
 import { offlineQueue } from '../../core/sync/OfflineQueue';
 import { Cloud, CloudOff, RefreshCw, Shield, HardDrive, Clock, FileText, Loader2, CheckCircle2, AlertTriangle, FolderSync, WifiOff } from 'lucide-react';
 
@@ -23,7 +24,7 @@ function formatTimeAgo(dateStr) {
   return `${days}d ago`;
 }
 
-export default function SyncPreferences({ isAuthenticated, isGuest, userId }) {
+export default function SyncPreferences({ isAuthenticated, isGuest, userId, workspacePath: workspacePathProp }) {
   const [syncStatus, setSyncStatus] = useState('idle');
   const [remoteStats, setRemoteStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
@@ -34,13 +35,21 @@ export default function SyncPreferences({ isAuthenticated, isGuest, userId }) {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
 
-  const currentWorkspaceName = syncEngine.workspacePath
-    ? syncEngine.workspacePath.split(/[/\\]/).filter(Boolean).pop()
-    : null;
+  // Use prop as fallback when singleton lost state (e.g. HMR reload, separate window)
+  const effectivePath = syncEngine.workspacePath || workspacePathProp || null;
+
+  const currentWorkspaceName = effectivePath
+    ? effectivePath.split(/[/\\]/).filter(Boolean).pop()
+    : 'this workspace';
 
   const isSyncedHere = syncEngine.syncEnabled; // current open workspace is the synced one
 
   const loadData = useCallback(async () => {
+    // Re-initialize syncEngine + keyManager if they lost state (HMR, separate window)
+    if (!syncEngine.workspacePath && workspacePathProp && userId) {
+      await syncEngine.init(workspacePathProp, userId);
+      await keyManager.initialize(userId);
+    }
     setLoading(true);
     const ws = await syncEngine.getSyncedWorkspace(userId);
     setSyncedWorkspace(ws);
@@ -51,7 +60,7 @@ export default function SyncPreferences({ isAuthenticated, isGuest, userId }) {
       setLoadingStats(false);
     }
     setLoading(false);
-  }, [userId]);
+  }, [userId, workspacePathProp]);
 
   useEffect(() => {
     if (!isAuthenticated || isGuest) return;
@@ -161,24 +170,33 @@ export default function SyncPreferences({ isAuthenticated, isGuest, userId }) {
         <div className="bg-app-panel border border-app-border rounded-xl p-6">
           <div className="text-center">
             <Cloud className="w-12 h-12 text-app-muted mx-auto mb-4" />
-            <p className="text-app-text font-medium mb-2">Sync is not enabled</p>
-            <p className="text-app-muted text-sm mb-6">
-              Enable sync to upload "{currentWorkspaceName}" to the cloud and access it from any device.
-            </p>
-            <button
-              onClick={handleEnableSync}
-              disabled={enabling}
-              className="px-6 py-2.5 bg-app-accent text-app-accent-fg rounded-lg hover:bg-app-accent/90 transition-colors font-medium disabled:opacity-50"
-            >
-              {enabling ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Enabling...
-                </span>
-              ) : (
-                `Enable Sync for "${currentWorkspaceName}"`
-              )}
-            </button>
+            {effectivePath ? (
+              <>
+                <p className="text-app-text font-medium mb-2">Sync is not enabled</p>
+                <p className="text-app-muted text-sm mb-6">
+                  Enable sync to upload "{currentWorkspaceName}" to the cloud and access it from any device.
+                </p>
+                <button
+                  onClick={handleEnableSync}
+                  disabled={enabling}
+                  className="px-6 py-2.5 bg-app-accent text-app-accent-fg rounded-lg hover:bg-app-accent/90 transition-colors font-medium disabled:opacity-50"
+                >
+                  {enabling ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Enabling...
+                    </span>
+                  ) : (
+                    `Enable Sync for "${currentWorkspaceName}"`
+                  )}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-app-text font-medium mb-2">No workspace open</p>
+                <p className="text-app-muted text-sm">Open a workspace first to enable sync.</p>
+              </>
+            )}
           </div>
         </div>
       )}

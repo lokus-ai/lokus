@@ -110,16 +110,27 @@ export class SyncEngine {
     } catch {}
 
     if (localSyncId) {
-      this.workspaceId = localSyncId;
-      this.syncEnabled = true;
-      await syncCache.load(workspacePath);
-      await offlineQueue.load(workspacePath);
-      console.log(`[Sync] Linked to workspace ${this.workspaceId}`);
-      if (!offlineQueue.isEmpty) console.log(`[Sync] ${offlineQueue.size} files in offline queue from last session`);
-
-      // Ensure registry is up to date
-      const name = workspacePath.split(/[/\\]/).filter(Boolean).pop() || 'Workspace';
-      this._registerWorkspace(name);
+      // Verify the workspace still exists in the DB before trusting the local sync-id.
+      // If the DB was wiped or sync was disabled from another device, the local file is stale.
+      const registered = await this.getSyncedWorkspace(userId);
+      if (!registered || registered.workspace_id !== localSyncId) {
+        console.log(`[Sync] Local sync-id ${localSyncId} is stale (not in DB), clearing`);
+        try {
+          await invoke('write_file_content', {
+            path: `${workspacePath}/.lokus/sync-id`,
+            content: '',
+          });
+        } catch {}
+        this.workspaceId = null;
+        this.syncEnabled = false;
+      } else {
+        this.workspaceId = localSyncId;
+        this.syncEnabled = true;
+        await syncCache.load(workspacePath);
+        await offlineQueue.load(workspacePath);
+        console.log(`[Sync] Linked to workspace ${this.workspaceId}`);
+        if (!offlineQueue.isEmpty) console.log(`[Sync] ${offlineQueue.size} files in offline queue from last session`);
+      }
     } else {
       console.log('[Sync] No sync configured for this workspace');
     }

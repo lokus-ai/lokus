@@ -25,7 +25,7 @@ import { getCalloutConfig, saveCalloutConfig } from "@/core/editor/callout-confi
 
 
 
-export default function Preferences() {
+export default function Preferences({ workspacePath: workspacePathProp }) {
   const [themes, setThemes] = useState([]);
   const [activeTheme, setActiveTheme] = useState("");
   const [themeTokens, setThemeTokens] = useState({});
@@ -70,7 +70,7 @@ export default function Preferences() {
   const [newSymbolChar, setNewSymbolChar] = useState('');
 
   // Workspace path (used for non-sync features)
-  const [workspacePath, setWorkspacePath] = useState('');
+  const [workspacePath, setWorkspacePath] = useState(workspacePathProp || '');
 
   const [expandedSections, setExpandedSections] = useState({
     font: true,
@@ -3147,7 +3147,7 @@ export default function Preferences() {
             )}
 
             {featureFlags.enable_sync && section === "Sync" && (
-              <SyncPreferences isAuthenticated={isAuthenticated} isGuest={isGuest} userId={user?.id} />
+              <SyncPreferences isAuthenticated={isAuthenticated} isGuest={isGuest} userId={user?.id} workspacePath={workspacePath} />
             )}
 
 
