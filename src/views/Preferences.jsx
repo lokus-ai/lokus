@@ -3147,7 +3147,7 @@ export default function Preferences() {
             )}
 
             {featureFlags.enable_sync && section === "Sync" && (
-              <SyncPreferences isAuthenticated={isAuthenticated} isGuest={isGuest} />
+              <SyncPreferences isAuthenticated={isAuthenticated} isGuest={isGuest} userId={user?.id} />
             )}
 
 

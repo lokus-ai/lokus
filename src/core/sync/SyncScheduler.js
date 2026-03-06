@@ -1,5 +1,6 @@
 import { syncEngine } from './SyncEngine';
 import { keyManager } from './KeyManager';
+import { offlineQueue } from './OfflineQueue';
 
 export class SyncScheduler {
   constructor() {
@@ -20,11 +21,12 @@ export class SyncScheduler {
     this.enabled = true;
 
     // Full sync on startup (delayed to let auth settle)
+    // This also drains any offline queue from previous session
     setTimeout(() => {
       if (this.enabled) syncEngine.sync();
     }, 2000);
 
-    // Full sync every 5 minutes to catch external changes
+    // Full sync every 5 minutes
     this.interval = setInterval(() => {
       if (this.enabled) syncEngine.sync();
     }, 5 * 60 * 1000);
@@ -33,6 +35,7 @@ export class SyncScheduler {
   /**
    * Called when a specific file is saved.
    * Batches multiple saves within 3s window, then syncs only those files.
+   * If offline, SyncEngine will queue them automatically.
    */
   onFileSaved(absolutePath) {
     if (!this.enabled) return;
@@ -65,6 +68,7 @@ export class SyncScheduler {
       clearTimeout(this.saveDebounceTimer);
       this.saveDebounceTimer = null;
     }
+    syncEngine.destroy();
   }
 }
 
