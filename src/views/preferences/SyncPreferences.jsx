@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
+import { open } from '@tauri-apps/plugin-dialog';
+import { homeDir } from '@tauri-apps/api/path';
 import { syncEngine } from '../../core/sync/SyncEngine';
-import { syncScheduler } from '../../core/sync/SyncScheduler';
 import { offlineQueue } from '../../core/sync/OfflineQueue';
-import { readRecents } from '../../lib/recents';
-import { Cloud, CloudOff, RefreshCw, Shield, HardDrive, Clock, FileText, Loader2, CheckCircle2, AlertTriangle, FolderSync, Power, PowerOff, WifiOff } from 'lucide-react';
+import { readRecents, addRecent } from '../../lib/recents';
+import { WorkspaceManager } from '../../core/workspace/manager';
+import { Cloud, CloudOff, RefreshCw, Shield, HardDrive, Clock, FileText, Loader2, CheckCircle2, AlertTriangle, FolderSync, Power, PowerOff, WifiOff, Download } from 'lucide-react';
+import { toast } from 'sonner';
 
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return '0 B';
@@ -30,19 +33,43 @@ export default function SyncPreferences({ isAuthenticated, isGuest, userId }) {
   const [remoteStats, setRemoteStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [syncedWorkspace, setSyncedWorkspace] = useState(null); // remote workspace row
-  const [loadingWorkspace, setLoadingWorkspace] = useState(true);
-  const [enabling, setEnabling] = useState(false);
+  const [busyPath, setBusyPath] = useState(null); // path currently being enabled/disabled
+  // Map of workspace path → sync-id (or null). Tracks which workspaces have sync enabled.
+  const [syncMap, setSyncMap] = useState({});
+  const [loadingSyncMap, setLoadingSyncMap] = useState(true);
+  const [registeredWorkspaces, setRegisteredWorkspaces] = useState([]); // { workspace_id, name, created_at }[]
+  const [pullingId, setPullingId] = useState(null); // workspace_id currently being pulled
+  const [linkTarget, setLinkTarget] = useState(null); // workspace path wanting to link to existing cloud workspace
 
   const recents = readRecents();
+  const currentPath = syncEngine.workspacePath;
+  const currentName = currentPath ? currentPath.split(/[/\\]/).filter(Boolean).pop() : null;
+  const currentSyncId = currentPath ? syncMap[currentPath] : null;
 
-  const loadSyncedWorkspace = useCallback(async () => {
-    if (!userId) return;
-    setLoadingWorkspace(true);
-    const ws = await syncEngine.getSyncedWorkspace(userId);
-    setSyncedWorkspace(ws);
-    setLoadingWorkspace(false);
-  }, [userId]);
+  // -----------------------------------------------------------------------
+  // Load sync status for all recent workspaces
+  // -----------------------------------------------------------------------
+
+  const loadSyncMap = useCallback(async () => {
+    setLoadingSyncMap(true);
+    const map = {};
+    for (const r of recents) {
+      map[r.path] = await syncEngine.getSyncIdForPath(r.path);
+    }
+    // Also include current workspace if not in recents
+    if (currentPath && !map[currentPath]) {
+      map[currentPath] = await syncEngine.getSyncIdForPath(currentPath);
+    }
+    setSyncMap(map);
+    setLoadingSyncMap(false);
+
+    // Load registered workspaces from registry
+    if (userId) {
+      syncEngine.getRegisteredWorkspaces(userId).then(ws => {
+        setRegisteredWorkspaces(ws || []);
+      }).catch(() => setRegisteredWorkspaces([]));
+    }
+  }, [currentPath, userId]); // recents comes from localStorage, stable enough
 
   const loadStats = useCallback(async () => {
     setLoadingStats(true);
@@ -53,8 +80,8 @@ export default function SyncPreferences({ isAuthenticated, isGuest, userId }) {
 
   useEffect(() => {
     if (!isAuthenticated || isGuest) return;
-    loadSyncedWorkspace();
-    loadStats();
+    loadSyncMap();
+    if (syncEngine.syncEnabled) loadStats();
 
     const unsub = syncEngine.onStatusChange((status) => {
       setSyncStatus(status);
@@ -64,7 +91,11 @@ export default function SyncPreferences({ isAuthenticated, isGuest, userId }) {
       }
     });
     return unsub;
-  }, [isAuthenticated, isGuest, loadStats, loadSyncedWorkspace]);
+  }, [isAuthenticated, isGuest, loadStats, loadSyncMap]);
+
+  // -----------------------------------------------------------------------
+  // Handlers
+  // -----------------------------------------------------------------------
 
   const handleSyncNow = async () => {
     setSyncing(true);
@@ -72,29 +103,93 @@ export default function SyncPreferences({ isAuthenticated, isGuest, userId }) {
   };
 
   const handleEnableSync = async (workspacePath) => {
-    setEnabling(true);
+    if (!workspacePath) return;
+    setBusyPath(workspacePath);
     try {
-      await syncEngine.enableSyncForWorkspace(workspacePath, userId);
-      await loadSyncedWorkspace();
-      // Trigger a full sync now
-      await syncEngine.sync();
-      await loadStats();
+      const syncId = await syncEngine.enableSyncForWorkspace(workspacePath, userId);
+      setSyncMap(prev => ({ ...prev, [workspacePath]: syncId }));
+      // If this is the current workspace, trigger a sync
+      if (workspacePath === currentPath) {
+        await syncEngine.sync();
+        await loadStats();
+      }
     } catch (err) {
       console.error('[Sync] Enable failed:', err);
     } finally {
-      setEnabling(false);
+      setBusyPath(null);
     }
   };
 
-  const handleDisableSync = async () => {
+  const handleLinkToCloud = async (workspacePath, workspaceId) => {
+    if (!workspacePath || !userId) return;
+    setLinkTarget(null);
+    setBusyPath(workspacePath);
     try {
-      await syncEngine.disableSync(userId);
-      setSyncedWorkspace(null);
-      setRemoteStats(null);
+      await syncEngine.enableSyncForWorkspace(workspacePath, userId, { workspaceId });
+      await syncEngine.pullWorkspace(workspacePath, userId, workspaceId);
+      setSyncMap(prev => ({ ...prev, [workspacePath]: workspaceId }));
+      toast.success('Linked and pulled!');
+      if (workspacePath === currentPath) {
+        await loadStats();
+      }
+      await loadSyncMap();
     } catch (err) {
-      console.error('[Sync] Disable failed:', err);
+      console.error('[Sync] Link failed:', err);
+      toast.error(`Failed to link workspace: ${err.message}`);
+    } finally {
+      setBusyPath(null);
     }
   };
+
+  const handleDisableSync = async (workspacePath) => {
+    if (!workspacePath) return;
+    setBusyPath(workspacePath);
+    try {
+      await syncEngine.disableSyncForWorkspace(workspacePath, userId);
+      setSyncMap(prev => ({ ...prev, [workspacePath]: null }));
+      if (workspacePath === currentPath) {
+        setRemoteStats(null);
+      }
+    } catch (err) {
+      console.error('[Sync] Disable failed:', err);
+    } finally {
+      setBusyPath(null);
+    }
+  };
+
+  const handlePullCloudWorkspace = async (workspaceId) => {
+    if (!userId) return;
+    const targetPath = await open({
+      directory: true,
+      defaultPath: await homeDir(),
+      title: 'Choose folder to pull workspace into',
+    });
+    if (!targetPath) return;
+
+    setPullingId(workspaceId);
+    try {
+      await syncEngine.enableSyncForWorkspace(targetPath, userId, { workspaceId });
+      await syncEngine.pullWorkspace(targetPath, userId, workspaceId);
+      addRecent(targetPath);
+      toast.success('Workspace pulled successfully!');
+      await loadSyncMap();
+    } catch (err) {
+      console.error('[Sync] Pull failed:', err);
+      toast.error(`Failed to pull workspace: ${err.message}`);
+    } finally {
+      setPullingId(null);
+    }
+  };
+
+  const handleRemoveCloudWorkspace = async (workspaceId) => {
+    if (!userId) return;
+    await syncEngine.removeRegisteredWorkspace(userId, workspaceId);
+    setRegisteredWorkspaces(prev => prev.filter(w => w.workspace_id !== workspaceId));
+  };
+
+  // -----------------------------------------------------------------------
+  // Not authenticated
+  // -----------------------------------------------------------------------
 
   if (!isAuthenticated || isGuest) {
     return (
@@ -112,6 +207,10 @@ export default function SyncPreferences({ isAuthenticated, isGuest, userId }) {
     );
   }
 
+  // -----------------------------------------------------------------------
+  // Status config
+  // -----------------------------------------------------------------------
+
   const statusConfig = {
     idle: { icon: Cloud, color: 'text-app-muted', label: 'Idle' },
     syncing: { icon: Loader2, color: 'text-blue-500', label: 'Syncing...' },
@@ -123,107 +222,215 @@ export default function SyncPreferences({ isAuthenticated, isGuest, userId }) {
 
   const StatusIcon = statusConfig.icon;
 
+  // Build a lookup from workspace_id → registered name
+  const registryByWsId = {};
+  for (const rw of registeredWorkspaces) {
+    registryByWsId[rw.workspace_id] = rw.name;
+  }
+
+  // Build workspace list: current workspace first, then recents (deduped)
+  const workspaceList = [];
+  const seenPaths = new Set();
+  const seenWsIds = new Set();
+  if (currentPath) {
+    const wsId = syncMap[currentPath];
+    const cloudName = wsId ? registryByWsId[wsId] : null;
+    workspaceList.push({ name: cloudName || currentName, path: currentPath, isCurrent: true });
+    seenPaths.add(currentPath);
+    if (wsId) seenWsIds.add(wsId);
+  }
+  for (const r of recents) {
+    if (!seenPaths.has(r.path)) {
+      const wsId = syncMap[r.path];
+      const cloudName = wsId ? registryByWsId[wsId] : null;
+      workspaceList.push({ name: cloudName || r.name, path: r.path, isCurrent: false });
+      seenPaths.add(r.path);
+      if (wsId) seenWsIds.add(wsId);
+    }
+  }
+
+  // Cloud-only workspaces: registered but no local folder on this device
+  const cloudOnlyWorkspaces = registeredWorkspaces.filter(
+    rw => !seenWsIds.has(rw.workspace_id)
+  );
+
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
         <h1 className="text-2xl font-bold text-app-text mb-2">Sync</h1>
         <p className="text-app-text-secondary">
-          Sync one workspace across your devices with end-to-end encryption.
+          Sync your workspaces across devices with end-to-end encryption.
         </p>
       </div>
 
-      {/* Synced Workspace Selection */}
+      {/* Workspace List with per-workspace sync toggles */}
       <div className="bg-app-panel border border-app-border rounded-xl p-5">
         <h3 className="text-sm font-semibold text-app-text mb-4 flex items-center gap-2">
           <FolderSync className="w-4 h-4" />
-          Synced Workspace
+          Workspaces
         </h3>
 
-        {loadingWorkspace ? (
+        {loadingSyncMap ? (
           <div className="flex items-center justify-center py-4">
             <Loader2 className="w-5 h-5 text-app-muted animate-spin" />
           </div>
-        ) : syncedWorkspace ? (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-app-bg rounded-lg border border-app-border">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-md bg-green-500/10 flex items-center justify-center">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-app-text">{syncedWorkspace.name}</div>
-                  <div className="text-xs text-app-muted">Currently synced</div>
-                </div>
-              </div>
-              <button
-                onClick={handleDisableSync}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-              >
-                <PowerOff className="w-3 h-3" />
-                Stop Syncing
-              </button>
-            </div>
+        ) : workspaceList.length > 0 ? (
+          <div className="space-y-2">
+            {workspaceList.map(ws => {
+              const isSynced = !!syncMap[ws.path];
+              const isBusy = busyPath === ws.path;
 
-            {/* Option to switch to a different workspace */}
-            {recents.length > 1 && (
-              <details className="group">
-                <summary className="text-xs text-app-muted cursor-pointer hover:text-app-text transition-colors">
-                  Switch to a different workspace...
-                </summary>
-                <div className="mt-2 space-y-1">
-                  {recents
-                    .filter(r => {
-                      const name = r.path.split(/[/\\]/).filter(Boolean).pop();
-                      return name !== syncedWorkspace.name;
-                    })
-                    .map(r => (
+              return (
+                <div
+                  key={ws.path}
+                  className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                    isSynced
+                      ? 'bg-green-500/5 border-green-500/20'
+                      : 'bg-app-bg border-app-border'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-8 h-8 rounded-md flex items-center justify-center ${
+                      isSynced ? 'bg-green-500/10' : 'bg-app-accent/10'
+                    }`}>
+                      {isSynced
+                        ? <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        : <Power className="w-4 h-4 text-app-accent" />
+                      }
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-app-text truncate flex items-center gap-2">
+                        {ws.name}
+                        {ws.isCurrent && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-app-accent/10 text-app-accent font-medium">
+                            open
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-app-muted truncate">{ws.path}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0 ml-3">
+                    {isSynced ? (
                       <button
-                        key={r.path}
-                        onClick={() => handleEnableSync(r.path)}
-                        disabled={enabling}
-                        className="w-full text-left p-2.5 rounded-lg hover:bg-app-bg border border-transparent hover:border-app-border transition-colors text-sm text-app-text disabled:opacity-50"
+                        onClick={() => handleDisableSync(ws.path)}
+                        disabled={isBusy}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50"
                       >
-                        {r.name}
-                        <span className="text-xs text-app-muted ml-2">{r.path}</span>
+                        {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <PowerOff className="w-3 h-3" />}
+                        {isBusy ? '...' : 'Stop'}
                       </button>
-                    ))}
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleEnableSync(ws.path)}
+                          disabled={isBusy}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-app-accent hover:bg-app-accent/10 transition-colors disabled:opacity-50"
+                        >
+                          {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Power className="w-3 h-3" />}
+                          {isBusy ? '...' : 'New'}
+                        </button>
+                        {registeredWorkspaces.length > 0 && (
+                          <button
+                            onClick={() => setLinkTarget(ws.path)}
+                            disabled={isBusy}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-blue-500 hover:bg-blue-500/10 transition-colors disabled:opacity-50"
+                          >
+                            <Download className="w-3 h-3" />
+                            Link
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
-              </details>
-            )}
+              );
+            })}
           </div>
         ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-app-muted">No workspace is currently synced. Select one to enable cloud sync.</p>
-            {recents.length > 0 ? (
-              <div className="space-y-1">
-                {recents.map(r => (
-                  <button
-                    key={r.path}
-                    onClick={() => handleEnableSync(r.path)}
-                    disabled={enabling}
-                    className="w-full text-left p-3 rounded-lg hover:bg-app-bg border border-app-border hover:border-app-accent transition-colors disabled:opacity-50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-md bg-app-accent/10 flex items-center justify-center">
-                        <Power className="w-4 h-4 text-app-accent" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-app-text">{r.name}</div>
-                        <div className="text-xs text-app-muted">{r.path}</div>
+          <p className="text-sm text-app-muted">Open a workspace first, then come back here to enable sync.</p>
+        )}
+
+        {/* Cloud-only workspaces (registered but no local folder on this device) */}
+        {cloudOnlyWorkspaces.length > 0 && (
+          <>
+            <div className="text-xs font-medium text-app-muted uppercase tracking-wider mt-4 mb-2">Cloud Only</div>
+            <div className="space-y-2">
+              {cloudOnlyWorkspaces.map(ws => (
+                <div
+                  key={ws.workspace_id}
+                  className="flex items-center justify-between p-3 rounded-lg border bg-blue-500/5 border-blue-500/20"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-md flex items-center justify-center bg-blue-500/10">
+                      <Cloud className="w-4 h-4 text-blue-500" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-app-text truncate">{ws.name}</div>
+                      <div className="text-xs text-app-muted truncate">
+                        {ws.workspace_id.slice(0, 8)}... — not on this device
                       </div>
                     </div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-app-muted">Open a workspace first, then come back here to enable sync.</p>
-            )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0 ml-3">
+                    <button
+                      onClick={() => handlePullCloudWorkspace(ws.workspace_id)}
+                      disabled={pullingId === ws.workspace_id}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-blue-500 hover:bg-blue-500/10 transition-colors disabled:opacity-50"
+                    >
+                      {pullingId === ws.workspace_id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Download className="w-3 h-3" />
+                      )}
+                      {pullingId === ws.workspace_id ? '...' : 'Pull'}
+                    </button>
+                    <button
+                      onClick={() => handleRemoveCloudWorkspace(ws.workspace_id)}
+                      className="flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-lg text-red-500 hover:bg-red-500/10 transition-colors"
+                      title="Remove from registry"
+                    >
+                      <PowerOff className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Link picker — shown when user clicks "Link" on an unsynced workspace */}
+        {linkTarget && (
+          <div className="mt-3 p-3 rounded-lg border border-blue-500/30 bg-blue-500/5">
+            <div className="text-xs font-medium text-app-text mb-2">
+              Link to which cloud workspace?
+            </div>
+            <div className="space-y-1.5">
+              {registeredWorkspaces.map(cw => (
+                <button
+                  key={cw.workspace_id}
+                  onClick={() => handleLinkToCloud(linkTarget, cw.workspace_id)}
+                  className="w-full text-left p-2 rounded-md text-sm hover:bg-blue-500/10 transition-colors flex items-center gap-2"
+                >
+                  <Cloud className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                  <span className="text-app-text truncate">{cw.name}</span>
+                  <span className="text-[10px] text-app-muted">{cw.workspace_id.slice(0, 8)}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setLinkTarget(null)}
+              className="mt-2 text-xs text-app-muted hover:text-app-text transition-colors"
+            >
+              Cancel
+            </button>
           </div>
         )}
       </div>
 
-      {/* Status + Sync Now — only show when sync is active */}
-      {syncedWorkspace && (
+      {/* Status + Sync Now — only show when current workspace is synced */}
+      {currentSyncId && (
         <>
           <div className="bg-app-panel border border-app-border rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
@@ -323,7 +530,7 @@ export default function SyncPreferences({ isAuthenticated, isGuest, userId }) {
           </div>
           <div className="flex items-start gap-3">
             <FolderSync className="w-4 h-4 mt-0.5 text-purple-500 shrink-0" />
-            <span>One workspace per account. Pull it from any device via the <strong className="text-app-text">launcher</strong>.</span>
+            <span>Enable sync per workspace. Pull any of them from another device via the <strong className="text-app-text">launcher</strong>.</span>
           </div>
         </div>
       </div>

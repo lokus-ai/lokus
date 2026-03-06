@@ -39,7 +39,7 @@ async function runWithConcurrency(tasks, limit) {
 async function isOnline() {
   if (!navigator.onLine) return false;
   try {
-    const { error } = await supabase.from('user_workspaces').select('user_id').limit(0);
+    const { error } = await supabase.from('sync_files').select('user_id').limit(0);
     return !error;
   } catch {
     return false;
@@ -79,8 +79,6 @@ export class SyncEngine {
 
     this._setupConnectivityListeners();
 
-    const remoteWorkspace = await this.getSyncedWorkspace(userId).catch(() => null);
-
     let localSyncId = null;
     try {
       const raw = await invoke('read_file_content', {
@@ -89,21 +87,17 @@ export class SyncEngine {
       localSyncId = raw?.trim() || null;
     } catch {}
 
-    if (remoteWorkspace && localSyncId === remoteWorkspace.workspace_id) {
-      this.workspaceId = remoteWorkspace.workspace_id;
-      this.syncEnabled = true;
-      await syncCache.load(workspacePath);
-      await offlineQueue.load(workspacePath);
-      console.log(`[Sync] Linked to remote workspace "${remoteWorkspace.name}" (${this.workspaceId})`);
-      if (!offlineQueue.isEmpty) console.log(`[Sync] ${offlineQueue.size} files in offline queue from last session`);
-    } else if (!remoteWorkspace && localSyncId) {
+    if (localSyncId) {
       this.workspaceId = localSyncId;
       this.syncEnabled = true;
-      const workspaceName = workspacePath.split(/[/\\]/).filter(Boolean).pop();
-      await this._registerWorkspace(workspaceName);
       await syncCache.load(workspacePath);
       await offlineQueue.load(workspacePath);
-      console.log(`[Sync] Registered new workspace "${workspaceName}" (${this.workspaceId})`);
+      console.log(`[Sync] Linked to workspace ${this.workspaceId}`);
+      if (!offlineQueue.isEmpty) console.log(`[Sync] ${offlineQueue.size} files in offline queue from last session`);
+
+      // Lazy registration — auto-populate registry for existing users
+      const name = workspacePath.split(/[/\\]/).filter(Boolean).pop() || 'Workspace';
+      this._registerWorkspace(userId, localSyncId, name);
     } else {
       console.log('[Sync] No sync configured for this workspace');
     }
@@ -148,40 +142,117 @@ export class SyncEngine {
   }
 
   // -----------------------------------------------------------------------
-  // Workspace management
+  // Workspace registry
   // -----------------------------------------------------------------------
 
-  async getSyncedWorkspace(userId) {
+  /** Upsert a workspace into the user_workspaces registry. Silent on failure. */
+  async _registerWorkspace(userId, workspaceId, name) {
+    try {
+      await supabase.from('user_workspaces').upsert(
+        { user_id: userId, workspace_id: workspaceId, name },
+        { onConflict: 'user_id,workspace_id' }
+      );
+      console.log(`[Sync] Registered workspace "${name}" (${workspaceId})`);
+    } catch (err) {
+      console.warn('[Sync] Workspace registration failed (offline?):', err.message);
+    }
+  }
+
+  /** Get all registered workspaces for a user (from registry only). */
+  async getRegisteredWorkspaces(userId) {
     const uid = userId || this.userId;
-    if (!uid) return null;
+    if (!uid) return [];
     try {
       const { data } = await supabase
         .from('user_workspaces')
-        .select('workspace_id, name, last_synced_at')
+        .select('workspace_id, name, created_at')
         .eq('user_id', uid)
-        .maybeSingle();
-      return data || null;
+        .order('created_at', { ascending: true });
+
+      return data || [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Remove a workspace from the registry (does NOT delete sync data). */
+  async removeRegisteredWorkspace(userId, workspaceId) {
+    const uid = userId || this.userId;
+    if (!uid) return;
+    try {
+      await supabase.from('user_workspaces')
+        .delete()
+        .eq('user_id', uid)
+        .eq('workspace_id', workspaceId);
+      console.log(`[Sync] Removed workspace ${workspaceId} from registry`);
+    } catch (err) {
+      console.warn('[Sync] Failed to remove workspace from registry:', err.message);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Workspace management
+  // -----------------------------------------------------------------------
+
+  /** Read .lokus/sync-id from any workspace path */
+  async getSyncIdForPath(workspacePath) {
+    try {
+      const raw = await invoke('read_file_content', {
+        path: `${workspacePath}/.lokus/sync-id`,
+      });
+      return raw?.trim() || null;
     } catch {
       return null;
     }
   }
 
-  async enableSyncForWorkspace(workspacePath, userId) {
+  /** Get all distinct workspace_ids this user has in sync_files */
+  async getRemoteWorkspaceIds(userId) {
+    const uid = userId || this.userId;
+    if (!uid) return [];
+    try {
+      const { data } = await supabase
+        .from('sync_files')
+        .select('workspace_id')
+        .eq('user_id', uid);
+      if (!data) return [];
+      // Dedupe workspace_ids
+      return [...new Set(data.map(r => r.workspace_id))];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Convenience — returns first remote workspace_id (for single-pull scenarios) */
+  async getRemoteWorkspaceId(userId) {
+    const ids = await this.getRemoteWorkspaceIds(userId);
+    return ids[0] || null;
+  }
+
+  async enableSyncForWorkspace(workspacePath, userId, { workspaceId: linkId, workspaceName } = {}) {
     const uid = userId || this.userId;
     if (!uid) throw new Error('Not authenticated');
 
-    const workspaceName = workspacePath.split(/[/\\]/).filter(Boolean).pop();
-    console.log(`[Sync] Enabling sync for "${workspaceName}"`);
+    // If already has a sync-id, reuse it (but ensure registration)
+    const existing = await this.getSyncIdForPath(workspacePath);
+    if (existing) {
+      console.log(`[Sync] Workspace already synced (${existing})`);
+      if (workspacePath === this.workspacePath) {
+        this.workspaceId = existing;
+        this.syncEnabled = true;
+        await syncCache.load(workspacePath);
+        await offlineQueue.load(workspacePath);
+      }
+      const name = workspaceName || workspacePath.split(/[/\\]/).filter(Boolean).pop() || 'Workspace';
+      this._registerWorkspace(uid, existing, name);
+      return existing;
+    }
 
-    await supabase.from('user_workspaces').delete().eq('user_id', uid);
+    console.log(`[Sync] Enabling sync for workspace at ${workspacePath}`);
 
-    const workspaceId = crypto.randomUUID();
-
-    await supabase.from('user_workspaces').insert({
-      user_id: uid,
-      workspace_id: workspaceId,
-      name: workspaceName,
-    });
+    // Use provided linkId (linking to existing workspace) or generate new
+    const workspaceId = linkId || crypto.randomUUID();
+    const name = workspaceName || workspacePath.split(/[/\\]/).filter(Boolean).pop() || 'Workspace';
 
     try {
       await invoke('create_directory', { path: `${workspacePath}/.lokus`, recursive: true });
@@ -198,43 +269,101 @@ export class SyncEngine {
       await offlineQueue.load(workspacePath);
     }
 
-    console.log(`[Sync] Enabled — workspace "${workspaceName}" (${workspaceId})`);
+    // Register in the workspace registry
+    await this._registerWorkspace(uid, workspaceId, name);
+
+    console.log(`[Sync] Enabled — workspace ${workspaceId}`);
     return workspaceId;
   }
 
-  async disableSync(userId) {
+  /**
+   * Disable sync for a specific workspace.
+   * Cleans up: sync_files rows, storage bucket files, local .lokus/sync-id.
+   */
+  async disableSyncForWorkspace(workspacePath, userId) {
     const uid = userId || this.userId;
     if (!uid) return;
-    console.log('[Sync] Disabling sync');
-    await supabase.from('user_workspaces').delete().eq('user_id', uid);
-    this.syncEnabled = false;
-    this.workspaceId = null;
+
+    const syncId = await this.getSyncIdForPath(workspacePath);
+    if (!syncId) return;
+
+    console.log(`[Sync] Disabling sync for workspace ${syncId} at ${workspacePath}`);
+
+    // 1. Get file paths from sync_files (need them to delete from storage)
+    try {
+      const { data: files } = await supabase.from('sync_files')
+        .select('file_path')
+        .eq('user_id', uid)
+        .eq('workspace_id', syncId);
+
+      // 2. Delete encrypted files from storage bucket
+      if (files && files.length > 0) {
+        const storagePaths = files.map(f => `${uid}/${syncId}/${f.file_path}`);
+        // Supabase remove supports batches — process in chunks of 100
+        for (let i = 0; i < storagePaths.length; i += 100) {
+          const batch = storagePaths.slice(i, i + 100);
+          await supabase.storage.from('vaults').remove(batch);
+        }
+        console.log(`[Sync] Deleted ${files.length} files from storage`);
+      }
+
+      // 3. Delete sync_files rows
+      await supabase.from('sync_files')
+        .delete()
+        .eq('user_id', uid)
+        .eq('workspace_id', syncId);
+      console.log('[Sync] Deleted sync_files rows');
+
+      // 4. Delete workspace registry entry
+      await supabase.from('user_workspaces')
+        .delete()
+        .eq('user_id', uid)
+        .eq('workspace_id', syncId);
+      console.log('[Sync] Deleted workspace registry entry');
+    } catch (err) {
+      console.warn('[Sync] Cleanup error (continuing):', err.message);
+    }
+
+    // 4. Clear local sync-id file
+    try {
+      await invoke('write_file_content', {
+        path: `${workspacePath}/.lokus/sync-id`,
+        content: '',
+      });
+    } catch {}
+
+    // 5. If this is the currently open workspace, clear engine state
+    if (workspacePath === this.workspacePath) {
+      this.syncEnabled = false;
+      this.workspaceId = null;
+    }
+
+    console.log(`[Sync] Sync disabled for ${syncId}`);
   }
 
-  async pullWorkspace(targetPath, userId) {
+  async pullWorkspace(targetPath, userId, workspaceId) {
     const uid = userId;
     if (!uid) throw new Error('Not authenticated');
 
     await keyManager.initialize(uid);
     const mek = keyManager.getMEK();
 
-    const workspace = await this.getSyncedWorkspace(uid);
-    if (!workspace) throw new Error('No synced workspace found');
-
-    const { workspace_id } = workspace;
+    // Use provided workspaceId or fall back to first remote one
+    const wsId = workspaceId || await this.getRemoteWorkspaceId(uid);
+    if (!wsId) throw new Error('No synced workspace found');
 
     const { data: files, error } = await supabase.from('sync_files')
       .select('file_path, content_hash, file_size, is_binary, modified_at')
       .eq('user_id', uid)
-      .eq('workspace_id', workspace_id);
+      .eq('workspace_id', wsId);
     if (error) throw error;
 
-    console.log(`[Sync] Pulling "${workspace.name}" → ${targetPath} (${(files || []).length} files)`);
+    console.log(`[Sync] Pulling workspace → ${targetPath} (${(files || []).length} files)`);
 
     let pulled = 0;
     const downloadTasks = (files || []).map((file) => async () => {
       try {
-        const sp = storagePath(uid, workspace_id, file.file_path);
+        const sp = storagePath(uid, wsId, file.file_path);
         const { data, error: dlError } = await supabase.storage.from('vaults').download(sp);
         if (dlError) throw dlError;
 
@@ -266,11 +395,9 @@ export class SyncEngine {
       await invoke('create_directory', { path: `${targetPath}/.lokus`, recursive: true });
       await invoke('write_file_content', {
         path: `${targetPath}/.lokus/sync-id`,
-        content: workspace_id,
+        content: wsId,
       });
     } catch {}
-
-    return workspace.name;
   }
 
   // -----------------------------------------------------------------------
@@ -532,12 +659,6 @@ export class SyncEngine {
 
       await syncCache.save(this.workspacePath);
 
-      try {
-        await supabase.from('user_workspaces').update({
-          last_synced_at: new Date().toISOString(),
-        }).eq('user_id', this.userId).eq('workspace_id', this.workspaceId);
-      } catch {}
-
       this.lastSyncResult = {
         uploaded: actions.upload.length - failed,
         downloaded: actions.download.length,
@@ -585,19 +706,6 @@ export class SyncEngine {
       return { fileCount: files.length, totalSize, encryptedSize, lastModified };
     } catch {
       return null;
-    }
-  }
-
-  async getUserWorkspaces() {
-    if (!this.userId) return [];
-    try {
-      const { data } = await supabase
-        .from('user_workspaces')
-        .select('workspace_id, name, last_synced_at')
-        .eq('user_id', this.userId);
-      return data || [];
-    } catch {
-      return [];
     }
   }
 
@@ -794,15 +902,6 @@ export class SyncEngine {
     const map = new Map();
     for (const row of (data || [])) map.set(row.file_path, row);
     return map;
-  }
-
-  async _registerWorkspace(name) {
-    try {
-      await supabase.from('user_workspaces').upsert(
-        { user_id: this.userId, workspace_id: this.workspaceId, name },
-        { onConflict: 'user_id,workspace_id' }
-      );
-    } catch {}
   }
 
   // -----------------------------------------------------------------------
