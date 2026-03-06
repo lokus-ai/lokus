@@ -63,91 +63,49 @@ export default function Launcher() {
   const [recents, setRecents] = useState([]);
   const [isTestMode, setIsTestMode] = useState(false);
   const [reauthWorkspace, setReauthWorkspace] = useState(null); // { path, name } of workspace needing re-auth
-  const [registeredWorkspaces, setRegisteredWorkspaces] = useState([]); // { workspace_id, name }[] from registry
+  const [syncedWorkspace, setSyncedWorkspace] = useState(null); // { workspace_id, name } from cloud
   const [pulling, setPulling] = useState(false);
-  const [linkPrompt, setLinkPrompt] = useState(null); // { path, workspaces } | null
+  const [pullProgress, setPullProgress] = useState(null); // { current, total }
   const { isAuthenticated, user, isGuest } = useAuth();
 
-  // Fetch registered workspaces from the cloud registry
+  // Check if user has a synced workspace in the cloud
   useEffect(() => {
     if (!isAuthenticated || isGuest || !user?.id) {
-      setRegisteredWorkspaces([]);
+      setSyncedWorkspace(null);
       return;
     }
-    syncEngine.getRegisteredWorkspaces(user.id).then(ws => {
-      setRegisteredWorkspaces(ws || []);
-    }).catch(() => setRegisteredWorkspaces([]));
+    syncEngine.getSyncedWorkspace(user.id).then(ws => {
+      setSyncedWorkspace(ws);
+    }).catch(() => setSyncedWorkspace(null));
   }, [isAuthenticated, isGuest, user?.id]);
 
-  const handlePullWorkspace = async (workspaceId) => {
-    if (!user?.id) return;
+  const handlePullWorkspace = async () => {
+    if (!syncedWorkspace || !user?.id) return;
 
-    // Ask user to pick a folder to pull into
     const targetPath = await open({
       directory: true,
       defaultPath: await homeDir(),
-      title: 'Choose folder to pull workspace into',
+      title: `Choose folder for "${syncedWorkspace.name}"`,
     });
     if (!targetPath) return;
 
     setPulling(true);
     try {
-      // Link the local folder to the existing workspace
-      await syncEngine.enableSyncForWorkspace(targetPath, user.id, { workspaceId });
-      await syncEngine.pullWorkspace(targetPath, user.id, workspaceId);
+      await syncEngine.pullWorkspace(targetPath, user.id, (current, total) => {
+        setPullProgress({ current, total });
+      });
       addRecent(targetPath);
       setRecents(readRecents());
       await WorkspaceManager.saveWorkspacePath(targetPath);
-      toast.success('Workspace pulled successfully!');
+      toast.success(`Pulled "${syncedWorkspace.name}" successfully!`);
       await openWorkspace(targetPath);
     } catch (err) {
       console.error('[Sync] Pull failed:', err);
       toast.error(`Failed to pull workspace: ${err.message}`);
     } finally {
       setPulling(false);
+      setPullProgress(null);
     }
-  };
-
-  /** Check if a folder should show the link prompt (no sync-id + user has registered workspaces) */
-  const checkLinkPrompt = async (path) => {
-    if (!isAuthenticated || isGuest || !user?.id) return false;
-    const syncId = await syncEngine.getSyncIdForPath(path);
-    if (syncId) return false; // already linked
-    const ws = registeredWorkspaces.length > 0 ? registeredWorkspaces : await syncEngine.getRegisteredWorkspaces(user.id);
-    if (ws.length === 0) return false;
-    setLinkPrompt({ path, workspaces: ws });
-    return true;
-  };
-
-  const handleLinkWorkspace = async (workspaceId) => {
-    if (!linkPrompt || !user?.id) return;
-    const { path } = linkPrompt;
-    setLinkPrompt(null);
-    setPulling(true);
-    try {
-      await syncEngine.enableSyncForWorkspace(path, user.id, { workspaceId });
-      await syncEngine.pullWorkspace(path, user.id, workspaceId);
-      addRecent(path);
-      setRecents(readRecents());
-      await WorkspaceManager.saveWorkspacePath(path);
-      toast.success('Workspace linked and pulled!');
-      await openWorkspace(path);
-    } catch (err) {
-      console.error('[Sync] Link + pull failed:', err);
-      toast.error(`Failed to link workspace: ${err.message}`);
-    } finally {
-      setPulling(false);
-    }
-  };
-
-  const handleSkipLink = async () => {
-    if (!linkPrompt) return;
-    const { path } = linkPrompt;
-    setLinkPrompt(null);
-    addRecent(path);
-    setRecents(readRecents());
-    await WorkspaceManager.saveWorkspacePath(path);
-    await openWorkspace(path);
   };
 
   useEffect(() => {
@@ -189,9 +147,6 @@ export default function Launcher() {
       // Validate workspace before proceeding
       const isValid = await WorkspaceManager.validatePath(p);
       if (isValid) {
-        // Check if this folder should be linked to an existing workspace
-        const prompted = await checkLinkPrompt(p);
-        if (prompted) return; // modal is showing, user will choose
         addRecent(p);
         setRecents(readRecents());
         await WorkspaceManager.saveWorkspacePath(p);
@@ -256,9 +211,6 @@ This is your new mobile workspace. Start taking notes!
     // Validate recent workspace before opening
     const isValid = await WorkspaceManager.validatePath(path);
     if (isValid) {
-      // Check if this folder should be linked to an existing workspace
-      const prompted = await checkLinkPrompt(path);
-      if (prompted) return; // modal is showing, user will choose
       addRecent(path);
       setRecents(readRecents());
       await WorkspaceManager.saveWorkspacePath(path);
@@ -414,7 +366,7 @@ This is your new mobile workspace. Start taking notes!
     );
   }
 
-  // Desktop layout (original)
+  // Desktop layout
   return (
     <div className="h-full bg-app-bg text-app-text flex items-center justify-center p-8 transition-colors duration-300">
       {/* Test Mode Indicator */}
@@ -462,45 +414,6 @@ This is your new mobile workspace. Start taking notes!
                 Cancel
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Link to Existing Workspace Prompt */}
-      {linkPrompt && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-app-panel border border-app-border rounded-xl p-6 max-w-md w-full shadow-2xl">
-            <div className="flex items-start gap-4 mb-4">
-              <div className="w-12 h-12 rounded-lg bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                <Icon path="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m9.86-2.065a4.5 4.5 0 0 0-1.242-7.244l4.5-4.5a4.5 4.5 0 1 0-6.364 6.364l-1.757 1.757" className="w-6 h-6 text-blue-500" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-app-text">Link to existing workspace?</h3>
-                <p className="text-sm text-app-muted mt-1">
-                  This folder doesn't have sync set up. Link it to one of your cloud workspaces to pull its files.
-                </p>
-              </div>
-            </div>
-            <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
-              {linkPrompt.workspaces.map(ws => (
-                <button
-                  key={ws.workspace_id}
-                  onClick={() => handleLinkWorkspace(ws.workspace_id)}
-                  className="w-full text-left p-3 rounded-lg border border-app-border hover:border-blue-500 hover:bg-blue-500/5 transition-colors flex items-center gap-3"
-                >
-                  <div className="w-8 h-8 rounded-md bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                    <Icon path="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" className="w-4 h-4 text-blue-500" />
-                  </div>
-                  <span className="font-medium text-app-text">{ws.name}</span>
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={handleSkipLink}
-              className="w-full px-4 py-2.5 bg-app-bg border border-app-border rounded-lg hover:bg-app-panel transition-colors text-app-muted text-sm"
-            >
-              Skip — open without sync
-            </button>
           </div>
         </div>
       )}
@@ -582,27 +495,29 @@ This is your new mobile workspace. Start taking notes!
               </div>
             </button>
 
-            {/* Pull Workspace from Cloud — compact card */}
-            {registeredWorkspaces.length > 0 && (
-              <div className="rounded-xl bg-app-panel border border-app-border p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Icon path="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" className="w-4 h-4 text-blue-500" />
-                  <span className="text-sm font-semibold text-app-text">Pull from Cloud</span>
+            {/* Pull Workspace from Cloud */}
+            {syncedWorkspace && (
+              <button
+                onClick={handlePullWorkspace}
+                disabled={pulling}
+                className="w-full text-left p-5 flex items-center gap-4 rounded-xl bg-app-panel hover:bg-app-accent hover:text-app-accent-fg border border-app-border hover:border-app-accent transition-all duration-200 group disabled:opacity-50"
+              >
+                <div className="w-12 h-12 rounded-lg bg-blue-500/10 group-hover:bg-app-accent-fg/20 flex items-center justify-center transition-colors">
+                  <Icon path="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" className="w-6 h-6 text-blue-500 group-hover:text-app-accent-fg" />
                 </div>
-                <div className="space-y-1">
-                  {registeredWorkspaces.map(ws => (
-                    <button
-                      key={ws.workspace_id}
-                      onClick={() => handlePullWorkspace(ws.workspace_id)}
-                      disabled={pulling}
-                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-app-bg transition-colors flex items-center justify-between gap-2 disabled:opacity-50"
-                    >
-                      <span className="text-sm text-app-text truncate">{pulling ? 'Pulling...' : ws.name}</span>
-                      <Icon path="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" className="w-4 h-4 text-app-muted shrink-0" />
-                    </button>
-                  ))}
+                <div className="flex-1">
+                  <div className="font-semibold text-lg group-hover:text-app-accent-fg">
+                    {pulling ? (
+                      pullProgress
+                        ? `Pulling... ${pullProgress.current}/${pullProgress.total} files`
+                        : 'Pulling...'
+                    ) : `Pull "${syncedWorkspace.name}" from Cloud`}
+                  </div>
+                  <div className="text-sm text-app-muted group-hover:text-app-accent-fg/80 mt-1">
+                    Download your synced workspace to this device
+                  </div>
                 </div>
-              </div>
+              </button>
             )}
           </div>
         </div>

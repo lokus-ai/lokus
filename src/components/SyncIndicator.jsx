@@ -5,11 +5,14 @@ import { useAuth } from '../core/auth/AuthContext';
 
 export default function SyncIndicator() {
   const [status, setStatus] = useState('idle');
+  const [errorDetail, setErrorDetail] = useState(null);
   const { isAuthenticated, isGuest } = useAuth();
 
   useEffect(() => {
-    const unsub = syncEngine.onStatusChange((s) => {
+    const unsub = syncEngine.onStatusChange((s, detail) => {
       setStatus(s);
+      if (s === 'error') setErrorDetail(detail || null);
+      if (s !== 'error') setErrorDetail(null);
       if (s === 'synced') setTimeout(() => setStatus('idle'), 3000);
     });
     return unsub;
@@ -26,8 +29,12 @@ export default function SyncIndicator() {
 
   const Icon = config.icon;
 
+  const title = status === 'error' && errorDetail
+    ? `Sync error: ${errorDetail}`
+    : config.label;
+
   return (
-    <div className="obsidian-status-bar-item" title={config.label}>
+    <div className="obsidian-status-bar-item" title={title}>
       <Icon className={`w-3.5 h-3.5 ${config.className}`} />
     </div>
   );

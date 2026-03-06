@@ -3,6 +3,7 @@ import { sha256 } from './encryption';
 
 const EXCLUDED = ['.git', 'node_modules', '.DS_Store', '.Trash', 'Thumbs.db'];
 const LOKUS_EXCLUDED = ['backups', 'temp', 'plugins', 'cache'];
+const LOKUS_EXCLUDED_FILES = ['sync-cache.json', 'sync-id', 'offline-queue.json'];
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 const BINARY_EXTENSIONS = new Set([
@@ -57,6 +58,16 @@ export class SyncCache {
     this.cache[relativePath] = { hash, mtime, size };
   }
 
+  /** Check if a path exists in the cache (used for deletion detection) */
+  has(relativePath) {
+    return relativePath in this.cache;
+  }
+
+  /** Remove a path from the cache (used after remote deletion) */
+  delete(relativePath) {
+    delete this.cache[relativePath];
+  }
+
   /** Check if file changed based on mtime + size */
   isUnchanged(relativePath, mtime, size) {
     const c = this.cache[relativePath];
@@ -99,6 +110,11 @@ export class FileScanner {
           content = new TextEncoder().encode(text);
         }
 
+        if (content.byteLength > MAX_FILE_SIZE) {
+          console.warn(`[Sync] Skipping ${relativePath} — exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`);
+          continue;
+        }
+
         const hash = await sha256(content.buffer);
 
         files.set(relativePath, {
@@ -130,6 +146,7 @@ export class FileScanner {
 
       if (name.startsWith('.') && !insideLokus) continue;
       if (insideLokus && entry.is_directory && LOKUS_EXCLUDED.includes(name)) continue;
+      if (insideLokus && !entry.is_directory && LOKUS_EXCLUDED_FILES.includes(name)) continue;
 
       if (entry.is_directory) {
         if (entry.children) {

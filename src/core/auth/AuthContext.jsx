@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import authManager from './AuthManager';
 import posthog from '../../services/posthog.js';
+import { keyManager } from '../sync/KeyManager';
 
 const AuthContext = createContext();
 
@@ -110,6 +111,8 @@ export const AuthProvider = ({ children }) => {
     try {
       // Reset PostHog to anonymous tracking
       posthog.reset();
+      // Clear cached encryption key material to prevent leaking to next user
+      keyManager.onLogout();
       await authManager.signOut();
     } catch (error) {
       throw error;

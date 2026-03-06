@@ -43,6 +43,11 @@ export class OfflineQueue {
     await this.save();
   }
 
+  /** Return queue contents without clearing */
+  peekAll() {
+    return [...this.queue];
+  }
+
   /** Drain all queued paths and clear */
   async drain() {
     const paths = [...this.queue];

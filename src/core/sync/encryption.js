@@ -9,10 +9,10 @@ const INFO_STRING = 'lokus-file-encryption-v1';
 
 // --- Key Management ---
 
-export async function deriveWrappingKey(userId, salt) {
+export async function deriveWrappingKey(secret, salt) {
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
-    new TextEncoder().encode(userId),
+    new TextEncoder().encode(secret),
     'HKDF',
     false,
     ['deriveKey']
