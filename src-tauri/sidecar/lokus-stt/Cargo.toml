@@ -1,0 +1,21 @@
+[package]
+name = "lokus-stt"
+version = "0.1.0"
+edition = "2021"
+description = "Lokus STT sidecar: Silero VAD + Whisper speech-to-text"
+publish = false
+
+[[bin]]
+name = "lokus-stt"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sherpa-rs = { version = "0.6", default-features = false, features = ["download-binaries"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

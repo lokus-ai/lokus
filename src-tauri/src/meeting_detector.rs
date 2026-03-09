@@ -116,45 +116,115 @@ fn unix_secs() -> u64 {
 // macOS CoreAudio + NSWorkspace detection
 // ---------------------------------------------------------------------------
 
+/// Dedicated meeting apps — if one of these is running AND any mic is active,
+/// we consider a meeting to be in progress.
 #[cfg(target_os = "macos")]
-fn default_input_device_id() -> Result<u32, i32> {
+const MEETING_APP_IDS: &[&str] = &[
+    "us.zoom.xos",
+    "com.microsoft.teams",
+    "com.microsoft.teams2",
+    "com.cisco.webex.meetings",
+    "com.apple.FaceTime",
+    "com.hnc.Discord",
+    "com.tinyspeck.slackmacgap",
+];
+
+/// Browsers — these only count if a mic is active (could be Google Meet, etc.).
+#[cfg(target_os = "macos")]
+const BROWSER_IDS: &[&str] = &[
+    "com.google.Chrome",
+    "com.apple.Safari",
+    "company.thebrowser.Browser",
+    "com.microsoft.edgemac",
+    "com.brave.Browser",
+    "org.mozilla.firefox",
+    "org.chromium.Chromium",
+    "com.operasoftware.Opera",
+];
+
+/// Get all audio input device IDs from CoreAudio.
+#[cfg(target_os = "macos")]
+fn all_input_device_ids() -> Vec<u32> {
     use coreaudio_sys::{
-        kAudioHardwareNoError, kAudioHardwarePropertyDefaultInputDevice,
+        kAudioHardwareNoError, kAudioHardwarePropertyDevices,
         kAudioObjectPropertyElementMain, kAudioObjectPropertyScopeGlobal,
-        kAudioObjectSystemObject, AudioObjectGetPropertyData, AudioObjectPropertyAddress,
+        kAudioObjectSystemObject, kAudioDevicePropertyStreams,
+        kAudioObjectPropertyScopeInput,
+        AudioObjectGetPropertyData, AudioObjectGetPropertyDataSize,
+        AudioObjectPropertyAddress,
     };
     use std::mem;
 
-    let address = AudioObjectPropertyAddress {
-        mSelector: kAudioHardwarePropertyDefaultInputDevice,
+    // First get all devices.
+    let devices_addr = AudioObjectPropertyAddress {
+        mSelector: kAudioHardwarePropertyDevices,
         mScope: kAudioObjectPropertyScopeGlobal,
         mElement: kAudioObjectPropertyElementMain,
     };
 
-    let mut device_id: u32 = 0;
-    let mut data_size = mem::size_of::<u32>() as u32;
-
+    let mut data_size: u32 = 0;
     let status = unsafe {
-        AudioObjectGetPropertyData(
+        AudioObjectGetPropertyDataSize(
             kAudioObjectSystemObject,
-            std::ptr::addr_of!(address),
+            std::ptr::addr_of!(devices_addr),
             0,
             std::ptr::null(),
             std::ptr::addr_of_mut!(data_size),
-            std::ptr::addr_of_mut!(device_id).cast(),
         )
     };
 
     #[allow(clippy::cast_possible_wrap)]
-    if status == kAudioHardwareNoError as i32 {
-        Ok(device_id)
-    } else {
-        Err(status)
+    if status != kAudioHardwareNoError as i32 || data_size == 0 {
+        return Vec::new();
     }
+
+    let device_count = data_size as usize / mem::size_of::<u32>();
+    let mut device_ids = vec![0u32; device_count];
+
+    let status = unsafe {
+        AudioObjectGetPropertyData(
+            kAudioObjectSystemObject,
+            std::ptr::addr_of!(devices_addr),
+            0,
+            std::ptr::null(),
+            std::ptr::addr_of_mut!(data_size),
+            device_ids.as_mut_ptr().cast(),
+        )
+    };
+
+    #[allow(clippy::cast_possible_wrap)]
+    if status != kAudioHardwareNoError as i32 {
+        return Vec::new();
+    }
+
+    // Filter to only devices that have input streams.
+    device_ids
+        .into_iter()
+        .filter(|&dev_id| {
+            let stream_addr = AudioObjectPropertyAddress {
+                mSelector: kAudioDevicePropertyStreams,
+                mScope: kAudioObjectPropertyScopeInput,
+                mElement: kAudioObjectPropertyElementMain,
+            };
+            let mut stream_size: u32 = 0;
+            let s = unsafe {
+                AudioObjectGetPropertyDataSize(
+                    dev_id,
+                    std::ptr::addr_of!(stream_addr),
+                    0,
+                    std::ptr::null(),
+                    std::ptr::addr_of_mut!(stream_size),
+                )
+            };
+            #[allow(clippy::cast_possible_wrap)]
+            { s == kAudioHardwareNoError as i32 && stream_size > 0 }
+        })
+        .collect()
 }
 
+/// Check if ANY input device is in use by any process.
 #[cfg(target_os = "macos")]
-fn is_mic_in_use_somewhere(device_id: u32) -> Result<bool, i32> {
+fn is_any_mic_in_use() -> bool {
     use coreaudio_sys::{
         kAudioDevicePropertyDeviceIsRunningSomewhere, kAudioHardwareNoError,
         kAudioObjectPropertyElementMain, kAudioObjectPropertyScopeGlobal,
@@ -162,51 +232,41 @@ fn is_mic_in_use_somewhere(device_id: u32) -> Result<bool, i32> {
     };
     use std::mem;
 
-    let address = AudioObjectPropertyAddress {
-        mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
-        mScope: kAudioObjectPropertyScopeGlobal,
-        mElement: kAudioObjectPropertyElementMain,
-    };
+    for device_id in all_input_device_ids() {
+        let address = AudioObjectPropertyAddress {
+            mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain,
+        };
 
-    let mut is_running: u32 = 0;
-    let mut data_size = mem::size_of::<u32>() as u32;
+        let mut is_running: u32 = 0;
+        let mut data_size = mem::size_of::<u32>() as u32;
 
-    let status = unsafe {
-        AudioObjectGetPropertyData(
-            device_id,
-            std::ptr::addr_of!(address),
-            0,
-            std::ptr::null(),
-            std::ptr::addr_of_mut!(data_size),
-            std::ptr::addr_of_mut!(is_running).cast(),
-        )
-    };
+        let status = unsafe {
+            AudioObjectGetPropertyData(
+                device_id,
+                std::ptr::addr_of!(address),
+                0,
+                std::ptr::null(),
+                std::ptr::addr_of_mut!(data_size),
+                std::ptr::addr_of_mut!(is_running).cast(),
+            )
+        };
 
-    #[allow(clippy::cast_possible_wrap)]
-    if status == kAudioHardwareNoError as i32 {
-        Ok(is_running != 0)
-    } else {
-        Err(status)
+        #[allow(clippy::cast_possible_wrap)]
+        if status == kAudioHardwareNoError as i32 && is_running != 0 {
+            return true;
+        }
     }
+
+    false
 }
 
+/// Detect running meeting apps via NSWorkspace.
+/// Returns `Some(bundle_id)` for the first known meeting/browser app found.
 #[cfg(target_os = "macos")]
 fn detect_meeting_app() -> Option<String> {
     use objc2_app_kit::NSWorkspace;
-
-    const MEETING_BUNDLE_IDS: &[&str] = &[
-        "us.zoom.xos",
-        "com.microsoft.teams",
-        "com.microsoft.teams2",
-        "com.cisco.webex.meetings",
-        "com.apple.FaceTime",
-        "com.google.Chrome",
-        "com.apple.Safari",
-        "company.thebrowser.Browser",
-        "com.microsoft.edgemac",
-        "com.brave.Browser",
-        "org.mozilla.firefox",
-    ];
 
     let workspace = NSWorkspace::sharedWorkspace();
     let running_apps = workspace.runningApplications();
@@ -215,7 +275,10 @@ fn detect_meeting_app() -> Option<String> {
         let Some(id) = app.bundleIdentifier().map(|ns| ns.to_string()) else {
             continue;
         };
-        if MEETING_BUNDLE_IDS.iter().any(|&known| known == id) {
+        if MEETING_APP_IDS.iter().any(|&known| known == id) {
+            return Some(id);
+        }
+        if BROWSER_IDS.iter().any(|&known| known == id) {
             return Some(id);
         }
     }
@@ -224,13 +287,8 @@ fn detect_meeting_app() -> Option<String> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn default_input_device_id() -> Result<u32, i32> {
-    Err(-1)
-}
-
-#[cfg(not(target_os = "macos"))]
-fn is_mic_in_use_somewhere(_device_id: u32) -> Result<bool, i32> {
-    Ok(false)
+fn is_any_mic_in_use() -> bool {
+    false
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -240,21 +298,7 @@ fn detect_meeting_app() -> Option<String> {
 
 async fn check_meeting_active() -> (bool, String) {
     tokio::task::spawn_blocking(|| {
-        let device_id = match default_input_device_id() {
-            Ok(id) => id,
-            Err(e) => {
-                tracing::warn!(status = e, "Failed to get default input device");
-                return (false, String::new());
-            }
-        };
-
-        let mic_in_use = match is_mic_in_use_somewhere(device_id) {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::warn!(status = e, "Failed to query DeviceIsRunningSomewhere");
-                return (false, String::new());
-            }
-        };
+        let mic_in_use = is_any_mic_in_use();
 
         if !mic_in_use {
             return (false, String::new());

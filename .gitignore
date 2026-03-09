@@ -109,3 +109,5 @@ temp-plugins/
 packages/lokus-plugin-cli/my-react-plugin-sixteen
 packages/lokus-plugin-cli/my-react-plugin-ten
 packages/lokus-plugin-cli/test-plugin
+src-tauri/sidecar/lokus-stt/target/
+prototype-stt/

@@ -1,24 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import {
   Mic,
-  Key,
-  Brain,
   CheckCircle,
   XCircle,
   Loader2,
-  Eye,
-  EyeOff,
   ChevronDown,
   NotebookPen,
-  Calendar,
+  Download,
 } from 'lucide-react';
-import {
-  loadProviderConfig,
-  saveProviderConfig,
-  validateApiKey,
-  getAvailableModels,
-} from '../../services/ai-provider.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -27,7 +18,6 @@ import {
 const MEETING_SETTINGS_KEY = 'lokus-meeting-settings';
 
 const DEFAULT_MEETING_SETTINGS = {
-  autoDetectCalendar: true,
   detectAdHocCalls: true,
   autoInsertSummary: true,
   summaryTemplate: 'general',
@@ -40,6 +30,16 @@ const SUMMARY_TEMPLATES = [
   { id: '1on1', label: '1:1' },
   { id: 'standup', label: 'Standup' },
 ];
+
+// STT model download states
+const STT_STATUS_LOADING   = 'loading';
+const STT_STATUS_READY     = 'ready';
+const STT_STATUS_MISSING   = 'missing';
+const STT_STATUS_ERROR     = 'error';
+
+const DOWNLOAD_IDLE        = 'idle';
+const DOWNLOAD_IN_PROGRESS = 'downloading';
+const DOWNLOAD_ERROR       = 'error';
 
 // ---------------------------------------------------------------------------
 // Small reusable primitives
@@ -123,89 +123,10 @@ function SettingRow({ label, description, children }) {
 }
 
 // ---------------------------------------------------------------------------
-// API key input with show/hide and Test button
-// ---------------------------------------------------------------------------
-
-const TEST_IDLE = 'idle';
-const TEST_LOADING = 'loading';
-const TEST_OK = 'ok';
-const TEST_FAIL = 'fail';
-
-function ApiKeyInput({ label, placeholder, value, onChange, onTest, testState, testError }) {
-  const [visible, setVisible] = useState(false);
-
-  return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-medium text-app-muted uppercase tracking-wide">
-        {label}
-      </label>
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <input
-            type={visible ? 'text' : 'password'}
-            value={value}
-            onChange={onChange}
-            placeholder={placeholder}
-            className="h-9 w-full pl-3 pr-9 rounded-md bg-app-panel border border-app-border text-app-text text-sm outline-none focus:ring-2 focus:ring-app-accent/50 placeholder:text-app-muted/60"
-            autoComplete="off"
-            spellCheck={false}
-          />
-          <button
-            type="button"
-            onClick={() => setVisible((v) => !v)}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-app-muted hover:text-app-text transition-colors"
-            tabIndex={-1}
-            aria-label={visible ? 'Hide key' : 'Show key'}
-          >
-            {visible ? (
-              <EyeOff className="w-4 h-4" />
-            ) : (
-              <Eye className="w-4 h-4" />
-            )}
-          </button>
-        </div>
-
-        <button
-          type="button"
-          onClick={onTest}
-          disabled={!value || testState === TEST_LOADING}
-          className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md border border-app-border bg-app-panel text-sm text-app-text hover:bg-app-bg transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-          aria-label={`Test ${label}`}
-        >
-          {testState === TEST_LOADING && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-          {testState === TEST_OK && <CheckCircle className="w-3.5 h-3.5 text-green-500" />}
-          {testState === TEST_FAIL && <XCircle className="w-3.5 h-3.5 text-red-500" />}
-          {testState === TEST_IDLE && <Key className="w-3.5 h-3.5" />}
-          <span>Test</span>
-        </button>
-      </div>
-
-      {testState === TEST_OK && (
-        <p className="text-xs text-green-600 dark:text-green-400">Key is valid.</p>
-      )}
-      {testState === TEST_FAIL && testError && (
-        <p className="text-xs text-red-600 dark:text-red-400">{testError}</p>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
 export default function MeetingNotes() {
-  // --- AI provider config state ---
-  const [providerConfig, setProviderConfig] = useState({
-    mode: 'lokus',
-    llmProvider: 'anthropic',
-    llmApiKey: '',
-    llmModel: 'claude-sonnet-4-20250514',
-    deepgramApiKey: '',
-    supabaseUrl: '',
-    supabaseToken: '',
-  });
-
   // --- Meeting-specific settings state ---
   const [meetingSettings, setMeetingSettings] = useState(DEFAULT_MEETING_SETTINGS);
 
@@ -214,29 +135,18 @@ export default function MeetingNotes() {
   const [devicesLoading, setDevicesLoading] = useState(true);
   const [devicesError, setDevicesError] = useState('');
 
-  // --- Loading / error ---
+  // --- Loading ---
   const [configLoading, setConfigLoading] = useState(true);
 
-  // --- API key test states ---
-  const [deepgramTestState, setDeepgramTestState] = useState(TEST_IDLE);
-  const [deepgramTestError, setDeepgramTestError] = useState('');
-  const [llmTestState, setLlmTestState] = useState(TEST_IDLE);
-  const [llmTestError, setLlmTestError] = useState('');
+  // --- STT model status ---
+  const [sttStatus, setSttStatus] = useState(STT_STATUS_LOADING);
 
-  // ---------------------------------------------------------------------------
-  // Debounce helper for text inputs
-  // ---------------------------------------------------------------------------
+  // --- Model download ---
+  const [downloadState, setDownloadState] = useState(DOWNLOAD_IDLE);
+  const [downloadProgress, setDownloadProgress] = useState(0); // 0-100
+  const [downloadError, setDownloadError] = useState('');
 
-  const debounceRef = useRef(null);
-
-  const debouncedSaveProviderConfig = useCallback((config) => {
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      saveProviderConfig(config).catch((err) => {
-        console.error('[MeetingNotes] Failed to save provider config:', err);
-      });
-    }, 300);
-  }, []);
+  const downloadUnlistenRef = useRef(null);
 
   // ---------------------------------------------------------------------------
   // Load config on mount
@@ -246,16 +156,6 @@ export default function MeetingNotes() {
     let cancelled = false;
 
     async function init() {
-      // Load AI provider config
-      try {
-        const config = await loadProviderConfig();
-        if (!cancelled) setProviderConfig(config);
-      } catch (err) {
-        console.error('[MeetingNotes] Failed to load provider config:', err);
-      } finally {
-        if (!cancelled) setConfigLoading(false);
-      }
-
       // Load meeting settings from localStorage
       try {
         const raw = localStorage.getItem(MEETING_SETTINGS_KEY);
@@ -280,10 +180,36 @@ export default function MeetingNotes() {
       } finally {
         if (!cancelled) setDevicesLoading(false);
       }
+
+      // Check STT model status
+      try {
+        const status = await invoke('get_stt_model_status');
+        if (!cancelled) {
+          const ready = status?.vadDownloaded && status?.whisperDownloaded;
+          setSttStatus(ready ? STT_STATUS_READY : STT_STATUS_MISSING);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[MeetingNotes] get_stt_model_status failed:', err);
+          setSttStatus(STT_STATUS_ERROR);
+        }
+      } finally {
+        if (!cancelled) setConfigLoading(false);
+      }
     }
 
     init();
     return () => { cancelled = true; };
+  }, []);
+
+  // Tear down the download progress listener on unmount
+  useEffect(() => {
+    return () => {
+      if (downloadUnlistenRef.current) {
+        downloadUnlistenRef.current();
+        downloadUnlistenRef.current = null;
+      }
+    };
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -298,25 +224,6 @@ export default function MeetingNotes() {
     }
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // Provider config updaters
-  // ---------------------------------------------------------------------------
-
-  /** Update a key in providerConfig and immediately persist to Tauri/localStorage. */
-  const updateProviderConfig = useCallback((patch, debounce = false) => {
-    setProviderConfig((prev) => {
-      const next = { ...prev, ...patch };
-      if (debounce) {
-        debouncedSaveProviderConfig(next);
-      } else {
-        saveProviderConfig(next).catch((err) => {
-          console.error('[MeetingNotes] Failed to save provider config:', err);
-        });
-      }
-      return next;
-    });
-  }, [debouncedSaveProviderConfig]);
-
   /** Update a key in meetingSettings and immediately persist to localStorage. */
   const updateMeetingSettings = useCallback((patch) => {
     setMeetingSettings((prev) => {
@@ -327,67 +234,48 @@ export default function MeetingNotes() {
   }, [saveMeetingSettings]);
 
   // ---------------------------------------------------------------------------
-  // Mode toggle handler — clear test states on switch
+  // STT model download
   // ---------------------------------------------------------------------------
 
-  const handleModeChange = useCallback((newMode) => {
-    setDeepgramTestState(TEST_IDLE);
-    setDeepgramTestError('');
-    setLlmTestState(TEST_IDLE);
-    setLlmTestError('');
-    updateProviderConfig({ mode: newMode });
-  }, [updateProviderConfig]);
+  const handleDownloadModel = useCallback(async () => {
+    if (downloadState === DOWNLOAD_IN_PROGRESS) return;
 
-  // ---------------------------------------------------------------------------
-  // LLM provider change — reset model to first available
-  // ---------------------------------------------------------------------------
+    setDownloadState(DOWNLOAD_IN_PROGRESS);
+    setDownloadProgress(0);
+    setDownloadError('');
 
-  const handleLlmProviderChange = useCallback((newProvider) => {
-    const models = getAvailableModels(newProvider);
-    const defaultModel = models[0]?.id ?? models[0] ?? '';
-    setLlmTestState(TEST_IDLE);
-    setLlmTestError('');
-    updateProviderConfig({ llmProvider: newProvider, llmModel: defaultModel });
-  }, [updateProviderConfig]);
-
-  // ---------------------------------------------------------------------------
-  // API key test handlers
-  // ---------------------------------------------------------------------------
-
-  const handleTestDeepgram = useCallback(async () => {
-    setDeepgramTestState(TEST_LOADING);
-    setDeepgramTestError('');
+    // Subscribe to progress events before triggering the download
     try {
-      const result = await validateApiKey('deepgram', providerConfig.deepgramApiKey);
-      setDeepgramTestState(result.valid ? TEST_OK : TEST_FAIL);
-      if (!result.valid) setDeepgramTestError(result.error ?? 'Invalid key.');
+      const unlisten = await listen('lokus:model-download-progress', ({ payload }) => {
+        const pct = typeof payload?.percent === 'number' ? payload.percent : 0;
+        setDownloadProgress(Math.min(100, Math.max(0, pct)));
+      });
+      downloadUnlistenRef.current = unlisten;
     } catch (err) {
-      setDeepgramTestState(TEST_FAIL);
-      setDeepgramTestError(err.message ?? 'Validation failed.');
+      console.error('[MeetingNotes] Failed to subscribe to download progress:', err);
     }
-  }, [providerConfig.deepgramApiKey]);
 
-  const handleTestLlm = useCallback(async () => {
-    setLlmTestState(TEST_LOADING);
-    setLlmTestError('');
     try {
-      const result = await validateApiKey(providerConfig.llmProvider, providerConfig.llmApiKey);
-      setLlmTestState(result.valid ? TEST_OK : TEST_FAIL);
-      if (!result.valid) setLlmTestError(result.error ?? 'Invalid key.');
+      await invoke('download_stt_model');
+      setSttStatus(STT_STATUS_READY);
+      setDownloadState(DOWNLOAD_IDLE);
+      setDownloadProgress(100);
     } catch (err) {
-      setLlmTestState(TEST_FAIL);
-      setLlmTestError(err.message ?? 'Validation failed.');
+      console.error('[MeetingNotes] download_stt_model failed:', err);
+      setDownloadState(DOWNLOAD_ERROR);
+      setDownloadError(err?.message ?? String(err));
+    } finally {
+      if (downloadUnlistenRef.current) {
+        downloadUnlistenRef.current();
+        downloadUnlistenRef.current = null;
+      }
     }
-  }, [providerConfig.llmProvider, providerConfig.llmApiKey]);
+  }, [downloadState]);
 
   // ---------------------------------------------------------------------------
-  // Derived values
-  // ---------------------------------------------------------------------------
-
-  const isBYOK = providerConfig.mode === 'byok';
-  const availableModels = getAvailableModels(providerConfig.llmProvider);
-
   // Default device selection when devices load
+  // ---------------------------------------------------------------------------
+
   useEffect(() => {
     if (audioDevices.length > 0 && !meetingSettings.selectedDeviceId) {
       const defaultDevice = audioDevices.find((d) => d.is_default) ?? audioDevices[0];
@@ -415,136 +303,88 @@ export default function MeetingNotes() {
       <div>
         <h1 className="text-2xl font-bold text-app-text mb-1">Meeting Notes</h1>
         <p className="text-sm text-app-muted">
-          Configure AI transcription, summarisation, and meeting detection.
+          Configure transcription, summarisation, and meeting detection.
         </p>
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Section 1: AI Provider Mode                                         */}
+      {/* Section 1: Transcription Engine                                     */}
       {/* ------------------------------------------------------------------ */}
       <section>
-        <SectionHeading icon={Brain}>AI Provider</SectionHeading>
+        <SectionHeading icon={Mic}>Transcription</SectionHeading>
 
-        <Card>
+        <Card className="space-y-4">
           <SettingRow
-            label="Use Lokus AI"
-            description="Let Lokus handle AI infrastructure. Bring your own keys for full control."
+            label="Local speech-to-text"
+            description="Whisper base.en — runs entirely on your device, no API keys needed."
           >
-            {/* Two-state toggle: left = Lokus AI (unchecked), right = BYOK (checked) */}
-            <div className="flex items-center gap-2">
-              <span className={`text-xs ${!isBYOK ? 'text-app-text font-medium' : 'text-app-muted'}`}>
-                Lokus AI
-              </span>
-              <Toggle
-                checked={isBYOK}
-                onChange={(e) => handleModeChange(e.target.checked ? 'byok' : 'lokus')}
-              />
-              <span className={`text-xs ${isBYOK ? 'text-app-text font-medium' : 'text-app-muted'}`}>
-                BYOK
-              </span>
-            </div>
+            {sttStatus === STT_STATUS_LOADING && (
+              <Loader2 className="w-4 h-4 animate-spin text-app-muted" />
+            )}
+
+            {sttStatus === STT_STATUS_READY && (
+              <div className="flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4 text-green-500" />
+                <span className="text-sm text-green-600 dark:text-green-400 font-medium">Ready</span>
+              </div>
+            )}
+
+            {sttStatus === STT_STATUS_MISSING && downloadState === DOWNLOAD_IDLE && (
+              <button
+                type="button"
+                onClick={handleDownloadModel}
+                className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md border border-app-border bg-app-panel text-sm text-app-text hover:bg-app-bg transition-colors shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download (74 MB)</span>
+              </button>
+            )}
+
+            {sttStatus === STT_STATUS_ERROR && downloadState === DOWNLOAD_IDLE && (
+              <div className="flex items-center gap-1.5">
+                <XCircle className="w-4 h-4 text-red-500" />
+                <span className="text-sm text-red-600 dark:text-red-400">Status unavailable</span>
+              </div>
+            )}
+
+            {downloadState === DOWNLOAD_IN_PROGRESS && (
+              <div className="flex items-center gap-1.5">
+                <Loader2 className="w-4 h-4 animate-spin text-app-accent" />
+                <span className="text-sm text-app-muted">{Math.round(downloadProgress)}%</span>
+              </div>
+            )}
+
+            {downloadState === DOWNLOAD_ERROR && (
+              <button
+                type="button"
+                onClick={handleDownloadModel}
+                className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md border border-red-400 bg-app-panel text-sm text-red-600 hover:bg-app-bg transition-colors shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Retry</span>
+              </button>
+            )}
           </SettingRow>
 
-          {/* Lokus AI placeholder */}
-          {!isBYOK && (
-            <div className="mt-4 pt-4 border-t border-app-border/50">
-              <p className="text-sm text-app-muted italic">
-                Coming soon — subscription tiers will appear here.
-              </p>
+          {/* Download progress bar */}
+          {downloadState === DOWNLOAD_IN_PROGRESS && (
+            <div className="w-full bg-app-bg rounded-full h-1.5">
+              <div
+                className="bg-app-accent h-1.5 rounded-full transition-all duration-300"
+                style={{ width: `${downloadProgress}%` }}
+              />
             </div>
+          )}
+
+          {/* Download error message */}
+          {downloadState === DOWNLOAD_ERROR && downloadError && (
+            <p className="text-xs text-red-600 dark:text-red-400">{downloadError}</p>
           )}
         </Card>
       </section>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Section 2: BYOK Settings                                            */}
-      {/* ------------------------------------------------------------------ */}
-      {isBYOK && (
-        <section>
-          <SectionHeading icon={Key}>API Keys</SectionHeading>
-
-          <Card className="space-y-5">
-            {/* Deepgram */}
-            <ApiKeyInput
-              label="Deepgram API Key"
-              placeholder="dg_••••••••••••••••••••••••••••••••••••••••"
-              value={providerConfig.deepgramApiKey}
-              onChange={(e) => {
-                setDeepgramTestState(TEST_IDLE);
-                setDeepgramTestError('');
-                updateProviderConfig({ deepgramApiKey: e.target.value }, true);
-              }}
-              onTest={handleTestDeepgram}
-              testState={deepgramTestState}
-              testError={deepgramTestError}
-            />
-
-            {/* Divider */}
-            <div className="border-t border-app-border/50" />
-
-            {/* LLM Provider */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-app-muted uppercase tracking-wide">
-                LLM Provider
-              </label>
-              <Select
-                value={providerConfig.llmProvider}
-                onChange={(e) => handleLlmProviderChange(e.target.value)}
-              >
-                <option value="anthropic">Anthropic</option>
-                <option value="openai">OpenAI</option>
-              </Select>
-            </div>
-
-            {/* LLM API Key */}
-            <ApiKeyInput
-              label={`${providerConfig.llmProvider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API Key`}
-              placeholder={
-                providerConfig.llmProvider === 'anthropic'
-                  ? 'sk-ant-••••••••••••••••••••••••••••••••'
-                  : 'sk-••••••••••••••••••••••••••••••••'
-              }
-              value={providerConfig.llmApiKey}
-              onChange={(e) => {
-                setLlmTestState(TEST_IDLE);
-                setLlmTestError('');
-                updateProviderConfig({ llmApiKey: e.target.value }, true);
-              }}
-              onTest={handleTestLlm}
-              testState={llmTestState}
-              testError={llmTestError}
-            />
-
-            {/* LLM Model */}
-            {availableModels.length > 0 && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-app-muted uppercase tracking-wide">
-                  Model
-                </label>
-                <Select
-                  value={providerConfig.llmModel}
-                  onChange={(e) =>
-                    updateProviderConfig({ llmModel: e.target.value })
-                  }
-                >
-                  {availableModels.map((model) => {
-                    const id = typeof model === 'string' ? model : model.id;
-                    const name = typeof model === 'string' ? model : (model.name ?? model.id);
-                    return (
-                      <option key={id} value={id}>
-                        {name}
-                      </option>
-                    );
-                  })}
-                </Select>
-              </div>
-            )}
-          </Card>
-        </section>
-      )}
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Section 3: Microphone                                               */}
+      {/* Section 2: Microphone                                               */}
       {/* ------------------------------------------------------------------ */}
       <section>
         <SectionHeading icon={Mic}>Microphone</SectionHeading>
@@ -583,29 +423,15 @@ export default function MeetingNotes() {
       </section>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Section 4: Meeting Detection                                        */}
+      {/* Section 3: Meeting Detection                                        */}
       {/* ------------------------------------------------------------------ */}
       <section>
-        <SectionHeading icon={Calendar}>Meeting Detection</SectionHeading>
+        <SectionHeading icon={Mic}>Meeting Detection</SectionHeading>
 
         <Card className="space-y-4">
           <SettingRow
-            label="Auto-detect calendar meetings"
-            description="Start recording automatically when a calendar event begins."
-          >
-            <Toggle
-              checked={meetingSettings.autoDetectCalendar}
-              onChange={(e) =>
-                updateMeetingSettings({ autoDetectCalendar: e.target.checked })
-              }
-            />
-          </SettingRow>
-
-          <div className="border-t border-app-border/50" />
-
-          <SettingRow
-            label="Detect ad-hoc calls via microphone activity"
-            description="Prompt to start a meeting note when sustained audio is detected."
+            label="Auto-detect meetings"
+            description="Detects when a meeting app is using your mic and prompts to start recording."
           >
             <Toggle
               checked={meetingSettings.detectAdHocCalls}
@@ -614,11 +440,14 @@ export default function MeetingNotes() {
               }
             />
           </SettingRow>
+          <p className="text-xs text-app-muted">
+            Works with Zoom, Teams, Google Meet, FaceTime, Slack, Webex, and browser-based calls.
+          </p>
         </Card>
       </section>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Section 5: Summary                                                  */}
+      {/* Section 4: Summary                                                  */}
       {/* ------------------------------------------------------------------ */}
       <section>
         <SectionHeading icon={NotebookPen}>Summary</SectionHeading>

@@ -22,7 +22,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "^2.0", features = [] }
 
 [dependencies]
-tauri = { version = "^2.0", features = ["protocol-asset", "tray-icon"] }
+tauri = { version = "^2.0", features = ["protocol-asset", "tray-icon", "macos-private-api"] }
 tauri-plugin-opener = "^2.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -74,15 +74,16 @@ blake3 = "1.5"
 getrandom = "0.2"
 # Compression
 zstd = "0.13"
+# Tar/bzip2 extraction for STT model downloads
+tar = "0.4"
+bzip2 = "0.4"
 # Retry logic
 backoff = { version = "0.4", features = ["tokio"] }
 # Audio capture
 cpal = "0.15"
 ringbuf = "0.4"
 bytemuck = { version = "1", features = ["derive"] }
-# WebSocket transcription
-tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
-tungstenite = "0.26"
+# Async utilities
 futures-util = "0.3"
 
 # Desktop-only dependencies (use system_configuration which is macOS-only)

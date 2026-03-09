@@ -8,7 +8,7 @@
  *
  * Responsibilities:
  *   - Driving state transitions in response to user actions and Tauri events
- *   - Starting/stopping the Rust audio capture and Deepgram transcription layer
+ *   - Starting/stopping the Rust audio capture and local STT engine
  *   - Accumulating transcript segments streamed from Tauri
  *   - Auto-stop handling when the Rust side detects meeting silence
  *   - Streaming summary generation via the LLM summary service
@@ -476,7 +476,7 @@ export function useMeetingSession() {
    *
    * Calls, in order:
    *   1. start_audio_capture  — begins mic capture in Rust
-   *   2. start_transcription  — opens the Deepgram WebSocket
+   *   2. start_stt            — starts the local Whisper STT engine
    *   3. start_meeting_monitoring — switches to active-meeting monitoring
    *
    * On any failure the Rust layer is asked to stop whatever started.
@@ -489,6 +489,29 @@ export function useMeetingSession() {
     setSummary('');
     setDuration(0);
     setIsEnding(false);
+
+    // Set recording state immediately so the MeetingPanel is visible in the
+    // sidebar — the user should see status/errors inline rather than a blank
+    // sidebar if something goes wrong.
+    setState(SESSION_STATE.RECORDING);
+
+    // Check if STT models are downloaded before attempting anything.
+    try {
+      const modelStatus = await invoke('get_stt_model_status');
+      if (!modelStatus.vadDownloaded || !modelStatus.whisperDownloaded) {
+        logError('STT models not downloaded');
+        setError('Speech models not downloaded. Go to Settings → Meeting Notes to download them.');
+        startTimeRef.current = null;
+        // Stay in RECORDING so the panel stays visible with the error.
+        // User clicks Dismiss to reset.
+        return false;
+      }
+    } catch (err) {
+      logError('get_stt_model_status failed:', err);
+      setError(`Cannot check model status: ${err.message ?? err}`);
+      startTimeRef.current = null;
+      return false;
+    }
 
     try {
       await invoke('start_audio_capture', {
@@ -503,29 +526,18 @@ export function useMeetingSession() {
       logError('start_audio_capture failed:', err);
       setError(`Failed to start audio capture: ${err.message ?? err}`);
       startTimeRef.current = null;
+      // Stay in RECORDING so panel shows the error inline.
       return false;
     }
 
     try {
-      // Load provider config to pass Deepgram credentials/mode.
-      // Dynamically imported to avoid a hard dependency at module load time
-      // and to keep the hook testable with a simple mock.
-      const { loadProviderConfig } = await import('../services/ai-provider.js');
-      const providerCfg = await loadProviderConfig();
-
-      await invoke('start_transcription', {
-        config: {
-          apiKey:   providerCfg.deepgramApiKey || '',
-          mode:     providerCfg.mode === 'lokus' ? 'proxy' : 'byok',
-          proxyUrl: providerCfg.mode === 'lokus' ? providerCfg.supabaseUrl : null,
-        },
-      });
+      await invoke('start_stt');
     } catch (err) {
-      logError('start_transcription failed:', err);
+      logError('start_stt failed:', err);
       setError(`Failed to start transcription: ${err.message ?? err}`);
-      // Best-effort rollback
       invoke('stop_audio_capture').catch(() => {});
       startTimeRef.current = null;
+      // Stay in RECORDING so panel shows the error inline.
       return false;
     }
 
@@ -537,7 +549,6 @@ export function useMeetingSession() {
       logError('start_meeting_monitoring failed (non-fatal):', err);
     }
 
-    setState(SESSION_STATE.RECORDING);
     log('Recording started');
     return true;
   }, []);
@@ -586,7 +597,7 @@ export function useMeetingSession() {
    *
    * Calls, in order:
    *   1. stop_meeting_monitoring
-   *   2. stop_transcription
+   *   2. stop_stt
    *   3. stop_audio_capture
    */
   const stopRecording = useCallback(async () => {
@@ -604,9 +615,9 @@ export function useMeetingSession() {
     }
 
     try {
-      await invoke('stop_transcription');
+      await invoke('stop_stt');
     } catch (err) {
-      logError('stop_transcription failed:', err);
+      logError('stop_stt failed:', err);
       setError(`Failed to stop transcription: ${err.message ?? err}`);
     }
 
@@ -631,7 +642,7 @@ export function useMeetingSession() {
 
     // Clean up any active Rust-side processes best-effort.
     invoke('stop_meeting_monitoring').catch(() => {});
-    invoke('stop_transcription').catch(() => {});
+    invoke('stop_stt').catch(() => {});
     invoke('stop_audio_capture').catch(() => {});
     invoke('disable_meeting_detection').catch(() => {});
 
