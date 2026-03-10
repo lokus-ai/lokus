@@ -4,12 +4,10 @@
 //! wires it to the audio pipeline:
 //!
 //! ```text
-//! [mic] ──audio.rs──► lokus:audio-chunk ──► stt_bridge.rs
-//!                                                 │
-//!                                     decode base64 i16-LE PCM
-//!                                         convert i16 → f32
-//!                                                 │
-//!                                      JSON line → lokus-stt stdin
+//! [mic] ──audio.rs──► forward_audio_to_stt() ──► stt_bridge.rs
+//!                        (direct f32 channel)           │
+//!                                                       │
+//!                                            JSON line → lokus-stt stdin
 //!                                                 │
 //!                                      lokus-stt stdout (JSON lines)
 //!                                                 │
@@ -45,11 +43,9 @@
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use tauri::{Emitter, Listener};
+use tauri::Emitter;
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::Mutex;
@@ -132,11 +128,6 @@ pub struct SttErrorPayload {
 /// The `CommandChild` is stored separately in [`CHILD_SLOT`] because its
 /// `kill()` method consumes the value by moving it out of a `Mutex<Option<_>>`.
 struct SttState {
-    /// Tauri event-listener ID for `lokus:audio-chunk`.
-    listener_id: Option<tauri::EventId>,
-    /// Sender half of the audio channel.  Dropping it closes the channel and
-    /// causes the writer task to exit.
-    audio_tx: Option<tokio::sync::mpsc::UnboundedSender<Vec<f32>>>,
     /// Set once the sidecar emits `{"type":"ready"}`.
     is_ready: bool,
     /// `true` while a session is active.
@@ -146,8 +137,6 @@ struct SttState {
 impl SttState {
     const fn new() -> Self {
         Self {
-            listener_id: None,
-            audio_tx: None,
             is_ready: false,
             is_running: false,
         }
@@ -156,6 +145,26 @@ impl SttState {
 
 static STT_STATE: Lazy<Arc<Mutex<SttState>>> =
     Lazy::new(|| Arc::new(Mutex::new(SttState::new())));
+
+/// Direct audio channel from [`crate::audio`] to the writer task.
+///
+/// Uses a `std::sync::Mutex` (not tokio) so it can be called from any context
+/// including the sync audio emitter task.
+static AUDIO_TX: std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedSender<Vec<f32>>>> =
+    std::sync::Mutex::new(None);
+
+/// Forward f32 audio samples directly from the audio capture module to STT.
+///
+/// Called by [`crate::audio`] on every chunk.  If STT is not running, this is
+/// a no-op.  The samples are sent through an unbounded channel to the writer
+/// task which serialises them to JSON and writes to the sidecar's stdin.
+pub fn forward_audio_to_stt(samples: &[f32]) {
+    if let Ok(guard) = AUDIO_TX.lock() {
+        if let Some(ref tx) = *guard {
+            let _ = tx.send(samples.to_vec());
+        }
+    }
+}
 
 /// Stores the live `CommandChild` so `stop_stt` can write to stdin and kill it.
 ///
@@ -186,15 +195,29 @@ fn whisper_model_dir() -> Result<std::path::PathBuf, String> {
 }
 
 /// Returns `true` when both the VAD model and the whisper model bundle are present.
+///
+/// The archive ships files like `base.en-encoder.int8.onnx` rather than plain
+/// `encoder.onnx`, so we use substring matching — the same approach the
+/// `lokus-stt` sidecar uses when resolving model paths at runtime.
 fn models_present() -> Result<bool, String> {
     let vad = vad_model_path()?;
     let whisper_dir = whisper_model_dir()?;
 
     let vad_ok = vad.exists() && vad.is_file();
-    let whisper_ok = whisper_dir.is_dir()
-        && whisper_dir.join("encoder.onnx").is_file()
-        && whisper_dir.join("decoder.onnx").is_file()
-        && whisper_dir.join("tokens.txt").is_file();
+
+    if !whisper_dir.is_dir() {
+        return Ok(false);
+    }
+
+    let files: Vec<String> = std::fs::read_dir(&whisper_dir)
+        .map_err(|e| format!("cannot read whisper model dir: {e}"))?
+        .filter_map(|e| e.ok())
+        .filter_map(|e| e.file_name().into_string().ok())
+        .collect();
+
+    let whisper_ok = ["encoder", "decoder", "tokens"]
+        .iter()
+        .all(|pattern| files.iter().any(|f| f.contains(pattern)));
 
     Ok(vad_ok && whisper_ok)
 }
@@ -261,53 +284,14 @@ pub async fn start_stt(app: tauri::AppHandle) -> Result<(), String> {
     // Store the child in the global slot so stop_stt can write to it / kill it.
     *CHILD_SLOT.lock().await = Some(child);
 
-    // Create the channel that bridges the audio-chunk listener to the writer task.
+    // Create the direct audio channel (audio.rs → writer task).
     let (audio_tx, audio_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<f32>>();
 
-    // Register the `lokus:audio-chunk` listener.
-    let audio_tx_listener = audio_tx.clone();
-    let listener_id = app.listen("lokus:audio-chunk", move |event: tauri::Event| {
-        let payload: Value = match serde_json::from_str(event.payload()) {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::warn!(error = %e, "stt_bridge: failed to parse audio-chunk payload");
-                return;
-            }
-        };
-
-        let data_b64 = match payload.get("data").and_then(Value::as_str) {
-            Some(s) => s.to_owned(),
-            None => {
-                tracing::warn!("stt_bridge: audio-chunk payload missing 'data' field");
-                return;
-            }
-        };
-
-        let pcm_bytes = match BASE64.decode(&data_b64) {
-            Ok(b) => b,
-            Err(e) => {
-                tracing::warn!(error = %e, "stt_bridge: base64 decode failed");
-                return;
-            }
-        };
-
-        if pcm_bytes.is_empty() || pcm_bytes.len() % 2 != 0 {
-            return;
-        }
-
-        // i16 LE PCM → f32 [-1.0, 1.0]
-        let samples: Vec<f32> = pcm_bytes
-            .chunks_exact(2)
-            .map(|b| {
-                let sample = i16::from_le_bytes([b[0], b[1]]);
-                f32::from(sample) / f32::from(i16::MAX)
-            })
-            .collect();
-
-        if audio_tx_listener.send(samples).is_err() {
-            tracing::debug!("stt_bridge: audio channel closed; listener teardown in progress");
-        }
-    });
+    // Store the sender in the static slot so `forward_audio_to_stt()` can use it.
+    {
+        let mut slot = AUDIO_TX.lock().expect("AUDIO_TX poisoned");
+        *slot = Some(audio_tx);
+    }
 
     // Writer task: audio_rx → sidecar stdin JSON lines.
     let child_slot = Arc::clone(&*CHILD_SLOT);
@@ -321,8 +305,6 @@ pub async fn start_stt(app: tauri::AppHandle) -> Result<(), String> {
     // Commit session to global state.
     {
         let mut state = STT_STATE.lock().await;
-        state.listener_id = Some(listener_id);
-        state.audio_tx = Some(audio_tx);
         state.is_running = true;
         state.is_ready = false;
     }
@@ -339,25 +321,22 @@ pub async fn start_stt(app: tauri::AppHandle) -> Result<(), String> {
 ///
 /// Safe to call when no session is active.
 #[tauri::command]
-pub async fn stop_stt(app: tauri::AppHandle) -> Result<(), String> {
-    // Take the listener ID and audio sender from state.
-    let (listener_id, audio_tx) = {
+pub async fn stop_stt(_app: tauri::AppHandle) -> Result<(), String> {
+    // Mark session as stopped.
+    {
         let mut state = STT_STATE.lock().await;
         if !state.is_running {
             return Ok(());
         }
         state.is_running = false;
         state.is_ready = false;
-        (state.listener_id.take(), state.audio_tx.take())
-    };
-
-    // Unregister the audio-chunk listener.
-    if let Some(id) = listener_id {
-        app.unlisten(id);
     }
 
-    // Closing the sender causes the writer task to exit after draining pending sends.
-    drop(audio_tx);
+    // Close the audio channel — the writer task will exit once drained.
+    {
+        let mut slot = AUDIO_TX.lock().expect("AUDIO_TX poisoned");
+        *slot = None;
+    }
 
     // Send the stop message to the sidecar.
     let stop_msg = b"{\"type\":\"stop\"}\n";
@@ -586,6 +565,7 @@ fn emit_stt_error(app: &tauri::AppHandle, error: String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 
     #[test]
     fn i16_to_f32_normalisation_bounds() {
@@ -623,7 +603,7 @@ mod tests {
 
         let tolerance = 1.0 / f32::from(i16::MAX);
         for (original, recovered) in original_f32.iter().zip(recovered.iter()) {
-            let clamped = original.max(-1.0).min(1.0);
+            let clamped = original.max(-1.0_f32).min(1.0);
             assert!(
                 (clamped - recovered).abs() <= tolerance,
                 "expected {clamped:.6} ≈ {recovered:.6} (tolerance {tolerance:.6})"

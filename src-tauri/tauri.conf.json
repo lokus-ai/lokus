@@ -47,9 +47,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": [
-      "binaries/lokus-stt"
-    ],
     "resources": [
       "../src/themes/",
       "mcp-bundle/"

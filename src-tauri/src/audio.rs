@@ -1,8 +1,7 @@
 //! Audio capture module for Lokus meeting notes.
 //!
 //! Provides microphone capture via [`cpal`] and emits raw PCM audio chunks as
-//! Tauri events so the frontend can forward them to Deepgram for real-time
-//! transcription.
+//! Tauri events so the STT sidecar can perform local real-time transcription.
 //!
 //! # Event protocol
 //!

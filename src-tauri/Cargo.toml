@@ -74,9 +74,6 @@ blake3 = "1.5"
 getrandom = "0.2"
 # Compression
 zstd = "0.13"
-# Tar/bzip2 extraction for STT model downloads
-tar = "0.4"
-bzip2 = "0.4"
 # Retry logic
 backoff = { version = "0.4", features = ["tokio"] }
 # Audio capture

@@ -125,6 +125,18 @@ export function MeetingProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.acceptPrompt]);
 
+  // Listen for "Dismiss" from the MeetingOverlay window.
+  useEffect(() => {
+    const unlisten = listen('meeting:dismiss', () => {
+      console.log('[Lokus Meeting] Overlay dismiss received');
+      session.dismissPrompt();
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.dismissPrompt]);
+
   return (
     <MeetingContext.Provider value={session}>
       {children}

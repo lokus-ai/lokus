@@ -1,15 +1,22 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 import {
   Mic,
+  Key,
   CheckCircle,
   XCircle,
   Loader2,
   ChevronDown,
   NotebookPen,
-  Download,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
+import {
+  loadProviderConfig,
+  saveProviderConfig,
+  validateApiKey,
+  getAvailableModels,
+} from '../../services/ai-provider.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -31,23 +38,15 @@ const SUMMARY_TEMPLATES = [
   { id: 'standup', label: 'Standup' },
 ];
 
-// STT model download states
-const STT_STATUS_LOADING   = 'loading';
-const STT_STATUS_READY     = 'ready';
-const STT_STATUS_MISSING   = 'missing';
-const STT_STATUS_ERROR     = 'error';
-
-const DOWNLOAD_IDLE        = 'idle';
-const DOWNLOAD_IN_PROGRESS = 'downloading';
-const DOWNLOAD_ERROR       = 'error';
+const LLM_PROVIDERS = [
+  { id: 'openai', label: 'OpenAI' },
+  { id: 'anthropic', label: 'Anthropic (Claude)' },
+];
 
 // ---------------------------------------------------------------------------
 // Small reusable primitives
 // ---------------------------------------------------------------------------
 
-/**
- * Styled <select> consistent with the rest of Preferences.jsx.
- */
 function Select({ value, onChange, children, disabled }) {
   return (
     <div className="relative">
@@ -64,9 +63,6 @@ function Select({ value, onChange, children, disabled }) {
   );
 }
 
-/**
- * Toggle switch — same visual style as the Updates section toggle.
- */
 function Toggle({ checked, onChange, disabled }) {
   return (
     <label className="relative inline-flex items-center cursor-pointer">
@@ -82,9 +78,6 @@ function Toggle({ checked, onChange, disabled }) {
   );
 }
 
-/**
- * Section header — matches "text-sm uppercase tracking-wide text-app-muted" pattern.
- */
 function SectionHeading({ icon: Icon, children }) {
   return (
     <div className="flex items-center gap-2 mb-4">
@@ -94,9 +87,6 @@ function SectionHeading({ icon: Icon, children }) {
   );
 }
 
-/**
- * Card wrapper consistent with bg-app-panel rounded-lg border border-app-border.
- */
 function Card({ children, className = '' }) {
   return (
     <div className={`bg-app-panel rounded-lg p-4 border border-app-border ${className}`}>
@@ -105,9 +95,6 @@ function Card({ children, className = '' }) {
   );
 }
 
-/**
- * Row inside a card: label on left, control on right.
- */
 function SettingRow({ label, description, children }) {
   return (
     <div className="flex items-center justify-between gap-4">
@@ -122,6 +109,51 @@ function SettingRow({ label, description, children }) {
   );
 }
 
+/**
+ * API key input with show/hide toggle and validation button.
+ */
+function ApiKeyInput({ value, onChange, onValidate, validationState, placeholder }) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="relative flex-1">
+        <input
+          type={visible ? 'text' : 'password'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="h-9 pl-3 pr-9 w-full rounded-md bg-app-panel border border-app-border text-app-text text-sm outline-none font-mono focus:ring-2 focus:ring-app-accent/50"
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-app-muted hover:text-app-text"
+        >
+          {visible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+        </button>
+      </div>
+
+      {onValidate && (
+        <button
+          type="button"
+          onClick={onValidate}
+          disabled={!value || validationState === 'validating'}
+          className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md border border-app-border bg-app-panel text-sm text-app-text hover:bg-app-bg transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {validationState === 'validating' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          {validationState === 'valid' && <CheckCircle className="w-3.5 h-3.5 text-green-500" />}
+          {validationState === 'invalid' && <XCircle className="w-3.5 h-3.5 text-red-500" />}
+          {(!validationState || validationState === 'idle') && <span>Verify</span>}
+          {validationState === 'validating' && <span>Checking</span>}
+          {validationState === 'valid' && <span>Valid</span>}
+          {validationState === 'invalid' && <span>Invalid</span>}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -130,6 +162,17 @@ export default function MeetingNotes() {
   // --- Meeting-specific settings state ---
   const [meetingSettings, setMeetingSettings] = useState(DEFAULT_MEETING_SETTINGS);
 
+  // --- AI provider config ---
+  const [deepgramKey, setDeepgramKey] = useState('');
+  const [llmProvider, setLlmProvider] = useState('openai');
+  const [llmApiKey, setLlmApiKey] = useState('');
+  const [llmModel, setLlmModel] = useState('gpt-4o-mini');
+
+  // --- Validation states ---
+  const [deepgramValidation, setDeepgramValidation] = useState('idle');
+  const [llmValidation, setLlmValidation] = useState('idle');
+  const [validationError, setValidationError] = useState('');
+
   // --- Audio devices ---
   const [audioDevices, setAudioDevices] = useState([]);
   const [devicesLoading, setDevicesLoading] = useState(true);
@@ -137,16 +180,6 @@ export default function MeetingNotes() {
 
   // --- Loading ---
   const [configLoading, setConfigLoading] = useState(true);
-
-  // --- STT model status ---
-  const [sttStatus, setSttStatus] = useState(STT_STATUS_LOADING);
-
-  // --- Model download ---
-  const [downloadState, setDownloadState] = useState(DOWNLOAD_IDLE);
-  const [downloadProgress, setDownloadProgress] = useState(0); // 0-100
-  const [downloadError, setDownloadError] = useState('');
-
-  const downloadUnlistenRef = useRef(null);
 
   // ---------------------------------------------------------------------------
   // Load config on mount
@@ -166,6 +199,19 @@ export default function MeetingNotes() {
         // ignore parse errors
       }
 
+      // Load AI provider config
+      try {
+        const config = await loadProviderConfig();
+        if (!cancelled) {
+          setDeepgramKey(config.deepgramApiKey || '');
+          setLlmProvider(config.llmProvider || 'openai');
+          setLlmApiKey(config.llmApiKey || '');
+          setLlmModel(config.llmModel || 'gpt-4o-mini');
+        }
+      } catch (err) {
+        console.error('[MeetingNotes] loadProviderConfig failed:', err);
+      }
+
       // Fetch audio devices
       try {
         const devices = await invoke('get_audio_devices');
@@ -181,35 +227,11 @@ export default function MeetingNotes() {
         if (!cancelled) setDevicesLoading(false);
       }
 
-      // Check STT model status
-      try {
-        const status = await invoke('get_stt_model_status');
-        if (!cancelled) {
-          const ready = status?.vadDownloaded && status?.whisperDownloaded;
-          setSttStatus(ready ? STT_STATUS_READY : STT_STATUS_MISSING);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          console.error('[MeetingNotes] get_stt_model_status failed:', err);
-          setSttStatus(STT_STATUS_ERROR);
-        }
-      } finally {
-        if (!cancelled) setConfigLoading(false);
-      }
+      if (!cancelled) setConfigLoading(false);
     }
 
     init();
     return () => { cancelled = true; };
-  }, []);
-
-  // Tear down the download progress listener on unmount
-  useEffect(() => {
-    return () => {
-      if (downloadUnlistenRef.current) {
-        downloadUnlistenRef.current();
-        downloadUnlistenRef.current = null;
-      }
-    };
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -224,7 +246,6 @@ export default function MeetingNotes() {
     }
   }, []);
 
-  /** Update a key in meetingSettings and immediately persist to localStorage. */
   const updateMeetingSettings = useCallback((patch) => {
     setMeetingSettings((prev) => {
       const next = { ...prev, ...patch };
@@ -234,43 +255,55 @@ export default function MeetingNotes() {
   }, [saveMeetingSettings]);
 
   // ---------------------------------------------------------------------------
-  // STT model download
+  // Save AI config whenever keys/provider/model change
   // ---------------------------------------------------------------------------
 
-  const handleDownloadModel = useCallback(async () => {
-    if (downloadState === DOWNLOAD_IN_PROGRESS) return;
-
-    setDownloadState(DOWNLOAD_IN_PROGRESS);
-    setDownloadProgress(0);
-    setDownloadError('');
-
-    // Subscribe to progress events before triggering the download
+  const saveAiConfig = useCallback(async (overrides = {}) => {
+    const config = {
+      mode: 'byok',
+      llmProvider: overrides.llmProvider ?? llmProvider,
+      llmApiKey: overrides.llmApiKey ?? llmApiKey,
+      llmModel: overrides.llmModel ?? llmModel,
+      deepgramApiKey: overrides.deepgramApiKey ?? deepgramKey,
+    };
     try {
-      const unlisten = await listen('lokus:model-download-progress', ({ payload }) => {
-        const pct = typeof payload?.percent === 'number' ? payload.percent : 0;
-        setDownloadProgress(Math.min(100, Math.max(0, pct)));
-      });
-      downloadUnlistenRef.current = unlisten;
+      await saveProviderConfig(config);
     } catch (err) {
-      console.error('[MeetingNotes] Failed to subscribe to download progress:', err);
+      console.error('[MeetingNotes] saveProviderConfig failed:', err);
     }
+  }, [llmProvider, llmApiKey, llmModel, deepgramKey]);
 
+  // ---------------------------------------------------------------------------
+  // API key validation
+  // ---------------------------------------------------------------------------
+
+  const handleValidateDeepgram = useCallback(async () => {
+    if (!deepgramKey) return;
+    setDeepgramValidation('validating');
+    setValidationError('');
     try {
-      await invoke('download_stt_model');
-      setSttStatus(STT_STATUS_READY);
-      setDownloadState(DOWNLOAD_IDLE);
-      setDownloadProgress(100);
+      const result = await validateApiKey('deepgram', deepgramKey);
+      setDeepgramValidation(result.valid ? 'valid' : 'invalid');
+      if (!result.valid) setValidationError(result.error || 'Invalid key');
     } catch (err) {
-      console.error('[MeetingNotes] download_stt_model failed:', err);
-      setDownloadState(DOWNLOAD_ERROR);
-      setDownloadError(err?.message ?? String(err));
-    } finally {
-      if (downloadUnlistenRef.current) {
-        downloadUnlistenRef.current();
-        downloadUnlistenRef.current = null;
-      }
+      setDeepgramValidation('invalid');
+      setValidationError(err.message);
     }
-  }, [downloadState]);
+  }, [deepgramKey]);
+
+  const handleValidateLlm = useCallback(async () => {
+    if (!llmApiKey) return;
+    setLlmValidation('validating');
+    setValidationError('');
+    try {
+      const result = await validateApiKey(llmProvider, llmApiKey);
+      setLlmValidation(result.valid ? 'valid' : 'invalid');
+      if (!result.valid) setValidationError(result.error || 'Invalid key');
+    } catch (err) {
+      setLlmValidation('invalid');
+      setValidationError(err.message);
+    }
+  }, [llmApiKey, llmProvider]);
 
   // ---------------------------------------------------------------------------
   // Default device selection when devices load
@@ -297,88 +330,125 @@ export default function MeetingNotes() {
     );
   }
 
+  const availableModels = getAvailableModels(llmProvider);
+
   return (
     <div className="space-y-8 max-w-xl">
       {/* Page heading */}
       <div>
         <h1 className="text-2xl font-bold text-app-text mb-1">Meeting Notes</h1>
         <p className="text-sm text-app-muted">
-          Configure transcription, summarisation, and meeting detection.
+          Configure transcription, AI summarisation, and meeting detection.
         </p>
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Section 1: Transcription Engine                                     */}
+      {/* Section 1: API Keys                                                 */}
       {/* ------------------------------------------------------------------ */}
       <section>
-        <SectionHeading icon={Mic}>Transcription</SectionHeading>
+        <SectionHeading icon={Key}>API Keys</SectionHeading>
 
-        <Card className="space-y-4">
-          <SettingRow
-            label="Local speech-to-text"
-            description="Whisper base.en — runs entirely on your device, no API keys needed."
-          >
-            {sttStatus === STT_STATUS_LOADING && (
-              <Loader2 className="w-4 h-4 animate-spin text-app-muted" />
-            )}
-
-            {sttStatus === STT_STATUS_READY && (
-              <div className="flex items-center gap-1.5">
-                <CheckCircle className="w-4 h-4 text-green-500" />
-                <span className="text-sm text-green-600 dark:text-green-400 font-medium">Ready</span>
-              </div>
-            )}
-
-            {sttStatus === STT_STATUS_MISSING && downloadState === DOWNLOAD_IDLE && (
-              <button
-                type="button"
-                onClick={handleDownloadModel}
-                className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md border border-app-border bg-app-panel text-sm text-app-text hover:bg-app-bg transition-colors shrink-0"
+        <Card className="space-y-5">
+          {/* Deepgram key */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-app-muted uppercase tracking-wide">
+              Deepgram API Key
+            </label>
+            <ApiKeyInput
+              value={deepgramKey}
+              onChange={(val) => {
+                setDeepgramKey(val);
+                setDeepgramValidation('idle');
+                saveAiConfig({ deepgramApiKey: val });
+              }}
+              onValidate={handleValidateDeepgram}
+              validationState={deepgramValidation}
+              placeholder="Enter your Deepgram API key"
+            />
+            <p className="text-xs text-app-muted">
+              Used for real-time speech-to-text transcription.{' '}
+              <a
+                href="https://console.deepgram.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-app-accent hover:underline"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span>Download (74 MB)</span>
-              </button>
-            )}
+                Get a key
+              </a>
+            </p>
+          </div>
 
-            {sttStatus === STT_STATUS_ERROR && downloadState === DOWNLOAD_IDLE && (
-              <div className="flex items-center gap-1.5">
-                <XCircle className="w-4 h-4 text-red-500" />
-                <span className="text-sm text-red-600 dark:text-red-400">Status unavailable</span>
-              </div>
-            )}
+          <div className="border-t border-app-border/50" />
 
-            {downloadState === DOWNLOAD_IN_PROGRESS && (
-              <div className="flex items-center gap-1.5">
-                <Loader2 className="w-4 h-4 animate-spin text-app-accent" />
-                <span className="text-sm text-app-muted">{Math.round(downloadProgress)}%</span>
-              </div>
-            )}
+          {/* LLM Provider */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-app-muted uppercase tracking-wide">
+              AI Summary Provider
+            </label>
+            <Select
+              value={llmProvider}
+              onChange={(e) => {
+                const provider = e.target.value;
+                const models = getAvailableModels(provider);
+                const defaultModel = models[0] || '';
+                setLlmProvider(provider);
+                setLlmModel(defaultModel);
+                setLlmValidation('idle');
+                saveAiConfig({ llmProvider: provider, llmModel: defaultModel });
+              }}
+            >
+              {LLM_PROVIDERS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </Select>
+          </div>
 
-            {downloadState === DOWNLOAD_ERROR && (
-              <button
-                type="button"
-                onClick={handleDownloadModel}
-                className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md border border-red-400 bg-app-panel text-sm text-red-600 hover:bg-app-bg transition-colors shrink-0"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Retry</span>
-              </button>
-            )}
-          </SettingRow>
+          {/* LLM API Key */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-app-muted uppercase tracking-wide">
+              {llmProvider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API Key
+            </label>
+            <ApiKeyInput
+              value={llmApiKey}
+              onChange={(val) => {
+                setLlmApiKey(val);
+                setLlmValidation('idle');
+                saveAiConfig({ llmApiKey: val });
+              }}
+              onValidate={handleValidateLlm}
+              validationState={llmValidation}
+              placeholder={`Enter your ${llmProvider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key`}
+            />
+            <p className="text-xs text-app-muted">
+              Used to generate AI meeting summaries.
+            </p>
+          </div>
 
-          {/* Download progress bar */}
-          {downloadState === DOWNLOAD_IN_PROGRESS && (
-            <div className="w-full bg-app-bg rounded-full h-1.5">
-              <div
-                className="bg-app-accent h-1.5 rounded-full transition-all duration-300"
-                style={{ width: `${downloadProgress}%` }}
-              />
-            </div>
-          )}
+          {/* LLM Model */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-app-muted uppercase tracking-wide">
+              Model
+            </label>
+            <Select
+              value={llmModel}
+              onChange={(e) => {
+                setLlmModel(e.target.value);
+                saveAiConfig({ llmModel: e.target.value });
+              }}
+            >
+              {availableModels.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </Select>
+          </div>
 
-          {/* Download error message */}
-          {downloadState === DOWNLOAD_ERROR && downloadError && (
-            <p className="text-xs text-red-600 dark:text-red-400">{downloadError}</p>
+          {/* Validation error */}
+          {validationError && (
+            <p className="text-xs text-red-600 dark:text-red-400">{validationError}</p>
           )}
         </Card>
       </section>

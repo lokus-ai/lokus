@@ -122,11 +122,26 @@ fn whisper_model_dir() -> Result<PathBuf, String> {
     Ok(models_dir()?.join("sherpa-onnx-whisper-base.en"))
 }
 
-/// Required files inside the whisper model directory.
-const WHISPER_REQUIRED_FILES: &[&str] = &["encoder.onnx", "decoder.onnx", "tokens.txt"];
+/// Patterns that must each match at least one file inside the whisper model
+/// directory.  The archive ships files like `base.en-encoder.int8.onnx` rather
+/// than plain `encoder.onnx`, so we use substring matching — the same approach
+/// the `lokus-stt` sidecar uses when resolving model paths at runtime.
+const WHISPER_REQUIRED_PATTERNS: &[&str] = &["encoder", "decoder", "tokens"];
 
 fn whisper_fully_present(dir: &Path) -> bool {
-    dir.is_dir() && WHISPER_REQUIRED_FILES.iter().all(|f| dir.join(f).is_file())
+    if !dir.is_dir() {
+        return false;
+    }
+    let files: Vec<String> = match std::fs::read_dir(dir) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .filter_map(|e| e.file_name().into_string().ok())
+            .collect(),
+        Err(_) => return false,
+    };
+    WHISPER_REQUIRED_PATTERNS
+        .iter()
+        .all(|pattern| files.iter().any(|f| f.contains(pattern)))
 }
 
 fn whisper_dir_size(dir: &Path) -> u64 {
@@ -522,7 +537,9 @@ mod tests {
         let model_dir = tmp.path().join("sherpa-onnx-whisper-base.en");
         std::fs::create_dir_all(&model_dir).unwrap();
 
-        for filename in WHISPER_REQUIRED_FILES {
+        // Create files whose names contain each required substring pattern.
+        for pattern in WHISPER_REQUIRED_PATTERNS {
+            let filename = format!("base.en-{}.int8.onnx", pattern);
             std::fs::write(model_dir.join(filename), b"fake model data").unwrap();
         }
 

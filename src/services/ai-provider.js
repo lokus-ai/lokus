@@ -12,8 +12,8 @@
  * All HTTP is done with native fetch(). No external runtime dependencies
  * are required.
  *
- * Speech-to-text is handled entirely on-device by the Rust backend
- * (local Whisper). This module covers LLM summarisation only.
+ * Speech-to-text is handled by Deepgram (BYOK). The user supplies their
+ * own Deepgram API key. This module covers LLM summarisation only.
  *
  * Provider config shape:
  * {
@@ -21,6 +21,7 @@
  *   llmProvider: 'openai' | 'anthropic',
  *   llmApiKey: string,       // BYOK only
  *   llmModel: string,        // e.g. 'gpt-4o', 'claude-sonnet-4-20250514'
+ *   deepgramApiKey: string,  // Deepgram BYOK key for STT
  *   supabaseUrl: string,     // Lokus-provided mode
  *   supabaseToken: string,   // user's Supabase JWT (Lokus-provided mode)
  * }
@@ -50,6 +51,7 @@ const EDGE_FN_LLM_SUMMARY = 'llm-summary';
 /** Direct provider API base URLs */
 const OPENAI_BASE_URL    = 'https://api.openai.com/v1';
 const ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
+const GEMINI_BASE_URL    = 'https://generativelanguage.googleapis.com/v1beta';
 
 /** Current Anthropic API version header value */
 const ANTHROPIC_API_VERSION = '2023-06-01';
@@ -178,6 +180,59 @@ async function _rustStream(provider, apiKey, model, prompt, onChunk) {
     });
   } finally {
     unlisten();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// LLM client — Gemini (direct fetch, no Rust proxy needed)
+// ---------------------------------------------------------------------------
+
+async function _geminiGenerate(apiKey, model, prompt) {
+  const url = `${GEMINI_BASE_URL}/models/${model}:generateContent?key=${apiKey}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: prompt.system }] },
+      contents: [{ role: 'user', parts: [{ text: prompt.user }] }],
+    }),
+  });
+  if (!response.ok) await _throwForStatus(response, 'Gemini generate');
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+}
+
+async function _geminiStream(apiKey, model, prompt, onChunk) {
+  const url = `${GEMINI_BASE_URL}/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: prompt.system }] },
+      contents: [{ role: 'user', parts: [{ text: prompt.user }] }],
+    }),
+  });
+  if (!response.ok) await _throwForStatus(response, 'Gemini stream');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data: ')) continue;
+      try {
+        const json = JSON.parse(trimmed.slice(6));
+        const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) onChunk(text);
+      } catch { /* skip malformed lines */ }
+    }
   }
 }
 
@@ -336,6 +391,9 @@ export function createLLMClient(config) {
         if (mode === 'lokus') {
           return await _proxyGenerate(supabaseUrl, supabaseToken, prompt, llmModel, llmProvider);
         }
+        if (llmProvider === 'gemini') {
+          return await _geminiGenerate(llmApiKey, llmModel, prompt);
+        }
         if (llmProvider === 'openai') {
           return await _openaiGenerate(llmApiKey, llmModel, prompt);
         }
@@ -359,6 +417,9 @@ export function createLLMClient(config) {
       try {
         if (mode === 'lokus') {
           return await _proxyStream(supabaseUrl, supabaseToken, prompt, llmModel, llmProvider, onChunk);
+        }
+        if (llmProvider === 'gemini') {
+          return await _geminiStream(llmApiKey, llmModel, prompt, onChunk);
         }
         if (llmProvider === 'openai') {
           return await _openaiStream(llmApiKey, llmModel, prompt, onChunk);
@@ -422,6 +483,11 @@ export async function validateApiKey(provider, apiKey) {
  */
 export function getAvailableModels(provider) {
   const models = {
+    gemini: [
+      'gemini-2.0-flash',
+      'gemini-2.0-flash-lite',
+      'gemini-1.5-flash',
+    ],
     openai: [
       'gpt-4o',
       'gpt-4o-mini',
@@ -454,10 +520,11 @@ export function getAvailableModels(provider) {
  */
 export function getProviderConfig() {
   const defaults = {
-    mode: 'lokus',
-    llmProvider: 'anthropic',
+    mode: 'byok',
+    llmProvider: 'openai',
     llmApiKey: '',
-    llmModel: 'claude-sonnet-4-20250514',
+    llmModel: 'gpt-4o-mini',
+    deepgramApiKey: '',
     supabaseUrl: import.meta.env?.VITE_SUPABASE_URL ?? '',
     supabaseToken: '',
   };
@@ -488,7 +555,7 @@ export async function saveProviderConfig(config) {
     throw new Error('saveProviderConfig: config must be an object.');
   }
 
-  const { llmApiKey, supabaseToken, ...nonSensitive } = config;
+  const { llmApiKey, deepgramApiKey, supabaseToken, ...nonSensitive } = config;
 
   // Always persist non-sensitive fields to localStorage for fast reads
   try {
@@ -505,8 +572,9 @@ export async function saveProviderConfig(config) {
       // Dynamic import so the module doesn't break in browser-only environments
       const { invoke } = await import('@tauri-apps/api/core');
       const keysToStore = {
-        'ai-llm-api-key':    llmApiKey    ?? '',
-        'ai-supabase-token': supabaseToken ?? '',
+        'ai-llm-api-key':      llmApiKey      ?? '',
+        'ai-deepgram-api-key': deepgramApiKey  ?? '',
+        'ai-supabase-token':   supabaseToken   ?? '',
       };
 
       for (const [key, value] of Object.entries(keysToStore)) {
@@ -541,8 +609,9 @@ export async function saveProviderConfig(config) {
     );
   }
   try {
-    if (llmApiKey     !== undefined) localStorage.setItem('lokus-ai-secure-ai-llm-api-key',    llmApiKey);
-    if (supabaseToken !== undefined) localStorage.setItem('lokus-ai-secure-ai-supabase-token',  supabaseToken);
+    if (llmApiKey      !== undefined) localStorage.setItem('lokus-ai-secure-ai-llm-api-key',      llmApiKey);
+    if (deepgramApiKey !== undefined) localStorage.setItem('lokus-ai-secure-ai-deepgram-api-key', deepgramApiKey);
+    if (supabaseToken  !== undefined) localStorage.setItem('lokus-ai-secure-ai-supabase-token',   supabaseToken);
   } catch (error) {
     logger.error('AIProvider', 'saveProviderConfig failed to write sensitive fields:', error);
     throw new Error(`Failed to save API keys: ${error.message}`);
@@ -564,8 +633,9 @@ export async function loadProviderConfig() {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       const sensitiveKeys = {
-        llmApiKey:     'ai-llm-api-key',
-        supabaseToken: 'ai-supabase-token',
+        llmApiKey:      'ai-llm-api-key',
+        deepgramApiKey: 'ai-deepgram-api-key',
+        supabaseToken:  'ai-supabase-token',
       };
 
       for (const [configField, storeKey] of Object.entries(sensitiveKeys)) {
@@ -586,8 +656,9 @@ export async function loadProviderConfig() {
   }
 
   // Non-Tauri: read from localStorage
-  config.llmApiKey     = localStorage.getItem('lokus-ai-secure-ai-llm-api-key')    ?? config.llmApiKey;
-  config.supabaseToken = localStorage.getItem('lokus-ai-secure-ai-supabase-token')  ?? config.supabaseToken;
+  config.llmApiKey      = localStorage.getItem('lokus-ai-secure-ai-llm-api-key')      ?? config.llmApiKey;
+  config.deepgramApiKey = localStorage.getItem('lokus-ai-secure-ai-deepgram-api-key') ?? config.deepgramApiKey;
+  config.supabaseToken  = localStorage.getItem('lokus-ai-secure-ai-supabase-token')   ?? config.supabaseToken;
 
   return config;
 }

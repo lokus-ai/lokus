@@ -42,8 +42,12 @@ export default function MeetingOverlay() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const handleClose = () => {
+  const handleClose = async () => {
     setIsClosing(true);
+    try {
+      const { emit } = await import('@tauri-apps/api/event');
+      await emit('meeting:dismiss');
+    } catch (_) {}
     setTimeout(() => {
       invoke('close_meeting_overlay').catch(() => {});
     }, 150);

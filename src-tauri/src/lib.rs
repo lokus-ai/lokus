@@ -39,8 +39,6 @@ pub(crate) mod file_locking;
 mod macos;
 mod audio;
 mod meeting_detector;
-mod stt_bridge;
-mod model_downloader;
 mod notifications;
 
 #[cfg(desktop)]
@@ -1138,12 +1136,6 @@ pub fn run() {
       meeting_detector::dismiss_detection,
       meeting_detector::start_meeting_monitoring,
       meeting_detector::stop_meeting_monitoring,
-      // Local STT commands
-      stt_bridge::start_stt,
-      stt_bridge::stop_stt,
-      // Model management commands
-      model_downloader::get_stt_model_status,
-      model_downloader::download_stt_model,
       // Native notification commands
       notifications::request_notification_permission_cmd,
       notifications::send_native_notification,
