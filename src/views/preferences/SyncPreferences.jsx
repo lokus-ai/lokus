@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { syncEngine } from '../../core/sync/SyncEngine';
 import { keyManager } from '../../core/sync/KeyManager';
 import { offlineQueue } from '../../core/sync/OfflineQueue';
+import { workspaceRegistry } from '../../core/sync/WorkspaceRegistry';
 import { Cloud, CloudOff, RefreshCw, Shield, HardDrive, Clock, FileText, Loader2, CheckCircle2, AlertTriangle, FolderSync, WifiOff } from 'lucide-react';
 
 function formatBytes(bytes) {
@@ -24,6 +25,13 @@ function formatTimeAgo(dateStr) {
   return `${days}d ago`;
 }
 
+function formatCooldown(ms) {
+  const hours = Math.floor(ms / (60 * 60 * 1000));
+  const mins = Math.floor((ms % (60 * 60 * 1000)) / 60000);
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}
+
 export default function SyncPreferences({ isAuthenticated, isGuest, userId, workspacePath: workspacePathProp }) {
   const [syncStatus, setSyncStatus] = useState('idle');
   const [remoteStats, setRemoteStats] = useState(null);
@@ -31,21 +39,20 @@ export default function SyncPreferences({ isAuthenticated, isGuest, userId, work
   const [syncing, setSyncing] = useState(false);
   const [enabling, setEnabling] = useState(false);
   const [disabling, setDisabling] = useState(false);
-  const [syncedWorkspace, setSyncedWorkspace] = useState(null); // { workspace_id, name } from registry
+  const [syncedWorkspace, setSyncedWorkspace] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [cooldown, setCooldown] = useState(null); // { canSwitch, remainingMs }
 
-  // Use prop as fallback when singleton lost state (e.g. HMR reload, separate window)
   const effectivePath = syncEngine.workspacePath || workspacePathProp || null;
 
   const currentWorkspaceName = effectivePath
     ? effectivePath.split(/[/\\]/).filter(Boolean).pop()
     : 'this workspace';
 
-  const isSyncedHere = syncEngine.syncEnabled; // current open workspace is the synced one
+  const isSyncedHere = syncEngine.syncEnabled;
 
   const loadData = useCallback(async () => {
-    // Re-initialize syncEngine + keyManager if they lost state (HMR, separate window)
     if (!syncEngine.workspacePath && workspacePathProp && userId) {
       await syncEngine.init(workspacePathProp, userId);
       await keyManager.initialize(userId);
@@ -53,6 +60,15 @@ export default function SyncPreferences({ isAuthenticated, isGuest, userId, work
     setLoading(true);
     const ws = await syncEngine.getSyncedWorkspace(userId);
     setSyncedWorkspace(ws);
+
+    // Check cooldown if there's a registered workspace and this isn't the synced one
+    if (ws && !syncEngine.syncEnabled) {
+      const cd = await workspaceRegistry.checkCooldown(userId);
+      setCooldown(cd);
+    } else {
+      setCooldown(null);
+    }
+
     if (syncEngine.syncEnabled) {
       setLoadingStats(true);
       const stats = await syncEngine.getRemoteStats();
@@ -82,6 +98,15 @@ export default function SyncPreferences({ isAuthenticated, isGuest, userId, work
   }, [isAuthenticated, isGuest, loadData]);
 
   const handleEnableSync = async () => {
+    // Check cooldown when switching workspaces
+    if (syncedWorkspace && !isSyncedHere) {
+      const cd = await workspaceRegistry.checkCooldown(userId);
+      if (!cd.canSwitch) {
+        setCooldown(cd);
+        return;
+      }
+    }
+
     setEnabling(true);
     try {
       await syncEngine.enableSync(userId);
@@ -263,10 +288,10 @@ export default function SyncPreferences({ isAuthenticated, isGuest, userId, work
                 {syncEngine.lastSyncResult.downloaded > 0 && (
                   <span>↓ {syncEngine.lastSyncResult.downloaded} downloaded</span>
                 )}
-                {syncEngine.lastSyncResult.merged > 0 && (
-                  <span>⇄ {syncEngine.lastSyncResult.merged} merged</span>
+                {syncEngine.lastSyncResult.deleted > 0 && (
+                  <span>✗ {syncEngine.lastSyncResult.deleted} deleted</span>
                 )}
-                {syncEngine.lastSyncResult.uploaded === 0 && syncEngine.lastSyncResult.downloaded === 0 && syncEngine.lastSyncResult.merged === 0 && (
+                {syncEngine.lastSyncResult.uploaded === 0 && syncEngine.lastSyncResult.downloaded === 0 && (syncEngine.lastSyncResult.deleted || 0) === 0 && (
                   <span>Everything up to date</span>
                 )}
               </div>
@@ -325,38 +350,26 @@ export default function SyncPreferences({ isAuthenticated, isGuest, userId, work
       )}
 
       {/* ================================================================ */}
-      {/* STATE 3: Sync enabled but for a DIFFERENT workspace */}
+      {/* STATE 3: Sync enabled but for a DIFFERENT workspace (read-only) */}
       {/* ================================================================ */}
       {syncedWorkspace && !isSyncedHere && (
         <div className="bg-app-panel border border-app-border rounded-xl p-6">
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
-              <AlertTriangle className="w-5 h-5 text-amber-500" />
+            <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+              <FolderSync className="w-5 h-5 text-blue-500" />
             </div>
             <div className="flex-1">
               <p className="text-sm font-medium text-app-text mb-1">
-                Sync is enabled for "{syncedWorkspace.name}"
+                Syncing "{syncedWorkspace.name}"
               </p>
-              <p className="text-sm text-app-muted mb-4">
-                You're currently viewing "{currentWorkspaceName}". Only one workspace can be synced at a time.
-                Switching will stop syncing "{syncedWorkspace.name}" and start syncing this workspace instead.
+              <p className="text-sm text-app-muted mb-1">
+                Open "{syncedWorkspace.name}" to manage sync settings.
               </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={handleEnableSync}
-                  disabled={enabling}
-                  className="px-4 py-2 text-sm font-medium bg-app-accent text-app-accent-fg rounded-lg hover:bg-app-accent/90 transition-colors disabled:opacity-50"
-                >
-                  {enabling ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Switching...
-                    </span>
-                  ) : (
-                    `Switch to "${currentWorkspaceName}"`
-                  )}
-                </button>
-              </div>
+              {cooldown && !cooldown.canSwitch && (
+                <p className="text-xs text-amber-500 mt-2">
+                  You switched recently. Try again in {formatCooldown(cooldown.remainingMs)}.
+                </p>
+              )}
             </div>
           </div>
         </div>

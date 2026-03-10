@@ -2,11 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- ============================================ -->
-	<!-- NOTE: com.apple.application-identifier and  -->
-	<!-- com.apple.developer.team-identifier are     -->
-	<!-- provided by the provisioning profile        -->
-	<!-- ============================================ -->
+	<!-- Application identity (must match provisioning profile) -->
+	<key>com.apple.application-identifier</key>
+	<string>UH5Z2K4G9H.io.lokus.app</string>
+	<key>com.apple.developer.team-identifier</key>
+	<string>UH5Z2K4G9H</string>
+
 	<!-- REQUIRED: App Store Sandbox                  -->
 	<!-- All App Store apps MUST include this         -->
 	<!-- ============================================ -->

@@ -37,18 +37,15 @@ export class OfflineQueue {
     }
   }
 
-  /** Add files to the offline queue */
   async enqueue(relativePaths) {
     for (const p of relativePaths) this.queue.add(p);
     await this.save();
   }
 
-  /** Return queue contents without clearing */
   peekAll() {
     return [...this.queue];
   }
 
-  /** Drain all queued paths and clear */
   async drain() {
     const paths = [...this.queue];
     this.queue.clear();

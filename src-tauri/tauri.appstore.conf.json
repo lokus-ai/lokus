@@ -23,7 +23,11 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https: wss:; media-src 'self' data: blob:; object-src 'none'; frame-src 'self' blob:; base-uri 'self'; form-action 'none'; upgrade-insecure-requests;"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' asset: https://asset.localhost blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob: asset: https://asset.localhost; font-src 'self' data:; connect-src 'self' https: wss: asset: https://asset.localhost; media-src 'self' data: blob: asset: https://asset.localhost; object-src 'none'; frame-src 'self' blob:; base-uri 'self'; form-action 'none'; upgrade-insecure-requests;",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$HOME/.lokus/**", "$DOCUMENT/**", "$DESKTOP/**", "$DOWNLOAD/**", "$PICTURE/**"]
+      }
     }
   },
   "bundle": {
@@ -48,7 +52,8 @@
       "exceptionDomain": "",
       "signingIdentity": "3rd Party Mac Developer Application: Pratham Patel (UH5Z2K4G9H)",
       "hardenedRuntime": false,
-      "entitlements": "entitlements-appstore.plist"
+      "entitlements": "entitlements-appstore.plist",
+      "infoPlist": "Info.plist"
     },
     "category": "public.app-category.productivity"
   },
