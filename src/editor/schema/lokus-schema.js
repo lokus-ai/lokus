@@ -568,6 +568,56 @@ const nodes = {
     },
   },
 
+  // -- Graph link (inline atom) ----------------------------------------------
+  graphLink: {
+    group: 'inline',
+    inline: true,
+    atom: true,
+    selectable: true,
+    attrs: {
+      id: { default: '' },
+      graphName: { default: '' },
+      graphPath: { default: '' },
+      exists: { default: false },
+      expressions: { default: '' },
+    },
+    parseDOM: [{
+      tag: 'span[data-type="graph-link"]',
+      getAttrs(dom) {
+        return {
+          id: '',
+          graphName: dom.textContent?.trim() || '',
+          graphPath: dom.getAttribute('href') || '',
+          exists: !dom.classList.contains('graph-link-broken'),
+        }
+      },
+    }, {
+      tag: 'a[data-type="graph-link"]',
+      getAttrs(dom) {
+        return {
+          id: '',
+          graphName: dom.textContent?.trim() || '',
+          graphPath: dom.getAttribute('href') || '',
+          exists: !dom.classList.contains('graph-link-broken'),
+        }
+      },
+    }],
+    toDOM(node) {
+      const { graphName, graphPath, exists } = node.attrs
+      const className = exists ? 'graph-link' : 'graph-link graph-link-broken'
+      return [
+        'span',
+        {
+          'data-type': 'graph-link',
+          class: className,
+          href: graphPath || graphName,
+          style: 'cursor: pointer',
+        },
+        graphName,
+      ]
+    },
+  },
+
   // -- Callout (block with children) -----------------------------------------
   callout: {
     group: 'block',

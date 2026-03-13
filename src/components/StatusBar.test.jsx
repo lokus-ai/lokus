@@ -13,10 +13,6 @@ vi.mock('../hooks/useStatusBar', () => ({
     })
 }))
 
-// Mock SyncStatus component
-vi.mock('./Auth/SyncStatus.jsx', () => ({
-    default: () => <div data-testid="sync-status">Sync</div>
-}))
 
 describe('StatusBar Component', () => {
     const defaultProps = {
@@ -36,7 +32,6 @@ describe('StatusBar Component', () => {
         expect(screen.getByText('Ready')).toBeInTheDocument()
         expect(screen.getByText('Markdown')).toBeInTheDocument()
         expect(screen.getByText('Settings')).toBeInTheDocument()
-        expect(screen.getByTestId('sync-status')).toBeInTheDocument()
     })
 
     it('should display active file name', () => {

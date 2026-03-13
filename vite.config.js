@@ -10,6 +10,7 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "jsxgraph/distrib/jsxgraph.css": path.resolve(__dirname, "node_modules/jsxgraph/distrib/jsxgraph.css"),
     },
   },
 

@@ -27,6 +27,8 @@ import { usePlugins } from '../hooks/usePlugins.jsx';
 import { useTheme } from '../hooks/theme.jsx';
 import { useFeatureFlags } from '../contexts/RemoteConfigContext';
 import dailyNotesManager from '../core/daily-notes/manager.js';
+import { syncScheduler } from '../core/sync/SyncScheduler';
+import { useAuth } from '../core/auth/AuthContext';
 
 // Sub-components
 import WorkspaceShell from './WorkspaceShell';
@@ -96,6 +98,15 @@ function WorkspaceInner({ path }) {
   useEffect(() => {
     if (path) dailyNotesManager.init(path);
   }, [path]);
+
+  // Initialize cloud sync when workspace opens with authenticated user
+  const { isAuthenticated, isGuest, user } = useAuth();
+  useEffect(() => {
+    if (path && isAuthenticated && !isGuest && user?.id) {
+      syncScheduler.start(path, user.id);
+    }
+    return () => syncScheduler.stop();
+  }, [path, isAuthenticated, isGuest, user?.id]);
 
   // Sync feature flags to globalThis for non-React code (slash commands, shortcuts)
   useEffect(() => {
@@ -212,6 +223,7 @@ function WorkspaceInner({ path }) {
                 onOpenPluginDetail={handleOpenPluginDetail}
                 onCreateKanban={fileOps.handleCreateKanban}
                 onKanbanBoardAction={fileOps.handleKanbanBoardAction}
+                onCreateGraph={fileOps.handleCreateGraph}
                 editorGroupsUpdateTabPath={(old, next) =>
                   useEditorGroupStore.getState().updateTabPath(old, next)
                 }

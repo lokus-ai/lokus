@@ -5,71 +5,39 @@ All notable changes to Lokus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.0] - 2026-03-02
+## [1.2.0] - 2026-03-12
 
-### Editor
-- **ProseMirror Migration** — Replaced TipTap with raw ProseMirror for full control over the editing pipeline. All extensions (slash commands, wiki links, callouts, code blocks, tables, markdown paste, mermaid) ported to native ProseMirror plugins.
-- **Per-Tab Editor State** — Each tab now has independent undo history, cursor position, and scroll state. Switching tabs preserves your exact editing context.
-- **Crash-Proof Editor** — Malformed or corrupt markdown files no longer crash the editor. Error boundaries catch failures gracefully with per-block content recovery.
-- **Input Rules & Suggestions** — Fixed markdown shortcuts (headings, lists, code blocks) and autocomplete popups that broke during the ProseMirror migration.
+### Math Graphing System
+- `.graph` file format — JSON-based graph files with expressions, variables, viewport, and settings
+- MathGraphEditor — full Desmos-style graph editor with 2D plotting via JSXGraph + math.js
+- Expression engine — parses explicit (`y=`), implicit, parametric, polar, and 3D surface types
+- Sliders and variables — interactive parameter controls in the graph sidebar
+- Graph sidebar — expression list, color picker, visibility toggles, variable sliders
+- Viewport sanity checks — clamps blown-out ranges, prevents feedback loops from function domains
 
-### Canvas
-- **Excalidraw Canvas** — Replaced TLDraw with Excalidraw for drawing and diagramming. Full support for shapes, arrows, text, freehand, and collaboration-ready state format.
+### Graph Embedding in Markdown
+- `<<expression>>@file.graph` syntax — type expressions inline, pick a .graph file from dropdown
+- `<<` Tab completion — ghost text hints guide through the template (`y=expr>>@file.graph`)
+- `>>@` dropdown — shows only `.graph` files with KaTeX-rendered math expressions instead of filenames
+- "Create new graph" button in dropdown — inline input to name and create a new .graph file on the spot
+- GraphLink node — inline atom in ProseMirror, renders expressions with KaTeX + teal waveform icon
+- Click to open — clicking a graph link opens the `.graph` file in a new editor tab
+- Hover preview — floating popup with SVG-rendered graph thumbnail (grid, axes, colored curves)
+- Preview generator — pure SVG rendering from graph data without JSXGraph, with 5-min TTL cache
 
-### Themes
-- **4 Distinctive Themes** — Lokus Dark, Lokus Light, Rose Pine, and Tokyo Night. Each theme is a complete, cohesive palette across all surfaces (editor, sidebar, modals, canvas, graph, kanban, tasks).
-- **Custom Theme Support** — Drop `.json` theme files into `~/.lokus/themes/` and they appear in the theme picker automatically.
-
-### Import System
-- **Unified Importer Pipeline** — Complete rewrite using Parser → IR → Transformer architecture. All three platforms (Obsidian, Logseq, Roam) now use the same intermediate representation.
-- **Obsidian Import** — Full conversion of callouts, dataview queries (preserved in info callouts), comments, Tasks plugin metadata, and `.canvas` → `.excalidraw` files.
-- **Logseq Import** — Outline-to-heading conversion, `parent/child` namespace → folder structure, block reference resolution, task state mapping (TODO/DOING/DONE/LATER/NOW/WAIT/CANCELLED).
-- **Roam Import** — JSON export parsing, date page titles → `daily-notes/YYYY-MM-DD.md`, nested block hierarchy, `{{[[TODO]]}}` task conversion, multi-word tag slugification.
-- **Zero Data Loss** — Unsupported syntax is wrapped in `> [!info]` callouts, never deleted.
-- **Asset Handling** — Attachments copied to `attachments/` directory with path remapping.
-
-### Authentication & Preferences
-- **Guest Mode** — "Continue as Guest" bypasses authentication for fully local, offline usage.
-- **Preferences Sign-In** — Fixed inline authentication flow in Account section. Sign-in form works directly in preferences without browser redirect.
-- **Window Reopen Fix** — Preferences window now reopens correctly after being closed.
-
-### Feature Flags
-- **Remote Feature Flags** — ~85% of app features controlled via server-side flags. Includes kill switches for Canvas, Plugins, Sync, and AI Assistant.
-
-### Architecture
-- **Workspace Refactor** — Workspace.jsx reduced from monolith to ~240-line orchestrator. State split into 4 independent Zustand stores. 6 sub-components extracted with error boundaries.
-- **Bases & Graph as Tabs** — Database and graph views now render as tabs instead of full-screen view swaps, keeping the file explorer sidebar visible.
-
-### Calendar & Tasks
-- **Task Calendar Scheduling** — Tasks with due dates appear on the calendar view.
-- **Meeting Attendee Linking** — Calendar meeting attendees auto-link to people pages.
-- **AI Meeting Notes** — Auto-detection, transcription, and smart summaries for meeting notes.
-- **Callout Customization** — Configurable callout styles in Preferences.
-
-### Security
-- **Filesystem Scope Hardening** — Narrowed Tauri FS permissions from `$HOME/**` to specific directories (`~/.lokus`, Documents, Desktop, Downloads).
-- **Asset Protocol Scope** — Restricted asset protocol access to `$HOME/.lokus/**` instead of entire home directory.
-- **Auth Token File Permissions** — OAuth callback files written with `0600` (owner-only) permissions on Unix.
-- **Sensitive Log Redaction** — Auth callback URLs no longer logged with tokens/codes.
-- **Dead Code Removal** — Removed unused `admin.deleteUser()` call from AuthManager; uses server-side RPC only.
-- **Workspace Path Validation** — All Tauri IPC file commands validate workspace paths to prevent traversal.
-- **Rust Error Handling** — Replaced 22 `unwrap()` calls with proper error handling.
-
-### Quality
-- **Test Suite** — 2246 tests passing, 0 failures across 115 files. Fixed all 136 broken tests from ProseMirror migration, plugin permission mismatches, and component mock issues.
-- **ESLint** — 0 errors across entire `src/` directory.
-- **Dependencies** — Resolved critical jspdf vulnerability, updated MCP SDK, ran npm audit fix. 16 remaining vulnerabilities are all dev-only or locked to Excalidraw transitive deps.
+### Sync V2
+- Manifest-based sync replacing per-file DB rows
+- 1 workspace per user model with 6-hour cooldown on switches
+- Offline queue with reconnect drain
+- Cross-window mutex via localStorage heartbeat
+- Soft delete to `.lokus/trash/` with 30-day cleanup
 
 ### Bug Fixes
-- Fixed plugin API permission name mismatches (singular vs plural)
-- Fixed TaskAPI.js using wrong permission names (`commands:register` → `tasks:register`)
-- Fixed TabBar CSS classes and KanbanList caching
-- Fixed Apple App Store compliance issues (entitlements, capabilities, signing)
-- Fixed update checker bugs and preferences window reopen
-- Fixed mobile tab close button visibility on touch devices
-- Fixed mobile workspace validation and logging issues
-- Fixed iOS plugin panel width responsiveness
-- Resolved top user-reported bugs and removed discontinued features
+- Fixed GraphFileManager path resolution — relative paths now resolve against workspace root
+- Fixed `lokus:open-file` event passing object instead of string path
+- Fixed ProseMirror nodeView stale closure — added `update()` method for live attr updates
+- Fixed setState-during-render warning in MathGraphEditor
+- Fixed hardcoded function domain (-1000, 1000) blowing out saved viewports
 
 ## [1.0.2] - 2026-03-01
 

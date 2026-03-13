@@ -26,6 +26,41 @@
 }
 
 /* ========================================
+   Graph Link Styles (teal/cyan color to differentiate from canvas/wiki)
+   ======================================== */
+
+.graph-link {
+  display: inline;
+  padding: 0.125rem 0.25rem;
+  background: rgba(20, 184, 166, 0.1);
+  border-radius: 3px;
+  color: rgb(20, 184, 166);
+  font-size: inherit;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(20, 184, 166, 0.5);
+}
+
+.graph-link:hover {
+  background: rgba(20, 184, 166, 0.2);
+  color: rgb(45, 212, 191);
+  border-bottom-color: rgb(45, 212, 191);
+}
+
+.graph-link-broken {
+  color: rgb(20, 184, 166);
+  opacity: 0.6;
+  border-bottom-style: dotted;
+  cursor: pointer;
+}
+
+.graph-link:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
+}
+
+/* ========================================
    Broken Canvas Link - subtle styling, no strikethrough
    ======================================== */
 

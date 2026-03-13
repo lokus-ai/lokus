@@ -7,6 +7,8 @@ import blockIdManager from '../../core/blocks/block-id-manager.js'
 import { insertContent } from '../commands/index.js'
 import { useEditorGroupStore } from '../../stores/editorGroups.js'
 import referenceWorkerClient from '../../workers/referenceWorkerClient.js'
+import { createExpression, DEFAULT_COLORS } from '../../core/mathgraph/schema.js'
+import { createNewGraphFile, saveGraphFile, loadGraphFile } from '../../core/mathgraph/GraphFileManager.js'
 
 const WIKI_SUGGESTION_KEY = new PluginKey('wikiLinkSuggestion')
 export const IMAGE_EMBED_KEY = new PluginKey('imageEmbedSuggestion')
@@ -18,6 +20,12 @@ function getIndex() {
   const list = (globalThis.__LOKUS_FILE_INDEX__ || [])
   if (!Array.isArray(list)) return []
   return list.filter(f => LINKABLE_EXT.test(f.path))
+}
+
+function getGraphIndex() {
+  const list = (globalThis.__LOKUS_FILE_INDEX__ || [])
+  if (!Array.isArray(list)) return []
+  return list.filter(f => f.path.endsWith('.graph'))
 }
 
 async function getFileBlocks(fileName) {
@@ -955,8 +963,8 @@ export function createWikiLinkSuggestPlugins(view) {
         const active = (globalThis.__LOKUS_ACTIVE_FILE__ || '')
         const idx = getIndex()
 
-        // Filter to only canvas files
-        const canvasFiles = idx.filter(f => f.path.endsWith('.excalidraw') || f.path.endsWith('.canvas'))
+        // Filter to canvas and graph files
+        const canvasFiles = idx.filter(f => f.path.endsWith('.excalidraw') || f.path.endsWith('.canvas') || f.path.endsWith('.graph'))
 
         // Clean query
         const cleanQuery = query.toLowerCase()
@@ -999,21 +1007,34 @@ export function createWikiLinkSuggestPlugins(view) {
         const hasClosingBracket = textAfter.startsWith(']')
         const deleteEnd = hasClosingBracket ? to + 1 : to
 
-        const fileName = props.title || props.path.split('/').pop()?.replace(/\.(excalidraw|canvas)$/, '')
         const fullPath = props.path || ''
+        const isGraph = fullPath.endsWith('.graph')
+        const fileName = props.title || props.path.split('/').pop()?.replace(/\.(excalidraw|canvas|graph)$/, '')
 
-        // Delete ![...] and insert CanvasLink node
+        // Delete ![...] and insert appropriate node type
         const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
-        focusDeleteAndInsert(editorView, from, deleteEnd, {
-          type: 'canvasLink',
-          attrs: {
-            id,
-            canvasName: fileName,
-            canvasPath: fullPath,
-            thumbnailUrl: '',
-            exists: true
-          }
-        })
+        if (isGraph) {
+          focusDeleteAndInsert(editorView, from, deleteEnd, {
+            type: 'graphLink',
+            attrs: {
+              id,
+              graphName: fileName,
+              graphPath: fullPath,
+              exists: true,
+            }
+          })
+        } else {
+          focusDeleteAndInsert(editorView, from, deleteEnd, {
+            type: 'canvasLink',
+            attrs: {
+              id,
+              canvasName: fileName,
+              canvasPath: fullPath,
+              thumbnailUrl: '',
+              exists: true
+            }
+          })
+        }
       },
       render: createWikiLinkRender(),
     }),
@@ -1088,6 +1109,179 @@ export function createWikiLinkSuggestPlugins(view) {
         }
       },
       render: createWikiLinkRender(),
+    }),
+
+    // Plugin 5: Handle >>@ for graph file suggestions
+    // Triggers when user types @ after >> (inside a <<expressions>> pattern)
+    createSuggestionPlugin({
+      pluginKey: new PluginKey('graphFileSuggestion'),
+      editor: view,
+      char: '@',
+      allowSpaces: false,
+      startOfLine: false,
+      allowedPrefixes: ['>'],
+      allow: ({ state }) => {
+        const $pos = state.selection.$from
+        const textBefore = state.doc.textBetween($pos.start(), $pos.pos)
+        // Must have <<...>>@ pattern
+        return /<<[^>]+>>@[^@]*$/.test(textBefore)
+      },
+      items: async ({ query }) => {
+        const active = (globalThis.__LOKUS_ACTIVE_FILE__ || '')
+        const graphFiles = getGraphIndex()
+
+        const q = query.toLowerCase()
+        const scored = graphFiles.map(f => {
+          const name = (f.title || f.path.split('/').pop() || '').toLowerCase()
+          let score = 0
+
+          if (!q) score = 100
+          else if (name.startsWith(q)) score = 1000
+          else if (name.includes(q)) score = 100
+          else if (f.path.toLowerCase().includes(q)) score = 10
+          else score = -1
+
+          try {
+            if (dirname(active) === dirname(f.path)) score += 50
+          } catch {}
+
+          return { ...f, type: 'graph', score }
+        })
+
+        const filtered = scored.filter(f => f.score >= 0).sort((a, b) => b.score - a.score).slice(0, 20)
+
+        // Load expressions from each graph file for KaTeX preview
+        const withExpressions = await Promise.all(
+          filtered.map(async (f) => {
+            try {
+              const graphData = await loadGraphFile(f.path)
+              const exprs = (graphData.expressions || [])
+                .filter(e => e.latex && e.visible !== false)
+                .map(e => e.latex)
+              return { ...f, expressions: exprs }
+            } catch {
+              return { ...f, expressions: [] }
+            }
+          })
+        )
+
+        // Add "Create new graph" option at the end
+        withExpressions.push({
+          type: 'create_graph',
+          path: '__create_graph__',
+          title: 'Create new graph',
+          expressions: [],
+        })
+
+        return withExpressions
+      },
+      command: ({ editor: editorView, range, props }) => {
+        if (props.type === 'create_graph') {
+          const newFileName = props.newFileName
+          if (!newFileName) return
+
+          const { state } = editorView
+          const $pos = state.selection.$from
+          const textBefore = state.doc.textBetween($pos.start(), $pos.pos)
+          const patternMatch = /<<([^>]+)>>@[^@]*$/.exec(textBefore)
+          if (!patternMatch) return
+
+          const expressionsRaw = patternMatch[1]
+          const matchStart = $pos.pos - textBefore.length + patternMatch.index
+          const to = range?.to ?? state.selection.to
+
+          const cleanName = newFileName.replace(/\.graph$/, '')
+          const graphFilePath = `${cleanName}.graph`
+
+          const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
+
+          const exprStrings = expressionsRaw.split(',').map(s => s.trim()).filter(Boolean)
+
+          focusDeleteAndInsert(editorView, matchStart, to, {
+            type: 'graphLink',
+            attrs: { id, graphName: cleanName, graphPath: '', exists: false, expressions: exprStrings.join(', ') },
+          })
+
+          // Create graph file with expressions as side effect
+          const expressions = exprStrings.map((latex, i) => {
+            const color = DEFAULT_COLORS[i % DEFAULT_COLORS.length]
+            return createExpression('explicit', latex, color)
+          })
+
+          createNewGraphFile(graphFilePath, cleanName).then(graphData => {
+            const updated = { ...graphData, expressions }
+            return saveGraphFile(graphFilePath, updated)
+          }).then(() => {
+            try {
+              let pos = -1
+              editorView.state.doc.descendants((n, position) => {
+                if (pos !== -1) return false
+                if (n.type.name === 'graphLink' && n.attrs.id === id) {
+                  pos = position
+                  return false
+                }
+                return true
+              })
+              if (pos !== -1) {
+                const resolvedPath = graphFilePath
+                const updateTr = editorView.state.tr.setNodeMarkup(pos, undefined, {
+                  id, graphName: cleanName, graphPath: resolvedPath, exists: true, expressions: exprStrings.join(', '),
+                })
+                editorView.dispatch(updateTr)
+              }
+            } catch {}
+          }).catch(err => {
+            console.warn('[WikiLinkSuggest] Failed to create graph file:', err)
+          })
+          return
+        }
+
+        const { state } = editorView
+        const $pos = state.selection.$from
+        const textBefore = state.doc.textBetween($pos.start(), $pos.pos)
+
+        // Find the full <<expressions>>@ pattern
+        const patternMatch = /<<([^>]+)>>@[^@]*$/.exec(textBefore)
+        if (!patternMatch) return
+
+        const expressionsRaw = patternMatch[1]
+        const matchStart = $pos.pos - textBefore.length + patternMatch.index
+        const to = range?.to ?? state.selection.to
+
+        const fullPath = props.path || ''
+        const fileName = (props.title || fullPath.split('/').pop() || 'graph').replace(/\.graph$/, '')
+
+        // Create graphLink node
+        const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
+        const exprStrings = expressionsRaw.split(',').map(s => s.trim()).filter(Boolean)
+
+        focusDeleteAndInsert(editorView, matchStart, to, {
+          type: 'graphLink',
+          attrs: {
+            id,
+            graphName: fileName,
+            graphPath: fullPath,
+            exists: true,
+            expressions: exprStrings.join(', '),
+          },
+        })
+
+        // Parse expressions and update the .graph file as a side effect
+        if (exprStrings.length > 0) {
+          const expressions = exprStrings.map((latex, i) => {
+            const color = DEFAULT_COLORS[i % DEFAULT_COLORS.length]
+            return createExpression('explicit', latex, color)
+          })
+
+          loadGraphFile(fullPath).then(graphData => {
+            const updated = { ...graphData, expressions: [...graphData.expressions, ...expressions] }
+            return saveGraphFile(fullPath, updated)
+          }).catch(err => {
+            console.warn('[WikiLinkSuggest] Failed to update graph file:', err)
+          })
+        }
+      },
+      render: createWikiLinkRender({ isGraphMode: true }),
     }),
   ]
 }

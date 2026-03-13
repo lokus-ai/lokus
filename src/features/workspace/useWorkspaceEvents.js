@@ -11,6 +11,7 @@ import { getActiveShortcuts } from "../../core/shortcuts/registry.js";
 import { getFilename } from "../../utils/pathUtils.js";
 import { isImageFile } from "../../utils/imageUtils.js";
 import { generatePreview } from "../../core/canvas/preview-generator.js";
+import { generateGraphPreview } from "../../core/mathgraph/preview-generator.js";
 import { insertContent, insertText } from "../../editor/commands/index.js";
 
 /** Returns true when the app is running inside Tauri. */
@@ -226,6 +227,43 @@ export function useWorkspaceEvents({
       window.removeEventListener('canvas-link-hover', handleCanvasLinkHover);
       window.removeEventListener('canvas-link-hover-end', handleCanvasLinkHoverEnd);
       window.removeEventListener('lokus:open-canvas', handleOpenCanvas);
+    };
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // Graph link hover / open
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const handleGraphLinkHover = async (event) => {
+      const { graphName, graphPath, position } = event.detail;
+      useViewStore.setState({ graphPreview: { graphName, graphPath, position, loading: true } });
+
+      try {
+        const thumbnailUrl = await generateGraphPreview(graphPath);
+        useViewStore.setState((s) => ({
+          graphPreview: s.graphPreview?.graphPath === graphPath
+            ? { ...s.graphPreview, thumbnailUrl, loading: false }
+            : null
+        }));
+      } catch {
+        useViewStore.setState((s) => ({
+          graphPreview: s.graphPreview?.graphPath === graphPath
+            ? { ...s.graphPreview, error: true, loading: false }
+            : null
+        }));
+      }
+    };
+
+    const handleGraphLinkHoverEnd = () => {
+      useViewStore.setState({ graphPreview: null });
+    };
+
+    window.addEventListener('graph-link-hover', handleGraphLinkHover);
+    window.addEventListener('graph-link-hover-end', handleGraphLinkHoverEnd);
+
+    return () => {
+      window.removeEventListener('graph-link-hover', handleGraphLinkHover);
+      window.removeEventListener('graph-link-hover-end', handleGraphLinkHoverEnd);
     };
   }, []);
 

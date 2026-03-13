@@ -45,6 +45,7 @@ export const useViewStore = create(
     showVersionHistory: false,
     versionHistoryFile: null,
     canvasPreview: null,
+    graphPreview: null,
     versionRefreshKey: 0,
     showDailyNotesPanel: false,
     showCalendarPanel: false,

@@ -24,8 +24,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { loadGraphConfig, saveGraphConfig, getDefaultConfig, debouncedSaveGraphConfig } from '../core/graph/config-manager.js';
 import posthog from '../services/posthog.js';
 import { generateFileTreeHash } from '../utils/fileTreeUtils.js';
+import { useEditorGroupStore } from '../stores/editorGroups.js';
+import { getColorGroupMatch } from '../core/graph/color-group-matcher.js';
 
-export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile, fileTree = [], onGraphStateChange }) => {
+export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile, fileTree = [] }) => {
   // Core state
   const [viewMode, setViewMode] = useState('2d'); // '2d', '3d', 'force'
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
@@ -50,11 +52,11 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   const animationIndexRef = useRef(0);
   const animationIntervalRef = useRef(null);
 
-  // Force configuration state
+  // Force configuration state (used by force mode's dedicated useEffect)
   const [forceConfig, setForceConfig] = useState({
-    charge: { strength: -400 },
-    link: { distance: 100, strength: 1 },
-    center: { strength: 0.3 },
+    charge: { strength: -100 },
+    link: { distance: 80, strength: 0.3 },
+    center: { strength: 0.1 },
     collision: { radius: 8 },
     alphaDecay: 0.02,
     velocityDecay: 0.3
@@ -82,6 +84,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   const containerRef = useRef(null);
   const forceGraph2DRef = useRef(null);
   const forceGraph3DRef = useRef(null);
+  const forceGraphForceRef = useRef(null);
   const performanceTimerRef = useRef(null);
 
   // File tree change detection refs
@@ -192,17 +195,25 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   }, [workspacePath]);
 
   // Apply force settings from graphConfig to D3 forces
+  // Forces update instantly; reheat is debounced so dragging a slider doesn't
+  // inject full energy on every tick.
+  const reheatTimerRef = useRef(null);
+
   useEffect(() => {
-    const currentRef = viewMode === '3d' ? forceGraph3DRef.current : forceGraph2DRef.current;
+    const currentRef = viewMode === '3d'
+      ? forceGraph3DRef.current
+      : viewMode === 'force'
+        ? forceGraphForceRef.current
+        : forceGraph2DRef.current;
     if (!currentRef || !graphConfig) return;
 
     try {
-      // Apply charge (repel) strength - negative for repulsion
-      if (graphConfig.repelStrength !== undefined) {
-        currentRef.d3Force('charge', d3.forceManyBody().strength(-graphConfig.repelStrength * 10));
+      // Update forces immediately (cheap, no energy injection)
+      const chargeForce = currentRef.d3Force('charge');
+      if (chargeForce && graphConfig.repelStrength !== undefined) {
+        chargeForce.strength(-graphConfig.repelStrength);
       }
 
-      // Apply link distance and strength
       const linkForce = currentRef.d3Force('link');
       if (linkForce) {
         if (graphConfig.linkDistance !== undefined) {
@@ -213,27 +224,34 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         }
       }
 
-      // Apply center strength - pull toward center
-      if (graphConfig.centerStrength !== undefined) {
-        currentRef.d3Force('center', d3.forceCenter(0, 0).strength(graphConfig.centerStrength));
+      const centerForce = currentRef.d3Force('center');
+      if (centerForce && graphConfig.centerStrength !== undefined) {
+        centerForce.strength(graphConfig.centerStrength);
       }
 
-      // Add collision force to prevent overlap
-      const avgNodeSize = 12; // Average node size
-      currentRef.d3Force('collision', d3.forceCollide(avgNodeSize * 1.5));
-
-      // Forces updated - no restart needed to avoid node spreading on UI changes
-      // The simulation will naturally adapt to new force values
+      // Debounced reheat — wait for slider to settle, then reheat once
+      if (reheatTimerRef.current) clearTimeout(reheatTimerRef.current);
+      reheatTimerRef.current = setTimeout(() => {
+        currentRef.d3ReheatSimulation();
+      }, 300);
     } catch (err) {
       console.error('ProfessionalGraphView: Failed to apply force settings', err);
     }
+
+    return () => {
+      if (reheatTimerRef.current) clearTimeout(reheatTimerRef.current);
+    };
   }, [viewMode, graphConfig.repelStrength, graphConfig.linkDistance, graphConfig.linkStrength, graphConfig.centerStrength]);
 
   // Initial warmup: Reheat simulation when graph data first loads
   useEffect(() => {
     if (!graphData.nodes || graphData.nodes.length === 0) return;
 
-    const currentRef = viewMode === '3d' ? forceGraph3DRef.current : forceGraph2DRef.current;
+    const currentRef = viewMode === '3d'
+      ? forceGraph3DRef.current
+      : viewMode === 'force'
+        ? forceGraphForceRef.current
+        : forceGraph2DRef.current;
     if (!currentRef) return;
 
     // Delay to ensure forces are applied, then reheat
@@ -656,7 +674,9 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     if (action === 'start') {
       setIsLayoutRunning(true);
       // Start physics simulation based on current view mode
-      if (forceGraph2DRef.current && (viewMode === '2d' || viewMode === 'force')) {
+      if (viewMode === 'force' && forceGraphForceRef.current) {
+        forceGraphForceRef.current.d3ReheatSimulation();
+      } else if (viewMode === '2d' && forceGraph2DRef.current) {
         forceGraph2DRef.current.d3ReheatSimulation();
       } else if (forceGraph3DRef.current && viewMode === '3d') {
         forceGraph3DRef.current.d3ReheatSimulation();
@@ -664,7 +684,10 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     } else if (action === 'stop') {
       setIsLayoutRunning(false);
       // Cool down physics simulation
-      if (forceGraph2DRef.current && (viewMode === '2d' || viewMode === 'force')) {
+      if (viewMode === 'force' && forceGraphForceRef.current) {
+        const simulation = forceGraphForceRef.current.d3Force('simulation');
+        if (simulation) simulation.alpha(0);
+      } else if (viewMode === '2d' && forceGraph2DRef.current) {
         const simulation = forceGraph2DRef.current.d3Force('simulation');
         if (simulation) simulation.alpha(0);
       } else if (forceGraph3DRef.current && viewMode === '3d') {
@@ -681,7 +704,9 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     setZoomLevel(1);
 
     // Reset view to fit all nodes
-    if (forceGraph2DRef.current && (viewMode === '2d' || viewMode === 'force')) {
+    if (viewMode === 'force' && forceGraphForceRef.current) {
+      forceGraphForceRef.current.zoomToFit(400);
+    } else if (viewMode === '2d' && forceGraph2DRef.current) {
       forceGraph2DRef.current.zoomToFit(400);
     } else if (forceGraph3DRef.current && viewMode === '3d') {
       forceGraph3DRef.current.zoomToFit(400);
@@ -696,7 +721,10 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     setSelectedNodes([node.id]);
 
     // Center camera on node
-    if (forceGraph2DRef.current && (viewMode === '2d' || viewMode === 'force')) {
+    if (viewMode === 'force' && forceGraphForceRef.current) {
+      forceGraphForceRef.current.centerAt(node.x, node.y, 1000);
+      forceGraphForceRef.current.zoom(1.8, 1000);
+    } else if (viewMode === '2d' && forceGraph2DRef.current) {
       // For 2D graphs
       forceGraph2DRef.current.centerAt(node.x, node.y, 1000); // Smooth 1s transition
       forceGraph2DRef.current.zoom(1.8, 1000); // Gentle zoom in to 1.8x
@@ -789,7 +817,11 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   }, [graphDataManager]);
 
   const handleZoom = useCallback((action) => {
-    const currentRef = viewMode === '3d' ? forceGraph3DRef.current : forceGraph2DRef.current;
+    const currentRef = viewMode === '3d'
+      ? forceGraph3DRef.current
+      : viewMode === 'force'
+        ? forceGraphForceRef.current
+        : forceGraph2DRef.current;
     if (!currentRef) return;
 
     switch (action) {
@@ -833,7 +865,11 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     setForceConfig(newForceConfig);
 
     // Apply force changes to the active graph
-    const currentRef = viewMode === '3d' ? forceGraph3DRef.current : forceGraph2DRef.current;
+    const currentRef = viewMode === '3d'
+      ? forceGraph3DRef.current
+      : viewMode === 'force'
+        ? forceGraphForceRef.current
+        : forceGraph2DRef.current;
     if (!currentRef) return;
 
     // Update D3 forces dynamically
@@ -884,6 +920,32 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   const isValidHexColor = (color) => {
     if (typeof color !== 'string') return false;
     return /^#[0-9A-Fa-f]{6}$/.test(color) || /^#[0-9A-Fa-f]{3}$/.test(color);
+  };
+
+  // Sanitize a color value so it is safe to pass to THREE.Color.
+  // Three.js Color accepts "#rrggbb" hex strings or 0xrrggbb numbers.
+  // CSS variables, rgba() strings, or any non-hex value will silently produce
+  // black — this helper converts those cases to a valid hex string.
+  const sanitizeColorForThree = (color) => {
+    if (!color) return '#8b5cf6';
+    if (typeof color === 'number') return color; // already a THREE-compatible number
+    if (typeof color !== 'string') return '#8b5cf6';
+    // Already a valid 6-digit hex
+    if (/^#[0-9a-fA-F]{6}$/.test(color)) return color;
+    // 3-digit hex — expand to 6
+    if (/^#[0-9a-fA-F]{3}$/.test(color)) {
+      const [, r, g, b] = color.match(/^#(.)(.)(.)$/);
+      return `#${r}${r}${g}${g}${b}${b}`;
+    }
+    // rgb(...) or rgba(...) — extract r, g, b integers
+    if (color.startsWith('rgb')) {
+      const match = color.match(/\d+/g);
+      if (match && match.length >= 3) {
+        const [r, g, b] = match.map(Number);
+        return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+      }
+    }
+    return '#8b5cf6'; // safe fallback purple
   };
 
   const getThemeColor = (varName, fallback) => {
@@ -953,6 +1015,12 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         return safeColor(getThemeColor('--accent', DEFAULT_ACCENT));
       }
 
+      // Color groups overlay — first match wins, overrides base scheme
+      const groupColor = getColorGroupMatch(graphConfig.colorGroups, node);
+      if (groupColor && isValidHexColor(groupColor)) {
+        return groupColor;
+      }
+
       const scheme = colorSchemes[colorScheme] || colorSchemes.type;
 
       switch (colorScheme) {
@@ -991,18 +1059,6 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
           }
           return safeColor(scheme.old) || DEFAULT_MUTED;
 
-        case 'custom':
-          if (Array.isArray(nodeGroups)) {
-            for (const group of nodeGroups) {
-              if (group.nodeIds && group.nodeIds.includes(node.id)) {
-                if (group.color && isValidHexColor(group.color)) {
-                  return group.color;
-                }
-              }
-            }
-          }
-          return safeColor(getThemeColor('--accent', DEFAULT_ACCENT));
-
         default:
           return safeColor(colorSchemes.type[node.type]);
       }
@@ -1010,7 +1066,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       // Ultimate fallback
       return DEFAULT_ACCENT;
     }
-  }, [selectedNodes, colorScheme, nodeGroups]);
+  }, [selectedNodes, colorScheme, graphConfig.colorGroups]);
 
   const getNodeSize = useCallback((node) => {
     let baseSize = node.size || 8;
@@ -1143,57 +1199,6 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     }
   }, [selectedNodes, hoveredNode, getNodeSize, getNodeColor, graphConfig.textFadeMultiplier, graphConfig.search]);
 
-  // Custom 3D node object
-  const create3DNode = useCallback((node) => {
-    const size = getNodeSize(node);
-    const color = getNodeColor(node);
-
-    const geometry = new THREE.SphereGeometry(size, 16, 16);
-    const material = new THREE.MeshPhongMaterial({
-      color: color,
-      transparent: true,
-      opacity: 0.9,
-      emissive: color,
-      emissiveIntensity: selectedNodes.includes(node.id) ? 0.3 : 0.1
-    });
-
-    const mesh = new THREE.Mesh(geometry, material);
-
-    // Add glow effect for selected nodes
-    if (selectedNodes.includes(node.id)) {
-      const glowGeometry = new THREE.SphereGeometry(size * 1.5, 16, 16);
-      const glowMaterial = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.3
-      });
-      const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-      mesh.add(glow);
-    }
-
-    return mesh;
-  }, [selectedNodes, getNodeSize, getNodeColor]);
-
-  // Notify parent component of graph state changes
-  useEffect(() => {
-    if (onGraphStateChange) {
-      onGraphStateChange({
-        selectedNodes,
-        hoveredNode,
-        graphData,
-        stats,
-        graphConfig,
-        onConfigChange: handleConfigChange,
-        onFocusNode: handleFocusNode,
-        // Animation tour controls
-        isAnimating,
-        animationSpeed,
-        onToggleAnimation: toggleAnimationTour,
-        onAnimationSpeedChange: handleAnimationSpeedChange
-      });
-    }
-  }, [selectedNodes, hoveredNode, graphData, stats, graphConfig, handleConfigChange, handleFocusNode, isAnimating, animationSpeed, toggleAnimationTour, handleAnimationSpeedChange, onGraphStateChange]);
-
   // Apply filtering to graph data - only recompute when filter settings actually change
   const filteredGraphData = React.useMemo(() => {
     return filterGraphData(graphData, graphConfig);
@@ -1206,6 +1211,227 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     graphConfig.showOrphans,
     filterGraphData
   ]);
+
+  // Custom node rendering for Force mode — ring/outline style, always-visible labels
+  const renderNodeForce = useCallback((node, ctx, globalScale) => {
+    const size = getNodeSize(node);
+    const color = getNodeColor(node);
+    const isSelected = selectedNodes.includes(node.id);
+    const isHovered = hoveredNode?.id === node.id;
+
+    // Outer glow for selected/hovered nodes
+    if (isSelected || isHovered) {
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, size * 3, 0, 2 * Math.PI, false);
+      ctx.fillStyle = color + '25';
+      ctx.fill();
+    }
+
+    // Draw neighbor connection highlights when node is hovered
+    if (isHovered && filteredGraphData.links) {
+      const neighborLinks = filteredGraphData.links.filter(l => {
+        const src = l.source?.id ?? l.source;
+        const tgt = l.target?.id ?? l.target;
+        return src === node.id || tgt === node.id;
+      });
+      neighborLinks.forEach(l => {
+        const neighborId = (l.source?.id ?? l.source) === node.id
+          ? (l.target?.id ?? l.target)
+          : (l.source?.id ?? l.source);
+        const neighbor = filteredGraphData.nodes.find(n => n.id === neighborId);
+        if (!neighbor) return;
+        ctx.beginPath();
+        ctx.moveTo(node.x, node.y);
+        ctx.lineTo(neighbor.x, neighbor.y);
+        ctx.strokeStyle = color + '80';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+      });
+    }
+
+    // Semi-transparent fill (ring aesthetic — hollow center)
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, size, 0, 2 * Math.PI, false);
+    ctx.fillStyle = color + '30';
+    ctx.fill();
+
+    // Strong colored border — the defining visual of force mode
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, size, 0, 2 * Math.PI, false);
+    ctx.strokeStyle = isSelected ? '#ffffff' : color;
+    ctx.lineWidth = isSelected ? 3 : 2;
+    ctx.stroke();
+
+    // Inner accent dot so the node is visible at small sizes
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, size * 0.3, 0, 2 * Math.PI, false);
+    ctx.fillStyle = color + 'cc';
+    ctx.fill();
+
+    // Always show labels in force mode — exploration-first
+    const label = node.label || node.title || node.id;
+    if (label) {
+      const fontSize = Math.max(10, size / 2);
+      ctx.font = `${fontSize}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // Subtle text shadow for readability over busy graphs
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.fillText(label, node.x + 1, node.y + size + 13);
+
+      ctx.fillStyle = isSelected || isHovered
+        ? 'rgba(255, 255, 255, 1.0)'
+        : 'rgba(255, 255, 255, 0.85)';
+      ctx.fillText(label, node.x, node.y + size + 12);
+    }
+  }, [selectedNodes, hoveredNode, getNodeSize, getNodeColor, filteredGraphData]);
+
+  // Apply forceConfig to the force-mode graph via d3Force() ref calls
+  useEffect(() => {
+    if (viewMode !== 'force' || !forceGraphForceRef.current) return;
+
+    const fg = forceGraphForceRef.current;
+
+    try {
+      const chargeForce = fg.d3Force('charge');
+      if (chargeForce) chargeForce.strength(forceConfig.charge.strength);
+
+      const linkForce = fg.d3Force('link');
+      if (linkForce) {
+        linkForce.distance(forceConfig.link.distance);
+        linkForce.strength(forceConfig.link.strength);
+      }
+
+      const centerForce = fg.d3Force('center');
+      if (centerForce) centerForce.strength(forceConfig.center.strength);
+
+      // Add collision force — not present in 2D mode, distinctive to force mode
+      fg.d3Force('collision', d3.forceCollide(forceConfig.collision.radius));
+
+      fg.d3ReheatSimulation();
+    } catch (err) {
+      console.error('ProfessionalGraphView: Failed to apply forceConfig to force mode', err);
+    }
+  }, [viewMode, forceConfig]);
+
+  // Auto-start layout when entering force mode so it feels "alive"
+  useEffect(() => {
+    if (viewMode !== 'force') return;
+    setIsLayoutRunning(true);
+  }, [viewMode]);
+
+  // Custom 3D node object
+  const create3DNode = useCallback((node) => {
+    const size = getNodeSize(node);
+    // Sanitize the color before passing to Three.js — getNodeColor may return
+    // CSS variable values that Three.js Color cannot parse, producing black nodes.
+    const rawColor = getNodeColor(node);
+    const color = sanitizeColorForThree(rawColor);
+    const isSelected = selectedNodes.includes(node.id);
+    const isHovered = hoveredNode?.id === node.id;
+
+    const group = new THREE.Group();
+
+    // Sphere mesh
+    const geometry = new THREE.SphereGeometry(size, 24, 24);
+    const material = new THREE.MeshPhongMaterial({
+      color: color,
+      transparent: true,
+      opacity: 0.95,
+      emissive: color,
+      emissiveIntensity: isSelected ? 0.6 : isHovered ? 0.5 : 0.4,
+      shininess: 80
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    group.add(mesh);
+
+    // Glow shell for selected or hovered nodes
+    if (isSelected || isHovered) {
+      const glowGeometry = new THREE.SphereGeometry(size * 1.6, 24, 24);
+      const glowMaterial = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: isSelected ? 0.35 : 0.2,
+        side: THREE.BackSide
+      });
+      const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+      group.add(glow);
+    }
+
+    // Text sprite label below the sphere
+    const label = node.label || node.title || node.id;
+    if (label) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const fontSize = 28;
+      const padding = 10;
+      ctx.font = `${fontSize}px Arial, sans-serif`;
+      const textWidth = ctx.measureText(label).width;
+      canvas.width = textWidth + padding * 2;
+      canvas.height = fontSize + padding * 2;
+
+      // Re-apply font after resize (canvas reset clears state)
+      ctx.font = `${fontSize}px Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // Semi-transparent background pill for readability
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      const r = 8;
+      const x = 0, y = 0, w = canvas.width, h = canvas.height;
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+      ctx.fillText(label, canvas.width / 2, canvas.height / 2);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      const spriteMaterial = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        depthWrite: false
+      });
+      const sprite = new THREE.Sprite(spriteMaterial);
+
+      // Scale sprite so it is proportional to the node size
+      const aspect = canvas.width / canvas.height;
+      const spriteHeight = size * 1.4;
+      sprite.scale.set(spriteHeight * aspect, spriteHeight, 1);
+      // Position just below the sphere
+      sprite.position.set(0, -(size + spriteHeight * 0.65), 0);
+      group.add(sprite);
+    }
+
+    return group;
+  }, [selectedNodes, hoveredNode, getNodeSize, getNodeColor, sanitizeColorForThree]);
+
+  // Push graph state directly to Zustand store for sidebar consumption
+  useEffect(() => {
+    useEditorGroupStore.getState().setGraphSidebar({
+      selectedNodes,
+      hoveredNode,
+      graphData,
+      stats,
+      graphConfig,
+      onConfigChange: handleConfigChange,
+      onFocusNode: handleFocusNode,
+      isAnimating,
+      animationSpeed,
+      onToggleAnimation: toggleAnimationTour,
+      onAnimationSpeedChange: handleAnimationSpeedChange
+    });
+  }, [selectedNodes, hoveredNode, graphData, stats, graphConfig, handleConfigChange, handleFocusNode, isAnimating, animationSpeed, toggleAnimationTour, handleAnimationSpeedChange]);
 
   // Helper to get CSS variable color
   const getCSSColor = (varName, fallback) => {
@@ -1342,14 +1568,14 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
                 linkDirectionalArrowColor={getLinkColor}
                 onNodeHover={handleNodeHover}
                 onNodeClick={handleNodeClick}
-                d3AlphaDecay={0.015}
-                d3VelocityDecay={0.3}
-                cooldownTicks={300}
-                warmupTicks={100}
+                d3AlphaDecay={0.05}
+                d3VelocityDecay={0.4}
+                cooldownTicks={200}
+                warmupTicks={50}
                 enableNodeDrag={true}
                 enableZoomInteraction={true}
                 enablePanInteraction={true}
-                backgroundColor="transparent"
+                backgroundColor="rgba(0,0,0,0)"
                 linkDirectionalParticles={isLayoutRunning ? 2 : 0}
                 linkDirectionalParticleSpeed={0.01}
                 nodeCanvasObject={renderNode2D}
@@ -1373,6 +1599,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
                 height={dimensions.height}
                 nodeColor={getNodeColor}
                 nodeVal={getNodeSize}
+                nodeOpacity={0.95}
                 nodeLabel={(node) => `${node.label || node.title || node.id}\nType: ${node.type}\nBacklinks: ${node.backlinkCount || 0}`}
                 linkColor={getLinkColor}
                 linkWidth={getLinkWidth}
@@ -1381,15 +1608,16 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
                 linkDirectionalArrowColor={getLinkColor}
                 onNodeHover={handleNodeHover}
                 onNodeClick={handleNodeClick}
-                d3AlphaDecay={0.015}
-                d3VelocityDecay={0.3}
-                cooldownTicks={300}
-                warmupTicks={100}
+                d3AlphaDecay={0.05}
+                d3VelocityDecay={0.4}
+                cooldownTicks={200}
+                warmupTicks={50}
                 enableNodeDrag={true}
-                backgroundColor="transparent"
+                backgroundColor="rgba(0,0,0,0)"
                 linkDirectionalParticles={isLayoutRunning ? 2 : 0}
                 linkDirectionalParticleSpeed={0.01}
                 nodeThreeObject={create3DNode}
+                nodeThreeObjectExtend={false}
               />
             </motion.div>
           )}
@@ -1404,7 +1632,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
               style={{ width: '100%', height: '100%' }}
             >
               <ForceGraph2D
-                ref={forceGraph2DRef}
+                ref={forceGraphForceRef}
                 graphData={filteredGraphData}
                 width={dimensions.width}
                 height={dimensions.height}
@@ -1418,18 +1646,18 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
                 linkDirectionalArrowColor={getLinkColor}
                 onNodeHover={handleNodeHover}
                 onNodeClick={handleNodeClick}
-                d3AlphaDecay={0.005}
-                d3VelocityDecay={0.1}
-                cooldownTicks={500}
+                d3AlphaDecay={forceConfig.alphaDecay}
+                d3VelocityDecay={forceConfig.velocityDecay}
+                d3AlphaMin={0.001}
+                cooldownTicks={Infinity}
                 warmupTicks={100}
                 enableNodeDrag={true}
                 enableZoomInteraction={true}
                 enablePanInteraction={true}
-                backgroundColor="transparent"
-                linkDirectionalParticles={isLayoutRunning ? 4 : 0}
+                backgroundColor="rgba(0,0,0,0)"
+                linkDirectionalParticles={4}
                 linkDirectionalParticleSpeed={0.005}
-                nodeCanvasObject={renderNode2D}
-                d3ForceConfig={forceConfig}
+                nodeCanvasObject={renderNodeForce}
               />
             </motion.div>
           )}
