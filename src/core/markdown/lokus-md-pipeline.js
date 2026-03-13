@@ -289,6 +289,47 @@ function markdownItCanvasLink(md) {
 }
 
 // ---------------------------------------------------------------------------
+// markdown-it plugin: graph links   ![[name.graph]] and <<expressions>>@name.graph
+// (Must be registered BEFORE the general wiki-link plugin so it takes priority)
+// ---------------------------------------------------------------------------
+
+function markdownItGraphLink(md) {
+  md.inline.ruler.push('graph_link', (state, silent) => {
+    const src = state.src.slice(state.pos)
+
+    // Pattern 1: ![[name.graph]]
+    const embedMatch = src.match(/^!\[\[([^\]]+?\.graph)\]\]/)
+    if (embedMatch) {
+      if (!silent) {
+        const token = state.push('graph_link', '', 0)
+        token.attrSet('graphName', embedMatch[1].replace(/\.graph$/i, '').trim())
+        token.markup = embedMatch[0]
+        token.content = embedMatch[1]
+      }
+      state.pos += embedMatch[0].length
+      return true
+    }
+
+    // Pattern 2: <<expr1, expr2>>@filename.graph or <<expr1, expr2>>@filename
+    const createMatch = src.match(/^<<([^>]+)>>@(\S+?)(?:\.graph)?(?=[\s,.)}\]]|$)/)
+    if (createMatch) {
+      if (!silent) {
+        const token = state.push('graph_link', '', 0)
+        const graphName = createMatch[2].trim()
+        token.attrSet('graphName', graphName)
+        token.attrSet('expressions', createMatch[1].trim())
+        token.markup = createMatch[0]
+        token.content = createMatch[0]
+      }
+      state.pos += createMatch[0].length
+      return true
+    }
+
+    return false
+  })
+}
+
+// ---------------------------------------------------------------------------
 // markdown-it plugin: wiki-link embeds  ![[file^blockId]] / ![[file#heading]]
 // (Block-level — must come before wiki_link inline rule)
 // ---------------------------------------------------------------------------
@@ -595,6 +636,7 @@ function buildTokenizer(schemaNodes) {
   }
 
   // Custom Lokus plugins (order matters: more specific patterns first)
+  if (has('graphLink')) md.use(markdownItGraphLink)     // ![[name.graph]] / <<...>>@name (before canvas)
   if (has('canvasLink')) md.use(markdownItCanvasLink)   // ![[name.canvas]] (before wiki_link)
   if (has('wikiLinkEmbed')) md.use(markdownItWikiLinkEmbed) // block ![[file^id]]
   if (has('wikiLink')) md.use(markdownItWikiLink)       // [[target]] / ![[target]]
@@ -789,6 +831,17 @@ export function createLokusParser(schema) {
         canvasName: tok.attrGet('canvasName') ?? '',
         canvasPath: '',
         thumbnailUrl: '',
+        exists: false,
+      }),
+    },
+
+    // graph_link  → graphLink (inline atom)
+    graph_link: {
+      node: 'graphLink',
+      getAttrs: tok => ({
+        id: '',
+        graphName: tok.attrGet('graphName') ?? '',
+        graphPath: '',
         exists: false,
       }),
     },
@@ -1155,6 +1208,14 @@ export function createLokusSerializer() {
       const { canvasName } = node.attrs ?? {}
       const name = canvasName ?? ''
       const suffix = name.endsWith('.canvas') ? '' : '.canvas'
+      state.write(`![[${name}${suffix}]]`)
+    },
+
+    // 5b. graphLink  ![[name.graph]]
+    graphLink(state, node) {
+      const { graphName } = node.attrs ?? {}
+      const name = graphName ?? ''
+      const suffix = name.endsWith('.graph') ? '' : '.graph'
       state.write(`![[${name}${suffix}]]`)
     },
 

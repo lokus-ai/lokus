@@ -1,0 +1,117 @@
+/* MathGraphBoard.css
+ * JSXGraph-specific overrides for the Lokus math graphing system.
+ * Tailwind handles layout/theming; this file only patches JSXGraph internals.
+ */
+
+/* ── Container ─────────────────────────────────────────────────────────────── */
+
+.math-graph-board {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  /* Cursor resets so JSXGraph's own cursor rules win inside the board */
+  cursor: default;
+}
+
+/* ── JSXGraph root box ──────────────────────────────────────────────────────── */
+
+.math-graph-board .jxgbox {
+  width: 100% !important;
+  height: 100% !important;
+  position: relative;
+  overflow: hidden;
+  /* Remove any default border JSXGraph may inject */
+  border: none !important;
+  outline: none !important;
+  /* Let the parent handle border-radius / shadows */
+  border-radius: 0;
+  /* Prevent browser from consuming trackpad / touch gestures so JSXGraph
+     receives the wheel and pinch events for zoom / pan. */
+  touch-action: none;
+}
+
+/* JSXGraph injects an inline border style on the element it creates.
+   The !important above covers it, but the selector below is more specific
+   in case the library uses an ID-based rule. */
+[id^="jxgbox"] {
+  border: none !important;
+}
+
+/* ── SVG / Canvas layers ────────────────────────────────────────────────────── */
+
+.math-graph-board .jxgbox svg,
+.math-graph-board .jxgbox canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ── Interaction cursors ────────────────────────────────────────────────────── */
+
+/* Default panning state — JSXGraph adds this class while dragging the board */
+.math-graph-board .jxgbox.JXG_navigation_grab {
+  cursor: grabbing !important;
+}
+
+.math-graph-board .jxgbox:not(.JXG_navigation_grab) {
+  cursor: grab;
+}
+
+/* Draggable elements get a move cursor */
+.math-graph-board .jxgbox [class*="JXG_drag"] {
+  cursor: move;
+}
+
+/* ── Navigation buttons (zoom in/out/home) ──────────────────────────────────── */
+
+/* JSXGraph renders its built-in navigation buttons as absolutely positioned
+   divs. We hide them because the MathGraphEditor toolbar provides its own
+   zoom controls. */
+.math-graph-board .JXG_navigation {
+  display: none !important;
+}
+
+/* ── Copyright notice ───────────────────────────────────────────────────────── */
+
+/* showCopyright:false is set in initBoard, but guard against it appearing */
+.math-graph-board .JXG_copyright {
+  display: none !important;
+}
+
+/* ── Text / label elements rendered by JSXGraph ─────────────────────────────── */
+
+.math-graph-board .JXG_infobox {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  /* Use app CSS variables for the tooltip-style info box */
+  background: rgb(var(--panel));
+  color: rgb(var(--text));
+  border: 1px solid rgb(var(--border));
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ── 3-D view placeholder ───────────────────────────────────────────────────── */
+
+.math-graph-board--3d {
+  background: rgb(var(--panel));
+}
+
+/* ── Loading / empty state overlay ─────────────────────────────────────────── */
+
+.math-graph-board__loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(var(--panel) / 0.7);
+  backdrop-filter: blur(2px);
+  font-size: 13px;
+  color: rgb(var(--text-muted, var(--text)));
+  pointer-events: none;
+  z-index: 10;
+}

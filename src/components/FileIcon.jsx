@@ -24,6 +24,7 @@ import {
   Table,
   FileCheck,
   Calendar,
+  TrendingUp,
 } from 'lucide-react';
 
 /**
@@ -125,6 +126,7 @@ const FILE_ICON_MAP = {
   'excalidraw': Layout,
   'canvas': Layout,  // deprecated: use .excalidraw
   'kanban': Trello,
+  'graph': TrendingUp,
 
   // Other
   'pdf': File,
@@ -232,6 +234,7 @@ export function getFileIconColor(fileName, isDirectory) {
     'excalidraw': 'text-green-500',
     'canvas': 'text-green-500',  // deprecated: use .excalidraw
     'kanban': 'text-teal-500',
+    'graph': 'text-violet-500',
 
     // Database
     'sql': 'text-orange-500',

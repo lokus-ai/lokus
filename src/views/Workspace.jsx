@@ -223,6 +223,7 @@ function WorkspaceInner({ path }) {
                 onOpenPluginDetail={handleOpenPluginDetail}
                 onCreateKanban={fileOps.handleCreateKanban}
                 onKanbanBoardAction={fileOps.handleKanbanBoardAction}
+                onCreateGraph={fileOps.handleCreateGraph}
                 editorGroupsUpdateTabPath={(old, next) =>
                   useEditorGroupStore.getState().updateTabPath(old, next)
                 }

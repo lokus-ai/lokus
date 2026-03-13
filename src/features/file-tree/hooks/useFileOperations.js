@@ -9,6 +9,7 @@ import { toast } from '../../../components/ui/enhanced-toast';
 import referenceWorkerClient from '../../../workers/referenceWorkerClient.js';
 import referenceManager from '../../../core/references/ReferenceManager.js';
 import { canvasManager } from '../../../core/canvas/manager.js';
+import { createNewGraphFile } from '../../../core/mathgraph/GraphFileManager.js';
 import dailyNotesManager from '../../../core/daily-notes/manager.js';
 import posthog from '../../../services/posthog.js';
 import { setGlobalActiveTheme } from '../../../core/theme/manager.js';
@@ -148,6 +149,20 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
       posthog.trackFeatureActivation('canvas');
     } catch { }
   }, [featureFlags, getTargetPath, refreshTree, handleFileOpen]);
+
+  // ---------------------------------------------------------------------------
+  // Math graph creation
+  // ---------------------------------------------------------------------------
+  const handleCreateGraph = useCallback(async () => {
+    try {
+      const targetPath = getTargetPath();
+      const fileName = 'Untitled Graph.graph';
+      const graphPath = `${targetPath}/${fileName}`;
+      await createNewGraphFile(graphPath, 'Untitled Graph');
+      refreshTree();
+      handleFileOpen?.({ path: graphPath, name: fileName, is_directory: false });
+    } catch { }
+  }, [getTargetPath, refreshTree, handleFileOpen]);
 
   // ---------------------------------------------------------------------------
   // Kanban creation and board actions
@@ -414,6 +429,8 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
     handleConfirmCreate,
     // Canvas
     handleCreateCanvas,
+    // Math graph
+    handleCreateGraph,
     // Kanban
     handleCreateKanban,
     handleKanbanBoardAction,

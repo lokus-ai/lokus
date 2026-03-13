@@ -19,6 +19,7 @@ import { useFeatureFlags } from '../contexts/RemoteConfigContext';
 const BasesView = lazy(() => import('../bases/BasesView'));
 const ProfessionalGraphView = lazy(() => import('../views/ProfessionalGraphView').then(m => ({ default: m.ProfessionalGraphView })));
 const KanbanBoard = lazy(() => import('./KanbanBoard'));
+const MathGraphEditor = lazy(() => import('./MathGraph/MathGraphEditor.jsx'));
 
 /**
  * EditorGroup — a single editor pane with its own tabs, content cache,
@@ -87,7 +88,7 @@ export default function EditorGroup({
   const [originalTitle, setOriginalTitle] = useState('');
 
   useEffect(() => {
-    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas') || activeFile.endsWith('.excalidraw') || activeFile.endsWith('.kanban') || isImageFile(activeFile) || isPDFFile(activeFile)) {
+    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas') || activeFile.endsWith('.excalidraw') || activeFile.endsWith('.kanban') || activeFile.endsWith('.graph') || isImageFile(activeFile) || isPDFFile(activeFile)) {
       setEditorTitle('');
       setOriginalTitle('');
       return;
@@ -164,15 +165,15 @@ export default function EditorGroup({
    */
   const snapshotEditorState = useCallback((filePath) => {
     const view = rawEditorRef.current;
-    if (!view || !filePath || filePath.startsWith('__') || filePath.endsWith('.canvas') || filePath.endsWith('.excalidraw') || filePath.endsWith('.kanban') || isImageFile(filePath) || isPDFFile(filePath)) return;
+    if (!view || !filePath || filePath.startsWith('__') || filePath.endsWith('.canvas') || filePath.endsWith('.excalidraw') || filePath.endsWith('.kanban') || filePath.endsWith('.graph') || isImageFile(filePath) || isPDFFile(filePath)) return;
     editorStatesRef.current.set(filePath, view.state);
   }, []);
 
   // ── Tab-switching effect ──────────────────────────────────────────────────
 
   useEffect(() => {
-    // Canvas / kanban / image / PDF / special files don't involve the ProseMirror instance
-    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas') || activeFile.endsWith('.excalidraw') || activeFile.endsWith('.kanban') || isImageFile(activeFile) || isPDFFile(activeFile)) {
+    // Canvas / kanban / math graph / image / PDF / special files don't involve the ProseMirror instance
+    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas') || activeFile.endsWith('.excalidraw') || activeFile.endsWith('.kanban') || activeFile.endsWith('.graph') || isImageFile(activeFile) || isPDFFile(activeFile)) {
       activeFileRef.current = activeFile;
       return;
     }
@@ -188,6 +189,7 @@ export default function EditorGroup({
       !prevFile.endsWith('.canvas') &&
       !prevFile.endsWith('.excalidraw') &&
       !prevFile.endsWith('.kanban') &&
+      !prevFile.endsWith('.graph') &&
       !isImageFile(prevFile) &&
       !isPDFFile(prevFile)
     ) {
@@ -317,7 +319,7 @@ export default function EditorGroup({
       // This handles the case where the component re-mounts after a split
       // (React changes tree position → unmount/remount → lost EditorView).
       const file = activeFileRef.current;
-      if (file && !file.startsWith('__') && !file.endsWith('.canvas') && !file.endsWith('.excalidraw') && !file.endsWith('.kanban') && !isImageFile(file) && !isPDFFile(file)) {
+      if (file && !file.startsWith('__') && !file.endsWith('.canvas') && !file.endsWith('.excalidraw') && !file.endsWith('.kanban') && !file.endsWith('.graph') && !isImageFile(file) && !isPDFFile(file)) {
         const cachedState = editorStatesRef.current.get(file);
         if (cachedState) {
           restoreEditorState(cachedState);
@@ -403,7 +405,8 @@ export default function EditorGroup({
 
   const isImageFileActive = !!(activeFile && isImageFile(activeFile));
   const isPDFFileActive = !!(activeFile && isPDFFile(activeFile));
-  const isEditorFile = !!(activeFile && !activeFile.startsWith('__') && !activeFile.endsWith('.canvas') && !activeFile.endsWith('.excalidraw') && !activeFile.endsWith('.kanban') && !isImageFileActive && !isPDFFileActive);
+  const isMathGraphFile = !!(activeFile?.endsWith('.graph'));
+  const isEditorFile = !!(activeFile && !activeFile.startsWith('__') && !activeFile.endsWith('.canvas') && !activeFile.endsWith('.excalidraw') && !activeFile.endsWith('.kanban') && !activeFile.endsWith('.graph') && !isImageFileActive && !isPDFFileActive);
   // DEPRECATED: .canvas (TLDraw) format is no longer supported
   const isCanvasFile = !!(activeFile?.endsWith('.canvas'));
   const isExcalidrawFile = !!(activeFile?.endsWith('.excalidraw'));
@@ -502,6 +505,23 @@ export default function EditorGroup({
                 workspacePath={workspacePath}
                 boardPath={activeFile}
                 onFileOpen={onFileOpen}
+              />
+            </Suspense>
+          </div>
+        )}
+
+        {/* Math graph editor — rendered for .graph files */}
+        {isMathGraphFile && (
+          <div className="flex-1 overflow-hidden h-full">
+            <Suspense fallback={<div className="flex-1 flex items-center justify-center text-app-muted">Loading graph...</div>}>
+              <MathGraphEditor
+                graphPath={activeFile}
+                onSave={() => {
+                  useEditorGroupStore.getState().markTabDirty(group.id, activeFile, false);
+                }}
+                onChange={() => {
+                  useEditorGroupStore.getState().markTabDirty(group.id, activeFile, true);
+                }}
               />
             </Suspense>
           </div>

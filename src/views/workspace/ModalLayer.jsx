@@ -14,6 +14,7 @@ import TagManagementModal from '../../components/TagManagementModal.jsx';
 import AboutDialog from '../../components/AboutDialog.jsx';
 import ReferenceUpdateModal from '../../components/ReferenceUpdateModal.jsx';
 import CanvasPreviewPopup from '../../components/CanvasPreviewPopup.jsx';
+import GraphPreviewPopup from '../../components/GraphPreviewPopup.jsx';
 import { DatePickerModal } from '../../components/DailyNotes/index.js';
 import { getMarkdownCompiler } from '../../core/markdown/compiler.js';
 import { getFilename } from '../../utils/pathUtils.js';
@@ -97,6 +98,7 @@ export default function ModalLayer({
   const showAboutDialog = useViewStore((s) => s.showAboutDialog);
   const showDatePickerModal = useViewStore((s) => s.showDatePickerModal);
   const canvasPreview = useViewStore((s) => s.canvasPreview);
+  const graphPreview = useViewStore((s) => s.graphPreview);
   const referenceUpdateModal = useViewStore((s) => s.referenceUpdateModal);
 
   // Focused group id for editor registry lookup
@@ -353,6 +355,19 @@ export default function ModalLayer({
           loading={canvasPreview.loading}
           error={canvasPreview.error}
           onClose={() => useViewStore.setState({ canvasPreview: null })}
+        />
+      )}
+
+      {/* Graph preview popup */}
+      {graphPreview && (
+        <GraphPreviewPopup
+          graphName={graphPreview.graphName}
+          graphPath={graphPreview.graphPath}
+          position={graphPreview.position}
+          thumbnailUrl={graphPreview.thumbnailUrl}
+          loading={graphPreview.loading}
+          error={graphPreview.error}
+          onClose={() => useViewStore.setState({ graphPreview: null })}
         />
       )}
     </>

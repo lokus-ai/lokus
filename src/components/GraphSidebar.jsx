@@ -1,5 +1,6 @@
 import React from 'react';
 import { Network, Link, FileText, Tag, ChevronDown, ChevronRight, Search, Sliders, Palette, Filter, Zap, Play, Pause, Sparkles, Image } from 'lucide-react';
+import { countMatches } from '../core/graph/color-group-matcher.js';
 
 /**
  * GraphSidebar - Obsidian-style graph customization panel
@@ -327,73 +328,73 @@ export default function GraphSidebar({
               {/* Center Strength */}
               <div>
                 <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-app-muted">Center Strength</span>
-                  <span className="text-app-text font-medium">{(config.centerStrength ?? 0.3).toFixed(2)}</span>
+                  <span className="text-app-muted">Center Force</span>
+                  <span className="text-app-text font-medium">{(config.centerStrength ?? 0.1).toFixed(2)}</span>
                 </div>
                 <input
                   type="range"
                   min="0"
                   max="1"
                   step="0.05"
-                  value={config.centerStrength ?? 0.3}
+                  value={config.centerStrength ?? 0.1}
                   onChange={(e) => updateConfig('centerStrength', parseFloat(e.target.value))}
                   className="w-full accent-app-accent"
                 />
-                <div className="text-xs text-app-muted mt-1">Pull toward center (lower = more spread)</div>
+                <div className="text-xs text-app-muted mt-1">Pull nodes toward center</div>
               </div>
 
               {/* Repel Strength */}
               <div>
                 <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-app-muted">Repel Strength</span>
-                  <span className="text-app-text font-medium">{(config.repelStrength ?? 15).toFixed(1)}</span>
+                  <span className="text-app-muted">Repel Force</span>
+                  <span className="text-app-text font-medium">{Math.round(config.repelStrength ?? 100)}</span>
                 </div>
                 <input
                   type="range"
-                  min="0"
-                  max="20"
-                  step="0.5"
-                  value={config.repelStrength ?? 15}
+                  min="10"
+                  max="500"
+                  step="10"
+                  value={config.repelStrength ?? 100}
                   onChange={(e) => updateConfig('repelStrength', parseFloat(e.target.value))}
                   className="w-full accent-app-accent"
                 />
-                <div className="text-xs text-app-muted mt-1">Push nodes apart (higher = more separation)</div>
+                <div className="text-xs text-app-muted mt-1">Push nodes apart (higher = more spread)</div>
               </div>
 
               {/* Link Strength */}
               <div>
                 <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-app-muted">Link Strength</span>
-                  <span className="text-app-text font-medium">{(config.linkStrength ?? 0.5).toFixed(2)}</span>
+                  <span className="text-app-muted">Link Stiffness</span>
+                  <span className="text-app-text font-medium">{(config.linkStrength ?? 0.3).toFixed(2)}</span>
                 </div>
                 <input
                   type="range"
                   min="0"
-                  max="2"
-                  step="0.1"
-                  value={config.linkStrength ?? 0.5}
+                  max="1"
+                  step="0.05"
+                  value={config.linkStrength ?? 0.3}
                   onChange={(e) => updateConfig('linkStrength', parseFloat(e.target.value))}
                   className="w-full accent-app-accent"
                 />
-                <div className="text-xs text-app-muted mt-1">Connection stiffness (lower = more flexible)</div>
+                <div className="text-xs text-app-muted mt-1">How rigidly links hold nodes together</div>
               </div>
 
               {/* Link Distance */}
               <div>
                 <div className="flex justify-between text-xs mb-1.5">
                   <span className="text-app-muted">Link Distance</span>
-                  <span className="text-app-text font-medium">{Math.round(config.linkDistance ?? 250)}</span>
+                  <span className="text-app-text font-medium">{Math.round(config.linkDistance ?? 80)}px</span>
                 </div>
                 <input
                   type="range"
-                  min="50"
-                  max="500"
-                  step="10"
-                  value={config.linkDistance ?? 250}
+                  min="20"
+                  max="300"
+                  step="5"
+                  value={config.linkDistance ?? 80}
                   onChange={(e) => updateConfig('linkDistance', parseInt(e.target.value))}
                   className="w-full accent-app-accent"
                 />
-                <div className="text-xs text-app-muted mt-1">Target spacing between connected nodes</div>
+                <div className="text-xs text-app-muted mt-1">Target distance between connected nodes</div>
               </div>
             </div>
           )}
@@ -413,7 +414,7 @@ export default function GraphSidebar({
           </button>
 
           {!config['collapse-groups'] && (
-            <div className="px-4 pb-4 space-y-4">
+            <div className="px-4 pb-4 space-y-3">
               {/* Color Scheme Selector */}
               <div>
                 <label className="text-xs text-app-muted mb-1.5 block">Color Scheme</label>
@@ -427,7 +428,6 @@ export default function GraphSidebar({
                   <option value="tag">By Primary Tag</option>
                   <option value="creation-date">By Creation Date</option>
                   <option value="modification-date">By Modification Date</option>
-                  <option value="custom">Custom Groups</option>
                 </select>
                 <div className="text-xs text-app-muted mt-1.5">
                   {config.colorScheme === 'type' && 'Colors nodes by their type (document, placeholder, tag, etc.)'}
@@ -435,82 +435,114 @@ export default function GraphSidebar({
                   {config.colorScheme === 'tag' && 'Colors nodes by their primary tag'}
                   {config.colorScheme === 'creation-date' && 'Colors nodes by creation date (recent to old)'}
                   {config.colorScheme === 'modification-date' && 'Colors nodes by modification date'}
-                  {config.colorScheme === 'custom' && 'Use custom color groups defined below'}
                 </div>
               </div>
 
-              {/* Custom Color Groups (only show if custom scheme selected) */}
-              {config.colorScheme === 'custom' && (
-                <div className="space-y-2">
-                  <div className="text-xs text-app-muted mb-2">Custom Groups</div>
+              {/* Query-based color group overrides */}
+              <div className="text-xs text-app-muted mb-1">Color Overrides</div>
 
-                  {config.colorGroups && config.colorGroups.length > 0 ? (
-                    <div className="space-y-2">
-                      {config.colorGroups.map((group, index) => (
-                        <div key={index} className="flex items-center gap-2 p-2 bg-app-bg rounded border border-app-border">
-                          <input
-                            type="color"
-                            value={group.color}
-                            onChange={(e) => {
-                              const newGroups = [...(config.colorGroups || [])];
-                              newGroups[index].color = e.target.value;
-                              updateConfig('colorGroups', newGroups);
-                            }}
-                            className="w-8 h-8 rounded border border-app-border cursor-pointer"
-                          />
-                          <div className="flex-1">
-                            <input
-                              type="text"
-                              value={group.name}
-                              onChange={(e) => {
-                                const newGroups = [...(config.colorGroups || [])];
-                                newGroups[index].name = e.target.value;
-                                updateConfig('colorGroups', newGroups);
-                              }}
-                              placeholder="Group name"
-                              className="w-full px-2 py-1 bg-app-panel border border-app-border rounded text-xs text-app-text focus:outline-none focus:border-app-accent"
-                            />
-                            <div className="text-xs text-app-muted mt-1">
-                              {(group.nodeIds || []).length} nodes
-                            </div>
-                          </div>
+              {config.colorGroups && config.colorGroups.length > 0 && (
+                <div className="space-y-2">
+                  {config.colorGroups.map((group, index) => {
+                    const matchCount = countMatches(group.query, graphData?.nodes || []);
+                    return (
+                      <div key={index} className="flex items-center gap-2 p-2 bg-app-bg rounded border border-app-border">
+                        <div className="flex flex-col gap-0.5">
                           <button
                             onClick={() => {
-                              const newGroups = config.colorGroups.filter((_, i) => i !== index);
+                              if (index === 0) return;
+                              const newGroups = [...(config.colorGroups || [])];
+                              [newGroups[index - 1], newGroups[index]] = [newGroups[index], newGroups[index - 1]];
                               updateConfig('colorGroups', newGroups);
                             }}
-                            className="px-2 py-1 text-xs text-red-500 hover:bg-red-500/10 rounded transition-colors"
+                            disabled={index === 0}
+                            className="text-[10px] text-app-muted hover:text-app-text disabled:opacity-30 leading-none"
+                            title="Move up (higher priority)"
                           >
-                            ✕
+                            ▲
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (index === config.colorGroups.length - 1) return;
+                              const newGroups = [...(config.colorGroups || [])];
+                              [newGroups[index], newGroups[index + 1]] = [newGroups[index + 1], newGroups[index]];
+                              updateConfig('colorGroups', newGroups);
+                            }}
+                            disabled={index === config.colorGroups.length - 1}
+                            className="text-[10px] text-app-muted hover:text-app-text disabled:opacity-30 leading-none"
+                            title="Move down (lower priority)"
+                          >
+                            ▼
                           </button>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-xs text-app-muted text-center py-4 bg-app-bg rounded border border-app-border border-dashed">
-                      No custom groups yet
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => {
-                      const newGroup = {
-                        name: `Group ${(config.colorGroups || []).length + 1}`,
-                        color: `#${Math.floor(Math.random()*16777215).toString(16)}`,
-                        nodeIds: []
-                      };
-                      updateConfig('colorGroups', [...(config.colorGroups || []), newGroup]);
-                    }}
-                    className="w-full px-3 py-2 bg-app-accent/10 hover:bg-app-accent/20 text-app-accent rounded text-xs font-medium transition-colors"
-                  >
-                    + Add Color Group
-                  </button>
-
-                  <div className="text-xs text-app-muted mt-2 p-2 bg-app-bg rounded border border-app-border">
-                    💡 Tip: Select nodes in the graph, then drag them into a color group to assign colors
-                  </div>
+                        <input
+                          type="color"
+                          value={group.color}
+                          onChange={(e) => {
+                            const newGroups = [...(config.colorGroups || [])];
+                            newGroups[index] = { ...newGroups[index], color: e.target.value };
+                            updateConfig('colorGroups', newGroups);
+                          }}
+                          className="w-7 h-7 rounded border border-app-border cursor-pointer shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <input
+                            type="text"
+                            value={group.query}
+                            onChange={(e) => {
+                              const newGroups = [...(config.colorGroups || [])];
+                              newGroups[index] = { ...newGroups[index], query: e.target.value };
+                              updateConfig('colorGroups', newGroups);
+                            }}
+                            placeholder="folder:path/ or tag:name or text"
+                            className="w-full px-2 py-1 bg-app-panel border border-app-border rounded text-xs text-app-text focus:outline-none focus:border-app-accent"
+                          />
+                        </div>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 ${
+                            matchCount > 0
+                              ? 'bg-app-accent/20 text-app-accent'
+                              : 'bg-app-bg text-app-muted'
+                          }`}
+                          title={`${matchCount} node${matchCount !== 1 ? 's' : ''} matched`}
+                        >
+                          {matchCount}
+                        </span>
+                        <button
+                          onClick={() => {
+                            const newGroups = config.colorGroups.filter((_, i) => i !== index);
+                            updateConfig('colorGroups', newGroups);
+                          }}
+                          className="text-xs text-app-muted hover:text-red-400 shrink-0 transition-colors"
+                          title="Remove group"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
+
+              <button
+                onClick={() => {
+                  const newGroup = {
+                    query: '',
+                    color: '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')
+                  };
+                  updateConfig('colorGroups', [...(config.colorGroups || []), newGroup]);
+                }}
+                className="w-full px-3 py-2 bg-app-accent/10 hover:bg-app-accent/20 text-app-accent rounded text-xs font-medium transition-colors"
+              >
+                + Add Color Group
+              </button>
+
+              <div className="text-[11px] text-app-muted space-y-1 p-2 bg-app-bg rounded border border-app-border">
+                <div><span className="text-app-text font-mono">folder:path/</span> — match by folder</div>
+                <div><span className="text-app-text font-mono">tag:name</span> — match by tag</div>
+                <div><span className="text-app-text font-mono">text</span> — match by title</div>
+                <div className="text-app-muted mt-1">First match wins. Use arrows to reorder priority.</div>
+              </div>
             </div>
           )}
         </div>

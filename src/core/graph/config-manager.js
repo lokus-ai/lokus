@@ -30,11 +30,11 @@ export function getDefaultConfig() {
     textFadeMultiplier: 1.3,
     nodeSizeMultiplier: 1.0,
     lineSizeMultiplier: 1.0,
-    // Force settings
-    centerStrength: 0.3,     // Lower center pull = more spread
-    repelStrength: 15,       // Higher repel = more separation
-    linkStrength: 0.5,       // Lower link = more flexible
-    linkDistance: 250,       // Longer links = more space
+    // Force settings (d3-force values — repel is passed directly as negative charge strength)
+    centerStrength: 0.1,     // Pull toward center (0 = none, 1 = strong)
+    repelStrength: 100,      // Charge strength (passed as -N to d3.forceManyBody)
+    linkStrength: 0.3,       // Link spring stiffness (0 = loose, 1 = rigid)
+    linkDistance: 80,         // Target px between linked nodes
     // Color customization
     'collapse-groups': false,
     colorScheme: 'type', // 'type', 'folder', 'tag', 'creation-date', 'modification-date', 'custom'
@@ -157,7 +157,7 @@ export function validateConfig(config) {
     validated.version = config.version;
   }
   if (typeof config.colorScheme === 'string') {
-    const validSchemes = ['type', 'folder', 'tag', 'creation-date', 'modification-date', 'custom'];
+    const validSchemes = ['type', 'folder', 'tag', 'creation-date', 'modification-date'];
     validated.colorScheme = validSchemes.includes(config.colorScheme) ? config.colorScheme : 'type';
   }
   if (typeof config.backgroundType === 'string') {
@@ -176,10 +176,10 @@ export function validateConfig(config) {
     { key: 'textFadeMultiplier', min: 0, max: 3, default: 1.3 },
     { key: 'nodeSizeMultiplier', min: 0.5, max: 2, default: 1.0 },
     { key: 'lineSizeMultiplier', min: 0.5, max: 3, default: 1.0 },
-    { key: 'centerStrength', min: 0, max: 1, default: 0.3 },
-    { key: 'repelStrength', min: 0, max: 20, default: 15 },
-    { key: 'linkStrength', min: 0, max: 2, default: 0.5 },
-    { key: 'linkDistance', min: 50, max: 500, default: 250 },
+    { key: 'centerStrength', min: 0, max: 1, default: 0.1 },
+    { key: 'repelStrength', min: 10, max: 500, default: 100 },
+    { key: 'linkStrength', min: 0, max: 1, default: 0.3 },
+    { key: 'linkDistance', min: 20, max: 300, default: 80 },
     { key: 'backgroundOpacity', min: 0, max: 1, default: 0.1 },
     { key: 'backgroundDotSize', min: 1, max: 10, default: 2 },
     { key: 'backgroundDotSpacing', min: 10, max: 100, default: 30 }
@@ -193,9 +193,14 @@ export function validateConfig(config) {
     }
   });
 
-  // Validate arrays
+  // Validate colorGroups array (query-based groups)
   if (Array.isArray(config.colorGroups)) {
-    validated.colorGroups = config.colorGroups;
+    validated.colorGroups = config.colorGroups
+      .filter(g => g && typeof g.query === 'string' && typeof g.color === 'string')
+      .map(g => ({
+        query: g.query.trim(),
+        color: /^#[0-9A-F]{6}$/i.test(g.color) ? g.color : '#6366f1'
+      }));
   }
 
   return validated;

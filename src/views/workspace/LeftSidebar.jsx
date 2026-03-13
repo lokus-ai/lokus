@@ -42,6 +42,7 @@ export default function LeftSidebar({
   onOpenPluginDetail,
   onCreateKanban,
   onKanbanBoardAction,
+  onCreateGraph,
   editorGroupsUpdateTabPath,
 }) {
   const showLeft = useLayoutStore((s) => s.showLeft);
@@ -201,6 +202,7 @@ export default function LeftSidebar({
           {featureFlags.enable_canvas && (
             <ContextMenuItem onClick={onCreateCanvas}>New Canvas</ContextMenuItem>
           )}
+          <ContextMenuItem onClick={onCreateGraph}>New Graph</ContextMenuItem>
           <ContextMenuItem onClick={onCreateFolder}>
             New Folder
             {isDesktop() && (

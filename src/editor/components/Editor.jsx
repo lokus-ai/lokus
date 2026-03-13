@@ -35,6 +35,7 @@ import { createMermaidInputRulesPlugin, mermaidNodeView } from '../extensions/Me
 import { inlineMathNodeView } from '../extensions/InlineMath.jsx';
 import { createWikiLinkNodeView } from '../extensions/WikiLink.js';
 import { createCanvasLinkNodeView } from '../extensions/CanvasLink.js';
+import { createGraphLinkPlugins, createGraphLinkNodeView } from '../extensions/GraphLink.js';
 // View-dependent plugin factories (need EditorView, created in onReady)
 import { createSlashCommandPlugin } from '../lib/SlashCommand.js';
 import { createWikiLinkSuggestPlugins } from '../lib/WikiLinkSuggest.js';
@@ -456,6 +457,7 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       ...createWikiLinkPlugins(schema),
       ...createWikiLinkEmbedPlugins(schema),
       ...createCanvasLinkPlugins(schema),
+      ...createGraphLinkPlugins(schema),
       ...createCodeBlockPlugins(schema),
       createCodeBlockIndentPlugin(),
       ...createMathSnippetsPlugins(schema, { customSnippets: customSymbols }),
@@ -469,6 +471,7 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       inlineMath: inlineMathNodeView,
       wikiLink: createWikiLinkNodeView,
       canvasLink: createCanvasLinkNodeView,
+      graphLink: createGraphLinkNodeView,
     };
 
     // ── Load editor settings then finalize ──────────────────────────────
