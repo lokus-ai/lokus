@@ -15,7 +15,7 @@ Local-first. Privacy-focused. Blazing fast.
 [![GitHub Stars](https://img.shields.io/github/stars/lokus-ai/lokus?style=flat&logo=github&labelColor=1a1a2e&color=6366f1)](https://github.com/lokus-ai/lokus/stargazers)
 [![License](https://img.shields.io/badge/License-FCL_1.0-blue?style=flat&labelColor=1a1a2e&color=6366f1)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/lokus-ai/lokus?include_prereleases&style=flat&labelColor=1a1a2e&color=6366f1)](https://github.com/lokus-ai/lokus/releases)
-[![Downloads](https://img.shields.io/github/downloads/lokus-ai/lokus/total?style=flat&labelColor=1a1a2e&color=6366f1)](https://github.com/lokus-ai/lokus/releases)
+
 
 <br />
 
