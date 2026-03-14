@@ -1,8 +1,10 @@
+import { lazy, Suspense, useContext } from 'react';
 import { useLayoutStore } from '../../stores/layout';
 import { useViewStore } from '../../stores/views';
 import { useEditorGroupStore } from '../../stores/editorGroups';
 import { getEditor } from '../../stores/editorRegistry';
 import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
+import MeetingContext from '../../contexts/MeetingContext';
 import DocumentOutline from '../../components/DocumentOutline.jsx';
 import BacklinksPanel from '../BacklinksPanel.jsx';
 import GraphSidebar from '../../components/GraphSidebar.jsx';
@@ -12,6 +14,8 @@ import { CalendarWidget } from '../../components/Calendar/index.js';
 import { PanelRegion } from '../../plugins/ui/PanelManager.jsx';
 import { PANEL_POSITIONS } from '../../plugins/api/UIAPI.js';
 import { EditorModeSwitcher } from '../../features/editor';
+
+const MeetingPanel = lazy(() => import('../../components/meeting/MeetingPanel'));
 
 /**
  * RightSidebar — document outline, backlinks, graph sidebar, version history,
@@ -63,6 +67,14 @@ export default function RightSidebar({
 
   const featureFlags = useFeatureFlags();
 
+  // Read meeting state directly from context (returns null if no MeetingProvider)
+  const meetingCtx = useContext(MeetingContext);
+  const meetingState = meetingCtx?.state;
+  const isMeetingActive =
+    meetingState === 'recording' ||
+    meetingState === 'processing' ||
+    meetingState === 'complete';
+
   if (!showRight) return null;
 
   const handleOpenCalendarView = () => {
@@ -95,7 +107,11 @@ export default function RightSidebar({
       className="h-full overflow-y-auto flex flex-col bg-app-bg border-l border-app-border"
     >
       <div className="flex-1 overflow-hidden">
-        {featureFlags.enable_version_history && showVersionHistory ? (
+        {isMeetingActive ? (
+          <Suspense fallback={null}>
+            <MeetingPanel workspacePath={workspacePath} />
+          </Suspense>
+        ) : featureFlags.enable_version_history && showVersionHistory ? (
           <VersionHistoryPanel
             key={`version-${activeFile}-${versionRefreshKey}`}
             workspacePath={workspacePath}

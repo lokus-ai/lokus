@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Lokus uses the microphone to record meeting audio for real-time transcription. Audio is sent to Deepgram for processing and is not stored on our servers.</string>
+	<string>Lokus uses the microphone to record meeting audio for real-time transcription via your Deepgram API key. Audio is streamed directly to Deepgram and is not stored by Lokus.</string>
 	<key>NSDesktopFolderUsageDescription</key>
 	<string>Lokus needs access to your Desktop folder to open and manage note files you have saved there.</string>
 	<key>NSDocumentsFolderUsageDescription</key>

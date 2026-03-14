@@ -284,6 +284,7 @@ mod macos_impl {
             ProtocolObject::from_ref::<NotificationDelegate>(delegate);
         center.setDelegate(Some(delegate_ref));
 
+        println!("[NOTIF] Delegate installed, has_bundle_id={}", has_bundle_id());
         tracing::info!("Notification delegate installed");
     }
 
@@ -293,10 +294,10 @@ mod macos_impl {
     /// The notification fires after 0.1 seconds (effectively immediately).
     /// A new UUID is used for each call so notifications do not overwrite
     /// each other.
-    pub fn send_meeting_notification(title: &str, body: &str) {
+    pub fn send_meeting_notification(title: &str, body: &str) -> Result<(), String> {
         if !has_bundle_id() {
             tracing::warn!("Skipping notification — no bundle identifier (dev mode)");
-            return;
+            return Err("No bundle identifier — notifications require a bundled .app (use `cargo tauri build --debug` to test)".into());
         }
         let content = UNMutableNotificationContent::new();
         content.setTitle(&NSString::from_str(title));
@@ -327,14 +328,25 @@ mod macos_impl {
 
         let completion = RcBlock::new(|error: *mut objc2_foundation::NSError| {
             if error.is_null() {
-                tracing::info!("Meeting notification scheduled successfully");
+                println!("[NOTIF] Notification scheduled successfully");
             } else {
-                tracing::warn!("Failed to schedule meeting notification");
+                let desc = unsafe {
+                    if let Some(e) = error.as_ref() {
+                        e.localizedDescription().to_string()
+                    } else {
+                        "unknown error".to_string()
+                    }
+                };
+                println!("[NOTIF] ERROR scheduling notification: {}", desc);
             }
         });
 
+        println!("[NOTIF] Scheduling notification: title={}, body={}", title, body);
         center.addNotificationRequest_withCompletionHandler(&request, Some(&completion));
+
+        Ok(())
     }
+
 }
 
 // ---------------------------------------------------------------------------
@@ -361,7 +373,9 @@ pub fn register_notification_categories() {}
 pub fn install_notification_delegate(_app_handle: tauri::AppHandle) {}
 
 #[cfg(not(target_os = "macos"))]
-pub fn send_meeting_notification(_title: &str, _body: &str) {}
+pub fn send_meeting_notification(_title: &str, _body: &str) -> Result<(), String> {
+    Err("Notifications not supported on this platform".into())
+}
 
 // ---------------------------------------------------------------------------
 // Tauri commands
@@ -381,6 +395,5 @@ pub async fn request_notification_permission_cmd() -> Result<(), String> {
 /// On non-macOS platforms this is a no-op that always returns `Ok`.
 #[tauri::command]
 pub async fn send_native_notification(title: String, body: String) -> Result<(), String> {
-    send_meeting_notification(&title, &body);
-    Ok(())
+    send_meeting_notification(&title, &body)
 }

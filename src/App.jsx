@@ -5,6 +5,8 @@ import { useAuth } from "./core/auth/AuthContext.jsx";
 // Lazy load heavy views
 const Workspace = lazy(() => import("./views/Workspace"));
 const Preferences = lazy(() => import("./views/Preferences"));
+const MeetingOverlay = lazy(() => import("./components/meeting/MeetingOverlay"));
+const MeetingFAB = lazy(() => import("./components/meeting/MeetingFAB"));
 
 import UpdateChecker from "./components/UpdateChecker";
 import { RemoteAnnouncement } from "./components/RemoteAnnouncement";
@@ -82,7 +84,27 @@ const AuthGate = ({ children, isPrefsWindow }) => {
   return children;
 };
 
+// Detect special window types at module level (evaluated once)
+const WINDOW_VIEW = (() => {
+  try {
+    return new URLSearchParams(window.location.search).get('view');
+  } catch { return null; }
+})();
+
 function App() {
+  // Standalone lightweight windows — skip all providers/hooks
+  if (WINDOW_VIEW === 'meeting-overlay') {
+    return (
+      <Suspense fallback={null}>
+        <MeetingOverlay />
+      </Suspense>
+    );
+  }
+
+  return <AppMain />;
+}
+
+function AppMain() {
   // Use the hooks' values directly (no setter param expected)
   const { isPrefsWindow } = usePreferenceActivation();
   const activePath = useWorkspaceActivation();
@@ -236,7 +258,10 @@ function App() {
                   {isPrefsWindow ? (
                     <Preferences />
                   ) : activePath ? (
-                    <Workspace initialPath={activePath} />
+                    <>
+                      <Workspace initialPath={activePath} />
+                      <Suspense fallback={null}><MeetingFAB /></Suspense>
+                    </>
                   ) : (
                     <Launcher />
                   )}

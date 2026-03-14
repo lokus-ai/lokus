@@ -1,16 +1,19 @@
 /**
  * AI Provider Abstraction Layer
  *
- * Unified interface for dual-mode AI access in Lokus:
+ * Unified interface for dual-mode LLM access in Lokus:
  *
  *   - BYOK (Bring Your Own Key): Calls go directly from the app to
- *     OpenAI / Anthropic / Deepgram using the user's own API keys.
+ *     OpenAI / Anthropic using the user's own API keys.
  *   - Lokus-provided: Calls route through Supabase Edge Function proxies
  *     using Lokus-managed API keys. The user's Supabase JWT is forwarded
  *     for authentication and usage tracking.
  *
- * All HTTP is done with native fetch(). WebSocket uses the native WebSocket
- * API. No external runtime dependencies are required.
+ * All HTTP is done with native fetch(). No external runtime dependencies
+ * are required.
+ *
+ * Speech-to-text is handled by Deepgram (BYOK). The user supplies their
+ * own Deepgram API key. This module covers LLM summarisation only.
  *
  * Provider config shape:
  * {
@@ -18,7 +21,7 @@
  *   llmProvider: 'openai' | 'anthropic',
  *   llmApiKey: string,       // BYOK only
  *   llmModel: string,        // e.g. 'gpt-4o', 'claude-sonnet-4-20250514'
- *   deepgramApiKey: string,  // BYOK only
+ *   deepgramApiKey: string,  // Deepgram BYOK key for STT
  *   supabaseUrl: string,     // Lokus-provided mode
  *   supabaseToken: string,   // user's Supabase JWT (Lokus-provided mode)
  * }
@@ -48,13 +51,7 @@ const EDGE_FN_LLM_SUMMARY = 'llm-summary';
 /** Direct provider API base URLs */
 const OPENAI_BASE_URL    = 'https://api.openai.com/v1';
 const ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
-const DEEPGRAM_BASE_URL  = 'https://api.deepgram.com/v1';
-
-/** Deepgram streaming WebSocket base URL */
-const DEEPGRAM_WS_URL    = 'wss://api.deepgram.com/v1/listen';
-
-/** Deepgram proxy WebSocket path on the Edge Function */
-const EDGE_FN_TRANSCRIBE_WS_PATH = 'transcribe-ws';
+const GEMINI_BASE_URL    = 'https://generativelanguage.googleapis.com/v1beta';
 
 /** Current Anthropic API version header value */
 const ANTHROPIC_API_VERSION = '2023-06-01';
@@ -183,6 +180,59 @@ async function _rustStream(provider, apiKey, model, prompt, onChunk) {
     });
   } finally {
     unlisten();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// LLM client — Gemini (direct fetch, no Rust proxy needed)
+// ---------------------------------------------------------------------------
+
+async function _geminiGenerate(apiKey, model, prompt) {
+  const url = `${GEMINI_BASE_URL}/models/${model}:generateContent?key=${apiKey}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: prompt.system }] },
+      contents: [{ role: 'user', parts: [{ text: prompt.user }] }],
+    }),
+  });
+  if (!response.ok) await _throwForStatus(response, 'Gemini generate');
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+}
+
+async function _geminiStream(apiKey, model, prompt, onChunk) {
+  const url = `${GEMINI_BASE_URL}/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: prompt.system }] },
+      contents: [{ role: 'user', parts: [{ text: prompt.user }] }],
+    }),
+  });
+  if (!response.ok) await _throwForStatus(response, 'Gemini stream');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data: ')) continue;
+      try {
+        const json = JSON.parse(trimmed.slice(6));
+        const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) onChunk(text);
+      } catch { /* skip malformed lines */ }
+    }
   }
 }
 
@@ -341,6 +391,9 @@ export function createLLMClient(config) {
         if (mode === 'lokus') {
           return await _proxyGenerate(supabaseUrl, supabaseToken, prompt, llmModel, llmProvider);
         }
+        if (llmProvider === 'gemini') {
+          return await _geminiGenerate(llmApiKey, llmModel, prompt);
+        }
         if (llmProvider === 'openai') {
           return await _openaiGenerate(llmApiKey, llmModel, prompt);
         }
@@ -365,6 +418,9 @@ export function createLLMClient(config) {
         if (mode === 'lokus') {
           return await _proxyStream(supabaseUrl, supabaseToken, prompt, llmModel, llmProvider, onChunk);
         }
+        if (llmProvider === 'gemini') {
+          return await _geminiStream(llmApiKey, llmModel, prompt, onChunk);
+        }
         if (llmProvider === 'openai') {
           return await _openaiStream(llmApiKey, llmModel, prompt, onChunk);
         }
@@ -381,205 +437,19 @@ export function createLLMClient(config) {
 }
 
 // ---------------------------------------------------------------------------
-// Public API — Transcription client
-// ---------------------------------------------------------------------------
-
-/**
- * Build the Deepgram streaming WebSocket URL with recommended parameters.
- * @param {string} apiKey - Deepgram API key (BYOK mode).
- * @returns {string}
- */
-function _deepgramWsUrl(apiKey) {
-  const params = new URLSearchParams({
-    encoding: 'linear16',
-    sample_rate: '16000',
-    channels: '1',
-    model: 'nova-2',
-    language: 'en',
-    smart_format: 'true',
-    diarize: 'true',
-    interim_results: 'true',
-  });
-  return `${DEEPGRAM_WS_URL}?${params.toString()}`;
-}
-
-/**
- * Create a Deepgram streaming WebSocket (BYOK direct path).
- * @param {string} apiKey
- * @param {function(Object): void} onTranscript - Called with each transcript segment.
- * @param {function(Error): void} onError - Called on WebSocket errors.
- * @returns {WebSocket}
- */
-function _createDeepgramWebSocket(apiKey, onTranscript, onError) {
-  const url = _deepgramWsUrl(apiKey);
-  const ws = new WebSocket(url, ['token', apiKey]);
-
-  ws.binaryType = 'arraybuffer';
-
-  ws.addEventListener('message', (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      // Deepgram sends 'Results' messages for transcript updates
-      if (data.type === 'Results') {
-        const channel = data.channel?.alternatives?.[0];
-        if (channel) {
-          onTranscript({
-            text: channel.transcript,
-            words: channel.words ?? [],
-            isFinal: data.is_final ?? false,
-            speechFinal: data.speech_final ?? false,
-            confidence: channel.confidence ?? 0,
-          });
-        }
-      }
-    } catch (err) {
-      logger.error('AIProvider', 'Deepgram message parse error:', err);
-    }
-  });
-
-  ws.addEventListener('error', (event) => {
-    const err = new Error('Deepgram WebSocket error');
-    logger.error('AIProvider', 'Deepgram WebSocket error:', event);
-    onError(err);
-  });
-
-  ws.addEventListener('close', (event) => {
-    if (!event.wasClean) {
-      const err = new Error(`Deepgram WebSocket closed unexpectedly (code ${event.code})`);
-      logger.error('AIProvider', 'Deepgram WebSocket closed unexpectedly:', event);
-      onError(err);
-    }
-  });
-
-  return ws;
-}
-
-/**
- * Create a proxy transcription WebSocket through the Supabase Edge Function.
- *
- * The Edge Function at {supabaseUrl}/functions/v1/transcribe-ws is expected to
- * act as a WebSocket proxy to Deepgram, accepting the user's Supabase JWT in
- * the first message or query parameter.
- *
- * @param {string} supabaseUrl
- * @param {string} supabaseToken
- * @param {function(Object): void} onTranscript
- * @param {function(Error): void} onError
- * @returns {WebSocket}
- */
-function _createProxyWebSocket(supabaseUrl, supabaseToken, onTranscript, onError) {
-  const base = (supabaseUrl || SUPABASE_PROXY_BASE_PLACEHOLDER).replace(/\/$/, '');
-  // Convert https:// to wss:// for WebSocket
-  const wsBase = base.replace(/^https?:\/\//, (match) =>
-    match.startsWith('https') ? 'wss://' : 'ws://'
-  );
-  const url = `${wsBase}/functions/v1/${EDGE_FN_TRANSCRIBE_WS_PATH}?token=${encodeURIComponent(supabaseToken)}`;
-
-  const ws = new WebSocket(url);
-  ws.binaryType = 'arraybuffer';
-
-  ws.addEventListener('message', (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.type === 'Results') {
-        const channel = data.channel?.alternatives?.[0];
-        if (channel) {
-          onTranscript({
-            text: channel.transcript,
-            words: channel.words ?? [],
-            isFinal: data.is_final ?? false,
-            speechFinal: data.speech_final ?? false,
-            confidence: channel.confidence ?? 0,
-          });
-        }
-      }
-    } catch (err) {
-      logger.error('AIProvider', 'Proxy transcription message parse error:', err);
-    }
-  });
-
-  ws.addEventListener('error', (event) => {
-    const err = new Error('Transcription proxy WebSocket error');
-    logger.error('AIProvider', 'Proxy WebSocket error:', event);
-    onError(err);
-  });
-
-  ws.addEventListener('close', (event) => {
-    if (!event.wasClean) {
-      const err = new Error(`Transcription proxy closed unexpectedly (code ${event.code})`);
-      logger.error('AIProvider', 'Proxy WebSocket closed unexpectedly:', event);
-      onError(err);
-    }
-  });
-
-  return ws;
-}
-
-/**
- * Create a transcription client object for streaming audio to a speech-to-text
- * service via WebSocket.
- *
- * @param {Object} config - Provider configuration (see module docblock).
- * @returns {{ createWebSocket: Function }}
- *
- * @example
- * const client = createTranscriptionClient(config);
- * const ws = client.createWebSocket(
- *   (segment) => console.log(segment.text),
- *   (err)     => console.error(err)
- * );
- * // Send PCM audio chunks:
- * ws.send(audioChunk);
- * // When done:
- * ws.close();
- */
-export function createTranscriptionClient(config) {
-  const { mode, deepgramApiKey, supabaseUrl, supabaseToken } = config ?? {};
-
-  return {
-    /**
-     * Open a streaming WebSocket connection for real-time audio transcription.
-     *
-     * @param {function(Object): void} onTranscript
-     *   Called with each transcript segment object:
-     *   { text, words, isFinal, speechFinal, confidence }
-     * @param {function(Error): void} onError
-     *   Called on connection or protocol errors.
-     * @returns {WebSocket}
-     *   Native WebSocket. Send raw audio chunks (ArrayBuffer / Blob) over it.
-     *   Call ws.close() when recording ends.
-     */
-    createWebSocket(onTranscript, onError) {
-      try {
-        if (mode === 'lokus') {
-          return _createProxyWebSocket(supabaseUrl, supabaseToken, onTranscript, onError);
-        }
-
-        // BYOK path — direct Deepgram connection
-        return _createDeepgramWebSocket(deepgramApiKey, onTranscript, onError);
-      } catch (error) {
-        logger.error('AIProvider', 'createWebSocket failed:', error);
-        throw error;
-      }
-    },
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Public API — Key validation
 // ---------------------------------------------------------------------------
 
 /**
- * Test whether an API key is valid for the given provider.
+ * Test whether an API key is valid for the given LLM provider.
  *
  * Validation strategy:
  *   - openai:    GET /v1/models — succeeds on 200, fails on 401
  *   - anthropic: POST /v1/messages with minimal payload — succeeds on 200,
  *                fails on 401 (a 400 "invalid_request_error" still means the
  *                key itself is accepted)
- *   - deepgram:  GET /v1/projects — lightweight authenticated endpoint
  *
- * @param {'openai' | 'anthropic' | 'deepgram'} provider
+ * @param {'openai' | 'anthropic'} provider
  * @param {string} apiKey
  * @returns {Promise<{ valid: boolean, error?: string }>}
  */
@@ -613,6 +483,11 @@ export async function validateApiKey(provider, apiKey) {
  */
 export function getAvailableModels(provider) {
   const models = {
+    gemini: [
+      'gemini-2.0-flash',
+      'gemini-2.0-flash-lite',
+      'gemini-1.5-flash',
+    ],
     openai: [
       'gpt-4o',
       'gpt-4o-mini',
@@ -645,10 +520,10 @@ export function getAvailableModels(provider) {
  */
 export function getProviderConfig() {
   const defaults = {
-    mode: 'lokus',
-    llmProvider: 'anthropic',
+    mode: 'byok',
+    llmProvider: 'openai',
     llmApiKey: '',
-    llmModel: 'claude-sonnet-4-20250514',
+    llmModel: 'gpt-4o-mini',
     deepgramApiKey: '',
     supabaseUrl: import.meta.env?.VITE_SUPABASE_URL ?? '',
     supabaseToken: '',
@@ -668,7 +543,7 @@ export function getProviderConfig() {
 /**
  * Persist the provider configuration.
  *
- * Sensitive fields (llmApiKey, deepgramApiKey) are stored via Tauri secure
+ * Sensitive fields (llmApiKey, supabaseToken) are stored via Tauri secure
  * storage when running inside Tauri, so they never touch localStorage.
  * Non-sensitive fields are always written to localStorage for fast reads.
  *
@@ -698,8 +573,8 @@ export async function saveProviderConfig(config) {
       const { invoke } = await import('@tauri-apps/api/core');
       const keysToStore = {
         'ai-llm-api-key':      llmApiKey      ?? '',
-        'ai-deepgram-api-key': deepgramApiKey ?? '',
-        'ai-supabase-token':   supabaseToken  ?? '',
+        'ai-deepgram-api-key': deepgramApiKey  ?? '',
+        'ai-supabase-token':   supabaseToken   ?? '',
       };
 
       for (const [key, value] of Object.entries(keysToStore)) {
@@ -735,8 +610,8 @@ export async function saveProviderConfig(config) {
   }
   try {
     if (llmApiKey      !== undefined) localStorage.setItem('lokus-ai-secure-ai-llm-api-key',      llmApiKey);
-    if (deepgramApiKey !== undefined) localStorage.setItem('lokus-ai-secure-ai-deepgram-api-key',  deepgramApiKey);
-    if (supabaseToken  !== undefined) localStorage.setItem('lokus-ai-secure-ai-supabase-token',    supabaseToken);
+    if (deepgramApiKey !== undefined) localStorage.setItem('lokus-ai-secure-ai-deepgram-api-key', deepgramApiKey);
+    if (supabaseToken  !== undefined) localStorage.setItem('lokus-ai-secure-ai-supabase-token',   supabaseToken);
   } catch (error) {
     logger.error('AIProvider', 'saveProviderConfig failed to write sensitive fields:', error);
     throw new Error(`Failed to save API keys: ${error.message}`);
@@ -782,8 +657,8 @@ export async function loadProviderConfig() {
 
   // Non-Tauri: read from localStorage
   config.llmApiKey      = localStorage.getItem('lokus-ai-secure-ai-llm-api-key')      ?? config.llmApiKey;
-  config.deepgramApiKey = localStorage.getItem('lokus-ai-secure-ai-deepgram-api-key')  ?? config.deepgramApiKey;
-  config.supabaseToken  = localStorage.getItem('lokus-ai-secure-ai-supabase-token')    ?? config.supabaseToken;
+  config.deepgramApiKey = localStorage.getItem('lokus-ai-secure-ai-deepgram-api-key') ?? config.deepgramApiKey;
+  config.supabaseToken  = localStorage.getItem('lokus-ai-secure-ai-supabase-token')   ?? config.supabaseToken;
 
   return config;
 }

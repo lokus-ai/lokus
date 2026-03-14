@@ -23,7 +23,7 @@
  * @module contexts/MeetingContext
  */
 
-import React, { createContext, useContext, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useMeetingSession } from '../hooks/useMeetingSession.js';
@@ -59,7 +59,7 @@ const MeetingContext = createContext(null);
 export function MeetingProvider({ children }) {
   const session = useMeetingSession();
 
-  // Request notification permission once on mount.
+  // Request native notification permission once on mount.
   useEffect(() => {
     invoke('request_notification_permission_cmd').catch(console.error);
   }, []);
@@ -79,30 +79,22 @@ export function MeetingProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.state]); // re-run whenever state changes
 
-  // Send notification when a meeting is detected.
-  // Try native OS notification first; fall back to browser Notification API
-  // (works in dev mode where native notifications are unavailable).
+  // Show/close Notion-style floating overlay based on meeting state.
+  const prevState = useRef(session.state);
   useEffect(() => {
     if (session.state === 'prompted') {
-      console.log('[Lokus Meeting] Meeting detected — sending notification');
-      invoke('send_native_notification', {
-        title: 'Meeting Detected',
-        body: 'A meeting is in progress. Start recording?',
-      }).catch(() => {
-        // Native notification unavailable (dev mode) — use browser fallback
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification('Meeting Detected', {
-            body: 'A meeting is in progress. Open Lokus to start recording.',
-          });
-        } else if ('Notification' in window && Notification.permission === 'default') {
-          Notification.requestPermission();
-        }
+      console.log('[Lokus Meeting] Meeting detected — showing overlay');
+      invoke('open_meeting_overlay').catch((err) => {
+        console.warn('[Lokus Meeting] Overlay failed:', err);
       });
+    } else if (prevState.current === 'prompted' && session.state !== 'prompted') {
+      // State left prompted — close the overlay window
+      invoke('close_meeting_overlay').catch(() => {});
     }
+    prevState.current = session.state;
   }, [session.state]);
 
-  // Listen for action buttons tapped on the native notification banner.
-  // The Rust layer emits `lokus:notification-action` with { action: string }.
+  // Listen for action buttons from native notification banner.
   useEffect(() => {
     const unlisten = listen('lokus:notification-action', (event) => {
       const { action } = event.payload;
@@ -118,9 +110,32 @@ export function MeetingProvider({ children }) {
     return () => {
       unlisten.then((fn) => fn());
     };
-    // acceptPrompt and dismissPrompt are stable useCallback refs from the hook.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.acceptPrompt, session.dismissPrompt]);
+
+  // Listen for "Start transcribing" from the MeetingOverlay window.
+  useEffect(() => {
+    const unlisten = listen('meeting:start-recording', () => {
+      console.log('[Lokus Meeting] Overlay start-recording received');
+      session.acceptPrompt();
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.acceptPrompt]);
+
+  // Listen for "Dismiss" from the MeetingOverlay window.
+  useEffect(() => {
+    const unlisten = listen('meeting:dismiss', () => {
+      console.log('[Lokus Meeting] Overlay dismiss received');
+      session.dismissPrompt();
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.dismissPrompt]);
 
   return (
     <MeetingContext.Provider value={session}>
