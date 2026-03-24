@@ -67,5 +67,5 @@ export function docToPlainTextString(doc) {
  */
 export function plainTextDocToReadingHtml(doc) {
   const text = docToPlainTextString(doc);
-  return `<pre class="lokus-plain-text-reading" style="white-space:pre-wrap;word-break:break-word">${escapeHtml(text)}</pre>`;
+  return `<pre class="lokus-plain-text-reading" style="white-space:pre-wrap;word-break:break-word;tab-size:4;-moz-tab-size:4">${escapeHtml(text)}</pre>`;
 }

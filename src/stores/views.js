@@ -22,6 +22,7 @@ const PANEL_MAP = {
   showAboutDialog:      'showAboutDialog',
   showDatePickerModal:  'showDatePickerModal',
   showVersionHistory:   ['showVersionHistory', 'versionHistoryFile'],
+  showAgendaPanel:      'showAgendaPanel',
 };
 
 export const useViewStore = create(
@@ -49,6 +50,8 @@ export const useViewStore = create(
     versionRefreshKey: 0,
     showDailyNotesPanel: false,
     showCalendarPanel: false,
+    showAgendaPanel: false,
+    calendarNavigationTarget: null,
     referenceUpdateModal: {
       isOpen: false, oldPath: null, newPath: null,
       affectedFiles: [], isProcessing: false, result: null, pendingOperation: null,
@@ -57,6 +60,7 @@ export const useViewStore = create(
     // Valid view values: 'editor' | 'graph' | 'kanban' | 'bases' | 'calendar' |
     //                    'marketplace' | 'canvas' | 'settings' | 'dailyNotes'
     switchView: (view) => set({ currentView: view }),
+    setCalendarNavigationTarget: (target) => set({ calendarNavigationTarget: target }),
     incrementVersionRefreshKey: () => set((s) => ({ versionRefreshKey: s.versionRefreshKey + 1 })),
 
     openPanel: (name, data) => {

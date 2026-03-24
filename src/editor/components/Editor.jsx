@@ -76,7 +76,7 @@ import "../../styles/canvas-preview.css";
 // and renders the inner Tiptap (now ProseMirror) component.
 // ---------------------------------------------------------------------------
 
-const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading = false }, ref) => {
+const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading = false, plainTextNote = false }, ref) => {
   const [plugins, setPlugins] = useState(null);
   const [nodeViews, setNodeViews] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -644,6 +644,7 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       editorMode={editorMode}
       onEditorReady={onEditorReady}
       isLoading={isLoading}
+      plainTextNote={plainTextNote}
       showSymbolPicker={showSymbolPicker}
       setShowSymbolPicker={setShowSymbolPicker}
       customSymbols={customSymbols}
@@ -659,7 +660,7 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
 // renders the editor mount point.
 // ---------------------------------------------------------------------------
 
-const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, editorSettings, editorMode = 'edit', onEditorReady, isLoading = false, showSymbolPicker = false, setShowSymbolPicker, customSymbols = {}, viewRefForPlugins }, ref) => {
+const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, editorSettings, editorMode = 'edit', onEditorReady, isLoading = false, plainTextNote = false, showSymbolPicker = false, setShowSymbolPicker, customSymbols = {}, viewRefForPlugins }, ref) => {
   const [isWikiLinkModalOpen, setIsWikiLinkModalOpen] = useState(false);
   const [isTaskCreationModalOpen, setIsTaskCreationModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -1328,7 +1329,10 @@ const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, edi
       >
         <div
           ref={mountRef}
-          className={editorMode === 'live' ? 'live-preview-mode' : ''}
+          className={[
+            editorMode === 'live' ? 'live-preview-mode' : '',
+            plainTextNote ? 'lokus-plain-text-editor' : '',
+          ].filter(Boolean).join(' ')}
         />
       </EditorContextMenu>
 

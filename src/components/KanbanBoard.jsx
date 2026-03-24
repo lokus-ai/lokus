@@ -50,6 +50,14 @@ const getNowLocalISOString =() => {
   return d.toISOString().slice(0, 16);
 };
 
+const emitKanbanUpdated = (boardPath) => {
+  if (typeof window === 'undefined') return;
+
+  window.dispatchEvent(new CustomEvent('lokus:kanban-updated', {
+    detail: { boardPath },
+  }));
+};
+
 
 // Individual task card component
 function TaskCard({ task, onUpdate, onDelete, isDragging }) {
@@ -587,6 +595,7 @@ export default function KanbanBoard({ workspacePath, boardPath, onFileOpen }) {
           board: updatedBoard,
         });
         setBoard(updatedBoard);
+        emitKanbanUpdated(boardPath);
       } catch (err) {
         throw err;
       }

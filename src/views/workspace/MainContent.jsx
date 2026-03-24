@@ -26,7 +26,7 @@ export default function MainContent({ workspacePath, welcomeProps }) {
     <ErrorBoundary name="MainContent" message="View crashed">
       <Suspense fallback={fallback}>
         {showEditor && <EditorGroupsView workspacePath={workspacePath} welcomeProps={welcomeProps} />}
-        {featureFlags.enable_calendar && currentView === 'calendar' && <CalendarView />}
+        {featureFlags.enable_calendar && currentView === 'calendar' && <CalendarView workspacePath={workspacePath} />}
         {currentView === 'canvas' && <Canvas workspacePath={workspacePath} />}
         {currentView === 'settings' && <Preferences workspacePath={workspacePath} />}
         {featureFlags.enable_daily_notes && currentView === 'dailyNotes' && <DailyNotesPanel workspacePath={workspacePath} />}

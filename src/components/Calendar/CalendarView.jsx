@@ -45,6 +45,7 @@ import {
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import { useCalendarContext } from '../../contexts/CalendarContext.jsx';
 import { useScheduleContext } from '../../contexts/ScheduleContext.jsx';
+import { useViewStore } from '../../stores/views.js';
 import calendarService from '../../services/calendar.js';
 import EventCard from './EventCard.jsx';
 import TaskScheduleSidebar from './TaskScheduleSidebar.jsx';
@@ -68,6 +69,8 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
     getVisibleCalendars,
     getWritableCalendars
   } = useCalendarContext();
+  const calendarNavigationTarget = useViewStore((state) => state.calendarNavigationTarget);
+  const setCalendarNavigationTarget = useViewStore((state) => state.setCalendarNavigationTarget);
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState('week'); // 'month', 'week', 'day' — default week for task time-blocking
@@ -100,6 +103,39 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
   const [scheduleBlockContextMenu, setScheduleBlockContextMenu] = useState(null);
   // Cache tasks for rendering schedule blocks
   const tasksCacheRef = useRef(new Map());
+
+  useEffect(() => {
+    if (!calendarNavigationTarget?.date) {
+      return;
+    }
+
+    const targetDate = new Date(calendarNavigationTarget.date);
+    if (Number.isNaN(targetDate.getTime())) {
+      setCalendarNavigationTarget(null);
+      return;
+    }
+
+    setCurrentDate(targetDate);
+    setSelectedDate(targetDate);
+
+    if (!calendarNavigationTarget.eventId) {
+      setCalendarNavigationTarget(null);
+    }
+  }, [calendarNavigationTarget, setCalendarNavigationTarget]);
+
+  useEffect(() => {
+    if (!calendarNavigationTarget?.eventId) {
+      return;
+    }
+
+    const targetEvent = viewEvents.find((event) => event.id === calendarNavigationTarget.eventId);
+    if (!targetEvent) {
+      return;
+    }
+
+    setSelectedEvent(targetEvent);
+    setCalendarNavigationTarget(null);
+  }, [calendarNavigationTarget, setCalendarNavigationTarget, viewEvents]);
 
   // DnD sensors for task scheduling
   const dndSensors = useSensors(
@@ -267,6 +303,9 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
         status: 'completed',
         priority: null
       });
+      window.dispatchEvent(new CustomEvent('lokus:tasks-updated', {
+        detail: { taskId: task.id },
+      }));
       toast.success('Task completed', { description: task.title });
     } catch (err) {
       console.error('Failed to mark task complete:', err);

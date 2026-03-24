@@ -621,6 +621,7 @@ export default function EditorGroup({
             */}
             <Editor
               ref={editorHandleRef}
+              plainTextNote={isPlainTextNotePath(activeFile)}
               onContentChange={handleContentChange}
               onEditorReady={handleEditorReady}
             />

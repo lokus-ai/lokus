@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import Editor from "../editor";
 import { WorkspaceManager } from "../core/workspace/manager.js";
 import { getFilename, joinPath } from '../utils/pathUtils.js';
+import { isPlainTextNotePath } from '../utils/plainTextNote.js';
 import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
 import { ColoredFileIcon } from "../components/FileIcon.jsx";
 import { useTheme } from "../hooks/theme.jsx";
@@ -232,6 +233,7 @@ export default function MobileWorkspace({ initialPath }) {
           ref={editorRef}
           initialContent={fileContent}
           filePath={activeFile?.path}
+          plainTextNote={isPlainTextNotePath(activeFile?.path)}
           onChange={(content) => setFileContent(content)}
           onEditorReady={(editor) => {
             console.log('[MobileWorkspace] Editor ready');

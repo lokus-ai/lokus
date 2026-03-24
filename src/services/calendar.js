@@ -3,6 +3,16 @@ import { listen } from '@tauri-apps/api/event';
 import { logger } from '../utils/logger.js';
 import { isMobile } from '../platform/index.js';
 
+function emitCalendarEventsUpdated(action, detail = {}) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.dispatchEvent(new CustomEvent('lokus:calendar-events-updated', {
+    detail: { action, ...detail },
+  }));
+}
+
 /**
  * Calendar Service Module
  *
@@ -262,6 +272,7 @@ export const events = {
           recurrence_rule: event.recurrenceRule || null
         }
       });
+      emitCalendarEventsUpdated('created', { calendarId, eventId: createdEvent?.id || null });
       return createdEvent;
     } catch (error) {
       logger.error('Calendar', 'Failed to create event:', error);
@@ -295,6 +306,7 @@ export const events = {
         },
         etag
       });
+      emitCalendarEventsUpdated('updated', { calendarId, eventId });
       return updatedEvent;
     } catch (error) {
       logger.error('Calendar', 'Failed to update event:', error);
@@ -312,6 +324,7 @@ export const events = {
   async deleteEvent(calendarId, eventId, etag = null) {
     try {
       await invoke('delete_event', { calendarId, eventId, etag });
+      emitCalendarEventsUpdated('deleted', { calendarId, eventId });
     } catch (error) {
       logger.error('Calendar', 'Failed to delete event:', error);
       throw new Error(`Failed to delete event: ${error}`);

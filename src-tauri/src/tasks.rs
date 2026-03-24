@@ -1,8 +1,11 @@
+use ::regex::Regex as RealRegex;
+use chrono::{Datelike, Duration, Local, NaiveDate, NaiveTime, TimeZone, Weekday};
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreBuilder;
-use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -36,18 +39,26 @@ pub struct Task {
     pub note_path: Option<String>,
     pub note_position: Option<i32>,
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub due_date: Option<String>,
+    #[serde(default)]
+    pub due_date_is_all_day: bool,
     // Kanban linking
     pub kanban_board: Option<String>,  // Path to .kanban file
     pub kanban_column: Option<String>, // Column ID in the board
     pub kanban_card_id: Option<String>, // ID of the card in kanban
 }
 
+fn current_timestamp_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
+}
+
 impl Task {
     pub fn new(title: String) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as i64;
+        let now = current_timestamp_ms();
 
         Self {
             id: uuid::Uuid::new_v4().to_string(),
@@ -60,6 +71,8 @@ impl Task {
             note_path: None,
             note_position: None,
             tags: Vec::new(),
+            due_date: None,
+            due_date_is_all_day: false,
             kanban_board: None,
             kanban_column: None,
             kanban_card_id: None,
@@ -68,10 +81,7 @@ impl Task {
 
     pub fn update_status(&mut self, status: TaskStatus) {
         self.status = status;
-        self.updated_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as i64;
+        self.updated_at = current_timestamp_ms();
     }
 }
 
@@ -170,13 +180,204 @@ fn save_task_store(app: &AppHandle, task_store: &TaskStore) -> Result<(), String
     Ok(())
 }
 
+fn local_datetime_from_date(date: NaiveDate) -> Option<chrono::DateTime<Local>> {
+    let naive = date.and_hms_opt(0, 0, 0)?;
+    Local
+        .from_local_datetime(&naive)
+        .earliest()
+        .or_else(|| Local.from_local_datetime(&naive).latest())
+}
+
+fn parse_due_time_reference(time_ref: &str) -> Option<chrono::DateTime<Local>> {
+    let now = Local::now();
+    let today = now.date_naive();
+    let lower_ref = time_ref.trim().to_lowercase();
+
+    match lower_ref.as_str() {
+        "today" => local_datetime_from_date(today),
+        "tomorrow" => local_datetime_from_date(today + Duration::days(1)),
+        "next week" => local_datetime_from_date(today + Duration::days(7)),
+        "this week" => {
+            let days_until_end_of_week = 7 - i64::from(now.weekday().num_days_from_sunday());
+            local_datetime_from_date(today + Duration::days(days_until_end_of_week))
+        }
+        _ => {
+            let weekday = match lower_ref.as_str() {
+                "sunday" => Some(Weekday::Sun),
+                "monday" => Some(Weekday::Mon),
+                "tuesday" => Some(Weekday::Tue),
+                "wednesday" => Some(Weekday::Wed),
+                "thursday" => Some(Weekday::Thu),
+                "friday" => Some(Weekday::Fri),
+                "saturday" => Some(Weekday::Sat),
+                _ => None,
+            };
+
+            if let Some(target_weekday) = weekday {
+                let current_index = i64::from(now.weekday().num_days_from_sunday());
+                let target_index = i64::from(target_weekday.num_days_from_sunday());
+                let mut days_until = (target_index - current_index + 7) % 7;
+                if days_until == 0 {
+                    days_until = 7;
+                }
+                return local_datetime_from_date(today + Duration::days(days_until));
+            }
+
+            let date_match = RealRegex::new(r"^(\d{1,2})[/-](\d{1,2})$")
+                .unwrap()
+                .captures(time_ref.trim())?;
+            let month = date_match.get(1)?.as_str().parse::<u32>().ok()?;
+            let day = date_match.get(2)?.as_str().parse::<u32>().ok()?;
+
+            let mut year = today.year();
+            let mut parsed_date = NaiveDate::from_ymd_opt(year, month, day)?;
+            if parsed_date.cmp(&today) == Ordering::Less {
+                year += 1;
+                parsed_date = NaiveDate::from_ymd_opt(year, month, day)?;
+            }
+
+            local_datetime_from_date(parsed_date)
+        }
+    }
+}
+
+fn extract_due_details(text: &str) -> Option<(String, bool, String)> {
+    if text.trim().is_empty() {
+        return None;
+    }
+
+    if let Some(captures) = RealRegex::new(
+        r"(?i)\b(?:due|deadline|by)(?:\s*::?|\s+)(\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}:\d{2}))?\b",
+    )
+    .unwrap()
+    .captures(text)
+    {
+        let matched = captures.get(0)?.as_str().to_string();
+        let date_part = captures.get(1)?.as_str();
+        let time_part = captures.get(2).map(|value| value.as_str());
+
+        let parsed = if let Some(time) = time_part {
+            let date = NaiveDate::parse_from_str(date_part, "%Y-%m-%d").ok()?;
+            let time = NaiveTime::parse_from_str(time, "%H:%M").ok()?;
+            let naive = date.and_time(time);
+            Local
+                .from_local_datetime(&naive)
+                .earliest()
+                .or_else(|| Local.from_local_datetime(&naive).latest())?
+        } else {
+            local_datetime_from_date(NaiveDate::parse_from_str(date_part, "%Y-%m-%d").ok()?)?
+        };
+
+        return Some((parsed.to_rfc3339(), time_part.is_none(), matched));
+    }
+
+    if let Some(captures) = RealRegex::new(
+        r"(?i)\b(?:due|deadline|by)(?:\s+at)?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b",
+    )
+    .unwrap()
+    .captures(text)
+    {
+        let matched = captures.get(0)?.as_str().to_string();
+        let hour_part = captures.get(1)?.as_str().parse::<u32>().ok()?;
+        let minute_part = captures
+            .get(2)
+            .map(|value| value.as_str().parse::<u32>().ok())
+            .flatten()
+            .unwrap_or(0);
+        let meridiem = captures.get(3)?.as_str().to_lowercase();
+
+        let mut hour = hour_part % 12;
+        if meridiem == "pm" {
+            hour += 12;
+        }
+
+        let parsed = Local
+            .with_ymd_and_hms(
+                Local::now().year(),
+                Local::now().month(),
+                Local::now().day(),
+                hour,
+                minute_part,
+                0,
+            )
+            .single()?;
+
+        return Some((parsed.to_rfc3339(), false, matched));
+    }
+
+    if let Some(captures) = RealRegex::new(
+        r"(?i)\b(?:by|due|deadline|until|before)\s+(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}/\d{1,2}|\d{1,2}-\d{1,2}|next week|this week)\b",
+    )
+    .unwrap()
+    .captures(text)
+    {
+        let matched = captures.get(0)?.as_str().to_string();
+        let time_ref = captures.get(1)?.as_str();
+        let parsed = parse_due_time_reference(time_ref)?;
+        return Some((parsed.to_rfc3339(), true, matched));
+    }
+
+    None
+}
+
+fn normalize_task_title(title: &str) -> String {
+    let normalized = title
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim()
+        .trim_matches(|c: char| matches!(c, '-' | ',' | ':' | ';' | '(' | ')' | '[' | ']'))
+        .trim()
+        .to_string();
+
+    if normalized.is_empty() {
+        title.trim().to_string()
+    } else {
+        normalized
+    }
+}
+
+fn parse_task_title_and_due(raw_title: &str) -> (String, Option<String>, bool) {
+    if let Some((due_date, due_date_is_all_day, matched_text)) = extract_due_details(raw_title) {
+        let cleaned_title = normalize_task_title(&raw_title.replacen(&matched_text, "", 1));
+        return (cleaned_title, Some(due_date), due_date_is_all_day);
+    }
+
+    (normalize_task_title(raw_title), None, false)
+}
+
+fn build_extracted_task(raw_title: &str, note_path: &str, line_num: usize) -> Option<Task> {
+    let (title, due_date, due_date_is_all_day) = parse_task_title_and_due(raw_title);
+    if title.is_empty() {
+        return None;
+    }
+
+    let mut task = Task::new(title);
+    task.note_path = Some(note_path.to_string());
+    task.note_position = Some(line_num as i32);
+    task.due_date = due_date;
+    task.due_date_is_all_day = due_date_is_all_day;
+    Some(task)
+}
+
 // Tauri commands
 #[tauri::command]
-pub async fn create_task(app: AppHandle, title: String, description: Option<String>, note_path: Option<String>, note_position: Option<i32>) -> Result<Task, String> {
-    let mut task = Task::new(title);
+pub async fn create_task(
+    app: AppHandle,
+    title: String,
+    description: Option<String>,
+    note_path: Option<String>,
+    note_position: Option<i32>,
+    due_date: Option<String>,
+    due_date_is_all_day: Option<bool>,
+) -> Result<Task, String> {
+    let (normalized_title, parsed_due_date, parsed_due_date_is_all_day) = parse_task_title_and_due(&title);
+    let mut task = Task::new(normalized_title);
     task.description = description;
     task.note_path = note_path;
     task.note_position = note_position;
+    task.due_date = due_date.or(parsed_due_date);
+    task.due_date_is_all_day = due_date_is_all_day.unwrap_or(parsed_due_date_is_all_day);
     
     let mut task_store = get_task_store(&app)?;
     task_store.add_task(task.clone());
@@ -198,29 +399,59 @@ pub async fn get_task(app: AppHandle, task_id: String) -> Result<Option<Task>, S
 }
 
 #[tauri::command]
-pub async fn update_task(app: AppHandle, task_id: String, title: Option<String>, description: Option<String>, status: Option<TaskStatus>, priority: Option<i32>) -> Result<Task, String> {
+pub async fn update_task(
+    app: AppHandle,
+    task_id: String,
+    title: Option<String>,
+    description: Option<String>,
+    status: Option<TaskStatus>,
+    priority: Option<i32>,
+    due_date: Option<Option<String>>,
+    due_date_is_all_day: Option<bool>,
+) -> Result<Task, String> {
     let mut task_store = get_task_store(&app)?;
     
     let mut task = task_store
         .get_task(&task_id)
         .ok_or_else(|| format!("Task with id {} not found", task_id))?
         .clone();
+
+    let mut touched = false;
     
     if let Some(new_title) = title {
-        task.title = new_title;
+        let (normalized_title, parsed_due_date, parsed_due_date_is_all_day) = parse_task_title_and_due(&new_title);
+        task.title = normalized_title;
+        if due_date.is_none() && parsed_due_date.is_some() {
+            task.due_date = parsed_due_date;
+            task.due_date_is_all_day = parsed_due_date_is_all_day;
+        }
+        touched = true;
     }
     if let Some(new_description) = description {
         task.description = Some(new_description);
+        touched = true;
     }
     if let Some(new_status) = status {
         task.update_status(new_status);
     }
     if let Some(new_priority) = priority {
         task.priority = new_priority;
-        task.updated_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as i64;
+        touched = true;
+    }
+    if let Some(new_due_date) = due_date {
+        task.due_date = new_due_date;
+        if task.due_date.is_none() {
+            task.due_date_is_all_day = false;
+        }
+        touched = true;
+    }
+    if let Some(new_due_date_is_all_day) = due_date_is_all_day {
+        task.due_date_is_all_day = new_due_date_is_all_day;
+        touched = true;
+    }
+
+    if touched {
+        task.updated_at = current_timestamp_ms();
     }
     
     task_store.update_task(&task_id, task.clone())?;
@@ -286,10 +517,9 @@ pub async fn extract_tasks_from_content(content: String, note_path: String) -> R
         if let Some(pos) = trimmed.find("!task ") {
             let title = trimmed[pos + 6..].trim().to_string();
             if !title.is_empty() {
-                let mut task = Task::new(title);
-                task.note_path = Some(note_path.clone());
-                task.note_position = Some(line_num as i32);
-                tasks.push(task);
+                if let Some(task) = build_extracted_task(&title, &note_path, line_num) {
+                    tasks.push(task);
+                }
             }
         }
 
@@ -300,19 +530,18 @@ pub async fn extract_tasks_from_content(content: String, note_path: String) -> R
                 let title = trimmed[pos + end_bracket + 1..].trim().to_string();
 
                 if !title.is_empty() {
-                    let mut task = Task::new(title);
-                    task.note_path = Some(note_path.clone());
-                    task.note_position = Some(line_num as i32);
+                    if let Some(mut task) = build_extracted_task(&title, &note_path, line_num) {
 
-                    // Parse board and column
-                    if let Some(slash_pos) = target.find('/') {
-                        task.kanban_board = Some(target[..slash_pos].to_string());
-                        task.kanban_column = Some(target[slash_pos + 1..].to_string());
-                    } else {
-                        task.kanban_board = Some(target.to_string());
+                        // Parse board and column
+                        if let Some(slash_pos) = target.find('/') {
+                            task.kanban_board = Some(target[..slash_pos].to_string());
+                            task.kanban_column = Some(target[slash_pos + 1..].to_string());
+                        } else {
+                            task.kanban_board = Some(target.to_string());
+                        }
+
+                        tasks.push(task);
                     }
-
-                    tasks.push(task);
                 }
             }
         }
@@ -325,16 +554,15 @@ pub async fn extract_tasks_from_content(content: String, note_path: String) -> R
             if let Some(title_match) = captures.get(1) {
                 let title = title_match.as_str().trim().to_string();
                 if !title.is_empty() {
-                    let mut task = Task::new(title);
-                    task.note_path = Some(note_path.clone());
-                    task.note_position = Some(line_num as i32);
+                    if let Some(mut task) = build_extracted_task(&title, &note_path, line_num) {
 
-                    // Set status based on checkbox state
-                    if trimmed.contains("[x]") || trimmed.contains("[X]") {
-                        task.status = TaskStatus::Completed;
+                        // Set status based on checkbox state
+                        if trimmed.contains("[x]") || trimmed.contains("[X]") {
+                            task.status = TaskStatus::Completed;
+                        }
+
+                        tasks.push(task);
                     }
-
-                    tasks.push(task);
                 }
             }
         }
@@ -349,18 +577,17 @@ pub async fn extract_tasks_from_content(content: String, note_path: String) -> R
                     let keyword = keyword_match.as_str();
                     let title = title_match.as_str().trim().to_string();
                     if !title.is_empty() {
-                        let mut task = Task::new(title);
-                        task.note_path = Some(note_path.clone());
-                        task.note_position = Some(line_num as i32);
+                        if let Some(mut task) = build_extracted_task(&title, &note_path, line_num) {
 
-                        // Set status based on keyword
-                        task.status = match keyword {
-                            "URGENT" => TaskStatus::Urgent,
-                            "TODO" | "FIXME" | "BUG" => TaskStatus::Todo,
-                            _ => TaskStatus::Todo,
-                        };
+                            // Set status based on keyword
+                            task.status = match keyword {
+                                "URGENT" => TaskStatus::Urgent,
+                                "TODO" | "FIXME" | "BUG" => TaskStatus::Todo,
+                                _ => TaskStatus::Todo,
+                            };
 
-                        tasks.push(task);
+                            tasks.push(task);
+                        }
                     }
                 }
             }
@@ -374,10 +601,9 @@ pub async fn extract_tasks_from_content(content: String, note_path: String) -> R
             if let Some(task_match) = captures.get(2) {
                 let title = task_match.as_str().trim().to_string();
                 if !title.is_empty() && title.len() <= 200 { // Reasonable length limit
-                    let mut task = Task::new(title);
-                    task.note_path = Some(note_path.clone());
-                    task.note_position = Some(line_num as i32);
-                    tasks.push(task);
+                    if let Some(task) = build_extracted_task(&title, &note_path, line_num) {
+                        tasks.push(task);
+                    }
                 }
             }
         }
@@ -404,10 +630,7 @@ pub async fn link_task_to_kanban(
     // Update task with kanban info
     task.kanban_board = Some(board_path.clone());
     task.kanban_column = Some(column_id.clone());
-    task.updated_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as i64;
+    task.updated_at = current_timestamp_ms();
 
     task_store.update_task(&task_id, task.clone())?;
     save_task_store(&app, &task_store)?;
@@ -574,7 +797,19 @@ mod tests {
         let task = Task::new("Test task".to_string());
         assert_eq!(task.title, "Test task");
         assert_eq!(task.status, TaskStatus::Todo);
+        assert!(task.due_date.is_none());
+        assert!(!task.due_date_is_all_day);
         assert!(task.id.len() > 0);
+    }
+
+    #[test]
+    fn test_due_date_extraction_from_title() {
+        let (title, due_date, due_date_is_all_day) =
+            parse_task_title_and_due("Submit report due 2026-03-25 17:30");
+
+        assert_eq!(title, "Submit report");
+        assert!(due_date.is_some());
+        assert!(!due_date_is_all_day);
     }
 
     #[test]

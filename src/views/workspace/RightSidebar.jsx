@@ -8,7 +8,7 @@ import BacklinksPanel from '../BacklinksPanel.jsx';
 import GraphSidebar from '../../components/GraphSidebar.jsx';
 import VersionHistoryPanel from '../../components/VersionHistoryPanel.jsx';
 import { DailyNotesPanel } from '../../components/DailyNotes/index.js';
-import { CalendarWidget } from '../../components/Calendar/index.js';
+import { AgendaPanel, CalendarWidget } from '../../components/Calendar/index.js';
 import { PanelRegion } from '../../plugins/ui/PanelManager.jsx';
 import { PANEL_POSITIONS } from '../../plugins/api/UIAPI.js';
 import { EditorModeSwitcher } from '../../features/editor';
@@ -36,6 +36,7 @@ export default function RightSidebar({
   const versionRefreshKey = useViewStore((s) => s.versionRefreshKey);
   const showDailyNotesPanel = useViewStore((s) => s.showDailyNotesPanel);
   const showCalendarPanel = useViewStore((s) => s.showCalendarPanel);
+  const showAgendaPanel = useViewStore((s) => s.showAgendaPanel);
   const currentDailyNoteDate = useViewStore((s) => s.currentDailyNoteDate);
 
   // Focused group id for registry lookup
@@ -65,17 +66,11 @@ export default function RightSidebar({
 
   if (!showRight) return null;
 
-  const handleOpenCalendarView = () => {
-    const calendarPath = '__calendar__';
-    const calendarName = 'Calendar';
-    const { focusedGroupId } = useEditorGroupStore.getState();
-    if (focusedGroupId) {
-      useEditorGroupStore.getState().addTab(
-        focusedGroupId,
-        { path: calendarPath, name: calendarName },
-        true
-      );
-    }
+  const handleOpenCalendarView = (target = null) => {
+    useViewStore.setState({
+      currentView: 'calendar',
+      calendarNavigationTarget: target,
+    });
   };
 
   const handleOpenCalendarSettings = async () => {
@@ -102,6 +97,12 @@ export default function RightSidebar({
             filePath={activeFile}
             onClose={() => useViewStore.getState().closePanel('showVersionHistory')}
             onRestore={onReloadCurrentFile}
+          />
+        ) : featureFlags.enable_calendar && showAgendaPanel ? (
+          <AgendaPanel
+            workspacePath={workspacePath}
+            onFileOpen={onFileOpen}
+            onOpenCalendarView={handleOpenCalendarView}
           />
         ) : featureFlags.enable_daily_notes && showDailyNotesPanel ? (
           <DailyNotesPanel

@@ -54,12 +54,21 @@ export class TaskManager {
    */
   async createTask(title, options = {}) {
     try {
-      const task = await invoke('create_task', {
+      const payload = {
         title,
         description: options.description || null,
         notePath: options.notePath || null,
         notePosition: options.notePosition || null
-      })
+      }
+
+      if (Object.prototype.hasOwnProperty.call(options, 'dueDate')) {
+        payload.dueDate = options.dueDate
+      }
+      if (Object.prototype.hasOwnProperty.call(options, 'dueDateIsAllDay')) {
+        payload.dueDateIsAllDay = options.dueDateIsAllDay
+      }
+
+      const task = await invoke('create_task', payload)
 
       // Update status if provided
       if (options.status && options.status !== 'todo') {
@@ -82,13 +91,22 @@ export class TaskManager {
    */
   async updateTask(taskId, updates) {
     try {
-      const updatedTask = await invoke('update_task', {
+      const payload = {
         taskId,
         title: updates.title || null,
         description: updates.description || null,
         status: updates.status || null,
         priority: updates.priority || null
-      })
+      }
+
+      if (Object.prototype.hasOwnProperty.call(updates, 'dueDate')) {
+        payload.dueDate = updates.dueDate
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'dueDateIsAllDay')) {
+        payload.dueDateIsAllDay = updates.dueDateIsAllDay
+      }
+
+      const updatedTask = await invoke('update_task', payload)
 
       this.invalidateCache()
       this.notifyListeners({ 
@@ -200,7 +218,9 @@ export class TaskManager {
             description: extracted.description,
             notePath: extracted.note_path,
             notePosition: extracted.note_position,
-            status: extracted.status
+            status: extracted.status,
+            dueDate: extracted.due_date || null,
+            dueDateIsAllDay: Boolean(extracted.due_date_is_all_day)
           })
           newTasks.push(created)
         }

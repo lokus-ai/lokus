@@ -9,6 +9,10 @@ import { TASK_STATUSES, TASK_PRIORITIES } from './manager.js'
 const TASK_PATTERNS = {
   // Checkbox patterns: - [ ] Task, - [x] Task, - [/] In progress
   CHECKBOX: /^(\s*)-\s*\[([x X/!?\->]|\s)\]\s*(.+)$/gm,
+
+  // Explicit due date patterns
+  EXPLICIT_DATE: /\b(?:due|deadline|by)(?:\s*::?|\s+)(\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}:\d{2}))?\b/i,
+  EXPLICIT_TIME: /\b(?:due|deadline|by)(?:\s+at)?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i,
   
   // Heading task patterns: ## TODO: Fix bug
   HEADING_TASK: /^(#{1,6})\s*(TODO|FIXME|URGENT|BUG|HACK|NOTE|QUESTION)\s*[:]\s*(.+)$/gm,
@@ -183,6 +187,8 @@ function createTaskFromMatch(title, status, lineNumber, notePath, originalLine) 
     title: title.trim(),
     status,
     priority: TASK_PRIORITIES.NORMAL,
+    due_date: null,
+    due_date_is_all_day: false,
     note_path: notePath,
     note_position: lineNumber + 1, // 1-based line numbers
     original_line: originalLine,
@@ -202,6 +208,19 @@ function createTaskFromMatch(title, status, lineNumber, notePath, originalLine) 
  * Extract metadata from task text (priorities, deadlines, etc.)
  */
 function extractMetadata(task, text) {
+  const explicitDue = extractDueDateMetadata(text)
+  if (explicitDue?.parsedDate) {
+    task.due_date = explicitDue.parsedDate.toISOString()
+    task.due_date_is_all_day = explicitDue.isAllDay
+    task.metadata.deadline = {
+      original: explicitDue.original,
+      preposition: explicitDue.preposition,
+      time_reference: explicitDue.timeReference,
+      parsed_date: explicitDue.parsedDate,
+      is_all_day: explicitDue.isAllDay
+    }
+  }
+
   // Extract priority indicators
   const priorityMatches = [...text.matchAll(TASK_PATTERNS.PRIORITY)]
   priorityMatches.forEach(match => {
@@ -216,11 +235,20 @@ function extractMetadata(task, text) {
   const deadlineMatches = [...text.matchAll(TASK_PATTERNS.DEADLINE)]
   deadlineMatches.forEach(match => {
     const [fullMatch, preposition, timeRef] = match
+    const parsedDate = parseTimeReference(timeRef)
+    if (!parsedDate) return
+
     task.metadata.deadline = {
       original: fullMatch,
       preposition,
       time_reference: timeRef,
-      parsed_date: parseTimeReference(timeRef)
+      parsed_date: parsedDate,
+      is_all_day: true
+    }
+
+    if (!task.due_date) {
+      task.due_date = parsedDate.toISOString()
+      task.due_date_is_all_day = true
     }
   })
 
@@ -245,6 +273,8 @@ function extractMetadata(task, text) {
 
   // Clean title by removing metadata
   let cleanTitle = text
+  cleanTitle = cleanTitle.replace(TASK_PATTERNS.EXPLICIT_DATE, '').trim()
+  cleanTitle = cleanTitle.replace(TASK_PATTERNS.EXPLICIT_TIME, '').trim()
   cleanTitle = cleanTitle.replace(TASK_PATTERNS.PRIORITY, '').trim()
   cleanTitle = cleanTitle.replace(TASK_PATTERNS.DEADLINE, '').trim()
   cleanTitle = cleanTitle.replace(TASK_PATTERNS.TIME_ESTIMATE, '').trim()
@@ -255,11 +285,56 @@ function extractMetadata(task, text) {
   }
 }
 
+function extractDueDateMetadata(text) {
+  if (!text) return null
+
+  const explicitDateMatch = text.match(TASK_PATTERNS.EXPLICIT_DATE)
+  if (explicitDateMatch) {
+    const [, datePart, timePart] = explicitDateMatch
+    const parsedDate = new Date(timePart ? `${datePart}T${timePart}` : `${datePart}T00:00:00`)
+
+    if (!Number.isNaN(parsedDate.getTime())) {
+      return {
+        original: explicitDateMatch[0],
+        preposition: 'due',
+        timeReference: timePart ? `${datePart} ${timePart}` : datePart,
+        parsedDate,
+        isAllDay: !timePart
+      }
+    }
+  }
+
+  const explicitTimeMatch = text.match(TASK_PATTERNS.EXPLICIT_TIME)
+  if (explicitTimeMatch) {
+    const [, hoursPart, minutesPart = '00', meridiem] = explicitTimeMatch
+    const parsedDate = new Date()
+    let hours = parseInt(hoursPart, 10) % 12
+
+    if (meridiem.toLowerCase() === 'pm') {
+      hours += 12
+    }
+
+    parsedDate.setHours(hours, parseInt(minutesPart, 10), 0, 0)
+
+    return {
+      original: explicitTimeMatch[0],
+      preposition: 'due',
+      timeReference: explicitTimeMatch[0],
+      parsedDate,
+      isAllDay: false
+    }
+  }
+
+  return null
+}
+
 /**
  * Parse time references into dates
  */
 function parseTimeReference(timeRef) {
-  const today = new Date()
+  const now = new Date()
+  const today = new Date(now)
+  today.setHours(0, 0, 0, 0)
   const lowerRef = timeRef.toLowerCase()
   
   switch (lowerRef) {
@@ -269,16 +344,19 @@ function parseTimeReference(timeRef) {
     case 'tomorrow':
       const tomorrow = new Date(today)
       tomorrow.setDate(today.getDate() + 1)
+      tomorrow.setHours(0, 0, 0, 0)
       return tomorrow
     
     case 'next week':
       const nextWeek = new Date(today)
       nextWeek.setDate(today.getDate() + 7)
+      nextWeek.setHours(0, 0, 0, 0)
       return nextWeek
     
     case 'this week':
       const thisWeekEnd = new Date(today)
       thisWeekEnd.setDate(today.getDate() + (7 - today.getDay()))
+      thisWeekEnd.setHours(0, 0, 0, 0)
       return thisWeekEnd
     
     default:
@@ -290,6 +368,7 @@ function parseTimeReference(timeRef) {
         const targetDay = new Date(today)
         const daysUntil = (dayIndex - today.getDay() + 7) % 7 || 7
         targetDay.setDate(today.getDate() + daysUntil)
+        targetDay.setHours(0, 0, 0, 0)
         return targetDay
       }
       
@@ -298,6 +377,7 @@ function parseTimeReference(timeRef) {
       if (dateMatch) {
         const [, month, day] = dateMatch
         const date = new Date(today.getFullYear(), parseInt(month) - 1, parseInt(day))
+        date.setHours(0, 0, 0, 0)
         
         // If the date has passed this year, assume next year
         if (date < today) {

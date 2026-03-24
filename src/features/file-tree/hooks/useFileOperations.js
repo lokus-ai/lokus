@@ -15,6 +15,14 @@ import posthog from '../../../services/posthog.js';
 import { setGlobalActiveTheme } from '../../../core/theme/manager.js';
 import { createLokusSerializer } from '../../../core/markdown/lokus-md-pipeline.js';
 
+const emitKanbanUpdated = (boardPath = null) => {
+  if (typeof window === 'undefined') return;
+
+  window.dispatchEvent(new CustomEvent('lokus:kanban-updated', {
+    detail: { boardPath },
+  }));
+};
+
 export function useFileOperations({ workspacePath, featureFlags, handleFileOpen, currentTheme }) {
   const refreshTree = useFileTreeStore((s) => s.refreshTree);
   const startCreate = useFileTreeStore((s) => s.startCreate);
@@ -178,6 +186,7 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
       refreshTree();
       const fileName = 'New Board.kanban';
       const boardPath = `${targetPath}/${fileName}`;
+      emitKanbanUpdated(boardPath);
       handleFileOpen?.({ path: boardPath, name: fileName, is_directory: false });
       posthog.trackFeatureActivation('database');
     } catch { }
@@ -210,6 +219,7 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
           const newPath = `${dirPath}/${newName}`;
           await invoke('write_file_content', { path: newPath, content });
           refreshBoards?.();
+          emitKanbanUpdated(newPath);
           toast.success(`Duplicated: ${newName}`);
         } catch (err) {
           toast.error('Failed to duplicate board');
@@ -236,6 +246,7 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
           if (confirmed) {
             await invoke('delete_file', { path: board.path });
             refreshBoards?.();
+            emitKanbanUpdated(board.path);
             toast.success(`Deleted: ${board.name}`);
           }
         } catch (err) {
