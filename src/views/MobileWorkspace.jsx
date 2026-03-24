@@ -75,15 +75,15 @@ export default function MobileWorkspace({ initialPath }) {
         });
         console.log('[MobileWorkspace] Files loaded:', result?.length || 0);
 
-        // Filter to only markdown files for now
-        const mdFiles = (result || []).filter(f =>
-          f.name?.endsWith('.md') && !f.is_dir
+        // Markdown and plain-text notes
+        const noteFiles = (result || []).filter(f =>
+          (f.name?.endsWith('.md') || f.name?.endsWith('.txt')) && !f.is_dir
         );
-        setFiles(mdFiles);
+        setFiles(noteFiles);
 
         // Auto-open first file
-        if (mdFiles.length > 0 && !activeFile) {
-          handleFileSelect(mdFiles[0]);
+        if (noteFiles.length > 0 && !activeFile) {
+          handleFileSelect(noteFiles[0]);
         }
       } catch (e) {
         console.error('[MobileWorkspace] Error loading files:', e);

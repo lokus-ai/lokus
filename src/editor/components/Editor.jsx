@@ -6,6 +6,7 @@ import { recoverContent } from "../lib/sanitizeHTML.js";
 import useProseMirror from '../hooks/useProseMirror.js';
 import { lokusSchema } from '../schema/lokus-schema.js';
 import { createLokusSerializer } from '../../core/markdown/lokus-md-pipeline.js';
+import { isPlainTextNotePath, plainTextDocToReadingHtml } from '../../utils/plainTextNote.js';
 import { keymap } from 'prosemirror-keymap';
 import { baseKeymap, toggleMark, setBlockType, wrapIn, chainCommands } from 'prosemirror-commands';
 import { history, undo, redo } from 'prosemirror-history';
@@ -1289,11 +1290,16 @@ const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, edi
   // Reading mode - show non-editable HTML view
   if (editorMode === 'reading') {
     const view = viewRef.current;
+    const activePath = globalThis.__LOKUS_ACTIVE_FILE__;
     let htmlContent = content;
     if (view) {
       try {
-        const serializer = createLokusSerializer();
-        htmlContent = serializer.serialize(view.state.doc);
+        if (isPlainTextNotePath(activePath)) {
+          htmlContent = plainTextDocToReadingHtml(view.state.doc);
+        } else {
+          const serializer = createLokusSerializer();
+          htmlContent = serializer.serialize(view.state.doc);
+        }
       } catch { }
     }
     return (
