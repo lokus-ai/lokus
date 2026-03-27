@@ -1,17 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Mic,
   Key,
-  Brain,
   CheckCircle,
   XCircle,
   Loader2,
-  Eye,
-  EyeOff,
   ChevronDown,
   NotebookPen,
-  Calendar,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {
   loadProviderConfig,
@@ -27,7 +25,6 @@ import {
 const MEETING_SETTINGS_KEY = 'lokus-meeting-settings';
 
 const DEFAULT_MEETING_SETTINGS = {
-  autoDetectCalendar: true,
   detectAdHocCalls: true,
   autoInsertSummary: true,
   summaryTemplate: 'general',
@@ -41,13 +38,15 @@ const SUMMARY_TEMPLATES = [
   { id: 'standup', label: 'Standup' },
 ];
 
+const LLM_PROVIDERS = [
+  { id: 'openai', label: 'OpenAI' },
+  { id: 'anthropic', label: 'Anthropic (Claude)' },
+];
+
 // ---------------------------------------------------------------------------
 // Small reusable primitives
 // ---------------------------------------------------------------------------
 
-/**
- * Styled <select> consistent with the rest of Preferences.jsx.
- */
 function Select({ value, onChange, children, disabled }) {
   return (
     <div className="relative">
@@ -64,9 +63,6 @@ function Select({ value, onChange, children, disabled }) {
   );
 }
 
-/**
- * Toggle switch — same visual style as the Updates section toggle.
- */
 function Toggle({ checked, onChange, disabled }) {
   return (
     <label className="relative inline-flex items-center cursor-pointer">
@@ -82,9 +78,6 @@ function Toggle({ checked, onChange, disabled }) {
   );
 }
 
-/**
- * Section header — matches "text-sm uppercase tracking-wide text-app-muted" pattern.
- */
 function SectionHeading({ icon: Icon, children }) {
   return (
     <div className="flex items-center gap-2 mb-4">
@@ -94,9 +87,6 @@ function SectionHeading({ icon: Icon, children }) {
   );
 }
 
-/**
- * Card wrapper consistent with bg-app-panel rounded-lg border border-app-border.
- */
 function Card({ children, className = '' }) {
   return (
     <div className={`bg-app-panel rounded-lg p-4 border border-app-border ${className}`}>
@@ -105,9 +95,6 @@ function Card({ children, className = '' }) {
   );
 }
 
-/**
- * Row inside a card: label on left, control on right.
- */
 function SettingRow({ label, description, children }) {
   return (
     <div className="flex items-center justify-between gap-4">
@@ -122,69 +109,46 @@ function SettingRow({ label, description, children }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// API key input with show/hide and Test button
-// ---------------------------------------------------------------------------
-
-const TEST_IDLE = 'idle';
-const TEST_LOADING = 'loading';
-const TEST_OK = 'ok';
-const TEST_FAIL = 'fail';
-
-function ApiKeyInput({ label, placeholder, value, onChange, onTest, testState, testError }) {
+/**
+ * API key input with show/hide toggle and validation button.
+ */
+function ApiKeyInput({ value, onChange, onValidate, validationState, placeholder }) {
   const [visible, setVisible] = useState(false);
 
   return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-medium text-app-muted uppercase tracking-wide">
-        {label}
-      </label>
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <input
-            type={visible ? 'text' : 'password'}
-            value={value}
-            onChange={onChange}
-            placeholder={placeholder}
-            className="h-9 w-full pl-3 pr-9 rounded-md bg-app-panel border border-app-border text-app-text text-sm outline-none focus:ring-2 focus:ring-app-accent/50 placeholder:text-app-muted/60"
-            autoComplete="off"
-            spellCheck={false}
-          />
-          <button
-            type="button"
-            onClick={() => setVisible((v) => !v)}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-app-muted hover:text-app-text transition-colors"
-            tabIndex={-1}
-            aria-label={visible ? 'Hide key' : 'Show key'}
-          >
-            {visible ? (
-              <EyeOff className="w-4 h-4" />
-            ) : (
-              <Eye className="w-4 h-4" />
-            )}
-          </button>
-        </div>
-
+    <div className="flex items-center gap-2">
+      <div className="relative flex-1">
+        <input
+          type={visible ? 'text' : 'password'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="h-9 pl-3 pr-9 w-full rounded-md bg-app-panel border border-app-border text-app-text text-sm outline-none font-mono focus:ring-2 focus:ring-app-accent/50"
+        />
         <button
           type="button"
-          onClick={onTest}
-          disabled={!value || testState === TEST_LOADING}
-          className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md border border-app-border bg-app-panel text-sm text-app-text hover:bg-app-bg transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-          aria-label={`Test ${label}`}
+          onClick={() => setVisible((v) => !v)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-app-muted hover:text-app-text"
         >
-          {testState === TEST_LOADING && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-          {testState === TEST_OK && <CheckCircle className="w-3.5 h-3.5 text-green-500" />}
-          {testState === TEST_FAIL && <XCircle className="w-3.5 h-3.5 text-red-500" />}
-          {testState === TEST_IDLE && <Key className="w-3.5 h-3.5" />}
-          <span>Test</span>
+          {visible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
         </button>
       </div>
 
-      {testState === TEST_OK && (
-        <p className="text-xs text-green-600 dark:text-green-400">Key is valid.</p>
-      )}
-      {testState === TEST_FAIL && testError && (
-        <p className="text-xs text-red-600 dark:text-red-400">{testError}</p>
+      {onValidate && (
+        <button
+          type="button"
+          onClick={onValidate}
+          disabled={!value || validationState === 'validating'}
+          className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md border border-app-border bg-app-panel text-sm text-app-text hover:bg-app-bg transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {validationState === 'validating' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          {validationState === 'valid' && <CheckCircle className="w-3.5 h-3.5 text-green-500" />}
+          {validationState === 'invalid' && <XCircle className="w-3.5 h-3.5 text-red-500" />}
+          {(!validationState || validationState === 'idle') && <span>Verify</span>}
+          {validationState === 'validating' && <span>Checking</span>}
+          {validationState === 'valid' && <span>Valid</span>}
+          {validationState === 'invalid' && <span>Invalid</span>}
+        </button>
       )}
     </div>
   );
@@ -195,48 +159,27 @@ function ApiKeyInput({ label, placeholder, value, onChange, onTest, testState, t
 // ---------------------------------------------------------------------------
 
 export default function MeetingNotes() {
-  // --- AI provider config state ---
-  const [providerConfig, setProviderConfig] = useState({
-    mode: 'lokus',
-    llmProvider: 'anthropic',
-    llmApiKey: '',
-    llmModel: 'claude-sonnet-4-20250514',
-    deepgramApiKey: '',
-    supabaseUrl: '',
-    supabaseToken: '',
-  });
-
   // --- Meeting-specific settings state ---
   const [meetingSettings, setMeetingSettings] = useState(DEFAULT_MEETING_SETTINGS);
+
+  // --- AI provider config ---
+  const [deepgramKey, setDeepgramKey] = useState('');
+  const [llmProvider, setLlmProvider] = useState('openai');
+  const [llmApiKey, setLlmApiKey] = useState('');
+  const [llmModel, setLlmModel] = useState('gpt-4o-mini');
+
+  // --- Validation states ---
+  const [deepgramValidation, setDeepgramValidation] = useState('idle');
+  const [llmValidation, setLlmValidation] = useState('idle');
+  const [validationError, setValidationError] = useState('');
 
   // --- Audio devices ---
   const [audioDevices, setAudioDevices] = useState([]);
   const [devicesLoading, setDevicesLoading] = useState(true);
   const [devicesError, setDevicesError] = useState('');
 
-  // --- Loading / error ---
+  // --- Loading ---
   const [configLoading, setConfigLoading] = useState(true);
-
-  // --- API key test states ---
-  const [deepgramTestState, setDeepgramTestState] = useState(TEST_IDLE);
-  const [deepgramTestError, setDeepgramTestError] = useState('');
-  const [llmTestState, setLlmTestState] = useState(TEST_IDLE);
-  const [llmTestError, setLlmTestError] = useState('');
-
-  // ---------------------------------------------------------------------------
-  // Debounce helper for text inputs
-  // ---------------------------------------------------------------------------
-
-  const debounceRef = useRef(null);
-
-  const debouncedSaveProviderConfig = useCallback((config) => {
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      saveProviderConfig(config).catch((err) => {
-        console.error('[MeetingNotes] Failed to save provider config:', err);
-      });
-    }, 300);
-  }, []);
 
   // ---------------------------------------------------------------------------
   // Load config on mount
@@ -246,16 +189,6 @@ export default function MeetingNotes() {
     let cancelled = false;
 
     async function init() {
-      // Load AI provider config
-      try {
-        const config = await loadProviderConfig();
-        if (!cancelled) setProviderConfig(config);
-      } catch (err) {
-        console.error('[MeetingNotes] Failed to load provider config:', err);
-      } finally {
-        if (!cancelled) setConfigLoading(false);
-      }
-
       // Load meeting settings from localStorage
       try {
         const raw = localStorage.getItem(MEETING_SETTINGS_KEY);
@@ -264,6 +197,19 @@ export default function MeetingNotes() {
         }
       } catch {
         // ignore parse errors
+      }
+
+      // Load AI provider config
+      try {
+        const config = await loadProviderConfig();
+        if (!cancelled) {
+          setDeepgramKey(config.deepgramApiKey || '');
+          setLlmProvider(config.llmProvider || 'openai');
+          setLlmApiKey(config.llmApiKey || '');
+          setLlmModel(config.llmModel || 'gpt-4o-mini');
+        }
+      } catch (err) {
+        console.error('[MeetingNotes] loadProviderConfig failed:', err);
       }
 
       // Fetch audio devices
@@ -280,6 +226,8 @@ export default function MeetingNotes() {
       } finally {
         if (!cancelled) setDevicesLoading(false);
       }
+
+      if (!cancelled) setConfigLoading(false);
     }
 
     init();
@@ -298,26 +246,6 @@ export default function MeetingNotes() {
     }
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // Provider config updaters
-  // ---------------------------------------------------------------------------
-
-  /** Update a key in providerConfig and immediately persist to Tauri/localStorage. */
-  const updateProviderConfig = useCallback((patch, debounce = false) => {
-    setProviderConfig((prev) => {
-      const next = { ...prev, ...patch };
-      if (debounce) {
-        debouncedSaveProviderConfig(next);
-      } else {
-        saveProviderConfig(next).catch((err) => {
-          console.error('[MeetingNotes] Failed to save provider config:', err);
-        });
-      }
-      return next;
-    });
-  }, [debouncedSaveProviderConfig]);
-
-  /** Update a key in meetingSettings and immediately persist to localStorage. */
   const updateMeetingSettings = useCallback((patch) => {
     setMeetingSettings((prev) => {
       const next = { ...prev, ...patch };
@@ -327,67 +255,60 @@ export default function MeetingNotes() {
   }, [saveMeetingSettings]);
 
   // ---------------------------------------------------------------------------
-  // Mode toggle handler — clear test states on switch
+  // Save AI config whenever keys/provider/model change
   // ---------------------------------------------------------------------------
 
-  const handleModeChange = useCallback((newMode) => {
-    setDeepgramTestState(TEST_IDLE);
-    setDeepgramTestError('');
-    setLlmTestState(TEST_IDLE);
-    setLlmTestError('');
-    updateProviderConfig({ mode: newMode });
-  }, [updateProviderConfig]);
-
-  // ---------------------------------------------------------------------------
-  // LLM provider change — reset model to first available
-  // ---------------------------------------------------------------------------
-
-  const handleLlmProviderChange = useCallback((newProvider) => {
-    const models = getAvailableModels(newProvider);
-    const defaultModel = models[0]?.id ?? models[0] ?? '';
-    setLlmTestState(TEST_IDLE);
-    setLlmTestError('');
-    updateProviderConfig({ llmProvider: newProvider, llmModel: defaultModel });
-  }, [updateProviderConfig]);
-
-  // ---------------------------------------------------------------------------
-  // API key test handlers
-  // ---------------------------------------------------------------------------
-
-  const handleTestDeepgram = useCallback(async () => {
-    setDeepgramTestState(TEST_LOADING);
-    setDeepgramTestError('');
+  const saveAiConfig = useCallback(async (overrides = {}) => {
+    const config = {
+      mode: 'byok',
+      llmProvider: overrides.llmProvider ?? llmProvider,
+      llmApiKey: overrides.llmApiKey ?? llmApiKey,
+      llmModel: overrides.llmModel ?? llmModel,
+      deepgramApiKey: overrides.deepgramApiKey ?? deepgramKey,
+    };
     try {
-      const result = await validateApiKey('deepgram', providerConfig.deepgramApiKey);
-      setDeepgramTestState(result.valid ? TEST_OK : TEST_FAIL);
-      if (!result.valid) setDeepgramTestError(result.error ?? 'Invalid key.');
+      await saveProviderConfig(config);
     } catch (err) {
-      setDeepgramTestState(TEST_FAIL);
-      setDeepgramTestError(err.message ?? 'Validation failed.');
+      console.error('[MeetingNotes] saveProviderConfig failed:', err);
     }
-  }, [providerConfig.deepgramApiKey]);
+  }, [llmProvider, llmApiKey, llmModel, deepgramKey]);
 
-  const handleTestLlm = useCallback(async () => {
-    setLlmTestState(TEST_LOADING);
-    setLlmTestError('');
+  // ---------------------------------------------------------------------------
+  // API key validation
+  // ---------------------------------------------------------------------------
+
+  const handleValidateDeepgram = useCallback(async () => {
+    if (!deepgramKey) return;
+    setDeepgramValidation('validating');
+    setValidationError('');
     try {
-      const result = await validateApiKey(providerConfig.llmProvider, providerConfig.llmApiKey);
-      setLlmTestState(result.valid ? TEST_OK : TEST_FAIL);
-      if (!result.valid) setLlmTestError(result.error ?? 'Invalid key.');
+      const result = await validateApiKey('deepgram', deepgramKey);
+      setDeepgramValidation(result.valid ? 'valid' : 'invalid');
+      if (!result.valid) setValidationError(result.error || 'Invalid key');
     } catch (err) {
-      setLlmTestState(TEST_FAIL);
-      setLlmTestError(err.message ?? 'Validation failed.');
+      setDeepgramValidation('invalid');
+      setValidationError(err.message);
     }
-  }, [providerConfig.llmProvider, providerConfig.llmApiKey]);
+  }, [deepgramKey]);
+
+  const handleValidateLlm = useCallback(async () => {
+    if (!llmApiKey) return;
+    setLlmValidation('validating');
+    setValidationError('');
+    try {
+      const result = await validateApiKey(llmProvider, llmApiKey);
+      setLlmValidation(result.valid ? 'valid' : 'invalid');
+      if (!result.valid) setValidationError(result.error || 'Invalid key');
+    } catch (err) {
+      setLlmValidation('invalid');
+      setValidationError(err.message);
+    }
+  }, [llmApiKey, llmProvider]);
 
   // ---------------------------------------------------------------------------
-  // Derived values
-  // ---------------------------------------------------------------------------
-
-  const isBYOK = providerConfig.mode === 'byok';
-  const availableModels = getAvailableModels(providerConfig.llmProvider);
-
   // Default device selection when devices load
+  // ---------------------------------------------------------------------------
+
   useEffect(() => {
     if (audioDevices.length > 0 && !meetingSettings.selectedDeviceId) {
       const defaultDevice = audioDevices.find((d) => d.is_default) ?? audioDevices[0];
@@ -409,142 +330,131 @@ export default function MeetingNotes() {
     );
   }
 
+  const availableModels = getAvailableModels(llmProvider);
+
   return (
     <div className="space-y-8 max-w-xl">
       {/* Page heading */}
       <div>
         <h1 className="text-2xl font-bold text-app-text mb-1">Meeting Notes</h1>
         <p className="text-sm text-app-muted">
-          Configure AI transcription, summarisation, and meeting detection.
+          Configure transcription, AI summarisation, and meeting detection.
         </p>
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Section 1: AI Provider Mode                                         */}
+      {/* Section 1: API Keys                                                 */}
       {/* ------------------------------------------------------------------ */}
       <section>
-        <SectionHeading icon={Brain}>AI Provider</SectionHeading>
+        <SectionHeading icon={Key}>API Keys</SectionHeading>
 
-        <Card>
-          <SettingRow
-            label="Use Lokus AI"
-            description="Let Lokus handle AI infrastructure. Bring your own keys for full control."
-          >
-            {/* Two-state toggle: left = Lokus AI (unchecked), right = BYOK (checked) */}
-            <div className="flex items-center gap-2">
-              <span className={`text-xs ${!isBYOK ? 'text-app-text font-medium' : 'text-app-muted'}`}>
-                Lokus AI
-              </span>
-              <Toggle
-                checked={isBYOK}
-                onChange={(e) => handleModeChange(e.target.checked ? 'byok' : 'lokus')}
-              />
-              <span className={`text-xs ${isBYOK ? 'text-app-text font-medium' : 'text-app-muted'}`}>
-                BYOK
-              </span>
-            </div>
-          </SettingRow>
+        <Card className="space-y-5">
+          {/* Deepgram key */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-app-muted uppercase tracking-wide">
+              Deepgram API Key
+            </label>
+            <ApiKeyInput
+              value={deepgramKey}
+              onChange={(val) => {
+                setDeepgramKey(val);
+                setDeepgramValidation('idle');
+                saveAiConfig({ deepgramApiKey: val });
+              }}
+              onValidate={handleValidateDeepgram}
+              validationState={deepgramValidation}
+              placeholder="Enter your Deepgram API key"
+            />
+            <p className="text-xs text-app-muted">
+              Used for real-time speech-to-text transcription.{' '}
+              <a
+                href="https://console.deepgram.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-app-accent hover:underline"
+              >
+                Get a key
+              </a>
+            </p>
+          </div>
 
-          {/* Lokus AI placeholder */}
-          {!isBYOK && (
-            <div className="mt-4 pt-4 border-t border-app-border/50">
-              <p className="text-sm text-app-muted italic">
-                Coming soon — subscription tiers will appear here.
-              </p>
-            </div>
+          <div className="border-t border-app-border/50" />
+
+          {/* LLM Provider */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-app-muted uppercase tracking-wide">
+              AI Summary Provider
+            </label>
+            <Select
+              value={llmProvider}
+              onChange={(e) => {
+                const provider = e.target.value;
+                const models = getAvailableModels(provider);
+                const defaultModel = models[0] || '';
+                setLlmProvider(provider);
+                setLlmModel(defaultModel);
+                setLlmValidation('idle');
+                saveAiConfig({ llmProvider: provider, llmModel: defaultModel });
+              }}
+            >
+              {LLM_PROVIDERS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          {/* LLM API Key */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-app-muted uppercase tracking-wide">
+              {llmProvider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API Key
+            </label>
+            <ApiKeyInput
+              value={llmApiKey}
+              onChange={(val) => {
+                setLlmApiKey(val);
+                setLlmValidation('idle');
+                saveAiConfig({ llmApiKey: val });
+              }}
+              onValidate={handleValidateLlm}
+              validationState={llmValidation}
+              placeholder={`Enter your ${llmProvider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key`}
+            />
+            <p className="text-xs text-app-muted">
+              Used to generate AI meeting summaries.
+            </p>
+          </div>
+
+          {/* LLM Model */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-app-muted uppercase tracking-wide">
+              Model
+            </label>
+            <Select
+              value={llmModel}
+              onChange={(e) => {
+                setLlmModel(e.target.value);
+                saveAiConfig({ llmModel: e.target.value });
+              }}
+            >
+              {availableModels.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          {/* Validation error */}
+          {validationError && (
+            <p className="text-xs text-red-600 dark:text-red-400">{validationError}</p>
           )}
         </Card>
       </section>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Section 2: BYOK Settings                                            */}
-      {/* ------------------------------------------------------------------ */}
-      {isBYOK && (
-        <section>
-          <SectionHeading icon={Key}>API Keys</SectionHeading>
-
-          <Card className="space-y-5">
-            {/* Deepgram */}
-            <ApiKeyInput
-              label="Deepgram API Key"
-              placeholder="dg_••••••••••••••••••••••••••••••••••••••••"
-              value={providerConfig.deepgramApiKey}
-              onChange={(e) => {
-                setDeepgramTestState(TEST_IDLE);
-                setDeepgramTestError('');
-                updateProviderConfig({ deepgramApiKey: e.target.value }, true);
-              }}
-              onTest={handleTestDeepgram}
-              testState={deepgramTestState}
-              testError={deepgramTestError}
-            />
-
-            {/* Divider */}
-            <div className="border-t border-app-border/50" />
-
-            {/* LLM Provider */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-app-muted uppercase tracking-wide">
-                LLM Provider
-              </label>
-              <Select
-                value={providerConfig.llmProvider}
-                onChange={(e) => handleLlmProviderChange(e.target.value)}
-              >
-                <option value="anthropic">Anthropic</option>
-                <option value="openai">OpenAI</option>
-              </Select>
-            </div>
-
-            {/* LLM API Key */}
-            <ApiKeyInput
-              label={`${providerConfig.llmProvider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API Key`}
-              placeholder={
-                providerConfig.llmProvider === 'anthropic'
-                  ? 'sk-ant-••••••••••••••••••••••••••••••••'
-                  : 'sk-••••••••••••••••••••••••••••••••'
-              }
-              value={providerConfig.llmApiKey}
-              onChange={(e) => {
-                setLlmTestState(TEST_IDLE);
-                setLlmTestError('');
-                updateProviderConfig({ llmApiKey: e.target.value }, true);
-              }}
-              onTest={handleTestLlm}
-              testState={llmTestState}
-              testError={llmTestError}
-            />
-
-            {/* LLM Model */}
-            {availableModels.length > 0 && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-app-muted uppercase tracking-wide">
-                  Model
-                </label>
-                <Select
-                  value={providerConfig.llmModel}
-                  onChange={(e) =>
-                    updateProviderConfig({ llmModel: e.target.value })
-                  }
-                >
-                  {availableModels.map((model) => {
-                    const id = typeof model === 'string' ? model : model.id;
-                    const name = typeof model === 'string' ? model : (model.name ?? model.id);
-                    return (
-                      <option key={id} value={id}>
-                        {name}
-                      </option>
-                    );
-                  })}
-                </Select>
-              </div>
-            )}
-          </Card>
-        </section>
-      )}
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Section 3: Microphone                                               */}
+      {/* Section 2: Microphone                                               */}
       {/* ------------------------------------------------------------------ */}
       <section>
         <SectionHeading icon={Mic}>Microphone</SectionHeading>
@@ -583,29 +493,15 @@ export default function MeetingNotes() {
       </section>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Section 4: Meeting Detection                                        */}
+      {/* Section 3: Meeting Detection                                        */}
       {/* ------------------------------------------------------------------ */}
       <section>
-        <SectionHeading icon={Calendar}>Meeting Detection</SectionHeading>
+        <SectionHeading icon={Mic}>Meeting Detection</SectionHeading>
 
         <Card className="space-y-4">
           <SettingRow
-            label="Auto-detect calendar meetings"
-            description="Start recording automatically when a calendar event begins."
-          >
-            <Toggle
-              checked={meetingSettings.autoDetectCalendar}
-              onChange={(e) =>
-                updateMeetingSettings({ autoDetectCalendar: e.target.checked })
-              }
-            />
-          </SettingRow>
-
-          <div className="border-t border-app-border/50" />
-
-          <SettingRow
-            label="Detect ad-hoc calls via microphone activity"
-            description="Prompt to start a meeting note when sustained audio is detected."
+            label="Auto-detect meetings"
+            description="Detects when a meeting app is using your mic and prompts to start recording."
           >
             <Toggle
               checked={meetingSettings.detectAdHocCalls}
@@ -614,11 +510,14 @@ export default function MeetingNotes() {
               }
             />
           </SettingRow>
+          <p className="text-xs text-app-muted">
+            Works with Zoom, Teams, Google Meet, FaceTime, Slack, Webex, and browser-based calls.
+          </p>
         </Card>
       </section>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Section 5: Summary                                                  */}
+      {/* Section 4: Summary                                                  */}
       {/* ------------------------------------------------------------------ */}
       <section>
         <SectionHeading icon={NotebookPen}>Summary</SectionHeading>

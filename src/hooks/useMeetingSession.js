@@ -8,8 +8,8 @@
  *
  * Responsibilities:
  *   - Driving state transitions in response to user actions and Tauri events
- *   - Starting/stopping the Rust audio capture and Deepgram transcription layer
- *   - Accumulating transcript segments streamed from Tauri
+ *   - Starting/stopping the Rust audio capture and Deepgram STT
+ *   - Accumulating transcript segments from Deepgram WebSocket
  *   - Auto-stop handling when the Rust side detects meeting silence
  *   - Streaming summary generation via the LLM summary service
  *   - Duration tracking via a one-second setInterval
@@ -26,6 +26,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { streamMeetingSummary } from '../services/llm-summary.js';
 import { calendarAuth, events as calendarEventsApi } from '../services/calendar.js';
+import { createDeepgramSession } from '../services/deepgram-transcription.js';
+import { loadProviderConfig } from '../services/ai-provider.js';
 
 // Use console directly for meeting diagnostics (the app logger is a no-op in dev)
 const log = (...args) => console.log('[MeetingSession]', ...args);
@@ -174,6 +176,9 @@ export function useMeetingSession() {
   /** Mirror meeting title for the same stale-closure reason. */
   const meetingTitleRef = useRef('');
 
+  /** Active Deepgram transcription session handle. */
+  const deepgramRef = useRef(null);
+
   // Keep refs in sync with their corresponding state values
   useEffect(() => { sparseNotesRef.current = sparseNotes; }, [sparseNotes]);
   useEffect(() => { meetingTitleRef.current = meetingTitle; }, [meetingTitle]);
@@ -303,9 +308,14 @@ export function useMeetingSession() {
       log('Summary generation complete');
     } catch (err) {
       logError('Summary generation failed:', err);
-      setError(`Summary generation failed: ${err.message}`);
-      // Still transition to COMPLETE so the user can see whatever partial
-      // summary was streamed before the error occurred.
+      // LLM unavailable — fall back to showing the raw transcript.
+      const transcriptString = _buildTranscriptString(segments, startTimeMs);
+      if (transcriptString.trim()) {
+        log('Falling back to raw transcript');
+        setSummary(`## Raw Transcript\n\n${transcriptString}`);
+      } else {
+        setError(`Summary generation failed: ${err.message}`);
+      }
       setState(SESSION_STATE.COMPLETE);
     }
   }, []);
@@ -331,24 +341,6 @@ export function useMeetingSession() {
         logError(`Failed to register listener for "${event}":`, err);
       }
     };
-
-    // ----------------------------------------------------------------
-    // lokus:transcript-update
-    // Append each arriving segment to both state (for display) and ref
-    // (for the summary pipeline).
-    // ----------------------------------------------------------------
-    register('lokus:transcript-update', ({ payload }) => {
-      const segment = {
-        text:      payload.text      ?? '',
-        speaker:   payload.speaker   ?? null,
-        timestamp: payload.timestamp ?? Date.now(),
-        is_final:  payload.isFinal   ?? payload.is_final ?? false,
-        words:     payload.words     ?? [],
-      };
-
-      transcriptRef.current = [...transcriptRef.current, segment];
-      setTranscript((prev) => [...prev, segment]);
-    });
 
     // ----------------------------------------------------------------
     // lokus:meeting-detected
@@ -381,20 +373,17 @@ export function useMeetingSession() {
       log('Meeting ended event received — auto-stopping');
       setIsEnding(false);
 
+      // Stop Deepgram transcription on auto-stop.
+      if (deepgramRef.current) {
+        deepgramRef.current.stop();
+        deepgramRef.current = null;
+      }
+      invoke('stop_audio_capture').catch(() => {});
+
       setState((prev) => {
         if (prev !== SESSION_STATE.RECORDING) return prev;
         return SESSION_STATE.PROCESSING;
       });
-    });
-
-    // ----------------------------------------------------------------
-    // lokus:transcription-error
-    // Non-fatal transcription errors — surface to UI but keep running.
-    // ----------------------------------------------------------------
-    register('lokus:transcription-error', ({ payload }) => {
-      const msg = payload?.error ?? payload?.message ?? 'Unknown transcription error';
-      logError('Transcription error:', msg);
-      setError(`Transcription error: ${msg}`);
     });
 
     // Cleanup: remove all listeners when the component unmounts.
@@ -429,6 +418,7 @@ export function useMeetingSession() {
 
     // Capture a snapshot of the accumulated segments at stop time.
     const segmentsSnapshot = [...transcriptRef.current];
+    log(`Processing: ${segmentsSnapshot.length} transcript segments captured, ${segmentsSnapshot.filter(s => s.is_final).length} final`);
     const startTimeMs = startTimeRef.current;
 
     _runSummary(segmentsSnapshot, startTimeMs);
@@ -475,9 +465,10 @@ export function useMeetingSession() {
    * Core recording start logic — shared by acceptPrompt and startRecording.
    *
    * Calls, in order:
-   *   1. start_audio_capture  — begins mic capture in Rust
-   *   2. start_transcription  — opens the Deepgram WebSocket
-   *   3. start_meeting_monitoring — switches to active-meeting monitoring
+   *   1. Load AI provider config (to get Deepgram API key)
+   *   2. start_audio_capture  — begins mic capture in Rust
+   *   3. Start Deepgram WebSocket — streams audio to Deepgram for STT
+   *   4. start_meeting_monitoring — switches to active-meeting monitoring
    *
    * On any failure the Rust layer is asked to stop whatever started.
    */
@@ -489,6 +480,29 @@ export function useMeetingSession() {
     setSummary('');
     setDuration(0);
     setIsEnding(false);
+
+    // Set recording state immediately so the MeetingPanel is visible in the
+    // sidebar — the user should see status/errors inline rather than a blank
+    // sidebar if something goes wrong.
+    setState(SESSION_STATE.RECORDING);
+
+    // Load config to get the Deepgram API key.
+    let config;
+    try {
+      config = await loadProviderConfig();
+    } catch (err) {
+      logError('loadProviderConfig failed:', err);
+      setError('Failed to load API configuration. Check Settings → Meeting Notes.');
+      startTimeRef.current = null;
+      return false;
+    }
+
+    if (!config.deepgramApiKey) {
+      logError('No Deepgram API key configured');
+      setError('Deepgram API key not set. Go to Settings → Meeting Notes to add it.');
+      startTimeRef.current = null;
+      return false;
+    }
 
     try {
       await invoke('start_audio_capture', {
@@ -506,24 +520,25 @@ export function useMeetingSession() {
       return false;
     }
 
+    // Start Deepgram transcription session.
     try {
-      // Load provider config to pass Deepgram credentials/mode.
-      // Dynamically imported to avoid a hard dependency at module load time
-      // and to keep the hook testable with a simple mock.
-      const { loadProviderConfig } = await import('../services/ai-provider.js');
-      const providerCfg = await loadProviderConfig();
-
-      await invoke('start_transcription', {
-        config: {
-          apiKey:   providerCfg.deepgramApiKey || '',
-          mode:     providerCfg.mode === 'lokus' ? 'proxy' : 'byok',
-          proxyUrl: providerCfg.mode === 'lokus' ? providerCfg.supabaseUrl : null,
+      const session = createDeepgramSession({
+        apiKey: config.deepgramApiKey,
+        onTranscript: (segment) => {
+          log('Transcript segment received:', segment.text?.substring(0, 60));
+          transcriptRef.current = [...transcriptRef.current, segment];
+          setTranscript((prev) => [...prev, segment]);
+        },
+        onError: (msg) => {
+          logError('Deepgram error:', msg);
+          setError(`Transcription error: ${msg}`);
         },
       });
+      await session.start();
+      deepgramRef.current = session;
     } catch (err) {
-      logError('start_transcription failed:', err);
+      logError('Deepgram session start failed:', err);
       setError(`Failed to start transcription: ${err.message ?? err}`);
-      // Best-effort rollback
       invoke('stop_audio_capture').catch(() => {});
       startTimeRef.current = null;
       return false;
@@ -537,7 +552,6 @@ export function useMeetingSession() {
       logError('start_meeting_monitoring failed (non-fatal):', err);
     }
 
-    setState(SESSION_STATE.RECORDING);
     log('Recording started');
     return true;
   }, []);
@@ -586,7 +600,7 @@ export function useMeetingSession() {
    *
    * Calls, in order:
    *   1. stop_meeting_monitoring
-   *   2. stop_transcription
+   *   2. Stop Deepgram transcription session
    *   3. stop_audio_capture
    */
   const stopRecording = useCallback(async () => {
@@ -603,11 +617,10 @@ export function useMeetingSession() {
       logError('stop_meeting_monitoring failed (non-fatal):', err);
     }
 
-    try {
-      await invoke('stop_transcription');
-    } catch (err) {
-      logError('stop_transcription failed:', err);
-      setError(`Failed to stop transcription: ${err.message ?? err}`);
+    // Stop Deepgram transcription.
+    if (deepgramRef.current) {
+      deepgramRef.current.stop();
+      deepgramRef.current = null;
     }
 
     try {
@@ -629,9 +642,14 @@ export function useMeetingSession() {
   const reset = useCallback(() => {
     _clearDurationInterval();
 
+    // Stop Deepgram transcription if active.
+    if (deepgramRef.current) {
+      deepgramRef.current.stop();
+      deepgramRef.current = null;
+    }
+
     // Clean up any active Rust-side processes best-effort.
     invoke('stop_meeting_monitoring').catch(() => {});
-    invoke('stop_transcription').catch(() => {});
     invoke('stop_audio_capture').catch(() => {});
     invoke('disable_meeting_detection').catch(() => {});
 

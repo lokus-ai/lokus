@@ -195,6 +195,70 @@ pub fn open_launcher_window(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn open_meeting_overlay(app: AppHandle) -> Result<(), String> {
+  let label = "meeting-overlay";
+
+  // If already open, just focus it
+  if let Some(win) = app.get_webview_window(label) {
+    focus(&win);
+    return Ok(());
+  }
+
+  let url = WebviewUrl::App("index.html?view=meeting-overlay".into());
+
+  // Height is tall enough for dropdown (transparent area is invisible)
+  let win = WebviewWindowBuilder::new(&app, label, url)
+    .title("")
+    .inner_size(620.0, 200.0)
+    .resizable(false)
+    .maximizable(false)
+    .minimizable(false)
+    .decorations(false)
+    .transparent(true)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .center()
+    .build()
+    .map_err(|e: tauri::Error| e.to_string())?;
+
+  // Position at top-center (frontend will reposition precisely)
+  let _ = win.set_position(tauri::PhysicalPosition::new(400, 12));
+
+  // macOS: clear window bg, visible on all Spaces
+  // WKWebView transparency is handled by Tauri's .transparent(true) + macOSPrivateApi
+  // The CSS sets html, body, #root { background: transparent } for the content layer
+  #[cfg(target_os = "macos")]
+  {
+    let win_clone = win.clone();
+    let _ = win.run_on_main_thread(move || {
+      use cocoa::base::{id, NO};
+      use objc::{msg_send, sel, sel_impl, class};
+
+      if let Ok(ns_win) = win_clone.ns_window() {
+        let ns_win = ns_win as id;
+        unsafe {
+          let clear: id = msg_send![class!(NSColor), clearColor];
+          let _: () = msg_send![ns_win, setBackgroundColor: clear];
+          let _: () = msg_send![ns_win, setHasShadow: NO];
+          let _: () = msg_send![ns_win, setOpaque: NO];
+          let _: () = msg_send![ns_win, setCollectionBehavior: 1u64];
+        }
+      }
+    });
+  }
+
+  Ok(())
+}
+
+#[tauri::command]
+pub fn close_meeting_overlay(app: AppHandle) -> Result<(), String> {
+  if let Some(win) = app.get_webview_window("meeting-overlay") {
+    let _ = win.close();
+  }
+  Ok(())
+}
+
+#[tauri::command]
 pub fn sync_window_theme(window: tauri::Window, is_dark: bool, _bg_color: String) -> Result<(), String> {
 
   #[cfg(target_os = "macos")]
