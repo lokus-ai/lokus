@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import Editor from "../editor";
 import { WorkspaceManager } from "../core/workspace/manager.js";
 import { getFilename, joinPath } from '../utils/pathUtils.js';
+import { isPlainTextNotePath } from '../utils/plainTextNote.js';
 import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
 import { ColoredFileIcon } from "../components/FileIcon.jsx";
 import { useTheme } from "../hooks/theme.jsx";
@@ -75,15 +76,15 @@ export default function MobileWorkspace({ initialPath }) {
         });
         console.log('[MobileWorkspace] Files loaded:', result?.length || 0);
 
-        // Filter to only markdown files for now
-        const mdFiles = (result || []).filter(f =>
-          f.name?.endsWith('.md') && !f.is_dir
+        // Markdown and plain-text notes
+        const noteFiles = (result || []).filter(f =>
+          (f.name?.endsWith('.md') || f.name?.endsWith('.txt')) && !f.is_dir
         );
-        setFiles(mdFiles);
+        setFiles(noteFiles);
 
         // Auto-open first file
-        if (mdFiles.length > 0 && !activeFile) {
-          handleFileSelect(mdFiles[0]);
+        if (noteFiles.length > 0 && !activeFile) {
+          handleFileSelect(noteFiles[0]);
         }
       } catch (e) {
         console.error('[MobileWorkspace] Error loading files:', e);
@@ -232,6 +233,7 @@ export default function MobileWorkspace({ initialPath }) {
           ref={editorRef}
           initialContent={fileContent}
           filePath={activeFile?.path}
+          plainTextNote={isPlainTextNotePath(activeFile?.path)}
           onChange={(content) => setFileContent(content)}
           onEditorReady={(editor) => {
             console.log('[MobileWorkspace] Editor ready');

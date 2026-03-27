@@ -1440,3 +1440,35 @@ ul[data-type="taskList"] li.task-started {
   margin: 0 2px;
 }
 
+/* ============================================
+   Plain .txt notes — preserve fixed-width columns
+   (monospace + no paragraph gaps; each line is a PM paragraph)
+   ============================================ */
+
+.lokus-plain-text-editor .ProseMirror {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", "Courier New", monospace !important;
+  font-variant-ligatures: none !important;
+  font-feature-settings: normal !important;
+  letter-spacing: 0 !important;
+  line-height: 1.45 !important;
+  tab-size: 4;
+  -moz-tab-size: 4;
+  /* Beat Tailwind .prose which can reset white-space and collapse spaces */
+  white-space: pre-wrap !important;
+}
+
+.lokus-plain-text-editor .ProseMirror p {
+  margin: 0 !important;
+  min-height: 1.45em;
+  white-space: pre-wrap !important;
+}
+
+.reading-mode-view .lokus-plain-text-reading {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-variant-ligatures: none;
+  font-feature-settings: normal;
+  letter-spacing: 0;
+  line-height: 1.45;
+  margin: 0;
+}
+

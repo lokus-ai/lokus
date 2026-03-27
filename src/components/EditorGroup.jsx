@@ -10,6 +10,12 @@ import WelcomeScreen from './WelcomeScreen';
 import { canvasManager } from '../core/canvas/manager';
 import { createLokusParser, createLokusSerializer } from '../core/markdown/lokus-md-pipeline';
 import { registerEditor } from '../stores/editorRegistry';
+import {
+  isPlainTextNotePath,
+  noteBasenameForTitle,
+  plainTextStringToDoc,
+  docToPlainTextString,
+} from '../utils/plainTextNote.js';
 import { isImageFile } from '../utils/imageUtils';
 import { isPDFFile } from '../utils/pdfUtils';
 import { LazyImageViewer, LazyPDFViewer } from './OptimizedWrapper';
@@ -94,7 +100,7 @@ export default function EditorGroup({
       return;
     }
     const cached = useEditorGroupStore.getState().findGroup(group.id)?.contentByTab?.[activeFile];
-    const title = cached?.title || activeFile.split('/').pop().replace(/\.md$/, '');
+    const title = cached?.title || noteBasenameForTitle(activeFile);
     setEditorTitle(title);
     setOriginalTitle(title);
   }, [activeFile, group.id]);
@@ -223,25 +229,28 @@ export default function EditorGroup({
           return;
         }
 
-        // Ensure parser is ready
-        if (!lokusParserRef.current) {
-          const view = rawEditorRef.current;
-          if (!view) {
-            // Editor not mounted yet — store raw markdown for handleEditorReady
-            useEditorGroupStore.getState().setTabContent(group.id, activeFile, {
-              rawMarkdown: raw,
-              savedContent: raw,
-              title: activeFile.split('/').pop().replace(/\.md$/, ''),
-            });
-            loadingFileRef.current = null;
-            setIsLoading(false);
-            return;
-          }
-          lokusParserRef.current = createLokusParser(view.state.schema);
+        const editorView = rawEditorRef.current;
+        if (!editorView) {
+          // Editor not mounted yet — store raw source for handleEditorReady
+          useEditorGroupStore.getState().setTabContent(group.id, activeFile, {
+            rawMarkdown: raw,
+            savedContent: raw,
+            title: noteBasenameForTitle(activeFile),
+          });
+          loadingFileRef.current = null;
+          setIsLoading(false);
+          return;
         }
 
-        // Parse markdown → PM doc → fresh EditorState
-        const doc = lokusParserRef.current.parse(raw);
+        // Ensure markdown parser is ready (unused for .txt body parse, but kept for md tabs)
+        if (!lokusParserRef.current) {
+          lokusParserRef.current = createLokusParser(editorView.state.schema);
+        }
+
+        // Parse file → PM doc (.txt = plain lines; else markdown)
+        const doc = isPlainTextNotePath(activeFile)
+          ? plainTextStringToDoc(editorView.state.schema, raw)
+          : lokusParserRef.current.parse(raw);
         const newState = createEditorStateFromDoc(doc);
         if (!newState || cancelled || loadingFileRef.current !== activeFile) return;
 
@@ -249,7 +258,7 @@ export default function EditorGroup({
         editorStatesRef.current.set(activeFile, newState);
         useEditorGroupStore.getState().setTabContent(group.id, activeFile, {
           savedContent: raw,
-          title: activeFile.split('/').pop().replace(/\.md$/, ''),
+          title: noteBasenameForTitle(activeFile),
         });
 
         if (cancelled) return;
@@ -328,13 +337,15 @@ export default function EditorGroup({
           // Check if raw markdown was stored while editor was mounting
           const cached = useEditorGroupStore.getState().findGroup(group.id)?.contentByTab?.[file];
           if (cached?.rawMarkdown) {
-            const doc = lokusParserRef.current.parse(cached.rawMarkdown);
+            const doc = isPlainTextNotePath(file)
+              ? plainTextStringToDoc(view.state.schema, cached.rawMarkdown)
+              : lokusParserRef.current.parse(cached.rawMarkdown);
             const newState = createEditorStateFromDoc(doc);
             if (newState) {
               editorStatesRef.current.set(file, newState);
               useEditorGroupStore.getState().setTabContent(group.id, file, {
                 savedContent: cached.savedContent ?? cached.rawMarkdown,
-                title: cached.title ?? file.split('/').pop().replace(/\.md$/, ''),
+                title: cached.title ?? noteBasenameForTitle(file),
               });
               restoreEditorState(newState);
               setIsLoading(false);
@@ -349,13 +360,15 @@ export default function EditorGroup({
                 const raw = await invoke('read_file_content', { path: file });
                 // Verify file is still active, view still exists, and no other load took over
                 if (activeFileRef.current !== file || !rawEditorRef.current || loadingFileRef.current !== file) return;
-                const doc = lokusParserRef.current.parse(raw);
+                const doc = isPlainTextNotePath(file)
+                  ? plainTextStringToDoc(rawEditorRef.current.state.schema, raw)
+                  : lokusParserRef.current.parse(raw);
                 const newState = createEditorStateFromDoc(doc);
                 if (!newState) return;
                 editorStatesRef.current.set(file, newState);
                 useEditorGroupStore.getState().setTabContent(group.id, file, {
                   savedContent: raw,
-                  title: file.split('/').pop().replace(/\.md$/, ''),
+                  title: noteBasenameForTitle(file),
                 });
                 loadingFileRef.current = null;
                 restoreEditorState(newState);
@@ -396,8 +409,10 @@ export default function EditorGroup({
       if (!lokusSerializerRef.current) {
         lokusSerializerRef.current = createLokusSerializer();
       }
-      const currentMd = lokusSerializerRef.current.serialize(view.state.doc);
-      store.markTabDirty(group.id, currentFile, currentMd !== saved);
+      const currentSerialized = isPlainTextNotePath(currentFile)
+        ? docToPlainTextString(view.state.doc)
+        : lokusSerializerRef.current.serialize(view.state.doc);
+      store.markTabDirty(group.id, currentFile, currentSerialized !== saved);
     }
   }, [group.id]);
 
@@ -606,6 +621,7 @@ export default function EditorGroup({
             */}
             <Editor
               ref={editorHandleRef}
+              plainTextNote={isPlainTextNotePath(activeFile)}
               onContentChange={handleContentChange}
               onEditorReady={handleEditorReady}
             />

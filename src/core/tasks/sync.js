@@ -118,10 +118,16 @@ export class TaskSyncManager {
       const existing = existingMap.get(key)
 
       if (existing) {
-        // Check if task status has changed in content
-        if (existing.status !== extracted.status) {
+        const dueDateChanged = (existing.due_date || null) !== (extracted.due_date || null)
+        const dueDateAllDayChanged =
+          Boolean(existing.due_date_is_all_day) !== Boolean(extracted.due_date_is_all_day)
+
+        // Check if task metadata has changed in content
+        if (existing.status !== extracted.status || dueDateChanged || dueDateAllDayChanged) {
           const updated = await taskManager.updateTask(existing.id, {
-            status: extracted.status
+            status: extracted.status,
+            dueDate: extracted.due_date || null,
+            dueDateIsAllDay: Boolean(extracted.due_date_is_all_day)
           })
           result.updated.push(updated)
         } else {
@@ -134,7 +140,9 @@ export class TaskSyncManager {
           description: extracted.metadata?.original_title || null,
           notePath: filePath,
           notePosition: extracted.note_position,
-          status: extracted.status
+          status: extracted.status,
+          dueDate: extracted.due_date || null,
+          dueDateIsAllDay: Boolean(extracted.due_date_is_all_day)
         })
         result.created.push(created)
       }

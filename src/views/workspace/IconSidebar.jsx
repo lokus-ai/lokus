@@ -1,4 +1,4 @@
-import { FolderOpen, LayoutGrid, Puzzle, Database, Network, Calendar, CalendarDays } from 'lucide-react';
+import { FolderOpen, LayoutGrid, Puzzle, Database, Network, Calendar, CalendarDays, ListTodo } from 'lucide-react';
 import LokusLogo from '../../components/LokusLogo.jsx';
 import { useLayoutStore } from '../../stores/layout';
 import { useViewStore } from '../../stores/views';
@@ -23,6 +23,7 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
   const currentView = useViewStore((s) => s.currentView);
   const showDailyNotesPanel = useViewStore((s) => s.showDailyNotesPanel);
   const showCalendarPanel = useViewStore((s) => s.showCalendarPanel);
+  const showAgendaPanel = useViewStore((s) => s.showAgendaPanel);
 
   // Derive boolean view flags from currentView
   const showKanban = currentView === 'kanban';
@@ -66,14 +67,33 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
 
   const handleDailyNotesClick = () => {
     const nextValue = !useViewStore.getState().showDailyNotesPanel;
-    useViewStore.setState({ showDailyNotesPanel: nextValue, showCalendarPanel: false });
+    useViewStore.setState({
+      showDailyNotesPanel: nextValue,
+      showCalendarPanel: false,
+      showAgendaPanel: false,
+    });
     useLayoutStore.setState({ showRight: true });
     useViewStore.getState().closePanel('showVersionHistory');
   };
 
   const handleCalendarClick = () => {
     const nextValue = !useViewStore.getState().showCalendarPanel;
-    useViewStore.setState({ showCalendarPanel: nextValue, showDailyNotesPanel: false });
+    useViewStore.setState({
+      showCalendarPanel: nextValue,
+      showDailyNotesPanel: false,
+      showAgendaPanel: false,
+    });
+    useLayoutStore.setState({ showRight: true });
+    useViewStore.getState().closePanel('showVersionHistory');
+  };
+
+  const handleAgendaClick = () => {
+    const nextValue = !useViewStore.getState().showAgendaPanel;
+    useViewStore.setState({
+      showAgendaPanel: nextValue,
+      showCalendarPanel: false,
+      showDailyNotesPanel: false,
+    });
     useLayoutStore.setState({ showRight: true });
     useViewStore.getState().closePanel('showVersionHistory');
   };
@@ -289,6 +309,25 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
           <CalendarDays
             className="w-5 h-5"
             style={showCalendarPanel ? { color: 'rgb(var(--accent))' } : {}}
+          />
+        </button>}
+
+        {featureFlags.enable_calendar && <button
+          onClick={handleAgendaClick}
+          title="Agenda"
+          className={`obsidian-button icon-only w-full mb-1 ${showAgendaPanel ? 'active' : ''}`}
+          onMouseEnter={(e) => {
+            const icon = e.currentTarget.querySelector('svg');
+            if (icon) icon.style.color = 'rgb(var(--accent))';
+          }}
+          onMouseLeave={(e) => {
+            const icon = e.currentTarget.querySelector('svg');
+            if (icon) icon.style.color = showAgendaPanel ? 'rgb(var(--accent))' : '';
+          }}
+        >
+          <ListTodo
+            className="w-5 h-5"
+            style={showAgendaPanel ? { color: 'rgb(var(--accent))' } : {}}
           />
         </button>}
       </div>

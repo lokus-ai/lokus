@@ -3,6 +3,7 @@ import { useEditorGroupStore } from '../../../stores/editorGroups';
 import { useViewStore } from '../../../stores/views';
 import { getEditor } from '../../../stores/editorRegistry';
 import { createLokusSerializer } from '../../../core/markdown/lokus-md-pipeline';
+import { isPlainTextNotePath, docToPlainTextString } from '../../../utils/plainTextNote.js';
 import { DOMSerializer } from 'prosemirror-model';
 import { invoke } from '@tauri-apps/api/core';
 import { confirm, save } from '@tauri-apps/plugin-dialog';
@@ -40,7 +41,7 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
         const group = store.findGroup(groupId);
         const tabContent = group?.contentByTab?.[filePath];
         if (tabContent?.title) {
-          const currentFileName = filePath.split('/').pop().replace(/\.md$/, '');
+          const currentFileName = (filePath.split('/').pop() || '').replace(/\.(md|txt)$/i, '');
           if (tabContent.title !== currentFileName && tabContent.title.trim()) {
             const dir = filePath.substring(0, filePath.lastIndexOf('/'));
             const ext = filePath.includes('.') ? filePath.substring(filePath.lastIndexOf('.')) : '.md';
@@ -57,8 +58,10 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
         }
       }
 
-      // Serialize ProseMirror document directly to markdown
-      const contentToSave = lokusSerializer.serialize(editor.state.doc);
+      // Serialize: plain text for .txt, markdown otherwise
+      const contentToSave = isPlainTextNotePath(pathToSave)
+        ? docToPlainTextString(editor.state.doc)
+        : lokusSerializer.serialize(editor.state.doc);
 
       await invoke('write_file_content', { path: pathToSave, content: contentToSave });
 
