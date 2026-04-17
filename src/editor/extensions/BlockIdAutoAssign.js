@@ -19,6 +19,8 @@ import { generateBlockId } from '../../core/blocks/id.js'
 
 export const blockIdAutoAssignKey = new PluginKey('blockIdAutoAssign')
 
+let _appendCount = 0
+
 /**
  * Create the BlockIdAutoAssign plugin.
  * @returns {Plugin}
@@ -28,22 +30,39 @@ export function createBlockIdAutoAssignPlugin() {
     key: blockIdAutoAssignKey,
 
     appendTransaction(transactions, oldState, newState) {
-      // Skip if nothing relevant changed — critical for idempotency
       const docChanged = transactions.some(t => t.docChanged)
       if (!docChanged) return null
+
+      // Hard guard: if PM calls appendTransaction more than 50 times in rapid
+      // succession without a user-initiated transaction in between, bail out.
+      // This prevents any theoretical infinite loop from freezing the app.
+      _appendCount++
+      if (_appendCount > 50) {
+        console.warn('[BlockIdAutoAssign] appendTransaction called >50 times, bailing')
+        return null
+      }
+      // Reset counter on next microtask (user transactions come async)
+      if (_appendCount === 1) {
+        queueMicrotask(() => { _appendCount = 0 })
+      }
+
+      console.log('[BlockIdAutoAssign] appendTransaction called, round:', _appendCount)
 
       const tr = newState.tr
       let modified = false
       const seen = new Set()
+      let nodeCount = 0
 
       newState.doc.descendants((node, pos) => {
-        // Only nodes that declare a blockId attr in their schema spec
         if (!node.type.spec.attrs || !('blockId' in node.type.spec.attrs)) {
           return
         }
+
+        // Safety cap — no doc should have >5000 blocks
+        nodeCount++
+        if (nodeCount > 5000) return false
+
         const existing = node.attrs.blockId
-        // Assign if missing OR if duplicate within the same document
-        // (duplicates can arise from paste operations copying node attrs).
         if (!existing || seen.has(existing)) {
           const id = generateBlockId()
           tr.setNodeMarkup(pos, null, { ...node.attrs, blockId: id })

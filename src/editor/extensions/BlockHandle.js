@@ -204,6 +204,7 @@ class BlockHandleView {
     // Append handle to document.body so it's never clipped by editor overflow.
     // Fixed positioning means we use viewport coords directly.
     document.body.appendChild(this.handle)
+    console.log('[BlockHandle] mounted, handle element:', this.handle, 'parent:', this.handle.parentElement)
 
     // Bind handlers
     this._onMouseMove = this._onMouseMove.bind(this)
@@ -331,12 +332,14 @@ class BlockHandleView {
         return
       }
 
+      console.log('[BlockHandle] hover:', target.node.type.name, 'pos:', target.pos, 'dom:', blockDOM.tagName)
+
       this.currentPos = target.pos
       this._applyBlockHover(blockDOM)
       clearTimeout(this._hideTimer)
       this._show(blockDOM)
-    } catch {
-      // Never let the handler crash and freeze the editor
+    } catch (err) {
+      console.error('[BlockHandle] mousemove error:', err)
       this._scheduleHide()
     }
   }
