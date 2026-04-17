@@ -199,6 +199,7 @@ class BlockHandleView {
     this.visible = false
     this._hideTimer = null
     this._isOverHandle = false
+    this._rafPending = false        // rAF throttle guard for mousemove
 
     // Append handle to document.body so it's never clipped by editor overflow.
     // Fixed positioning means we use viewport coords directly.
@@ -297,36 +298,47 @@ class BlockHandleView {
   // ---- Mouse events --------------------------------------------------------
 
   _onMouseMove(event) {
-    const coords = { left: event.clientX, top: event.clientY }
-    const target = blockAtCoords(this.view, coords)
+    // Throttle via rAF to prevent 60+ calls/sec from hanging the UI
+    if (this._rafPending) return
+    this._rafPending = true
+    const clientX = event.clientX
+    const clientY = event.clientY
+    requestAnimationFrame(() => {
+      this._rafPending = false
+      this._handleMouseAt(clientX, clientY)
+    })
+  }
 
-    if (!target) {
-      this._scheduleHide()
-      return
-    }
-
-    // Get the DOM node for this block
-    let blockDOM
+  _handleMouseAt(clientX, clientY) {
     try {
-      blockDOM = this.view.nodeDOM(target.pos)
+      const coords = { left: clientX, top: clientY }
+      const target = blockAtCoords(this.view, coords)
+
+      if (!target) {
+        this._scheduleHide()
+        return
+      }
+
+      let blockDOM
+      try {
+        blockDOM = this.view.nodeDOM(target.pos)
+      } catch {
+        blockDOM = null
+      }
+
+      if (!blockDOM || !(blockDOM instanceof Element)) {
+        this._scheduleHide()
+        return
+      }
+
+      this.currentPos = target.pos
+      this._applyBlockHover(blockDOM)
+      clearTimeout(this._hideTimer)
+      this._show(blockDOM)
     } catch {
-      blockDOM = null
-    }
-
-    if (!blockDOM || !(blockDOM instanceof Element)) {
+      // Never let the handler crash and freeze the editor
       this._scheduleHide()
-      return
     }
-
-    // Store current target position
-    this.currentPos = target.pos
-
-    // Update hover class
-    this._applyBlockHover(blockDOM)
-
-    // Show handle
-    clearTimeout(this._hideTimer)
-    this._show(blockDOM)
   }
 
   _onMouseLeave() {

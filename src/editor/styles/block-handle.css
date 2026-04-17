@@ -94,12 +94,15 @@
    Block hover highlight
    --------------------------------------------------------------------------- */
 
-/* Applied to the PM block DOM element while handle is visible over it */
+/* Applied to the PM block DOM element while handle is visible over it.
+   Notion-style: subtle background tint + rounded outline so users can
+   visually see the block boundary. */
 .block-hover {
-  border-left: 2px solid var(--accent, #6366f1) !important;
-  padding-left: calc(var(--block-indent, 0px) + 4px);
-  margin-left: -6px;
-  transition: border-color 0.15s;
+  background-color: var(--bg-secondary, rgba(127, 127, 127, 0.06)) !important;
+  outline: 1.5px solid var(--accent, #6366f1) !important;
+  outline-offset: 2px;
+  border-radius: 4px;
+  transition: background-color 0.12s, outline-color 0.12s;
 }
 
 /* ---------------------------------------------------------------------------
