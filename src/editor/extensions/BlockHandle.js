@@ -249,10 +249,14 @@ class BlockHandleView {
     if (!blockDOM) return
 
     const blockRect = blockDOM.getBoundingClientRect()
-    // Fixed position: use viewport coordinates directly.
-    // Place handle 40px to the left of the block's left edge.
-    const left = Math.max(0, blockRect.left - 40)
-    this.handle.style.top = `${blockRect.top}px`
+    // Fixed position: viewport coordinates.
+    // Place handle inside the editor's left padding area, just left of the
+    // block text. The editor .ProseMirror element has padding-left; we use
+    // the editor's left edge + a small offset so the handle sits in the
+    // padding zone (visible, never under the sidebar).
+    const editorRect = this.view.dom.getBoundingClientRect()
+    const left = editorRect.left + 8
+    this.handle.style.top = `${blockRect.top + 2}px`
     this.handle.style.left = `${left}px`
   }
 

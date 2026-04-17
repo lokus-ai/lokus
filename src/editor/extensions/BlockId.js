@@ -61,11 +61,12 @@ export function createBlockIdPlugin() {
             tr.setNodeMarkup(pos, null, { ...node.attrs, blockId })
             modified = true
           }
-        } else if (node.attrs.blockId) {
-          // Block ID pattern was removed, clear the attribute
-          tr.setNodeMarkup(pos, null, { ...node.attrs, blockId: null })
-          modified = true
         }
+        // NOTE: we intentionally do NOT clear blockId when there's no ^id text.
+        // BlockIdAutoAssign now manages programmatic IDs — clearing here would
+        // create an infinite loop (assign → clear → assign → clear → ...).
+        // The ^id text pattern is an optional user-visible marker, not the
+        // source of truth for block identity.
       })
 
       return modified ? tr : null
