@@ -68,45 +68,41 @@ describe('BlockHandleView — DOM initialisation', () => {
   afterEach(() => {
     if (view) view.destroy()
     if (mount.parentElement) mount.parentElement.removeChild(mount)
+    // Clean up any orphaned handles from body
+    document.querySelectorAll('.block-handle').forEach(el => el.remove())
   })
 
-  it('appends exactly one .block-handle element to the editor container', () => {
-    const container = view.dom.parentElement
-    const handles = container.querySelectorAll('.block-handle')
+  it('appends exactly one .block-handle element to document.body', () => {
+    const handles = document.body.querySelectorAll('.block-handle')
     expect(handles.length).toBe(1)
   })
 
   it('the handle is initially hidden (no --visible class)', () => {
-    const container = view.dom.parentElement
-    const handle = container.querySelector('.block-handle')
+    const handle = document.body.querySelector('.block-handle')
     expect(handle.classList.contains('block-handle--visible')).toBe(false)
   })
 
   it('the handle contains a grip element and a plus button', () => {
-    const container = view.dom.parentElement
-    const handle = container.querySelector('.block-handle')
+    const handle = document.body.querySelector('.block-handle')
     expect(handle.querySelector('.block-handle__grip')).toBeTruthy()
     expect(handle.querySelector('.block-handle__plus')).toBeTruthy()
   })
 
   it('the grip element has 6 dot children', () => {
-    const container = view.dom.parentElement
-    const grip = container.querySelector('.block-handle__grip')
+    const grip = document.body.querySelector('.block-handle__grip')
     const dots = grip.querySelectorAll('.block-handle__dot')
     expect(dots.length).toBe(6)
   })
 
   it('the grip is draggable', () => {
-    const container = view.dom.parentElement
-    const grip = container.querySelector('.block-handle__grip')
+    const grip = document.body.querySelector('.block-handle__grip')
     expect(grip.getAttribute('draggable')).toBe('true')
   })
 
   it('removes the handle element when the view is destroyed', () => {
-    const container = view.dom.parentElement
     view.destroy()
-    view = null  // prevent afterEach double-destroy
-    const handles = container.querySelectorAll('.block-handle')
+    view = null
+    const handles = document.body.querySelectorAll('.block-handle')
     expect(handles.length).toBe(0)
   })
 })
@@ -134,16 +130,15 @@ describe('BlockHandleView — multiple plugin instances', () => {
     const view1 = new EditorView(mount1, { state: state1 })
     const view2 = new EditorView(mount2, { state: state2 })
 
-    const handles1 = mount1.querySelectorAll('.block-handle')
-    const handles2 = mount2.querySelectorAll('.block-handle')
-
-    expect(handles1.length).toBe(1)
-    expect(handles2.length).toBe(1)
-    expect(handles1[0]).not.toBe(handles2[0])
+    const handles = document.body.querySelectorAll('.block-handle')
+    expect(handles.length).toBe(2)
+    expect(handles[0]).not.toBe(handles[1])
 
     view1.destroy()
     view2.destroy()
     mount1.remove()
     mount2.remove()
+    // Clean up remaining handles
+    document.querySelectorAll('.block-handle').forEach(el => el.remove())
   })
 })

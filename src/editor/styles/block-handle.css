@@ -2,12 +2,11 @@
    Block Handle — Notion-style drag handle floating to the left of blocks
    --------------------------------------------------------------------------- */
 
-/* Container: positioned absolutely to the left of the editor content.
-   The editor's parent container must have position: relative (set by the plugin). */
+/* Container: fixed-positioned so it can't be clipped by editor overflow.
+   The plugin sets top/left in viewport coordinates on every mousemove. */
 .block-handle {
-  position: absolute;
+  position: fixed;
   z-index: 50;
-  left: -40px;
   display: flex;
   align-items: flex-start;
   gap: 2px;

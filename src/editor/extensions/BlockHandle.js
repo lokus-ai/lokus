@@ -200,16 +200,9 @@ class BlockHandleView {
     this._hideTimer = null
     this._isOverHandle = false
 
-    // Append handle as a sibling of the ProseMirror content div
-    const container = view.dom.parentElement
-    if (container) {
-      // Make sure the container can host absolutely-positioned children
-      const style = getComputedStyle(container)
-      if (style.position === 'static') {
-        container.style.position = 'relative'
-      }
-      container.appendChild(this.handle)
-    }
+    // Append handle to document.body so it's never clipped by editor overflow.
+    // Fixed positioning means we use viewport coords directly.
+    document.body.appendChild(this.handle)
 
     // Bind handlers
     this._onMouseMove = this._onMouseMove.bind(this)
@@ -220,6 +213,17 @@ class BlockHandleView {
     this._onGripDragEnd = this._onGripDragEnd.bind(this)
     this._onGripClick = this._onGripClick.bind(this)
     this._onPlusClick = this._onPlusClick.bind(this)
+
+    // Scroll listener — reposition handle when editor scrolls (fixed positioning)
+    this._scrollParent = view.dom.closest('.ProseMirror')?.parentElement || view.dom.parentElement
+    this._onScroll = () => {
+      if (this.visible && this.currentBlockDOM) {
+        this._positionHandle(this.currentBlockDOM)
+      }
+    }
+    if (this._scrollParent) {
+      this._scrollParent.addEventListener('scroll', this._onScroll, { passive: true })
+    }
 
     // Editor DOM listeners
     view.dom.addEventListener('mousemove', this._onMouseMove)
@@ -240,15 +244,14 @@ class BlockHandleView {
   // ---- Positioning ---------------------------------------------------------
 
   _positionHandle(blockDOM) {
-    const container = this.view.dom.parentElement
-    if (!container || !blockDOM) return
+    if (!blockDOM) return
 
-    const containerRect = container.getBoundingClientRect()
     const blockRect = blockDOM.getBoundingClientRect()
-
-    const top = blockRect.top - containerRect.top + container.scrollTop
-    this.handle.style.top = `${top}px`
-    this.handle.style.left = '0px'     // CSS positions it at -40px via margin/transform
+    // Fixed position: use viewport coordinates directly.
+    // Place handle 40px to the left of the block's left edge.
+    const left = Math.max(0, blockRect.left - 40)
+    this.handle.style.top = `${blockRect.top}px`
+    this.handle.style.left = `${left}px`
   }
 
   // ---- Visibility ----------------------------------------------------------
@@ -454,6 +457,9 @@ class BlockHandleView {
     clearTimeout(this._hideTimer)
 
     // Remove DOM listeners
+    if (this._scrollParent) {
+      this._scrollParent.removeEventListener('scroll', this._onScroll)
+    }
     this.view.dom.removeEventListener('mousemove', this._onMouseMove)
     this.view.dom.removeEventListener('mouseleave', this._onMouseLeave)
 
@@ -464,7 +470,7 @@ class BlockHandleView {
     this.grip.removeEventListener('click', this._onGripClick)
     this.plus.removeEventListener('click', this._onPlusClick)
 
-    // Remove handle from DOM
+    // Remove handle from DOM (appended to document.body)
     if (this.handle.parentElement) {
       this.handle.parentElement.removeChild(this.handle)
     }
