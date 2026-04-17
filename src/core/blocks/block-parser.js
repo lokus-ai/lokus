@@ -100,46 +100,11 @@ function parseHTMLBlocks(content, filePath) {
     blockIdManager.registerBlock(filePath, blockId, block)
   }
 
-  // Strategy 3: Virtual IDs for ALL paragraphs, lists, blockquotes (for search)
-  // These are searchable but not explicitly in the file
-  const allBlocksRegex = /<(p|li|blockquote)(?![^>]*data-block-id)([^>]*)>(.*?)<\/\1>/gi
-  let blockMatch2
-
-  while ((blockMatch2 = allBlocksRegex.exec(content)) !== null) {
-    const tagName = blockMatch2[1]
-    let text = blockMatch2[3]
-      .replace(/<[^>]+>/g, '')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/\s+\^[a-zA-Z0-9_-]+\s*$/, '') // Remove any ^blockid marker
-      .trim()
-
-    // Skip empty blocks
-    if (!text || text.length < 3) continue
-
-    // Generate virtual ID from content hash
-    const virtualId = generateContentHash(text)
-
-    let type = 'paragraph'
-    if (tagName === 'li') type = 'list'
-    if (tagName === 'blockquote') type = 'quote'
-
-    const block = {
-      blockId: virtualId,
-      id: virtualId,
-      type,
-      text: text.slice(0, 100),
-      line: lineNumber++,
-      position: blockMatch2.index,
-      auto: true,
-      virtual: true // Mark as virtual (searchable but not in file)
-    }
-
-    blocks.push(block)
-    // Don't register virtual blocks in block manager (they're transient)
-  }
+  // Strategy 3 removed: virtual content-hash IDs had a 32-bit collision bug
+  // (two paragraphs with identical text in different files got the same ID).
+  // Untagged blocks now get durable IDs via `BlockIdAutoAssign` in the editor
+  // and the SQLite index (`block_index` Rust module). See
+  // `docs/plans/2026-04-16-block-identity-foundation-design.md` §10.
 
   return blocks
 }
@@ -254,25 +219,6 @@ function generateSlug(text) {
     .replace(/\s+/g, '-') // Replace spaces with hyphens
     .replace(/-+/g, '-') // Replace multiple hyphens with single
     .slice(0, 50) // Limit length
-}
-
-/**
- * Generate a content hash for virtual block IDs
- * @param {string} text - Block content
- * @returns {string} Hash-based ID (e.g., "v1a2b3c")
- */
-function generateContentHash(text) {
-  // Simple hash for virtual IDs
-  let hash = 0
-  const str = text.slice(0, 200) // Use first 200 chars for hash
-
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash = hash & hash // Convert to 32-bit integer
-  }
-
-  return `v${Math.abs(hash).toString(36)}`
 }
 
 /**

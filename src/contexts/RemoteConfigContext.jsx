@@ -61,6 +61,10 @@ const DEFAULT_CONFIG = {
         enable_backlinks: true,
         enable_version_history: true,
         enable_import_export: true,
+        // Phase 1 foundation: SQLite-backed block identity index.
+        // Default ON in dev, OFF in production — remote config can override.
+        // See docs/plans/2026-04-16-block-identity-foundation-design.md
+        block_index_v1: (typeof import.meta !== 'undefined' && import.meta.env?.DEV) === true,
     },
 
     // Service status for maintenance mode

@@ -270,6 +270,7 @@ const nodes = {
     attrs: {
       checked: { default: false },
       taskState: { default: null },
+      blockId: { default: null },
     },
     parseDOM: [{
       tag: 'li[data-type="taskItem"]',
@@ -278,6 +279,7 @@ const nodes = {
         return {
           checked: dom.getAttribute('data-checked') === 'true',
           taskState: dom.getAttribute('data-task-state') || null,
+          blockId: dom.getAttribute('data-block-id') || null,
         }
       },
     }],
@@ -287,6 +289,7 @@ const nodes = {
         'data-checked': node.attrs.checked,
       }
       if (node.attrs.taskState) attrs['data-task-state'] = node.attrs.taskState
+      if (node.attrs.blockId) attrs['data-block-id'] = node.attrs.blockId
       return [
         'li',
         attrs,
@@ -346,6 +349,10 @@ const nodes = {
   tableHeader: {
     ...pmTableSpecs.table_header,
     // Content already set to 'block*' via cellContent option
+    attrs: {
+      ...(pmTableSpecs.table_header.attrs || {}),
+      blockId: { default: null },
+    },
     parseDOM: [{
       tag: 'th',
       getAttrs(dom) {
@@ -356,6 +363,7 @@ const nodes = {
           colspan,
           rowspan,
           colwidth: colwidth ? colwidth.split(',').map(Number) : null,
+          blockId: dom.getAttribute('data-block-id') || null,
         }
       },
     }],
@@ -364,6 +372,7 @@ const nodes = {
       if (node.attrs.colspan !== 1) attrs.colspan = node.attrs.colspan
       if (node.attrs.rowspan !== 1) attrs.rowspan = node.attrs.rowspan
       if (node.attrs.colwidth) attrs['data-colwidth'] = node.attrs.colwidth.join(',')
+      if (node.attrs.blockId) attrs['data-block-id'] = node.attrs.blockId
       return ['th', attrs, 0]
     },
   },
@@ -371,6 +380,10 @@ const nodes = {
   tableCell: {
     ...pmTableSpecs.table_cell,
     // Content already set to 'block*' via cellContent option
+    attrs: {
+      ...(pmTableSpecs.table_cell.attrs || {}),
+      blockId: { default: null },
+    },
     parseDOM: [{
       tag: 'td',
       getAttrs(dom) {
@@ -381,6 +394,7 @@ const nodes = {
           colspan,
           rowspan,
           colwidth: colwidth ? colwidth.split(',').map(Number) : null,
+          blockId: dom.getAttribute('data-block-id') || null,
         }
       },
     }],
@@ -389,6 +403,7 @@ const nodes = {
       if (node.attrs.colspan !== 1) attrs.colspan = node.attrs.colspan
       if (node.attrs.rowspan !== 1) attrs.rowspan = node.attrs.rowspan
       if (node.attrs.colwidth) attrs['data-colwidth'] = node.attrs.colwidth.join(',')
+      if (node.attrs.blockId) attrs['data-block-id'] = node.attrs.blockId
       return ['td', attrs, 0]
     },
   },
@@ -577,6 +592,7 @@ const nodes = {
       type: { default: 'note' },
       title: { default: null },
       collapsed: { default: false },
+      blockId: { default: null },
     },
     parseDOM: [{
       tag: 'div[data-callout-type]',
@@ -585,17 +601,19 @@ const nodes = {
           type: dom.getAttribute('data-callout-type') || 'note',
           title: dom.getAttribute('data-callout-title') || null,
           collapsed: dom.getAttribute('data-collapsed') === 'true',
+          blockId: dom.getAttribute('data-block-id') || null,
         }
       },
     }],
     toDOM(node) {
-      const { type, title, collapsed } = node.attrs
+      const { type, title, collapsed, blockId } = node.attrs
       const attrs = {
         class: `callout callout-${type}`,
         'data-callout-type': type,
         'data-collapsed': collapsed ? 'true' : 'false',
       }
       if (title) attrs['data-callout-title'] = title
+      if (blockId) attrs['data-block-id'] = blockId
       return [
         'div',
         attrs,
@@ -616,6 +634,7 @@ const nodes = {
       code: { default: '' },
       theme: { default: 'default' },
       updatedAt: { default: 0 },
+      blockId: { default: null },
     },
     parseDOM: [{
       tag: 'mermaid-block',
@@ -632,6 +651,7 @@ const nodes = {
           code,
           theme: dom.getAttribute('theme') || 'default',
           updatedAt: Number(dom.getAttribute('updatedat')) || 0,
+          blockId: dom.getAttribute('data-block-id') || null,
         }
       },
     }, {
@@ -644,19 +664,19 @@ const nodes = {
           code: codeEl.textContent || '',
           theme: 'default',
           updatedAt: 0,
+          blockId: null,
         }
       },
     }],
     toDOM(node) {
       const encodedCode = node.attrs.code ? btoa(node.attrs.code) : ''
-      return [
-        'mermaid-block',
-        {
-          'data-code': encodedCode,
-          theme: node.attrs.theme || 'default',
-          updatedat: String(node.attrs.updatedAt || 0),
-        },
-      ]
+      const attrs = {
+        'data-code': encodedCode,
+        theme: node.attrs.theme || 'default',
+        updatedat: String(node.attrs.updatedAt || 0),
+      }
+      if (node.attrs.blockId) attrs['data-block-id'] = node.attrs.blockId
+      return ['mermaid-block', attrs]
     },
   },
 

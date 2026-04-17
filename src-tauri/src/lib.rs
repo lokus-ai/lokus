@@ -37,6 +37,7 @@ mod audio;
 mod meeting_detector;
 mod transcription;
 mod notifications;
+mod block_index;
 
 #[cfg(desktop)]
 use window_manager::{open_workspace_window, open_preferences_window, open_launcher_window};
@@ -873,6 +874,15 @@ pub fn run() {
       search::search_in_file,
       search::get_file_content_with_lines,
       search::build_search_index,
+      block_index::block_index_upsert_file,
+      block_index::block_index_delete_file,
+      block_index::block_index_rename_file,
+      block_index::block_index_resolve,
+      block_index::block_index_get_file_blocks,
+      block_index::block_index_get_backlinks,
+      block_index::block_index_search,
+      block_index::block_index_stats,
+      block_index::block_index_rebuild,
       plugins::list_plugins,
       plugins::install_plugin,
       plugins::uninstall_plugin,

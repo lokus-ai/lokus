@@ -80,6 +80,9 @@ bytemuck = { version = "1", features = ["derive"] }
 tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
 tungstenite = "0.26"
 futures-util = "0.3"
+# Block index (SQLite)
+rusqlite = { version = "0.31", features = ["bundled"] }
+nanoid = "0.4"
 
 # Desktop-only dependencies (use system_configuration which is macOS-only)
 [target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]

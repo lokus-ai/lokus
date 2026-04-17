@@ -7,10 +7,15 @@ import { DOMSerializer } from 'prosemirror-model';
 import { invoke } from '@tauri-apps/api/core';
 import { confirm, save } from '@tauri-apps/plugin-dialog';
 import { syncScheduler } from '../../../core/sync/SyncScheduler';
+import { useFeatureFlags } from '../../../contexts/RemoteConfigContext';
+import blockIndexClient from '../../../core/blocks/BlockIndexClient';
+import { extractBlocks } from '../../../core/blocks/BlockIndexer';
 
 const lokusSerializer = createLokusSerializer();
 
 export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
+  const featureFlags = useFeatureFlags();
+  const blockIndexEnabled = !!featureFlags?.block_index_v1;
   const lastVersionContentRef = useRef({});
   const lastVersionSaveRef = useRef({});
 
@@ -64,6 +69,25 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
 
       // Trigger sync for this specific file (debounced + batched inside scheduler)
       syncScheduler.onFileSaved(pathToSave);
+
+      // Phase 1 block index: extract blocks from the PM doc and upsert.
+      // Wrapped in try/catch — index failure must NEVER block the save.
+      if (blockIndexEnabled && workspacePath) {
+        (async () => {
+          try {
+            await blockIndexClient.setWorkspace(workspacePath);
+            const blocks = await extractBlocks(editor.state.doc);
+            if (blocks.length > 0) {
+              await blockIndexClient.upsertFile(pathToSave, blocks);
+            }
+          } catch (err) {
+            // Telemetry only — no user-facing error, no blocking behaviour.
+            if (typeof console !== 'undefined') {
+              console.warn('[block-index] upsert failed:', err?.message || err);
+            }
+          }
+        })();
+      }
 
       // Mark tab as saved in the store
       if (groupId) {
