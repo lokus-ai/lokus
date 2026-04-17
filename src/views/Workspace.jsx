@@ -41,6 +41,7 @@ import BottomPanel from './workspace/BottomPanel';
 import ModalLayer from './workspace/ModalLayer';
 import ErrorBoundary from '../components/ErrorBoundary';
 import ResponsiveStatusBar from '../components/StatusBar/ResponsiveStatusBar.jsx';
+import BlockIndexProgress from '../components/BlockIndexProgress.jsx';
 
 // ---------------------------------------------------------------------------
 // Inner orchestrator — rendered inside context providers
@@ -255,7 +256,7 @@ function WorkspaceInner({ path }) {
             </ErrorBoundary>
           }
           bottomPanel={<BottomPanel workspacePath={path} onResizeStart={handleBottomPanelResizeStart} />}
-          statusBar={<ResponsiveStatusBar workspacePath={path} />}
+          statusBar={<><ResponsiveStatusBar workspacePath={path} /><BlockIndexProgress /></>}
         />
       </div>
 

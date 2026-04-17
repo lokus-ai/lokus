@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useEditorGroupStore } from "../../stores/editorGroups";
 import { useFileTreeStore } from "../../stores/fileTree";
@@ -9,6 +9,8 @@ import { getFilename } from "../../utils/pathUtils.js";
 import { isImageFile, findImageFiles } from "../../utils/imageUtils.js";
 import referenceWorkerClient from "../../workers/referenceWorkerClient.js";
 import { insertContent } from "../../editor/commands/index.js";
+import { bootstrapBlockIndex } from "../../core/blocks/BlockIndexBootstrap.js";
+import { useFeatureFlags } from "../../contexts/RemoteConfigContext";
 
 /**
  * Manages session persistence, file tree fetching, and file content loading.
@@ -25,6 +27,23 @@ import { insertContent } from "../../editor/commands/index.js";
  */
 export function useWorkspaceSession({ workspacePath, plugins }) {
   const refreshId = useFileTreeStore((s) => s.refreshId);
+  const featureFlags = useFeatureFlags();
+  const blockIndexBootstrapped = useRef(false);
+
+  // -------------------------------------------------------------------------
+  // Phase 1d: first-run block index bootstrap (behind feature flag)
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    if (!workspacePath || !featureFlags?.block_index_v1) return;
+    if (blockIndexBootstrapped.current) return;
+    blockIndexBootstrapped.current = true;
+
+    // Run after a short delay so the editor and file tree load first.
+    const timer = setTimeout(() => {
+      bootstrapBlockIndex(workspacePath).catch(() => {});
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [workspacePath, featureFlags?.block_index_v1]);
 
   // -------------------------------------------------------------------------
   // Helper – get proper display name for special tabs
