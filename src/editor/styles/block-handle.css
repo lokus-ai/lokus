@@ -1,0 +1,115 @@
+/* ---------------------------------------------------------------------------
+   Block Handle — Notion-style drag handle floating to the left of blocks
+   --------------------------------------------------------------------------- */
+
+/* Container: positioned absolutely to the left of the editor content.
+   The editor's parent container must have position: relative (set by the plugin). */
+.block-handle {
+  position: absolute;
+  z-index: 50;
+  left: -40px;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  user-select: none;
+}
+
+/* Visible state — toggled by the plugin via classList */
+.block-handle--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Hide in reading mode */
+.editor-reading .block-handle {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Plus button
+   --------------------------------------------------------------------------- */
+
+.block-handle__plus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: 3px;
+  background: var(--bg-secondary, #f9fafb);
+  color: var(--text-muted, #9ca3af);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+
+.block-handle__plus:hover {
+  background: var(--accent, #6366f1);
+  color: #fff;
+  border-color: var(--accent, #6366f1);
+}
+
+/* ---------------------------------------------------------------------------
+   Grip icon — 2 columns × 3 rows of dots
+   --------------------------------------------------------------------------- */
+
+.block-handle__grip {
+  display: grid;
+  grid-template-columns: repeat(2, 4px);
+  grid-template-rows: repeat(3, 4px);
+  gap: 2px;
+  width: 12px;
+  height: 16px;
+  align-content: center;
+  cursor: grab;
+  padding: 0 1px;
+  flex-shrink: 0;
+}
+
+.block-handle__grip:active {
+  cursor: grabbing;
+}
+
+.block-handle__dot {
+  display: block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-muted, #9ca3af);
+  transition: background 0.1s;
+}
+
+.block-handle__grip:hover .block-handle__dot {
+  background: var(--accent, #6366f1);
+}
+
+/* ---------------------------------------------------------------------------
+   Block hover highlight
+   --------------------------------------------------------------------------- */
+
+/* Applied to the PM block DOM element while handle is visible over it */
+.block-hover {
+  border-left: 2px solid var(--accent, #6366f1) !important;
+  padding-left: calc(var(--block-indent, 0px) + 4px);
+  margin-left: -6px;
+  transition: border-color 0.15s;
+}
+
+/* ---------------------------------------------------------------------------
+   Dragging state
+   --------------------------------------------------------------------------- */
+
+/* Applied to the block DOM element while being dragged */
+.block-dragging {
+  opacity: 0.5;
+  transform: scale(0.98);
+  transition: opacity 0.1s, transform 0.1s;
+}

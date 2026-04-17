@@ -7,6 +7,21 @@ import blockIdManager from '../../core/blocks/block-id-manager.js'
 import { insertContent } from '../commands/index.js'
 import { useEditorGroupStore } from '../../stores/editorGroups.js'
 import referenceWorkerClient from '../../workers/referenceWorkerClient.js'
+import { blockIndexClient } from '../../core/blocks/BlockIndexClient.js'
+
+/**
+ * Returns true when the SQLite block index feature flag is enabled.
+ * Reads from globalThis.__LOKUS_FEATURE_FLAGS__ (set by the workspace session
+ * alongside other __LOKUS_* globals) with a safe fallback to false so the
+ * existing code path is always preserved when the flag is absent.
+ */
+function isBlockIndexEnabled() {
+  try {
+    return globalThis.__LOKUS_FEATURE_FLAGS__?.block_index_v1 === true
+  } catch (_) {
+    return false
+  }
+}
 
 const WIKI_SUGGESTION_KEY = new PluginKey('wikiLinkSuggestion')
 export const IMAGE_EMBED_KEY = new PluginKey('imageEmbedSuggestion')
@@ -20,23 +35,66 @@ function getIndex() {
   return list.filter(f => LINKABLE_EXT.test(f.path))
 }
 
+/**
+ * Resolve a display name / partial filename to a full path from the file index.
+ * Returns the matched file entry or undefined.
+ */
+function resolveFileEntry(fileName) {
+  const fileIndex = getIndex()
+  return fileIndex.find(f =>
+    f.title === fileName ||
+    f.title === fileName.replace('.md', '') ||
+    f.path.endsWith(fileName) ||
+    f.path.endsWith(fileName.replace('.md', ''))
+  )
+}
+
+/**
+ * Get blocks for a file.
+ *
+ * When block_index_v1 is ON:
+ *   - Query blockIndexClient.getFileBlocks(resolvedPath) from the SQLite index.
+ *   - If that returns results, format them into the shape WikiLinkList expects.
+ *   - If the index returns nothing (file not yet indexed), fall through to the
+ *     legacy parser path so the UI still works during initial indexing.
+ *
+ * When block_index_v1 is OFF (or blockIndexClient throws):
+ *   - Use the existing blockIdManager cache + readTextFile + parseBlocks path.
+ */
 async function getFileBlocks(fileName) {
   try {
-
-    // Find the file in the index
-    const fileIndex = getIndex()
-
-    const fileEntry = fileIndex.find(f =>
-      f.title === fileName ||
-      f.title === fileName.replace('.md', '') ||
-      f.path.endsWith(fileName) ||
-      f.path.endsWith(fileName.replace('.md', ''))
-    )
-
+    const fileEntry = resolveFileEntry(fileName)
     if (!fileEntry) {
       return []
     }
 
+    // ── SQLite path (block_index_v1 ON) ─────────────────────────────────────
+    if (isBlockIndexEnabled()) {
+      try {
+        const indexedBlocks = await blockIndexClient.getFileBlocks(fileEntry.path)
+        if (Array.isArray(indexedBlocks) && indexedBlocks.length > 0) {
+          // Map BlockRecord shape → shape expected by the WikiLinkList block items
+          return indexedBlocks.map(b => ({
+            // Legacy fields expected by existing command handlers
+            blockId: b.id,
+            id:      b.id,
+            text:    b.textPreview || b.id,
+            line:    b.position ?? 0,
+            type:    b.nodeType,
+            level:   b.level,
+            // Extra fields from the SQLite index
+            nodeType:    b.nodeType,
+            textPreview: b.textPreview,
+            position:    b.position,
+          }))
+        }
+        // Fall through to legacy parser if index is empty (file not yet indexed)
+      } catch (_) {
+        // blockIndexClient unavailable (e.g. in tests) — fall through silently
+      }
+    }
+
+    // ── Legacy path ──────────────────────────────────────────────────────────
     // Check if blocks are already cached
     let blocks = blockIdManager.getFileBlocks(fileEntry.path)
 
@@ -46,7 +104,6 @@ async function getFileBlocks(fileName) {
       const { parseBlocks } = await import('../../core/blocks/block-parser.js')
 
       const content = await readTextFile(fileEntry.path)
-
       blocks = parseBlocks(content, fileEntry.path)
     }
 
@@ -492,6 +549,38 @@ export function createWikiLinkSuggestPlugins(view) {
           const fileName = blockRefMatch[1].trim()
           const blockQuery = blockRefMatch[2]
 
+          // ── SQLite path: use search() for query + getFileBlocks() for full list ──
+          if (isBlockIndexEnabled() && blockQuery) {
+            try {
+              const fileEntry = resolveFileEntry(fileName)
+              const searchResults = await blockIndexClient.search(blockQuery, 20)
+              if (Array.isArray(searchResults) && searchResults.length > 0) {
+                // Filter to blocks belonging to the target file only
+                const filePath = fileEntry?.path
+                const fileFiltered = filePath
+                  ? searchResults.filter(r => r.filePath === filePath)
+                  : searchResults
+                if (fileFiltered.length > 0) {
+                  return fileFiltered.map(r => ({
+                    type: 'block',
+                    blockId: r.id,
+                    title: r.textPreview || r.id,
+                    path: `${fileName}^${r.id}`,
+                    text: r.textPreview || '',
+                    line: r.position ?? 0,
+                    fileName,
+                    blockType: r.nodeType,
+                    level: r.level,
+                  }))
+                }
+              }
+              // Fall through to getFileBlocks if search returns nothing for this file
+            } catch (_) {
+              // blockIndexClient unavailable — fall through to legacy path
+            }
+          }
+
+          // ── Legacy path (or SQLite returned no results) ──────────────────────
           // Load real blocks from file
           const blocks = await getFileBlocks(fileName)
 
@@ -1051,6 +1140,58 @@ export function createWikiLinkSuggestPlugins(view) {
         const fileName = match[1].trim()
         const blockQuery = match[2] || query
 
+        // ── SQLite path (block_index_v1 ON) ─────────────────────────────────
+        if (isBlockIndexEnabled()) {
+          try {
+            const fileEntry = resolveFileEntry(fileName)
+            const filePath = fileEntry?.path
+
+            if (blockQuery) {
+              // Non-empty query: use search() scoped to this file
+              const searchResults = await blockIndexClient.search(blockQuery, 20)
+              if (Array.isArray(searchResults)) {
+                const fileFiltered = filePath
+                  ? searchResults.filter(r => r.filePath === filePath)
+                  : searchResults
+                if (fileFiltered.length > 0) {
+                  return fileFiltered.map(r => ({
+                    type: 'block',
+                    blockId: r.id,
+                    title: r.textPreview || r.id,
+                    path: `${fileName}^${r.id}`,
+                    text: r.textPreview || '',
+                    line: r.position ?? 0,
+                    fileName,
+                    blockType: r.nodeType,
+                    level: r.level,
+                  }))
+                }
+              }
+              // Fall through if search returns no file-scoped results
+            } else if (filePath) {
+              // Empty query: list all blocks for the file from the index
+              const indexedBlocks = await blockIndexClient.getFileBlocks(filePath)
+              if (Array.isArray(indexedBlocks) && indexedBlocks.length > 0) {
+                return indexedBlocks.map(b => ({
+                  type: 'block',
+                  blockId: b.id,
+                  title: b.textPreview || b.id,
+                  path: `${fileName}^${b.id}`,
+                  text: b.textPreview || '',
+                  line: b.position ?? 0,
+                  fileName,
+                  blockType: b.nodeType,
+                  level: b.level,
+                }))
+              }
+              // Fall through if index has no entries for this file yet
+            }
+          } catch (_) {
+            // blockIndexClient unavailable (e.g. in tests) — fall through silently
+          }
+        }
+
+        // ── Legacy path ──────────────────────────────────────────────────────
         // Load real blocks from the file using getFileBlocks
         const blocks = await getFileBlocks(fileName)
 

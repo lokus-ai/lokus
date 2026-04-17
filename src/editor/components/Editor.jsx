@@ -18,6 +18,7 @@ import { createEditorCommands, insertContent as pmInsertContent } from '../comma
 // --- Extension plugin factories ---
 import { createBlockIdPlugin } from '../extensions/BlockId.js';
 import { createBlockIdAutoAssignPlugin } from '../extensions/BlockIdAutoAssign.js';
+import { createBlockHandlePlugin } from '../extensions/BlockHandle.js';
 import { createTaskSyntaxHighlightPlugin } from '../extensions/TaskSyntaxHighlight.js';
 import { createFoldingPlugins } from '../extensions/Folding.js';
 import { createMarkdownPastePlugin } from '../extensions/MarkdownPaste.js';
@@ -64,6 +65,7 @@ import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 
 import "../styles/editor.css";
 import "../styles/block-embeds.css";
+import "../styles/block-handle.css";
 import "../../styles/page-preview.css";
 import "../../styles/canvas-extensions.css";
 import "../../styles/canvas-preview.css";
@@ -446,6 +448,7 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       gapCursor(),
       // Trivial extensions
       createBlockIdAutoAssignPlugin(),
+      createBlockHandlePlugin(),
       createBlockIdPlugin(),
       createTaskSyntaxHighlightPlugin(),
       ...createFoldingPlugins(),

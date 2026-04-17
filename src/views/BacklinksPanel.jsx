@@ -3,6 +3,8 @@ import { BacklinkManager } from '../core/links/backlink-manager.js';
 import { MentionDetector } from '../core/links/mention-detector.js';
 import blockBacklinkManager from '../core/links/block-backlink-manager.js';
 import { Search, ChevronDown, ChevronRight, Link2, FileText, Hash } from 'lucide-react';
+import { blockIndexClient } from '../core/blocks/BlockIndexClient.js';
+import { useFeatureFlags } from '../contexts/RemoteConfigContext.jsx';
 
 /**
  * BacklinksPanel - Show all notes linking to current note
@@ -18,11 +20,19 @@ export default function BacklinksPanel({
   const [searchQuery, setSearchQuery] = useState('');
   const [linkedExpanded, setLinkedExpanded] = useState(true);
   const [blockBacklinksExpanded, setBlockBacklinksExpanded] = useState(false);
+  const [sqliteBlockRefsExpanded, setSqliteBlockRefsExpanded] = useState(true);
   const [unlinkedExpanded, setUnlinkedExpanded] = useState(false);
   const [expandedSources, setExpandedSources] = useState(new Set());
 
+  // SQLite-powered block refs state
+  const [sqliteBlockRefs, setSqliteBlockRefs] = useState([]);
+  const [sqliteLoading, setSqliteLoading] = useState(false);
+
   const backlinkManagerRef = useRef(null);
   const mentionDetectorRef = useRef(null);
+
+  const featureFlags = useFeatureFlags();
+  const blockIndexEnabled = featureFlags?.block_index_v1 === true;
 
   // Initialize managers
   useEffect(() => {
@@ -98,6 +108,108 @@ export default function BacklinksPanel({
     }
   }, [currentNodeId, currentFile, graphData]);
 
+  // ── SQLite block refs (block_index_v1) ───────────────────────────────────
+
+  /**
+   * Load block-level backlinks from the SQLite index for the current file.
+   * Steps:
+   *   1. Get all blocks belonging to this file via getFileBlocks().
+   *   2. For each block, call getBacklinks(blockId) to find incoming refs.
+   *   3. Flatten + group by source file for display.
+   */
+  const loadSqliteBlockRefs = useCallback(async () => {
+    if (!blockIndexEnabled || !currentFile) {
+      setSqliteBlockRefs([]);
+      return;
+    }
+
+    setSqliteLoading(true);
+    try {
+      // 1. Get all blocks in the current file
+      const fileBlocks = await blockIndexClient.getFileBlocks(currentFile);
+      if (!Array.isArray(fileBlocks) || fileBlocks.length === 0) {
+        setSqliteBlockRefs([]);
+        setSqliteLoading(false);
+        return;
+      }
+
+      // 2. For each block, fetch incoming backlinks
+      const allRefs = [];
+      await Promise.all(
+        fileBlocks.map(async (block) => {
+          try {
+            const refs = await blockIndexClient.getBacklinks(block.id);
+            if (Array.isArray(refs)) {
+              for (const ref of refs) {
+                allRefs.push({
+                  ...ref,
+                  // Attach the target block's preview so we know what was linked
+                  targetBlockPreview: block.textPreview || block.id,
+                  targetBlockId: block.id,
+                  targetBlockType: block.nodeType,
+                });
+              }
+            }
+          } catch (_) {
+            // Individual block backlink failure is non-fatal
+          }
+        })
+      );
+
+      // 3. Group by source file
+      const byFile = new Map();
+      for (const ref of allRefs) {
+        const sourceFile = ref.sourceFile || 'Unknown file';
+        if (!byFile.has(sourceFile)) {
+          byFile.set(sourceFile, []);
+        }
+        byFile.get(sourceFile).push(ref);
+      }
+
+      // Convert to sorted array (most refs first)
+      const grouped = Array.from(byFile.entries())
+        .map(([sourceFile, refs]) => ({ sourceFile, refs }))
+        .sort((a, b) => b.refs.length - a.refs.length);
+
+      setSqliteBlockRefs(grouped);
+    } catch (err) {
+      console.error('BacklinksPanel: Failed to load SQLite block refs', err);
+      setSqliteBlockRefs([]);
+    } finally {
+      setSqliteLoading(false);
+    }
+  }, [blockIndexEnabled, currentFile]);
+
+  // Load on mount and when currentFile changes
+  useEffect(() => {
+    if (!blockIndexEnabled) return;
+    loadSqliteBlockRefs();
+  }, [blockIndexEnabled, loadSqliteBlockRefs]);
+
+  // Subscribe to index updates for live refresh
+  useEffect(() => {
+    if (!blockIndexEnabled) return;
+
+    const unsubscribe = blockIndexClient.subscribe((payload) => {
+      // Re-query if the updated file is either the current file (its blocks changed)
+      // or any source file that may link to this one.
+      if (!payload) {
+        loadSqliteBlockRefs();
+        return;
+      }
+      const { file, added_refs, removed_refs } = payload;
+      const isRelevant =
+        file === currentFile ||
+        (Array.isArray(added_refs) && added_refs.length > 0) ||
+        (Array.isArray(removed_refs) && removed_refs.length > 0);
+      if (isRelevant) {
+        loadSqliteBlockRefs();
+      }
+    });
+
+    return unsubscribe;
+  }, [blockIndexEnabled, currentFile, loadSqliteBlockRefs]);
+
   // Filter backlinks by search query
   const filteredBacklinks = useMemo(() => {
     if (!searchQuery.trim()) return backlinks;
@@ -123,6 +235,23 @@ export default function BacklinksPanel({
       );
     });
   }, [unlinkedMentions, searchQuery]);
+
+  // Filter SQLite block refs by search query
+  const filteredSqliteBlockRefs = useMemo(() => {
+    if (!searchQuery.trim()) return sqliteBlockRefs;
+
+    const query = searchQuery.toLowerCase();
+    return sqliteBlockRefs
+      .map(group => ({
+        ...group,
+        refs: group.refs.filter(ref =>
+          (ref.sourceFile || '').toLowerCase().includes(query) ||
+          (ref.sourceBlockId || '').toLowerCase().includes(query) ||
+          (ref.targetBlockPreview || '').toLowerCase().includes(query)
+        ),
+      }))
+      .filter(group => group.refs.length > 0);
+  }, [sqliteBlockRefs, searchQuery]);
 
   // Group backlinks by source
   const groupedBacklinks = useMemo(() => {
@@ -194,6 +323,13 @@ export default function BacklinksPanel({
       onOpenFile({ path: sourceNode.path, name: sourceNode.title });
     }
   }, [onOpenFile, graphData]);
+
+  // Handle click on SQLite block ref — open the source file
+  const handleSqliteRefClick = useCallback((sourceFile) => {
+    if (!onOpenFile) return;
+    const fileName = sourceFile.split('/').pop()?.replace('.md', '') || sourceFile;
+    onOpenFile({ path: sourceFile, name: fileName });
+  }, [onOpenFile]);
 
   // Render context snippet
   const renderContext = useCallback((context) => {
@@ -366,6 +502,141 @@ export default function BacklinksPanel({
     );
   }, [expandedSources, toggleSource, handleMentionClick, renderContext]);
 
+  // Render a single SQLite block ref row
+  const renderSqliteRefRow = useCallback((ref, idx) => {
+    const sourceFileName = (ref.sourceFile || '').split('/').pop()?.replace('.md', '') || ref.sourceFile || 'Unknown';
+    const kindLabel = ref.kind === 'embed' ? 'EMBED' : null;
+
+    return (
+      <div
+        key={`sqlite-ref-${ref.sourceBlockId || idx}-${idx}`}
+        onClick={() => handleSqliteRefClick(ref.sourceFile)}
+        style={{
+          padding: '8px',
+          marginBottom: '4px',
+          cursor: 'pointer',
+          borderRadius: '4px',
+          borderLeft: '2px solid var(--accent)',
+          transition: 'background 0.15s ease'
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--panel)'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+      >
+        {/* Source block info */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          marginBottom: '3px'
+        }}>
+          <Hash size={11} style={{ color: 'var(--muted)', flexShrink: 0 }} />
+          <code style={{
+            fontSize: '11px',
+            color: 'var(--muted)',
+            backgroundColor: 'var(--panel)',
+            padding: '1px 4px',
+            borderRadius: '3px',
+            fontFamily: 'monospace'
+          }}>
+            {ref.sourceBlockId || 'unknown'}
+          </code>
+          {kindLabel && (
+            <span style={{
+              fontSize: '10px',
+              padding: '1px 5px',
+              borderRadius: '4px',
+              backgroundColor: 'var(--accent)',
+              color: 'white',
+              fontWeight: '600',
+              marginLeft: '2px'
+            }}>
+              {kindLabel}
+            </span>
+          )}
+        </div>
+
+        {/* Target block preview — what this block links to */}
+        {ref.targetBlockPreview && (
+          <div style={{
+            fontSize: '12px',
+            color: 'var(--muted)',
+            paddingLeft: '17px',
+            lineHeight: '1.4',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}>
+            <span style={{ color: 'var(--muted)' }}>refs: </span>
+            <span style={{ color: 'var(--accent)', fontWeight: '500' }}>
+              {ref.targetBlockPreview.length > 60
+                ? ref.targetBlockPreview.slice(0, 60) + '...'
+                : ref.targetBlockPreview}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  }, [handleSqliteRefClick]);
+
+  // Render a SQLite block refs group (grouped by source file)
+  const renderSqliteRefGroup = useCallback((group) => {
+    const groupKey = `sqlite-file-${group.sourceFile}`;
+    const isExpanded = expandedSources.has(groupKey);
+    const sourceFileName = group.sourceFile.split('/').pop()?.replace('.md', '') || group.sourceFile;
+
+    return (
+      <div key={groupKey} style={{ marginBottom: '8px' }}>
+        <div
+          onClick={() => toggleSource(groupKey)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 8px',
+            cursor: 'pointer',
+            borderRadius: '4px',
+            transition: 'background 0.15s ease'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--panel)'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+        >
+          {isExpanded ? (
+            <ChevronDown size={14} style={{ color: 'var(--muted)' }} />
+          ) : (
+            <ChevronRight size={14} style={{ color: 'var(--muted)' }} />
+          )}
+          <FileText size={14} style={{ color: 'var(--accent)' }} />
+          <span
+            style={{
+              flex: 1,
+              fontSize: '13px',
+              fontWeight: '500',
+              color: 'var(--text)'
+            }}
+            title={group.sourceFile}
+          >
+            {sourceFileName}
+          </span>
+          <span style={{
+            fontSize: '11px',
+            color: 'var(--muted)',
+            backgroundColor: 'var(--panel)',
+            padding: '2px 6px',
+            borderRadius: '10px'
+          }}>
+            {group.refs.length}
+          </span>
+        </div>
+
+        {isExpanded && (
+          <div style={{ marginLeft: '20px', marginTop: '4px' }}>
+            {group.refs.map((ref, idx) => renderSqliteRefRow(ref, idx))}
+          </div>
+        )}
+      </div>
+    );
+  }, [expandedSources, toggleSource, renderSqliteRefRow]);
+
   if (!graphData) {
     return (
       <div style={{ padding: '16px', color: 'var(--muted)', fontSize: '13px' }}>
@@ -384,6 +655,7 @@ export default function BacklinksPanel({
 
   const totalBacklinks = filteredBacklinks.length;
   const totalMentions = filteredMentions.length;
+  const totalSqliteRefs = filteredSqliteBlockRefs.reduce((sum, g) => sum + g.refs.length, 0);
 
   return (
     <div style={{
@@ -502,8 +774,8 @@ export default function BacklinksPanel({
           )}
         </div>
 
-        {/* Block Backlinks Section */}
-        <div>
+        {/* Block Backlinks Section (legacy regex-based) */}
+        <div style={{ marginBottom: '16px' }}>
           <div
             onClick={() => setBlockBacklinksExpanded(!blockBacklinksExpanded)}
             style={{
@@ -612,6 +884,102 @@ export default function BacklinksPanel({
             </div>
           )}
         </div>
+
+        {/* SQLite Block Refs Section (block_index_v1) */}
+        {blockIndexEnabled && (
+          <div style={{ marginBottom: '16px' }}>
+            <div
+              onClick={() => setSqliteBlockRefsExpanded(!sqliteBlockRefsExpanded)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 8px',
+                cursor: 'pointer',
+                borderRadius: '4px',
+                marginBottom: '8px',
+                transition: 'background 0.15s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--panel)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              {sqliteBlockRefsExpanded ? (
+                <ChevronDown size={16} style={{ color: 'var(--text)' }} />
+              ) : (
+                <ChevronRight size={16} style={{ color: 'var(--text)' }} />
+              )}
+              <Hash size={16} style={{ color: 'var(--accent)' }} />
+              <span style={{
+                flex: 1,
+                fontSize: '14px',
+                fontWeight: '600',
+                color: 'var(--text)'
+              }}>
+                Block refs
+              </span>
+              {/* Badge showing count or loading state */}
+              {sqliteLoading ? (
+                <span style={{
+                  fontSize: '11px',
+                  color: 'var(--muted)',
+                  padding: '2px 8px'
+                }}>
+                  ...
+                </span>
+              ) : (
+                <span style={{
+                  fontSize: '12px',
+                  color: 'var(--muted)',
+                  backgroundColor: 'var(--panel)',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  fontWeight: '500'
+                }}>
+                  {totalSqliteRefs}
+                </span>
+              )}
+              {/* "indexed" label to distinguish from legacy regex results */}
+              <span style={{
+                fontSize: '10px',
+                padding: '1px 5px',
+                borderRadius: '4px',
+                backgroundColor: 'var(--accent)',
+                color: 'white',
+                fontWeight: '600',
+                marginLeft: '4px',
+                opacity: 0.8
+              }}>
+                idx
+              </span>
+            </div>
+
+            {sqliteBlockRefsExpanded && (
+              <div>
+                {sqliteLoading ? (
+                  <div style={{
+                    padding: '16px',
+                    color: 'var(--muted)',
+                    fontSize: '12px',
+                    textAlign: 'center'
+                  }}>
+                    Loading indexed refs...
+                  </div>
+                ) : filteredSqliteBlockRefs.length === 0 ? (
+                  <div style={{
+                    padding: '16px',
+                    color: 'var(--muted)',
+                    fontSize: '12px',
+                    textAlign: 'center'
+                  }}>
+                    No indexed block refs found
+                  </div>
+                ) : (
+                  filteredSqliteBlockRefs.map(renderSqliteRefGroup)
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Unlinked Mentions Section */}
         <div>

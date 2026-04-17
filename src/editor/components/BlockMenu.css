@@ -1,0 +1,151 @@
+/* BlockMenu.css — styles for the floating block context menu */
+
+/* ---------------------------------------------------------------------------
+   Menu container
+   --------------------------------------------------------------------------- */
+
+.block-menu {
+  position: fixed;
+  z-index: 100;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 200px;
+  padding: 4px;
+  /* Prevent text selection inside the menu */
+  user-select: none;
+  /* Smooth entrance */
+  animation: block-menu-fade-in 80ms ease-out;
+}
+
+@keyframes block-menu-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Menu items
+   --------------------------------------------------------------------------- */
+
+.block-menu-item {
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  line-height: 1.4;
+  /* Remove default button outline */
+  outline: none;
+}
+
+.block-menu-item:hover,
+.block-menu-item:focus-visible {
+  background: var(--bg-secondary);
+}
+
+.block-menu-item:active {
+  background: var(--bg-tertiary, var(--bg-secondary));
+}
+
+/* Delete item — shown in red */
+.block-menu-item--danger {
+  color: var(--error, #ef4444);
+}
+
+.block-menu-item--danger:hover,
+.block-menu-item--danger:focus-visible {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+/* ---------------------------------------------------------------------------
+   Shortcut hints
+   --------------------------------------------------------------------------- */
+
+.block-menu-shortcut {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Item icon
+   --------------------------------------------------------------------------- */
+
+.block-menu-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+/* ---------------------------------------------------------------------------
+   Divider
+   --------------------------------------------------------------------------- */
+
+.block-menu-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
+/* ---------------------------------------------------------------------------
+   "Turn into" submenu
+   --------------------------------------------------------------------------- */
+
+.block-menu-item--submenu {
+  position: relative;
+}
+
+/* Arrow indicator */
+.block-menu-item--submenu::after {
+  content: '›';
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+/* Submenu container — shown on hover/focus */
+.block-menu-submenu {
+  display: none;
+  position: absolute;
+  top: -4px;
+  left: calc(100% + 4px);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 160px;
+  padding: 4px;
+  z-index: 101;
+}
+
+.block-menu-item--submenu:hover .block-menu-submenu,
+.block-menu-item--submenu:focus-within .block-menu-submenu {
+  display: block;
+}
+
+/* Submenu items inherit base item styles */
+.block-menu-submenu .block-menu-item {
+  font-size: 13px;
+}
