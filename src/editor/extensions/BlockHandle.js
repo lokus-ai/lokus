@@ -410,6 +410,21 @@ class BlockHandleView {
     }
     view.dispatch(view.state.tr.setSelection(sel))
     view.focus()
+
+    // Dispatch event for BlockMenu (React portal listens on document)
+    const blockNode = view.state.doc.nodeAt(pos)
+    const menuEvent = new CustomEvent('lokus:open-block-menu', {
+      bubbles: true,
+      detail: {
+        pos,
+        blockNode,
+        view,
+        handleEl: this.handle,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      },
+    })
+    document.dispatchEvent(menuEvent)
   }
 
   // ---- Plus click: open slash menu ----------------------------------------

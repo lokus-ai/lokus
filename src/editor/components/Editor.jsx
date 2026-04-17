@@ -19,6 +19,8 @@ import { createEditorCommands, insertContent as pmInsertContent } from '../comma
 import { createBlockIdPlugin } from '../extensions/BlockId.js';
 import { createBlockIdAutoAssignPlugin } from '../extensions/BlockIdAutoAssign.js';
 import { createBlockHandlePlugin } from '../extensions/BlockHandle.js';
+import BlockMenu from './BlockMenu.jsx';
+import { duplicateBlock, moveBlockUp, moveBlockDown, deleteBlock } from '../commands/block-commands.js';
 import { createTaskSyntaxHighlightPlugin } from '../extensions/TaskSyntaxHighlight.js';
 import { createFoldingPlugins } from '../extensions/Folding.js';
 import { createMarkdownPastePlugin } from '../extensions/MarkdownPaste.js';
@@ -444,6 +446,12 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       keymap(baseKeymap),
       history(),
       keymap({ 'Mod-z': undo, 'Mod-y': redo, 'Mod-Shift-z': redo }),
+      keymap({
+        'Mod-Shift-d': duplicateBlock,
+        'Mod-Shift-ArrowUp': moveBlockUp,
+        'Mod-Shift-ArrowDown': moveBlockDown,
+        'Mod-Shift-Backspace': deleteBlock,
+      }),
       dropCursor(),
       gapCursor(),
       // Trivial extensions
@@ -1427,6 +1435,9 @@ const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, edi
           }
         }}
       />
+
+      {/* Block context menu — singleton, listens for lokus:open-block-menu events */}
+      <BlockMenu />
     </>
   );
 });
