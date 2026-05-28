@@ -1,0 +1,61 @@
+# Lokus inference proxy stack: proxy + redis + caddy.
+# The proxy listens on :3000 on the internal bridge (NOT host-published).
+# Caddy is the only host-published service (443/80) and reverse-proxies to it.
+services:
+  proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      REDIS_URL: redis://redis:6379
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      LOKUS_DEEPGRAM_KEY: ${LOKUS_DEEPGRAM_KEY}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    expose:
+      - "3000"
+    networks:
+      - lokus
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - lokus
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - proxy
+    networks:
+      - lokus
+
+networks:
+  lokus:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
