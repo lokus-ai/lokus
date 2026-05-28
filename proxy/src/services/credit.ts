@@ -87,6 +87,40 @@ export async function refund(reserveId: string): Promise<void> {
   }
 }
 
+/**
+ * Trailing-24h reserved-credit sum for the daily cap (ledger helper
+ * `reserved_today(p_user_id)`). Service-role only. Used to refuse a request that
+ * would push the user over their per-day cap BEFORE reserving.
+ */
+export async function reservedToday(userId: string): Promise<number> {
+  const sb = getSupabase();
+  const { data, error } = await sb.rpc("reserved_today", { p_user_id: userId });
+  if (error) throw Errors.internal(`reserved_today failed: ${error.message}`);
+  return Number(data ?? 0);
+}
+
+/**
+ * Daily-cap gate. Returns true if reserving `amount` would keep the user at or
+ * under `cap` for the trailing 24h. Fails OPEN (returns true) if the underlying
+ * `reserved_today` read errors — reserve_credits + the balance CHECK remain the
+ * hard backstop, so an infra blip never wrongly blocks a paying user.
+ */
+export async function withinDailyCap(
+  userId: string,
+  amount: number,
+  cap: number,
+): Promise<boolean> {
+  try {
+    const usedToday = await reservedToday(userId);
+    return usedToday + amount <= cap;
+  } catch (e) {
+    console.error(
+      JSON.stringify({ level: "warn", at: "daily-cap", msg: (e as Error).message }),
+    );
+    return true; // fail open
+  }
+}
+
 /** Read the user's current credit balance. */
 export async function getBalance(userId: string): Promise<number> {
   const sb = getSupabase();

@@ -7,8 +7,14 @@ import type { Context } from "hono";
 import type { AuthedUser } from "../lib/jwks.ts";
 import { OpenAIProvider } from "../providers/openai.ts";
 import * as credit from "../services/credit.ts";
+import { dailyCapForPlan } from "../services/router.ts";
 import { deriveKey, claim, complete, abandon } from "../middleware/idempotency.ts";
 import { Errors, ProxyError, toProxyError, errorBody } from "../lib/errors.ts";
+
+/** Raw plan from the Supabase JWT (free | pro | power | undefined). */
+function planOf(user: AuthedUser): string | undefined {
+  return (user.payload.app_metadata as { plan?: string } | undefined)?.plan;
+}
 
 interface EmbedBody {
   texts: string[];
@@ -48,6 +54,14 @@ export async function embedHandler(c: Context) {
   }
 
   const amount = Math.max(1, body.texts.length * EMBED_COST_PER_TEXT);
+
+  // Daily-cap gate before reserving (mirrors chat/transcribe).
+  if (!(await credit.withinDailyCap(user.sub, amount, dailyCapForPlan(planOf(user))))) {
+    await abandon(key);
+    c.header("Retry-After", "3600");
+    return c.json(errorBody(Errors.dailyCapExceeded()), 429);
+  }
+
   let reserved: credit.ReserveResult;
   try {
     reserved = await credit.reserve(user.sub, amount, key);

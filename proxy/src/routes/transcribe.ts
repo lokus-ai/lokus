@@ -18,10 +18,16 @@ import type { Context } from "hono";
 import type { AuthedUser } from "../lib/jwks.ts";
 import { config } from "../config.ts";
 import * as credit from "../services/credit.ts";
+import { dailyCapForPlan } from "../services/router.ts";
 import { getRedis } from "../lib/redis.ts";
 import { verifyToken } from "../lib/jwks.ts";
 import { deriveKey, claim, complete, abandon } from "../middleware/idempotency.ts";
 import { Errors, toProxyError, errorBody } from "../lib/errors.ts";
+
+/** Raw plan from the Supabase JWT (free | pro | power | undefined). */
+function planOf(user: AuthedUser): string | undefined {
+  return (user.payload.app_metadata as { plan?: string } | undefined)?.plan;
+}
 
 const DEEPGRAM_BATCH_URL = "https://api.deepgram.com/v1/listen";
 const DEEPGRAM_LIVE_URL = "wss://api.deepgram.com/v1/listen";
@@ -59,6 +65,13 @@ export async function transcribeHandler(c: Context) {
   // PCM as a floor); settle to real duration after Deepgram reports it.
   const estSeconds = Math.max(1, Math.ceil(audio.byteLength / 16000));
   const reserveAmt = estSeconds * COST_PER_SECOND;
+
+  // Daily-cap gate before reserving (mirrors chat/embed).
+  if (!(await credit.withinDailyCap(user.sub, reserveAmt, dailyCapForPlan(planOf(user))))) {
+    await abandon(key);
+    c.header("Retry-After", "3600");
+    return c.json(errorBody(Errors.dailyCapExceeded()), 429);
+  }
 
   let reserved: credit.ReserveResult;
   try {
@@ -113,7 +126,7 @@ export async function transcribeTicketHandler(c: Context) {
   const redis = getRedis();
   await redis.set(
     `ticket:${ticket}`,
-    JSON.stringify({ sub: user.sub, issuedAt: Date.now() }),
+    JSON.stringify({ sub: user.sub, plan: planOf(user) ?? null, issuedAt: Date.now() }),
     "EX",
     TICKET_TTL_SECONDS,
   );
@@ -121,15 +134,18 @@ export async function transcribeTicketHandler(c: Context) {
 }
 
 /**
- * Validate (and consume) a WS ticket. Returns the user sub or null. Single-use:
+ * Validate (and consume) a WS ticket. Returns {sub, plan} or null. Single-use:
  * the key is deleted on read.
  */
-async function consumeTicket(ticket: string): Promise<string | null> {
+async function consumeTicket(
+  ticket: string,
+): Promise<{ sub: string; plan: string | undefined } | null> {
   const redis = getRedis();
   const raw = await redis.getdel(`ticket:${ticket}`);
   if (!raw) return null;
   try {
-    return (JSON.parse(raw) as { sub: string }).sub;
+    const parsed = JSON.parse(raw) as { sub: string; plan?: string | null };
+    return { sub: parsed.sub, plan: parsed.plan ?? undefined };
   } catch {
     return null;
   }
@@ -156,11 +172,16 @@ export async function authorizeWs(url: URL): Promise<WsAuthContext> {
   const token = url.searchParams.get("token");
 
   let sub: string | null = null;
+  let plan: string | undefined;
   if (ticket) {
-    sub = await consumeTicket(ticket);
+    const t = await consumeTicket(ticket);
+    sub = t?.sub ?? null;
+    plan = t?.plan;
   } else if (token) {
     try {
-      sub = (await verifyToken(token)).sub;
+      const u = await verifyToken(token);
+      sub = u.sub;
+      plan = (u.payload.app_metadata as { plan?: string } | undefined)?.plan;
     } catch {
       sub = null;
     }
@@ -169,6 +190,12 @@ export async function authorizeWs(url: URL): Promise<WsAuthContext> {
 
   const reserveId = `live:${crypto.randomUUID()}`;
   const reserveAmt = LIVE_RESERVE_SECONDS * COST_PER_SECOND;
+
+  // Daily-cap gate before reserving the live session.
+  if (!(await credit.withinDailyCap(sub, reserveAmt, dailyCapForPlan(plan)))) {
+    throw Errors.dailyCapExceeded();
+  }
+
   const reserved = await credit.reserve(sub, reserveAmt, reserveId);
   if (!reserved.ok) throw Errors.insufficientCredits();
 

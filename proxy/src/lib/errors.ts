@@ -11,6 +11,7 @@
 export type ErrorCode =
   | "unauthorized"
   | "rate_limited"
+  | "daily_cap_exceeded"
   | "insufficient_credits"
   | "invalid_request"
   | "model_not_allowed"
@@ -38,6 +39,8 @@ export const Errors = {
     new ProxyError("unauthorized", msg, 401, false),
   rateLimited: (msg = "Rate limit exceeded") =>
     new ProxyError("rate_limited", msg, 429, true),
+  dailyCapExceeded: (msg = "Daily credit cap exceeded") =>
+    new ProxyError("daily_cap_exceeded", msg, 429, false),
   insufficientCredits: (msg = "Insufficient credits") =>
     new ProxyError("insufficient_credits", msg, 402, false),
   invalidRequest: (msg = "Invalid request") =>

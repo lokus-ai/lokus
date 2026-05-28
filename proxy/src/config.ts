@@ -27,6 +27,7 @@ export interface Config {
   LOKUS_DEEPGRAM_KEY: string;
   OLLAMA_BASE_URL: string;
   OPENROUTER_API_KEY: string;
+  DAILY_CREDIT_CAP: number;
 }
 
 // In `bun test` we don't want config to throw on missing secrets — tests mock
@@ -50,4 +51,7 @@ export const config: Config = {
   LOKUS_DEEPGRAM_KEY: req("LOKUS_DEEPGRAM_KEY", "test-deepgram"),
   OLLAMA_BASE_URL: optional("OLLAMA_BASE_URL", "http://localhost:11434"),
   OPENROUTER_API_KEY: optional("OPENROUTER_API_KEY", ""),
+  // Base free-tier daily reserved-credit cap. Pro/power scale it (see
+  // dailyCapForPlan in services/router.ts). Matches the ledger edge-fn default.
+  DAILY_CREDIT_CAP: Number(optional("DAILY_CREDIT_CAP", "2000")),
 };

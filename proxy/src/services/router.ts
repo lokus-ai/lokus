@@ -15,6 +15,7 @@ import { OpenAIProvider } from "../providers/openai.ts";
 import { OllamaProvider } from "../providers/ollama.ts";
 import type { IProvider } from "../providers/interface.ts";
 import { Errors } from "../lib/errors.ts";
+import { config } from "../config.ts";
 
 export const FREE_MODEL = "claude-haiku-4-20250514";
 export const DEFAULT_MODEL = "claude-sonnet-4-20250514";
@@ -108,4 +109,16 @@ export function actualAmount(
 /** Local (ollama) models cost no credits. */
 export function isFreeProvider(model: string): boolean {
   return !ANTHROPIC_MODELS.has(model) && !OPENAI_MODELS.has(model);
+}
+
+/**
+ * Per-day reserved-credit cap for a plan. Base = `DAILY_CREDIT_CAP` (free);
+ * ×5 for pro, ×10 for power. Matches the ledger edge-function policy so the
+ * proxy and edge paths enforce the same ceiling.
+ */
+export function dailyCapForPlan(plan: string | undefined): number {
+  const base = config.DAILY_CREDIT_CAP;
+  if (plan === "power") return base * 10;
+  if (plan === "pro") return base * 5;
+  return base; // free / unknown
 }

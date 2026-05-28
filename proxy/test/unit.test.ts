@@ -58,7 +58,9 @@ describe("idempotency key derivation", () => {
 describe("router model selection", async () => {
   // Imported lazily so the module's provider constructors (which read config)
   // don't run at file load under odd env.
-  const { resolveModel, FREE_MODEL, DEFAULT_MODEL } = await import("../src/services/router.ts");
+  const { resolveModel, FREE_MODEL, DEFAULT_MODEL, dailyCapForPlan } = await import(
+    "../src/services/router.ts"
+  );
 
   it("free tier with no model → haiku", () => {
     expect(resolveModel(undefined, "free").model).toBe(FREE_MODEL);
@@ -88,6 +90,23 @@ describe("router model selection", async () => {
 
   it("unknown model is rejected", () => {
     expect(() => resolveModel("definitely-not-a-model", "paid")).toThrow();
+  });
+
+  it("daily cap scales by plan: free=base, pro=x5, power=x10", () => {
+    const free = dailyCapForPlan("free");
+    expect(dailyCapForPlan(undefined)).toBe(free);
+    expect(dailyCapForPlan("pro")).toBe(free * 5);
+    expect(dailyCapForPlan("power")).toBe(free * 10);
+  });
+});
+
+describe("audit outcome mapping", async () => {
+  const { outcomeForError } = await import("../src/services/audit.ts");
+  it("maps error codes to the table's outcome enum", () => {
+    expect(outcomeForError("client_cancelled")).toBe("client_abort");
+    expect(outcomeForError("insufficient_credits")).toBe("error_credits");
+    expect(outcomeForError("provider_error")).toBe("error_upstream");
+    expect(outcomeForError("upstream_timeout")).toBe("error_upstream");
   });
 });
 

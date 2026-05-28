@@ -16,10 +16,12 @@ const calls = {
   reserve: [] as Array<{ userId: string; amount: number; reserveId: string }>,
   settle: [] as Array<{ reserveId: string; actual: number }>,
   refund: [] as Array<{ reserveId: string }>,
+  audit: [] as Array<{ outcome: string; errorCode?: string | null }>,
   providerComplete: 0,
 };
 
 let reserveOk = true;
+let capOk = true;
 
 // Mock jwks: any token → a fixed paid user.
 mock.module("../src/lib/jwks.ts", () => ({
@@ -42,7 +44,22 @@ mock.module("../src/services/credit.ts", () => ({
   refund: async (reserveId: string) => {
     calls.refund.push({ reserveId });
   },
+  withinDailyCap: async () => capOk,
+  reservedToday: async () => 0,
   getBalance: async () => 1000,
+}));
+
+// Mock audit so it never reaches Supabase; capture outcomes.
+mock.module("../src/services/audit.ts", () => ({
+  audit: async (rec: { outcome: string; errorCode?: string | null }) => {
+    calls.audit.push({ outcome: rec.outcome, errorCode: rec.errorCode });
+  },
+  outcomeForError: (code: string) =>
+    code === "client_cancelled"
+      ? "client_abort"
+      : code === "insufficient_credits"
+        ? "error_credits"
+        : "error_upstream",
 }));
 
 // Mock idempotency: always fresh, no real Redis.
@@ -90,6 +107,7 @@ mock.module("../src/services/router.ts", () => {
     }),
     reservationAmount: () => 100,
     actualAmount: () => 7,
+    dailyCapForPlan: () => 2000,
     isFreeProvider: () => false,
     FREE_MODEL: "claude-haiku-4-20250514",
     DEFAULT_MODEL: "claude-sonnet-4-20250514",
@@ -121,8 +139,10 @@ describe("POST /v1/chat", () => {
     calls.reserve.length = 0;
     calls.settle.length = 0;
     calls.refund.length = 0;
+    calls.audit.length = 0;
     calls.providerComplete = 0;
     reserveOk = true;
+    capOk = true;
 
     const res = await app.fetch(
       chatRequest({ messages: [{ role: "user", content: "hi" }] }),
@@ -154,6 +174,10 @@ describe("POST /v1/chat", () => {
     expect(done.usage.promptTokens).toBe(100);
     expect(done.usage.completionTokens).toBe(20);
     expect(frames[frames.length - 1]).toBe("[DONE]");
+
+    // exactly one audit row, outcome=success.
+    expect(calls.audit.length).toBe(1);
+    expect(calls.audit[0].outcome).toBe("success");
   });
 
   it("refuses with 402 when balance is insufficient (no provider call)", async () => {
@@ -161,6 +185,7 @@ describe("POST /v1/chat", () => {
     calls.settle.length = 0;
     calls.providerComplete = 0;
     reserveOk = false;
+    capOk = true;
 
     const res = await app.fetch(
       chatRequest({ messages: [{ role: "user", content: "hi" }] }),
@@ -172,9 +197,30 @@ describe("POST /v1/chat", () => {
     expect(calls.settle.length).toBe(0);
   });
 
+  it("refuses with 429 daily_cap_exceeded before reserving", async () => {
+    calls.reserve.length = 0;
+    calls.settle.length = 0;
+    calls.providerComplete = 0;
+    reserveOk = true;
+    capOk = false;
+
+    const res = await app.fetch(
+      chatRequest({ messages: [{ role: "user", content: "hi" }] }),
+    );
+    expect(res.status).toBe(429);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("daily_cap_exceeded");
+    // never reserved, never called the provider, never settled.
+    expect(calls.reserve.length).toBe(0);
+    expect(calls.providerComplete).toBe(0);
+    expect(calls.settle.length).toBe(0);
+    capOk = true;
+  });
+
   it("rejects an empty messages[] with 400 before reserving", async () => {
     calls.reserve.length = 0;
     reserveOk = true;
+    capOk = true;
     const res = await app.fetch(chatRequest({ messages: [] }));
     expect(res.status).toBe(400);
     expect(calls.reserve.length).toBe(0);

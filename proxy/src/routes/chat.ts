@@ -22,11 +22,12 @@ import {
   resolveModel,
   reservationAmount,
   actualAmount,
+  dailyCapForPlan,
   type Resolved,
   type Tier,
 } from "../services/router.ts";
 import * as credit from "../services/credit.ts";
-import { audit } from "../services/audit.ts";
+import { audit, outcomeForError } from "../services/audit.ts";
 import { deriveKey, claim, complete, abandon } from "../middleware/idempotency.ts";
 import {
   DEFAULT_MAX_TOKENS,
@@ -43,9 +44,22 @@ interface ChatBody {
   max_tokens?: number;
 }
 
+/** Coarse provider label for audit rows, derived from the active model id. */
+function providerLabel(model: string): string {
+  if (model.startsWith("claude")) return "anthropic";
+  if (model.startsWith("gpt")) return "openai";
+  return "ollama";
+}
+
+/** Raw plan from the Supabase JWT (free | pro | power | undefined). */
+function planOf(user: AuthedUser): string | undefined {
+  return (user.payload.app_metadata as { plan?: string } | undefined)?.plan;
+}
+
 function tierOf(user: AuthedUser): Tier {
-  // Supabase app_metadata may carry a plan; default to "paid" only if marked.
-  const plan = (user.payload.app_metadata as { plan?: string } | undefined)?.plan;
+  // The proxy only needs free vs not-free for model gating; the exact plan
+  // (pro/power) is used separately for the daily-cap multiplier.
+  const plan = planOf(user);
   return plan && plan !== "free" ? "paid" : "free";
 }
 
@@ -135,6 +149,26 @@ export async function chatHandler(c: Context) {
     : reservationAmount(resolved.model, maxTokens, estimatePromptTokens(body));
 
   if (!isLocal) {
+    // Daily-cap gate (before reserving): refuse if this reservation would push
+    // the trailing-24h reserved total over the user's plan cap. Mirrors the
+    // ledger edge-function policy so both paths enforce the same ceiling.
+    const cap = dailyCapForPlan(planOf(user));
+    if (!(await credit.withinDailyCap(user.sub, reserveAmt, cap))) {
+      await abandon(key);
+      const err = Errors.dailyCapExceeded();
+      void audit({
+        userId: user.sub,
+        reserveId: null,
+        action: "chat",
+        provider: providerLabel(resolved.model),
+        model: resolved.model,
+        outcome: "error_credits",
+        errorCode: err.code,
+      });
+      c.header("Retry-After", "3600");
+      return c.json(errorBody(err), 429);
+    }
+
     let res: credit.ReserveResult;
     try {
       res = await credit.reserve(user.sub, reserveAmt, key);
@@ -146,7 +180,17 @@ export async function chatHandler(c: Context) {
     if (!res.ok) {
       await abandon(key);
       const err = Errors.insufficientCredits();
-      audit({ at: "chat", userId: user.sub, model: resolved.model, code: err.code });
+      void audit({
+        userId: user.sub,
+        reserveId: null,
+        action: "chat",
+        provider: providerLabel(resolved.model),
+        model: resolved.model,
+        creditsReserved: 0,
+        creditsActual: 0,
+        outcome: "error_credits",
+        errorCode: err.code,
+      });
       return c.json(errorBody(err), 402);
     }
   }
@@ -214,13 +258,18 @@ export async function chatHandler(c: Context) {
             perr.code !== "insufficient_credits"
           ) {
             usedFallback = true;
-            audit({
-              at: "chat.fallback",
-              userId: user.sub,
-              model: resolved.fallback.model,
-              fallback: true,
-              code: perr.code,
-            });
+            // Informational only — the billable audit row is written once below
+            // (success or error) with the model/provider that actually ran.
+            console.log(
+              JSON.stringify({
+                level: "info",
+                at: "chat.fallback",
+                userId: user.sub,
+                from: resolved.model,
+                to: resolved.fallback.model,
+                cause: perr.code,
+              }),
+            );
             await runProvider(resolved.fallback.provider, resolved.fallback.model);
           } else {
             throw primaryErr;
@@ -239,18 +288,19 @@ export async function chatHandler(c: Context) {
         await complete(key, donePayload);
         await stream.writeSSE({ data: JSON.stringify({ type: "done", ...donePayload }) });
         await stream.writeSSE({ data: "[DONE]" });
-        audit({
-          at: "chat",
+        void audit({
           userId: user.sub,
+          reserveId: isLocal ? null : key,
+          action: "chat",
+          provider: providerLabel(activeModel),
           model: activeModel,
-          reserveId: key,
-          reserved: reserveAmt,
-          actual,
-          promptTokens,
-          completionTokens,
+          tokensPrompt: promptTokens,
+          tokensCompletion: completionTokens,
           cacheReadTokens,
-          fallback: usedFallback,
-          durationMs: Date.now() - started,
+          creditsReserved: reserveAmt,
+          creditsActual: actual,
+          latencyMs: Date.now() - started,
+          outcome: "success",
         });
       } catch (e) {
         const err = toProxyError(e);
@@ -267,13 +317,20 @@ export async function chatHandler(c: Context) {
           }),
         });
         await stream.writeSSE({ data: "[DONE]" });
-        audit({
-          at: "chat.error",
+        void audit({
           userId: user.sub,
+          reserveId: isLocal ? null : key,
+          action: "chat",
+          provider: providerLabel(activeModel),
           model: activeModel,
-          reserveId: key,
-          code: err.code,
-          durationMs: Date.now() - started,
+          tokensPrompt: promptTokens,
+          tokensCompletion: completionTokens,
+          cacheReadTokens,
+          creditsReserved: reserveAmt,
+          creditsActual: 0,
+          latencyMs: Date.now() - started,
+          outcome: outcomeForError(err.code),
+          errorCode: err.code,
         });
       }
     },
