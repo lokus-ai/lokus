@@ -80,6 +80,9 @@ bytemuck = { version = "1", features = ["derive"] }
 tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
 tungstenite = "0.26"
 futures-util = "0.3"
+# Local embeddings index (.lokus/embeddings.db). `bundled` statically links a
+# known-good libsqlite3 — no cross-platform version drift, no extension loading.
+rusqlite = { version = "0.31", features = ["bundled"] }
 
 # Desktop-only dependencies (use system_configuration which is macOS-only)
 [target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
