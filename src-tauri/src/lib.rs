@@ -1095,6 +1095,8 @@ pub fn run() {
       ai_embeddings::delete_note_embedding,
       ai_embeddings::search_embeddings,
       ai_embeddings::list_indexed_notes,
+      // AI — local append-only audit trail (.lokus/ai-audit.jsonl), all-platform
+      handlers::ai::append_audit_log,
       // AI — keychain-backed secret storage (gated, matches keyring crate)
       #[cfg(not(any(target_os = "ios", target_os = "android")))]
       secure_store::secure_store_set,
