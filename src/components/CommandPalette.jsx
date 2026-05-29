@@ -26,7 +26,8 @@ import {
   Target,
   Globe,
   Database,
-  Calendar
+  Calendar,
+  Sparkles
 } from 'lucide-react'
 import { getActiveShortcuts, formatAccelerator } from '../core/shortcuts/registry'
 import { useCommandHistory, createFileHistoryItem, createCommandHistoryItem } from '../hooks/useCommandHistory.js'
@@ -299,6 +300,27 @@ export default function CommandPalette({
 
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
+
+          {/* AI — opens the natural-language Cmd-K panel, prefilled with the
+              current input. The editor's React layer listens for this event. */}
+          {featureFlags.enable_ai !== false && (
+            <>
+              <CommandGroup heading="AI">
+                <CommandItem
+                  value={`ask ai ${inputValue}`}
+                  onSelect={() => runCommand(() => {
+                    window.dispatchEvent(new CustomEvent('lokus:open-ai-cmdk', {
+                      detail: { query: inputValue.trim() },
+                    }))
+                  })}
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  <span>{inputValue.trim() ? `Ask AI: "${inputValue.trim()}"` : 'Ask AI…'}</span>
+                </CommandItem>
+              </CommandGroup>
+              <CommandSeparator />
+            </>
+          )}
 
           {/* File Actions */}
           <CommandGroup heading="File">

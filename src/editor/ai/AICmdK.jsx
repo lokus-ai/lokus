@@ -27,8 +27,9 @@ import AIWritePreviewBar from './AIWritePreviewBar.jsx';
  * @param {(open: boolean) => void} props.onOpenChange
  * @param {import('prosemirror-view').EditorView} [props.view] - for staged writes
  * @param {object} [props.registry] - defaults to the actionRegistry singleton
+ * @param {string} [props.initialQuery] - prefilled instruction (from slash/palette)
  */
-export default function AICmdK({ open, onOpenChange, view, registry = actionRegistry }) {
+export default function AICmdK({ open, onOpenChange, view, registry = actionRegistry, initialQuery = '' }) {
   const [query, setQuery] = React.useState('');
   const [status, setStatus] = React.useState('idle'); // idle|routing|running|done|error
   const [answer, setAnswer] = React.useState('');
@@ -47,14 +48,14 @@ export default function AICmdK({ open, onOpenChange, view, registry = actionRegi
   React.useEffect(() => {
     if (open) {
       reset();
-      setQuery('');
+      setQuery(initialQuery ?? '');
       // focus shortly after mount
       const id = setTimeout(() => inputRef.current?.focus(), 0);
       return () => clearTimeout(id);
     }
     abortRef.current?.abort();
     return undefined;
-  }, [open, reset]);
+  }, [open, reset, initialQuery]);
 
   const stageWrites = React.useCallback((writeBuffer) => {
     if (!view || !Array.isArray(writeBuffer) || writeBuffer.length === 0) return false;
