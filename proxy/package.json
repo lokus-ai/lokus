@@ -1,0 +1,24 @@
+{
+  "name": "lokus-inference-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lokus self-hosted inference proxy (Hono): JWT verify, rate-limit, credit reserve/settle, SSE streaming inference.",
+  "type": "module",
+  "module": "src/index.ts",
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "hono": "^4.6.14",
+    "jose": "^5.9.6",
+    "ioredis": "^5.4.2",
+    "@supabase/supabase-js": "^2.47.10"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.14",
+    "typescript": "^5.7.2"
+  }
+}
