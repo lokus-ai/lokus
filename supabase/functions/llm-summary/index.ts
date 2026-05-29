@@ -11,6 +11,15 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  actualAmount,
+  buildAdminClient as buildCreditAdminClient,
+  deriveReserveId,
+  refund as refundCredits,
+  reserveAmount,
+  reserveOrThrow,
+  settle as settleCredits,
+} from "../_shared/credits.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -71,15 +80,26 @@ const DEFAULT_MODELS: Record<Provider, Record<Tier, string>> = {
 };
 
 // ---------------------------------------------------------------------------
-// Per-tier monthly meeting caps (mirrors transcribe)
+// Credit gate config
+//
+// [FIX] The old per-tier monthly meeting count-cap (free:5, pro:30,
+// power:Infinity) is REPLACED by a real credit-balance gate: every request
+// reserves credits against the user's balance (over-reserved to MAX_OUTPUT_TOKENS)
+// and settles to actual usage. A 0-balance request is refused (402). A
+// per-account daily spend cap also applies (see _shared/credits.ts). The
+// power:Infinity free-for-all is gone — power users are still bounded by their
+// balance and daily cap.
 // ---------------------------------------------------------------------------
 
-/** Per-tier monthly meeting caps. Power tier has no hard cap. */
-const TIER_LIMITS: Record<string, number> = {
-  free: 5,
-  pro: 30,
-  power: Infinity,
-};
+/** Output-token ceiling we send to the provider AND reserve against. */
+const MAX_OUTPUT_TOKENS = 2048;
+
+/** Coarse input-token estimate from prompt length. Only affects the reserve
+ *  size, which over-reserves anyway, so an underestimate cannot under-charge
+ *  (settle uses the provider-reported actual when available). */
+function estimateInputTokens(prompt: string): number {
+  return Math.ceil(prompt.length / 4);
+}
 
 // ---------------------------------------------------------------------------
 // CORS helpers
@@ -179,24 +199,6 @@ async function resolveUserContext(authHeader: string | null): Promise<UserContex
   }
 
   return { userId, tier, meetingsThisMonth };
-}
-
-// ---------------------------------------------------------------------------
-// Usage enforcement
-// ---------------------------------------------------------------------------
-
-// Bug 1 fix: assertWithinLimit enforces the monthly quota
-function assertWithinLimit(ctx: UserContext): void {
-  const limit = TIER_LIMITS[ctx.tier] ?? TIER_LIMITS.free;
-  if (ctx.meetingsThisMonth >= limit) {
-    throw Object.assign(
-      new Error(
-        `Monthly meeting limit reached (${limit} for ${ctx.tier} tier). ` +
-          "Upgrade your plan or bring your own API key.",
-      ),
-      { status: 429, code: "USAGE_LIMIT_EXCEEDED" },
-    );
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -516,13 +518,9 @@ serve(async (req: Request): Promise<Response> => {
     return errorResponse(e.message, e.code ?? "AUTH_ERROR", e.status ?? 401);
   }
 
-  // Bug 1 fix: enforce monthly quota before allowing the LLM call
-  try {
-    assertWithinLimit(userCtx);
-  } catch (err: unknown) {
-    const e = err as { message: string; status?: number; code?: string };
-    return errorResponse(e.message, e.code ?? "LIMIT_ERROR", e.status ?? 429);
-  }
+  // [FIX] The monthly meeting count-cap is gone; the credit gate below
+  // (reserve → provider → settle/refund) is the real enforcement. We reserve
+  // after building the prompt so the reservation reflects measured input.
 
   // Parse and validate request body
   let body: RequestBody;
@@ -559,6 +557,26 @@ serve(async (req: Request): Promise<Response> => {
     template,
   );
 
+  // -------------------------------------------------------------------------
+  // Credit gate: reserve (over-reserved to MAX_OUTPUT_TOKENS) → provider →
+  // settle (refund unused) / refund (on failure). A 0-balance request is
+  // refused with 402; the per-account daily cap is enforced inside reserveOrThrow.
+  // -------------------------------------------------------------------------
+  const creditAdmin = buildCreditAdminClient();
+  const inputTokensEst = estimateInputTokens(prompt);
+  const reserveAmt = reserveAmount(model, inputTokensEst, MAX_OUTPUT_TOKENS);
+  const reserveId = await deriveReserveId(userCtx.userId, prompt);
+
+  try {
+    await reserveOrThrow(creditAdmin, userCtx.userId, userCtx.tier, reserveAmt, reserveId);
+  } catch (err: unknown) {
+    const e = err as { message: string; status?: number; code?: string; balance?: number };
+    return corsResponse(
+      JSON.stringify({ error: e.message, code: e.code ?? "INSUFFICIENT_CREDITS", balance: e.balance }),
+      { status: e.status ?? 402, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   // Call the appropriate provider
   let result: Response | LLMResult;
   try {
@@ -568,6 +586,8 @@ serve(async (req: Request): Promise<Response> => {
       result = await callOpenAI(model, prompt, stream);
     }
   } catch (err: unknown) {
+    // Provider failed before producing output → full refund of the reservation.
+    refundCredits(creditAdmin, reserveId);
     const e = err as { message: string; status?: number; code?: string };
     return errorResponse(e.message, e.code ?? "UPSTREAM_ERROR", e.status ?? 502);
   }
@@ -575,12 +595,20 @@ serve(async (req: Request): Promise<Response> => {
   // Bug 3 fix: use the type guard to distinguish streaming Response from
   // non-streaming LLMResult — no more unsafe casts in either branch.
   if (!isLLMResult(result)) {
-    // Streaming: provider already built the Response, return it directly
+    // Streaming: the upstream SSE is piped straight through, so this function
+    // never observes token usage. Settle to the FULL reservation (charge the
+    // over-reserved amount — never more than reserved, so no negative balance).
+    // The client-side proxy path (/v1/chat) is where streamed usage is captured
+    // and refunded precisely; this edge function is the non-streaming fallback.
+    settleCredits(creditAdmin, reserveId, reserveAmt);
     return result;
   }
 
-  // Non-streaming: log usage and return JSON
+  // Non-streaming: settle to ACTUAL usage (refunds the unused output ceiling).
   const { content, promptTokens, completionTokens } = result;
+
+  const actual = actualAmount(model, promptTokens, completionTokens);
+  settleCredits(creditAdmin, reserveId, actual);
 
   logTokenUsage(userCtx.userId, promptTokens, completionTokens);
 
@@ -593,6 +621,10 @@ serve(async (req: Request): Promise<Response> => {
         prompt_tokens: promptTokens,
         completion_tokens: completionTokens,
         total_tokens: promptTokens + completionTokens,
+      },
+      credits: {
+        reserved: reserveAmt,
+        actual,
       },
     }),
     {

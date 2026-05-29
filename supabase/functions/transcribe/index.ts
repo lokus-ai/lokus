@@ -12,6 +12,14 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  buildAdminClient as buildCreditAdminClient,
+  deriveReserveId,
+  refund as refundCredits,
+  reserveOrThrow,
+  settle as settleCredits,
+  transcribeCredits,
+} from "../_shared/credits.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -20,15 +28,34 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const DEEPGRAM_WS_URL = "wss://api.deepgram.com/v1/listen";
 const DEEPGRAM_REST_URL = "https://api.deepgram.com/v1/listen";
 
-/** Per-tier monthly meeting caps. Power tier has no hard cap. */
-const TIER_LIMITS: Record<string, number> = {
-  free: 5,
-  pro: 30,
-  power: Infinity,
-};
+// [FIX] The per-tier monthly meeting count-cap (free:5, pro:30, power:Infinity)
+// is REPLACED by a real credit-balance gate. Transcription credits are
+// duration-based (Deepgram: ~5 credits/min). We reserve on an upper-bound
+// duration estimate, then settle to Deepgram's reported `metadata.duration`.
+// A 0-balance request is refused (402); a per-account daily cap also applies.
+
+/** Max audio duration (seconds) we reserve against for the WebSocket stream
+ *  before we know the real length. Hard server-side stream ceiling = 2h. */
+const WS_RESERVE_SECONDS = 2 * 60 * 60;
 
 /** Allowed audio encodings forwarded to Deepgram. */
 const ALLOWED_ENCODINGS = new Set(["linear16", "opus", "mulaw", "alaw", "mp3", "flac"]);
+
+/**
+ * Upper-bound duration (seconds) for a batch audio buffer. For PCM (linear16)
+ * we compute it exactly from byte length / (sampleRate * 2 bytes * 1 channel);
+ * for compressed formats we cannot know without decoding, so we use a generous
+ * ceiling derived from a low assumed bitrate so the reservation never
+ * under-charges (settle reconciles to Deepgram's real duration).
+ */
+function estimateAudioSeconds(byteLength: number, encoding: string, sampleRate: number): number {
+  if (encoding === "linear16") {
+    const sr = sampleRate > 0 ? sampleRate : 16000;
+    return Math.ceil(byteLength / (sr * 2)); // 16-bit mono
+  }
+  // Compressed: assume a low ~16 kbps floor → 2 KB/s, generous over-estimate.
+  return Math.ceil(byteLength / 2000);
+}
 
 // ---------------------------------------------------------------------------
 // CORS helpers
@@ -133,23 +160,6 @@ async function resolveUserContext(authHeader: string | null): Promise<UserContex
 }
 
 // ---------------------------------------------------------------------------
-// Usage enforcement
-// ---------------------------------------------------------------------------
-
-function assertWithinLimit(ctx: UserContext): void {
-  const limit = TIER_LIMITS[ctx.tier] ?? TIER_LIMITS.free;
-  if (ctx.meetingsThisMonth >= limit) {
-    throw Object.assign(
-      new Error(
-        `Monthly meeting limit reached (${limit} for ${ctx.tier} tier). ` +
-          "Upgrade your plan or bring your own API key.",
-      ),
-      { status: 429, code: "USAGE_LIMIT_EXCEEDED" },
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Usage increment (fire-and-forget — best effort)
 // ---------------------------------------------------------------------------
 
@@ -219,12 +229,7 @@ async function handlePost(req: Request): Promise<Response> {
     return errorResponse(e.message, e.code ?? "AUTH_ERROR", e.status ?? 401);
   }
 
-  try {
-    assertWithinLimit(userCtx);
-  } catch (err: unknown) {
-    const e = err as { message: string; status?: number; code?: string };
-    return errorResponse(e.message, e.code ?? "LIMIT_ERROR", e.status ?? 429);
-  }
+  // [FIX] count-cap removed; the credit gate below is the real enforcement.
 
   // Parse request body
   let body: { audio?: string; encoding?: string; sample_rate?: number };
@@ -267,6 +272,26 @@ async function handlePost(req: Request): Promise<Response> {
     return errorResponse("Audio data is empty", "EMPTY_AUDIO", 400);
   }
 
+  // -------------------------------------------------------------------------
+  // Credit gate: reserve on an upper-bound duration estimate (over-reserve),
+  // then settle to Deepgram's reported duration (refund unused) or refund in
+  // full on failure. 0-balance is refused (402); daily cap enforced in reserve.
+  // -------------------------------------------------------------------------
+  const creditAdmin = buildCreditAdminClient();
+  const estSeconds = estimateAudioSeconds(audioBuffer.byteLength, encoding, sampleRate);
+  const reserveAmt = transcribeCredits(estSeconds);
+  const reserveId = await deriveReserveId(userCtx.userId, body.audio);
+
+  try {
+    await reserveOrThrow(creditAdmin, userCtx.userId, userCtx.tier, reserveAmt, reserveId);
+  } catch (err: unknown) {
+    const e = err as { message: string; status?: number; code?: string; balance?: number };
+    return corsResponse(
+      JSON.stringify({ error: e.message, code: e.code ?? "INSUFFICIENT_CREDITS", balance: e.balance }),
+      { status: e.status ?? 402, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   // Forward to Deepgram REST API
   const deepgramUrl = `${DEEPGRAM_REST_URL}?${buildDeepgramQuery(encoding, sampleRate)}`;
 
@@ -281,11 +306,13 @@ async function handlePost(req: Request): Promise<Response> {
       body: audioBuffer,
     });
   } catch (err) {
+    refundCredits(creditAdmin, reserveId);   // never produced output → full refund
     console.error("[transcribe] Deepgram network error:", err);
     return errorResponse("Transcription service unreachable", "UPSTREAM_UNAVAILABLE", 502);
   }
 
   if (!deepgramRes.ok) {
+    refundCredits(creditAdmin, reserveId);   // upstream error → full refund
     const errText = await deepgramRes.text().catch(() => "");
     console.error(`[transcribe] Deepgram error ${deepgramRes.status}:`, errText);
     return errorResponse("Transcription failed", "UPSTREAM_ERROR", 502);
@@ -293,10 +320,16 @@ async function handlePost(req: Request): Promise<Response> {
 
   const transcript = await deepgramRes.json();
 
+  // Settle to the ACTUAL audio duration Deepgram processed (refund the unused
+  // reserved seconds). Fall back to the estimate if metadata is absent.
+  const actualSeconds = Number(transcript?.metadata?.duration ?? estSeconds);
+  const actualAmt = transcribeCredits(actualSeconds);
+  settleCredits(creditAdmin, reserveId, actualAmt);
+
   // Increment usage asynchronously after a successful transcription
   incrementUsage(userCtx.userId);
 
-  return corsResponse(JSON.stringify(transcript), {
+  return corsResponse(JSON.stringify({ ...transcript, credits: { reserved: reserveAmt, actual: actualAmt } }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
@@ -320,16 +353,32 @@ async function handleWebSocket(req: Request): Promise<Response> {
     return errorResponse(e.message, e.code ?? "AUTH_ERROR", e.status ?? 401);
   }
 
-  try {
-    assertWithinLimit(userCtx);
-  } catch (err: unknown) {
-    const e = err as { message: string; status?: number; code?: string };
-    return errorResponse(e.message, e.code ?? "LIMIT_ERROR", e.status ?? 429);
-  }
-
   const deepgramKey = Deno.env.get("LOKUS_DEEPGRAM_KEY");
   if (!deepgramKey) {
     return errorResponse("Transcription service not configured", "SERVICE_UNAVAILABLE", 503);
+  }
+
+  // -------------------------------------------------------------------------
+  // Credit gate for the stream: reserve the 2h ceiling up front (refused with
+  // 402 if balance/daily-cap insufficient), then settle to the actual streamed
+  // duration on close (refund the unused reserved seconds). Failure/no-audio
+  // paths refund in full.
+  // -------------------------------------------------------------------------
+  const creditAdmin = buildCreditAdminClient();
+  const reserveAmt = transcribeCredits(WS_RESERVE_SECONDS);
+  const reserveId = await deriveReserveId(
+    userCtx.userId,
+    `ws:${userCtx.userId}:${Date.now()}`, // unique per connection — each stream is its own reservation
+  );
+
+  try {
+    await reserveOrThrow(creditAdmin, userCtx.userId, userCtx.tier, reserveAmt, reserveId);
+  } catch (err: unknown) {
+    const e = err as { message: string; status?: number; code?: string; balance?: number };
+    return corsResponse(
+      JSON.stringify({ error: e.message, code: e.code ?? "INSUFFICIENT_CREDITS", balance: e.balance }),
+      { status: e.status ?? 402, headers: { "Content-Type": "application/json" } },
+    );
   }
 
   // Parse encoding/sample_rate from query string (client sets these before upgrade)
@@ -346,6 +395,23 @@ async function handleWebSocket(req: Request): Promise<Response> {
   deepgramSocket.binaryType = "arraybuffer";
 
   let usageIncremented = false;
+
+  // Credit reconciliation state for this stream.
+  let streamSeconds = 0;        // max observed (start + duration) across segments
+  let creditSettled = false;    // guard so we settle/refund exactly once
+
+  /** Settle the stream reservation to the actual streamed duration (refund-only),
+   *  or full-refund if no audio was processed. Idempotent via creditSettled and
+   *  the RPC's settled flag. */
+  const reconcileCredits = () => {
+    if (creditSettled) return;
+    creditSettled = true;
+    if (streamSeconds <= 0) {
+      refundCredits(creditAdmin, reserveId);            // never transcribed → full refund
+    } else {
+      settleCredits(creditAdmin, reserveId, transcribeCredits(streamSeconds));
+    }
+  };
 
   // ---- Client → Deepgram ------------------------------------------------
   clientSocket.onopen = () => {
@@ -367,6 +433,7 @@ async function handleWebSocket(req: Request): Promise<Response> {
     if (deepgramSocket.readyState === WebSocket.OPEN) {
       deepgramSocket.close(1000, "client disconnected");
     }
+    reconcileCredits();   // settle/refund the stream reservation
   };
 
   // ---- Deepgram → Client ------------------------------------------------
@@ -379,6 +446,13 @@ async function handleWebSocket(req: Request): Promise<Response> {
 
     try {
       const data = JSON.parse(event.data as string);
+
+      // Track the furthest audio timestamp seen so we can settle to the real
+      // streamed duration on close (credit reconciliation).
+      const segEnd = Number(data?.start ?? 0) + Number(data?.duration ?? 0);
+      if (Number.isFinite(segEnd) && segEnd > streamSeconds) {
+        streamSeconds = segEnd;
+      }
 
       // Count usage once the first is_final transcript arrives
       if (!usageIncremented && data?.is_final === true) {
@@ -415,6 +489,7 @@ async function handleWebSocket(req: Request): Promise<Response> {
     if (clientSocket.readyState === WebSocket.OPEN) {
       clientSocket.close(event.code, event.reason);
     }
+    reconcileCredits();   // settle/refund the stream reservation
   };
 
   return response;
