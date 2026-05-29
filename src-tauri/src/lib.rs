@@ -37,6 +37,12 @@ mod audio;
 mod meeting_detector;
 mod transcription;
 mod notifications;
+// AI: local models (Ollama), local embeddings index, keychain secret storage.
+// `ai_local` and `secure_store` are internally gated to the non-mobile target
+// block (they use reqwest / keyring); `ai_embeddings` is all-platform.
+mod ai_local;
+mod ai_embeddings;
+mod secure_store;
 
 #[cfg(desktop)]
 use window_manager::{open_workspace_window, open_preferences_window, open_launcher_window};
@@ -1072,7 +1078,32 @@ pub fn run() {
       #[cfg(desktop)]
       validate_api_key,
       #[cfg(desktop)]
-      llm_stream_request
+      llm_stream_request,
+      // AI — local Ollama (gated to the non-mobile target block, matching reqwest)
+      #[cfg(not(any(target_os = "ios", target_os = "android")))]
+      ai_local::ollama_check,
+      #[cfg(not(any(target_os = "ios", target_os = "android")))]
+      ai_local::ollama_list_models,
+      #[cfg(not(any(target_os = "ios", target_os = "android")))]
+      ai_local::ollama_stream_request,
+      #[cfg(not(any(target_os = "ios", target_os = "android")))]
+      ai_local::ollama_pull_model,
+      #[cfg(not(any(target_os = "ios", target_os = "android")))]
+      ai_local::ollama_embed,
+      // AI — local embeddings index (.lokus/embeddings.db), all-platform
+      ai_embeddings::index_note_embedding,
+      ai_embeddings::delete_note_embedding,
+      ai_embeddings::search_embeddings,
+      ai_embeddings::list_indexed_notes,
+      // AI — local append-only audit trail (.lokus/ai-audit.jsonl), all-platform
+      handlers::ai::append_audit_log,
+      // AI — keychain-backed secret storage (gated, matches keyring crate)
+      #[cfg(not(any(target_os = "ios", target_os = "android")))]
+      secure_store::secure_store_set,
+      #[cfg(not(any(target_os = "ios", target_os = "android")))]
+      secure_store::secure_store_get,
+      #[cfg(not(any(target_os = "ios", target_os = "android")))]
+      secure_store::secure_store_delete
     ])
     .setup(|app| {
       #[cfg(desktop)]
