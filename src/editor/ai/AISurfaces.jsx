@@ -5,6 +5,7 @@ import SelectionToolbar from './SelectionToolbar.jsx';
 import AIWritePreviewBar from './AIWritePreviewBar.jsx';
 import { getTransform, runTransform } from './transforms.js';
 import { previewWriteBuffer, hasPendingPreview } from './DiffPreview.js';
+import '../styles/ai-surfaces.css';
 
 /**
  * AISurfaces — the single React mount point for the editor AI surfaces.
