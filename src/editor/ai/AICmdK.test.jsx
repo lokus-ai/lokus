@@ -9,6 +9,13 @@ vi.mock('./actionContext.js', () => ({
 vi.mock('./DiffPreview.js', () => ({
   previewWriteBuffer: vi.fn(() => true),
 }));
+// Mock the providers-owned module so the "provider unavailable" path is tested
+// deterministically. The real ai-provider.js now exports a working aiProvider,
+// so without this the unavailable-fallback test can't trigger. Tests that need a
+// working provider inject one via setProvider() (checked first by getProvider()).
+vi.mock('../../services/ai-provider.js', () => ({
+  aiProvider: {}, // no complete() → PROVIDER_UNAVAILABLE in the lazy fallback
+}));
 
 import { setProvider } from './aiClient.js';
 import AICmdK from './AICmdK.jsx';
@@ -81,7 +88,7 @@ describe('AICmdK', () => {
   });
 
   it('renders a friendly message when the provider is unavailable', async () => {
-    setProvider(null); // real ai-provider.js has no complete() yet → PROVIDER_UNAVAILABLE
+    setProvider(null); // ai-provider.js is mocked without complete() → PROVIDER_UNAVAILABLE
     render(<AICmdK open onOpenChange={() => {}} registry={makeRegistry()} />);
     const input = screen.getByPlaceholderText(/Ask AI/i);
     fireEvent.change(input, { target: { value: 'explain this concept to me' } });
