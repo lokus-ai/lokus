@@ -1,4 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+// Mock the providers-owned module so the "no complete()" guard is tested
+// deterministically. The real ai-provider.js now exports a working aiProvider
+// (providers' Wave-2 rewrite), so without this mock getProvider() would resolve
+// to it instead of exercising the PROVIDER_UNAVAILABLE path. Every other test
+// here injects a provider via setProvider() (which getProvider checks first), so
+// this mock only matters for the lazy-import fallback case.
+vi.mock('../../services/ai-provider.js', () => ({
+  // Intentionally NO `complete` and NO default → simulates the unavailable state.
+  aiProvider: {},
+}));
+
 import {
   AIClientError,
   setProvider,
@@ -46,9 +58,8 @@ describe('aiClient', () => {
 
     it('throws PROVIDER_UNAVAILABLE when ai-provider has no complete()', async () => {
       setProvider(null);
-      // ai-provider.js (providers-owned) may not export aiProvider yet; the real
-      // module also lacks complete() until they land it, so this resolves to the
-      // typed error rather than a hard import crash.
+      // ai-provider.js is mocked (top of file) to export an aiProvider without
+      // complete(), so the lazy-import fallback must surface the typed error.
       await expect(getProvider()).rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE' });
     });
   });
