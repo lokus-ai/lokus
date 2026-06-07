@@ -4,9 +4,38 @@ import react from "@vitejs/plugin-react";
 
 const host = process.env.TAURI_DEV_HOST;
 
+/**
+ * Stub out mcp-server modules in the browser bundle.
+ * The MCP server runs as a separate Node.js process and uses fs/promises,
+ * which doesn't exist in the Tauri WebView. This plugin redirects any
+ * frontend import of those modules to browser-safe stubs.
+ */
+function mcpServerBrowserStub() {
+  const stubMap = {
+    [path.resolve(__dirname, 'src/mcp-server/utils/graphIndex.js')]:
+      path.resolve(__dirname, 'src/core/ai/mcp-graph-stub.js'),
+    [path.resolve(__dirname, 'src/mcp-server/tools/notes.js')]:
+      path.resolve(__dirname, 'src/core/ai/mcp-notes-stub.js'),
+  };
+  return {
+    name: 'mcp-server-browser-stub',
+    enforce: 'pre',
+    resolveId(id, importer) {
+      // Match relative imports that end with the mcp-server path
+      if (id.endsWith('mcp-server/utils/graphIndex.js')) {
+        return stubMap[path.resolve(__dirname, 'src/mcp-server/utils/graphIndex.js')];
+      }
+      if (id.endsWith('mcp-server/tools/notes.js')) {
+        return stubMap[path.resolve(__dirname, 'src/mcp-server/tools/notes.js')];
+      }
+      return null;
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react()],
+  plugins: [react(), mcpServerBrowserStub()],
   resolve: {
     // Array form so the graphIndex entry can use a regex `find`.
     alias: [
