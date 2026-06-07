@@ -1,0 +1,23 @@
+# Caddy fronts the proxy on 443/80. Set your domain below (or use the
+# {$LOKUS_PROXY_DOMAIN} env). Caddy auto-provisions TLS.
+#
+# IMPORTANT: Caddy sets NO Access-Control-Allow-Origin — CORS is owned ONLY by
+# Hono (the proxy). `flush_interval -1` disables response buffering so SSE
+# frames reach the client immediately. WebSocket upgrades pass through natively.
+
+{$LOKUS_PROXY_DOMAIN:localhost} {
+	encode zstd gzip
+
+	# Live transcription WebSocket — pass upgrades straight through.
+	@ws {
+		path /v1/transcribe/ws
+		header Connection *Upgrade*
+		header Upgrade websocket
+	}
+	reverse_proxy @ws proxy:3000
+
+	# Everything else, including SSE (/v1/chat). Disable buffering for streaming.
+	reverse_proxy proxy:3000 {
+		flush_interval -1
+	}
+}

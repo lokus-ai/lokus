@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.local
+*.log
+dist/
+.DS_Store
+
+# Local process/planning artifacts — not part of the deliverable.
+task_plan.md
+findings.md
+progress.md

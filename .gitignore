@@ -109,3 +109,6 @@ temp-plugins/
 packages/lokus-plugin-cli/my-react-plugin-sixteen
 packages/lokus-plugin-cli/my-react-plugin-ten
 packages/lokus-plugin-cli/test-plugin
+
+# AI integration: cross-agent coordination board + scratch (not for commit)
+.context/

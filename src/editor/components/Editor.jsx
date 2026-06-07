@@ -47,6 +47,7 @@ import { createPluginCompletionPlugin } from '../extensions/PluginCompletion.js'
 import { convertFileSrc } from "@tauri-apps/api/core";
 import TableBubbleMenu from "./TableBubbleMenu.jsx";
 import EditorContextMenu from "../../components/EditorContextMenu.jsx";
+import AISurfaces from "../ai/AISurfaces.jsx";
 import liveEditorSettings from "../../core/editor/live-settings.js";
 import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import TaskCreationModal from "../../components/TaskCreationModal.jsx";
@@ -1335,6 +1336,11 @@ const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, edi
           ].filter(Boolean).join(' ')}
         />
       </EditorContextMenu>
+
+      {/* AI surfaces — Cmd-K panel + selection transforms. Mounted once with the
+          live view; listens for lokus:open-ai-cmdk / lokus:ai-transform events
+          dispatched by the slash /ai command, the context menu, and the palette. */}
+      <AISurfaces view={viewRef.current} />
 
       {/* WikiLink Modal */}
       <WikiLinkModal
