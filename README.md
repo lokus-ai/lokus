@@ -71,17 +71,17 @@ Most note-taking apps fall into two categories: **powerful but cloud-dependent**
 - Plugin marketplace
 - Theme customization
 - Keyboard-first design
-- 40+ slash commands
+- ~30 slash commands
 
 </td>
 <td width="50%">
 
 ### Privacy
-- Zero telemetry
-- No account required
+- No account required — guest/local by default
 - Works 100% offline
 - Standard markdown files
-- P2P sync (coming soon)
+- Anonymous product analytics, opt-out anytime in Preferences (crash reporting off by default)
+- Optional encrypted cloud sync (Supabase)
 
 </td>
 </tr>
@@ -147,9 +147,9 @@ cd lokus && npm install && npm run tauri build
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | React 19, TipTap 3, Tailwind CSS, Vite 7 |
+| Frontend | React 19, Tailwind CSS, Vite 7 |
 | Backend | Rust, Tauri 2.0, Tokio |
-| Editor | TipTap (ProseMirror), KaTeX, Shiki |
+| Editor | ProseMirror (raw), KaTeX, Shiki |
 | Canvas | TLDraw |
 | Graph | Three.js, D3-force |
 | Testing | Vitest, Playwright |
@@ -188,7 +188,7 @@ lokus/
 ├── src/                    # React frontend
 │   ├── components/         # UI components
 │   ├── core/               # Core functionality
-│   ├── editor/             # TipTap editor
+│   ├── editor/             # ProseMirror editor
 │   └── views/              # Main views
 ├── src-tauri/              # Rust backend
 │   └── src/                # Tauri commands
@@ -207,6 +207,7 @@ lokus/
 - [x] Template system
 - [x] Plugin marketplace
 - [x] MCP server integration
+- [x] Encrypted cloud sync (Supabase)
 
 ### Next
 - [ ] P2P sync (Iroh)
