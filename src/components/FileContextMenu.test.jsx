@@ -3,6 +3,16 @@ import { render, fireEvent, screen } from "@testing-library/react";
 import React from "react";
 import FileContextMenu from "./FileContextMenu.jsx";
 
+// Advanced-mode flags: exercise the Terminal + Version History menu items, which
+// are now behind the "Advanced features" toggle (Simple default hides them).
+vi.mock("../contexts/RemoteConfigContext", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    useFeatureFlags: () => ({ enable_terminal: true, enable_version_history: true }),
+  };
+});
+
 // Mock PlatformService
 vi.mock("../services/platform/PlatformService", () => ({
   default: {

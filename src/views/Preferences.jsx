@@ -10,7 +10,7 @@ import liveEditorSettings from "../core/editor/live-settings.js";
 // Import editor styles for Live Preview
 import "../editor/styles/editor.css";
 import markdownSyntaxConfig from "../core/markdown/syntax-config.js";
-import { useFeatureFlags } from "../contexts/RemoteConfigContext";
+import { useFeatureFlags, useAdvancedFeatures } from "../contexts/RemoteConfigContext";
 import AIAssistant from "./preferences/AIAssistant.jsx";
 import MeetingNotes from "./preferences/MeetingNotes.jsx";
 import { CalendarSettings, CalendarConnectionStatus } from "../components/Calendar/index.js";
@@ -34,6 +34,7 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
   const [section, setSection] = useState("Appearance");
   const { isAuthenticated, user, signIn, signInWithGoogle, signInWithApple, signInWithEmail, signUpWithEmail, resetPassword, signOut, deleteAccount, isLoading, isGuest, getAccessToken } = useAuth();
   const featureFlags = useFeatureFlags();
+  const { advancedFeatures, setAdvancedFeatures } = useAdvancedFeatures();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [authMode, setAuthMode] = useState('signin'); // 'signin', 'signup', 'reset'
   const [authEmail, setAuthEmail] = useState('');
@@ -697,7 +698,7 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
           {/* Sidebar */}
           <aside className="bg-app-panel border-r border-app-border p-3">
             {[
-              // "General",
+              "General",
               "Appearance",
               "Editor",
               "Callouts",
@@ -1868,7 +1869,45 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
 
 
             {section === "General" && (
-              <div className="text-app-muted">General settings coming soon.</div>
+              <div className="space-y-8 max-w-2xl">
+                <div>
+                  <h1 className="text-2xl font-bold text-app-text mb-2">General</h1>
+                  <p className="text-app-text-secondary">
+                    Choose how much of Lokus you want to see.
+                  </p>
+                </div>
+
+                <section className="bg-app-panel border border-app-border rounded-xl p-6">
+                  <div className="flex items-start justify-between gap-6">
+                    <div>
+                      <h2 className="text-base font-semibold text-app-text mb-1">Advanced features</h2>
+                      <p className="text-sm text-app-text-secondary max-w-md">
+                        Lokus starts simple: just the editor, files, and search. Turn this on to
+                        unlock the advanced tools — Graph, Canvas, Kanban, Bases, Calendar, Meeting
+                        Notes, AI Assistant, Sync, Plugins, Templates, Terminal, MCP, and Version
+                        History.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={advancedFeatures}
+                      aria-label="Advanced features"
+                      onClick={() => setAdvancedFeatures(!advancedFeatures)}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${advancedFeatures ? "bg-app-accent" : "bg-app-border"}`}
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${advancedFeatures ? "translate-x-5" : "translate-x-0.5"}`}
+                      />
+                    </button>
+                  </div>
+                  <p className="text-xs text-app-muted mt-4">
+                    {advancedFeatures
+                      ? "All features are enabled."
+                      : "Simple mode — advanced panels are hidden."}
+                  </p>
+                </section>
+              </div>
             )}
 
             {section === "Markdown" && (
@@ -2325,10 +2364,6 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
                   </div>
                 </div>
               </div>
-            )}
-
-            {section === "General" && (
-              <div className="text-app-muted">General settings coming soon.</div>
             )}
 
             {section === "Daily Notes" && (
@@ -2898,7 +2933,7 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
                       <button
                         onClick={async () => {
                           try {
-                            await signOut(); // Clears guest mode → returns to login screen
+                            await signOut(); // Clears guest mode → reveals the inline sign-in form below
                           } catch { }
                         }}
                         className="inline-flex items-center gap-2 px-6 py-3 bg-app-accent text-white font-medium rounded-lg hover:bg-app-accent/90 transition-colors"
