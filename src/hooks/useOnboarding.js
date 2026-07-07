@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { readConfig, updateConfig } from "../core/config/store.js";
+import { detectExistingUser } from "../contexts/RemoteConfigContext.jsx";
 
 const TOTAL_STEPS = 6;
 
@@ -27,7 +28,14 @@ export function useOnboarding() {
         const config = await readConfig();
         const completed = config?.hasCompletedOnboarding ?? false;
         if (!completed) {
-          setPhase("wizard");
+          // Existing users (who already have a vault) predate the wizard — don't
+          // re-onboard them; mark complete and skip so onboarding is first-run only.
+          const existing = await detectExistingUser();
+          if (existing) {
+            try { await updateConfig({ hasCompletedOnboarding: true }); } catch {}
+          } else {
+            setPhase("wizard");
+          }
         }
       } catch {
         setPhase("wizard");
