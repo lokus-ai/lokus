@@ -640,8 +640,12 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
     let quit_item = MenuItem::with_id(app, "quit", "Quit Lokus", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
 
-    let _tray = TrayIconBuilder::new()
-        .icon(app.default_window_icon().cloned().unwrap())
+    let mut tray_builder = TrayIconBuilder::new();
+    // Tray icon is best-effort: a missing default window icon must not panic setup.
+    if let Some(icon) = app.default_window_icon().cloned() {
+        tray_builder = tray_builder.icon(icon);
+    }
+    let _tray = tray_builder
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_tray_icon_event(|tray, event| {
@@ -1106,11 +1110,18 @@ pub fn run() {
       secure_store::secure_store_delete
     ])
     .setup(|app| {
+      // Non-essential init is best-effort: a failure here must never unwind setup and
+      // leave the app with no visible window. The final guard at the end of setup
+      // guarantees a window is shown regardless.
       #[cfg(desktop)]
-      menu::init(&app.handle())?;
+      if let Err(e) = menu::init(&app.handle()) {
+        tracing::error!("menu init failed (continuing): {}", e);
+      }
 
       #[cfg(desktop)]
-      setup_tray(app)?;
+      if let Err(e) = setup_tray(app) {
+        tracing::error!("tray setup failed (continuing): {}", e);
+      }
 
       // Install native macOS notification delegate and register categories.
       // Permission request is non-blocking; the OS shows a dialog at most once.
@@ -1266,8 +1277,6 @@ pub fn run() {
       #[cfg(desktop)]
       {
         let app_handle = app.handle().clone();
-        let store = StoreBuilder::new(app.handle(), PathBuf::from(".settings.dat")).build().unwrap();
-        let _ = store.reload();
 
         // In development mode, always clear workspace data and show launcher
         if cfg!(debug_assertions) {
@@ -1295,6 +1304,19 @@ pub fn run() {
             if let Some(main_window) = app.get_webview_window("main") {
               let _ = main_window.show();
             }
+          }
+        }
+
+        // Final guard: no matter which path ran above (or if an optional step failed),
+        // guarantee SOME window is visible so the app can never launch to nothing.
+        let any_visible = app
+          .webview_windows()
+          .values()
+          .any(|w| w.is_visible().unwrap_or(false));
+        if !any_visible {
+          if let Some(main_window) = app.get_webview_window("main") {
+            let _ = main_window.show();
+            let _ = main_window.set_focus();
           }
         }
       }
