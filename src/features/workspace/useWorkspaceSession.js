@@ -58,16 +58,21 @@ export function useWorkspaceSession({ workspacePath, plugins }) {
         useFileTreeStore.setState({ expandedFolders: new Set(session.expanded_folders) });
       }
 
-      // Restore editor layout if available (new format)
-      if (session.editor_layout) {
-        useEditorGroupStore.getState().restoreLayout(session.editor_layout);
-      } else if (session.open_tabs && session.open_tabs.length > 0) {
-        // Legacy: build single group from open_tabs
-        const tabs = session.open_tabs.map(p => ({
-          path: p,
-          name: getTabDisplayName(p, plugins)
-        }));
-        useEditorGroupStore.getState().initLayout(tabs, tabs[0]?.path || null);
+      // Restore editor layout if available (new format). Never clobber tabs
+      // the user already opened while the session file was still loading —
+      // restoring is only safe into an empty layout.
+      const hasOpenTabs = useEditorGroupStore.getState().getAllGroups().some(g => g.tabs.length > 0);
+      if (!hasOpenTabs) {
+        if (session.editor_layout) {
+          useEditorGroupStore.getState().restoreLayout(session.editor_layout);
+        } else if (session.open_tabs && session.open_tabs.length > 0) {
+          // Legacy: build single group from open_tabs
+          const tabs = session.open_tabs.map(p => ({
+            path: p,
+            name: getTabDisplayName(p, plugins)
+          }));
+          useEditorGroupStore.getState().initLayout(tabs, tabs[0]?.path || null);
+        }
       }
 
       // Restore recent files
@@ -98,12 +103,17 @@ export function useWorkspaceSession({ workspacePath, plugins }) {
   }, [workspacePath]);
 
   // -------------------------------------------------------------------------
-  // Session save (debounced, 500 ms)
+  // Session save — persists whenever the editor layout changes (debounced).
+  // A one-shot 500ms-after-mount save used to run here, which meant the
+  // session file recorded an empty layout forever and every restore wiped
+  // the user's tabs.
   // -------------------------------------------------------------------------
   useEffect(() => {
-    const saveTimeout = setTimeout(() => {
-      if (!workspacePath) return;
+    if (!workspacePath) return;
 
+    let timer = null;
+
+    const persist = () => {
       const { layout, getAllGroups, globalRecentFiles } = useEditorGroupStore.getState();
       const { expandedFolders } = useFileTreeStore.getState();
       const { showLeft, showRight, leftW, rightW, bottomPanelHeight, bottomPanelTab } = useLayoutStore.getState();
@@ -137,9 +147,21 @@ export function useWorkspaceSession({ workspacePath, plugins }) {
         editorLayout: cleanLayout,
         layout: { showLeft, showRight, leftW, rightW, bottomPanelHeight, bottomPanelTab },
         currentView,
-      });
-    }, 500);
-    return () => clearTimeout(saveTimeout);
+      }).catch(() => {});
+    };
+
+    const schedule = () => {
+      clearTimeout(timer);
+      timer = setTimeout(persist, 500);
+    };
+
+    schedule(); // initial save (mirrors old behavior)
+    const unsubscribe = useEditorGroupStore.subscribe((s) => s.layout, schedule);
+
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
   }, [workspacePath]);
 
   // -------------------------------------------------------------------------

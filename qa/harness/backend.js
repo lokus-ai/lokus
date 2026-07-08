@@ -35,6 +35,7 @@ export class QaBackend {
     this.lastWorkspace = null;
     this.pickerQueue = [];
     this.windowEvents = [];
+    this.latency = {};
   }
 
   async createVault(name) {
@@ -119,9 +120,22 @@ export class QaBackend {
   /**
    * Handle a forwarded Tauri invoke. Returns { ok, value } or { ok:false, error }.
    */
+  /**
+   * Add artificial latency to a specific invoke command (ms). Used by
+   * journeys to widen async race windows deterministically, e.g.
+   * `backend.setLatency('read_file_content', 300)`. Reset in resetSession().
+   */
+  setLatency(cmd, ms) {
+    this.latency = this.latency || {};
+    if (ms > 0) this.latency[cmd] = ms;
+    else delete this.latency[cmd];
+  }
+
   async handle(cmd, args = {}) {
     this.invokeLog.push({ cmd, args, ts: Date.now() });
     try {
+      const delay = this.latency?.[cmd];
+      if (delay) await new Promise((r) => setTimeout(r, delay));
       const value = await this.dispatch(cmd, args);
       return { ok: true, value };
     } catch (err) {
