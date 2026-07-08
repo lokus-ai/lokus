@@ -670,6 +670,8 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
                 }
             }
             "quit" => {
+                // Flush unsaved editors, then exit programmatically (code=Some(0)).
+                let _ = app.emit("lokus:flush-dirty", ());
                 app.exit(0);
             }
             _ => {}
@@ -1325,20 +1327,72 @@ pub fn run() {
     })
     .on_window_event(|window, event| {
       if let WindowEvent::CloseRequested { api, .. } = event {
-        // Let modal windows (preferences) close and be destroyed.
-        // Only hide the main workspace windows to preserve state.
-        if window.label() == "prefs" {
+        let label = window.label().to_string();
+
+        // Modal windows (preferences) close and are destroyed normally.
+        if label == "prefs" {
           return;
         }
-        let _ = window.hide();
-        api.prevent_close();
+
+        // The webview keeps running while hidden, so give the frontend a chance to
+        // flush any unsaved editors before this window goes away.
+        let _ = window.emit("lokus:flush-dirty", ());
+
+        // Count OTHER visible, non-prefs windows still open.
+        let app = window.app_handle();
+        let others_visible = app
+          .webview_windows()
+          .iter()
+          .filter(|(l, w)| {
+            l.as_str() != label && l.as_str() != "prefs" && w.is_visible().unwrap_or(false)
+          })
+          .count();
+
+        // Keep the app alive (hide + prevent close) only for the primary anchor window
+        // ("main") or when this is the LAST remaining visible window. Secondary ws-* and
+        // launcher-* windows close/destroy normally so they don't orphan in the background.
+        if label == "main" || others_visible == 0 {
+          let _ = window.hide();
+          api.prevent_close();
+        }
       }
     })
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
-    .run(|_app, event| {
-      if let RunEvent::ExitRequested { api, .. } = event {
-        api.prevent_exit();
+    .run(|app, event| {
+      match event {
+        RunEvent::ExitRequested { api, code, .. } => {
+          // code == None  -> the last window was destroyed by the user; keep the app
+          //                  alive in the tray instead of quitting.
+          // code == Some  -> a real user quit (tray Quit / File→Quit / Cmd+Q all route
+          //                  through app.exit(0)); let it proceed.
+          if code.is_none() {
+            api.prevent_exit();
+          } else {
+            // Belt-and-braces: ask the frontend to flush unsaved editors, then give it a
+            // brief moment before the process exits (the frontend also autosaves on a
+            // debounce, so this is a safety net, not the primary mechanism).
+            let _ = app.emit("lokus:flush-dirty", ());
+            std::thread::sleep(std::time::Duration::from_millis(250));
+          }
+        }
+        // macOS: clicking the dock icon after all windows were hidden/closed.
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen { .. } => {
+          // Prefer an existing workspace window; fall back to main, then any window.
+          let target = app
+            .webview_windows()
+            .into_iter()
+            .find(|(l, _)| l.starts_with("ws-"))
+            .map(|(_, w)| w)
+            .or_else(|| app.get_webview_window("main"))
+            .or_else(|| app.webview_windows().into_iter().next().map(|(_, w)| w));
+          if let Some(w) = target {
+            let _ = w.show();
+            let _ = w.set_focus();
+          }
+        }
+        _ => {}
       }
     });
 }

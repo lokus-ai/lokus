@@ -3,13 +3,18 @@
 
 use tauri::{
   AppHandle,
-  menu::{MenuBuilder, SubmenuBuilder, PredefinedMenuItem, MenuItemBuilder, CheckMenuItemBuilder},
+  menu::{MenuBuilder, SubmenuBuilder, MenuItemBuilder, CheckMenuItemBuilder},
   Emitter,
 };
 
 // Menu item IDs
 pub const PREFERENCES_ID: &str = "preferences";
 pub const ABOUT_ID: &str = "about";
+// Quit is a custom item (not PredefinedMenuItem::quit) so we can intercept it in
+// on_menu_event and route through app.exit(0). That makes the RunEvent::ExitRequested
+// carry code=Some(_) (programmatic exit), letting the run handler distinguish a real
+// user quit from a last-window-close (code=None) which must keep the app alive in the tray.
+pub const QUIT_ID: &str = "quit";
 
 // File menu IDs
 const FILE_NEW_NOTE_ID: &str = "file-new-note";
@@ -97,7 +102,9 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
       .hide_others()
       .show_all()
       .separator()
-      .item(&PredefinedMenuItem::quit(app, None)?)
+      .item(&MenuItemBuilder::with_id(QUIT_ID, "Quit Lokus")
+        .accelerator("CmdOrCtrl+Q")
+        .build(app)?)
       .build()?
   };
 
@@ -380,9 +387,11 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         .accelerator("CmdOrCtrl+,")
         .build(app)?)
       .separator()
-      .item(&PredefinedMenuItem::quit(app, None)?)
+      .item(&MenuItemBuilder::with_id(QUIT_ID, "Quit Lokus")
+        .accelerator("CmdOrCtrl+Q")
+        .build(app)?)
       .build()?;
-      
+
     let menu = MenuBuilder::new(app)
       .items(&[
         &file_menu_with_prefs, 
@@ -409,7 +418,13 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
       PREFERENCES_ID => {
         let _ = crate::window_manager::open_preferences_window(app.clone(), None, None);
       }
-      
+      QUIT_ID => {
+        // Flush any unsaved editors, then exit programmatically so the run handler
+        // sees code=Some(0) and does NOT keep the app alive.
+        let _ = app.emit("lokus:flush-dirty", ());
+        app.exit(0);
+      }
+
       // File menu
       FILE_NEW_NOTE_ID => {
         let _ = app.emit("lokus:new-file", ());
