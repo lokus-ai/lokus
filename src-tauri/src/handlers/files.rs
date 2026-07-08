@@ -88,8 +88,41 @@ pub async fn read_workspace_files(workspace_path: String) -> Result<Vec<FileEntr
     read_directory_contents(Path::new(&workspace_path)).await
 }
 
+/// Maximum size for a file loaded into the text editor. Larger files are refused
+/// with a descriptive error instead of being read into memory / the webview.
+const MAX_EDITOR_FILE_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
+
 #[tauri::command]
 pub async fn read_file_content(path: String) -> Result<String, String> {
+    use tokio::io::AsyncReadExt;
+
+    // Guard 1: refuse files larger than 10 MB before reading them in.
+    if let Ok(meta) = tokio::fs::metadata(&path).await {
+        if meta.len() > MAX_EDITOR_FILE_SIZE {
+            return Err(format!(
+                "FILE_TOO_LARGE: {} is {:.1} MB, which exceeds the {} MB editor limit.",
+                path,
+                meta.len() as f64 / (1024.0 * 1024.0),
+                MAX_EDITOR_FILE_SIZE / (1024 * 1024)
+            ));
+        }
+    }
+
+    // Guard 2: binary heuristic — a NUL byte in the first 8 KB means this is not text.
+    // (read_to_string only rejects invalid UTF-8; NUL is valid UTF-8, so binary blobs
+    // full of NULs would otherwise load as garbage into the editor.)
+    if let Ok(mut file) = tokio::fs::File::open(&path).await {
+        let mut probe = [0u8; 8192];
+        if let Ok(n) = file.read(&mut probe).await {
+            if probe[..n].contains(&0) {
+                return Err(format!(
+                    "BINARY_FILE: {} appears to be a binary file (NUL byte detected); it cannot be opened in the text editor.",
+                    path
+                ));
+            }
+        }
+    }
+
     tokio::fs::read_to_string(path).await.map_err(|e| e.to_string())
 }
 
