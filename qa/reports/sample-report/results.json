@@ -1,0 +1,1875 @@
+{
+  "meta": {
+    "startedAt": "2026-07-08T00:33:56.596Z",
+    "runner": "playwright-chromium + real vite frontend + disk-backed tauri mock (real temp vault folders)",
+    "aiDecider": "stub-persona (no ANTHROPIC_API_KEY)",
+    "runRoot": "/var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E",
+    "unknownInvokeCommands": [
+      "request_notification_permission_cmd",
+      "enable_meeting_detection",
+      "google_calendar_auth_status",
+      "caldav_is_connected",
+      "sync_window_theme"
+    ]
+  },
+  "summary": {
+    "pass": 3,
+    "fail": 8,
+    "crash": 0,
+    "findings": 8
+  },
+  "results": [
+    {
+      "journeyId": "00-client-node-imports",
+      "status": "fail",
+      "steps": [],
+      "passes": [],
+      "findings": [
+        {
+          "kind": "fail",
+          "title": "Editor bundle is webview-safe",
+          "expected": "Client-side editor code never pulls Node-only modules into the webview bundle",
+          "actual": "EDITOR CRASHES ON NOTE OPEN (\"View crashed — Click to recover\"). Without the QA fs-shim, opening any note throws: Module \"fs/promises\" has been externalized for browser compatibility (at src/mcp-server/utils/graphIndex.js:8, reached from the editor AI action context). Offending import chains: [\"src/editor/ai/actionContext.js → ../../mcp-server/utils/graphIndex.js (imports Node builtins)\",\"src/core/ai/ContextAssembler.js → ../../mcp-server/utils/graphIndex.js (imports Node builtins)\",\"src/core/ai/actions/vault-actions.js → ../../../mcp-server/tools/notes.js (imports Node builtins)\"]",
+          "screenshot": null,
+          "severity": "major",
+          "steps": [],
+          "consoleErrors": []
+        }
+      ],
+      "consoleErrors": [],
+      "title": "Opening a note must not crash the editor (Node imports in client bundle)",
+      "expected": "No module reachable from the editor imports Node builtins; opening a note renders the editor, not \"View crashed\"."
+    },
+    {
+      "journeyId": "01-autosave-data-loss",
+      "status": "fail",
+      "steps": [
+        {
+          "n": 1,
+          "action": "createVault",
+          "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/autosave-mrbchndc",
+          "ts": 1783470839952
+        },
+        {
+          "n": 2,
+          "action": "newNote",
+          "detail": "via New File button, name \"crash-draft\"",
+          "ts": 1783470847107
+        },
+        {
+          "n": 3,
+          "action": "type",
+          "detail": "\"Meeting notes: shipped the Q3 roadmap, follow up with Dana about pricing.\"",
+          "ts": 1783470848142,
+          "screenshot": "01-autosave-data-loss-01-typed-before-crash.png"
+        },
+        {
+          "n": 4,
+          "action": "forceReload",
+          "detail": "simulated crash/quit: hard page reload (no save flushed)",
+          "ts": 1783470854701,
+          "screenshot": "01-autosave-data-loss-02-after-crash-reload.png"
+        }
+      ],
+      "passes": [
+        {
+          "title": "Typing works",
+          "detail": "Typed text appears in the editor"
+        }
+      ],
+      "findings": [
+        {
+          "kind": "fail",
+          "title": "No data loss on crash/quit (autosave)",
+          "expected": "The draft text is preserved across a reload without manual Cmd+S (autosave or flush-on-close).",
+          "actual": "DATA LOST. Editor after reload: \"<empty>\". Disk before crash: {\"crash-draft.md\":\"\"}. Disk after: {\"crash-draft.md\":\"\"}. The note file exists but the typed content was never written — there is no autosave and no flush on unload.",
+          "screenshot": "01-autosave-data-loss-02-after-crash-reload.png",
+          "severity": "major",
+          "steps": [
+            {
+              "n": 1,
+              "action": "createVault",
+              "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/autosave-mrbchndc",
+              "ts": 1783470839952
+            },
+            {
+              "n": 2,
+              "action": "newNote",
+              "detail": "via New File button, name \"crash-draft\"",
+              "ts": 1783470847107
+            },
+            {
+              "n": 3,
+              "action": "type",
+              "detail": "\"Meeting notes: shipped the Q3 roadmap, follow up with Dana about pricing.\"",
+              "ts": 1783470848142,
+              "screenshot": "01-autosave-data-loss-01-typed-before-crash.png"
+            },
+            {
+              "n": 4,
+              "action": "forceReload",
+              "detail": "simulated crash/quit: hard page reload (no save flushed)",
+              "ts": 1783470854701,
+              "screenshot": "01-autosave-data-loss-02-after-crash-reload.png"
+            }
+          ],
+          "consoleErrors": [
+            {
+              "ts": 1783470842704,
+              "type": "console.error",
+              "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+            },
+            {
+              "ts": 1783470843198,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470842833' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470843198,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            },
+            {
+              "ts": 1783470843198,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470842829' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470843198,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            },
+            {
+              "ts": 1783470854968,
+              "type": "console.error",
+              "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+            },
+            {
+              "ts": 1783470855192,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470855064' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470855192,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            },
+            {
+              "ts": 1783470855215,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470855065' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470855215,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            }
+          ]
+        }
+      ],
+      "consoleErrors": [
+        {
+          "ts": 1783470842704,
+          "type": "console.error",
+          "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+        },
+        {
+          "ts": 1783470843198,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470842833' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470843198,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470843198,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470842829' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470843198,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470854968,
+          "type": "console.error",
+          "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+        },
+        {
+          "ts": 1783470855192,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470855064' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470855192,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470855215,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470855065' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470855215,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        }
+      ],
+      "title": "Typed text must survive a crash/quit without manual save (autosave)",
+      "expected": "After typing and a forced reload (simulated crash), the text is still there — in the editor or at least on disk."
+    },
+    {
+      "journeyId": "02-heading-input-rule",
+      "status": "pass",
+      "steps": [
+        {
+          "n": 1,
+          "action": "createVault",
+          "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/headings-mrbci04a",
+          "ts": 1783470856475
+        },
+        {
+          "n": 2,
+          "action": "newNote",
+          "detail": "via New File button, name \"headings\"",
+          "ts": 1783470858763
+        },
+        {
+          "n": 3,
+          "action": "type",
+          "detail": "\"# Hello World\"",
+          "ts": 1783470859449
+        },
+        {
+          "n": 4,
+          "action": "press",
+          "detail": "Enter",
+          "ts": 1783470860107
+        },
+        {
+          "n": 5,
+          "action": "type",
+          "detail": "\"## Section Two\"",
+          "ts": 1783470860334
+        },
+        {
+          "n": 6,
+          "action": "press",
+          "detail": "Enter",
+          "ts": 1783470860781
+        },
+        {
+          "n": 7,
+          "action": "type",
+          "detail": "\"Plain paragraph text.\"",
+          "ts": 1783470860988,
+          "screenshot": "02-heading-input-rule-01-after-typing-headings.png"
+        }
+      ],
+      "passes": [
+        {
+          "title": "\"# \" creates an H1",
+          "detail": "Typing \"# Hello World\" renders an <h1>Hello World</h1>"
+        },
+        {
+          "title": "\"## \" creates an H2",
+          "detail": "Typing \"## Section Two\" renders an <h2>"
+        }
+      ],
+      "findings": [],
+      "consoleErrors": [
+        {
+          "ts": 1783470857243,
+          "type": "console.error",
+          "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+        },
+        {
+          "ts": 1783470857390,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470857324' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470857390,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470857390,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470857323' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470857390,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        }
+      ],
+      "title": "Typing \"# Hello\" turns into an H1 heading",
+      "expected": "`# ` at line start converts to a heading node as you type (markdown input rule)."
+    },
+    {
+      "journeyId": "03-save-persists-to-disk",
+      "status": "fail",
+      "steps": [
+        {
+          "n": 1,
+          "action": "createVault",
+          "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/save-path-mrbci466",
+          "ts": 1783470861727
+        },
+        {
+          "n": 2,
+          "action": "newNote",
+          "detail": "via New File button, name \"saved-note\"",
+          "ts": 1783470863941
+        },
+        {
+          "n": 3,
+          "action": "type",
+          "detail": "\"This note was saved with Cmd+S and must exist on disk.\"",
+          "ts": 1783470864609
+        },
+        {
+          "n": 4,
+          "action": "save",
+          "detail": "ControlOrMeta+S",
+          "ts": 1783470866317,
+          "screenshot": "03-save-persists-to-disk-01-after-save.png"
+        },
+        {
+          "n": 5,
+          "action": "forceReload",
+          "detail": "simulated crash/quit: hard page reload (no save flushed)",
+          "ts": 1783470869484,
+          "screenshot": "03-save-persists-to-disk-02-after-reload.png"
+        }
+      ],
+      "passes": [
+        {
+          "title": "Cmd+S writes to disk",
+          "detail": "A markdown file in the real vault folder contains the typed text after Cmd+S"
+        }
+      ],
+      "findings": [
+        {
+          "kind": "fail",
+          "title": "Last open note restored after reload",
+          "expected": "Reopening the workspace shows the note you were working on",
+          "actual": "SESSION NOT RESTORED: after reload the app shows \"EXPLORER\nsaved-note\nWelcome to Lokus\n\nYour modern knowledge …\" (Welcome screen) instead of the note. The note file IS on disk, but the persisted session is \"{\n  \"open_tabs\": [],\n  \"expanded_folders\": [],\n  \"recent_files\": [],\n  \"editor_layout\": {\n    \"id\": \"group-1\",\n    \"type\": \"group\",\n    \"tabs\": [],\n    \"activeT\" — the session save effect runs only once, 500ms after workspace mount (before any tab is open), so open tabs are never persisted.",
+          "screenshot": "03-save-persists-to-disk-02-after-reload.png",
+          "severity": "major",
+          "steps": [
+            {
+              "n": 1,
+              "action": "createVault",
+              "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/save-path-mrbci466",
+              "ts": 1783470861727
+            },
+            {
+              "n": 2,
+              "action": "newNote",
+              "detail": "via New File button, name \"saved-note\"",
+              "ts": 1783470863941
+            },
+            {
+              "n": 3,
+              "action": "type",
+              "detail": "\"This note was saved with Cmd+S and must exist on disk.\"",
+              "ts": 1783470864609
+            },
+            {
+              "n": 4,
+              "action": "save",
+              "detail": "ControlOrMeta+S",
+              "ts": 1783470866317,
+              "screenshot": "03-save-persists-to-disk-01-after-save.png"
+            },
+            {
+              "n": 5,
+              "action": "forceReload",
+              "detail": "simulated crash/quit: hard page reload (no save flushed)",
+              "ts": 1783470869484,
+              "screenshot": "03-save-persists-to-disk-02-after-reload.png"
+            }
+          ],
+          "consoleErrors": [
+            {
+              "ts": 1783470862362,
+              "type": "console.error",
+              "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+            },
+            {
+              "ts": 1783470862614,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470862461' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470862614,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            },
+            {
+              "ts": 1783470862614,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470862460' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470862614,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            },
+            {
+              "ts": 1783470869785,
+              "type": "console.error",
+              "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+            },
+            {
+              "ts": 1783470869947,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470869901' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470869948,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            },
+            {
+              "ts": 1783470869948,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470869902' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470869948,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            }
+          ]
+        }
+      ],
+      "consoleErrors": [
+        {
+          "ts": 1783470862362,
+          "type": "console.error",
+          "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+        },
+        {
+          "ts": 1783470862614,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470862461' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470862614,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470862614,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470862460' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470862614,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470869785,
+          "type": "console.error",
+          "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+        },
+        {
+          "ts": 1783470869947,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470869901' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470869948,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470869948,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470869902' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470869948,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        }
+      ],
+      "title": "Cmd+S persists the note to the vault folder and it survives reload",
+      "expected": "After Cmd+S the .md file in the vault contains the text; after reload the note reopens with it."
+    },
+    {
+      "journeyId": "04-slash-menu",
+      "status": "pass",
+      "steps": [
+        {
+          "n": 1,
+          "action": "createVault",
+          "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/slash-mrbcicvl",
+          "ts": 1783470873010
+        },
+        {
+          "n": 2,
+          "action": "newNote",
+          "detail": "via New File button, name \"slash-menu\"",
+          "ts": 1783470875439
+        },
+        {
+          "n": 3,
+          "action": "openSlashMenu",
+          "detail": "type '/' in editor",
+          "ts": 1783470876085,
+          "screenshot": "04-slash-menu-01-slash-menu-open.png"
+        },
+        {
+          "n": 4,
+          "action": "chooseSlashItem",
+          "detail": "head",
+          "ts": 1783470876597
+        },
+        {
+          "n": 5,
+          "action": "type",
+          "detail": "\"Inserted via slash\"",
+          "ts": 1783470877707,
+          "screenshot": "04-slash-menu-02-after-slash-insert.png"
+        }
+      ],
+      "passes": [
+        {
+          "title": "'/' opens the slash menu",
+          "detail": "A command menu with items appears next to the cursor"
+        },
+        {
+          "title": "Slash item inserts the block",
+          "detail": "Choosing the heading command turns the current block into a heading"
+        }
+      ],
+      "findings": [],
+      "consoleErrors": [
+        {
+          "ts": 1783470873929,
+          "type": "console.error",
+          "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+        },
+        {
+          "ts": 1783470874109,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470874013' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470874109,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470874110,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470874011' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470874110,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        }
+      ],
+      "title": "Slash menu opens and inserts a block",
+      "expected": "Typing '/' pops the command menu; choosing 'Heading 1' inserts an H1 block."
+    },
+    {
+      "journeyId": "05-wikilink",
+      "status": "pass",
+      "steps": [
+        {
+          "n": 1,
+          "action": "createVault",
+          "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/links-mrbcih11",
+          "ts": 1783470878389
+        },
+        {
+          "n": 2,
+          "action": "newNote",
+          "detail": "via New File button, name \"Target Note\"",
+          "ts": 1783470881211
+        },
+        {
+          "n": 3,
+          "action": "type",
+          "detail": "\"I am the target.\"",
+          "ts": 1783470882332
+        },
+        {
+          "n": 4,
+          "action": "save",
+          "detail": "ControlOrMeta+S",
+          "ts": 1783470882994
+        },
+        {
+          "n": 5,
+          "action": "newNote",
+          "detail": "via New File button, name \"Source Note\"",
+          "ts": 1783470883602
+        },
+        {
+          "n": 6,
+          "action": "type",
+          "detail": "\"Linking to \"",
+          "ts": 1783470884230
+        },
+        {
+          "n": 7,
+          "action": "link",
+          "detail": "[[Target]]",
+          "ts": 1783470884644,
+          "screenshot": "05-wikilink-01-after-wikilink.png"
+        }
+      ],
+      "passes": [
+        {
+          "title": "'[[' opens the link suggestion popup",
+          "detail": "A suggestion popup listing existing notes appears after typing [["
+        },
+        {
+          "title": "Wiki-link node is created",
+          "detail": "The editor contains a [data-type=\"wiki-link\"] node pointing at Target Note"
+        }
+      ],
+      "findings": [],
+      "consoleErrors": [
+        {
+          "ts": 1783470878817,
+          "type": "console.error",
+          "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+        },
+        {
+          "ts": 1783470878973,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470878889' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470878973,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470878973,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470878888' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470878973,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        }
+      ],
+      "title": "'[[' links to another note",
+      "expected": "Typing '[[Target' suggests the existing note and Enter inserts a wiki-link node."
+    },
+    {
+      "journeyId": "06-split-pane-undo",
+      "status": "fail",
+      "steps": [
+        {
+          "n": 1,
+          "action": "createVault",
+          "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/split-mrbcinmm",
+          "ts": 1783470886942
+        },
+        {
+          "n": 2,
+          "action": "newNote",
+          "detail": "via New File button, name \"split-undo\"",
+          "ts": 1783470889579
+        },
+        {
+          "n": 3,
+          "action": "type",
+          "detail": "\"First sentence stays.\"",
+          "ts": 1783470890193
+        },
+        {
+          "n": 4,
+          "action": "press",
+          "detail": "Enter",
+          "ts": 1783470890890
+        },
+        {
+          "n": 5,
+          "action": "type",
+          "detail": "\"UNDOME second sentence.\"",
+          "ts": 1783470891117,
+          "screenshot": "06-split-pane-undo-01-before-split.png"
+        },
+        {
+          "n": 6,
+          "action": "splitPane",
+          "detail": "emit lokus:toggle-split-view (Cmd+\\ accelerator path)",
+          "ts": 1783470891752,
+          "screenshot": "06-split-pane-undo-02-after-split.png"
+        },
+        {
+          "n": 7,
+          "action": "press",
+          "detail": "ControlOrMeta+z",
+          "ts": 1783470892749
+        },
+        {
+          "n": 8,
+          "action": "press",
+          "detail": "ControlOrMeta+z",
+          "ts": 1783470892951
+        },
+        {
+          "n": 9,
+          "action": "press",
+          "detail": "ControlOrMeta+z",
+          "ts": 1783470893154,
+          "screenshot": "06-split-pane-undo-03-after-undo.png"
+        }
+      ],
+      "passes": [
+        {
+          "title": "Split shortcut is wired",
+          "detail": "lokus:toggle-split-view (Cmd+\\) has a listener and splits the pane"
+        },
+        {
+          "title": "Undo history survives the split",
+          "detail": "Cmd+Z after splitting undoes the typing done before the split"
+        }
+      ],
+      "findings": [
+        {
+          "kind": "fail",
+          "title": "Content survives the split",
+          "expected": "The note text is still shown after splitting",
+          "actual": "Editor text after split: \"\n---pane---\n\"",
+          "screenshot": "06-split-pane-undo-02-after-split.png",
+          "severity": "major",
+          "steps": [
+            {
+              "n": 1,
+              "action": "createVault",
+              "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/split-mrbcinmm",
+              "ts": 1783470886942
+            },
+            {
+              "n": 2,
+              "action": "newNote",
+              "detail": "via New File button, name \"split-undo\"",
+              "ts": 1783470889579
+            },
+            {
+              "n": 3,
+              "action": "type",
+              "detail": "\"First sentence stays.\"",
+              "ts": 1783470890193
+            },
+            {
+              "n": 4,
+              "action": "press",
+              "detail": "Enter",
+              "ts": 1783470890890
+            },
+            {
+              "n": 5,
+              "action": "type",
+              "detail": "\"UNDOME second sentence.\"",
+              "ts": 1783470891117,
+              "screenshot": "06-split-pane-undo-01-before-split.png"
+            },
+            {
+              "n": 6,
+              "action": "splitPane",
+              "detail": "emit lokus:toggle-split-view (Cmd+\\ accelerator path)",
+              "ts": 1783470891752,
+              "screenshot": "06-split-pane-undo-02-after-split.png"
+            }
+          ],
+          "consoleErrors": [
+            {
+              "ts": 1783470887848,
+              "type": "console.error",
+              "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+            },
+            {
+              "ts": 1783470888043,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470887973' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470888043,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            },
+            {
+              "ts": 1783470888045,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470887971' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470888045,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            }
+          ]
+        }
+      ],
+      "consoleErrors": [
+        {
+          "ts": 1783470887848,
+          "type": "console.error",
+          "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+        },
+        {
+          "ts": 1783470888043,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470887973' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470888043,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470888045,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470887971' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470888045,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        }
+      ],
+      "title": "Content and undo history survive a pane split",
+      "expected": "After Cmd+\\ split, the note text is intact and Cmd+Z still undoes the last edit."
+    },
+    {
+      "journeyId": "07-graph-hotkey",
+      "status": "fail",
+      "steps": [
+        {
+          "n": 1,
+          "action": "createVault",
+          "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/graph-mrbcismz",
+          "ts": 1783470893437
+        },
+        {
+          "n": 2,
+          "action": "newNote",
+          "detail": "via New File button, name \"note-a\"",
+          "ts": 1783470896058
+        },
+        {
+          "n": 3,
+          "action": "type",
+          "detail": "\"# Node A\\nlinks make graphs\"",
+          "ts": 1783470896703
+        },
+        {
+          "n": 4,
+          "action": "save",
+          "detail": "ControlOrMeta+S",
+          "ts": 1783470897639,
+          "screenshot": "07-graph-hotkey-01-editor-before-hotkey.png"
+        },
+        {
+          "n": 5,
+          "action": "graphHotkey",
+          "detail": "emit lokus:graph-view (Cmd+Shift+G accelerator path)",
+          "ts": 1783470898291,
+          "screenshot": "07-graph-hotkey-02-after-graph-hotkey.png"
+        }
+      ],
+      "passes": [
+        {
+          "title": "Graph shortcut is wired",
+          "detail": "lokus:graph-view (Cmd+Shift+G) has a listener"
+        }
+      ],
+      "findings": [
+        {
+          "kind": "fail",
+          "title": "Center still renders after graph hotkey",
+          "expected": "The center pane shows the graph view (canvas) or keeps the editor visible",
+          "actual": "BLANK CENTER: graph rendered: false, editor rendered: false. The shortcut switches currentView to 'graph' but MainContent has no branch for 'graph', so nothing is rendered. DOM summary: editorPresent=false, bodyText=\"note-a.md\nEXPLORER\nnote-a\nReady\nnote-a.md\n1 file\nMarkdown\nSettings\"",
+          "screenshot": "07-graph-hotkey-02-after-graph-hotkey.png",
+          "severity": "major",
+          "steps": [
+            {
+              "n": 1,
+              "action": "createVault",
+              "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/graph-mrbcismz",
+              "ts": 1783470893437
+            },
+            {
+              "n": 2,
+              "action": "newNote",
+              "detail": "via New File button, name \"note-a\"",
+              "ts": 1783470896058
+            },
+            {
+              "n": 3,
+              "action": "type",
+              "detail": "\"# Node A\\nlinks make graphs\"",
+              "ts": 1783470896703
+            },
+            {
+              "n": 4,
+              "action": "save",
+              "detail": "ControlOrMeta+S",
+              "ts": 1783470897639,
+              "screenshot": "07-graph-hotkey-01-editor-before-hotkey.png"
+            },
+            {
+              "n": 5,
+              "action": "graphHotkey",
+              "detail": "emit lokus:graph-view (Cmd+Shift+G accelerator path)",
+              "ts": 1783470898291,
+              "screenshot": "07-graph-hotkey-02-after-graph-hotkey.png"
+            }
+          ],
+          "consoleErrors": [
+            {
+              "ts": 1783470894381,
+              "type": "console.error",
+              "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+            },
+            {
+              "ts": 1783470894560,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470894469' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470894560,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            },
+            {
+              "ts": 1783470894560,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470894467' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470894560,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            }
+          ]
+        }
+      ],
+      "consoleErrors": [
+        {
+          "ts": 1783470894381,
+          "type": "console.error",
+          "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+        },
+        {
+          "ts": 1783470894560,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470894469' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470894560,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470894560,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470894467' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470894560,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        }
+      ],
+      "title": "Graph hotkey (Cmd+Shift+G) shows the graph — never a blank center",
+      "expected": "After the graph shortcut, the center pane renders a graph canvas (or stays on the editor); it must not go blank."
+    },
+    {
+      "journeyId": "08-window-lifecycle",
+      "status": "fail",
+      "steps": [
+        {
+          "n": 1,
+          "action": "createVault",
+          "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/lifecycle-mrbcixee",
+          "ts": 1783470899606
+        },
+        {
+          "n": 2,
+          "action": "newNote",
+          "detail": "via New File button, name \"lifecycle\"",
+          "ts": 1783470902442
+        },
+        {
+          "n": 3,
+          "action": "type",
+          "detail": "\"window lifecycle test\"",
+          "ts": 1783470903085
+        },
+        {
+          "n": 4,
+          "action": "save",
+          "detail": "ControlOrMeta+S",
+          "ts": 1783470903809,
+          "screenshot": "08-window-lifecycle-01-before-close.png"
+        },
+        {
+          "n": 5,
+          "action": "closeWindow",
+          "detail": "emit lokus:close-window (menu path) -> window.close()",
+          "ts": 1783470904462,
+          "screenshot": "08-window-lifecycle-02-after-close-window-hidden.png"
+        },
+        {
+          "n": 6,
+          "action": "reopenFromDock",
+          "detail": "simulate macOS dock click after window close",
+          "ts": 1783470905017
+        }
+      ],
+      "passes": [
+        {
+          "title": "Close-window path is wired",
+          "detail": "lokus:close-window has a listener that calls window.close()"
+        },
+        {
+          "title": "Close request reaches the window layer (hide-on-close)",
+          "detail": "window.close() is requested; the real backend hides the window and keeps the app alive"
+        }
+      ],
+      "findings": [
+        {
+          "kind": "fail",
+          "title": "Dock click can restore the hidden window",
+          "expected": "If close hides the window (it does), the Rust side must handle macOS RunEvent::Reopen (dock click) and re-show it",
+          "actual": "NO REOPEN HANDLER: the window is hidden on close but no RunEvent::Reopen / reopen handling exists anywhere in src-tauri — after closing the window, clicking the dock icon can never bring it back. Evidence: src-tauri/src/lib.rs:1305 — CloseRequested → hide()+prevent_close. Simulated window state after dock click: {\"visible\":false,\"closeRequests\":1}",
+          "screenshot": "08-window-lifecycle-02-after-close-window-hidden.png",
+          "severity": "major",
+          "steps": [
+            {
+              "n": 1,
+              "action": "createVault",
+              "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/lifecycle-mrbcixee",
+              "ts": 1783470899606
+            },
+            {
+              "n": 2,
+              "action": "newNote",
+              "detail": "via New File button, name \"lifecycle\"",
+              "ts": 1783470902442
+            },
+            {
+              "n": 3,
+              "action": "type",
+              "detail": "\"window lifecycle test\"",
+              "ts": 1783470903085
+            },
+            {
+              "n": 4,
+              "action": "save",
+              "detail": "ControlOrMeta+S",
+              "ts": 1783470903809,
+              "screenshot": "08-window-lifecycle-01-before-close.png"
+            },
+            {
+              "n": 5,
+              "action": "closeWindow",
+              "detail": "emit lokus:close-window (menu path) -> window.close()",
+              "ts": 1783470904462,
+              "screenshot": "08-window-lifecycle-02-after-close-window-hidden.png"
+            },
+            {
+              "n": 6,
+              "action": "reopenFromDock",
+              "detail": "simulate macOS dock click after window close",
+              "ts": 1783470905017
+            }
+          ],
+          "consoleErrors": [
+            {
+              "ts": 1783470900647,
+              "type": "console.error",
+              "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+            },
+            {
+              "ts": 1783470900863,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470900767' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470900863,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            },
+            {
+              "ts": 1783470900869,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470900765' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470900869,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            }
+          ]
+        }
+      ],
+      "consoleErrors": [
+        {
+          "ts": 1783470900647,
+          "type": "console.error",
+          "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+        },
+        {
+          "ts": 1783470900863,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470900767' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470900863,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470900869,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470900765' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470900869,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        }
+      ],
+      "title": "Closed window can be reopened from the dock",
+      "expected": "Closing the window hides the app (by design); clicking the dock icon must bring it back."
+    },
+    {
+      "journeyId": "ai-user",
+      "status": "fail",
+      "steps": [
+        {
+          "n": 1,
+          "action": "ai:goal",
+          "detail": "You're a brand-new non-technical user of Lokus (a markdown notes app). Set up your workspace and write your first two notes: one with a big heading, one that links to the other. Save one of them, then the app will restart at some point — check nothing you wrote was lost. Report anything confusing, broken, or surprising along the way. (decider: stub-persona)",
+          "ts": 1783470905468
+        },
+        {
+          "n": 2,
+          "action": "createVault",
+          "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/ai-user-mrbcj1x8",
+          "ts": 1783470905469,
+          "screenshot": "ai-user-01-ai-step-1.png"
+        },
+        {
+          "n": 3,
+          "action": "ai:new_note",
+          "detail": "{\"name\":\"welcome\"} — scripted step 1",
+          "ts": 1783470907735
+        },
+        {
+          "n": 4,
+          "action": "newNote",
+          "detail": "via New File button, name \"welcome\"",
+          "ts": 1783470907735,
+          "screenshot": "ai-user-02-ai-step-2.png"
+        },
+        {
+          "n": 5,
+          "action": "ai:type",
+          "detail": "{\"text\":\"# My first note\\nTrying out Lokus today.\"} — scripted step 2",
+          "ts": 1783470908394
+        },
+        {
+          "n": 6,
+          "action": "type",
+          "detail": "\"# My first note\"",
+          "ts": 1783470908394
+        },
+        {
+          "n": 7,
+          "action": "press",
+          "detail": "Enter",
+          "ts": 1783470909046
+        },
+        {
+          "n": 8,
+          "action": "type",
+          "detail": "\"Trying out Lokus today.\"",
+          "ts": 1783470909273,
+          "screenshot": "ai-user-03-ai-step-3.png"
+        },
+        {
+          "n": 9,
+          "action": "ai:read_editor",
+          "detail": "{} — scripted step 3",
+          "ts": 1783470909976,
+          "screenshot": "ai-user-04-ai-step-4.png"
+        },
+        {
+          "n": 10,
+          "action": "ai:save",
+          "detail": "{} — scripted step 4",
+          "ts": 1783470910022
+        },
+        {
+          "n": 11,
+          "action": "save",
+          "detail": "ControlOrMeta+S",
+          "ts": 1783470910022,
+          "screenshot": "ai-user-05-ai-step-5.png"
+        },
+        {
+          "n": 12,
+          "action": "ai:new_note",
+          "detail": "{\"name\":\"second-note\"} — scripted step 5",
+          "ts": 1783470910672
+        },
+        {
+          "n": 13,
+          "action": "newNote",
+          "detail": "via New File button, name \"second-note\"",
+          "ts": 1783470910672,
+          "screenshot": "ai-user-06-ai-step-6.png"
+        },
+        {
+          "n": 14,
+          "action": "ai:type",
+          "detail": "{\"text\":\"This links back to \"} — scripted step 6",
+          "ts": 1783470911326
+        },
+        {
+          "n": 15,
+          "action": "type",
+          "detail": "\"This links back to \"",
+          "ts": 1783470911326,
+          "screenshot": "ai-user-07-ai-step-7.png"
+        },
+        {
+          "n": 16,
+          "action": "ai:link",
+          "detail": "{\"target\":\"welcome\"} — scripted step 7",
+          "ts": 1783470911992
+        },
+        {
+          "n": 17,
+          "action": "link",
+          "detail": "[[welcome]]",
+          "ts": 1783470911992,
+          "screenshot": "ai-user-08-ai-step-8.png"
+        },
+        {
+          "n": 18,
+          "action": "ai:open_slash_menu",
+          "detail": "{} — scripted step 8",
+          "ts": 1783470914196
+        },
+        {
+          "n": 19,
+          "action": "openSlashMenu",
+          "detail": "type '/' in editor",
+          "ts": 1783470914196,
+          "screenshot": "ai-user-09-ai-step-9.png"
+        },
+        {
+          "n": 20,
+          "action": "ai:choose_slash_item",
+          "detail": "{\"query\":\"head\"} — scripted step 9",
+          "ts": 1783470914678
+        },
+        {
+          "n": 21,
+          "action": "chooseSlashItem",
+          "detail": "head",
+          "ts": 1783470914678,
+          "screenshot": "ai-user-10-ai-step-10.png"
+        },
+        {
+          "n": 22,
+          "action": "ai:type",
+          "detail": "{\"text\":\"Made with the slash menu\"} — scripted step 10",
+          "ts": 1783470915795
+        },
+        {
+          "n": 23,
+          "action": "type",
+          "detail": "\"Made with the slash menu\"",
+          "ts": 1783470915795,
+          "screenshot": "ai-user-11-ai-step-11.png"
+        },
+        {
+          "n": 24,
+          "action": "ai:force_reload",
+          "detail": "{} — scripted step 11",
+          "ts": 1783470916574
+        },
+        {
+          "n": 25,
+          "action": "forceReload",
+          "detail": "simulated crash/quit: hard page reload (no save flushed)",
+          "ts": 1783470916574,
+          "screenshot": "ai-user-12-ai-step-12.png"
+        },
+        {
+          "n": 26,
+          "action": "ai:read_editor",
+          "detail": "{} — scripted step 12",
+          "ts": 1783470918322,
+          "screenshot": "ai-user-13-ai-step-13.png"
+        },
+        {
+          "n": 27,
+          "action": "ai:report_issue",
+          "detail": "{\"title\":\"Unsaved note content lost after app restart\",\"expected\":\"A notes app should not lose what I typed (autosave)\",\"actual\":\"After the app restarted, the editor shows: \\\"<empty>\\\" — my slash-menu heading is gone\",\"severity\":\"blocker\"} — My unsaved note text is gone after the restart.",
+          "ts": 1783470918361,
+          "screenshot": "ai-user-15-ai-step-14.png"
+        },
+        {
+          "n": 28,
+          "action": "ai:done",
+          "detail": "{\"summary\":\"Set up a vault, wrote two notes with a heading and a link, app restarted mid-session.\"} — scripted step 14",
+          "ts": 1783470918476
+        }
+      ],
+      "passes": [
+        {
+          "title": "AI user finished",
+          "detail": "Set up a vault, wrote two notes with a heading and a link, app restarted mid-session."
+        }
+      ],
+      "findings": [
+        {
+          "kind": "ai-issue",
+          "title": "Unsaved note content lost after app restart",
+          "expected": "A notes app should not lose what I typed (autosave)",
+          "actual": "After the app restarted, the editor shows: \"<empty>\" — my slash-menu heading is gone",
+          "screenshot": "ai-user-14-issue-unsaved-note-content-lost-afte.png",
+          "severity": "blocker",
+          "steps": [
+            {
+              "n": 1,
+              "action": "ai:goal",
+              "detail": "You're a brand-new non-technical user of Lokus (a markdown notes app). Set up your workspace and write your first two notes: one with a big heading, one that links to the other. Save one of them, then the app will restart at some point — check nothing you wrote was lost. Report anything confusing, broken, or surprising along the way. (decider: stub-persona)",
+              "ts": 1783470905468
+            },
+            {
+              "n": 2,
+              "action": "createVault",
+              "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/ai-user-mrbcj1x8",
+              "ts": 1783470905469,
+              "screenshot": "ai-user-01-ai-step-1.png"
+            },
+            {
+              "n": 3,
+              "action": "ai:new_note",
+              "detail": "{\"name\":\"welcome\"} — scripted step 1",
+              "ts": 1783470907735
+            },
+            {
+              "n": 4,
+              "action": "newNote",
+              "detail": "via New File button, name \"welcome\"",
+              "ts": 1783470907735,
+              "screenshot": "ai-user-02-ai-step-2.png"
+            },
+            {
+              "n": 5,
+              "action": "ai:type",
+              "detail": "{\"text\":\"# My first note\\nTrying out Lokus today.\"} — scripted step 2",
+              "ts": 1783470908394
+            },
+            {
+              "n": 6,
+              "action": "type",
+              "detail": "\"# My first note\"",
+              "ts": 1783470908394
+            },
+            {
+              "n": 7,
+              "action": "press",
+              "detail": "Enter",
+              "ts": 1783470909046
+            },
+            {
+              "n": 8,
+              "action": "type",
+              "detail": "\"Trying out Lokus today.\"",
+              "ts": 1783470909273,
+              "screenshot": "ai-user-03-ai-step-3.png"
+            },
+            {
+              "n": 9,
+              "action": "ai:read_editor",
+              "detail": "{} — scripted step 3",
+              "ts": 1783470909976,
+              "screenshot": "ai-user-04-ai-step-4.png"
+            },
+            {
+              "n": 10,
+              "action": "ai:save",
+              "detail": "{} — scripted step 4",
+              "ts": 1783470910022
+            },
+            {
+              "n": 11,
+              "action": "save",
+              "detail": "ControlOrMeta+S",
+              "ts": 1783470910022,
+              "screenshot": "ai-user-05-ai-step-5.png"
+            },
+            {
+              "n": 12,
+              "action": "ai:new_note",
+              "detail": "{\"name\":\"second-note\"} — scripted step 5",
+              "ts": 1783470910672
+            },
+            {
+              "n": 13,
+              "action": "newNote",
+              "detail": "via New File button, name \"second-note\"",
+              "ts": 1783470910672,
+              "screenshot": "ai-user-06-ai-step-6.png"
+            },
+            {
+              "n": 14,
+              "action": "ai:type",
+              "detail": "{\"text\":\"This links back to \"} — scripted step 6",
+              "ts": 1783470911326
+            },
+            {
+              "n": 15,
+              "action": "type",
+              "detail": "\"This links back to \"",
+              "ts": 1783470911326,
+              "screenshot": "ai-user-07-ai-step-7.png"
+            },
+            {
+              "n": 16,
+              "action": "ai:link",
+              "detail": "{\"target\":\"welcome\"} — scripted step 7",
+              "ts": 1783470911992
+            },
+            {
+              "n": 17,
+              "action": "link",
+              "detail": "[[welcome]]",
+              "ts": 1783470911992,
+              "screenshot": "ai-user-08-ai-step-8.png"
+            },
+            {
+              "n": 18,
+              "action": "ai:open_slash_menu",
+              "detail": "{} — scripted step 8",
+              "ts": 1783470914196
+            },
+            {
+              "n": 19,
+              "action": "openSlashMenu",
+              "detail": "type '/' in editor",
+              "ts": 1783470914196,
+              "screenshot": "ai-user-09-ai-step-9.png"
+            },
+            {
+              "n": 20,
+              "action": "ai:choose_slash_item",
+              "detail": "{\"query\":\"head\"} — scripted step 9",
+              "ts": 1783470914678
+            },
+            {
+              "n": 21,
+              "action": "chooseSlashItem",
+              "detail": "head",
+              "ts": 1783470914678,
+              "screenshot": "ai-user-10-ai-step-10.png"
+            },
+            {
+              "n": 22,
+              "action": "ai:type",
+              "detail": "{\"text\":\"Made with the slash menu\"} — scripted step 10",
+              "ts": 1783470915795
+            },
+            {
+              "n": 23,
+              "action": "type",
+              "detail": "\"Made with the slash menu\"",
+              "ts": 1783470915795,
+              "screenshot": "ai-user-11-ai-step-11.png"
+            },
+            {
+              "n": 24,
+              "action": "ai:force_reload",
+              "detail": "{} — scripted step 11",
+              "ts": 1783470916574
+            },
+            {
+              "n": 25,
+              "action": "forceReload",
+              "detail": "simulated crash/quit: hard page reload (no save flushed)",
+              "ts": 1783470916574,
+              "screenshot": "ai-user-12-ai-step-12.png"
+            },
+            {
+              "n": 26,
+              "action": "ai:read_editor",
+              "detail": "{} — scripted step 12",
+              "ts": 1783470918322,
+              "screenshot": "ai-user-13-ai-step-13.png"
+            },
+            {
+              "n": 27,
+              "action": "ai:report_issue",
+              "detail": "{\"title\":\"Unsaved note content lost after app restart\",\"expected\":\"A notes app should not lose what I typed (autosave)\",\"actual\":\"After the app restarted, the editor shows: \\\"<empty>\\\" — my slash-menu heading is gone\",\"severity\":\"blocker\"} — My unsaved note text is gone after the restart.",
+              "ts": 1783470918361,
+              "screenshot": "ai-user-14-issue-unsaved-note-content-lost-afte.png"
+            }
+          ],
+          "consoleErrors": [
+            {
+              "ts": 1783470905919,
+              "type": "console.error",
+              "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+            },
+            {
+              "ts": 1783470906113,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470906018' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470906113,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            },
+            {
+              "ts": 1783470906113,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470906016' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470906113,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            },
+            {
+              "ts": 1783470916784,
+              "type": "console.error",
+              "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+            },
+            {
+              "ts": 1783470916942,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470916854' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470916942,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            },
+            {
+              "ts": 1783470916948,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470916854' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470916948,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            }
+          ]
+        }
+      ],
+      "consoleErrors": [
+        {
+          "ts": 1783470905919,
+          "type": "console.error",
+          "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+        },
+        {
+          "ts": 1783470906113,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470906018' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470906113,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470906113,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470906016' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470906113,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470916784,
+          "type": "console.error",
+          "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+        },
+        {
+          "ts": 1783470916942,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470916854' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470916942,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470916948,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470916854' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470916948,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        }
+      ],
+      "title": "AI user: brand-new user sets up a vault and writes first notes",
+      "expected": "A non-technical user can accomplish the basics without hitting anything broken, confusing, or lossy."
+    },
+    {
+      "journeyId": "ai-monkey",
+      "status": "fail",
+      "steps": [
+        {
+          "n": 1,
+          "action": "monkey:start",
+          "detail": "seed=42, 10 chaos bursts",
+          "ts": 1783470918491
+        },
+        {
+          "n": 2,
+          "action": "createVault",
+          "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/monkey-mrbcjbz0",
+          "ts": 1783470918493
+        },
+        {
+          "n": 3,
+          "action": "newNote",
+          "detail": "via New File button, name \"chaos\"",
+          "ts": 1783470920982
+        },
+        {
+          "n": 4,
+          "action": "monkey:hotkey-hammer",
+          "detail": "split/graph/save/sidebar shortcuts back to back",
+          "ts": 1783470921648,
+          "screenshot": "ai-monkey-01-monkey-burst-2-editor-gone.png"
+        },
+        {
+          "n": 5,
+          "action": "monkey:recover",
+          "detail": "reload + reopen note to continue the chaos run",
+          "ts": 1783470922592
+        },
+        {
+          "n": 6,
+          "action": "forceReload",
+          "detail": "simulated crash/quit: hard page reload (no save flushed)",
+          "ts": 1783470922592
+        },
+        {
+          "n": 7,
+          "action": "newNote",
+          "detail": "via New File button, name \"chaos-recover-2\"",
+          "ts": 1783470924381
+        },
+        {
+          "n": 8,
+          "action": "monkey:slash-escape-spam",
+          "detail": "open slash menu, Escape spam, repeat 5x",
+          "ts": 1783470924981
+        },
+        {
+          "n": 9,
+          "action": "monkey:rapid-clicks",
+          "detail": "15 rapid clicks on random visible buttons",
+          "ts": 1783470925506
+        },
+        {
+          "n": 10,
+          "action": "monkey:huge-paste",
+          "detail": "~40k chars in one insert",
+          "ts": 1783470927507
+        },
+        {
+          "n": 11,
+          "action": "monkey:slash-escape-spam",
+          "detail": "open slash menu, Escape spam, repeat 5x",
+          "ts": 1783470927887
+        },
+        {
+          "n": 12,
+          "action": "monkey:rapid-clicks",
+          "detail": "15 rapid clicks on random visible buttons",
+          "ts": 1783470928407
+        },
+        {
+          "n": 13,
+          "action": "monkey:huge-paste",
+          "detail": "~40k chars in one insert",
+          "ts": 1783470929438
+        },
+        {
+          "n": 14,
+          "action": "monkey:huge-paste",
+          "detail": "~40k chars in one insert",
+          "ts": 1783470930039
+        },
+        {
+          "n": 15,
+          "action": "monkey:slash-escape-spam",
+          "detail": "open slash menu, Escape spam, repeat 5x",
+          "ts": 1783470930601
+        },
+        {
+          "n": 16,
+          "action": "monkey:hotkey-hammer",
+          "detail": "split/graph/save/sidebar shortcuts back to back",
+          "ts": 1783470931207,
+          "screenshot": "ai-monkey-02-monkey-final-state.png"
+        }
+      ],
+      "passes": [
+        {
+          "title": "Monkey pass finished",
+          "detail": "10 chaos bursts executed"
+        }
+      ],
+      "findings": [
+        {
+          "kind": "ai-issue",
+          "title": "Editor disappeared during chaotic-but-legal input",
+          "expected": "The editing surface survives rapid hotkeys/clicks (or comes back on its own)",
+          "actual": "No .ProseMirror on screen after a chaos burst — the user has no way to keep typing",
+          "screenshot": "ai-monkey-01-monkey-burst-2-editor-gone.png",
+          "severity": "major",
+          "steps": [
+            {
+              "n": 1,
+              "action": "monkey:start",
+              "detail": "seed=42, 10 chaos bursts",
+              "ts": 1783470918491
+            },
+            {
+              "n": 2,
+              "action": "createVault",
+              "detail": "real temp folder /var/folders/bm/pxctjpzn6rj01lpsc3wvnn8r0000gn/T/lokus-qa-run-xsTL1E/monkey-mrbcjbz0",
+              "ts": 1783470918493
+            },
+            {
+              "n": 3,
+              "action": "newNote",
+              "detail": "via New File button, name \"chaos\"",
+              "ts": 1783470920982
+            },
+            {
+              "n": 4,
+              "action": "monkey:hotkey-hammer",
+              "detail": "split/graph/save/sidebar shortcuts back to back",
+              "ts": 1783470921648,
+              "screenshot": "ai-monkey-01-monkey-burst-2-editor-gone.png"
+            }
+          ],
+          "consoleErrors": [
+            {
+              "ts": 1783470918943,
+              "type": "console.error",
+              "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+            },
+            {
+              "ts": 1783470919139,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470919019' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470919145,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            },
+            {
+              "ts": 1783470919145,
+              "type": "console.error",
+              "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470919021' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+            },
+            {
+              "ts": 1783470919145,
+              "type": "console.error",
+              "text": "Failed to load resource: net::ERR_FAILED"
+            }
+          ]
+        }
+      ],
+      "consoleErrors": [
+        {
+          "ts": 1783470918943,
+          "type": "console.error",
+          "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+        },
+        {
+          "ts": 1783470919139,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470919019' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470919145,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470919145,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470919021' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470919145,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470922745,
+          "type": "console.error",
+          "text": "Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
+        },
+        {
+          "ts": 1783470922961,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470922811' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470922961,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        },
+        {
+          "ts": 1783470922984,
+          "type": "console.error",
+          "text": "Access to fetch at 'https://config.lokusmd.com/config.json?t=1783470922812' from origin 'http://localhost:1420' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+        },
+        {
+          "ts": 1783470922984,
+          "type": "console.error",
+          "text": "Failed to load resource: net::ERR_FAILED"
+        }
+      ],
+      "title": "Monkey/explorer: chaotic input must not crash or blank the app",
+      "expected": "Huge pastes, rapid keys, weird unicode, and hotkey hammering never produce unhandled errors or a blank app."
+    }
+  ]
+}

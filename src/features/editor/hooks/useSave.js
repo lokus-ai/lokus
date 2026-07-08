@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react';
 import { useEditorGroupStore } from '../../../stores/editorGroups';
 import { useViewStore } from '../../../stores/views';
 import { getEditor } from '../../../stores/editorRegistry';
+import { getTabModel } from '../../../stores/tabModels';
 import { createLokusSerializer } from '../../../core/markdown/lokus-md-pipeline';
 import { isPlainTextNotePath, docToPlainTextString } from '../../../utils/plainTextNote.js';
 import { DOMSerializer } from 'prosemirror-model';
@@ -31,7 +32,22 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
       editor = getEditor(groupId);
     }
 
-    if (!editor || !filePath) return;
+    if (!filePath) return;
+
+    // VS Code principle: save serializes the tab's OWN model — never the
+    // shared EditorView, which may still display another tab's document
+    // mid-switch. No model yet (tab still loading from disk, or load
+    // failed) → there is nothing trustworthy to write; do nothing.
+    let docToSave;
+    if (groupId) {
+      const model = getTabModel(groupId, filePath);
+      if (!model) return;
+      docToSave = model.state.doc;
+    } else {
+      // Explicit editor+path call from a legacy caller — trust the caller.
+      if (!editor) return;
+      docToSave = editor.state.doc;
+    }
 
     // Never save a tab whose file failed to load — the editor never held its
     // content, so writing would overwrite the original with something else.
@@ -68,17 +84,28 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
 
       // Serialize: plain text for .txt, markdown otherwise
       const contentToSave = isPlainTextNotePath(pathToSave)
-        ? docToPlainTextString(editor.state.doc)
-        : lokusSerializer.serialize(editor.state.doc);
+        ? docToPlainTextString(docToSave)
+        : lokusSerializer.serialize(docToSave);
 
       await writeFileGuarded(pathToSave, contentToSave);
 
       // Trigger sync for this specific file (debounced + batched inside scheduler)
       syncScheduler.onFileSaved(pathToSave);
 
-      // Mark tab as saved in the store
+      // Record what's on disk and clear/recompute the dirty flag. If the
+      // user kept typing while the write was in flight, compare the tab's
+      // CURRENT model against what was written instead of blindly marking
+      // the tab clean.
       if (groupId) {
-        useEditorGroupStore.getState().markTabDirty(groupId, pathToSave, false);
+        const store = useEditorGroupStore.getState();
+        store.setTabContent(groupId, pathToSave, { savedContent: contentToSave });
+        const nowModel = getTabModel(groupId, pathToSave);
+        const nowSerialized = nowModel
+          ? (isPlainTextNotePath(pathToSave)
+              ? docToPlainTextString(nowModel.state.doc)
+              : lokusSerializer.serialize(nowModel.state.doc))
+          : contentToSave;
+        store.markTabDirty(groupId, pathToSave, nowSerialized !== contentToSave);
       }
 
       // Save version if content changed
@@ -114,16 +141,32 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
   const handleSaveAs = useCallback(async (editorArg, filePathArg) => {
     let editor = editorArg;
     let filePath = filePathArg;
+    let groupId = null;
 
     if (!editor || !filePath) {
       const store = useEditorGroupStore.getState();
       const focusedGroup = store.getFocusedGroup?.() ?? null;
       if (!focusedGroup) return;
+      groupId = focusedGroup.id;
       filePath = focusedGroup.activeTab;
-      editor = getEditor(focusedGroup.id);
+      editor = getEditor(groupId);
     }
 
-    if (!editor || !filePath) return;
+    if (!filePath) return;
+
+    // Same model-first rule as handleSave: never serialize the shared view.
+    let docToSave;
+    let schemaForExport;
+    if (groupId) {
+      const model = getTabModel(groupId, filePath);
+      if (!model) return;
+      docToSave = model.state.doc;
+      schemaForExport = model.state.schema;
+    } else {
+      if (!editor) return;
+      docToSave = editor.state.doc;
+      schemaForExport = editor.state.schema;
+    }
 
     try {
       const currentFileName = filePath.split('/').pop().replace(/\.[^.]*$/, '');
@@ -143,10 +186,10 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
       if (!savePath) return;
 
       // Serialize ProseMirror document directly to markdown
-      let contentToSave = lokusSerializer.serialize(editor.state.doc);
+      let contentToSave = lokusSerializer.serialize(docToSave);
 
       if (savePath.endsWith('.html')) {
-        const fragment = DOMSerializer.fromSchema(editor.state.schema).serializeFragment(editor.state.doc.content);
+        const fragment = DOMSerializer.fromSchema(schemaForExport).serializeFragment(docToSave.content);
         const div = document.createElement('div');
         div.appendChild(fragment);
         const htmlContent = div.innerHTML;
@@ -171,12 +214,12 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
       } else if (savePath.endsWith('.json')) {
         contentToSave = JSON.stringify({
           title: currentFileName,
-          content: lokusSerializer.serialize(editor.state.doc),
+          content: lokusSerializer.serialize(docToSave),
           exported: new Date().toISOString(),
           format: 'markdown'
         }, null, 2);
       } else if (savePath.endsWith('.txt')) {
-        contentToSave = editor.state.doc.textContent;
+        contentToSave = docToSave.textContent;
       }
       // .md and other formats use the markdown content already set above
 

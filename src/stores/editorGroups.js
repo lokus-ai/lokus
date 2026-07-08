@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { deleteTabModel, moveTabModel, renameTabModel, clearGroupModels, clearAllModels } from './tabModels';
 
 const MAX_CACHED_TABS = 20;
 const MAX_RECENT_CLOSED = 20;
@@ -101,6 +102,9 @@ export const useEditorGroupStore = create(
 
     removeTab: (groupId, tabPath) =>
       set((s) => {
+        // Closing a tab discards its document model (all close paths — pane
+        // tab bar, titlebar tab bar, shortcuts — funnel through here).
+        deleteTabModel(groupId, tabPath);
         const updatedLayout = updateGroupInTree(s.layout, groupId, (g) => {
           const newTabs = g.tabs.filter((t) => t.path !== tabPath);
           const newActive = g.activeTab === tabPath ? (newTabs[0]?.path || null) : g.activeTab;
@@ -192,6 +196,7 @@ export const useEditorGroupStore = create(
 
     closeGroup: (groupId) =>
       set((s) => {
+        clearGroupModels(groupId);
         if (s.layout.type === 'group' && s.layout.id === groupId) {
           return { layout: { ...s.layout, tabs: [], activeTab: null, contentByTab: {} } };
         }
@@ -216,6 +221,7 @@ export const useEditorGroupStore = create(
       const tab = fromGroup.tabs.find((t) => t.path === tabPath);
       if (!tab) return;
       const cachedContent = fromGroup.contentByTab?.[tabPath];
+      moveTabModel(fromGroupId, toGroupId, tabPath);
       set((s) => {
         let newLayout = updateGroupInTree(s.layout, fromGroupId, (g) => {
           const newTabs = g.tabs.filter((t) => t.path !== tabPath);
@@ -242,6 +248,7 @@ export const useEditorGroupStore = create(
 
     updateTabPath: (oldPath, newPath) => {
       const newName = newPath.split('/').pop() || newPath;
+      renameTabModel(oldPath, newPath);
       set((s) => {
         const update = (node) => {
           if (node.type === 'group') {
@@ -309,6 +316,7 @@ export const useEditorGroupStore = create(
 
     // Initialize layout (from session or default)
     initLayout: (tabs = [], activeTab = null) => {
+      clearAllModels();
       const group = createGroup(tabs, activeTab);
       set({ layout: group, focusedGroupId: group.id });
     },
@@ -316,6 +324,7 @@ export const useEditorGroupStore = create(
     // Restore layout from session JSON
     restoreLayout: (layoutJson) => {
       if (!layoutJson) return;
+      clearAllModels();
       try {
         const maxId = JSON.stringify(layoutJson).match(/(?:group|container)-(\d+)/g)?.reduce((max, match) => {
           const num = parseInt(match.split('-')[1]);
