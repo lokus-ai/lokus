@@ -75,7 +75,12 @@ export function useShortcuts({ workspacePath, onSave, onSaveAs, onCreateFile, on
     on('lokus:graph-view', () => {
       const ff = globalThis.__LOKUS_FEATURE_FLAGS__ || {};
       if (ff.enable_graph === false) return;
-      useViewStore.getState().switchView('graph');
+      // Open the graph as a __graph__ tab (same as the sidebar button).
+      // switchView('graph') has no MainContent branch and blanks the center.
+      useViewStore.getState().switchView('editor');
+      const store = useEditorGroupStore.getState();
+      const groupId = store.focusedGroupId || store.getAllGroups()[0]?.id;
+      if (groupId) store.addTab(groupId, { path: '__graph__', name: 'Graph' }, true);
     });
     on('lokus:open-kanban', () => {
       const ff = globalThis.__LOKUS_FEATURE_FLAGS__ || {};
