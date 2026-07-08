@@ -12,6 +12,7 @@ import {
   Plus,
 } from 'lucide-react';
 import platformService from '../../services/platform/PlatformService.js';
+import { closeTabWithGuard } from '../../features/tabs/closeGuard';
 
 /**
  * Toolbar — fixed titlebar with action buttons and responsive tab bar.
@@ -75,7 +76,7 @@ export default function Toolbar({
   const handleTabClose = (path) => {
     const groupId = useEditorGroupStore.getState().focusedGroupId;
     if (groupId) {
-      useEditorGroupStore.getState().removeTab(groupId, path);
+      closeTabWithGuard(groupId, path);
     }
   };
 

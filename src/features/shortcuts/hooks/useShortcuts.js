@@ -9,6 +9,7 @@ import { setGlobalActiveTheme, getSystemPreferredTheme, setupSystemThemeListener
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isDesktop } from '../../../platform/index';
 import { createEditorCommands } from '../../../editor/commands/index.js';
+import { closeTabWithGuard } from '../../tabs/closeGuard';
 
 /** Returns the currently focused group's editor from the registry. */
 function getFocusedEditor() {
@@ -32,9 +33,7 @@ export function useShortcuts({ workspacePath, onSave, onSaveAs, onCreateFile, on
       const store = useEditorGroupStore.getState();
       const group = store.getFocusedGroup();
       if (group?.activeTab) {
-        const tab = group.tabs.find(t => t.path === group.activeTab);
-        if (tab) store.addRecentlyClosed(tab);
-        store.removeTab(group.id, group.activeTab);
+        closeTabWithGuard(group.id, group.activeTab);
       }
     });
     on('lokus:new-file', () => onCreateFile?.());

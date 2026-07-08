@@ -1,14 +1,13 @@
 import { useCallback, useRef } from 'react';
 import { useEditorGroupStore } from '../../../stores/editorGroups';
 import { getEditor } from '../../../stores/editorRegistry';
-import { confirm } from '@tauri-apps/plugin-dialog';
 import { getFilename } from '../../../utils/pathUtils.js';
+import { closeTabWithGuard } from '../closeGuard';
 import { isImageFile } from '../../../utils/imageUtils.js';
 import { TextSelection } from 'prosemirror-state';
 
 export function useTabs({ workspacePath, onSave }) {
   const lastCloseTimeRef = useRef(0);
-  const isShowingDialogRef = useRef(false);
   const currentlyClosingPathRef = useRef(null);
 
   const handleFileOpen = (file) => {
@@ -62,7 +61,6 @@ export function useTabs({ workspacePath, onSave }) {
 
   const handleTabClose = useCallback(async (path) => {
     if (currentlyClosingPathRef.current === path) return;
-    if (isShowingDialogRef.current) return;
     const now = Date.now();
     if (now - lastCloseTimeRef.current < 200) return;
     lastCloseTimeRef.current = now;
@@ -70,33 +68,12 @@ export function useTabs({ workspacePath, onSave }) {
     const store = useEditorGroupStore.getState();
     const groupId = store.focusedGroupId || store.getAllGroups()[0]?.id;
     if (!groupId) return;
-    const group = store.findGroup(groupId);
-    if (!group) return;
 
-    const tab = group.tabs.find(t => t.path === path);
-    const isDirty = group.contentByTab[path]?.dirty;
-
-    const closeTab = () => {
-      if (tab) store.addRecentlyClosed(tab);
-      store.removeTab(groupId, path);
-    };
-
-    if (isDirty) {
-      try {
-        currentlyClosingPathRef.current = path;
-        isShowingDialogRef.current = true;
-        const confirmed = await confirm("You have unsaved changes. Close without saving?", {
-          title: "Unsaved Changes",
-          type: "warning",
-        });
-        if (confirmed) closeTab();
-      } catch {} finally {
-        isShowingDialogRef.current = false;
-        currentlyClosingPathRef.current = null;
-      }
-    } else {
+    try {
       currentlyClosingPathRef.current = path;
-      closeTab();
+      // Single dirty-aware close path (saves dirty tabs, prompts on failure)
+      await closeTabWithGuard(groupId, path);
+    } finally {
       currentlyClosingPathRef.current = null;
     }
   }, []);
