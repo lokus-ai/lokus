@@ -1,0 +1,14 @@
+{
+  "knownFailing": [
+    "00-client-node-imports",
+    "01-autosave-data-loss",
+    "03-save-persists-to-disk",
+    "06-split-pane-undo",
+    "07-graph-hotkey",
+    "08-window-lifecycle",
+    "ai-user",
+    "ai-monkey"
+  ],
+  "updatedAt": "2026-07-08T00:33:56.596Z",
+  "note": "Known bugs as of the first AI-QA run. Remove an id here once its bug is fixed — the journey then guards against regression. New failures exit non-zero for CI."
+}

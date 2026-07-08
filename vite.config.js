@@ -11,6 +11,14 @@ export default defineConfig(async () => ({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "jsxgraph/distrib/jsxgraph.css": path.resolve(__dirname, "node_modules/jsxgraph/distrib/jsxgraph.css"),
+      // QA harness only (npm run qa): keep client code that wrongly imports
+      // Node builtins from crashing module evaluation. See qa/harness/node-shims.
+      ...(process.env.QA_FS_SHIM
+        ? {
+            "fs/promises": path.resolve(__dirname, "./qa/harness/node-shims/fs-promises.js"),
+            path: path.resolve(__dirname, "./qa/harness/node-shims/path.js"),
+          }
+        : {}),
     },
   },
 
