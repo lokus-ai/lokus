@@ -1,4 +1,56 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+
+// The "Simple" default: only Editor + Files + Search + command palette are on,
+// plus these lightweight, writing-essential flags. Everything else is "Advanced"
+// and hidden until the user opts in (see ADVANCED_FEATURE_FLAGS below).
+// Editor, Files, Search and the command palette are not flag-gated — they're always on.
+export const ADVANCED_FEATURE_FLAGS = [
+    'enable_ai_assistant',
+    'enable_sync',
+    'enable_plugins',
+    'enable_canvas',
+    'enable_graph',
+    'enable_kanban',
+    'enable_bases',
+    'enable_calendar',
+    'enable_meetings',
+    'enable_templates',
+    'enable_mcp',
+    'enable_terminal',
+    'enable_version_history',
+];
+
+// localStorage key holding the user's "Advanced features" preference.
+// Absent → undecided (a one-time migration decides new-vs-existing user).
+const ADVANCED_FEATURES_KEY = 'lokus-advanced-features';
+
+// An "existing user" is someone who has already opened a workspace/vault.
+// They keep full access to every panel so an upgrade never hides their features.
+// Brand-new installs (no saved workspace) get the Simple default.
+export async function detectExistingUser() {
+    try {
+        const isTauri = typeof window !== 'undefined' && (
+            (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function') ||
+            window.__TAURI_METADATA__ ||
+            (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.includes('Tauri'))
+        );
+        if (!isTauri) return false;
+        const { invoke } = await import('@tauri-apps/api/core');
+        const path = await invoke('get_validated_workspace_path');
+        return !!path;
+    } catch {
+        return false;
+    }
+}
+
+function readAdvancedPreference() {
+    try {
+        const v = localStorage.getItem(ADVANCED_FEATURES_KEY);
+        if (v === 'true') return true;
+        if (v === 'false') return false;
+    } catch {}
+    return null; // undecided
+}
 
 // Default configuration values (fallback if offline or fetch fails)
 const DEFAULT_CONFIG = {
@@ -43,24 +95,29 @@ const DEFAULT_CONFIG = {
         discord: null,
     },
 
-    // Feature flags (server can override)
+    // Feature flags (server can override).
+    // "Simple" default: core writing flags on; the ~13 advanced flags default off
+    // and are surfaced together via the "Advanced features" toggle in Preferences.
+    // (ADVANCED_FEATURE_FLAGS above is the source of truth for what's advanced.)
     feature_flags: {
-        enable_ai_assistant: true,
-        enable_sync: true,
-        enable_plugins: true,
-        enable_canvas: true,
-        enable_graph: true,
-        enable_kanban: true,
-        enable_bases: true,
+        // Core (Simple) — always on
         enable_daily_notes: true,
-        enable_calendar: true,
-        enable_meetings: true,
-        enable_templates: true,
-        enable_mcp: true,
-        enable_terminal: true,
         enable_backlinks: true,
-        enable_version_history: true,
         enable_import_export: true,
+        // Advanced — off by default, revealed by the "Advanced features" toggle
+        enable_ai_assistant: false,
+        enable_sync: false,
+        enable_plugins: false,
+        enable_canvas: false,
+        enable_graph: false,
+        enable_kanban: false,
+        enable_bases: false,
+        enable_calendar: false,
+        enable_meetings: false,
+        enable_templates: false,
+        enable_mcp: false,
+        enable_terminal: false,
+        enable_version_history: false,
     },
 
     // Service status for maintenance mode
@@ -172,12 +229,46 @@ export const RemoteConfigContext = createContext({
     loading: true,
     error: null,
     refreshConfig: () => { },
+    featureFlags: DEFAULT_CONFIG.feature_flags,
+    advancedFeatures: false,
+    setAdvancedFeatures: () => { },
 });
 
 export const RemoteConfigProvider = ({ children }) => {
     const [config, setConfig] = useState(DEFAULT_CONFIG);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+
+    // "Advanced features" preference. Initialized from localStorage; when undecided
+    // we start in Simple mode and a one-time migration upgrades existing users.
+    const [advancedFeatures, setAdvancedFeaturesState] = useState(() => readAdvancedPreference() === true);
+
+    useEffect(() => {
+        if (readAdvancedPreference() !== null) return; // already decided
+        let cancelled = false;
+        detectExistingUser().then((isExisting) => {
+            if (cancelled) return;
+            try { localStorage.setItem(ADVANCED_FEATURES_KEY, isExisting ? 'true' : 'false'); } catch {}
+            setAdvancedFeaturesState(isExisting);
+        });
+        return () => { cancelled = true; };
+    }, []);
+
+    const setAdvancedFeatures = useCallback((val) => {
+        const b = !!val;
+        try { localStorage.setItem(ADVANCED_FEATURES_KEY, b ? 'true' : 'false'); } catch {}
+        setAdvancedFeaturesState(b);
+    }, []);
+
+    // Effective flags. The "Advanced features" toggle is client-authoritative over the
+    // 13 advanced flags: OFF hides them all (a new user never sees the cockpit, even if a
+    // remote config enables them); ON reveals them all. Core flags keep their base value.
+    const featureFlags = useMemo(() => {
+        const base = config.feature_flags || {};
+        const result = { ...base };
+        for (const flag of ADVANCED_FEATURE_FLAGS) result[flag] = !!advancedFeatures;
+        return result;
+    }, [config.feature_flags, advancedFeatures]);
 
     const fetchConfig = async () => {
         try {
@@ -207,7 +298,7 @@ export const RemoteConfigProvider = ({ children }) => {
     }, []);
 
     return (
-        <RemoteConfigContext.Provider value={{ config, loading, error, refreshConfig: fetchConfig }}>
+        <RemoteConfigContext.Provider value={{ config, loading, error, refreshConfig: fetchConfig, featureFlags, advancedFeatures, setAdvancedFeatures }}>
             {children}
         </RemoteConfigContext.Provider>
     );
@@ -229,8 +320,14 @@ export const useRemoteLinks = () => {
 };
 
 export const useFeatureFlags = () => {
-    const { config } = useRemoteConfig();
-    return config.feature_flags;
+    const { featureFlags } = useRemoteConfig();
+    return featureFlags;
+};
+
+// Access + toggle the "Advanced features" preference (drives ADVANCED_FEATURE_FLAGS).
+export const useAdvancedFeatures = () => {
+    const { advancedFeatures, setAdvancedFeatures } = useRemoteConfig();
+    return { advancedFeatures, setAdvancedFeatures };
 };
 
 export const useServiceStatus = () => {
