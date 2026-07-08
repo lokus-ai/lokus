@@ -33,6 +33,13 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
 
     if (!editor || !filePath) return;
 
+    // Never save a tab whose file failed to load — the editor never held its
+    // content, so writing would overwrite the original with something else.
+    if (groupId) {
+      const grp = useEditorGroupStore.getState().findGroup(groupId);
+      if (grp?.contentByTab?.[filePath]?.loadError) return;
+    }
+
     let pathToSave = filePath;
 
     try {

@@ -20,6 +20,10 @@ import { isImageFile } from '../utils/imageUtils';
 import { isPDFFile } from '../utils/pdfUtils';
 import { LazyImageViewer, LazyPDFViewer } from './OptimizedWrapper';
 import { useFeatureFlags } from '../contexts/RemoteConfigContext';
+import { registerTabStateProvider, saveTab } from '../features/editor/tabSaver';
+import { closeTabWithGuard } from '../features/tabs/closeGuard';
+
+const AUTOSAVE_DEBOUNCE_MS = 1500;
 
 // Lazy-loaded special tab views
 const BasesView = lazy(() => import('../bases/BasesView'));
@@ -79,6 +83,19 @@ export default function EditorGroup({
   // Loading lock — prevents duplicate async file loads from the tab-switch effect
   // and handleEditorReady racing against each other.
   const loadingFileRef = useRef(null);
+
+  // Debounced autosave timer for the file being edited.
+  const autosaveTimerRef = useRef(null);
+
+  // Expose this group's per-tab EditorStates to the tabSaver so autosave,
+  // quit-flush, and the close guard can serialize background tabs too.
+  useEffect(() => {
+    registerTabStateProvider(group.id, (path) => editorStatesRef.current.get(path));
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      registerTabStateProvider(group.id, null);
+    };
+  }, [group.id]);
 
   // ── State ─────────────────────────────────────────────────────────────────
 
@@ -236,6 +253,7 @@ export default function EditorGroup({
             rawMarkdown: raw,
             savedContent: raw,
             title: noteBasenameForTitle(activeFile),
+            loadError: null,
           });
           loadingFileRef.current = null;
           setIsLoading(false);
@@ -259,6 +277,7 @@ export default function EditorGroup({
         useEditorGroupStore.getState().setTabContent(group.id, activeFile, {
           savedContent: raw,
           title: noteBasenameForTitle(activeFile),
+          loadError: null,
         });
 
         if (cancelled) return;
@@ -268,6 +287,12 @@ export default function EditorGroup({
       } catch (e) {
         console.error('Failed to load file:', activeFile, e);
         if (!cancelled) {
+          // Mark the tab so no save path can overwrite the original file
+          // with content that was never loaded from it.
+          useEditorGroupStore.getState().setTabContent(group.id, activeFile, {
+            loadError: String(e?.message || e || 'Failed to load file'),
+            dirty: false,
+          });
           loadingFileRef.current = null;
           setIsLoading(false);
         }
@@ -284,18 +309,17 @@ export default function EditorGroup({
     useEditorGroupStore.getState().setActiveTab(group.id, path);
   }, [group.id]);
 
-  const handleTabClose = useCallback((path) => {
+  const handleTabClose = useCallback(async (path) => {
     if (path === activeFile) {
       snapshotEditorState(path);
     }
-    const tab = tabs.find((t) => t.path === path);
-    if (tab) {
-      useEditorGroupStore.getState().addRecentlyClosed(tab);
+    // Single dirty-aware close path (saves dirty tabs, prompts on failure)
+    const closed = await closeTabWithGuard(group.id, path);
+    if (closed) {
+      // Clean up cached EditorState for the closed tab
+      editorStatesRef.current.delete(path);
     }
-    // Clean up cached EditorState for the closed tab
-    editorStatesRef.current.delete(path);
-    useEditorGroupStore.getState().removeTab(group.id, path);
-  }, [group.id, tabs, activeFile, snapshotEditorState]);
+  }, [group.id, activeFile, snapshotEditorState]);
 
   const handleFocus = useCallback(() => {
     useEditorGroupStore.getState().setFocusedGroupId(group.id);
@@ -369,12 +393,17 @@ export default function EditorGroup({
                 useEditorGroupStore.getState().setTabContent(group.id, file, {
                   savedContent: raw,
                   title: noteBasenameForTitle(file),
+                  loadError: null,
                 });
                 loadingFileRef.current = null;
                 restoreEditorState(newState);
                 setIsLoading(false);
               } catch (e) {
                 console.error('handleEditorReady: failed to load file:', file, e);
+                useEditorGroupStore.getState().setTabContent(group.id, file, {
+                  loadError: String(e?.message || e || 'Failed to load file'),
+                  dirty: false,
+                });
                 loadingFileRef.current = null;
                 setIsLoading(false);
               }
@@ -398,12 +427,16 @@ export default function EditorGroup({
     const currentFile = activeFileRef.current;
     if (!currentFile) return;
 
+    // Never track edits for a tab whose file failed to load — the view still
+    // holds some other content and saving it would clobber the original file.
+    const store = useEditorGroupStore.getState();
+    const grp = store.findGroup(group.id);
+    if (grp?.contentByTab?.[currentFile]?.loadError) return;
+
     // Save the latest EditorState for this file
     editorStatesRef.current.set(currentFile, view.state);
 
     // Dirty check: serialize to md and compare with saved source
-    const store = useEditorGroupStore.getState();
-    const grp = store.findGroup(group.id);
     const saved = grp?.contentByTab?.[currentFile]?.savedContent;
     if (saved !== undefined) {
       if (!lokusSerializerRef.current) {
@@ -412,7 +445,18 @@ export default function EditorGroup({
       const currentSerialized = isPlainTextNotePath(currentFile)
         ? docToPlainTextString(view.state.doc)
         : lokusSerializerRef.current.serialize(view.state.doc);
-      store.markTabDirty(group.id, currentFile, currentSerialized !== saved);
+      const isDirty = currentSerialized !== saved;
+      store.markTabDirty(group.id, currentFile, isDirty);
+
+      // Debounced autosave — edits should never depend on Cmd+S to survive.
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      if (isDirty) {
+        autosaveTimerRef.current = setTimeout(() => {
+          saveTab(group.id, currentFile).catch((e) => {
+            console.error('Autosave failed:', currentFile, e);
+          });
+        }, AUTOSAVE_DEBOUNCE_MS);
+      }
     }
   }, [group.id]);
 
@@ -428,6 +472,18 @@ export default function EditorGroup({
   const isKanbanFile = !!(activeFile?.endsWith('.kanban')) && featureFlags.enable_kanban;
   const isBasesTab = activeFile === '__bases__' && featureFlags.enable_bases;
   const isGraphTab = activeFile === '__graph__' && featureFlags.enable_graph;
+
+  // A restored special tab whose feature flag is now off would match no render
+  // branch and leave a blank pane — show an explicit fallback instead.
+  const disabledFeatureName =
+    (activeFile === '__bases__' && !featureFlags.enable_bases && 'Bases') ||
+    (activeFile === '__graph__' && !featureFlags.enable_graph && 'Graph view') ||
+    (activeFile?.endsWith('.kanban') && !featureFlags.enable_kanban && 'Kanban boards') ||
+    null;
+
+  // File failed to load (binary, too large, unreadable) — never show the
+  // editor for it; saving would overwrite the original.
+  const activeLoadError = activeFile ? group.contentByTab?.[activeFile]?.loadError : null;
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -476,6 +532,32 @@ export default function EditorGroup({
         {!activeFile && !hideTabBar && (
           <div className="flex-1 flex items-center justify-center text-app-muted text-sm">
             Open a file to get started
+          </div>
+        )}
+
+        {/* Feature-disabled fallback for restored special tabs */}
+        {disabledFeatureName && (
+          <div className="flex-1 h-full flex items-center justify-center bg-app-bg">
+            <div className="text-center max-w-md px-6">
+              <h2 className="text-lg font-semibold text-app-text mb-2">{disabledFeatureName} is disabled</h2>
+              <p className="text-sm text-app-muted">
+                This tab was restored from your last session, but the feature is
+                currently turned off. Enable it in Preferences, or close this tab.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Load-error fallback — file couldn't be opened as text */}
+        {activeLoadError && (
+          <div className="flex-1 h-full flex items-center justify-center bg-app-bg">
+            <div className="text-center max-w-md px-6">
+              <h2 className="text-lg font-semibold text-app-text mb-2">Can't open this file</h2>
+              <p className="text-sm text-app-muted break-words">{String(activeLoadError)}</p>
+              <p className="text-xs text-app-muted mt-3">
+                The file was left untouched — nothing will be saved over it.
+              </p>
+            </div>
           </div>
         )}
 
@@ -591,7 +673,7 @@ export default function EditorGroup({
         */}
         <div
           className="h-full"
-          style={{ display: isEditorFile ? 'block' : 'none' }}
+          style={{ display: isEditorFile && !activeLoadError ? 'block' : 'none' }}
         >
           {/* Loading overlay shown while disk I/O is in progress */}
           {isLoading && (
