@@ -2,6 +2,9 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 use std::path::Path;
 
 fn base_label_from_path(path: &str) -> String {
+  use std::collections::hash_map::DefaultHasher;
+  use std::hash::{Hash, Hasher};
+
   // Use Path for cross-platform path handling
   let path_obj = Path::new(path);
   let last = path_obj.file_name()
@@ -14,6 +17,14 @@ fn base_label_from_path(path: &str) -> String {
   }
   while s.ends_with('-') { s.pop(); }
   if s.len() < 3 { s.push_str("workspace"); }
+
+  // Append a short stable hash of the FULL path so two folders that share a basename
+  // (e.g. /work/notes and /personal/notes) get distinct labels instead of both
+  // collapsing to "ws-notes" and focusing the wrong window.
+  let mut hasher = DefaultHasher::new();
+  path.hash(&mut hasher);
+  s.push('-');
+  s.push_str(&format!("{:08x}", hasher.finish() as u32));
   s
 }
 
