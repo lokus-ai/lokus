@@ -6,6 +6,11 @@ export class SyncLock {
   constructor() {
     this._heartbeatTimer = null;
     this._lockedWorkspaceId = null;
+    // In-memory coordination between a sync and an editor save in THIS window.
+    // The cross-window localStorage lock cannot distinguish same-window callers
+    // (they share a holderId), so same-window mutual exclusion is tracked here.
+    this._syncRunning = false;
+    this._saveCount = 0;
   }
 
   acquire(workspaceId) {
@@ -25,6 +30,7 @@ export class SyncLock {
     }
 
     this._lockedWorkspaceId = workspaceId;
+    this._syncRunning = true;
     this._writeLock(key);
     this._startHeartbeat(key);
     return true;
@@ -47,6 +53,40 @@ export class SyncLock {
     }
 
     this._lockedWorkspaceId = null;
+    this._syncRunning = false;
+  }
+
+  /**
+   * True if a sync is currently running — either in this window (_syncRunning)
+   * or in another window (a fresh cross-window lock exists). Used by the editor
+   * save path to yield briefly so a sync download can't land mid-save.
+   */
+  isSyncActive(workspaceId) {
+    if (this._syncRunning) return true;
+    if (!workspaceId) return false;
+    const existing = localStorage.getItem(LOCK_PREFIX + workspaceId);
+    if (!existing) return false;
+    try {
+      const { timestamp } = JSON.parse(existing);
+      return Date.now() - timestamp < LOCK_STALE_MS;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Mark an editor save as in-flight (shared read side of the lock). */
+  beginSave() {
+    this._saveCount += 1;
+  }
+
+  /** Mark an editor save as finished. */
+  endSave() {
+    if (this._saveCount > 0) this._saveCount -= 1;
+  }
+
+  /** True while at least one editor save is writing in this window. */
+  isSaveActive() {
+    return this._saveCount > 0;
   }
 
   _holderId() {
