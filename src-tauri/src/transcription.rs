@@ -1,6 +1,6 @@
 //! Deepgram WebSocket streaming transcription module for Lokus.
 //!
-//! Connects to the Deepgram live transcription API (or a Lokus proxy), forwards
+//! Connects to the Deepgram live transcription API (or the Lokus proxy), forwards
 //! raw PCM audio received via [`lokus:audio-chunk`] Tauri events, and emits
 //! [`lokus:transcript-update`] events to the frontend as Deepgram returns
 //! transcript results.
@@ -9,9 +9,10 @@
 //!
 //! - **BYOK** (`mode = "byok"`) — connects directly to
 //!   `wss://api.deepgram.com/v1/listen` using the user-supplied API key.
-//! - **Proxy** (`mode = "proxy"`) — connects to a Supabase Edge Function
-//!   WebSocket URL supplied in `proxy_url`.  The edge function authenticates
-//!   to Deepgram on the caller's behalf.
+//! - **Proxy** (`mode = "proxy"`) — connects to the Lokus proxy WebSocket
+//!   (`wss://api.lokusmd.com/v1/transcribe/ws`) supplied in `proxy_url`.
+//!   The proxy authenticates the caller, reserves credits, and relays to
+//!   Deepgram so the key never reaches the client.
 //!
 //! # Audio flow
 //!

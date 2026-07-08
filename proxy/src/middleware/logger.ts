@@ -1,8 +1,16 @@
 /**
  * Request logger — one structured line per request with method, path, status,
- * and duration. Never logs bodies, tokens, or auth headers.
+ * duration, and client IP. Never logs bodies, tokens, or auth headers.
  */
 import type { Context, Next } from "hono";
+
+function clientIp(c: Context): string {
+  const forwarded = c.req.header("x-forwarded-for");
+  if (forwarded) {
+    return forwarded.split(",")[0].trim();
+  }
+  return (c.env as any)?.remoteAddress ?? "unknown";
+}
 
 export async function loggerMiddleware(c: Context, next: Next) {
   const start = Date.now();
@@ -16,6 +24,7 @@ export async function loggerMiddleware(c: Context, next: Next) {
       path: c.req.path,
       status: c.res.status,
       durationMs,
+      ip: clientIp(c),
     }),
   );
 }

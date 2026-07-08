@@ -510,14 +510,21 @@ export function useMeetingSession() {
       // Load provider config to pass Deepgram credentials/mode.
       // Dynamically imported to avoid a hard dependency at module load time
       // and to keep the hook testable with a simple mock.
-      const { loadProviderConfig } = await import('../services/ai-provider.js');
+      const { loadProviderConfig, PROXY_BASE_URL } = await import('../services/ai-provider.js');
       const providerCfg = await loadProviderConfig();
+
+      let proxyWsUrl = null;
+      if (providerCfg.mode === 'lokus') {
+        const base = (providerCfg.proxyUrl || PROXY_BASE_URL || 'https://api.lokusmd.com').replace(/\/$/, '');
+        const wsBase = base.replace(/^https:\/\//, 'wss://');
+        proxyWsUrl = `${wsBase}/v1/transcribe/ws?token=${encodeURIComponent(providerCfg.supabaseToken || '')}`;
+      }
 
       await invoke('start_transcription', {
         config: {
           apiKey:   providerCfg.deepgramApiKey || '',
           mode:     providerCfg.mode === 'lokus' ? 'proxy' : 'byok',
-          proxyUrl: providerCfg.mode === 'lokus' ? providerCfg.supabaseUrl : null,
+          proxyUrl: proxyWsUrl,
         },
       });
     } catch (err) {
