@@ -8,10 +8,21 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [react()],
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "jsxgraph/distrib/jsxgraph.css": path.resolve(__dirname, "node_modules/jsxgraph/distrib/jsxgraph.css"),
-    },
+    // Array form so the graphIndex entry can use a regex `find`.
+    alias: [
+      // graphIndex.js statically imports Node builtins (fs/promises, path), which
+      // cannot resolve in the browser/client bundle and break the production build.
+      // Redirect it to the Tauri-backed entry (real filesystem access via the app's
+      // Rust `invoke` commands, not a dead stub); the Node/MCP-server esbuild bundle
+      // is separate and still uses graphIndex.js. Mechanism adapted from PR #536.
+      // Does not match graphIndex.core.js / graphIndex.tauri.js (different suffixes).
+      {
+        find: /^.*[\\/]graphIndex\.js$/,
+        replacement: path.resolve(__dirname, "./src/mcp-server/utils/graphIndex.tauri.js"),
+      },
+      { find: "@", replacement: path.resolve(__dirname, "./src") },
+      { find: "jsxgraph/distrib/jsxgraph.css", replacement: path.resolve(__dirname, "node_modules/jsxgraph/distrib/jsxgraph.css") },
+    ],
   },
 
   // Excalidraw 0.18+ uses `export { english as "en-us" }` in locale modules
