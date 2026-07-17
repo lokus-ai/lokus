@@ -453,8 +453,9 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         let _ = emit_focused(app, "lokus:open-file", ());
       }
       FILE_OPEN_WORKSPACE_ID => {
-        // Global: spawns a launcher window rather than acting in one window.
-        let _ = app.emit("lokus:open-workspace", ());
+        // Window-scoped: the focused window spawns a single launcher window.
+        // Broadcasting would make every open window spawn its own launcher.
+        let _ = emit_focused(app, "lokus:open-workspace", ());
       }
       FILE_CLOSE_TAB_ID => {
         let _ = emit_focused(app, "lokus:close-tab", ());
@@ -614,7 +615,9 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         let _ = app.emit("lokus:release-notes", ());
       }
       HELP_REPORT_ISSUE_ID => {
-        let _ = app.emit("lokus:report-issue", ());
+        // Window-scoped: the handler opens a browser tab; broadcasting would
+        // open one tab per open window.
+        let _ = emit_focused(app, "lokus:report-issue", ());
       }
       
       _ => {
