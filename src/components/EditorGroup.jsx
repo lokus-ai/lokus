@@ -10,13 +10,15 @@ import WelcomeScreen from './WelcomeScreen';
 import { canvasManager } from '../core/canvas/manager';
 import { createLokusParser, createLokusSerializer } from '../core/markdown/lokus-md-pipeline';
 import { registerEditor } from '../stores/editorRegistry';
-import { getTabModel, setTabModel } from '../stores/tabModels';
+import { getTabModel, setTabModel, getSavedDoc, setSavedDoc } from '../stores/tabModels';
+import { useTabMetaStore, getTabMeta, selectGroupDirtyPaths } from '../stores/tabMeta';
+import { useShallow } from 'zustand/shallow';
 import { closeTabWithGuard } from '../features/tabs/closeGuard';
+import { registerTabStateProvider } from '../features/editor/tabSaver';
 import {
   isPlainTextNotePath,
   noteBasenameForTitle,
   plainTextStringToDoc,
-  docToPlainTextString,
 } from '../utils/plainTextNote.js';
 import { isImageFile } from '../utils/imageUtils';
 import { isPDFFile } from '../utils/pdfUtils';
@@ -99,7 +101,7 @@ export default function EditorGroup({
   // Lokus markdown→ProseMirror parser, created once when the editor mounts.
   const lokusParserRef = useRef(null);
 
-  // Lokus ProseMirror→markdown serializer, created lazily on first dirty check.
+  // Lokus ProseMirror→markdown serializer, created when the editor mounts.
   const lokusSerializerRef = useRef(null);
 
   // Loading lock — prevents duplicate async file loads from the tab-switch effect
@@ -125,8 +127,7 @@ export default function EditorGroup({
       setOriginalTitle('');
       return;
     }
-    const cached = useEditorGroupStore.getState().findGroup(group.id)?.contentByTab?.[activeFile];
-    const title = cached?.title || noteBasenameForTitle(activeFile);
+    const title = getTabMeta(group.id, activeFile)?.title || noteBasenameForTitle(activeFile);
     setEditorTitle(title);
     setOriginalTitle(title);
   }, [activeFile, group.id]);
@@ -138,32 +139,42 @@ export default function EditorGroup({
     }
   }, [activeFile]);
 
+  // Autosave / quit-flush: expose this group's tab models to tabSaver so
+  // saveTab / flushAllDirtyTabs can serialize tabs that are not active.
+  useEffect(() => {
+    registerTabStateProvider(group.id, (path) => getTabModel(group.id, path)?.state ?? null);
+    return () => registerTabStateProvider(group.id, null);
+  }, [group.id]);
+
+  // Title input is a LOCAL draft while typing — zero store writes per
+  // keystroke. The draft commits (one setTitle + one setDirty) on Enter/blur.
   const handleTitleChange = useCallback((e) => {
-    const newTitle = e.target.value;
-    setEditorTitle(newTitle);
-    useEditorGroupStore.getState().setTabContent(group.id, activeFile, { title: newTitle });
-    if (newTitle !== originalTitle) {
-      useEditorGroupStore.getState().markTabDirty(group.id, activeFile, true);
-    }
-  }, [group.id, activeFile, originalTitle]);
+    setEditorTitle(e.target.value);
+  }, []);
+
+  const commitTitle = useCallback(() => {
+    if (!activeFile || isNonEditorPath(activeFile)) return;
+    if (editorTitle === originalTitle) return;
+    const meta = useTabMetaStore.getState();
+    meta.setTitle(group.id, activeFile, editorTitle);
+    meta.setDirty(group.id, activeFile, true);
+  }, [group.id, activeFile, editorTitle, originalTitle]);
 
   const handleTitleKeyDown = useCallback((e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
+      commitTitle();
       // Focus the ProseMirror editor body
       rawEditorRef.current?.focus();
     }
-  }, []);
+  }, [commitTitle]);
 
   // ── Unsaved indicator ─────────────────────────────────────────────────────
 
-  const unsavedChanges = useMemo(() => {
-    const set = new Set();
-    for (const tab of tabs) {
-      if (group.contentByTab?.[tab.path]?.dirty) set.add(tab.path);
-    }
-    return set;
-  }, [tabs, group.contentByTab]);
+  // Dirty flags live in the tabMeta store (off the layout tree) — subscribe
+  // to this group's dirty paths with a shallow-compared array selector.
+  const dirtyPaths = useTabMetaStore(useShallow(selectGroupDirtyPaths(group.id)));
+  const unsavedChanges = useMemo(() => new Set(dirtyPaths), [dirtyPaths]);
 
   // ── Core imperatives ──────────────────────────────────────────────────────
 
@@ -302,6 +313,7 @@ export default function EditorGroup({
 
         // Register the tab's model and store metadata
         setTabModel(group.id, activeFile, newState, 0);
+        setSavedDoc(group.id, activeFile, doc);
         useEditorGroupStore.getState().setTabContent(group.id, activeFile, {
           savedContent: raw,
           title: noteBasenameForTitle(activeFile),
@@ -391,10 +403,12 @@ export default function EditorGroup({
               : lokusParserRef.current.parse(cached.rawMarkdown);
             const newState = createEditorStateFromDoc(doc);
             if (newState) {
+              const cachedMeta = getTabMeta(group.id, file);
               setTabModel(group.id, file, newState, 0);
+              setSavedDoc(group.id, file, doc);
               useEditorGroupStore.getState().setTabContent(group.id, file, {
-                savedContent: cached.savedContent ?? cached.rawMarkdown,
-                title: cached.title ?? noteBasenameForTitle(file),
+                savedContent: cachedMeta?.savedContent ?? cached.rawMarkdown,
+                title: cachedMeta?.title ?? noteBasenameForTitle(file),
               });
               applyModel(file, { state: newState, scrollTop: 0 });
               setIsLoading(false);
@@ -415,6 +429,7 @@ export default function EditorGroup({
                 const newState = createEditorStateFromDoc(doc);
                 if (!newState) return;
                 setTabModel(group.id, file, newState, 0);
+                setSavedDoc(group.id, file, doc);
                 useEditorGroupStore.getState().setTabContent(group.id, file, {
                   savedContent: raw,
                   title: noteBasenameForTitle(file),
@@ -454,18 +469,12 @@ export default function EditorGroup({
     // Update this tab's model with the latest state
     setTabModel(group.id, currentFile, view.state, scrollContainerRef.current?.scrollTop ?? 0);
 
-    // Dirty check: serialize to md and compare with saved source
-    const store = useEditorGroupStore.getState();
-    const grp = store.findGroup(group.id);
-    const saved = grp?.contentByTab?.[currentFile]?.savedContent;
-    if (saved !== undefined) {
-      if (!lokusSerializerRef.current) {
-        lokusSerializerRef.current = createLokusSerializer();
-      }
-      const currentSerialized = isPlainTextNotePath(currentFile)
-        ? docToPlainTextString(view.state.doc)
-        : lokusSerializerRef.current.serialize(view.state.doc);
-      store.markTabDirty(group.id, currentFile, currentSerialized !== saved);
+    // Dirty check: O(1) document-identity comparison against the doc last
+    // loaded from / written to disk — no per-keystroke serialization.
+    // (Edit-then-undo-back-to-saved still shows dirty; accepted tradeoff.)
+    const savedDoc = getSavedDoc(group.id, currentFile);
+    if (savedDoc) {
+      useEditorGroupStore.getState().markTabDirty(group.id, currentFile, view.state.doc !== savedDoc);
     }
   }, [group.id]);
 
@@ -659,6 +668,7 @@ export default function EditorGroup({
               value={editorTitle}
               onChange={handleTitleChange}
               onKeyDown={handleTitleKeyDown}
+              onBlur={commitTitle}
               className="w-full bg-transparent text-4xl font-bold pb-3 mb-4 outline-none text-app-text"
               placeholder="Untitled"
               spellCheck={false}

@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useEditorGroupStore } from '../../stores/editorGroups';
+import { getTabMeta } from '../../stores/tabMeta';
+import { setSavedDoc } from '../../stores/tabModels';
 import { createLokusSerializer } from '../../core/markdown/lokus-md-pipeline';
 import { isPlainTextNotePath, docToPlainTextString } from '../../utils/plainTextNote.js';
 import { isImageFile } from '../../utils/imageUtils';
@@ -52,6 +54,7 @@ export async function saveTab(groupId, path) {
   if (!group) return false;
 
   const content = group.contentByTab?.[path];
+  const meta = getTabMeta(groupId, path);
   // Never write a file whose original content failed to load — saving would
   // overwrite the original with whatever the editor happens to hold.
   if (content?.loadError) return false;
@@ -63,7 +66,8 @@ export async function saveTab(groupId, path) {
     ? docToPlainTextString(state.doc)
     : lokusSerializer.serialize(state.doc);
 
-  if (content?.savedContent === serialized) {
+  if (meta?.savedContent === serialized) {
+    setSavedDoc(groupId, path, state.doc);
     store.markTabDirty(groupId, path, false);
     return true;
   }
@@ -71,6 +75,7 @@ export async function saveTab(groupId, path) {
   await writeFileGuarded(path, serialized);
   syncScheduler.onFileSaved(path);
   store.setTabContent(groupId, path, { savedContent: serialized });
+  setSavedDoc(groupId, path, state.doc);
   store.markTabDirty(groupId, path, false);
   return true;
 }
@@ -84,11 +89,12 @@ export async function flushAllDirtyTabs() {
   const groups = store.getAllGroups();
   const saves = [];
   for (const group of groups) {
-    for (const [path, content] of Object.entries(group.contentByTab || {})) {
-      if (content?.dirty && !content?.loadError) {
+    for (const tab of group.tabs) {
+      const meta = getTabMeta(group.id, tab.path);
+      if (meta?.dirty && !group.contentByTab?.[tab.path]?.loadError) {
         saves.push(
-          saveTab(group.id, path).catch((e) => {
-            console.error('flushAllDirtyTabs: failed to save', path, e);
+          saveTab(group.id, tab.path).catch((e) => {
+            console.error('flushAllDirtyTabs: failed to save', tab.path, e);
           })
         );
       }

@@ -2,12 +2,14 @@ import { useCallback, useRef } from 'react';
 import { useEditorGroupStore } from '../../../stores/editorGroups';
 import { useViewStore } from '../../../stores/views';
 import { getEditor } from '../../../stores/editorRegistry';
-import { getTabModel } from '../../../stores/tabModels';
+import { getTabModel, setSavedDoc } from '../../../stores/tabModels';
+import { getTabMeta } from '../../../stores/tabMeta';
 import { createLokusSerializer } from '../../../core/markdown/lokus-md-pipeline';
 import { isPlainTextNotePath, docToPlainTextString } from '../../../utils/plainTextNote.js';
 import { DOMSerializer } from 'prosemirror-model';
 import { invoke } from '@tauri-apps/api/core';
 import { confirm, save } from '@tauri-apps/plugin-dialog';
+import { toast } from 'sonner';
 import { syncScheduler } from '../../../core/sync/SyncScheduler';
 import { writeFileGuarded } from '../../../core/sync/guardedWrite';
 
@@ -62,21 +64,23 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
       // Check if title was changed — if so, rename the file first
       if (groupId) {
         const store = useEditorGroupStore.getState();
-        const group = store.findGroup(groupId);
-        const tabContent = group?.contentByTab?.[filePath];
-        if (tabContent?.title) {
+        const title = getTabMeta(groupId, filePath)?.title;
+        if (title) {
           const currentFileName = (filePath.split('/').pop() || '').replace(/\.(md|txt)$/i, '');
-          if (tabContent.title !== currentFileName && tabContent.title.trim()) {
+          if (title !== currentFileName && title.trim()) {
             const dir = filePath.substring(0, filePath.lastIndexOf('/'));
             const ext = filePath.includes('.') ? filePath.substring(filePath.lastIndexOf('.')) : '.md';
-            const newPath = `${dir}/${tabContent.title}${ext}`;
+            const newPath = `${dir}/${title}${ext}`;
             try {
-              await invoke('rename_file', { oldPath: filePath, newPath });
+              // Rust handler is rename_file(path, new_name) — new_name is the
+              // file NAME (with extension), not a full path.
+              await invoke('rename_file', { path: filePath, newName: `${title}${ext}` });
               store.updateTabPath(filePath, newPath);
               pathToSave = newPath;
               if (onRefreshFiles) onRefreshFiles();
-            } catch (_) {
-              // If rename fails, save to original path
+            } catch (e) {
+              // If rename fails, save to original path — but tell the user.
+              toast.error(`Failed to rename file: ${e?.message || e}`);
             }
           }
         }
@@ -95,17 +99,13 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
       // Record what's on disk and clear/recompute the dirty flag. If the
       // user kept typing while the write was in flight, compare the tab's
       // CURRENT model against what was written instead of blindly marking
-      // the tab clean.
+      // the tab clean. Comparison is O(1) document identity — no serialize.
       if (groupId) {
         const store = useEditorGroupStore.getState();
         store.setTabContent(groupId, pathToSave, { savedContent: contentToSave });
+        setSavedDoc(groupId, pathToSave, docToSave);
         const nowModel = getTabModel(groupId, pathToSave);
-        const nowSerialized = nowModel
-          ? (isPlainTextNotePath(pathToSave)
-              ? docToPlainTextString(nowModel.state.doc)
-              : lokusSerializer.serialize(nowModel.state.doc))
-          : contentToSave;
-        store.markTabDirty(groupId, pathToSave, nowSerialized !== contentToSave);
+        store.markTabDirty(groupId, pathToSave, !!nowModel && nowModel.state.doc !== docToSave);
       }
 
       // Save version if content changed
@@ -230,6 +230,7 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
       store.updateTabPath(filePath, savePath);
       const group = store.getFocusedGroup();
       if (group) {
+        setSavedDoc(group.id, savePath, docToSave);
         store.markTabDirty(group.id, savePath, false);
       }
 

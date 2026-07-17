@@ -1,5 +1,8 @@
 import { useCallback } from 'react';
 import { useEditorGroupStore } from '../../../stores/editorGroups';
+import { getTabModel } from '../../../stores/tabModels';
+import { getTabMeta } from '../../../stores/tabMeta';
+import { DOMSerializer } from 'prosemirror-model';
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import posthog from '../../../services/posthog.js';
@@ -9,11 +12,20 @@ export function useExport({ workspacePath }) {
     const editorGroupStore = useEditorGroupStore.getState();
     const focusedGroup = editorGroupStore.getFocusedGroup();
     const activeFile = focusedGroup?.activeTab ?? null;
-    const tabContent = activeFile ? focusedGroup?.contentByTab?.[activeFile] : null;
-    const editorContent = tabContent?.html ?? tabContent?.content ?? '';
-    const editorTitle = tabContent?.title ?? '';
+    const editorTitle = (activeFile ? getTabMeta(focusedGroup?.id, activeFile)?.title : null) ?? '';
 
     if (!activeFile) return;
+
+    // Nothing writes html/content into the tab cache — serialize the tab's
+    // OWN model to HTML (same approach as the Save As HTML path in useSave).
+    const model = getTabModel(focusedGroup.id, activeFile);
+    let editorContent = '';
+    if (model) {
+      const fragment = DOMSerializer.fromSchema(model.state.schema).serializeFragment(model.state.doc.content);
+      const div = document.createElement('div');
+      div.appendChild(fragment);
+      editorContent = div.innerHTML;
+    }
 
     try {
       // Get the current file name without extension for default name
@@ -129,11 +141,20 @@ export function useExport({ workspacePath }) {
     const editorGroupStore = useEditorGroupStore.getState();
     const focusedGroup = editorGroupStore.getFocusedGroup();
     const activeFile = focusedGroup?.activeTab ?? null;
-    const tabContent = activeFile ? focusedGroup?.contentByTab?.[activeFile] : null;
-    const editorContent = tabContent?.html ?? tabContent?.content ?? '';
-    const editorTitle = tabContent?.title ?? '';
+    const editorTitle = (activeFile ? getTabMeta(focusedGroup?.id, activeFile)?.title : null) ?? '';
 
     if (!activeFile) return;
+
+    // Nothing writes html/content into the tab cache — serialize the tab's
+    // OWN model to HTML (same approach as the Save As HTML path in useSave).
+    const model = getTabModel(focusedGroup.id, activeFile);
+    let editorContent = '';
+    if (model) {
+      const fragment = DOMSerializer.fromSchema(model.state.schema).serializeFragment(model.state.doc.content);
+      const div = document.createElement('div');
+      div.appendChild(fragment);
+      editorContent = div.innerHTML;
+    }
 
     try {
       // Get the current file name without extension for default name
