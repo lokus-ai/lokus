@@ -2,6 +2,8 @@ import React, { useMemo } from 'react';
 import { useStatusBar } from '../../hooks/useStatusBar';
 import { useResponsiveStatusBar, STATUS_BAR_PRIORITY } from '../../hooks/useResponsiveStatusBar';
 import { useEditorGroupStore } from '../../stores/editorGroups';
+import { useTabMetaStore, selectAllDirtyPaths } from '../../stores/tabMeta';
+import { useShallow } from 'zustand/shallow';
 import { isDesktop } from '../../platform/index.js';
 import SyncIndicator from '../SyncIndicator';
 import {
@@ -14,6 +16,9 @@ import {
 } from '../ui/dropdown-menu';
 import { MoreHorizontal, Terminal } from 'lucide-react';
 
+// Stable fallback for the tabs selector when no group exists.
+const EMPTY_TABS = [];
+
 /**
  * ResponsiveStatusBar - Self-contained status bar.
  * Reads editor state directly from useEditorGroupStore.
@@ -25,25 +30,12 @@ export default function ResponsiveStatusBar({
 }) {
   const { leftItems, rightItems } = useStatusBar();
 
-  // Read state directly from EditorGroupStore
-  const layout = useEditorGroupStore((s) => s.layout);
-  const focusedGroupId = useEditorGroupStore((s) => s.focusedGroupId);
-
-  const { activeFile, openTabs, unsavedChanges } = useMemo(() => {
-    const store = useEditorGroupStore.getState();
-    const group = store.getFocusedGroup() || store.getAllGroups()[0];
-    const tabs = group?.tabs ?? [];
-    const active = group?.activeTab ?? null;
-
-    const dirty = new Set();
-    for (const g of store.getAllGroups()) {
-      for (const tab of g.tabs) {
-        if (g.contentByTab?.[tab.path]?.dirty) dirty.add(tab.path);
-      }
-    }
-
-    return { activeFile: active, openTabs: tabs, unsavedChanges: dirty };
-  }, [layout, focusedGroupId]);
+  // Read state directly from EditorGroupStore — stable primitives/refs only,
+  // never the whole layout tree. Dirty state comes from the tabMeta store.
+  const activeFile = useEditorGroupStore((s) => (s.getFocusedGroup() || s.getAllGroups()[0])?.activeTab ?? null);
+  const openTabs = useEditorGroupStore((s) => (s.getFocusedGroup() || s.getAllGroups()[0])?.tabs ?? EMPTY_TABS);
+  const dirtyPaths = useTabMetaStore(useShallow(selectAllDirtyPaths));
+  const unsavedChanges = useMemo(() => new Set(dirtyPaths), [dirtyPaths]);
 
   const editor = null;
 

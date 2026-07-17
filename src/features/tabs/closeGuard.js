@@ -1,5 +1,6 @@
 import { confirm } from '@tauri-apps/plugin-dialog';
 import { useEditorGroupStore } from '../../stores/editorGroups';
+import { getTabMeta } from '../../stores/tabMeta';
 import { saveTab } from '../editor/tabSaver';
 
 let dialogOpen = false;
@@ -23,8 +24,8 @@ export async function closeTabWithGuard(groupId, path) {
   if (!group) return false;
 
   const tab = group.tabs.find((t) => t.path === path);
-  const content = group.contentByTab?.[path];
-  const isDirty = !!content?.dirty && !content?.loadError;
+  const meta = getTabMeta(groupId, path);
+  const isDirty = !!meta?.dirty && !group.contentByTab?.[path]?.loadError;
 
   const doClose = () => {
     if (tab) useEditorGroupStore.getState().addRecentlyClosed(tab);
