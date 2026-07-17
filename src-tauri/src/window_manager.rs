@@ -35,10 +35,8 @@ fn focus(win: &WebviewWindow) {
 #[tauri::command]
 pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(), String> {
 
-  // VSCode-style behavior: REPLACE current window instead of creating new ones
-  // This prevents duplicate workspaces and follows industry standard UX
-
-  // First, check if this workspace is already open in another window
+  // One workspace per window: check if this workspace is already open and
+  // focus its window instead of opening a duplicate.
   let label = base_label_from_path(&workspace_path);
   if let Some(existing_win) = app.get_webview_window(&label) {
     focus(&existing_win);
@@ -55,36 +53,7 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
     return Ok(());
   }
 
-  // Find the current window (could be launcher or any window)
-  // Try common window labels in order of likelihood
-  let current_window = app.get_webview_window("main")
-    .or_else(|| {
-      // Try to find launcher windows (they have format "launcher-{timestamp}")
-      app.webview_windows().into_iter()
-        .find(|(label, _)| label.starts_with("launcher-"))
-        .map(|(_, win)| win)
-    });
-
-  if let Some(win) = current_window {
-    // Show window first (in case it was hidden)
-    let _ = win.show();
-    // Navigate to workspace by emitting activation event
-    let _ = win.emit("workspace:activate", workspace_path.clone());
-    // Bring window to focus
-    focus(&win);
-
-    // Update API server with the workspace
-    let workspace_for_api = workspace_path.clone();
-    let app_handle_for_api = app.clone();
-    tauri::async_runtime::spawn(async move {
-      crate::api_server::update_workspace(&app_handle_for_api, Some(workspace_for_api)).await;
-    });
-
-    return Ok(());
-  }
-
-  // Fallback: If no existing window found, create a new one
-  // This only happens on app startup or if all windows were closed
+  // Not open yet: create a real window for this workspace.
   let encoded_path = urlencoding::encode(&workspace_path);
   let url_string = format!("/index.html?workspacePath={}", encoded_path);
   let url = WebviewUrl::App(url_string.into());
@@ -172,8 +141,10 @@ pub fn open_preferences_window(app: AppHandle, workspace_path: Option<String>, s
   Ok(())
 }
 
-#[tauri::command]
-pub fn open_launcher_window(app: AppHandle) -> Result<(), String> {
+/// Build a launcher (welcome) window. Shared by the `open_launcher_window`
+/// command, the macOS Reopen handler and the tray handlers, all of which may
+/// need to create one when no window exists.
+pub fn build_launcher_window(app: &AppHandle) -> Result<WebviewWindow, String> {
   // Generate unique label with timestamp
   let timestamp = std::time::SystemTime::now()
     .duration_since(std::time::UNIX_EPOCH)
@@ -186,7 +157,7 @@ pub fn open_launcher_window(app: AppHandle) -> Result<(), String> {
 
   // Build window with platform-specific titlebar style to match main window
   #[cfg(target_os = "macos")]
-  let builder = WebviewWindowBuilder::new(&app, &label, url)
+  let builder = WebviewWindowBuilder::new(app, &label, url)
     .title("Lokus")
     .inner_size(900.0, 700.0)
     .min_inner_size(600.0, 500.0)
@@ -194,15 +165,19 @@ pub fn open_launcher_window(app: AppHandle) -> Result<(), String> {
     .title_bar_style(TitleBarStyle::Overlay);
 
   #[cfg(not(target_os = "macos"))]
-  let builder = WebviewWindowBuilder::new(&app, &label, url)
+  let builder = WebviewWindowBuilder::new(app, &label, url)
     .title("Lokus")
     .inner_size(900.0, 700.0)
     .min_inner_size(600.0, 500.0)
     .center()
     .decorations(true);
 
-  let _win = builder.build().map_err(|e| e.to_string())?;
-  Ok(())
+  builder.build().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn open_launcher_window(app: AppHandle) -> Result<(), String> {
+  build_launcher_window(&app).map(|_| ())
 }
 
 #[tauri::command]
@@ -252,4 +227,43 @@ pub fn sync_window_theme(window: tauri::Window, is_dark: bool, _bg_color: String
   }
 
   Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+  use super::base_label_from_path;
+
+  #[test]
+  fn label_is_stable_for_dedup() {
+    // The workspace dedup branch relies on the same path always producing the
+    // same window label.
+    assert_eq!(
+      base_label_from_path("/Users/me/Notes"),
+      base_label_from_path("/Users/me/Notes")
+    );
+  }
+
+  #[test]
+  fn label_has_ws_prefix_and_slug() {
+    let label = base_label_from_path("/Users/me/My Notes");
+    assert!(label.starts_with("ws-my-notes-"), "got: {}", label);
+  }
+
+  #[test]
+  fn same_basename_different_dirs_get_distinct_labels() {
+    // Two folders named "notes" must not collapse onto one window.
+    assert_ne!(
+      base_label_from_path("/work/notes"),
+      base_label_from_path("/personal/notes")
+    );
+  }
+
+  #[test]
+  fn trailing_separators_and_empty_names_are_safe() {
+    let root = base_label_from_path("/");
+    assert!(root.starts_with("ws-"), "got: {}", root);
+    let trailing = base_label_from_path("/Users/me/notes/");
+    assert!(trailing.starts_with("ws-"), "got: {}", trailing);
+  }
 }
