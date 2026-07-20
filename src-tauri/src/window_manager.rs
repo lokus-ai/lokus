@@ -40,8 +40,10 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
   let label = base_label_from_path(&workspace_path);
   if let Some(existing_win) = app.get_webview_window(&label) {
     focus(&existing_win);
-    // Re-activate just in case the workspace needs to refresh
-    let _ = existing_win.emit("workspace:activate", workspace_path.clone());
+    // Re-activate just in case the workspace needs to refresh. Must be targeted:
+    // a plain `emit` reaches every window, which would make the others switch
+    // to this workspace too.
+    let _ = existing_win.emit_to(label.as_str(), "workspace:activate", workspace_path.clone());
 
     // Update API server with the workspace
     let workspace_for_api = workspace_path.clone();
@@ -70,6 +72,7 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
     .title(format!("Lokus — {}", workspace_name))
     .inner_size(1200.0, 800.0)
     .title_bar_style(TitleBarStyle::Overlay)
+    .hidden_title(true)
     .build()
     .map_err(|e| e.to_string())?;
 
@@ -81,8 +84,8 @@ pub fn open_workspace_window(app: AppHandle, workspace_path: String) -> Result<(
     .build()
     .map_err(|e| e.to_string())?;
 
-  // Emit workspace:activate as backup method
-  let _ = win.emit("workspace:activate", workspace_path.clone());
+  // Emit workspace:activate as backup method (targeted — see dedup branch above)
+  let _ = win.emit_to(label.as_str(), "workspace:activate", workspace_path.clone());
 
   // Update API server with the new workspace
   let workspace_for_api = workspace_path.clone();
@@ -126,6 +129,7 @@ pub fn open_preferences_window(app: AppHandle, workspace_path: Option<String>, s
     .inner_size(760.0, 560.0)
     .resizable(true)
     .title_bar_style(TitleBarStyle::Overlay)
+    .hidden_title(true)
     .build()
     .map_err(|e| e.to_string())?;
 
@@ -162,7 +166,8 @@ pub fn build_launcher_window(app: &AppHandle) -> Result<WebviewWindow, String> {
     .inner_size(900.0, 700.0)
     .min_inner_size(600.0, 500.0)
     .center()
-    .title_bar_style(TitleBarStyle::Overlay);
+    .title_bar_style(TitleBarStyle::Overlay)
+    .hidden_title(true);
 
   #[cfg(not(target_os = "macos"))]
   let builder = WebviewWindowBuilder::new(app, &label, url)

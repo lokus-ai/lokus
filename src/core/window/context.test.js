@@ -25,6 +25,7 @@ describe('window context', () => {
     __resetWindowContext()
     state.label = 'main'
     setSearch('')
+    localStorage.clear()
   })
 
   it('detects the prefs window by label', () => {
@@ -66,6 +67,18 @@ describe('window context', () => {
     expect(ctx.kind).toBe('launcher')
     expect(ctx.workspacePath).toBe(null)
     expect(isLauncherWindow()).toBe(true)
+  })
+
+  it('keeps a forceWelcome window as launcher even when a workspace is saved', () => {
+    // A saved workspace must not flip a launcher window to kind "workspace":
+    // the kind comes from the window's own URL/label, never from saved state.
+    localStorage.setItem('lokus.workspace.path', '/Users/me/school')
+    state.label = 'launcher-1700000000000'
+    setSearch('?forceWelcome=true')
+    const ctx = getWindowContext()
+    expect(ctx.kind).toBe('launcher')
+    expect(isLauncherWindow()).toBe(true)
+    expect(isWorkspaceWindow()).toBe(false)
   })
 
   it('treats the main bootstrap window with no params as a launcher', () => {
