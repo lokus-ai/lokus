@@ -7,10 +7,14 @@ import { WorkspaceManager } from "../core/workspace/manager.js";
  *
  * It uses a robust, multi-part strategy:
  * 1. On initial load, it immediately checks the window's URL for a `workspacePath`
- *    query parameter and validates it.
- * 2. If no URL parameter, checks for a saved workspace and validates it.
- * 3. It ALSO listens for `workspace:activate` events for subsequent activations.
- * 4. All workspace paths are validated before being used.
+ *    query parameter and validates it (URL param is primary).
+ * 2. A `?forceWelcome=true` window (launcher) ALWAYS boots to the picker — it
+ *    never auto-activates the saved workspace and it ignores `workspace:activate`
+ *    events. forceWelcome beats the saved-path fallback.
+ * 3. Only if neither URL param decides, it falls back to the saved workspace
+ *    (this is how the bootstrap `main` window restores the last workspace).
+ * 4. It ALSO listens for `workspace:activate` events for subsequent activations.
+ * 5. All workspace paths are validated before being used.
  */
 export function useWorkspaceActivation() {
   const [path, setPath] = useState(null);
@@ -32,14 +36,7 @@ export function useWorkspaceActivation() {
 
         console.log('[WorkspaceActivation] URL params:', { forceWelcome, workspacePath });
 
-        // If forceWelcome is set, skip workspace loading and show launcher
-        if (forceWelcome === "true") {
-          console.log('[WorkspaceActivation] forceWelcome=true, showing launcher');
-          setPath(null);
-          setIsInitialized(true);
-          return;
-        }
-
+        // An explicit workspacePath in the URL always wins (URL param primary).
         if (workspacePath) {
           const decodedPath = decodeURIComponent(workspacePath);
           console.log('[WorkspaceActivation] Validating URL workspace path:', decodedPath);
@@ -59,8 +56,17 @@ export function useWorkspaceActivation() {
             const url = new URL(window.location);
             url.searchParams.delete('workspacePath');
             window.history.replaceState({}, '', url.toString());
-            // Continue to show launcher
+            // Fall through: forceWelcome (if set) or the saved-path fallback decide next
           }
+        }
+
+        // forceWelcome beats the saved-path fallback: a launcher window always
+        // boots to the picker and never auto-activates the last saved workspace.
+        if (forceWelcome === "true") {
+          console.log('[WorkspaceActivation] forceWelcome=true, showing launcher');
+          setPath(null);
+          setIsInitialized(true);
+          return;
         }
       }
 
@@ -99,6 +105,14 @@ export function useWorkspaceActivation() {
     // Listen for workspace activation and force welcome events
     const unlistenWorkspacePromise = isTauri
       ? listen("workspace:activate", async (event) => {
+          // A forced-launcher window (?forceWelcome=true with no explicit
+          // workspacePath) must never auto-activate a workspace, even if a
+          // broadcast `workspace:activate` event reaches it.
+          const params = new URLSearchParams(window.location.search);
+          if (params.get("forceWelcome") === "true" && !params.get("workspacePath")) {
+            console.log('[WorkspaceActivation] Ignoring workspace:activate on a forceWelcome window');
+            return;
+          }
           const p = event.payload;
           if (typeof p === 'string' && p) {
             // Validate the activated workspace path
