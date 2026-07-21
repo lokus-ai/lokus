@@ -60,9 +60,20 @@ export async function openWorkspace(path) {
     // closes itself (the close path flushes then destroys it; ExitRequested
     // keeps the app alive even if it was the last window). On invoke error we
     // stay open so the launcher remains usable.
-    await invoke("open_workspace_window", { workspacePath: path });
+    try {
+      await invoke("open_workspace_window", { workspacePath: path });
+    } catch (err) {
+      // Every pick path funnels through here, so one toast covers them all.
+      // Rethrow so callers (and tests) still see the failure.
+      toast.error(`Failed to open workspace: ${err}`);
+      throw err;
+    }
+    // The dedup path resolves here too (Rust focuses the existing window), so
+    // the launcher closes either way.
     if (isLauncherWindow()) {
-      try { await getCurrentWindow().close(); } catch {}
+      // A rejected close (e.g. a missing core:window:allow-close capability)
+      // must never be swallowed silently — an unclosed launcher leaks a window.
+      try { await getCurrentWindow().close(); } catch (err) { console.error('Launcher: failed to close window after opening workspace', err); }
     }
   }
 }
