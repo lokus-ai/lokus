@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { BacklinkManager } from '../core/links/backlink-manager.js';
 import { MentionDetector } from '../core/links/mention-detector.js';
 import blockBacklinkManager from '../core/links/block-backlink-manager.js';
+import { useGraphStore } from '../core/graph2/graphStore.js';
 import { Search, ChevronDown, ChevronRight, Link2, FileText, Hash } from 'lucide-react';
 
 /**
@@ -12,7 +12,6 @@ export default function BacklinksPanel({
   currentFile,
   onOpenFile
 }) {
-  const [backlinks, setBacklinks] = useState([]);
   const [unlinkedMentions, setUnlinkedMentions] = useState([]);
   const [blockBacklinks, setBlockBacklinks] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -21,31 +20,43 @@ export default function BacklinksPanel({
   const [unlinkedExpanded, setUnlinkedExpanded] = useState(false);
   const [expandedSources, setExpandedSources] = useState(new Set());
 
-  const backlinkManagerRef = useRef(null);
   const mentionDetectorRef = useRef(null);
 
-  // Initialize managers
+  // Linked mentions from the incremental link index — O(1) inverse-map
+  // lookup with context snippets, live on every save (version bumps).
+  const index = useGraphStore((s) => s.index);
+  const indexVersion = useGraphStore((s) => s.version);
+  const backlinks = useMemo(() => {
+    if (!index || !currentFile) return [];
+    return index.backlinks(currentFile).map(({ source, context }) => ({
+      sourceNodeId: source,
+      sourceTitle: source.split('/').pop().replace(/\.md$/i, ''),
+      targetNodeId: currentFile,
+      context,
+      position: 0,
+      linkText: '',
+      created: 0,
+    }));
+  }, [index, indexVersion, currentFile]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Initialize mention detector (unlinked mentions only)
   useEffect(() => {
     if (!graphData) return;
 
     try {
-      backlinkManagerRef.current = new BacklinkManager(graphData);
       mentionDetectorRef.current = new MentionDetector(graphData);
     } catch (err) {
-      console.error('BacklinksPanel: Failed to initialize link managers', err);
+      console.error('BacklinksPanel: Failed to initialize mention detector', err);
     }
 
     return () => {
-      if (backlinkManagerRef.current) {
-        backlinkManagerRef.current.destroy();
-      }
       if (mentionDetectorRef.current) {
         mentionDetectorRef.current.destroy();
       }
     };
   }, [graphData]);
 
-  // Get current node ID from file path
+  // Get current node ID from file path (for unlinked mentions + block links)
   const currentNodeId = useMemo(() => {
     if (!currentFile || !graphData || !graphData.nodes) return null;
 
@@ -59,19 +70,15 @@ export default function BacklinksPanel({
     return null;
   }, [currentFile, graphData]);
 
-  // Update backlinks when current file changes
+  // Update unlinked mentions + block backlinks when current file changes
   useEffect(() => {
-    if (!currentNodeId || !backlinkManagerRef.current || !mentionDetectorRef.current) {
-      setBacklinks([]);
+    if (!currentNodeId || !mentionDetectorRef.current) {
       setUnlinkedMentions([]);
       setBlockBacklinks([]);
       return;
     }
 
     try {
-      const links = backlinkManagerRef.current.getBacklinks(currentNodeId);
-      setBacklinks(links);
-
       const mentions = mentionDetectorRef.current.getUnlinkedMentions(currentNodeId);
       setUnlinkedMentions(mentions);
 

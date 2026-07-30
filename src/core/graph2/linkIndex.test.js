@@ -5,13 +5,13 @@ const W = '/ws';
 
 describe('scanWikiLinks', () => {
   it('extracts plain links', () => {
-    expect(scanWikiLinks('see [[Note One]] and [[Note Two]]')).toEqual(['Note One', 'Note Two']);
+    expect(scanWikiLinks('see [[Note One]] and [[Note Two]]').map(l => l.target)).toEqual(['Note One', 'Note Two']);
   });
   it('strips aliases and headings', () => {
-    expect(scanWikiLinks('[[Note|display text]] [[Other#Section]]')).toEqual(['Note', 'Other']);
+    expect(scanWikiLinks('[[Note|display text]] [[Other#Section]]').map(l => l.target)).toEqual(['Note', 'Other']);
   });
   it('ignores unclosed brackets and newlines inside', () => {
-    expect(scanWikiLinks('[[never closed\n[[Real]]')).toEqual(['Real']);
+    expect(scanWikiLinks('[[never closed\n[[Real]]').map(l => l.target)).toEqual(['Real']);
   });
   it('handles empty content and non-links', () => {
     expect(scanWikiLinks('')).toEqual([]);
@@ -37,8 +37,9 @@ describe('linkIndex', () => {
     const idx = seed();
     idx.indexContent(`${W}/a.md`, 'links to [[b]] and [[dir/c]]');
     expect(idx.forwardlinks(`${W}/a.md`).sort()).toEqual([`${W}/b.md`, `${W}/dir/c.md`]);
-    expect(idx.backlinks(`${W}/b.md`)).toEqual([`${W}/a.md`]);
-    expect(idx.backlinks(`${W}/dir/c.md`)).toEqual([`${W}/a.md`]);
+    expect(idx.backlinks(`${W}/b.md`).map(b => b.source)).toEqual([`${W}/a.md`]);
+    expect(idx.backlinks(`${W}/dir/c.md`).map(b => b.source)).toEqual([`${W}/a.md`]);
+    expect(idx.backlinks(`${W}/b.md`)[0].context.match).toBe('[[b]]');
   });
 
   it('tracks phantoms for unresolved targets and materializes them later', () => {
@@ -50,7 +51,7 @@ describe('linkIndex', () => {
     idx.addFile(`${W}/future-note.md`);
     expect(idx.stats().phantoms).toBe(0);
     expect(idx.forwardlinks(`${W}/a.md`)).toEqual([`${W}/future-note.md`]);
-    expect(idx.backlinks(`${W}/future-note.md`)).toEqual([`${W}/a.md`]);
+    expect(idx.backlinks(`${W}/future-note.md`).map(b => b.source)).toEqual([`${W}/a.md`]);
   });
 
   it('updateContent re-parses only that file and replaces its edges', () => {
@@ -69,7 +70,7 @@ describe('linkIndex', () => {
     idx.indexContent(`${W}/b.md`, '[[dir/c]]');
     idx.removeFile(`${W}/b.md`);
     expect(idx.forwardlinks(`${W}/a.md`)).toEqual(['phantom:b']);
-    expect(idx.backlinks(`${W}/dir/c.md`)).toEqual([`${W}/b.md`].filter(() => false)); // b is gone entirely
+    expect(idx.backlinks(`${W}/dir/c.md`)).toEqual([]); // b is gone entirely
     expect(idx.forwardlinks(`${W}/b.md`)).toEqual([]);
   });
 

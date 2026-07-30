@@ -53,7 +53,13 @@ export function scanWikiLinks(content) {
       }
       if (closed) {
         const raw = target.split('|')[0].split('#')[0].trim();
-        if (raw) targets.push(raw);
+        if (raw) {
+          // Rich snippet for the backlinks UI: 50 chars around the match.
+          const before = content.slice(Math.max(0, i - 50), i).trim();
+          const match = content.slice(i, j + 2);
+          const after = content.slice(j + 2, Math.min(n, j + 2 + 50)).trim();
+          targets.push({ target: raw, context: { before, match, after, full: before + match + after } });
+        }
         i = j + 2;
         continue;
       }
@@ -76,9 +82,11 @@ export function createLinkIndex() {
   // can memo on version without O(N) rebuilds per render.
   let cachedNodes = [];
   let cachedLinks = [];
+  let cachedStats = null;
   const notify = () => {
     cachedNodes = null;
     cachedLinks = null;
+    cachedStats = null;
     for (const fn of listeners) fn();
   };
 
@@ -120,19 +128,19 @@ export function createLinkIndex() {
     return [...set].sort((a, b) => a.length - b.length || a.localeCompare(b))[0];
   }
 
-  function addEdge(source, target) {
+  function addEdge(source, target, context = '') {
     let f = forward.get(source);
-    if (!f) { f = new Set(); forward.set(source, f); }
-    f.add(target);
+    if (!f) { f = new Map(); forward.set(source, f); }
+    f.set(target, context);
     let inv = inverse.get(target);
-    if (!inv) { inv = new Set(); inverse.set(target, inv); }
-    inv.add(source);
+    if (!inv) { inv = new Map(); inverse.set(target, inv); }
+    inv.set(source, context);
   }
 
   function clearEdgesFrom(source) {
     const outs = forward.get(source);
     if (!outs) return;
-    for (const target of outs) {
+    for (const target of outs.keys()) {
       const inv = inverse.get(target);
       if (inv) {
         inv.delete(source);
@@ -147,17 +155,17 @@ export function createLinkIndex() {
     clearEdgesFrom(source);
     phantoms.delete(keyOf(titleOf(source))); // a file that exists is never phantom
     const seen = new Set();
-    for (const raw of rawTargets) {
+    for (const { target: raw, context } of rawTargets) {
       const key = keyOf(raw);
       if (key === keyOf(titleOf(source))) continue; // self-link
       if (seen.has(key)) continue;
       seen.add(key);
       const resolved = resolve(raw);
       if (resolved) {
-        addEdge(source, resolved);
+        addEdge(source, resolved, context);
       } else {
         phantoms.add(key);
-        addEdge(source, `phantom:${key}`);
+        addEdge(source, `phantom:${key}`, context);
       }
     }
   }
@@ -169,9 +177,9 @@ export function createLinkIndex() {
     const ins = inverse.get(phantomId);
     if (!ins) return;
     phantoms.delete(key);
-    for (const source of [...ins]) {
+    for (const [source, context] of [...ins]) {
       const outs = forward.get(source);
-      if (outs && outs.delete(phantomId)) addEdge(source, path);
+      if (outs && outs.delete(phantomId)) addEdge(source, path, context);
     }
     inverse.delete(phantomId);
   }
@@ -237,11 +245,11 @@ export function createLinkIndex() {
       const ins = inverse.get(path);  // incoming → become phantoms
       if (ins) {
         const key = keyOf(titleOf(path));
-        for (const source of [...ins]) {
+        for (const [source, context] of [...ins]) {
           const outs = forward.get(source);
           if (outs && outs.delete(path)) {
             phantoms.add(key);
-            addEdge(source, `phantom:${key}`);
+            addEdge(source, `phantom:${key}`, context);
           }
         }
         inverse.delete(path);
@@ -256,18 +264,20 @@ export function createLinkIndex() {
       this.removeFile(oldPath);
       files.set(newPath, { ...meta });
       addName(newPath);
-      if (outs) for (const t of outs) addEdge(newPath, t);
+      if (outs) for (const [t, context] of outs) addEdge(newPath, t, context);
       materialize(newPath);
       notify();
     },
 
     // --- queries ------------------------------------------------------------
-    /** O(1) backlinks for a path. */
+    /** O(1) backlinks for a path: [{ source, context }]. */
     backlinks(path) {
-      return [...(inverse.get(path) || [])];
+      const inv = inverse.get(path);
+      if (!inv) return [];
+      return [...inv].map(([source, context]) => ({ source, context }));
     },
     forwardlinks(path) {
-      return [...(forward.get(path) || [])];
+      return [...(forward.get(path)?.keys() || [])];
     },
     /** All graph nodes: real files + phantom placeholders (cached snapshot). */
     nodes() {
@@ -291,9 +301,12 @@ export function createLinkIndex() {
       return [...files.keys()].filter(p => !forward.get(p)?.size && !inverse.get(p)?.size);
     },
     stats() {
-      let edgeCount = 0;
-      for (const [, set] of forward) edgeCount += set.size;
-      return { files: files.size, links: edgeCount, phantoms: phantoms.size };
+      if (!cachedStats) {
+        let edgeCount = 0;
+        for (const [, set] of forward) edgeCount += set.size;
+        cachedStats = { files: files.size, links: edgeCount, phantoms: phantoms.size };
+      }
+      return cachedStats;
     },
 
     resolve,
