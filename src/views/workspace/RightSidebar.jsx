@@ -1,14 +1,17 @@
 import { useLayoutStore } from '../../stores/layout';
 import { useViewStore } from '../../stores/views';
 import { useEditorGroupStore } from '../../stores/editorGroups';
-import { useFileTreeStore } from '../../stores/fileTree';
 import { getEditor } from '../../stores/editorRegistry';
 import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
-import { useMemo } from 'react';
+import { lazy, Suspense } from 'react';
+import { Network } from 'lucide-react';
 import DocumentOutline from '../../components/DocumentOutline.jsx';
 import BacklinksPanel from '../BacklinksPanel.jsx';
 import GraphSidebar from '../../components/GraphSidebar.jsx';
-import FocusedGraphView from '../../components/FocusedGraphView.jsx';
+
+const ProfessionalGraphView = lazy(() =>
+  import('../ProfessionalGraphView').then(m => ({ default: m.ProfessionalGraphView }))
+);
 import VersionHistoryPanel from '../../components/VersionHistoryPanel.jsx';
 import { DailyNotesPanel } from '../../components/DailyNotes/index.js';
 import { AgendaPanel, CalendarWidget } from '../../components/Calendar/index.js';
@@ -67,25 +70,6 @@ export default function RightSidebar({
 
   const featureFlags = useFeatureFlags();
 
-  // Live file index for the Local Graph — re-derives whenever the file-tree
-  // store changes (file created/renamed/deleted), so the graph resolves new
-  // files without a reload.
-  const fileTree = useFileTreeStore((s) => s.fileTree);
-  const fileIndex = useMemo(() => {
-    const flat = [];
-    const walk = (entries) => {
-      for (const e of entries || []) {
-        if (e.is_directory) {
-          walk(e.children);
-        } else if (e.path?.endsWith('.md')) {
-          flat.push({ path: e.path, title: (e.name || e.path.split('/').pop()).replace(/\.md$/, '') });
-        }
-      }
-    };
-    walk(fileTree);
-    return flat;
-  }, [fileTree]);
-
   if (!showRight) return null;
 
   const handleOpenCalendarView = (target = null) => {
@@ -111,7 +95,7 @@ export default function RightSidebar({
     <aside
       className="h-full overflow-y-auto flex flex-col bg-app-panel border-l border-app-border"
     >
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
         {featureFlags.enable_version_history && showVersionHistory ? (
           <VersionHistoryPanel
             key={`version-${activeFile}-${versionRefreshKey}`}
@@ -157,14 +141,19 @@ export default function RightSidebar({
           />
         ) : (
           <>
-            {/* Local Graph — the default right-sidebar panel (live) */}
-            <div className="h-[260px] flex-none border-b border-app-border">
-              <FocusedGraphView
-                currentFile={activeFile}
-                editor={getEditor(focusedGroupId)}
-                fileIndex={fileIndex}
-                onFileClick={onFileOpen}
-              />
+            {/* Graph — the real graph page, embedded as the default panel */}
+            <div className="h-[280px] flex-none border-b border-app-border flex flex-col">
+              <div className="h-[38px] px-3 border-b border-app-border flex items-center flex-none">
+                <h3 className="text-[13px] font-semibold flex items-center gap-2 text-app-text">
+                  <Network className="w-4 h-4" strokeWidth={1.5} />
+                  Graph
+                </h3>
+              </div>
+              <div className="flex-1 min-h-0">
+                <Suspense fallback={<div className="h-full flex items-center justify-center text-app-muted text-xs">Loading graph…</div>}>
+                  <ProfessionalGraphView workspacePath={workspacePath} />
+                </Suspense>
+              </div>
             </div>
 
             {/* Editor Mode Switcher */}
