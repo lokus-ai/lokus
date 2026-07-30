@@ -48,10 +48,10 @@ export function useResponsiveTabBar({
     const tabCount = sortedTabs.length;
     if (tabCount === 0) return maxTabWidth;
 
-    // Account for -12px overlap between tabs
+    // Account for the 2px gap between tabs
     // Total width needed = (width * count) - (overlap * (count - 1))
     // So: width = (availableWidth + (overlap * (count - 1))) / count
-    const overlap = 12;
+    const overlap = -2;
     const adjustedWidth = (availableWidth + (overlap * (tabCount - 1))) / tabCount;
 
     return Math.max(80, Math.min(maxTabWidth, adjustedWidth));
@@ -71,7 +71,7 @@ export function useResponsiveTabBar({
     reservedSpace,
     calculateItemWidth: calculateTabWidth,
     overflowButtonWidth: 32,
-    itemGap: -12 // Negative gap for overlapping tabs
+    itemGap: 2 // 2px gap between tabs
   });
 
   // Calculate the actual width for each visible tab
@@ -79,7 +79,7 @@ export function useResponsiveTabBar({
     if (visibleTabs.length === 0) return maxTabWidth;
 
     const availableWidth = containerWidth - reservedSpace - (hasOverflow ? 32 : 0);
-    const overlap = 12;
+    const overlap = -2;
     const tabCount = visibleTabs.length;
 
     // Account for overlap: total width = (width * count) - (overlap * (count - 1))

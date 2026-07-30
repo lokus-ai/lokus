@@ -81,6 +81,15 @@ export default function Toolbar({
     }
   };
 
+  // Tab-strip "+" creates a file via the explorer's inline input — make sure
+  // the sidebar is visible or the action looks like a no-op.
+  const handleNewTab = () => {
+    if (!useLayoutStore.getState().showLeft) {
+      useLayoutStore.getState().toggleLeft();
+    }
+    onCreateFile?.();
+  };
+
   // ── Split mode: panes extend to the top, each pane has its own tab bar.
   //    Only render a small floating overlay with action buttons at top-right. ──
   if (!isSingleGroup) {
@@ -191,9 +200,9 @@ export default function Toolbar({
           activeTab={activeFile}
           onTabClick={handleTabClick}
           onTabClose={handleTabClose}
-          onNewTab={onCreateFile}
+          onNewTab={handleNewTab}
           unsavedChanges={unsavedChanges}
-          reservedSpace={0}
+          reservedSpace={40}
         />
       </div>
 

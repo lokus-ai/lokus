@@ -56,13 +56,13 @@ export function ResponsiveTabBar({
         data-tauri-drag-region="false"
         className={`
           responsive-tab relative flex items-center gap-2 px-3 text-[13px] font-medium whitespace-nowrap cursor-pointer
-          max-w-[80px] sm:max-w-[100px] md:max-w-[180px]
-          min-w-[60px] sm:min-w-[80px] md:min-w-[120px]
           ${isActive ? 'responsive-tab-active z-10' : 'z-0'}
         `}
         style={{
           pointerEvents: 'auto',
           marginLeft: index > 0 && isVisible ? '2px' : '0',
+          maxWidth: '240px',
+          minWidth: '140px',
           flexShrink: 1,
         }}
         onMouseEnter={() => !isActive && setHoveredTab(tab.path)}
