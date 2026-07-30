@@ -148,6 +148,7 @@ export default function Toolbar({
         paddingLeft: platformService.isMacOS() ? '80px' : '8px',
         paddingRight: '8px',
         backgroundColor: 'rgb(var(--panel))',
+        borderBottom: '1px solid rgb(var(--border))',
       }}
     >
       {/* Left: sidebar toggle + search (Vellum cluster) */}
