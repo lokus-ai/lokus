@@ -118,7 +118,7 @@ export default function LeftSidebar({
     <aside className="h-full overflow-hidden flex flex-col bg-app-panel border-r border-app-border">
       {/* Explorer Header — icon actions only; the titlebar's bottom
           border is the separator line above this row */}
-      <div className="h-[38px] px-2 flex items-center justify-end gap-0.5 flex-none">
+      <div className="h-[34px] px-2 flex items-center justify-end gap-0.5 flex-none">
         <button
           onClick={onCreateFile}
           className="obsidian-button icon-only small"
@@ -151,7 +151,7 @@ export default function LeftSidebar({
 
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <div className="p-2 flex-1 overflow-y-auto">
+          <div className="px-2 pt-1 pb-2 flex-1 overflow-y-auto">
             <FileTreeView
               entries={filteredFileTree}
               onFileClick={onFileOpen}

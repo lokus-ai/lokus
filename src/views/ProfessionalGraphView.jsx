@@ -1443,7 +1443,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   // Generate background style from config - memoized to only update when background settings change
   const backgroundStyle = React.useMemo(() => {
     const config = graphConfig;
-    const bgType = config.backgroundType || 'radial';
+    const bgType = config.backgroundType || 'solid';
 
     // Get theme colors from CSS variables
     const themeColor1 = getCSSColor('--graph-bg-primary', '#1e1b4b');

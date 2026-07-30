@@ -1,11 +1,14 @@
 import { useLayoutStore } from '../../stores/layout';
 import { useViewStore } from '../../stores/views';
 import { useEditorGroupStore } from '../../stores/editorGroups';
+import { useFileTreeStore } from '../../stores/fileTree';
 import { getEditor } from '../../stores/editorRegistry';
 import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
+import { useMemo } from 'react';
 import DocumentOutline from '../../components/DocumentOutline.jsx';
 import BacklinksPanel from '../BacklinksPanel.jsx';
 import GraphSidebar from '../../components/GraphSidebar.jsx';
+import FocusedGraphView from '../../components/FocusedGraphView.jsx';
 import VersionHistoryPanel from '../../components/VersionHistoryPanel.jsx';
 import { DailyNotesPanel } from '../../components/DailyNotes/index.js';
 import { AgendaPanel, CalendarWidget } from '../../components/Calendar/index.js';
@@ -63,6 +66,25 @@ export default function RightSidebar({
   });
 
   const featureFlags = useFeatureFlags();
+
+  // Live file index for the Local Graph — re-derives whenever the file-tree
+  // store changes (file created/renamed/deleted), so the graph resolves new
+  // files without a reload.
+  const fileTree = useFileTreeStore((s) => s.fileTree);
+  const fileIndex = useMemo(() => {
+    const flat = [];
+    const walk = (entries) => {
+      for (const e of entries || []) {
+        if (e.is_directory) {
+          walk(e.children);
+        } else if (e.path?.endsWith('.md')) {
+          flat.push({ path: e.path, title: (e.name || e.path.split('/').pop()).replace(/\.md$/, '') });
+        }
+      }
+    };
+    walk(fileTree);
+    return flat;
+  }, [fileTree]);
 
   if (!showRight) return null;
 
@@ -135,6 +157,16 @@ export default function RightSidebar({
           />
         ) : (
           <>
+            {/* Local Graph — the default right-sidebar panel (live) */}
+            <div className="h-[260px] flex-none border-b border-app-border">
+              <FocusedGraphView
+                currentFile={activeFile}
+                editor={getEditor(focusedGroupId)}
+                fileIndex={fileIndex}
+                onFileClick={onFileOpen}
+              />
+            </div>
+
             {/* Editor Mode Switcher */}
             <EditorModeSwitcher />
 

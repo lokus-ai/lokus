@@ -263,7 +263,6 @@ function WorkspaceInner({ path }) {
           bottomPanel={<BottomPanel workspacePath={path} onResizeStart={handleBottomPanelResizeStart} />}
           statusBar={null}
         />
-        />
       </div>
 
       <ErrorBoundary name="ModalLayer" message="Modal crashed">

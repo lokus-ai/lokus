@@ -248,8 +248,11 @@ export const RemoteConfigProvider = ({ children }) => {
         let cancelled = false;
         detectExistingUser().then((isExisting) => {
             if (cancelled) return;
-            try { localStorage.setItem(ADVANCED_FEATURES_KEY, isExisting ? 'true' : 'false'); } catch {}
-            setAdvancedFeaturesState(isExisting);
+            // Dev builds always get the full cockpit when undecided — the Simple
+            // default is a product choice for real users, not for developers.
+            const advanced = isExisting || import.meta.env.DEV;
+            try { localStorage.setItem(ADVANCED_FEATURES_KEY, advanced ? 'true' : 'false'); } catch {}
+            setAdvancedFeaturesState(advanced);
         });
         return () => { cancelled = true; };
     }, []);

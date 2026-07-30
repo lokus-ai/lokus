@@ -41,7 +41,7 @@ export function getDefaultConfig() {
     colorGroups: [],
     // Background customization
     'collapse-background': false,
-    backgroundType: 'radial', // 'none', 'solid', 'gradient', 'radial', 'dots', 'grid'
+    backgroundType: 'solid', // 'none', 'solid', 'gradient', 'radial', 'dots', 'grid'
     backgroundColor: '#1e1b4b',
     backgroundSecondary: '#6366f1',
     backgroundOpacity: 0.1,
@@ -162,7 +162,7 @@ export function validateConfig(config) {
   }
   if (typeof config.backgroundType === 'string') {
     const validTypes = ['none', 'solid', 'gradient', 'radial', 'dots', 'grid'];
-    validated.backgroundType = validTypes.includes(config.backgroundType) ? config.backgroundType : 'radial';
+    validated.backgroundType = validTypes.includes(config.backgroundType) ? config.backgroundType : 'solid';
   }
   if (typeof config.backgroundColor === 'string' && /^#[0-9A-F]{6}$/i.test(config.backgroundColor)) {
     validated.backgroundColor = config.backgroundColor;
