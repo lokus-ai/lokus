@@ -117,7 +117,7 @@ export default function LeftSidebar({
   return (
     <aside className="h-full overflow-hidden flex flex-col bg-app-panel border-r border-app-border">
       {/* Explorer Header — icon actions only, no label (Vellum style) */}
-      <div className="h-[42px] px-2 flex items-center justify-end gap-0.5 flex-none">
+      <div className="h-[42px] px-2 flex items-center justify-end gap-0.5 flex-none border-b border-app-border">
         <button
           onClick={onCreateFile}
           className="obsidian-button icon-only small"

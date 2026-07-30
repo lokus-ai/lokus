@@ -105,7 +105,7 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
 
   return (
     <aside
-      className="flex flex-col items-center gap-1 bg-app-panel h-full"
+      className="flex flex-col items-center gap-1 bg-app-panel h-full border-r border-app-border"
       style={{
         paddingTop: platformService.isMacOS() ? '0.5rem' : '0.75rem',
         paddingBottom: '0.75rem',
