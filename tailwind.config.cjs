@@ -8,6 +8,7 @@ module.exports = {
         "app-panel": "rgb(var(--panel) / <alpha-value>)",
         "app-border": "rgb(var(--border) / <alpha-value>)",
         "app-text": "rgb(var(--text) / <alpha-value>)",
+        "app-text-secondary": "rgb(var(--text-secondary) / <alpha-value>)",
         "app-muted": "rgb(var(--muted) / <alpha-value>)",
         "app-accent": "rgb(var(--accent) / <alpha-value>)",
         "app-accent-fg": "rgb(var(--accent-fg) / <alpha-value>)",

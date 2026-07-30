@@ -180,7 +180,7 @@ export default function Toolbar({
           left: showLeft
             ? `${leftW + 53}px`
             : `${platformService.isMacOS() ? 160 : 84}px`,
-          right: showRight ? `${rightW + 120}px` : '120px',
+          right: showRight ? `${rightW + 84}px` : '84px',
           top: 0,
           height: '40px',
         }}
@@ -190,12 +190,13 @@ export default function Toolbar({
           activeTab={activeFile}
           onTabClick={handleTabClick}
           onTabClose={handleTabClose}
+          onNewTab={onCreateFile}
           unsavedChanges={unsavedChanges}
           reservedSpace={0}
         />
       </div>
 
-      {/* Right: split view toggle, sidebar toggle, new tab */}
+      {/* Right: split view toggle, sidebar toggle */}
       <div className="flex items-center gap-1">
         {uiVisibility.toolbar_split_view && hasActiveTabs && (
           <button
@@ -224,15 +225,6 @@ export default function Toolbar({
           ) : (
             <PanelRightOpen className="w-4 h-4" strokeWidth={1.5} />
           )}
-        </button>
-        <button
-          onClick={onCreateFile}
-          className="obsidian-button icon-only small"
-          title="New Tab"
-          data-tauri-drag-region="false"
-          style={{ pointerEvents: 'auto' }}
-        >
-          <Plus className="w-4 h-4" strokeWidth={1.5} />
         </button>
       </div>
     </div>

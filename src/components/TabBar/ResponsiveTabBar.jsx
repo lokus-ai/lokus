@@ -18,6 +18,7 @@ export function ResponsiveTabBar({
   activeTab = null,
   onTabClick,
   onTabClose,
+  onNewTab,
   unsavedChanges = new Set(),
   reservedSpace = 0
 }) {
@@ -189,6 +190,21 @@ export function ResponsiveTabBar({
 
       {/* Overflow menu */}
       {renderOverflowMenu()}
+
+      {/* New tab — sits right after the tabs (Vellum), not at the window edge */}
+      {onNewTab && (
+        <button
+          onClick={onNewTab}
+          title="New Tab"
+          data-tauri-drag-region="false"
+          className="self-center grid place-items-center w-[30px] h-[30px] ml-1 rounded-[7px] bg-transparent text-app-muted hover:bg-[rgb(var(--text)/0.07)] hover:text-app-text transition-colors flex-none"
+          style={{ pointerEvents: 'auto' }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <path d="M8 3.5v9M3.5 8h9" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }

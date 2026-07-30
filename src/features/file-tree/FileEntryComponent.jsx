@@ -517,7 +517,7 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
       className="file-entry-container"
       data-level={level}
       data-path={entry.path}
-      style={{ paddingLeft: `${level * 1.25}rem`, '--level': level }}
+      style={{ paddingLeft: `${level * 1}rem`, '--level': level }}
     >
       <div
         ref={(node) => {
@@ -526,7 +526,7 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
         }}
         className="rounded"
       >
-        <div ref={draggableRef} className="flex items-center">
+        <div ref={draggableRef} className="flex items-center w-full">
           <FileContextMenu
             file={{ ...entry, type: entry.is_directory ? 'folder' : 'file' }}
             onAction={handleFileContextAction}
@@ -539,15 +539,17 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
               onClick={handleClick}
               onDragEnter={handleExternalDragEnter}
               onDragLeave={handleExternalDragLeave}
-              className={`${baseClasses} ${stateClasses} ${selectedClasses} ${dropTargetClasses} ${draggingClasses} ${willExpandClasses} ${externalDropTargetClasses} file-entry-item`}
+              className={`${baseClasses} ${stateClasses} ${selectedClasses} ${dropTargetClasses} ${draggingClasses} ${willExpandClasses} ${externalDropTargetClasses} ${entry.is_directory ? '' : 'file-leaf'} file-entry-item`}
             >
-              <ColoredFileIcon
-                fileName={entry.name}
-                isDirectory={entry.is_directory}
-                isExpanded={isExpanded}
-                className="obsidian-file-icon"
-                showChevron={true}
-              />
+              {entry.is_directory && (
+                <ColoredFileIcon
+                  fileName={entry.name}
+                  isDirectory={entry.is_directory}
+                  isExpanded={isExpanded}
+                  className="obsidian-file-icon"
+                  showChevron={true}
+                />
+              )}
               {renamingPath === entry.path ? (
                 <InlineRenameInput
                   initialValue={entry.name}
@@ -555,7 +557,7 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
                   onCancel={handleRenameCancel}
                 />
               ) : (
-                <span className="truncate">
+                <span className={`truncate flex-1 min-w-0 ${entry.is_directory ? 'font-medium text-app-text-secondary' : ''}`}>
                   {entry.is_directory ? entry.name : getNameWithoutExtension(entry.name)}
                 </span>
               )}
@@ -575,7 +577,7 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
             transition={{ duration: 0.2, ease: "easeInOut" }}
             className="folder-children-container"
           >
-            <ul className="space-y-1 mt-1">
+            <ul className="space-y-0 mt-0">
               {entry.children.map(child => (
                 <FileEntryComponent
                   key={child.path}

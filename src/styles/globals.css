@@ -1847,25 +1847,18 @@ div:focus-visible,
   overflow-x: hidden;
 }
 
-/* Indentation Guides - VS Code style vertical lines */
+/* File tree: no indent guides (Vellum/VS Code clean), leaf rows align
+   with folder names (chevron column = 14px + 6px margin). */
 .file-entry-container {
   position: relative;
 }
 
 .file-entry-container::before {
-  content: '';
-  position: absolute;
-  left: calc(var(--level) * 1.25rem + 0.5rem);
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background-color: rgb(var(--border) / 0.3);
-  pointer-events: none;
+  display: none;
 }
 
-/* Hide guide line for root level items */
-.file-entry-container[data-level="0"]::before {
-  display: none;
+.file-leaf {
+  padding-left: 28px !important;
 }
 
 /* Drag Preview Styling */
@@ -1934,7 +1927,7 @@ div:focus-visible,
 
 /* File Count Badge */
 .file-count-badge {
-  margin-left: 4px;
+  margin-left: auto;
   padding: 0 4px;
   font-size: 0.75rem;
   color: rgb(var(--muted));
