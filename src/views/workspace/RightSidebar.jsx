@@ -87,7 +87,7 @@ export default function RightSidebar({
 
   return (
     <aside
-      className="h-full overflow-y-auto flex flex-col bg-app-bg border-l border-app-border"
+      className="h-full overflow-y-auto flex flex-col bg-app-panel border-l border-app-border"
     >
       <div className="flex-1 overflow-hidden">
         {featureFlags.enable_version_history && showVersionHistory ? (
