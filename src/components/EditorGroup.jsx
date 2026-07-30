@@ -495,7 +495,7 @@ export default function EditorGroup({
 
   return (
     <div
-      className={`flex flex-col h-full relative bg-app-bg ${isFocused ? 'ring-2 ring-app-accent' : ''}`}
+      className={`flex flex-col h-full relative bg-app-bg`}
       onClick={handleFocus}
     >
       {/* Per-pane tab bar — shown in split mode (hideTabBar=false).
@@ -506,7 +506,6 @@ export default function EditorGroup({
           data-tauri-drag-region
           style={{
             backgroundColor: 'rgb(var(--panel))',
-            borderBottom: '1px solid rgb(var(--border))',
             flexShrink: 0,
           }}
         >
@@ -669,10 +668,9 @@ export default function EditorGroup({
               onChange={handleTitleChange}
               onKeyDown={handleTitleKeyDown}
               onBlur={commitTitle}
-              className="w-full bg-transparent text-4xl font-bold pb-3 mb-4 outline-none text-app-text"
+              className="w-full bg-transparent text-4xl font-bold pb-3 mb-4 outline-none text-app-text font-display tracking-[-0.01em]"
               placeholder="Untitled"
               spellCheck={false}
-              style={{ borderBottom: '1px solid rgb(var(--border) / 0.4)' }}
             />
 
             {/*

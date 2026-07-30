@@ -1,13 +1,13 @@
 import { useLayoutStore } from '../../stores/layout';
+import { useViewStore } from '../../stores/views';
 import { useEditorGroupStore } from '../../stores/editorGroups';
 import { useTabMetaStore, selectGroupDirtyPaths } from '../../stores/tabMeta';
 import { useShallow } from 'zustand/shallow';
 import { useUIVisibility, useFeatureFlags } from '../../contexts/RemoteConfigContext';
 import { ResponsiveTabBar } from '../../components/TabBar/ResponsiveTabBar.jsx';
 import {
-  FilePlus as FilePlusCorner,
-  FolderOpen,
-  SquareKanban,
+  PanelLeft,
+  Search,
   SquareSplitHorizontal,
   PanelRightOpen,
   PanelRightClose,
@@ -109,7 +109,7 @@ export default function Toolbar({
             data-tour="split-view"
             style={{ pointerEvents: 'auto' }}
           >
-            <SquareSplitHorizontal className="w-5 h-5" strokeWidth={2} />
+            <SquareSplitHorizontal className="w-4 h-4" strokeWidth={1.5} />
           </button>
         )}
         <button
@@ -120,9 +120,9 @@ export default function Toolbar({
           style={{ pointerEvents: 'auto' }}
         >
           {showRight ? (
-            <PanelRightClose className="w-5 h-5" strokeWidth={2} />
+            <PanelRightClose className="w-4 h-4" strokeWidth={1.5} />
           ) : (
-            <PanelRightOpen className="w-5 h-5" strokeWidth={2} />
+            <PanelRightOpen className="w-4 h-4" strokeWidth={1.5} />
           )}
         </button>
         <button
@@ -132,7 +132,7 @@ export default function Toolbar({
           data-tauri-drag-region="false"
           style={{ pointerEvents: 'auto' }}
         >
-          <Plus className="w-5 h-5" strokeWidth={2.5} />
+          <Plus className="w-4 h-4" strokeWidth={1.5} />
         </button>
       </div>
     );
@@ -144,62 +144,45 @@ export default function Toolbar({
       className="fixed top-0 left-0 right-0 flex items-center justify-between z-50"
       data-tauri-drag-region
       style={{
-        height: '29px',
+        height: '40px',
         paddingLeft: platformService.isMacOS() ? '80px' : '8px',
         paddingRight: '8px',
         backgroundColor: 'rgb(var(--panel))',
-        borderBottom: '1px solid rgb(var(--border))',
       }}
     >
-      {/* Left: action buttons */}
+      {/* Left: sidebar toggle + search (Vellum cluster) */}
       <div className="flex items-center gap-1">
-        {uiVisibility.toolbar_new_file && (
-          <button
-            onClick={onCreateFile}
-            className="obsidian-button icon-only small"
-            title={`New File (${platformService.getModifierSymbol()}+N)`}
-            data-tauri-drag-region="false"
-            data-tour="create-note"
-            style={{ pointerEvents: 'auto' }}
-          >
-            <FilePlusCorner className="w-5 h-5" strokeWidth={2} />
-          </button>
-        )}
-        {uiVisibility.toolbar_new_folder && (
-          <button
-            onClick={onCreateFolder}
-            className="obsidian-button icon-only small"
-            title={`New Folder (${platformService.getModifierSymbol()}+Shift+N)`}
-            data-tauri-drag-region="false"
-            style={{ pointerEvents: 'auto' }}
-          >
-            <FolderOpen className="w-5 h-5" strokeWidth={2} />
-          </button>
-        )}
-        {featureFlags.enable_canvas && uiVisibility.toolbar_new_canvas && (
-          <button
-            onClick={onCreateCanvas}
-            className="obsidian-button icon-only small"
-            title="New Canvas"
-            data-tauri-drag-region="false"
-            style={{ pointerEvents: 'auto' }}
-          >
-            <SquareKanban className="w-5 h-5" strokeWidth={2} />
-          </button>
-        )}
+        <button
+          onClick={() => useLayoutStore.getState().toggleLeft()}
+          className={`obsidian-button icon-only small ${showLeft ? 'active' : ''}`}
+          title={showLeft ? 'Hide Sidebar' : 'Show Sidebar'}
+          data-tauri-drag-region="false"
+          style={{ pointerEvents: 'auto' }}
+        >
+          <PanelLeft className="w-4 h-4" strokeWidth={1.5} />
+        </button>
+        <button
+          onClick={() => useViewStore.getState().togglePanel('showCommandPalette')}
+          className="obsidian-button icon-only small"
+          title={`Search (${platformService.getModifierSymbol()}+K)`}
+          data-tauri-drag-region="false"
+          style={{ pointerEvents: 'auto' }}
+        >
+          <Search className="w-4 h-4" strokeWidth={1.5} />
+        </button>
       </div>
 
       {/* Center: tab bar in titlebar */}
       <div
-        className="absolute flex items-center overflow-hidden px-2"
+        className="absolute flex items-stretch overflow-hidden px-2"
         data-tauri-drag-region
         style={{
           left: showLeft
-            ? `${leftW + 57}px`
-            : `${platformService.isMacOS() ? 200 : 120}px`,
+            ? `${leftW + 53}px`
+            : `${platformService.isMacOS() ? 160 : 84}px`,
           right: showRight ? `${rightW + 120}px` : '120px',
           top: 0,
-          height: '32px',
+          height: '40px',
         }}
       >
         <ResponsiveTabBar
@@ -226,7 +209,7 @@ export default function Toolbar({
             data-tour="split-view"
             style={{ pointerEvents: 'auto' }}
           >
-            <SquareSplitHorizontal className="w-5 h-5" strokeWidth={2} />
+            <SquareSplitHorizontal className="w-4 h-4" strokeWidth={1.5} />
           </button>
         )}
         <button
@@ -237,9 +220,9 @@ export default function Toolbar({
           style={{ pointerEvents: 'auto' }}
         >
           {showRight ? (
-            <PanelRightClose className="w-5 h-5" strokeWidth={2} />
+            <PanelRightClose className="w-4 h-4" strokeWidth={1.5} />
           ) : (
-            <PanelRightOpen className="w-5 h-5" strokeWidth={2} />
+            <PanelRightOpen className="w-4 h-4" strokeWidth={1.5} />
           )}
         </button>
         <button
@@ -249,7 +232,7 @@ export default function Toolbar({
           data-tauri-drag-region="false"
           style={{ pointerEvents: 'auto' }}
         >
-          <Plus className="w-5 h-5" strokeWidth={2.5} />
+          <Plus className="w-4 h-4" strokeWidth={1.5} />
         </button>
       </div>
     </div>

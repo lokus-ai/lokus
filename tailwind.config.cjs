@@ -17,6 +17,11 @@ module.exports = {
         md: "8px",
         lg: "10px",
       },
+      fontFamily: {
+        sans: ["var(--font-family)", "sans-serif"],
+        display: ["var(--font-display)", "sans-serif"],
+        mono: ["var(--font-mono)", "monospace"],
+      },
       typography: ({ theme }) => ({
         DEFAULT: {
           css: {

@@ -7,11 +7,11 @@ import { useUIVisibility, useFeatureFlags } from '../../contexts/RemoteConfigCon
 import platformService from '../../services/platform/PlatformService.js';
 
 /**
- * IconSidebar — the 48px icon column on the far left.
+ * IconSidebar — the 44px ribbon on the far left.
  *
  * Contains the Lokus logo toggle button and the activity bar buttons:
  * Explorer, Task Board, Graph, Bases, Calendar, Daily Notes, Plugins.
- * Uses useViewStore for currentView/switchView and useLayoutStore for toggleLeft.
+ * Styling is pure CSS (.ribbon-button) — no per-button JS hover.
  */
 export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
   const showLeft = useLayoutStore((s) => s.showLeft);
@@ -49,6 +49,9 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
   const showGraphView = activeTab === '__graph__';
 
   const isExplorer = !showKanban && !showPlugins && !showBases && !showGraphView && showLeft;
+  const isKanbanActive = showKanban && !showPlugins && !showBases && !showGraphView;
+  const isPluginsActive = showPlugins && !showKanban && !showBases && !showGraphView;
+  const isBasesActive = showBases && !showKanban && !showPlugins && !showGraphView;
 
   const handleExplorerClick = () => {
     useViewStore.getState().switchView('editor');
@@ -98,9 +101,11 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
     useViewStore.getState().closePanel('showVersionHistory');
   };
 
+  const iconCls = 'w-[17px] h-[17px]';
+
   return (
     <aside
-      className="flex flex-col items-center gap-1 border-r border-app-border bg-app-panel h-full"
+      className="flex flex-col items-center gap-1 bg-app-panel h-full"
       style={{
         paddingTop: platformService.isMacOS() ? '0.5rem' : '0.75rem',
         paddingBottom: '0.75rem',
@@ -110,40 +115,21 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
       <button
         onClick={toggleLeft}
         title={showLeft ? 'Hide sidebar' : 'Show sidebar'}
-        className="obsidian-button icon-only mb-2"
-        onMouseEnter={(e) => {
-          const icon = e.currentTarget.querySelector('svg');
-          if (icon) icon.style.color = 'rgb(var(--accent))';
-        }}
-        onMouseLeave={(e) => {
-          const icon = e.currentTarget.querySelector('svg');
-          if (icon) icon.style.color = showLeft ? 'rgb(var(--accent))' : 'rgb(var(--text))';
-        }}
+        className="ribbon-button mb-2"
       >
-        <LokusLogo className="w-6 h-6" style={{ color: showLeft ? 'rgb(var(--accent))' : 'rgb(var(--text))' }} />
+        <LokusLogo className="w-5 h-5" />
       </button>
 
       {/* Activity Bar */}
-      <div className="w-full pt-2">
+      <div className="w-full pt-2 flex flex-col gap-1">
         {/* Explorer */}
         <button
           onClick={handleExplorerClick}
           title="Explorer"
           data-tour="files"
-          className="obsidian-button icon-only w-full mb-1"
-          onMouseEnter={(e) => {
-            const icon = e.currentTarget.querySelector('svg');
-            if (icon) icon.style.color = 'rgb(var(--accent))';
-          }}
-          onMouseLeave={(e) => {
-            const icon = e.currentTarget.querySelector('svg');
-            if (icon) icon.style.color = isExplorer ? 'rgb(var(--accent))' : '';
-          }}
+          className={`ribbon-button ${isExplorer ? 'active' : ''}`}
         >
-          <FolderOpen
-            className="w-5 h-5"
-            style={isExplorer ? { color: 'rgb(var(--accent))' } : {}}
-          />
+          <FolderOpen className={iconCls} strokeWidth={1.5} />
         </button>
 
         {/* Task Board (Kanban) */}
@@ -151,28 +137,9 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
           <button
             onClick={handleKanbanClick}
             title="Task Board"
-            className="obsidian-button icon-only w-full mb-1"
-            onMouseEnter={(e) => {
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) icon.style.color = 'rgb(var(--accent))';
-            }}
-            onMouseLeave={(e) => {
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon)
-                icon.style.color =
-                  showKanban && !showPlugins && !showBases && !showGraphView
-                    ? 'rgb(var(--accent))'
-                    : '';
-            }}
+            className={`ribbon-button ${isKanbanActive ? 'active' : ''}`}
           >
-            <LayoutGrid
-              className="w-5 h-5"
-              style={
-                showKanban && !showPlugins && !showBases && !showGraphView
-                  ? { color: 'rgb(var(--accent))' }
-                  : {}
-              }
-            />
+            <LayoutGrid className={iconCls} strokeWidth={1.5} />
           </button>
         )}
 
@@ -181,28 +148,9 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
           <button
             onClick={handlePluginsClick}
             title="Extensions"
-            className="obsidian-button icon-only w-full mb-1"
-            onMouseEnter={(e) => {
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) icon.style.color = 'rgb(var(--accent))';
-            }}
-            onMouseLeave={(e) => {
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon)
-                icon.style.color =
-                  showPlugins && !showKanban && !showBases && !showGraphView
-                    ? 'rgb(var(--accent))'
-                    : '';
-            }}
+            className={`ribbon-button ${isPluginsActive ? 'active' : ''}`}
           >
-            <Puzzle
-              className="w-5 h-5"
-              style={
-                showPlugins && !showKanban && !showBases && !showGraphView
-                  ? { color: 'rgb(var(--accent))' }
-                  : {}
-              }
-            />
+            <Puzzle className={iconCls} strokeWidth={1.5} />
           </button>
         )}
 
@@ -218,28 +166,9 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
             }}
             title="Bases"
             data-tour="bases"
-            className="obsidian-button icon-only w-full mb-1"
-            onMouseEnter={(e) => {
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) icon.style.color = 'rgb(var(--accent))';
-            }}
-            onMouseLeave={(e) => {
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon)
-                icon.style.color =
-                  showBases && !showKanban && !showPlugins && !showGraphView
-                    ? 'rgb(var(--accent))'
-                    : '';
-            }}
+            className={`ribbon-button ${isBasesActive ? 'active' : ''}`}
           >
-            <Database
-              className="w-5 h-5"
-              style={
-                showBases && !showKanban && !showPlugins && !showGraphView
-                  ? { color: 'rgb(var(--accent))' }
-                  : {}
-              }
-            />
+            <Database className={iconCls} strokeWidth={1.5} />
           </button>
         )}
 
@@ -255,17 +184,9 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
             }}
             title="Graph View"
             data-tour="graph"
-            className="obsidian-button icon-only w-full mb-1"
-            onMouseEnter={(e) => {
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) icon.style.color = 'rgb(var(--accent))';
-            }}
-            onMouseLeave={(e) => {
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) icon.style.color = '';
-            }}
+            className={`ribbon-button ${showGraphView ? 'active' : ''}`}
           >
-            <Network className="w-5 h-5" />
+            <Network className={iconCls} strokeWidth={1.5} />
           </button>
         )}
 
@@ -275,61 +196,33 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
             onClick={handleDailyNotesClick}
             title="Daily Notes"
             data-tour="daily-notes"
-            className={`obsidian-button icon-only w-full mb-1 ${showDailyNotesPanel ? 'active' : ''}`}
-            onMouseEnter={(e) => {
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) icon.style.color = 'rgb(var(--accent))';
-            }}
-            onMouseLeave={(e) => {
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) icon.style.color = showDailyNotesPanel ? 'rgb(var(--accent))' : '';
-            }}
+            className={`ribbon-button ${showDailyNotesPanel ? 'active' : ''}`}
           >
-            <Calendar
-              className="w-5 h-5"
-              style={showDailyNotesPanel ? { color: 'rgb(var(--accent))' } : {}}
-            />
+            <Calendar className={iconCls} strokeWidth={1.5} />
           </button>
         )}
 
         {/* Calendar */}
-        {featureFlags.enable_calendar && <button
-          onClick={handleCalendarClick}
-          title="Calendar"
-          className={`obsidian-button icon-only w-full mb-1 ${showCalendarPanel ? 'active' : ''}`}
-          onMouseEnter={(e) => {
-            const icon = e.currentTarget.querySelector('svg');
-            if (icon) icon.style.color = 'rgb(var(--accent))';
-          }}
-          onMouseLeave={(e) => {
-            const icon = e.currentTarget.querySelector('svg');
-            if (icon) icon.style.color = showCalendarPanel ? 'rgb(var(--accent))' : '';
-          }}
-        >
-          <CalendarDays
-            className="w-5 h-5"
-            style={showCalendarPanel ? { color: 'rgb(var(--accent))' } : {}}
-          />
-        </button>}
+        {featureFlags.enable_calendar && (
+          <button
+            onClick={handleCalendarClick}
+            title="Calendar"
+            className={`ribbon-button ${showCalendarPanel ? 'active' : ''}`}
+          >
+            <CalendarDays className={iconCls} strokeWidth={1.5} />
+          </button>
+        )}
 
-        {featureFlags.enable_calendar && <button
-          onClick={handleAgendaClick}
-          title="Agenda"
-          className={`obsidian-button icon-only w-full mb-1 ${showAgendaPanel ? 'active' : ''}`}
-          onMouseEnter={(e) => {
-            const icon = e.currentTarget.querySelector('svg');
-            if (icon) icon.style.color = 'rgb(var(--accent))';
-          }}
-          onMouseLeave={(e) => {
-            const icon = e.currentTarget.querySelector('svg');
-            if (icon) icon.style.color = showAgendaPanel ? 'rgb(var(--accent))' : '';
-          }}
-        >
-          <ListTodo
-            className="w-5 h-5"
-            style={showAgendaPanel ? { color: 'rgb(var(--accent))' } : {}}
-          />
-        </button>}
+        {/* Agenda */}
+        {featureFlags.enable_calendar && (
+          <button
+            onClick={handleAgendaClick}
+            title="Agenda"
+            className={`ribbon-button ${showAgendaPanel ? 'active' : ''}`}
+          >
+            <ListTodo className={iconCls} strokeWidth={1.5} />
+          </button>
+        )}
       </div>
     </aside>
   );
