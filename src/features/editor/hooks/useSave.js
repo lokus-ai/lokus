@@ -8,6 +8,7 @@ import { createLokusSerializer } from '../../../core/markdown/lokus-md-pipeline'
 import { isPlainTextNotePath, docToPlainTextString } from '../../../utils/plainTextNote.js';
 import { DOMSerializer } from 'prosemirror-model';
 import { invoke } from '@tauri-apps/api/core';
+import { useGraphStore } from '../../../core/graph2/graphStore.js';
 import { confirm, save } from '@tauri-apps/plugin-dialog';
 import { toast } from 'sonner';
 import { syncScheduler } from '../../../core/sync/SyncScheduler';
@@ -118,23 +119,10 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
         } catch (_) {}
       }
 
-      // Update graph if processor available
-      if (graphProcessorRef?.current) {
-        try {
-          const updateResult = await graphProcessorRef.current.updateFileContent(pathToSave, contentToSave);
-          if (updateResult.added > 0 || updateResult.removed > 0) {
-            const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
-            useEditorGroupStore.getState().setGraphData(updatedGraphData);
-          }
-        } catch (_) {
-          try {
-            const updatedGraphData = await graphProcessorRef.current.updateChangedFiles([pathToSave]);
-            if (updatedGraphData) useEditorGroupStore.getState().setGraphData(updatedGraphData);
-          } catch (__) {
-            if (onRefreshFiles) onRefreshFiles();
-          }
-        }
-      }
+      // Incremental graph update: re-parse just this file (graph2 index)
+      try {
+        useGraphStore.getState().noteSaved(pathToSave, contentToSave);
+      } catch (_) {}
     } catch (_) {}
   }, [workspacePath, graphProcessorRef, onRefreshFiles]);
 

@@ -7,6 +7,7 @@ import { useViewStore } from "../../stores/views";
 import { useEditorGroupStore } from "../../stores/editorGroups";
 import { useFileTreeStore } from "../../stores/fileTree";
 import { getEditor } from "../../stores/editorRegistry";
+import { useGraphStore } from "../../core/graph2/graphStore.js";
 import { useLayoutDefaults } from "../../contexts/RemoteConfigContext";
 import { getActiveShortcuts } from "../../core/shortcuts/registry.js";
 import { getFilename } from "../../utils/pathUtils.js";
@@ -85,23 +86,16 @@ export function useWorkspaceEvents({
     const handleWikiLinkCreated = async (event) => {
       const { sourceFile } = event.detail;
 
-      if (graphProcessorRef.current) {
-        try {
-          const group = useEditorGroupStore.getState().getFocusedGroup();
-          const activeFile = group?.activeTab;
-          const focusedEditor = getEditor(group?.id);
-          const currentContent = focusedEditor?.state?.doc?.textContent || '';
+      try {
+        const group = useEditorGroupStore.getState().getFocusedGroup();
+        const activeFile = group?.activeTab;
+        const focusedEditor = getEditor(group?.id);
+        const currentContent = focusedEditor?.state?.doc?.textContent || '';
 
-          if (currentContent && sourceFile === activeFile) {
-            const updateResult = await graphProcessorRef.current.updateFileContent(sourceFile, currentContent);
-
-            if ((updateResult.added > 0 || updateResult.removed > 0) && useViewStore.getState().currentView === 'graph') {
-              const updatedGraphData = graphProcessorRef.current.buildGraphStructure();
-              useEditorGroupStore.getState().setGraphData(updatedGraphData);
-            }
-          }
-        } catch {}
-      }
+        if (currentContent && sourceFile === activeFile) {
+          useGraphStore.getState().noteSaved(sourceFile, currentContent);
+        }
+      } catch {}
     };
 
     const handleScrollToBlock = (e) => {
