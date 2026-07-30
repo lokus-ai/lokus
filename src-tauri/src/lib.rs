@@ -65,6 +65,52 @@ struct TabMetadata {
     selection: Option<String>,
 }
 
+/// Process-wide record of the most recently focused window label. Menu commands
+/// that are window-scoped are routed to this window instead of being broadcast
+/// to every window (see `menu::emit_focused`).
+#[derive(Clone, Default)]
+pub struct FocusTracker(pub std::sync::Arc<std::sync::RwLock<Option<String>>>);
+
+impl FocusTracker {
+    pub fn set_focused(&self, label: &str) {
+        if let Ok(mut guard) = self.0.write() {
+            *guard = Some(label.to_string());
+        }
+    }
+
+    pub fn clear_if(&self, label: &str) {
+        if let Ok(mut guard) = self.0.write() {
+            if guard.as_deref() == Some(label) {
+                *guard = None;
+            }
+        }
+    }
+
+    pub fn get(&self) -> Option<String> {
+        self.0.read().ok().and_then(|guard| guard.clone())
+    }
+}
+
+/// Show and focus the best existing window (prefer ws-* workspace windows, then
+/// the main window, then any window), or create a launcher window when none
+/// exist. Used by the tray handlers and the macOS dock Reopen handler.
+#[cfg(desktop)]
+fn show_window_or_launcher(app: &tauri::AppHandle) {
+    let target = app
+        .webview_windows()
+        .into_iter()
+        .find(|(l, _)| l.starts_with("ws-"))
+        .map(|(_, w)| w)
+        .or_else(|| app.get_webview_window("main"))
+        .or_else(|| app.webview_windows().into_iter().next().map(|(_, w)| w));
+    if let Some(w) = target {
+        let _ = w.show();
+        let _ = w.set_focus();
+    } else {
+        let _ = window_manager::build_launcher_window(app);
+    }
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 struct SessionState {
     open_tabs: Vec<String>,
@@ -640,8 +686,12 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
     let quit_item = MenuItem::with_id(app, "quit", "Quit Lokus", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
 
-    let _tray = TrayIconBuilder::new()
-        .icon(app.default_window_icon().cloned().unwrap())
+    let mut tray_builder = TrayIconBuilder::new();
+    // Tray icon is best-effort: a missing default window icon must not panic setup.
+    if let Some(icon) = app.default_window_icon().cloned() {
+        tray_builder = tray_builder.icon(icon);
+    }
+    let _tray = tray_builder
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_tray_icon_event(|tray, event| {
@@ -651,21 +701,16 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
                 ..
             } = event
             {
-                let app = tray.app_handle();
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
+                show_window_or_launcher(tray.app_handle());
             }
         })
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show_window" => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
+                show_window_or_launcher(app);
             }
             "quit" => {
+                // Flush unsaved editors, then exit programmatically (code=Some(0)).
+                let _ = app.emit("lokus:flush-dirty", ());
                 app.exit(0);
             }
             _ => {}
@@ -1106,11 +1151,22 @@ pub fn run() {
       secure_store::secure_store_delete
     ])
     .setup(|app| {
+      // Tracks the last focused window so window-scoped menu commands can be
+      // routed to it (updated from the on_window_event handler).
+      app.manage(FocusTracker::default());
+
+      // Non-essential init is best-effort: a failure here must never unwind setup and
+      // leave the app with no visible window. The final guard at the end of setup
+      // guarantees a window is shown regardless.
       #[cfg(desktop)]
-      menu::init(&app.handle())?;
+      if let Err(e) = menu::init(&app.handle()) {
+        tracing::error!("menu init failed (continuing): {}", e);
+      }
 
       #[cfg(desktop)]
-      setup_tray(app)?;
+      if let Err(e) = setup_tray(app) {
+        tracing::error!("tray setup failed (continuing): {}", e);
+      }
 
       // Install native macOS notification delegate and register categories.
       // Permission request is non-blocking; the OS shows a dialog at most once.
@@ -1266,8 +1322,6 @@ pub fn run() {
       #[cfg(desktop)]
       {
         let app_handle = app.handle().clone();
-        let store = StoreBuilder::new(app.handle(), PathBuf::from(".settings.dat")).build().unwrap();
-        let _ = store.reload();
 
         // In development mode, always clear workspace data and show launcher
         if cfg!(debug_assertions) {
@@ -1297,26 +1351,124 @@ pub fn run() {
             }
           }
         }
+
+        // Final guard: no matter which path ran above (or if an optional step failed),
+        // guarantee SOME window is visible so the app can never launch to nothing.
+        let any_visible = app
+          .webview_windows()
+          .values()
+          .any(|w| w.is_visible().unwrap_or(false));
+        if !any_visible {
+          if let Some(main_window) = app.get_webview_window("main") {
+            let _ = main_window.show();
+            let _ = main_window.set_focus();
+          }
+        }
       }
 
       Ok(())
     })
     .on_window_event(|window, event| {
-      if let WindowEvent::CloseRequested { api, .. } = event {
-        // Let modal windows (preferences) close and be destroyed.
-        // Only hide the main workspace windows to preserve state.
-        if window.label() == "prefs" {
-          return;
+      match event {
+        WindowEvent::CloseRequested { api, .. } => {
+          let label = window.label().to_string();
+
+          // Modal windows (preferences) close and are destroyed normally.
+          if label == "prefs" {
+            return;
+          }
+
+          // Give the frontend a chance to flush any unsaved editors before the
+          // webview is destroyed.
+          let _ = window.emit("lokus:flush-dirty", ());
+          api.prevent_close();
+
+          // Every window is mortal: destroy it shortly after so the flush event
+          // has time to run. ExitRequested(code=None) keeps the app alive in
+          // the tray once the last window is gone — the desired macOS behavior.
+          let win = window.clone();
+          std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            if win.destroy().is_err() {
+              let _ = win.hide();
+            }
+          });
         }
-        let _ = window.hide();
-        api.prevent_close();
+        // Track the focused window so window-scoped menu commands can be routed
+        // to it instead of broadcast to every window.
+        WindowEvent::Focused(true) => {
+          window.state::<FocusTracker>().set_focused(window.label());
+        }
+        WindowEvent::Destroyed => {
+          window.state::<FocusTracker>().clear_if(window.label());
+        }
+        _ => {}
       }
     })
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
-    .run(|_app, event| {
-      if let RunEvent::ExitRequested { api, .. } = event {
-        api.prevent_exit();
+    .run(|app, event| {
+      match event {
+        RunEvent::ExitRequested { api, code, .. } => {
+          // code == None  -> the last window was destroyed by the user; keep the app
+          //                  alive in the tray instead of quitting.
+          // code == Some  -> a real user quit (tray Quit / File→Quit / Cmd+Q all route
+          //                  through app.exit(0)); let it proceed.
+          if code.is_none() {
+            api.prevent_exit();
+          } else {
+            // Belt-and-braces: ask the frontend to flush unsaved editors, then give it a
+            // brief moment before the process exits (the frontend also autosaves on a
+            // debounce, so this is a safety net, not the primary mechanism).
+            let _ = app.emit("lokus:flush-dirty", ());
+            std::thread::sleep(std::time::Duration::from_millis(250));
+          }
+        }
+        // macOS: clicking the dock icon after all windows were hidden/closed.
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen { .. } => {
+          show_window_or_launcher(app);
+        }
+        _ => {}
       }
     });
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::FocusTracker;
+
+    #[test]
+    fn focus_tracker_starts_empty() {
+        let tracker = FocusTracker::default();
+        assert_eq!(tracker.get(), None);
+    }
+
+    #[test]
+    fn focus_tracker_sets_last_focused_label() {
+        let tracker = FocusTracker::default();
+        tracker.set_focused("ws-notes-1a2b3c4d");
+        assert_eq!(tracker.get(), Some("ws-notes-1a2b3c4d".to_string()));
+        tracker.set_focused("launcher-42");
+        assert_eq!(tracker.get(), Some("launcher-42".to_string()));
+    }
+
+    #[test]
+    fn focus_tracker_clears_on_destroy_of_same_window() {
+        let tracker = FocusTracker::default();
+        tracker.set_focused("ws-notes-1a2b3c4d");
+        tracker.clear_if("ws-notes-1a2b3c4d");
+        assert_eq!(tracker.get(), None);
+    }
+
+    #[test]
+    fn focus_tracker_ignores_destroy_of_other_window() {
+        // Destroying a background window must not drop the real focus target,
+        // or menu commands would silently fall back to broadcast.
+        let tracker = FocusTracker::default();
+        tracker.set_focused("ws-notes-1a2b3c4d");
+        tracker.clear_if("launcher-42");
+        assert_eq!(tracker.get(), Some("ws-notes-1a2b3c4d".to_string()));
+    }
 }

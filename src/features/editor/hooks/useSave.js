@@ -2,12 +2,16 @@ import { useCallback, useRef } from 'react';
 import { useEditorGroupStore } from '../../../stores/editorGroups';
 import { useViewStore } from '../../../stores/views';
 import { getEditor } from '../../../stores/editorRegistry';
+import { getTabModel, setSavedDoc } from '../../../stores/tabModels';
+import { getTabMeta } from '../../../stores/tabMeta';
 import { createLokusSerializer } from '../../../core/markdown/lokus-md-pipeline';
 import { isPlainTextNotePath, docToPlainTextString } from '../../../utils/plainTextNote.js';
 import { DOMSerializer } from 'prosemirror-model';
 import { invoke } from '@tauri-apps/api/core';
 import { confirm, save } from '@tauri-apps/plugin-dialog';
+import { toast } from 'sonner';
 import { syncScheduler } from '../../../core/sync/SyncScheduler';
+import { writeFileGuarded } from '../../../core/sync/guardedWrite';
 
 const lokusSerializer = createLokusSerializer();
 
@@ -30,7 +34,29 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
       editor = getEditor(groupId);
     }
 
-    if (!editor || !filePath) return;
+    if (!filePath) return;
+
+    // VS Code principle: save serializes the tab's OWN model — never the
+    // shared EditorView, which may still display another tab's document
+    // mid-switch. No model yet (tab still loading from disk, or load
+    // failed) → there is nothing trustworthy to write; do nothing.
+    let docToSave;
+    if (groupId) {
+      const model = getTabModel(groupId, filePath);
+      if (!model) return;
+      docToSave = model.state.doc;
+    } else {
+      // Explicit editor+path call from a legacy caller — trust the caller.
+      if (!editor) return;
+      docToSave = editor.state.doc;
+    }
+
+    // Never save a tab whose file failed to load — the editor never held its
+    // content, so writing would overwrite the original with something else.
+    if (groupId) {
+      const grp = useEditorGroupStore.getState().findGroup(groupId);
+      if (grp?.contentByTab?.[filePath]?.loadError) return;
+    }
 
     let pathToSave = filePath;
 
@@ -38,21 +64,23 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
       // Check if title was changed — if so, rename the file first
       if (groupId) {
         const store = useEditorGroupStore.getState();
-        const group = store.findGroup(groupId);
-        const tabContent = group?.contentByTab?.[filePath];
-        if (tabContent?.title) {
+        const title = getTabMeta(groupId, filePath)?.title;
+        if (title) {
           const currentFileName = (filePath.split('/').pop() || '').replace(/\.(md|txt)$/i, '');
-          if (tabContent.title !== currentFileName && tabContent.title.trim()) {
+          if (title !== currentFileName && title.trim()) {
             const dir = filePath.substring(0, filePath.lastIndexOf('/'));
             const ext = filePath.includes('.') ? filePath.substring(filePath.lastIndexOf('.')) : '.md';
-            const newPath = `${dir}/${tabContent.title}${ext}`;
+            const newPath = `${dir}/${title}${ext}`;
             try {
-              await invoke('rename_file', { oldPath: filePath, newPath });
+              // Rust handler is rename_file(path, new_name) — new_name is the
+              // file NAME (with extension), not a full path.
+              await invoke('rename_file', { path: filePath, newName: `${title}${ext}` });
               store.updateTabPath(filePath, newPath);
               pathToSave = newPath;
               if (onRefreshFiles) onRefreshFiles();
-            } catch (_) {
-              // If rename fails, save to original path
+            } catch (e) {
+              // If rename fails, save to original path — but tell the user.
+              toast.error(`Failed to rename file: ${e?.message || e}`);
             }
           }
         }
@@ -60,17 +88,24 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
 
       // Serialize: plain text for .txt, markdown otherwise
       const contentToSave = isPlainTextNotePath(pathToSave)
-        ? docToPlainTextString(editor.state.doc)
-        : lokusSerializer.serialize(editor.state.doc);
+        ? docToPlainTextString(docToSave)
+        : lokusSerializer.serialize(docToSave);
 
-      await invoke('write_file_content', { path: pathToSave, content: contentToSave });
+      await writeFileGuarded(pathToSave, contentToSave);
 
       // Trigger sync for this specific file (debounced + batched inside scheduler)
       syncScheduler.onFileSaved(pathToSave);
 
-      // Mark tab as saved in the store
+      // Record what's on disk and clear/recompute the dirty flag. If the
+      // user kept typing while the write was in flight, compare the tab's
+      // CURRENT model against what was written instead of blindly marking
+      // the tab clean. Comparison is O(1) document identity — no serialize.
       if (groupId) {
-        useEditorGroupStore.getState().markTabDirty(groupId, pathToSave, false);
+        const store = useEditorGroupStore.getState();
+        store.setTabContent(groupId, pathToSave, { savedContent: contentToSave });
+        setSavedDoc(groupId, pathToSave, docToSave);
+        const nowModel = getTabModel(groupId, pathToSave);
+        store.markTabDirty(groupId, pathToSave, !!nowModel && nowModel.state.doc !== docToSave);
       }
 
       // Save version if content changed
@@ -106,16 +141,32 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
   const handleSaveAs = useCallback(async (editorArg, filePathArg) => {
     let editor = editorArg;
     let filePath = filePathArg;
+    let groupId = null;
 
     if (!editor || !filePath) {
       const store = useEditorGroupStore.getState();
       const focusedGroup = store.getFocusedGroup?.() ?? null;
       if (!focusedGroup) return;
+      groupId = focusedGroup.id;
       filePath = focusedGroup.activeTab;
-      editor = getEditor(focusedGroup.id);
+      editor = getEditor(groupId);
     }
 
-    if (!editor || !filePath) return;
+    if (!filePath) return;
+
+    // Same model-first rule as handleSave: never serialize the shared view.
+    let docToSave;
+    let schemaForExport;
+    if (groupId) {
+      const model = getTabModel(groupId, filePath);
+      if (!model) return;
+      docToSave = model.state.doc;
+      schemaForExport = model.state.schema;
+    } else {
+      if (!editor) return;
+      docToSave = editor.state.doc;
+      schemaForExport = editor.state.schema;
+    }
 
     try {
       const currentFileName = filePath.split('/').pop().replace(/\.[^.]*$/, '');
@@ -135,10 +186,10 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
       if (!savePath) return;
 
       // Serialize ProseMirror document directly to markdown
-      let contentToSave = lokusSerializer.serialize(editor.state.doc);
+      let contentToSave = lokusSerializer.serialize(docToSave);
 
       if (savePath.endsWith('.html')) {
-        const fragment = DOMSerializer.fromSchema(editor.state.schema).serializeFragment(editor.state.doc.content);
+        const fragment = DOMSerializer.fromSchema(schemaForExport).serializeFragment(docToSave.content);
         const div = document.createElement('div');
         div.appendChild(fragment);
         const htmlContent = div.innerHTML;
@@ -163,12 +214,12 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
       } else if (savePath.endsWith('.json')) {
         contentToSave = JSON.stringify({
           title: currentFileName,
-          content: lokusSerializer.serialize(editor.state.doc),
+          content: lokusSerializer.serialize(docToSave),
           exported: new Date().toISOString(),
           format: 'markdown'
         }, null, 2);
       } else if (savePath.endsWith('.txt')) {
-        contentToSave = editor.state.doc.textContent;
+        contentToSave = docToSave.textContent;
       }
       // .md and other formats use the markdown content already set above
 
@@ -179,6 +230,7 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
       store.updateTabPath(filePath, savePath);
       const group = store.getFocusedGroup();
       if (group) {
+        setSavedDoc(group.id, savePath, docToSave);
         store.markTabDirty(group.id, savePath, false);
       }
 

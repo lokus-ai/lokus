@@ -70,9 +70,10 @@ describe("router model selection", async () => {
     expect(resolveModel(undefined, "paid").model).toBe(DEFAULT_MODEL);
   });
 
-  it("anthropic resolution carries a gpt-4o fallback", () => {
+  it("paid default resolves to gpt-4o with anthropic fallback", () => {
     const r = resolveModel(undefined, "paid");
-    expect(r.fallback?.model).toBe("gpt-4o");
+    expect(r.model).toBe("gpt-4o");
+    expect(r.fallback?.model).toBe("claude-sonnet-4-20250514");
   });
 
   it("free tier cannot request the paid default model", () => {
@@ -83,9 +84,10 @@ describe("router model selection", async () => {
     expect(() => resolveModel("gpt-4o", "free")).toThrow();
   });
 
-  it("explicit openai model has NO cross-provider fallback", () => {
+  it("explicit openai model gets anthropic fallback when key available", () => {
     const r = resolveModel("gpt-4o", "paid");
-    expect(r.fallback).toBeUndefined();
+    expect(r.model).toBe("gpt-4o");
+    expect(r.fallback?.model).toBe("claude-sonnet-4-20250514");
   });
 
   it("unknown model is rejected", () => {

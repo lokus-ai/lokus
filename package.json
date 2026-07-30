@@ -77,6 +77,9 @@
     "test:watch:silent": "vitest --reporter=basic --hideSkippedTests",
     "test:summary": "vitest run --reporter=verbose",
     "test:failures": "node scripts/test-failures.js",
+    "qa": "node qa/run.js",
+    "qa:journeys": "node qa/run.js --journeys",
+    "qa:ai": "node qa/run.js --ai",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed"
@@ -136,7 +139,7 @@
     "markdown-it-mark": "^4.0.0",
     "markdown-it-strikethrough-alt": "^1.0.0",
     "markdown-it-texmath": "^1.0.0",
-    "mathjs": "^15.1.1",
+    "mathjs": "^15.2.0",
     "mermaid": "^11.12.1",
     "minisearch": "^7.2.0",
     "pdfjs-dist": "^5.4.394",

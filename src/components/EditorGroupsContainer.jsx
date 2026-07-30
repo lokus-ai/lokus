@@ -86,6 +86,7 @@ export default function EditorGroupsContainer({ node, workspacePath, isSingleGro
             <EditorGroupsContainer
               node={child}
               workspacePath={workspacePath}
+              isSingleGroup={isSingleGroup && node.children.length === 1}
               welcomeProps={welcomeProps}
             />
           </div>

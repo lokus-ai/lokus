@@ -4,6 +4,7 @@ import { useLayoutStore } from '../../stores/layout';
 import { useFileTreeStore } from '../../stores/fileTree';
 import { getEditor } from '../../stores/editorRegistry';
 import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
+import { closeTabWithGuard } from '../../features/tabs/closeGuard';
 import CommandPalette from '../../components/CommandPalette.jsx';
 import InFileSearch from '../../components/InFileSearch.jsx';
 import FullTextSearchPanel from '../FullTextSearchPanel.jsx';
@@ -144,7 +145,7 @@ export default function ModalLayer({
   const handleTabClose = (path) => {
     const store = useEditorGroupStore.getState();
     const groupId = store.focusedGroupId || store.getAllGroups()[0]?.id;
-    if (groupId) store.removeTab(groupId, path);
+    if (groupId) closeTabWithGuard(groupId, path);
   };
 
   const handleCreateFolder = () => {

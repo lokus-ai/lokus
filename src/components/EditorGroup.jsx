@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect, useState, useMemo, lazy, Suspense } from 'react';
+import React, { useRef, useCallback, useEffect, useLayoutEffect, useState, useMemo, lazy, Suspense } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { EditorState } from 'prosemirror-state';
 import Editor from '../editor';
@@ -10,16 +10,32 @@ import WelcomeScreen from './WelcomeScreen';
 import { canvasManager } from '../core/canvas/manager';
 import { createLokusParser, createLokusSerializer } from '../core/markdown/lokus-md-pipeline';
 import { registerEditor } from '../stores/editorRegistry';
+import { getTabModel, setTabModel, getSavedDoc, setSavedDoc } from '../stores/tabModels';
+import { useTabMetaStore, getTabMeta, selectGroupDirtyPaths } from '../stores/tabMeta';
+import { useShallow } from 'zustand/shallow';
+import { closeTabWithGuard } from '../features/tabs/closeGuard';
+import { registerTabStateProvider } from '../features/editor/tabSaver';
 import {
   isPlainTextNotePath,
   noteBasenameForTitle,
   plainTextStringToDoc,
-  docToPlainTextString,
 } from '../utils/plainTextNote.js';
 import { isImageFile } from '../utils/imageUtils';
 import { isPDFFile } from '../utils/pdfUtils';
 import { LazyImageViewer, LazyPDFViewer } from './OptimizedWrapper';
 import { useFeatureFlags } from '../contexts/RemoteConfigContext';
+
+// True for tabs that are not handled by the ProseMirror editor
+// (special views, canvases, boards, graphs, images, PDFs).
+const isNonEditorPath = (p) =>
+  !p ||
+  p.startsWith('__') ||
+  p.endsWith('.canvas') ||
+  p.endsWith('.excalidraw') ||
+  p.endsWith('.kanban') ||
+  p.endsWith('.graph') ||
+  isImageFile(p) ||
+  isPDFFile(p);
 
 // Lazy-loaded special tab views
 const BasesView = lazy(() => import('../bases/BasesView'));
@@ -28,17 +44,26 @@ const KanbanBoard = lazy(() => import('./KanbanBoard'));
 const MathGraphEditor = lazy(() => import('./MathGraph/MathGraphEditor.jsx'));
 
 /**
- * EditorGroup — a single editor pane with its own tabs, content cache,
- * and ONE persistent ProseMirror EditorView for the group's lifetime.
+ * EditorGroup — a single editor pane with its own tabs and ONE persistent
+ * ProseMirror EditorView for the group's lifetime.
  *
- * Tab switching strategy (EditorState-per-tab):
- *   1. Save the departing tab's full EditorState into an in-memory Map.
- *   2. Restore the arriving tab's EditorState via view.updateState().
- *      - If cached in Map  → instant restore (undo history, cursor preserved)
- *      - If not cached     → load from disk, parse, create fresh EditorState
+ * Model–view separation (VS Code TextModel principle):
+ *   - Every tab owns an isolated model — its full EditorState (doc, undo
+ *     history, selection) + scroll position — stored in the module-level
+ *     tabModels registry, NOT in this component. Models survive remounts.
+ *   - The EditorView is only a view. Switching tabs re-points it at the
+ *     active tab's model. The swap is TRANSACTIONAL: it happens
+ *     synchronously (useLayoutEffect, before paint), so at no instant does
+ *     the view display one tab's document while another tab is active.
+ *       - model cached  → instant updateState() (undo, cursor, scroll kept)
+ *       - not cached    → the view is blanked synchronously (placeholder
+ *         state, read-only) while the file loads from disk; the old tab's
+ *         document is never painted under the new tab.
+ *   - Edits are attributed by what the view ACTUALLY displays
+ *     (viewFileRef), never by which tab is active in the store, so a
+ *     keystroke can never be cached — or saved — under the wrong file.
  *
- * The <Editor> component is NEVER remounted on tab switches. The EditorView
- * persists for the group's lifetime; only its state is swapped.
+ * The <Editor> component is NEVER remounted on tab switches.
  */
 export default function EditorGroup({
   group,
@@ -61,19 +86,22 @@ export default function EditorGroup({
   // Forwarded ref handle exposed by <Editor> via useImperativeHandle.
   const editorHandleRef = useRef(null);
 
-  // The active file that was last loaded into the editor DOM.
-  // Also used by handleContentChange to avoid reading activeTab from the store (race-free).
+  // The tab currently active in the store (mirrors group.activeTab, race-free).
   const activeFileRef = useRef(null);
 
-  // Per-tab EditorState cache. Each tab gets its own independent EditorState
-  // with its own undo history, selection, and plugin state.
-  // Key = file path, Value = EditorState
-  const editorStatesRef = useRef(new Map());
+  // The file whose model the EditorView is CURRENTLY displaying. This is the
+  // isolation invariant: content is only ever snapshotted/attributed to
+  // viewFileRef, so a doc can never be stored under another tab's key.
+  // null while the view shows the loading placeholder.
+  const viewFileRef = useRef(null);
+
+  // Scroll container around the editor — captured/restored per tab.
+  const scrollContainerRef = useRef(null);
 
   // Lokus markdown→ProseMirror parser, created once when the editor mounts.
   const lokusParserRef = useRef(null);
 
-  // Lokus ProseMirror→markdown serializer, created lazily on first dirty check.
+  // Lokus ProseMirror→markdown serializer, created when the editor mounts.
   const lokusSerializerRef = useRef(null);
 
   // Loading lock — prevents duplicate async file loads from the tab-switch effect
@@ -99,8 +127,7 @@ export default function EditorGroup({
       setOriginalTitle('');
       return;
     }
-    const cached = useEditorGroupStore.getState().findGroup(group.id)?.contentByTab?.[activeFile];
-    const title = cached?.title || noteBasenameForTitle(activeFile);
+    const title = getTabMeta(group.id, activeFile)?.title || noteBasenameForTitle(activeFile);
     setEditorTitle(title);
     setOriginalTitle(title);
   }, [activeFile, group.id]);
@@ -112,44 +139,68 @@ export default function EditorGroup({
     }
   }, [activeFile]);
 
+  // Autosave / quit-flush: expose this group's tab models to tabSaver so
+  // saveTab / flushAllDirtyTabs can serialize tabs that are not active.
+  useEffect(() => {
+    registerTabStateProvider(group.id, (path) => getTabModel(group.id, path)?.state ?? null);
+    return () => registerTabStateProvider(group.id, null);
+  }, [group.id]);
+
+  // Title input is a LOCAL draft while typing — zero store writes per
+  // keystroke. The draft commits (one setTitle + one setDirty) on Enter/blur.
   const handleTitleChange = useCallback((e) => {
-    const newTitle = e.target.value;
-    setEditorTitle(newTitle);
-    useEditorGroupStore.getState().setTabContent(group.id, activeFile, { title: newTitle });
-    if (newTitle !== originalTitle) {
-      useEditorGroupStore.getState().markTabDirty(group.id, activeFile, true);
-    }
-  }, [group.id, activeFile, originalTitle]);
+    setEditorTitle(e.target.value);
+  }, []);
+
+  const commitTitle = useCallback(() => {
+    if (!activeFile || isNonEditorPath(activeFile)) return;
+    if (editorTitle === originalTitle) return;
+    const meta = useTabMetaStore.getState();
+    meta.setTitle(group.id, activeFile, editorTitle);
+    meta.setDirty(group.id, activeFile, true);
+  }, [group.id, activeFile, editorTitle, originalTitle]);
 
   const handleTitleKeyDown = useCallback((e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
+      commitTitle();
       // Focus the ProseMirror editor body
       rawEditorRef.current?.focus();
     }
-  }, []);
+  }, [commitTitle]);
 
   // ── Unsaved indicator ─────────────────────────────────────────────────────
 
-  const unsavedChanges = useMemo(() => {
-    const set = new Set();
-    for (const tab of tabs) {
-      if (group.contentByTab?.[tab.path]?.dirty) set.add(tab.path);
-    }
-    return set;
-  }, [tabs, group.contentByTab]);
+  // Dirty flags live in the tabMeta store (off the layout tree) — subscribe
+  // to this group's dirty paths with a shallow-compared array selector.
+  const dirtyPaths = useTabMetaStore(useShallow(selectGroupDirtyPaths(group.id)));
+  const unsavedChanges = useMemo(() => new Set(dirtyPaths), [dirtyPaths]);
 
   // ── Core imperatives ──────────────────────────────────────────────────────
 
   /**
-   * Restore an EditorState into the shared EditorView.
-   * Uses view.updateState() — a single atomic swap of the entire state.
-   * No transactions, no undo-stack pollution, no race conditions.
+   * Re-point the shared EditorView at a tab's model (atomic updateState swap)
+   * and restore that tab's scroll position.
    */
-  const restoreEditorState = useCallback((editorState) => {
+  const applyModel = useCallback((filePath, model) => {
     const view = rawEditorRef.current;
-    if (!view || !editorState) return;
-    view.updateState(editorState);
+    if (!view || !model) return;
+    view.updateState(model.state);
+    viewFileRef.current = filePath;
+    if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = model.scrollTop || 0;
+  }, []);
+
+  /**
+   * Blank the view synchronously while a tab's model loads from disk.
+   * Guarantees the previous tab's document is never displayed (or edited,
+   * or saved) under the new tab. viewFileRef = null: the view represents
+   * no file until the model arrives.
+   */
+  const showLoadingPlaceholder = useCallback(() => {
+    const view = rawEditorRef.current;
+    if (!view) return;
+    view.updateState(EditorState.create({ schema: view.state.schema, plugins: view.state.plugins }));
+    viewFileRef.current = null;
   }, []);
 
   /**
@@ -167,19 +218,25 @@ export default function EditorGroup({
   }, []);
 
   /**
-   * Save the current view's EditorState for the given file path.
+   * Snapshot the view's current state into the model registry — but ONLY for
+   * the file the view actually displays (viewFileRef). Passing any other
+   * path is a no-op: a document can never be stored under another tab's key.
    */
   const snapshotEditorState = useCallback((filePath) => {
     const view = rawEditorRef.current;
-    if (!view || !filePath || filePath.startsWith('__') || filePath.endsWith('.canvas') || filePath.endsWith('.excalidraw') || filePath.endsWith('.kanban') || filePath.endsWith('.graph') || isImageFile(filePath) || isPDFFile(filePath)) return;
-    editorStatesRef.current.set(filePath, view.state);
-  }, []);
+    if (!view || !filePath || isNonEditorPath(filePath)) return;
+    if (viewFileRef.current !== filePath) return;
+    setTabModel(group.id, filePath, view.state, scrollContainerRef.current?.scrollTop ?? 0);
+  }, [group.id]);
 
   // ── Tab-switching effect ──────────────────────────────────────────────────
 
-  useEffect(() => {
+  // Runs as a LAYOUT effect: the view is re-pointed synchronously, before the
+  // browser paints the render that activated the new tab. The old tab's
+  // document is therefore never visible — or attributable — under the new tab.
+  useLayoutEffect(() => {
     // Canvas / kanban / math graph / image / PDF / special files don't involve the ProseMirror instance
-    if (!activeFile || activeFile.startsWith('__') || activeFile.endsWith('.canvas') || activeFile.endsWith('.excalidraw') || activeFile.endsWith('.kanban') || activeFile.endsWith('.graph') || isImageFile(activeFile) || isPDFFile(activeFile)) {
+    if (isNonEditorPath(activeFile)) {
       activeFileRef.current = activeFile;
       return;
     }
@@ -187,32 +244,30 @@ export default function EditorGroup({
     const prevFile = activeFileRef.current;
     activeFileRef.current = activeFile;
 
-    // Step 1 — Snapshot the departing tab's full EditorState
-    if (
-      prevFile &&
-      prevFile !== activeFile &&
-      !prevFile.startsWith('__') &&
-      !prevFile.endsWith('.canvas') &&
-      !prevFile.endsWith('.excalidraw') &&
-      !prevFile.endsWith('.kanban') &&
-      !prevFile.endsWith('.graph') &&
-      !isImageFile(prevFile) &&
-      !isPDFFile(prevFile)
-    ) {
+    // Step 1 — Snapshot the departing tab's model (snapshotEditorState
+    // internally verifies the view really displays prevFile).
+    if (prevFile && prevFile !== activeFile) {
       snapshotEditorState(prevFile);
     }
 
-    // Step 2 — Restore the arriving tab
-    const cachedState = editorStatesRef.current.get(activeFile);
+    // Step 2 — Re-point the view at the arriving tab's model.
 
-    // Case A: EditorState cached in memory — instant restore
-    if (cachedState) {
+    // Case A: model in registry — instant, synchronous restore.
+    const cached = getTabModel(group.id, activeFile);
+    if (cached) {
+      loadingFileRef.current = null;
       setIsLoading(false);
-      restoreEditorState(cachedState);
+      applyModel(activeFile, cached);
       return;
     }
 
-    // Case B: No cached state — load from disk
+    // A load for this exact file is already in flight (handleEditorReady
+    // kicked it off on mount/remount) — don't start a second one.
+    if (loadingFileRef.current === activeFile) return;
+
+    // Case B: no model — blank the view NOW (never show the old tab's doc),
+    // then load from disk. The view is read-only while loadingFileRef is set.
+    showLoadingPlaceholder();
     setIsLoading(true);
     let cancelled = false;
     loadingFileRef.current = activeFile;
@@ -223,9 +278,11 @@ export default function EditorGroup({
         if (cancelled || loadingFileRef.current !== activeFile) return;
 
         // Check if handleEditorReady already loaded this file while we were awaiting
-        if (editorStatesRef.current.has(activeFile)) {
+        const existing = getTabModel(group.id, activeFile);
+        if (existing) {
+          loadingFileRef.current = null;
           setIsLoading(false);
-          restoreEditorState(editorStatesRef.current.get(activeFile));
+          applyModel(activeFile, existing);
           return;
         }
 
@@ -254,8 +311,9 @@ export default function EditorGroup({
         const newState = createEditorStateFromDoc(doc);
         if (!newState || cancelled || loadingFileRef.current !== activeFile) return;
 
-        // Cache the EditorState and store metadata
-        editorStatesRef.current.set(activeFile, newState);
+        // Register the tab's model and store metadata
+        setTabModel(group.id, activeFile, newState, 0);
+        setSavedDoc(group.id, activeFile, doc);
         useEditorGroupStore.getState().setTabContent(group.id, activeFile, {
           savedContent: raw,
           title: noteBasenameForTitle(activeFile),
@@ -264,7 +322,7 @@ export default function EditorGroup({
         if (cancelled) return;
         loadingFileRef.current = null;
         setIsLoading(false);
-        restoreEditorState(newState);
+        applyModel(activeFile, { state: newState, scrollTop: 0 });
       } catch (e) {
         console.error('Failed to load file:', activeFile, e);
         if (!cancelled) {
@@ -274,7 +332,10 @@ export default function EditorGroup({
       }
     })();
 
-    return () => { cancelled = true; loadingFileRef.current = null; };
+    return () => {
+      cancelled = true;
+      if (loadingFileRef.current === activeFile) loadingFileRef.current = null;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFile, group.id]);
 
@@ -284,18 +345,12 @@ export default function EditorGroup({
     useEditorGroupStore.getState().setActiveTab(group.id, path);
   }, [group.id]);
 
-  const handleTabClose = useCallback((path) => {
-    if (path === activeFile) {
-      snapshotEditorState(path);
-    }
-    const tab = tabs.find((t) => t.path === path);
-    if (tab) {
-      useEditorGroupStore.getState().addRecentlyClosed(tab);
-    }
-    // Clean up cached EditorState for the closed tab
-    editorStatesRef.current.delete(path);
-    useEditorGroupStore.getState().removeTab(group.id, path);
-  }, [group.id, tabs, activeFile, snapshotEditorState]);
+  const handleTabClose = useCallback(async (path) => {
+    // Dirty-safe close: closeTabWithGuard silent-saves a dirty tab (prompts only
+    // if that fails), then does addRecentlyClosed + removeTab — and removeTab drops
+    // the tab's model from the tabModels registry, so tab isolation is preserved.
+    await closeTabWithGuard(group.id, path);
+  }, [group.id]);
 
   const handleFocus = useCallback(() => {
     useEditorGroupStore.getState().setFocusedGroupId(group.id);
@@ -313,9 +368,14 @@ export default function EditorGroup({
    */
   const handleEditorReady = useCallback((view) => {
     rawEditorRef.current = view;
+    viewFileRef.current = null; // a fresh view displays no file yet
 
     if (view) {
       registerEditor(group.id, view);
+
+      // The view is read-only while a tab's model is loading from disk —
+      // keystrokes can't land in the placeholder (or a stale document).
+      view.setProps({ editable: () => !loadingFileRef.current });
 
       if (!lokusParserRef.current) {
         lokusParserRef.current = createLokusParser(view.state.schema);
@@ -328,10 +388,11 @@ export default function EditorGroup({
       // This handles the case where the component re-mounts after a split
       // (React changes tree position → unmount/remount → lost EditorView).
       const file = activeFileRef.current;
-      if (file && !file.startsWith('__') && !file.endsWith('.canvas') && !file.endsWith('.excalidraw') && !file.endsWith('.kanban') && !file.endsWith('.graph') && !isImageFile(file) && !isPDFFile(file)) {
-        const cachedState = editorStatesRef.current.get(file);
-        if (cachedState) {
-          restoreEditorState(cachedState);
+      if (file && !isNonEditorPath(file)) {
+        const model = getTabModel(group.id, file);
+        if (model) {
+          // Model survived the remount — full undo history and scroll intact.
+          applyModel(file, model);
           setIsLoading(false);
         } else {
           // Check if raw markdown was stored while editor was mounting
@@ -342,12 +403,14 @@ export default function EditorGroup({
               : lokusParserRef.current.parse(cached.rawMarkdown);
             const newState = createEditorStateFromDoc(doc);
             if (newState) {
-              editorStatesRef.current.set(file, newState);
+              const cachedMeta = getTabMeta(group.id, file);
+              setTabModel(group.id, file, newState, 0);
+              setSavedDoc(group.id, file, doc);
               useEditorGroupStore.getState().setTabContent(group.id, file, {
-                savedContent: cached.savedContent ?? cached.rawMarkdown,
-                title: cached.title ?? noteBasenameForTitle(file),
+                savedContent: cachedMeta?.savedContent ?? cached.rawMarkdown,
+                title: cachedMeta?.title ?? noteBasenameForTitle(file),
               });
-              restoreEditorState(newState);
+              applyModel(file, { state: newState, scrollTop: 0 });
               setIsLoading(false);
             }
           } else if (!loadingFileRef.current) {
@@ -365,13 +428,14 @@ export default function EditorGroup({
                   : lokusParserRef.current.parse(raw);
                 const newState = createEditorStateFromDoc(doc);
                 if (!newState) return;
-                editorStatesRef.current.set(file, newState);
+                setTabModel(group.id, file, newState, 0);
+                setSavedDoc(group.id, file, doc);
                 useEditorGroupStore.getState().setTabContent(group.id, file, {
                   savedContent: raw,
                   title: noteBasenameForTitle(file),
                 });
                 loadingFileRef.current = null;
-                restoreEditorState(newState);
+                applyModel(file, { state: newState, scrollTop: 0 });
                 setIsLoading(false);
               } catch (e) {
                 console.error('handleEditorReady: failed to load file:', file, e);
@@ -385,34 +449,32 @@ export default function EditorGroup({
     } else {
       registerEditor(group.id, null);
     }
-  }, [group.id, restoreEditorState, createEditorStateFromDoc]);
+  }, [group.id, applyModel, createEditorStateFromDoc]);
 
   /**
-   * Called by <Editor> on every user edit. Saves the EditorState and
+   * Called by <Editor> on every user edit. Updates the tab's model and
    * performs a dirty check.
    *
-   * Uses activeFileRef (a ref, not store state) so it can never race
-   * with tab switches.
+   * Edits are attributed to viewFileRef — the file the view ACTUALLY
+   * displays — never to the store's active tab. If the two disagree
+   * (a switch is mid-flight) the edit is dropped instead of being
+   * written under the wrong file's key.
    */
   const handleContentChange = useCallback((view) => {
-    const currentFile = activeFileRef.current;
-    if (!currentFile) return;
+    const currentFile = viewFileRef.current;
+    if (!currentFile) return;                          // placeholder / no file
+    if (loadingFileRef.current) return;                // a switch is loading
+    if (currentFile !== activeFileRef.current) return; // view ≠ active tab
 
-    // Save the latest EditorState for this file
-    editorStatesRef.current.set(currentFile, view.state);
+    // Update this tab's model with the latest state
+    setTabModel(group.id, currentFile, view.state, scrollContainerRef.current?.scrollTop ?? 0);
 
-    // Dirty check: serialize to md and compare with saved source
-    const store = useEditorGroupStore.getState();
-    const grp = store.findGroup(group.id);
-    const saved = grp?.contentByTab?.[currentFile]?.savedContent;
-    if (saved !== undefined) {
-      if (!lokusSerializerRef.current) {
-        lokusSerializerRef.current = createLokusSerializer();
-      }
-      const currentSerialized = isPlainTextNotePath(currentFile)
-        ? docToPlainTextString(view.state.doc)
-        : lokusSerializerRef.current.serialize(view.state.doc);
-      store.markTabDirty(group.id, currentFile, currentSerialized !== saved);
+    // Dirty check: O(1) document-identity comparison against the doc last
+    // loaded from / written to disk — no per-keystroke serialization.
+    // (Edit-then-undo-back-to-saved still shows dirty; accepted tradeoff.)
+    const savedDoc = getSavedDoc(group.id, currentFile);
+    if (savedDoc) {
+      useEditorGroupStore.getState().markTabDirty(group.id, currentFile, view.state.doc !== savedDoc);
     }
   }, [group.id]);
 
@@ -600,12 +662,13 @@ export default function EditorGroup({
             </div>
           )}
 
-          <div className="h-full pt-14 px-16 pb-4 overflow-y-auto">
+          <div ref={scrollContainerRef} className="h-full pt-14 px-16 pb-4 overflow-y-auto">
             <input
               type="text"
               value={editorTitle}
               onChange={handleTitleChange}
               onKeyDown={handleTitleKeyDown}
+              onBlur={commitTitle}
               className="w-full bg-transparent text-4xl font-bold pb-3 mb-4 outline-none text-app-text"
               placeholder="Untitled"
               spellCheck={false}

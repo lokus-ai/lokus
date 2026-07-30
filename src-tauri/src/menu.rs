@@ -3,13 +3,32 @@
 
 use tauri::{
   AppHandle,
-  menu::{MenuBuilder, SubmenuBuilder, PredefinedMenuItem, MenuItemBuilder, CheckMenuItemBuilder},
+  Manager,
+  menu::{MenuBuilder, SubmenuBuilder, MenuItemBuilder, CheckMenuItemBuilder},
   Emitter,
 };
+
+/// Emit a window-scoped menu event: straight to the last focused window when it
+/// still exists, otherwise fall back to a broadcast (e.g. no window has been
+/// focused yet). Keeps editor/tab/view commands from hitting every window.
+fn emit_focused<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: S) {
+  if let Some(label) = app.state::<crate::FocusTracker>().get() {
+    if app.get_webview_window(&label).is_some() {
+      let _ = app.emit_to(&label, event, payload);
+      return;
+    }
+  }
+  let _ = app.emit(event, payload);
+}
 
 // Menu item IDs
 pub const PREFERENCES_ID: &str = "preferences";
 pub const ABOUT_ID: &str = "about";
+// Quit is a custom item (not PredefinedMenuItem::quit) so we can intercept it in
+// on_menu_event and route through app.exit(0). That makes the RunEvent::ExitRequested
+// carry code=Some(_) (programmatic exit), letting the run handler distinguish a real
+// user quit from a last-window-close (code=None) which must keep the app alive in the tray.
+pub const QUIT_ID: &str = "quit";
 
 // File menu IDs
 const FILE_NEW_NOTE_ID: &str = "file-new-note";
@@ -97,7 +116,9 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
       .hide_others()
       .show_all()
       .separator()
-      .item(&PredefinedMenuItem::quit(app, None)?)
+      .item(&MenuItemBuilder::with_id(QUIT_ID, "Quit Lokus")
+        .accelerator("CmdOrCtrl+Q")
+        .build(app)?)
       .build()?
   };
 
@@ -380,9 +401,11 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         .accelerator("CmdOrCtrl+,")
         .build(app)?)
       .separator()
-      .item(&PredefinedMenuItem::quit(app, None)?)
+      .item(&MenuItemBuilder::with_id(QUIT_ID, "Quit Lokus")
+        .accelerator("CmdOrCtrl+Q")
+        .build(app)?)
       .build()?;
-      
+
     let menu = MenuBuilder::new(app)
       .items(&[
         &file_menu_with_prefs, 
@@ -409,90 +432,99 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
       PREFERENCES_ID => {
         let _ = crate::window_manager::open_preferences_window(app.clone(), None, None);
       }
-      
+      QUIT_ID => {
+        // Flush any unsaved editors, then exit programmatically so the run handler
+        // sees code=Some(0) and does NOT keep the app alive.
+        let _ = app.emit("lokus:flush-dirty", ());
+        app.exit(0);
+      }
+
       // File menu
       FILE_NEW_NOTE_ID => {
-        let _ = app.emit("lokus:new-file", ());
+        let _ = emit_focused(app, "lokus:new-file", ());
       }
       FILE_NEW_FOLDER_ID => {
-        let _ = app.emit("lokus:new-folder", ());
+        let _ = emit_focused(app, "lokus:new-folder", ());
       }
       FILE_NEW_CANVAS_ID => {
-        let _ = app.emit("lokus:new-canvas", ());
+        let _ = emit_focused(app, "lokus:new-canvas", ());
       }
       FILE_OPEN_ID => {
-        let _ = app.emit("lokus:open-file", ());
+        let _ = emit_focused(app, "lokus:open-file", ());
       }
       FILE_OPEN_WORKSPACE_ID => {
-        let _ = app.emit("lokus:open-workspace", ());
+        // Window-scoped: the focused window spawns a single launcher window.
+        // Broadcasting would make every open window spawn its own launcher.
+        let _ = emit_focused(app, "lokus:open-workspace", ());
       }
       FILE_CLOSE_TAB_ID => {
-        let _ = app.emit("lokus:close-tab", ());
+        let _ = emit_focused(app, "lokus:close-tab", ());
       }
       FILE_CLOSE_WINDOW_ID => {
-        let _ = app.emit("lokus:close-window", ());
+        let _ = emit_focused(app, "lokus:close-window", ());
       }
       FILE_SAVE_ID => {
-        let _ = app.emit("lokus:save-file", ());
+        let _ = emit_focused(app, "lokus:save-file", ());
       }
       FILE_SAVE_AS_ID => {
-        let _ = app.emit("lokus:save-as", ());
+        let _ = emit_focused(app, "lokus:save-as", ());
       }
       FILE_EXPORT_PDF_ID => {
-        let _ = app.emit("lokus:export-pdf", ());
+        let _ = emit_focused(app, "lokus:export-pdf", ());
       }
       FILE_EXPORT_HTML_ID => {
-        let _ = app.emit("lokus:export-html", ());
+        let _ = emit_focused(app, "lokus:export-html", ());
       }
       FILE_PRINT_ID => {
-        let _ = app.emit("lokus:print", ());
+        let _ = emit_focused(app, "lokus:print", ());
       }
-      
+
       // Edit menu
       EDIT_FIND_ID => {
-        let _ = app.emit("lokus:in-file-search", ());
+        let _ = emit_focused(app, "lokus:in-file-search", ());
       }
       EDIT_FIND_REPLACE_ID => {
-        let _ = app.emit("lokus:find-replace", ());
+        let _ = emit_focused(app, "lokus:find-replace", ());
       }
       EDIT_FIND_NEXT_ID => {
-        let _ = app.emit("lokus:find-next", ());
+        let _ = emit_focused(app, "lokus:find-next", ());
       }
       EDIT_FIND_PREVIOUS_ID => {
-        let _ = app.emit("lokus:find-previous", ());
+        let _ = emit_focused(app, "lokus:find-previous", ());
       }
       EDIT_PASTE_MATCH_STYLE_ID => {
-        let _ = app.emit("lokus:paste-match-style", ());
+        let _ = emit_focused(app, "lokus:paste-match-style", ());
       }
-      
+
       // View menu
       VIEW_TOGGLE_SIDEBAR_ID => {
-        let _ = app.emit("lokus:toggle-sidebar", ());
+        let _ = emit_focused(app, "lokus:toggle-sidebar", ());
       }
       VIEW_TOGGLE_SPLIT_ID => {
-        let _ = app.emit("lokus:toggle-split-view", ());
+        let _ = emit_focused(app, "lokus:toggle-split-view", ());
       }
       VIEW_FULL_SCREEN_ID => {
-        let _ = app.emit("lokus:toggle-fullscreen", ());
+        let _ = emit_focused(app, "lokus:toggle-fullscreen", ());
       }
       VIEW_ACTUAL_SIZE_ID => {
-        let _ = app.emit("lokus:actual-size", ());
+        let _ = emit_focused(app, "lokus:actual-size", ());
       }
       VIEW_ZOOM_IN_ID => {
-        let _ = app.emit("lokus:zoom-in", ());
+        let _ = emit_focused(app, "lokus:zoom-in", ());
       }
       VIEW_ZOOM_OUT_ID => {
-        let _ = app.emit("lokus:zoom-out", ());
+        let _ = emit_focused(app, "lokus:zoom-out", ());
       }
       VIEW_GRAPH_ID => {
-        let _ = app.emit("lokus:graph-view", ());
+        let _ = emit_focused(app, "lokus:graph-view", ());
       }
       VIEW_KANBAN_ID => {
-        let _ = app.emit("lokus:open-kanban", ());
+        let _ = emit_focused(app, "lokus:open-kanban", ());
       }
       VIEW_COMMAND_PALETTE_ID => {
-        let _ = app.emit("lokus:command-palette", ());
+        let _ = emit_focused(app, "lokus:command-palette", ());
       }
+      // Theme items stay global: every window must follow the active theme.
       VIEW_THEME_LIGHT_ID => {
         let _ = app.emit("lokus:theme-light", ());
       }
@@ -502,74 +534,74 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
       VIEW_THEME_AUTO_ID => {
         let _ = app.emit("lokus:theme-auto", ());
       }
-      
+
       // Insert menu
       INSERT_WIKILINK_ID => {
-        let _ = app.emit("lokus:insert-wikilink", ());
+        let _ = emit_focused(app, "lokus:insert-wikilink", ());
       }
       INSERT_MATH_ID => {
-        let _ = app.emit("lokus:insert-math", ());
+        let _ = emit_focused(app, "lokus:insert-math", ());
       }
       INSERT_TABLE_ID => {
-        let _ = app.emit("lokus:insert-table", ());
+        let _ = emit_focused(app, "lokus:insert-table", ());
       }
       INSERT_IMAGE_ID => {
-        let _ = app.emit("lokus:insert-image", ());
+        let _ = emit_focused(app, "lokus:insert-image", ());
       }
       INSERT_CODE_BLOCK_ID => {
-        let _ = app.emit("lokus:insert-code-block", ());
+        let _ = emit_focused(app, "lokus:insert-code-block", ());
       }
       INSERT_HORIZONTAL_RULE_ID => {
-        let _ = app.emit("lokus:insert-horizontal-rule", ());
+        let _ = emit_focused(app, "lokus:insert-horizontal-rule", ());
       }
       INSERT_TASK_LIST_ID => {
-        let _ = app.emit("lokus:insert-task-list", ());
+        let _ = emit_focused(app, "lokus:insert-task-list", ());
       }
       INSERT_H1_ID => {
-        let _ = app.emit("lokus:insert-heading", 1);
+        let _ = emit_focused(app, "lokus:insert-heading", 1);
       }
       INSERT_H2_ID => {
-        let _ = app.emit("lokus:insert-heading", 2);
+        let _ = emit_focused(app, "lokus:insert-heading", 2);
       }
       INSERT_H3_ID => {
-        let _ = app.emit("lokus:insert-heading", 3);
+        let _ = emit_focused(app, "lokus:insert-heading", 3);
       }
-      
+
       // Format menu
       FORMAT_BOLD_ID => {
-        let _ = app.emit("lokus:format-bold", ());
+        let _ = emit_focused(app, "lokus:format-bold", ());
       }
       FORMAT_ITALIC_ID => {
-        let _ = app.emit("lokus:format-italic", ());
+        let _ = emit_focused(app, "lokus:format-italic", ());
       }
       FORMAT_UNDERLINE_ID => {
-        let _ = app.emit("lokus:format-underline", ());
+        let _ = emit_focused(app, "lokus:format-underline", ());
       }
       FORMAT_STRIKETHROUGH_ID => {
-        let _ = app.emit("lokus:format-strikethrough", ());
+        let _ = emit_focused(app, "lokus:format-strikethrough", ());
       }
       FORMAT_CODE_ID => {
-        let _ = app.emit("lokus:format-code", ());
+        let _ = emit_focused(app, "lokus:format-code", ());
       }
       FORMAT_HIGHLIGHT_ID => {
-        let _ = app.emit("lokus:format-highlight", ());
+        let _ = emit_focused(app, "lokus:format-highlight", ());
       }
       FORMAT_CLEAR_ID => {
-        let _ = app.emit("lokus:format-clear", ());
+        let _ = emit_focused(app, "lokus:format-clear", ());
       }
-      
+
       // Window menu
       WINDOW_MINIMIZE_ID => {
-        let _ = app.emit("lokus:window-minimize", ());
+        let _ = emit_focused(app, "lokus:window-minimize", ());
       }
       WINDOW_ZOOM_ID => {
-        let _ = app.emit("lokus:window-zoom", ());
+        let _ = emit_focused(app, "lokus:window-zoom", ());
       }
       WINDOW_PREV_TAB_ID => {
-        let _ = app.emit("lokus:prev-tab", ());
+        let _ = emit_focused(app, "lokus:prev-tab", ());
       }
       WINDOW_NEXT_TAB_ID => {
-        let _ = app.emit("lokus:next-tab", ());
+        let _ = emit_focused(app, "lokus:next-tab", ());
       }
       
       // Help menu
@@ -583,7 +615,9 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         let _ = app.emit("lokus:release-notes", ());
       }
       HELP_REPORT_ISSUE_ID => {
-        let _ = app.emit("lokus:report-issue", ());
+        // Window-scoped: the handler opens a browser tab; broadcasting would
+        // open one tab per open window.
+        let _ = emit_focused(app, "lokus:report-issue", ());
       }
       
       _ => {

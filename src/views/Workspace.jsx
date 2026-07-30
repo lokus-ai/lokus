@@ -17,6 +17,7 @@ import { useWorkspaceSession } from '../features/workspace/useWorkspaceSession';
 import { useWorkspaceEvents } from '../features/workspace/useWorkspaceEvents';
 import { useReferenceModal } from '../features/workspace/useReferenceModal';
 import { useSave, useExport } from '../features/editor';
+import { useAutosaveFlush } from '../features/editor/hooks/useAutosaveFlush';
 import { useFileOperations } from '../features/file-tree';
 import { useGraphEngine } from '../features/graph';
 import { useTabs } from '../features/tabs';
@@ -82,6 +83,9 @@ function WorkspaceInner({ path }) {
     workspacePath: path,
     plugins,
   });
+
+  // Flush all dirty tabs on window hide / close / quit (never lose an edit)
+  useAutosaveFlush();
 
   // Workspace-level Tauri event listeners
   useWorkspaceEvents({

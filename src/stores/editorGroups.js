@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { deleteTabModel, moveTabModel, renameTabModel, clearGroupModels, clearAllModels } from './tabModels';
+import { useTabMetaStore, getTabMeta } from './tabMeta';
 
 const MAX_CACHED_TABS = 20;
 const MAX_RECENT_CLOSED = 20;
@@ -64,15 +66,21 @@ const removeGroupFromTree = (node, groupId) => {
   return node;
 };
 
-// LRU eviction: remove least-recently-accessed entries beyond MAX_CACHED_TABS
-const evictLRU = (contentByTab) => {
+// LRU eviction: remove least-recently-accessed entries beyond MAX_CACHED_TABS.
+// dirty/lastAccessed live in the tabMeta store (off the layout tree).
+const evictLRU = (groupId, contentByTab) => {
   const entries = Object.entries(contentByTab);
   if (entries.length <= MAX_CACHED_TABS) return contentByTab;
-  const dirty = entries.filter(([, v]) => v.dirty);
-  const clean = entries.filter(([, v]) => !v.dirty);
-  clean.sort((a, b) => (b[1].lastAccessed || 0) - (a[1].lastAccessed || 0));
+  const meta = (path) => getTabMeta(groupId, path);
+  const dirty = entries.filter(([p]) => meta(p)?.dirty);
+  const clean = entries.filter(([p]) => !meta(p)?.dirty);
+  clean.sort((a, b) => (meta(b[0])?.lastAccessed || 0) - (meta(a[0])?.lastAccessed || 0));
   return Object.fromEntries([...dirty, ...clean.slice(0, MAX_CACHED_TABS - dirty.length)]);
 };
+
+// Per-tab metadata fields routed to the tabMeta store; everything else is
+// tab-switch content cache (e.g. rawMarkdown) and stays on the group node.
+const TAB_META_KEYS = new Set(['dirty', 'savedContent', 'title', 'lastAccessed']);
 
 const defaultGroup = createGroup([], null);
 
@@ -101,6 +109,10 @@ export const useEditorGroupStore = create(
 
     removeTab: (groupId, tabPath) =>
       set((s) => {
+        // Closing a tab discards its document model (all close paths — pane
+        // tab bar, titlebar tab bar, shortcuts — funnel through here).
+        deleteTabModel(groupId, tabPath);
+        useTabMetaStore.getState().remove(groupId, tabPath);
         const updatedLayout = updateGroupInTree(s.layout, groupId, (g) => {
           const newTabs = g.tabs.filter((t) => t.path !== tabPath);
           const newActive = g.activeTab === tabPath ? (newTabs[0]?.path || null) : g.activeTab;
@@ -126,43 +138,46 @@ export const useEditorGroupStore = create(
         return { layout: updatedLayout };
       }),
 
-    setActiveTab: (groupId, tabPath) =>
+    setActiveTab: (groupId, tabPath) => {
+      useTabMetaStore.getState().touch(groupId, tabPath);
       set((s) => ({
         layout: updateGroupInTree(s.layout, groupId, (g) => ({
           ...g,
           activeTab: tabPath,
-          contentByTab: {
-            ...g.contentByTab,
-            ...(g.contentByTab[tabPath]
-              ? { [tabPath]: { ...g.contentByTab[tabPath], lastAccessed: Date.now() } }
-              : {}),
-          },
         })),
         focusedGroupId: groupId,
-      })),
+      }));
+    },
 
-    // Cache ProseMirror doc for a tab
-    setTabContent: (groupId, tabPath, content) =>
+    // Cache ProseMirror doc for a tab. Metadata (dirty/savedContent/title)
+    // delegates to the tabMeta store — only the tab-switch content cache
+    // (rawMarkdown, loadError) stays on the group node, so metadata writes
+    // never rebuild `layout`.
+    setTabContent: (groupId, tabPath, content) => {
+      const meta = useTabMetaStore.getState();
+      if ('dirty' in content) meta.setDirty(groupId, tabPath, content.dirty);
+      if ('savedContent' in content) meta.setSaved(groupId, tabPath, content.savedContent);
+      if ('title' in content) meta.setTitle(groupId, tabPath, content.title);
+      meta.touch(groupId, tabPath);
+
+      const cache = Object.fromEntries(Object.entries(content).filter(([k]) => !TAB_META_KEYS.has(k)));
+      if (Object.keys(cache).length === 0) return;
       set((s) => ({
         layout: updateGroupInTree(s.layout, groupId, (g) => ({
           ...g,
-          contentByTab: evictLRU({
+          contentByTab: evictLRU(groupId, {
             ...g.contentByTab,
-            [tabPath]: { ...(g.contentByTab[tabPath] || {}), ...content, lastAccessed: Date.now() },
+            [tabPath]: { ...(g.contentByTab[tabPath] || {}), ...cache },
           }),
         })),
-      })),
+      }));
+    },
 
-    markTabDirty: (groupId, tabPath, dirty) =>
-      set((s) => ({
-        layout: updateGroupInTree(s.layout, groupId, (g) => ({
-          ...g,
-          contentByTab: {
-            ...g.contentByTab,
-            [tabPath]: { ...(g.contentByTab[tabPath] || {}), dirty, lastAccessed: Date.now() },
-          },
-        })),
-      })),
+    // Thin delegator to the tabMeta store (transition-guarded there) —
+    // must NOT touch `layout`.
+    markTabDirty: (groupId, tabPath, dirty) => {
+      useTabMetaStore.getState().setDirty(groupId, tabPath, dirty);
+    },
 
     // --- Split operations ---
     splitGroup: (groupId, direction, position = 'after', newGroupTab = null) =>
@@ -192,6 +207,8 @@ export const useEditorGroupStore = create(
 
     closeGroup: (groupId) =>
       set((s) => {
+        clearGroupModels(groupId);
+        useTabMetaStore.getState().clearGroup(groupId);
         if (s.layout.type === 'group' && s.layout.id === groupId) {
           return { layout: { ...s.layout, tabs: [], activeTab: null, contentByTab: {} } };
         }
@@ -216,6 +233,18 @@ export const useEditorGroupStore = create(
       const tab = fromGroup.tabs.find((t) => t.path === tabPath);
       if (!tab) return;
       const cachedContent = fromGroup.contentByTab?.[tabPath];
+      moveTabModel(fromGroupId, toGroupId, tabPath);
+      // Carry per-tab metadata to the target group's key (mirrors moveTabModel)
+      // so a dirty tab stays dirty — and save-guarded — after a cross-pane move.
+      const metaStore = useTabMetaStore.getState();
+      const carried = getTabMeta(fromGroupId, tabPath);
+      if (carried) {
+        if (carried.dirty !== undefined) metaStore.setDirty(toGroupId, tabPath, carried.dirty);
+        if (carried.savedContent !== undefined) metaStore.setSaved(toGroupId, tabPath, carried.savedContent);
+        if (carried.title !== undefined) metaStore.setTitle(toGroupId, tabPath, carried.title);
+        metaStore.touch(toGroupId, tabPath);
+        metaStore.remove(fromGroupId, tabPath);
+      }
       set((s) => {
         let newLayout = updateGroupInTree(s.layout, fromGroupId, (g) => {
           const newTabs = g.tabs.filter((t) => t.path !== tabPath);
@@ -242,6 +271,8 @@ export const useEditorGroupStore = create(
 
     updateTabPath: (oldPath, newPath) => {
       const newName = newPath.split('/').pop() || newPath;
+      renameTabModel(oldPath, newPath);
+      useTabMetaStore.getState().renameKey(oldPath, newPath);
       set((s) => {
         const update = (node) => {
           if (node.type === 'group') {
@@ -309,6 +340,8 @@ export const useEditorGroupStore = create(
 
     // Initialize layout (from session or default)
     initLayout: (tabs = [], activeTab = null) => {
+      clearAllModels();
+      useTabMetaStore.getState().clearAll();
       const group = createGroup(tabs, activeTab);
       set({ layout: group, focusedGroupId: group.id });
     },
@@ -316,6 +349,8 @@ export const useEditorGroupStore = create(
     // Restore layout from session JSON
     restoreLayout: (layoutJson) => {
       if (!layoutJson) return;
+      clearAllModels();
+      useTabMetaStore.getState().clearAll();
       try {
         const maxId = JSON.stringify(layoutJson).match(/(?:group|container)-(\d+)/g)?.reduce((max, match) => {
           const num = parseInt(match.split('-')[1]);

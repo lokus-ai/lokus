@@ -1,0 +1,100 @@
+/**
+ * tabModels — per-tab document model registry (VS Code TextModel analog).
+ *
+ * Each open tab owns a fully isolated model: its ProseMirror EditorState
+ * (doc, selection, undo history, plugin state) plus view-restoration extras
+ * (scroll position). The persistent EditorView in EditorGroup is only a VIEW:
+ * switching tabs re-points it at the active tab's model via updateState().
+ *
+ * Kept at module level (like editorRegistry) so models outlive React
+ * remounts — splitting a pane or leaving/re-entering the editor view must
+ * not destroy a tab's undo history or unsaved content — and so the save
+ * path can serialize a tab's OWN model instead of whatever document the
+ * shared view happens to display mid-switch.
+ *
+ * Keyed per (groupId, filePath): the same file opened in two split groups
+ * intentionally has two independent models (matches existing behavior).
+ */
+
+const models = new Map();
+
+// The doc last loaded from / written to disk, per tab. Dirty checks compare
+// document IDENTITY against this (O(1)) instead of serializing per keystroke.
+const savedDocs = new Map();
+
+const key = (groupId, filePath) => `${groupId}\u0000${filePath}`;
+
+/** @returns {{ state: import('prosemirror-state').EditorState, scrollTop: number } | null} */
+export function getTabModel(groupId, filePath) {
+  return models.get(key(groupId, filePath)) ?? null;
+}
+
+export function setTabModel(groupId, filePath, state, scrollTop = 0) {
+  models.set(key(groupId, filePath), { state, scrollTop });
+}
+
+export function deleteTabModel(groupId, filePath) {
+  models.delete(key(groupId, filePath));
+  savedDocs.delete(key(groupId, filePath));
+}
+
+/** Move a tab's model between groups (drag & drop across panes). */
+export function moveTabModel(fromGroupId, toGroupId, filePath) {
+  const k = key(fromGroupId, filePath);
+  const model = models.get(k);
+  if (!model) return;
+  models.delete(k);
+  models.set(key(toGroupId, filePath), model);
+  const savedDoc = savedDocs.get(k);
+  if (savedDoc) {
+    savedDocs.delete(k);
+    savedDocs.set(key(toGroupId, filePath), savedDoc);
+  }
+}
+
+/** Re-key a file's models in every group (file rename / Save As). */
+export function renameTabModel(oldPath, newPath) {
+  const suffix = `\u0000${oldPath}`;
+  for (const [k, model] of [...models]) {
+    if (k.endsWith(suffix)) {
+      models.delete(k);
+      models.set(k.slice(0, -oldPath.length) + newPath, model);
+    }
+  }
+  for (const [k, doc] of [...savedDocs]) {
+    if (k.endsWith(suffix)) {
+      savedDocs.delete(k);
+      savedDocs.set(k.slice(0, -oldPath.length) + newPath, doc);
+    }
+  }
+}
+
+/** Drop every model (layout replaced wholesale, e.g. session restore). */
+export function clearAllModels() {
+  models.clear();
+  savedDocs.clear();
+}
+
+/** Drop all models belonging to a group (group/pane closed). */
+export function clearGroupModels(groupId) {
+  const prefix = `${groupId}\u0000`;
+  for (const k of [...models.keys()]) {
+    if (k.startsWith(prefix)) models.delete(k);
+  }
+  for (const k of [...savedDocs.keys()]) {
+    if (k.startsWith(prefix)) savedDocs.delete(k);
+  }
+}
+
+/**
+ * Record the doc that is on disk for a tab (after load / successful save).
+ * The dirty check is `view.state.doc !== getSavedDoc(groupId, filePath)`.
+ */
+export function setSavedDoc(groupId, filePath, doc) {
+  savedDocs.set(key(groupId, filePath), doc);
+}
+
+/** @returns {import('prosemirror-model').Node | null} */
+export function getSavedDoc(groupId, filePath) {
+  return savedDocs.get(key(groupId, filePath)) ?? null;
+}

@@ -57,9 +57,11 @@ export function ThemeProvider({ children }) {
         // Then read the actual configured theme
         const visuals = await readGlobalVisuals();
         if (visuals && visuals.theme) {
+          // Boot applies locally only (applyInitialTheme above already applied
+          // the tokens). It must never write the global config or broadcast
+          // theme:apply to other windows — only explicit user action
+          // (handleSetTheme) goes through setGlobalActiveTheme.
           setTheme(visuals.theme);
-          // Re-apply theme if it's different from the initial
-          await setGlobalActiveTheme(visuals.theme);
         } else {
           // Fallback to a default theme if none is configured
           setTheme('default');

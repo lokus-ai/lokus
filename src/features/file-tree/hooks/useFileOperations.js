@@ -349,7 +349,8 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
       if (currentTheme) {
         await setGlobalActiveTheme(currentTheme);
       }
-      await invoke('clear_last_workspace');
+      // Open a launcher window alongside this one. The last-workspace key is
+      // deliberately left alone: this window's workspace is still using it.
       await invoke('open_launcher_window');
     } catch { }
   }, [currentTheme]);

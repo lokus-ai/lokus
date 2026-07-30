@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { listen } from '@tauri-apps/api/event';
+import { listenWindow } from '../../../core/window/events.js';
 import { useLayoutStore } from '../../../stores/layout';
 import { useViewStore } from '../../../stores/views';
 import { useEditorGroupStore } from '../../../stores/editorGroups';
@@ -9,6 +9,7 @@ import { setGlobalActiveTheme, getSystemPreferredTheme, setupSystemThemeListener
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isDesktop } from '../../../platform/index';
 import { createEditorCommands } from '../../../editor/commands/index.js';
+import { closeTabWithGuard } from '../../tabs/closeGuard';
 
 /** Returns the currently focused group's editor from the registry. */
 function getFocusedEditor() {
@@ -20,9 +21,11 @@ export function useShortcuts({ workspacePath, onSave, onSaveAs, onCreateFile, on
   useEffect(() => {
     const unlisteners = [];
 
-    // Helper to register a Tauri listener
+    // Helper to register a Tauri listener. Window-scoped on purpose: menu
+    // events are emit_to()-targeted at the focused window, and a bare listen()
+    // would fire them in EVERY open window (see core/window/events.js).
     const on = (event, handler) => {
-      unlisteners.push(listen(event, handler));
+      unlisteners.push(listenWindow(event, handler));
     };
 
     // File operations
@@ -32,9 +35,7 @@ export function useShortcuts({ workspacePath, onSave, onSaveAs, onCreateFile, on
       const store = useEditorGroupStore.getState();
       const group = store.getFocusedGroup();
       if (group?.activeTab) {
-        const tab = group.tabs.find(t => t.path === group.activeTab);
-        if (tab) store.addRecentlyClosed(tab);
-        store.removeTab(group.id, group.activeTab);
+        closeTabWithGuard(group.id, group.activeTab);
       }
     });
     on('lokus:new-file', () => onCreateFile?.());
@@ -76,7 +77,12 @@ export function useShortcuts({ workspacePath, onSave, onSaveAs, onCreateFile, on
     on('lokus:graph-view', () => {
       const ff = globalThis.__LOKUS_FEATURE_FLAGS__ || {};
       if (ff.enable_graph === false) return;
-      useViewStore.getState().switchView('graph');
+      // Open the graph as a __graph__ tab (same as the sidebar button).
+      // switchView('graph') has no MainContent branch and blanks the center.
+      useViewStore.getState().switchView('editor');
+      const store = useEditorGroupStore.getState();
+      const groupId = store.focusedGroupId || store.getAllGroups()[0]?.id;
+      if (groupId) store.addTab(groupId, { path: '__graph__', name: 'Graph' }, true);
     });
     on('lokus:open-kanban', () => {
       const ff = globalThis.__LOKUS_FEATURE_FLAGS__ || {};

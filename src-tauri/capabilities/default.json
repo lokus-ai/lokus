@@ -13,6 +13,7 @@
     "core:event:allow-emit",
     "core:window:allow-start-dragging",
     "core:window:allow-internal-toggle-maximize",
+    "core:window:allow-close",
     "core:window:default",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister-all",

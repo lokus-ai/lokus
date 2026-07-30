@@ -17,12 +17,12 @@ import type { IProvider } from "../providers/interface.ts";
 import { Errors } from "../lib/errors.ts";
 import { config } from "../config.ts";
 
-export const FREE_MODEL = "claude-haiku-4-20250514";
-export const DEFAULT_MODEL = "claude-sonnet-4-20250514";
-export const FALLBACK_MODEL = "gpt-4o";
+export const FREE_MODEL = "gpt-4o-mini";
+export const DEFAULT_MODEL = "gpt-4o";
+export const FALLBACK_MODEL = "claude-sonnet-4-20250514";
 
-const ANTHROPIC_MODELS = new Set([FREE_MODEL, DEFAULT_MODEL]);
-const OPENAI_MODELS = new Set(["gpt-4o", "gpt-4o-mini"]);
+const ANTHROPIC_MODELS = new Set(["claude-haiku-4-20250514", "claude-sonnet-4-20250514", FALLBACK_MODEL]);
+const OPENAI_MODELS = new Set(["gpt-4o", "gpt-4o-mini", FREE_MODEL, DEFAULT_MODEL]);
 
 export type Tier = "free" | "paid";
 
@@ -38,10 +38,10 @@ export interface Resolved {
  * model + provider, validating that the model is allowed.
  */
 export function resolveModel(requested: string | undefined, tier: Tier): Resolved {
-  // No explicit model → tier default.
+  // No explicit model → tier default (OpenAI by default now).
   if (!requested) {
     const model = tier === "free" ? FREE_MODEL : DEFAULT_MODEL;
-    return withFallback({ model, provider: new AnthropicProvider() });
+    return withFallback({ model, provider: new OpenAIProvider() });
   }
 
   // Local models are routed to Ollama by an `ollama/` prefix.
@@ -58,32 +58,44 @@ export function resolveModel(requested: string | undefined, tier: Tier): Resolve
   }
 
   if (OPENAI_MODELS.has(requested)) {
-    if (tier === "free") {
+    // Free users only get the cheap model.
+    if (tier === "free" && requested !== FREE_MODEL) {
       throw Errors.modelNotAllowed("Upgrade required for this model");
     }
-    // Explicit OpenAI request: no cross-provider fallback.
-    return { model: requested, provider: new OpenAIProvider() };
+    return withFallback({ model: requested, provider: new OpenAIProvider() });
   }
 
   throw Errors.modelNotAllowed(`Unknown or disallowed model: ${requested}`);
 }
 
-/** Attach the single permitted OpenAI gpt-4o fallback to an Anthropic resolution. */
+/** Attach a cross-provider fallback only when the secondary provider key is
+ *  actually configured (not a placeholder). Prevents fallback loops when only
+ *  one provider is wired. */
 function withFallback(primary: Resolved): Resolved {
-  return {
-    ...primary,
-    fallback: { model: FALLBACK_MODEL, provider: new OpenAIProvider() },
-  };
+  const anthropicKey = config.ANTHROPIC_API_KEY;
+  const hasAnthropic = anthropicKey && !anthropicKey.startsWith("replace");
+  const openaiKey = config.OPENAI_API_KEY;
+  const hasOpenAI = openaiKey && !openaiKey.startsWith("replace");
+
+  // Anthropic primary → OpenAI fallback
+  if (primary.provider instanceof AnthropicProvider && hasOpenAI) {
+    return { ...primary, fallback: { model: "gpt-4o", provider: new OpenAIProvider() } };
+  }
+  // OpenAI primary → Anthropic fallback
+  if (primary.provider instanceof OpenAIProvider && hasAnthropic) {
+    return { ...primary, fallback: { model: FALLBACK_MODEL, provider: new AnthropicProvider() } };
+  }
+  return primary;
 }
 
 /** Pricing: credits charged per token, by model. Used to size reservations and
  *  settle actual usage. Reservation over-reserves to max_tokens at the output
  *  rate plus a flat input allowance. Keep in sync with the ledger's accounting. */
 const RATE_PER_1K: Record<string, { in: number; out: number }> = {
-  [FREE_MODEL]: { in: 1, out: 5 },
-  [DEFAULT_MODEL]: { in: 3, out: 15 },
-  "gpt-4o": { in: 3, out: 10 },
   "gpt-4o-mini": { in: 1, out: 4 },
+  "gpt-4o": { in: 3, out: 10 },
+  "claude-haiku-4-20250514": { in: 1, out: 5 },
+  "claude-sonnet-4-20250514": { in: 3, out: 15 },
 };
 
 /** Upper-bound credit cost for a request (used as the reservation amount). */

@@ -23,7 +23,7 @@
  * A `ModelRouter` maps each surface to a backend from {ollamaRunning, credits,
  * tier} so ambient/ghost never spend credits and cmdK/agent prefer cloud quality.
  *
- * The legacy `createLLMClient` / `createTranscriptionClient` / `validateApiKey`
+ * The legacy `createLLMClient` / `validateApiKey`
  * / `getAvailableModels` / config helpers are KEPT with identical signatures —
  * the meeting-summary flow (`llm-summary.js`, `MeetingNotes.jsx`,
  * `useMeetingSession.js`) needs no changes; they now delegate to the new core.
@@ -38,7 +38,7 @@
  *   llmApiKey: string,        // BYOK only
  *   llmModel: string,         // e.g. 'gpt-4o', 'claude-sonnet-4-20250514', 'qwen3:8b'
  *   deepgramApiKey: string,   // BYOK only
- *   supabaseUrl: string,      // Lokus-provided mode (STT WS still uses edge fn)
+ *   supabaseUrl: string,      // Supabase project URL (auth)
  *   supabaseToken: string,    // user's Supabase JWT (Lokus-provided mode)
  *   proxyUrl: string,         // Lokus AI proxy base; defaults VITE_PROXY_BASE_URL
  * }
@@ -56,21 +56,13 @@ import { invoke } from '@tauri-apps/api/core';
 /** localStorage key for persisted provider configuration (non-sensitive fields). */
 const CONFIG_STORAGE_KEY = 'lokus-ai-provider-config';
 
-/**
- * Placeholder Supabase project URL — replace once the Edge Functions are
- * deployed. Individual function paths are appended at call time.
- */
-const SUPABASE_PROXY_BASE_PLACEHOLDER = 'https://YOUR_PROJECT.supabase.co';
-
-/** Edge Function paths mounted on {supabaseUrl}/functions/v1/ */
-const EDGE_FN_LLM_SUMMARY = 'llm-summary';
 
 /**
  * Lokus AI proxy base URL (build-time, non-secret). Cloud chat + embeddings
  * route here. Falls back to a sensible default so dev builds without the env
  * var still target a real host rather than a placeholder.
  */
-const PROXY_BASE_URL =
+export const PROXY_BASE_URL =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PROXY_BASE_URL) ||
   'https://api.lokusmd.com';
 
@@ -96,13 +88,6 @@ const LOCAL_MODELS = {
 /** Direct provider API base URLs */
 const OPENAI_BASE_URL    = 'https://api.openai.com/v1';
 const ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
-const DEEPGRAM_BASE_URL  = 'https://api.deepgram.com/v1';
-
-/** Deepgram streaming WebSocket base URL */
-const DEEPGRAM_WS_URL    = 'wss://api.deepgram.com/v1/listen';
-
-/** Deepgram proxy WebSocket path on the Edge Function */
-const EDGE_FN_TRANSCRIBE_WS_PATH = 'transcribe-ws';
 
 /** Current Anthropic API version header value */
 const ANTHROPIC_API_VERSION = '2023-06-01';
@@ -124,17 +109,6 @@ function _isTauri() {
   } catch {
     return false;
   }
-}
-
-/**
- * Build Supabase Edge Function URL.
- * @param {string} supabaseUrl - Supabase project URL.
- * @param {string} functionName - Edge Function name (no leading slash).
- * @returns {string}
- */
-function _edgeFnUrl(supabaseUrl, functionName) {
-  const base = (supabaseUrl || SUPABASE_PROXY_BASE_PLACEHOLDER).replace(/\/$/, '');
-  return `${base}/functions/v1/${functionName}`;
 }
 
 /**
@@ -550,187 +524,6 @@ export function createLLMClient(config) {
 // ---------------------------------------------------------------------------
 // Public API — Transcription client
 // ---------------------------------------------------------------------------
-
-/**
- * Build the Deepgram streaming WebSocket URL with recommended parameters.
- * @param {string} apiKey - Deepgram API key (BYOK mode).
- * @returns {string}
- */
-function _deepgramWsUrl(apiKey) {
-  const params = new URLSearchParams({
-    encoding: 'linear16',
-    sample_rate: '16000',
-    channels: '1',
-    model: 'nova-2',
-    language: 'en',
-    smart_format: 'true',
-    diarize: 'true',
-    interim_results: 'true',
-  });
-  return `${DEEPGRAM_WS_URL}?${params.toString()}`;
-}
-
-/**
- * Create a Deepgram streaming WebSocket (BYOK direct path).
- * @param {string} apiKey
- * @param {function(Object): void} onTranscript - Called with each transcript segment.
- * @param {function(Error): void} onError - Called on WebSocket errors.
- * @returns {WebSocket}
- */
-function _createDeepgramWebSocket(apiKey, onTranscript, onError) {
-  const url = _deepgramWsUrl(apiKey);
-  const ws = new WebSocket(url, ['token', apiKey]);
-
-  ws.binaryType = 'arraybuffer';
-
-  ws.addEventListener('message', (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      // Deepgram sends 'Results' messages for transcript updates
-      if (data.type === 'Results') {
-        const channel = data.channel?.alternatives?.[0];
-        if (channel) {
-          onTranscript({
-            text: channel.transcript,
-            words: channel.words ?? [],
-            isFinal: data.is_final ?? false,
-            speechFinal: data.speech_final ?? false,
-            confidence: channel.confidence ?? 0,
-          });
-        }
-      }
-    } catch (err) {
-      logger.error('AIProvider', 'Deepgram message parse error:', err);
-    }
-  });
-
-  ws.addEventListener('error', (event) => {
-    const err = new Error('Deepgram WebSocket error');
-    logger.error('AIProvider', 'Deepgram WebSocket error:', event);
-    onError(err);
-  });
-
-  ws.addEventListener('close', (event) => {
-    if (!event.wasClean) {
-      const err = new Error(`Deepgram WebSocket closed unexpectedly (code ${event.code})`);
-      logger.error('AIProvider', 'Deepgram WebSocket closed unexpectedly:', event);
-      onError(err);
-    }
-  });
-
-  return ws;
-}
-
-/**
- * Create a proxy transcription WebSocket through the Supabase Edge Function.
- *
- * The Edge Function at {supabaseUrl}/functions/v1/transcribe-ws is expected to
- * act as a WebSocket proxy to Deepgram, accepting the user's Supabase JWT in
- * the first message or query parameter.
- *
- * @param {string} supabaseUrl
- * @param {string} supabaseToken
- * @param {function(Object): void} onTranscript
- * @param {function(Error): void} onError
- * @returns {WebSocket}
- */
-function _createProxyWebSocket(supabaseUrl, supabaseToken, onTranscript, onError) {
-  const base = (supabaseUrl || SUPABASE_PROXY_BASE_PLACEHOLDER).replace(/\/$/, '');
-  // Convert https:// to wss:// for WebSocket
-  const wsBase = base.replace(/^https?:\/\//, (match) =>
-    match.startsWith('https') ? 'wss://' : 'ws://'
-  );
-  const url = `${wsBase}/functions/v1/${EDGE_FN_TRANSCRIBE_WS_PATH}?token=${encodeURIComponent(supabaseToken)}`;
-
-  const ws = new WebSocket(url);
-  ws.binaryType = 'arraybuffer';
-
-  ws.addEventListener('message', (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.type === 'Results') {
-        const channel = data.channel?.alternatives?.[0];
-        if (channel) {
-          onTranscript({
-            text: channel.transcript,
-            words: channel.words ?? [],
-            isFinal: data.is_final ?? false,
-            speechFinal: data.speech_final ?? false,
-            confidence: channel.confidence ?? 0,
-          });
-        }
-      }
-    } catch (err) {
-      logger.error('AIProvider', 'Proxy transcription message parse error:', err);
-    }
-  });
-
-  ws.addEventListener('error', (event) => {
-    const err = new Error('Transcription proxy WebSocket error');
-    logger.error('AIProvider', 'Proxy WebSocket error:', event);
-    onError(err);
-  });
-
-  ws.addEventListener('close', (event) => {
-    if (!event.wasClean) {
-      const err = new Error(`Transcription proxy closed unexpectedly (code ${event.code})`);
-      logger.error('AIProvider', 'Proxy WebSocket closed unexpectedly:', event);
-      onError(err);
-    }
-  });
-
-  return ws;
-}
-
-/**
- * Create a transcription client object for streaming audio to a speech-to-text
- * service via WebSocket.
- *
- * @param {Object} config - Provider configuration (see module docblock).
- * @returns {{ createWebSocket: Function }}
- *
- * @example
- * const client = createTranscriptionClient(config);
- * const ws = client.createWebSocket(
- *   (segment) => console.log(segment.text),
- *   (err)     => console.error(err)
- * );
- * // Send PCM audio chunks:
- * ws.send(audioChunk);
- * // When done:
- * ws.close();
- */
-export function createTranscriptionClient(config) {
-  const { mode, deepgramApiKey, supabaseUrl, supabaseToken } = config ?? {};
-
-  return {
-    /**
-     * Open a streaming WebSocket connection for real-time audio transcription.
-     *
-     * @param {function(Object): void} onTranscript
-     *   Called with each transcript segment object:
-     *   { text, words, isFinal, speechFinal, confidence }
-     * @param {function(Error): void} onError
-     *   Called on connection or protocol errors.
-     * @returns {WebSocket}
-     *   Native WebSocket. Send raw audio chunks (ArrayBuffer / Blob) over it.
-     *   Call ws.close() when recording ends.
-     */
-    createWebSocket(onTranscript, onError) {
-      try {
-        if (mode === 'lokus') {
-          return _createProxyWebSocket(supabaseUrl, supabaseToken, onTranscript, onError);
-        }
-
-        // BYOK path — direct Deepgram connection
-        return _createDeepgramWebSocket(deepgramApiKey, onTranscript, onError);
-      } catch (error) {
-        logger.error('AIProvider', 'createWebSocket failed:', error);
-        throw error;
-      }
-    },
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Public API — Key validation

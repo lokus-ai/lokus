@@ -1,5 +1,7 @@
 import { useLayoutStore } from '../../stores/layout';
 import { useEditorGroupStore } from '../../stores/editorGroups';
+import { useTabMetaStore, selectGroupDirtyPaths } from '../../stores/tabMeta';
+import { useShallow } from 'zustand/shallow';
 import { useUIVisibility, useFeatureFlags } from '../../contexts/RemoteConfigContext';
 import { ResponsiveTabBar } from '../../components/TabBar/ResponsiveTabBar.jsx';
 import {
@@ -12,6 +14,7 @@ import {
   Plus,
 } from 'lucide-react';
 import platformService from '../../services/platform/PlatformService.js';
+import { closeTabWithGuard } from '../../features/tabs/closeGuard';
 
 /**
  * Toolbar — fixed titlebar with action buttons and responsive tab bar.
@@ -59,11 +62,10 @@ export default function Toolbar({
   const openTabs = focusedGroup?.tabs ?? [];
   const activeFile = focusedGroup?.activeTab ?? null;
   const hasActiveTabs = openTabs.length > 0;
-  const unsavedChanges = new Set(
-    Object.entries(focusedGroup?.contentByTab ?? {})
-      .filter(([, data]) => data?.dirty)
-      .map(([path]) => path)
-  );
+  // Dirty flags live in the tabMeta store (off the layout tree) — subscribe
+  // to a shallow-compared array of dirty paths for the focused group.
+  const dirtyPaths = useTabMetaStore(useShallow(selectGroupDirtyPaths(focusedGroup?.id)));
+  const unsavedChanges = new Set(dirtyPaths);
 
   const handleTabClick = (path) => {
     const groupId = useEditorGroupStore.getState().focusedGroupId;
@@ -75,7 +77,7 @@ export default function Toolbar({
   const handleTabClose = (path) => {
     const groupId = useEditorGroupStore.getState().focusedGroupId;
     if (groupId) {
-      useEditorGroupStore.getState().removeTab(groupId, path);
+      closeTabWithGuard(groupId, path);
     }
   };
 

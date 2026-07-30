@@ -266,7 +266,7 @@ COMMENT ON FUNCTION public.refund_reservation(text) IS
 -- 3. Daily spend cap helper (MONETIZATION §5)
 --
 -- The per-account daily cap (default 2,000 credits/day, configurable per tier)
--- is enforced by BOTH the edge functions and the proxy by summing the credits
+-- is enforced by the proxy by summing the credits
 -- reserved in the trailing 24h and refusing if reserving p_amount would exceed
 -- the cap. Exposed as a read-only helper so callers do not need direct table
 -- access. SECURITY DEFINER so service_role callers can read across the table.
@@ -457,7 +457,7 @@ CREATE POLICY cg_all ON public.credit_grant_log
 -- 7. Function lockdown — REVOKE FROM PUBLIC; GRANT EXECUTE TO service_role
 --
 -- No mutating RPC is callable by anonymous or authenticated roles. Every credit
--- mutation must go through the proxy / edge functions which authenticate with
+-- mutation must go through the proxy which authenticates with
 -- the service role key. (reserved_today is read-only but still service-role-only
 -- so a user cannot enumerate it directly.)
 -- =============================================================================

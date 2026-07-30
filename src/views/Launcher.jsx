@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { homeDir } from "@tauri-apps/api/path";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
+import { isLauncherWindow } from "../core/window/context.js";
 import { readRecents, addRecent, removeRecent, shortenPath } from "../lib/recents.js";
 import { WorkspaceManager } from "../core/workspace/manager.js";
 import { readGlobalVisuals, setGlobalActiveTheme } from "../core/theme/manager.js";
@@ -20,7 +22,7 @@ const Icon = ({ path, className = "w-5 h-5" }) => (
 );
 
 // --- Main Launcher Component ---
-async function openWorkspace(path) {
+export async function openWorkspace(path) {
   // Ensure current theme is saved globally before opening workspace
   // This fixes the issue where new workspace windows don't inherit the theme
   try {
@@ -53,9 +55,26 @@ async function openWorkspace(path) {
     // Trigger a page reload to activate workspace mode
     window.location.reload();
   } else {
-    // Desktop Tauri mode - replace current window with workspace (VSCode-style)
-    // This prevents duplicate windows and follows industry standard UX
-    await invoke("open_workspace_window", { workspacePath: path });
+    // Desktop Tauri mode - open the workspace in its own real window.
+    // A launcher window has served its purpose once the open succeeds, so it
+    // closes itself (the close path flushes then destroys it; ExitRequested
+    // keeps the app alive even if it was the last window). On invoke error we
+    // stay open so the launcher remains usable.
+    try {
+      await invoke("open_workspace_window", { workspacePath: path });
+    } catch (err) {
+      // Every pick path funnels through here, so one toast covers them all.
+      // Rethrow so callers (and tests) still see the failure.
+      toast.error(`Failed to open workspace: ${err}`);
+      throw err;
+    }
+    // The dedup path resolves here too (Rust focuses the existing window), so
+    // the launcher closes either way.
+    if (isLauncherWindow()) {
+      // A rejected close (e.g. a missing core:window:allow-close capability)
+      // must never be swallowed silently — an unclosed launcher leaks a window.
+      try { await getCurrentWindow().close(); } catch (err) { console.error('Launcher: failed to close window after opening workspace', err); }
+    }
   }
 }
 

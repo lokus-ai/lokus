@@ -20,7 +20,8 @@ import { cors } from "hono/cors";
 import { config } from "./config.ts";
 import { loggerMiddleware } from "./middleware/logger.ts";
 import { authMiddleware, type AuthVars } from "./middleware/auth.ts";
-import { rateLimitMiddleware } from "./middleware/rate-limit.ts";
+import { ipRateLimitMiddleware, rateLimitMiddleware } from "./middleware/rate-limit.ts";
+import { bodySizeGuard, messageGuard, streamConcurrencyGuard } from "./middleware/security.ts";
 import { chatHandler } from "./routes/chat.ts";
 import { embedHandler } from "./routes/embed.ts";
 import { balanceHandler } from "./routes/balance.ts";
@@ -32,6 +33,7 @@ import {
   DEEPGRAM_LIVE_HEADERS,
 } from "./routes/transcribe.ts";
 import * as credit from "./services/credit.ts";
+import { REQUEST_TIMEOUT_MS } from "./lib/constants.ts";
 
 const ALLOWED_ORIGINS = ["tauri://localhost", "https://tauri.localhost"];
 
@@ -51,9 +53,15 @@ app.use(
 // Health — unauthenticated.
 app.get("/health", (c) => c.json({ status: "ok", ts: Date.now() }));
 
-// Authenticated + rate-limited /v1 surface.
+// Global IP rate limit + body guard BEFORE auth (cheap rejection).
+app.use("/v1/*", ipRateLimitMiddleware);
+app.use("/v1/*", bodySizeGuard);
+
+// Authenticated endpoints.
 app.use("/v1/*", authMiddleware);
 app.use("/v1/*", rateLimitMiddleware);
+app.use("/v1/*", messageGuard);
+app.use("/v1/*", streamConcurrencyGuard);
 
 app.post("/v1/chat", chatHandler);
 app.post("/v1/embed", embedHandler);
@@ -85,6 +93,21 @@ if (!IS_TEST && BunRuntime) {
     idleTimeout: 120,
     async fetch(req: Request, server: any) {
       const url = new URL(req.url);
+
+      // --- Global IP rate limit (applies to WS too) ---
+      const forwarded = req.headers.get("x-forwarded-for");
+      const ip = forwarded ? forwarded.split(",")[0].trim() : "unknown";
+      try {
+        const { slidingWindowHit } = await import("./lib/redis.ts");
+        const { IP_RATE_LIMIT_WINDOW_MS, IP_RATE_LIMIT_MAX } = await import("./lib/constants.ts");
+        const count = await slidingWindowHit(`ratelimit-ip-ws:${ip}`, IP_RATE_LIMIT_WINDOW_MS);
+        if (count > IP_RATE_LIMIT_MAX) {
+          return new Response("rate limited", { status: 429 });
+        }
+      } catch {
+        return new Response("rate limiter unavailable", { status: 503 });
+      }
+
       if (url.pathname === "/v1/transcribe/ws") {
         let ctx;
         try {
@@ -98,7 +121,15 @@ if (!IS_TEST && BunRuntime) {
         if (ok) return undefined; // upgraded; Bun takes over
         return new Response("upgrade failed", { status: 400 });
       }
-      return app.fetch(req, server);
+
+      // Overall request timeout for non-WS requests.
+      const ctrl = new AbortController();
+      const timeout = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+      try {
+        return await app.fetch(req, server);
+      } finally {
+        clearTimeout(timeout);
+      }
     },
     websocket: {
       async open(ws: any) {

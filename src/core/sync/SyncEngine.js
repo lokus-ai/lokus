@@ -333,6 +333,8 @@ export class SyncEngine {
     try {
       if (gen !== this._generation) return;
 
+      await this._waitForSaves();
+
       const mek = keyManager.getMEK();
       const localFiles = await fileScanner.scanFiles(this.workspacePath, absolutePaths);
 
@@ -359,6 +361,29 @@ export class SyncEngine {
         if (remote && local.hash === remote.hash) {
           skipped++;
           return;
+        }
+
+        // Concurrent-edit guard: if the remote also moved since our last sync
+        // (another device edited the same file), preserve the remote version as
+        // a conflict copy before this save's content overwrites it. Nothing lost.
+        if (remote && local.hash !== remote.hash) {
+          const cached = syncCache.get(filePath);
+          const lastHash = cached ? cached.hash : null;
+          const remoteChanged = lastHash === null || remote.hash !== lastHash;
+          const localChanged = lastHash === null || local.hash !== lastHash;
+          if (remoteChanged && localChanged) {
+            try {
+              const copyRel = this._conflictCopyPath(filePath);
+              const blob = await storageManager.downloadFile(this.userId, this.workspaceId, filePath);
+              const plaintext = await decryptFile(mek, await blob.arrayBuffer());
+              const bytes = new Uint8Array(plaintext);
+              await this._writeLocalBytes(copyRel, bytes, remote.is_binary);
+              await this._registerConflictCopy(copyRel, bytes, remote.is_binary, mek, localFiles, uploadedPaths);
+              console.log(`[Sync] ⚠ concurrent edit on ${filePath} — preserved remote as ${copyRel}`);
+            } catch (e) {
+              console.warn(`[Sync] conflict-copy failed for ${filePath}: ${e.message}`);
+            }
+          }
         }
 
         try {
@@ -442,6 +467,9 @@ export class SyncEngine {
     try {
       if (gen !== this._generation) return;
 
+      // Let any in-flight editor save finish so we don't scan a half-written file.
+      await this._waitForSaves();
+
       // Try to push any pending manifest from a previous failed update
       await this._pushPendingManifest();
 
@@ -466,10 +494,14 @@ export class SyncEngine {
 
       if (gen !== this._generation) return;
 
-      // Diff
-      const actions = manifestManager.diff(localFiles, remoteManifest, syncCache);
+      // Diff — deletion detection requires a positive existence check so a
+      // transient scan miss can never propagate a deletion to the cloud.
+      const actions = await manifestManager.diff(localFiles, remoteManifest, syncCache, {
+        verifyDeleted: (relPath) => this._verifyFileDeleted(relPath),
+      });
+      const conflicts = actions.conflict || [];
       const total = actions.upload.length + actions.download.length + actions.delete.length;
-      console.log(`[Sync] Plan — ↑${actions.upload.length} ↓${actions.download.length} ✗${actions.delete.length} skip:${actions.skip.length}`);
+      console.log(`[Sync] Plan — ↑${actions.upload.length} ↓${actions.download.length} ✗${actions.delete.length} skip:${actions.skip.length} conflict:${conflicts.length}`);
 
       if (total === 0) {
         console.log('[Sync] Everything up to date');
@@ -484,6 +516,41 @@ export class SyncEngine {
       let completed = 0;
       let failed = 0;
       const uploadedPaths = [];
+
+      // --- Conflicts (concurrent two-sided edits) ---
+      // Keep BOTH copies. The timestamp winner keeps the primary filename (and
+      // is handled by the normal upload/download passes below); the loser is
+      // written alongside as a `.conflict-<ts>` copy and uploaded so every
+      // device converges on both versions. Runs first so that for a
+      // remote-wins conflict the local content is preserved before the download
+      // pass overwrites the primary path.
+      for (const { path: filePath, primary } of conflicts) {
+        try {
+          const local = localFiles.get(filePath);
+          const remote = remoteManifest.files[filePath];
+          const copyRel = this._conflictCopyPath(filePath);
+
+          if (primary === 'local') {
+            // Loser = remote. Fetch + decrypt remote and keep it as the copy.
+            const blob = await storageManager.downloadFile(this.userId, this.workspaceId, filePath);
+            const plaintext = await decryptFile(mek, await blob.arrayBuffer());
+            const bytes = new Uint8Array(plaintext);
+            await this._writeLocalBytes(copyRel, bytes, remote.is_binary);
+            await this._registerConflictCopy(copyRel, bytes, remote.is_binary, mek, localFiles, uploadedPaths);
+          } else {
+            // Loser = local current content — preserve before remote overwrites.
+            let bytes = local?.content;
+            if (!bytes) bytes = await this._readLocalBytes(filePath, local?.isBinary ?? false);
+            await this._writeLocalBytes(copyRel, bytes, local?.isBinary ?? false);
+            await this._registerConflictCopy(copyRel, bytes, local?.isBinary ?? false, mek, localFiles, uploadedPaths);
+          }
+          console.log(`[Sync] ⚠ conflict on ${filePath} — kept both (copy: ${copyRel})`);
+        } catch (err) {
+          if (this._isFatalError(err)) throw err;
+          console.warn(`[Sync] ✗ conflict handling failed: ${filePath} — ${err.message}`);
+          failed++;
+        }
+      }
 
       // --- Uploads ---
       const uploadTasks = actions.upload.map((filePath) => async () => {
@@ -525,9 +592,21 @@ export class SyncEngine {
       const downloadTasks = actions.download.map((filePath) => async () => {
         try {
           const remote = remoteManifest.files[filePath];
-          await this._downloadFile(filePath, remote, mek);
-          syncCache.set(filePath, remote.hash, Math.floor(Date.now() / 1000), remote.size);
-          console.log(`[Sync] ↓ ${filePath} (${remote.size}B)`);
+          // Guard: if the local file changed since the scan that produced this
+          // plan (mid-save race), do NOT overwrite it — keep the downloaded
+          // version as a conflict copy instead.
+          const expectedLocalHash = localFiles.has(filePath) ? localFiles.get(filePath).hash : null;
+          const res = await this._downloadFileGuarded(filePath, remote, mek, expectedLocalHash);
+          if (res.conflicted) {
+            await this._registerConflictCopy(res.copyRel, res.bytes, remote.is_binary, mek, localFiles, uploadedPaths);
+            // Treat remote as the reconciled baseline; the local edit will be
+            // re-uploaded next cycle as a clean one-sided change (no re-conflict).
+            syncCache.set(filePath, remote.hash, Math.floor(Date.now() / 1000), remote.size);
+            console.log(`[Sync] ⚠ ${filePath} changed mid-sync — kept both (copy: ${res.copyRel})`);
+          } else {
+            syncCache.set(filePath, remote.hash, Math.floor(Date.now() / 1000), remote.size);
+            console.log(`[Sync] ↓ ${filePath} (${remote.size}B)`);
+          }
         } catch (err) {
           if (this._isFatalError(err)) throw err;
           console.warn(`[Sync] ✗ download failed: ${filePath} — ${err.message}`);
@@ -648,6 +727,11 @@ export class SyncEngine {
     console.log(`[Sync] Pulling "${name}" → ${targetPath} (${fileEntries.length} files)`);
 
     let pulled = 0;
+    // Seed the sync cache with the pulled baseline so the first local edit after
+    // a pull is recognised as a one-sided change (fast path) rather than being
+    // mistaken for a two-sided conflict due to a missing last-synced hash.
+    const cacheSeed = {};
+    const nowSec = Math.floor(Date.now() / 1000);
     const downloadTasks = fileEntries.map(([filePath, fileMeta]) => async () => {
       try {
         const blob = await storageManager.downloadFile(uid, workspace_id, filePath);
@@ -670,6 +754,7 @@ export class SyncEngine {
           const text = new TextDecoder().decode(plaintext);
           await invoke('write_file_content', { path: fullPath, content: text });
         }
+        if (fileMeta.hash) cacheSeed[filePath] = { hash: fileMeta.hash, mtime: nowSec, size: fileMeta.size || 0 };
         pulled++;
         if (onProgress) onProgress(pulled, fileEntries.length);
       } catch (err) {
@@ -679,6 +764,15 @@ export class SyncEngine {
 
     await runWithConcurrency(downloadTasks, MAX_CONCURRENT);
     console.log(`[Sync] Pull complete — ${pulled}/${fileEntries.length} files`);
+
+    // Persist the seeded cache alongside the pulled workspace.
+    try {
+      await invoke('create_directory', { path: `${targetPath}/.lokus`, recursive: true });
+      await invoke('write_file_content', {
+        path: `${targetPath}/.lokus/sync-cache.json`,
+        content: JSON.stringify(cacheSeed),
+      });
+    } catch {}
 
     // Write sync-id so this folder is linked
     try {
@@ -716,6 +810,146 @@ export class SyncEngine {
     } else {
       const text = new TextDecoder().decode(plaintext);
       await invoke('write_file_content', { path: fullPath, content: text });
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Conflict handling (data-loss prevention)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Build a conflict-copy path alongside the original:
+   *   notes/todo.md → notes/todo.conflict-2026-07-07T12-00-00-000Z.md
+   */
+  _conflictCopyPath(relPath) {
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const slash = relPath.lastIndexOf('/');
+    const dot = relPath.lastIndexOf('.');
+    if (dot > slash) {
+      return `${relPath.slice(0, dot)}.conflict-${ts}${relPath.slice(dot)}`;
+    }
+    return `${relPath}.conflict-${ts}`;
+  }
+
+  async _readLocalBytes(relPath, isBinary) {
+    const absPath = joinPath(this.workspacePath, relPath);
+    if (isBinary) {
+      const raw = await invoke('read_binary_file', { path: absPath });
+      return new Uint8Array(raw);
+    }
+    const text = await invoke('read_file_content', { path: absPath });
+    return new TextEncoder().encode(text);
+  }
+
+  async _writeLocalBytes(relPath, bytes, isBinary) {
+    const absPath = joinPath(this.workspacePath, relPath);
+    const lastSep = Math.max(absPath.lastIndexOf('/'), absPath.lastIndexOf('\\'));
+    const dir = absPath.substring(0, lastSep);
+    try { await invoke('create_directory', { path: dir, recursive: true }); } catch {}
+    if (isBinary) {
+      const chunks = [];
+      for (let i = 0; i < bytes.length; i += 8192) chunks.push(...bytes.slice(i, i + 8192));
+      await invoke('write_binary_file', { path: absPath, content: chunks });
+    } else {
+      const text = new TextDecoder().decode(bytes);
+      await invoke('write_file_content', { path: absPath, content: text });
+    }
+  }
+
+  /** Encrypt + upload a conflict copy and register it for the manifest build. */
+  async _registerConflictCopy(copyRel, bytes, isBinary, mek, localFiles, uploadedPaths) {
+    const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    const hash = await sha256(buf);
+    const encrypted = await encryptFile(mek, buf);
+    await storageManager.uploadFile(this.userId, this.workspaceId, copyRel, encrypted);
+    localFiles.set(copyRel, {
+      hash,
+      size: bytes.byteLength,
+      isBinary,
+      modifiedAt: new Date().toISOString(),
+      content: bytes,
+      encryptedSize: encrypted.byteLength,
+    });
+    uploadedPaths.push(copyRel);
+    syncCache.set(copyRel, hash, Math.floor(Date.now() / 1000), bytes.byteLength);
+  }
+
+  /** Current on-disk state of a local file, or null if absent/unreadable. */
+  async _currentLocalState(absPath, isBinary) {
+    try {
+      let content;
+      if (isBinary) {
+        const raw = await invoke('read_binary_file', { path: absPath });
+        content = new Uint8Array(raw);
+      } else {
+        const text = await invoke('read_file_content', { path: absPath });
+        content = new TextEncoder().encode(text);
+      }
+      const buf = content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength);
+      return { hash: await sha256(buf), content };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Download a file, but if the local copy diverged from the scan-time plan
+   * (mid-save race), keep the downloaded version as a conflict copy instead of
+   * clobbering the local edit. Returns { conflicted, copyRel?, bytes? }.
+   */
+  async _downloadFileGuarded(filePath, remote, mek, expectedLocalHash) {
+    const absPath = joinPath(this.workspacePath, filePath);
+    const current = await this._currentLocalState(absPath, remote.is_binary);
+    const expectedAbsent = expectedLocalHash == null;
+    const diverged = expectedAbsent
+      ? current !== null                                   // expected no file, but one appeared
+      : (current === null || current.hash !== expectedLocalHash); // changed/removed since scan
+    if (diverged) {
+      const blob = await storageManager.downloadFile(this.userId, this.workspaceId, filePath);
+      const plaintext = await decryptFile(mek, await blob.arrayBuffer());
+      const bytes = new Uint8Array(plaintext);
+      const copyRel = this._conflictCopyPath(filePath);
+      await this._writeLocalBytes(copyRel, bytes, remote.is_binary);
+      return { conflicted: true, copyRel, bytes };
+    }
+    await this._downloadFile(filePath, remote, mek);
+    return { conflicted: false };
+  }
+
+  /**
+   * Confirm a file is actually deleted (a positive signal) rather than merely
+   * missing from a scan. Returns true = confirmed gone, false = still present,
+   * null = unknown (existence check errored — caller must NOT delete).
+   */
+  async _verifyFileDeleted(relPath) {
+    const absPath = joinPath(this.workspacePath, relPath);
+    // Fast path: still clearly present → scan miss, not a delete.
+    try {
+      if (await invoke('path_exists', { path: absPath })) return false;
+    } catch {
+      return null; // couldn't even check → unknown
+    }
+    // path_exists() also returns false on permission/unmount errors, so confirm
+    // via an enumerable parent listing before declaring the file deleted.
+    const lastSep = Math.max(absPath.lastIndexOf('/'), absPath.lastIndexOf('\\'));
+    const parentDir = absPath.substring(0, lastSep);
+    let entries;
+    try {
+      entries = await invoke('read_directory', { path: parentDir });
+    } catch {
+      return null; // parent unreadable/unmounted → unknown, do NOT delete
+    }
+    if (!Array.isArray(entries)) return null;
+    const name = relPath.split('/').pop();
+    const present = entries.some((e) => e && e.name === name);
+    return present ? false : true;
+  }
+
+  /** Bounded wait for any in-flight editor save to finish (best-effort). */
+  async _waitForSaves(maxMs = 3000) {
+    const start = Date.now();
+    while (syncLock.isSaveActive() && Date.now() - start < maxMs) {
+      await new Promise((r) => setTimeout(r, 50));
     }
   }
 

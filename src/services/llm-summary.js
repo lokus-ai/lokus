@@ -4,20 +4,16 @@
  * Orchestrates the end-to-end flow of generating a structured meeting summary:
  *
  *   1. Load the current AI provider configuration.
- *   2. Select and invoke the appropriate prompt template.
- *   3. Create an LLM client and dispatch the request (streaming or one-shot).
+ *   2. Build the meeting prompt from the transcript and sparse notes.
+ *   3. Dispatch via the AI provider (proxy cloud, BYOK through Rust, or local Ollama).
  *   4. Return the completed summary (and token usage where available).
  *
  * This module contains no React or UI code — it is pure async service logic.
  *
  * Depends on:
  *   - src/services/ai-provider.js  — createLLMClient, loadProviderConfig
- *   - src/services/summary-templates.js — getTemplate
+ *   - src/services/summary-templates.js — buildMeetingPrompt
  *   - src/utils/logger.js           — logger
- *
- * LLM client interface expected (from ai-provider.js spec):
- *   generateSummary(prompt: string) → Promise<string>
- *   streamSummary(prompt: string, onChunk: (text: string) => void) → Promise<string>
  *
  * @module services/llm-summary
  */

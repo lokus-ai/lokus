@@ -19,17 +19,29 @@ export class ManifestManager {
 
   /**
    * Diff local files against remote manifest.
-   * Returns { upload[], download[], delete[], skip[] }
+   * Returns { upload[], download[], delete[], skip[], conflict[] }
+   * where conflict = [{ path, primary: 'local'|'remote' }].
+   *
+   * Async because deletion detection requires a positive existence check
+   * (see `options.verifyDeleted`) rather than inferring a delete from a file
+   * merely being absent from the scan result.
    *
    * @param {Map} localFiles — Map<relPath, { hash, size, isBinary, modifiedAt }>
    * @param {object|null} remoteManifest — manifest JSON or null
-   * @param {SyncCache} syncCache — local sync cache for deletion detection
+   * @param {SyncCache} syncCache — local sync cache; holds the last-synced hash per path
+   * @param {object} [options]
+   * @param {(relPath:string)=>Promise<boolean|null>} [options.verifyDeleted]
+   *        Resolves true if the file is confirmed gone, false if it actually
+   *        still exists (transient scan miss), or null/throws if the existence
+   *        check itself errored (unknown → treated as "do not delete").
    */
-  diff(localFiles, remoteManifest, syncCache) {
+  async diff(localFiles, remoteManifest, syncCache, options = {}) {
+    const { verifyDeleted } = options;
     const upload = [];
     const download = [];
     const del = [];
     const skip = [];
+    const conflict = [];
 
     const remoteFiles = remoteManifest?.files || {};
 
@@ -42,23 +54,57 @@ export class ManifestManager {
       } else if (local.hash === remote.hash) {
         skip.push(path);
       } else {
-        // Different hash — compare timestamps (last-write-wins)
-        const localTime = new Date(local.modifiedAt).getTime();
-        const remoteTime = new Date(remote.modified_at).getTime();
-        if (localTime >= remoteTime) {
+        // Hashes differ. Decide one-sided update vs. true concurrent conflict
+        // using the last-synced hash recorded in the sync cache. Raw wall-clock
+        // last-write-wins is unsafe under clock skew and silently discards the
+        // loser — so a genuine two-sided divergence keeps BOTH copies.
+        const cached = syncCache.get(path);
+        const lastHash = cached ? cached.hash : null;
+        const localChanged = lastHash === null || local.hash !== lastHash;
+        const remoteChanged = lastHash === null || remote.hash !== lastHash;
+
+        if (localChanged && remoteChanged) {
+          // Both sides moved since the last synced state → real conflict.
+          // Timestamp only decides which copy keeps the primary filename; the
+          // loser is written alongside as a `.conflict-<ts>` copy. Nothing lost.
+          const localTime = new Date(local.modifiedAt).getTime();
+          const remoteTime = new Date(remote.modified_at).getTime();
+          const primary = localTime >= remoteTime ? 'local' : 'remote';
+          conflict.push({ path, primary });
+          if (primary === 'local') upload.push(path);
+          else download.push(path);
+        } else if (localChanged) {
+          // Only local moved since last sync → fast path, push local.
           upload.push(path);
         } else {
+          // Only remote moved since last sync → fast path, pull remote.
           download.push(path);
         }
       }
     }
 
-    // Check remote files not in local
+    // Check remote files not in local scan
     for (const path of Object.keys(remoteFiles)) {
       if (!localFiles.has(path)) {
         if (syncCache.has(path)) {
-          // Was synced before, now deleted locally
-          del.push(path);
+          // Present in remote + previously synced, but missing from THIS scan.
+          // Absence alone is not a delete signal — a transient scan miss
+          // (permissions error, unmounted dir, race) must never propagate a
+          // deletion to the cloud. Require a positive "confirmed gone" signal.
+          let confirmed = null; // true = gone, false = still present, null = unknown
+          if (verifyDeleted) {
+            try {
+              confirmed = await verifyDeleted(path);
+            } catch {
+              confirmed = null; // existence check errored → unknown
+            }
+          }
+          if (confirmed === true) {
+            del.push(path);
+          } else if (confirmed === false) {
+            skip.push(path); // scan miss — file is actually still there
+          }
+          // confirmed === null → unknown → skip entirely (no delete, no overwrite)
         } else {
           // New remote file
           download.push(path);
@@ -66,7 +112,7 @@ export class ManifestManager {
       }
     }
 
-    return { upload, download, delete: del, skip };
+    return { upload, download, delete: del, skip, conflict };
   }
 
   /**
