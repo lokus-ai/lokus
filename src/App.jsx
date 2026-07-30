@@ -224,8 +224,10 @@ function App() {
           </AuthGate>
         </AuthProvider>
         {/* First-run onboarding wizard — self-gates on hasCompletedOnboarding and
-            is skipped for existing users. Not shown in the Preferences window. */}
-        {!isPrefsWindow && <OnboardingWizard />}
+            is skipped for existing users. Not shown in the Preferences window.
+            TEMPORARILY DISABLED: renders broken since the Phase 0 doorway rework
+            (0662e54). Re-enable once the wizard is fixed. */}
+        {false && !isPrefsWindow && <OnboardingWizard />}
         <UpdateChecker />
         {/* Only show announcements/toasts in workspace, not in launcher or preferences */}
         {activePath && !isPrefsWindow && (
