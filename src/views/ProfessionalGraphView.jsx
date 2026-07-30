@@ -357,18 +357,30 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   }, [fileTree, workspacePath, graphDataManager, isVisible, contentVersion]); // Reload when fileTree changes
 
   // Camera glide to the current file: when focusPath changes, smoothly center
-  // and zoom onto its node (600ms animated transition). Retries on graphData
-  // changes if the node wasn't loaded yet.
+  // and zoom onto its node (800ms animated transition). Matches by normalized
+  // id OR raw path, delays slightly so the engine + auto-fit settle first,
+  // and retries if the node wasn't loaded yet.
   useEffect(() => {
     const focusId = focusPath ? focusPath.replace(/^\//, '') : null;
     if (!focusId || prevFocusRef.current === focusId || viewMode !== '2d') return;
-    const node = graphData?.nodes?.find(n => n.id === focusId);
-    if (!node) return; // not loaded yet — retry when graphData updates
-    const fg = forceGraph2DRef.current;
-    if (!fg) return;
-    prevFocusRef.current = focusId;
-    fg.centerAt(node.x, node.y, 600);
-    fg.zoom(1.5, 600);
+
+    const timers = [];
+    const attempt = () => {
+      const node = graphData?.nodes?.find(n => n.id === focusId || n.path === focusPath);
+      if (!node) return false;
+      const fg = forceGraph2DRef.current;
+      if (!fg) return false;
+      prevFocusRef.current = focusId;
+      fg.centerAt(node.x, node.y, 800);
+      fg.zoom(1.5, 800);
+      return true;
+    };
+
+    timers.push(setTimeout(() => {
+      if (!attempt()) timers.push(setTimeout(attempt, 700));
+    }, 250));
+
+    return () => timers.forEach(clearTimeout);
   }, [focusPath, graphData, viewMode]);
 
   // Load real workspace data
@@ -1037,7 +1049,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       // The graph normalizes ids without the leading slash — compare against
       // a slash-stripped focusPath so the current file can be highlighted.
       const focusId = focusPath ? focusPath.replace(/^\//, '') : null;
-      if (focusId && node.id === focusId) {
+      if (focusId && (node.id === focusId || node.path === focusPath)) {
         return safeColor(getThemeColor('--accent', DEFAULT_ACCENT));
       }
 
