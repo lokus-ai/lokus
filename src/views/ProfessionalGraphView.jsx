@@ -968,11 +968,13 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
 
   const colorSchemes = {
     type: {
-      document: getThemeColor('--accent', '#6366f1'),     // Theme accent
-      placeholder: getThemeColor('--muted', '#6b7280'),   // Theme muted
-      tag: '#ef4444',         // Red
-      folder: '#f59e0b',      // Amber
-      attachment: '#8b5cf6'   // Violet
+      // Vellum: nodes are neutral theme greys — accent is reserved for
+      // selection/hover emphasis, not the mass of the graph.
+      document: getThemeColor('--text-secondary', '#8b8b93'),
+      placeholder: getThemeColor('--muted', '#6b7280'),
+      tag: getThemeColor('--muted', '#7e7e86'),
+      folder: '#9c9ca4',
+      attachment: '#6e6e76'
     },
     folder: {
       // Dynamic colors based on folder depth/path
