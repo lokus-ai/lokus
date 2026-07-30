@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { listen } from '@tauri-apps/api/event';
+import { listenWindow } from '../../../core/window/events.js';
 import { useLayoutStore } from '../../../stores/layout';
 import { useViewStore } from '../../../stores/views';
 import { useEditorGroupStore } from '../../../stores/editorGroups';
@@ -21,9 +21,11 @@ export function useShortcuts({ workspacePath, onSave, onSaveAs, onCreateFile, on
   useEffect(() => {
     const unlisteners = [];
 
-    // Helper to register a Tauri listener
+    // Helper to register a Tauri listener. Window-scoped on purpose: menu
+    // events are emit_to()-targeted at the focused window, and a bare listen()
+    // would fire them in EVERY open window (see core/window/events.js).
     const on = (event, handler) => {
-      unlisteners.push(listen(event, handler));
+      unlisteners.push(listenWindow(event, handler));
     };
 
     // File operations
