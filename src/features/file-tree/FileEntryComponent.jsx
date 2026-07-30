@@ -6,6 +6,7 @@ import { ColoredFileIcon } from "../../components/FileIcon.jsx";
 import FileContextMenu from "../../components/FileContextMenu.jsx";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAutoExpand } from "../../hooks/useAutoExpand.js";
+import { useGraphStore } from "../../core/graph2/graphStore.js";
 import { getFilename } from "../../utils/pathUtils.js";
 import { copyFiles, cutFiles, getRelativePath } from "../../utils/clipboard.js";
 import { useViewStore } from "../../stores/views";
@@ -161,6 +162,7 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
           operation: async () => {
             try {
               await invoke("rename_file", { path: oldPath, newName: trimmedName });
+              useGraphStore.getState().fileRenamed(oldPath, newPath);
               onUpdateTabPath?.(oldPath, newPath);
               setRenamingPath(null);
               onRefresh && onRefresh();
@@ -179,6 +181,7 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
     // No references to update, proceed directly
     try {
       await invoke("rename_file", { path: oldPath, newName: trimmedName });
+      useGraphStore.getState().fileRenamed(oldPath, newPath);
       onUpdateTabPath?.(oldPath, newPath);
       setRenamingPath(null);
       onRefresh && onRefresh();

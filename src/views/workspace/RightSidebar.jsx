@@ -1,18 +1,14 @@
 import { useLayoutStore } from '../../stores/layout';
 import { useViewStore } from '../../stores/views';
 import { useEditorGroupStore } from '../../stores/editorGroups';
-import { useFileTreeStore } from '../../stores/fileTree';
 import { getEditor } from '../../stores/editorRegistry';
 import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
-import { lazy, Suspense, useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Network } from 'lucide-react';
+import GraphPanel from '../../components/graph2/GraphPanel.jsx';
 import DocumentOutline from '../../components/DocumentOutline.jsx';
 import BacklinksPanel from '../BacklinksPanel.jsx';
 import GraphSidebar from '../../components/GraphSidebar.jsx';
-
-const ProfessionalGraphView = lazy(() =>
-  import('../ProfessionalGraphView').then(m => ({ default: m.ProfessionalGraphView }))
-);
 import VersionHistoryPanel from '../../components/VersionHistoryPanel.jsx';
 import { DailyNotesPanel } from '../../components/DailyNotes/index.js';
 import { AgendaPanel, CalendarWidget } from '../../components/Calendar/index.js';
@@ -69,11 +65,6 @@ export default function RightSidebar({
   });
 
   const featureFlags = useFeatureFlags();
-
-  // Live feeds for the embedded graph: file ops come from the file-tree
-  // store, saves from the saveVersion counter (bumped by tabSaver).
-  const fileTree = useFileTreeStore((s) => s.fileTree);
-  const saveVersion = useEditorGroupStore((s) => s.saveVersion);
 
   // Resizable graph split (default 50/50) — drag the handle between the
   // graph and the panels below.
@@ -177,14 +168,12 @@ export default function RightSidebar({
                 </h3>
               </div>
               <div className="flex-1 min-h-0">
-                <Suspense fallback={<div className="h-full flex items-center justify-center text-app-muted text-xs">Loading graph…</div>}>
-                  <ProfessionalGraphView
-                    workspacePath={workspacePath}
-                    fileTree={fileTree}
-                    focusPath={activeFile}
-                    contentVersion={saveVersion}
-                  />
-                </Suspense>
+                <GraphPanel
+                  workspacePath={workspacePath}
+                  focusPath={activeFile}
+                  onFileClick={onFileOpen}
+                  hideHeader
+                />
               </div>
             </div>
 

@@ -11,6 +11,7 @@ import { canvasManager } from '../core/canvas/manager';
 import { createLokusParser, createLokusSerializer } from '../core/markdown/lokus-md-pipeline';
 import { registerEditor } from '../stores/editorRegistry';
 import { getTabModel, setTabModel, getSavedDoc, setSavedDoc } from '../stores/tabModels';
+import GraphPanel from './graph2/GraphPanel.jsx';
 import { useTabMetaStore, getTabMeta, selectGroupDirtyPaths } from '../stores/tabMeta';
 import { useShallow } from 'zustand/shallow';
 import { closeTabWithGuard } from '../features/tabs/closeGuard';
@@ -39,7 +40,6 @@ const isNonEditorPath = (p) =>
 
 // Lazy-loaded special tab views
 const BasesView = lazy(() => import('../bases/BasesView'));
-const ProfessionalGraphView = lazy(() => import('../views/ProfessionalGraphView').then(m => ({ default: m.ProfessionalGraphView })));
 const KanbanBoard = lazy(() => import('./KanbanBoard'));
 const MathGraphEditor = lazy(() => import('./MathGraph/MathGraphEditor.jsx'));
 
@@ -612,12 +612,10 @@ export default function EditorGroup({
           </div>
         )}
 
-        {/* Graph view — rendered as a tab */}
+        {/* Graph view — rendered as a tab (graph2: incremental, canvas) */}
         {isGraphTab && (
           <div className="flex-1 overflow-hidden h-full">
-            <Suspense fallback={<div className="flex-1 flex items-center justify-center text-app-muted">Loading...</div>}>
-              <ProfessionalGraphView workspacePath={workspacePath} />
-            </Suspense>
+            <GraphPanel workspacePath={workspacePath} focusPath={activeFile} onFileClick={onFileOpen} />
           </div>
         )}
 

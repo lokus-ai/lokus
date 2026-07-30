@@ -8,6 +8,7 @@ import { isImageFile } from '../../utils/imageUtils';
 import { isPDFFile } from '../../utils/pdfUtils';
 import { syncScheduler } from '../../core/sync/SyncScheduler';
 import { writeFileGuarded } from '../../core/sync/guardedWrite';
+import { useGraphStore } from '../../core/graph2/graphStore.js';
 
 /**
  * tabSaver — save any tab's content from outside the EditorGroup component.
@@ -78,6 +79,8 @@ export async function saveTab(groupId, path) {
   setSavedDoc(groupId, path, state.doc);
   store.markTabDirty(groupId, path, false);
   store.bumpSaveVersion();
+  // Incremental graph update: re-parse exactly this file, nothing else.
+  useGraphStore.getState().noteSaved(path, serialized);
   return true;
 }
 
