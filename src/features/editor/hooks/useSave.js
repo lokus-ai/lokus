@@ -16,7 +16,7 @@ import { writeFileGuarded } from '../../../core/sync/guardedWrite';
 
 const lokusSerializer = createLokusSerializer();
 
-export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
+export function useSave({ workspacePath, onRefreshFiles }) {
   const lastVersionContentRef = useRef({});
   const lastVersionSaveRef = useRef({});
 
@@ -124,7 +124,7 @@ export function useSave({ workspacePath, graphProcessorRef, onRefreshFiles }) {
         useGraphStore.getState().noteSaved(pathToSave, contentToSave);
       } catch (_) {}
     } catch (_) {}
-  }, [workspacePath, graphProcessorRef, onRefreshFiles]);
+  }, [workspacePath, onRefreshFiles]);
 
   const handleSaveAs = useCallback(async (editorArg, filePathArg) => {
     let editor = editorArg;

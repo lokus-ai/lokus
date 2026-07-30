@@ -30,7 +30,6 @@ function isTauriEnv() {
  */
 export function useWorkspaceEvents({
   workspacePath,
-  graphProcessorRef,
   insertImagesIntoEditor,
 }) {
   const layoutDefaults = useLayoutDefaults();
@@ -163,7 +162,7 @@ export function useWorkspaceEvents({
       document.removeEventListener('lokus:wiki-link-created', handleWikiLinkCreated);
       window.removeEventListener('lokus:scroll-to-block', handleScrollToBlock);
     };
-  }, [graphProcessorRef]);
+  }, []);
 
   // -------------------------------------------------------------------------
   // Canvas link hover / open

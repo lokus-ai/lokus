@@ -1,14 +1,75 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { MentionDetector } from '../core/links/mention-detector.js';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import blockBacklinkManager from '../core/links/block-backlink-manager.js';
 import { useGraphStore } from '../core/graph2/graphStore.js';
 import { Search, ChevronDown, ChevronRight, Link2, FileText, Hash } from 'lucide-react';
+
+const WIKILINK_RE = /\[\[[^\]\n]*\]\]/g;
+
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Context snippet around a match — 50 chars each side, trimmed at word edges. */
+function snippetAt(line, start, length) {
+  const beforeStart = Math.max(0, start - 50);
+  const afterEnd = Math.min(line.length, start + length + 50);
+
+  let before = line.slice(beforeStart, start);
+  let after = line.slice(start + length, afterEnd);
+
+  if (beforeStart > 0) {
+    const firstSpace = before.indexOf(' ');
+    if (firstSpace !== -1) before = '...' + before.slice(firstSpace + 1);
+  }
+  if (afterEnd < line.length) {
+    const lastSpace = after.lastIndexOf(' ');
+    if (lastSpace !== -1) after = after.slice(0, lastSpace) + '...';
+  }
+
+  before = before.replace(/\s+/g, ' ').trim();
+  after = after.replace(/\s+/g, ' ').trim();
+  const match = line.slice(start, start + length);
+
+  return { before, match, after, full: `${before}${match}${after}` };
+}
+
+/**
+ * Every whole-word occurrence of `title` in `line` that is NOT already inside
+ * a [[wikilink]] — those are linked mentions and belong to the other section.
+ */
+function unlinkedOccurrencesInLine(line, title) {
+  const out = [];
+  if (!line || !title) return out;
+
+  const spans = [];
+  WIKILINK_RE.lastIndex = 0;
+  let link;
+  while ((link = WIKILINK_RE.exec(line)) !== null) {
+    spans.push([link.index, link.index + link[0].length]);
+  }
+
+  const re = new RegExp(`\\b${escapeRegex(title)}\\b`, 'gi');
+  let match;
+  while ((match = re.exec(line)) !== null) {
+    if (match[0].length === 0) { re.lastIndex++; continue; }
+    const start = match.index;
+    if (spans.some(([a, b]) => start >= a && start < b)) continue;
+    out.push({ index: start, matchedText: match[0], context: snippetAt(line, start, match[0].length) });
+  }
+  return out;
+}
+
+/** Real markdown notes in the index — excludes phantoms, tags, attachments. */
+function noteNodes(index) {
+  return index ? index.nodes().filter((n) => !n.phantom && n.id.endsWith('.md')) : [];
+}
 
 /**
  * BacklinksPanel - Show all notes linking to current note
  */
 export default function BacklinksPanel({
-  graphData,
+  workspacePath,
   currentFile,
   onOpenFile
 }) {
@@ -19,8 +80,6 @@ export default function BacklinksPanel({
   const [blockBacklinksExpanded, setBlockBacklinksExpanded] = useState(false);
   const [unlinkedExpanded, setUnlinkedExpanded] = useState(false);
   const [expandedSources, setExpandedSources] = useState(new Set());
-
-  const mentionDetectorRef = useRef(null);
 
   // Linked mentions from the incremental link index — O(1) inverse-map
   // lookup with context snippets, live on every save (version bumps).
@@ -39,71 +98,100 @@ export default function BacklinksPanel({
     }));
   }, [index, indexVersion, currentFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Initialize mention detector (unlinked mentions only)
+  // The note's own title — what other notes would be mentioning.
+  const currentTitle = useMemo(
+    () => (currentFile ? currentFile.split('/').pop().replace(/\.md$/i, '') : ''),
+    [currentFile],
+  );
+
+  // Unlinked mentions: other notes whose text contains this note's title
+  // without linking it. The index holds no file contents by design, so the
+  // scan runs in Rust (`search_in_files`, whole-word, case-insensitive) and
+  // only the matched LINES come back — then each line is re-scanned here for
+  // every occurrence and for [[wikilink]] spans to exclude.
+  //
+  // Recomputed per file switch, not per save: a keystroke must never trigger
+  // a vault walk.
   useEffect(() => {
-    if (!graphData) return;
-
-    try {
-      mentionDetectorRef.current = new MentionDetector(graphData);
-    } catch (err) {
-      console.error('BacklinksPanel: Failed to initialize mention detector', err);
-    }
-
-    return () => {
-      if (mentionDetectorRef.current) {
-        mentionDetectorRef.current.destroy();
-      }
-    };
-  }, [graphData]);
-
-  // Get current node ID from file path (for unlinked mentions + block links)
-  const currentNodeId = useMemo(() => {
-    if (!currentFile || !graphData || !graphData.nodes) return null;
-
-    // Search nodes by path
-    for (const [nodeId, node] of graphData.nodes.entries()) {
-      if (node.path === currentFile) {
-        return nodeId;
-      }
-    }
-
-    return null;
-  }, [currentFile, graphData]);
-
-  // Update unlinked mentions + block backlinks when current file changes
-  useEffect(() => {
-    if (!currentNodeId || !mentionDetectorRef.current) {
+    if (!workspacePath || !currentTitle || !index) {
       setUnlinkedMentions([]);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const results = await invoke('search_in_files', {
+          query: currentTitle,
+          workspacePath,
+          options: {
+            caseSensitive: false,
+            wholeWord: true,
+            regex: false,
+            fileTypes: ['md'],
+            maxResults: 500,
+            contextLines: 0,
+          },
+        });
+        if (cancelled) return;
+
+        // The Rust walk sees the raw directory — keep only files the index
+        // knows about, so `.lokus/trash` and friends can't show up.
+        const known = new Set(noteNodes(index).map((n) => n.id));
+        const mentions = [];
+
+        for (const result of results || []) {
+          if (result.file === currentFile) continue; // a note never mentions itself
+          if (!known.has(result.file)) continue;
+          const sourceTitle = result.file.split('/').pop().replace(/\.md$/i, '');
+
+          for (const line of result.matches || []) {
+            for (const occ of unlinkedOccurrencesInLine(line.text, currentTitle)) {
+              mentions.push({
+                sourceNodeId: result.file,
+                sourceTitle,
+                targetNodeId: currentFile,
+                targetTitle: currentTitle,
+                position: line.line * 10000 + occ.index,
+                matchedText: occ.matchedText,
+                context: occ.context,
+              });
+            }
+          }
+        }
+
+        setUnlinkedMentions(mentions);
+      } catch (err) {
+        if (!cancelled) setUnlinkedMentions([]);
+      }
+    }, 250);
+
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [workspacePath, currentFile, currentTitle, index]);
+
+  // Block backlinks — a separate index ([[File^blockid]]), fed the note list
+  // from the graph2 index.
+  useEffect(() => {
+    if (!currentTitle || !index) {
       setBlockBacklinks([]);
       return;
     }
 
-    try {
-      const mentions = mentionDetectorRef.current.getUnlinkedMentions(currentNodeId);
-      setUnlinkedMentions(mentions);
+    let cancelled = false;
+    const read = () => {
+      if (!cancelled) setBlockBacklinks(blockBacklinkManager.getFileBlockBacklinks(currentTitle));
+    };
 
-      // Get block backlinks
-      if (currentFile) {
-        const fileName = currentFile.split('/').pop()?.replace('.md', '') || ''
-
-        // Index if not already indexed
-        if (!blockBacklinkManager.indexed && graphData?.nodes) {
-          const fileIndex = Array.from(graphData.nodes.values()).map(node => ({
-            path: node.path,
-            title: node.title
-          }))
-          blockBacklinkManager.indexBlockLinks(fileIndex).catch(err => {
-            console.error('BacklinksPanel: Failed to index block links', err);
-          })
-        }
-
-        const blockLinks = blockBacklinkManager.getFileBlockBacklinks(fileName)
-        setBlockBacklinks(blockLinks)
-      }
-    } catch (err) {
-      console.error('BacklinksPanel: Failed to update backlinks', err);
+    if (!blockBacklinkManager.indexed) {
+      const fileIndex = noteNodes(index).map((n) => ({ path: n.id, title: n.title }));
+      blockBacklinkManager.indexBlockLinks(fileIndex).then(read).catch((err) => {
+        console.error('BacklinksPanel: Failed to index block links', err);
+      });
     }
-  }, [currentNodeId, currentFile, graphData]);
+    read();
+
+    return () => { cancelled = true; };
+  }, [currentTitle, index]);
 
   // Filter backlinks by search query
   const filteredBacklinks = useMemo(() => {
@@ -182,29 +270,28 @@ export default function BacklinksPanel({
     });
   }, []);
 
-  // Handle click on backlink
-  const handleBacklinkClick = useCallback((backlink) => {
-    if (!onOpenFile || !graphData) return;
+  // Open the source note. Node ids ARE paths in the graph2 index; a phantom
+  // (`phantom:name`) has no file behind it and is not clickable.
+  const openSource = useCallback((sourceNodeId) => {
+    if (!onOpenFile || !sourceNodeId || sourceNodeId.startsWith('phantom:')) return;
+    onOpenFile({ path: sourceNodeId, name: sourceNodeId.split('/').pop().replace(/\.md$/i, '') });
+  }, [onOpenFile]);
 
-    const sourceNode = graphData.nodes.get(backlink.sourceNodeId);
-    if (sourceNode && sourceNode.path) {
-      onOpenFile({ path: sourceNode.path, name: sourceNode.title });
-    }
-  }, [onOpenFile, graphData]);
+  const handleBacklinkClick = useCallback(
+    (backlink) => openSource(backlink.sourceNodeId),
+    [openSource],
+  );
 
-  // Handle click on mention
-  const handleMentionClick = useCallback((mention) => {
-    if (!onOpenFile || !graphData) return;
-
-    const sourceNode = graphData.nodes.get(mention.sourceNodeId);
-    if (sourceNode && sourceNode.path) {
-      onOpenFile({ path: sourceNode.path, name: sourceNode.title });
-    }
-  }, [onOpenFile, graphData]);
+  const handleMentionClick = useCallback(
+    (mention) => openSource(mention.sourceNodeId),
+    [openSource],
+  );
 
   // Render context snippet
   const renderContext = useCallback((context) => {
-    if (!context || !context.before || !context.after) {
+    // A match at the start or end of a line has no text on one side — that is
+    // still context worth showing, so only bail when there is nothing at all.
+    if (!context || (!context.before && !context.after && !context.match)) {
       return <span style={{ color: 'var(--muted)', fontSize: '12px' }}>No context available</span>;
     }
 
@@ -372,14 +459,6 @@ export default function BacklinksPanel({
       </div>
     );
   }, [expandedSources, toggleSource, handleMentionClick, renderContext]);
-
-  if (!graphData) {
-    return (
-      <div style={{ padding: '16px', color: 'var(--muted)', fontSize: '13px' }}>
-        Graph data not available
-      </div>
-    );
-  }
 
   if (!currentFile) {
     return (

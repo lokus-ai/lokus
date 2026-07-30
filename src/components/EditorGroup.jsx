@@ -11,7 +11,8 @@ import { canvasManager } from '../core/canvas/manager';
 import { createLokusParser, createLokusSerializer } from '../core/markdown/lokus-md-pipeline';
 import { registerEditor } from '../stores/editorRegistry';
 import { getTabModel, setTabModel, getSavedDoc, setSavedDoc } from '../stores/tabModels';
-import GraphPanel from './graph2/GraphPanel.jsx';
+import GraphView from './graph2/GraphView.jsx';
+import { getGraphEngine } from '../core/graph2/graphEngine.js';
 import { useTabMetaStore, getTabMeta, selectGroupDirtyPaths } from '../stores/tabMeta';
 import { useShallow } from 'zustand/shallow';
 import { closeTabWithGuard } from '../features/tabs/closeGuard';
@@ -612,10 +613,17 @@ export default function EditorGroup({
           </div>
         )}
 
-        {/* Graph view — rendered as a tab (graph2: incremental, canvas) */}
+        {/* Graph view — rendered as a tab (graph2: incremental, canvas).
+            `__graph__` is not a node, so the focus to show is whatever real
+            file the engine last tracked — read at render, which is exactly
+            when the tab becomes active. */}
         {isGraphTab && (
           <div className="flex-1 overflow-hidden h-full">
-            <GraphPanel workspacePath={workspacePath} focusPath={activeFile} onFileClick={onFileOpen} />
+            <GraphView
+              workspacePath={workspacePath}
+              focusPath={getGraphEngine().getFocus()}
+              onFileClick={onFileOpen}
+            />
           </div>
         )}
 

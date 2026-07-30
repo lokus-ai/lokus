@@ -6,9 +6,9 @@ import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
 import { useState, useRef } from 'react';
 import { Network } from 'lucide-react';
 import GraphPanel from '../../components/graph2/GraphPanel.jsx';
+import { getGraphEngine } from '../../core/graph2/graphEngine.js';
 import DocumentOutline from '../../components/DocumentOutline.jsx';
 import BacklinksPanel from '../BacklinksPanel.jsx';
-import GraphSidebar from '../../components/GraphSidebar.jsx';
 import VersionHistoryPanel from '../../components/VersionHistoryPanel.jsx';
 import { DailyNotesPanel } from '../../components/DailyNotes/index.js';
 import { AgendaPanel, CalendarWidget } from '../../components/Calendar/index.js';
@@ -16,19 +16,20 @@ import { PanelRegion } from '../../plugins/ui/PanelManager.jsx';
 import { PANEL_POSITIONS } from '../../plugins/api/UIAPI.js';
 
 /**
- * RightSidebar — document outline, backlinks, graph sidebar, version history,
+ * RightSidebar — graph preview, document outline, backlinks, version history,
  * daily notes panel, and calendar widget.
  *
  * Reads focused group's active tab from useEditorGroupStore.
  * Panel visibility comes from useViewStore (showVersionHistory, etc.) and
  * useLayoutStore for sidebar dimensions.
+ *
+ * Graph SETTINGS are not here — they live in the full `__graph__` tab.
  */
 export default function RightSidebar({
   workspacePath,
   onFileOpen,
   onOpenDailyNoteByDate,
   onReloadCurrentFile,
-  graphProcessorRef,
 }) {
   const showRight = useLayoutStore((s) => s.showRight);
   const rightW = useLayoutStore((s) => s.rightW);
@@ -43,9 +44,6 @@ export default function RightSidebar({
 
   // Focused group id for registry lookup
   const focusedGroupId = useEditorGroupStore((s) => s.focusedGroupId);
-
-  // Graph sidebar data from useEditorGroupStore
-  const graphSidebarData = useEditorGroupStore((s) => s.graphSidebarData);
 
   // Active file from the focused editor group
   const activeFile = useEditorGroupStore((s) => {
@@ -65,6 +63,12 @@ export default function RightSidebar({
   });
 
   const featureFlags = useFeatureFlags();
+
+  // Special tabs (`__graph__`, `__bases__`, …) are not graph nodes, so the
+  // preview keeps showing the last real file the engine focused.
+  const graphFocusPath = activeFile?.startsWith('__')
+    ? getGraphEngine().getFocus()
+    : activeFile;
 
   // Resizable graph split (default 50/50) — drag the handle between the
   // graph and the panels below.
@@ -139,24 +143,6 @@ export default function RightSidebar({
             onOpenCalendarView={handleOpenCalendarView}
             onOpenSettings={handleOpenCalendarSettings}
           />
-        ) : featureFlags.enable_graph && activeFile === '__graph__' ? (
-          <GraphSidebar
-            selectedNodes={graphSidebarData?.selectedNodes}
-            hoveredNode={graphSidebarData?.hoveredNode}
-            graphData={graphSidebarData?.graphData}
-            stats={graphSidebarData?.stats}
-            config={graphSidebarData?.graphConfig}
-            onConfigChange={graphSidebarData?.onConfigChange}
-            onNodeClick={(node) => {
-              if (graphSidebarData?.onFocusNode) {
-                graphSidebarData.onFocusNode(node);
-              }
-            }}
-            isAnimating={graphSidebarData?.isAnimating}
-            animationSpeed={graphSidebarData?.animationSpeed}
-            onToggleAnimation={graphSidebarData?.onToggleAnimation}
-            onAnimationSpeedChange={graphSidebarData?.onAnimationSpeedChange}
-          />
         ) : (
           <>
             {/* Graph — resizable top half of the sidebar */}
@@ -170,7 +156,7 @@ export default function RightSidebar({
               <div className="flex-1 min-h-0">
                 <GraphPanel
                   workspacePath={workspacePath}
-                  focusPath={activeFile}
+                  focusPath={graphFocusPath}
                   onFileClick={onFileOpen}
                   hideHeader
                 />
@@ -198,7 +184,7 @@ export default function RightSidebar({
             {featureFlags.enable_backlinks && (
               <div style={{ minHeight: '200px', flex: 1, overflowY: 'auto' }}>
                 <BacklinksPanel
-                  graphData={graphProcessorRef?.current?.getGraphDatabase()}
+                  workspacePath={workspacePath}
                   currentFile={activeFile}
                   onOpenFile={onFileOpen}
                 />
