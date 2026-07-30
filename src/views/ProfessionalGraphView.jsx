@@ -27,7 +27,7 @@ import { generateFileTreeHash } from '../utils/fileTreeUtils.js';
 import { useEditorGroupStore } from '../stores/editorGroups.js';
 import { getColorGroupMatch } from '../core/graph/color-group-matcher.js';
 
-export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile, fileTree = [] }) => {
+export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile, fileTree = [], focusPath = null, contentVersion = 0 }) => {
   // Core state
   const [viewMode, setViewMode] = useState('2d'); // '2d', '3d', 'force'
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
@@ -89,6 +89,8 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
 
   // File tree change detection refs
   const prevFileTreeHashRef = useRef(null);
+  const prevContentVersionRef = useRef(0);
+  const prevFocusRef = useRef(null);
   const isInitializedRef = useRef(false);
   const reloadTimerRef = useRef(null);
 
@@ -319,12 +321,16 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         // Generate hash of current fileTree structure
         const currentHash = generateFileTreeHash(fileTree);
 
-        // Skip reload if hash hasn't changed (unless first load)
-        if (isInitializedRef.current && prevFileTreeHashRef.current === currentHash) {
+        // Skip reload if nothing changed (unless first load). contentVersion
+        // bumps on every save, so link edits force a reload even when the
+        // fileTree structure itself is unchanged.
+        const contentChanged = prevContentVersionRef.current !== contentVersion;
+        if (isInitializedRef.current && prevFileTreeHashRef.current === currentHash && !contentChanged) {
           return;
         }
 
         prevFileTreeHashRef.current = currentHash;
+        prevContentVersionRef.current = contentVersion;
         isInitializedRef.current = true;
 
         if (fileTree.length > 0) {
@@ -348,7 +354,34 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         clearTimeout(reloadTimerRef.current);
       }
     };
-  }, [fileTree, workspacePath, graphDataManager, isVisible]); // Reload when fileTree changes
+  }, [fileTree, workspacePath, graphDataManager, isVisible, contentVersion]); // Reload when fileTree changes
+
+  // Camera glide to the current file: when focusPath changes, smoothly center
+  // and zoom onto its node (800ms animated transition). Matches by normalized
+  // id OR raw path, delays slightly so the engine + auto-fit settle first,
+  // and retries if the node wasn't loaded yet.
+  useEffect(() => {
+    const focusId = focusPath ? focusPath.replace(/^\//, '') : null;
+    if (!focusId || prevFocusRef.current === focusId || viewMode !== '2d') return;
+
+    const timers = [];
+    const attempt = () => {
+      const node = graphData?.nodes?.find(n => n.id === focusId || n.path === focusPath);
+      if (!node) return false;
+      const fg = forceGraph2DRef.current;
+      if (!fg) return false;
+      prevFocusRef.current = focusId;
+      fg.centerAt(node.x, node.y, 800);
+      fg.zoom(1.5, 800);
+      return true;
+    };
+
+    timers.push(setTimeout(() => {
+      if (!attempt()) timers.push(setTimeout(attempt, 700));
+    }, 250));
+
+    return () => timers.forEach(clearTimeout);
+  }, [focusPath, graphData, viewMode]);
 
   // Load real workspace data
   const loadWorkspaceData = async (dataManager, workspacePath, providedFileTree = null) => {
@@ -968,11 +1001,13 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
 
   const colorSchemes = {
     type: {
-      document: getThemeColor('--accent', '#6366f1'),     // Theme accent
-      placeholder: getThemeColor('--muted', '#6b7280'),   // Theme muted
-      tag: '#ef4444',         // Red
-      folder: '#f59e0b',      // Amber
-      attachment: '#8b5cf6'   // Violet
+      // Vellum: nodes are neutral theme greys — accent is reserved for
+      // selection/hover emphasis, not the mass of the graph.
+      document: getThemeColor('--text-secondary', '#8b8b93'),
+      placeholder: getThemeColor('--muted', '#6b7280'),
+      tag: getThemeColor('--muted', '#7e7e86'),
+      folder: '#9c9ca4',
+      attachment: '#6e6e76'
     },
     folder: {
       // Dynamic colors based on folder depth/path
@@ -1011,6 +1046,13 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     };
 
     try {
+      // The graph normalizes ids without the leading slash — compare against
+      // a slash-stripped focusPath so the current file can be highlighted.
+      const focusId = focusPath ? focusPath.replace(/^\//, '') : null;
+      if (focusId && (node.id === focusId || node.path === focusPath)) {
+        return safeColor(getThemeColor('--accent', DEFAULT_ACCENT));
+      }
+
       if (selectedNodes.includes(node.id)) {
         return safeColor(getThemeColor('--accent', DEFAULT_ACCENT));
       }
@@ -1066,7 +1108,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       // Ultimate fallback
       return DEFAULT_ACCENT;
     }
-  }, [selectedNodes, colorScheme, graphConfig.colorGroups]);
+  }, [selectedNodes, colorScheme, graphConfig.colorGroups, focusPath]);
 
   const getNodeSize = useCallback((node) => {
     let baseSize = node.size || 8;
@@ -1443,7 +1485,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
   // Generate background style from config - memoized to only update when background settings change
   const backgroundStyle = React.useMemo(() => {
     const config = graphConfig;
-    const bgType = config.backgroundType || 'radial';
+    const bgType = config.backgroundType || 'solid';
 
     // Get theme colors from CSS variables
     const themeColor1 = getCSSColor('--graph-bg-primary', '#1e1b4b');

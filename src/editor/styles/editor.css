@@ -41,7 +41,7 @@
     font-feature-settings: "calt" 1, "liga" 1, "kern" 1;
 
     /* Real-time customizable properties */
-    font-family: var(--editor-font-family, ui-sans-serif) !important;
+    font-family: var(--editor-font-family, var(--font-family)) !important;
     font-size: var(--editor-font-size, 16px) !important;
     line-height: var(--editor-line-height, 1.7) !important;
     letter-spacing: var(--editor-letter-spacing, 0.003em) !important;
@@ -74,6 +74,8 @@
 .ProseMirror h5,
 .ProseMirror h6 {
     color: var(--editor-heading-color, rgb(var(--text))) !important;
+    font-family: var(--editor-heading-font, var(--font-display)) !important;
+    letter-spacing: -0.01em;
     margin-top: var(--editor-heading-margin-top, 1.5rem) !important;
     margin-bottom: var(--editor-heading-margin-bottom, 0.5rem) !important;
     transition: font-size .15s ease, color .15s ease, margin .15s ease;
@@ -195,7 +197,7 @@
     padding: 0 0.15rem;
     border-radius: 0.25rem;
     background: rgb(var(--panel));
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-family: var(--font-mono);
 }
 .math-block {
     padding: 0.5rem 0.75rem;
@@ -421,7 +423,7 @@ ul[data-type="taskList"] li.task-started {
     padding: var(--editor-code-block-padding, 1rem) !important;
     margin: var(--editor-block-margin, 1rem) 0 !important;
     overflow-x: auto;
-    font-family: var(--editor-code-block-font, ui-monospace) !important;
+    font-family: var(--editor-code-block-font, var(--font-mono)) !important;
     font-size: var(--editor-code-block-font-size, 14px) !important;
     line-height: var(--editor-code-block-line-height, 1.5) !important;
     position: relative;
@@ -646,12 +648,10 @@ ul[data-type="taskList"] li.task-started {
 }
 
 .ProseMirror h1 {
-    border-bottom: 2px solid rgb(var(--text) / 0.15);
     padding-bottom: 0.5rem;
 }
 
 .ProseMirror h2 {
-    border-bottom: 1px solid rgb(var(--text) / 0.1);
     padding-bottom: 0.25rem;
 }
 
@@ -672,7 +672,7 @@ ul[data-type="taskList"] li.task-started {
     color: rgb(var(--accent));
     padding: 0.15rem 0.3rem;
     border-radius: 0.25rem;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-family: var(--font-mono);
     font-size: 0.875em;
     font-weight: 500;
     border: 1px solid rgb(var(--border) / 0.3);

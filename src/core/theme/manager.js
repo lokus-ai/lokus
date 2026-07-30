@@ -24,25 +24,25 @@ const THEME_TOKEN_KEYS = [
   "--app-bg", "--app-text", "--app-panel", "--app-border", "--app-muted", "--app-accent", "--app-accent-fg"
 ];
 const BUILT_IN_THEME_TOKENS = {
-  // Core tokens (Lokus Dark defaults)
-  "--bg": "24 22 31", "--text": "224 221 240", "--panel": "32 30 41",
-  "--border": "54 51 67", "--muted": "120 117 142", "--accent": "224 168 114", "--accent-fg": "255 255 255",
+  // Core tokens (Vellum Dark defaults — must match globals.css dark)
+  "--bg": "33 33 36", "--text": "220 220 225", "--panel": "23 23 26",
+  "--border": "53 53 58", "--muted": "126 126 134", "--accent": "167 139 250", "--accent-fg": "255 255 255",
   // Tab colors
-  "--tab-active": "40 38 51",
+  "--tab-active": "33 33 36",
   // Task status colors
-  "--task-todo": "120 117 142", "--task-progress": "224 168 114", "--task-urgent": "235 111 146",
-  "--task-question": "246 193 119", "--task-completed": "110 201 143", "--task-cancelled": "120 117 142",
+  "--task-todo": "126 126 134", "--task-progress": "167 139 250", "--task-urgent": "235 111 146",
+  "--task-question": "246 193 119", "--task-completed": "110 201 143", "--task-cancelled": "126 126 134",
   "--task-delegated": "196 167 231",
   // Semantic colors
   "--danger": "235 111 146", "--success": "110 201 143", "--warning": "246 193 119", "--info": "140 170 238",
   // Editor colors
-  "--editor-placeholder": "120 117 142"
+  "--editor-placeholder": "126 126 134"
 };
 
 // Built-in themes (2 signature + 2 community favorites)
 const DEFAULT_THEMES = ["lokus-dark", "lokus-light", "rose-pine", "tokyo-night"];
 const DEFAULT_THEME_CONTENT = {
-  "lokus-dark": `{"name": "Lokus Dark", "tokens": {"--bg": "#18161f", "--text": "#e0ddf0", "--panel": "#201e29", "--border": "#363343", "--muted": "#78758e", "--accent": "#e0a872", "--accent-fg": "#ffffff", "--task-todo": "#78758e", "--task-progress": "#e0a872", "--task-urgent": "#eb6f92", "--task-question": "#f6c177", "--task-completed": "#6ec98f", "--task-cancelled": "#78758e", "--task-delegated": "#c4a7e7", "--danger": "#eb6f92", "--success": "#6ec98f", "--warning": "#f6c177", "--info": "#8caaee", "--editor-placeholder": "#78758e"}}`,
+  "lokus-dark": `{"name": "Lokus Dark", "tokens": {"--bg": "#212124", "--text": "#dcdce1", "--panel": "#17171a", "--border": "#35353a", "--muted": "#7e7e86", "--accent": "#a78bfa", "--accent-fg": "#ffffff", "--task-todo": "#7e7e86", "--task-progress": "#a78bfa", "--task-urgent": "#eb6f92", "--task-question": "#f6c177", "--task-completed": "#6ec98f", "--task-cancelled": "#7e7e86", "--task-delegated": "#c4a7e7", "--danger": "#eb6f92", "--success": "#6ec98f", "--warning": "#f6c177", "--info": "#8caaee", "--editor-placeholder": "#7e7e86"}}`,
   "lokus-light": `{"name": "Lokus Light", "tokens": {"--bg": "#f9f5ef", "--text": "#2b2738", "--panel": "#f0ebe3", "--border": "#d4cec5", "--muted": "#817c9c", "--accent": "#c27830", "--accent-fg": "#ffffff", "--task-todo": "#817c9c", "--task-progress": "#c27830", "--task-urgent": "#c23c5a", "--task-question": "#b88425", "--task-completed": "#28a06e", "--task-cancelled": "#817c9c", "--task-delegated": "#8b5cf6", "--danger": "#c23c5a", "--success": "#28a06e", "--warning": "#b88425", "--info": "#5a7fe8", "--editor-placeholder": "#817c9c"}}`,
   "rose-pine": `{"name": "Rosé Pine", "tokens": {"--bg": "#191724", "--text": "#e0def4", "--panel": "#1f1d2e", "--border": "#403d52", "--muted": "#6e6a86", "--accent": "#c4a7e7", "--accent-fg": "#191724", "--task-todo": "#6e6a86", "--task-progress": "#c4a7e7", "--task-urgent": "#eb6f92", "--task-question": "#f6c177", "--task-completed": "#9ccfd8", "--task-cancelled": "#6e6a86", "--task-delegated": "#ebbcba", "--danger": "#eb6f92", "--success": "#9ccfd8", "--warning": "#f6c177", "--info": "#31748f", "--editor-placeholder": "#6e6a86"}}`,
   "tokyo-night": `{"name": "Tokyo Night", "tokens": {"--bg": "#1a1b26", "--text": "#a9b1d6", "--panel": "#1f2335", "--border": "#3b4261", "--muted": "#565f89", "--accent": "#7aa2f7", "--accent-fg": "#1a1b26", "--task-todo": "#565f89", "--task-progress": "#7aa2f7", "--task-urgent": "#f7768e", "--task-question": "#e0af68", "--task-completed": "#9ece6a", "--task-cancelled": "#565f89", "--task-delegated": "#bb9af7", "--danger": "#f7768e", "--success": "#9ece6a", "--warning": "#e0af68", "--info": "#2ac3de", "--editor-placeholder": "#565f89"}}`

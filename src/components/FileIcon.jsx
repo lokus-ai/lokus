@@ -187,61 +187,13 @@ export default function FileIcon({
 
 /**
  * Get file icon color based on file type
- * Returns Tailwind color classes
+ * Returns Tailwind color classes.
+ *
+ * Vellum note: the explorer is fully neutral — a per-type rainbow reads
+ * childish against the Obsidian/Notion chrome. Everything is muted.
  */
 export function getFileIconColor(fileName, isDirectory) {
-  if (isDirectory) {
-    return 'text-blue-500';
-  }
-
-  if (!fileName) return 'text-app-muted';
-
-  const extension = fileName.split('.').pop()?.toLowerCase();
-
-  // Color mapping for different file types
-  const colorMap = {
-    // Markdown & Text - Purple
-    'md': 'text-purple-500',
-    'markdown': 'text-purple-500',
-    'txt': 'text-gray-500',
-
-    // JavaScript/TypeScript - Yellow
-    'js': 'text-yellow-500',
-    'jsx': 'text-yellow-500',
-    'ts': 'text-blue-500',
-    'tsx': 'text-blue-500',
-
-    // Web - Orange/Red
-    'html': 'text-orange-500',
-    'css': 'text-blue-400',
-    'scss': 'text-pink-500',
-
-    // Python - Blue
-    'py': 'text-blue-500',
-
-    // Data - Green
-    'json': 'text-yellow-600',
-    'yaml': 'text-red-500',
-    'yml': 'text-red-500',
-
-    // Images - Purple
-    'png': 'text-purple-400',
-    'jpg': 'text-purple-400',
-    'jpeg': 'text-purple-400',
-    'svg': 'text-orange-400',
-
-    // Special Lokus
-    'excalidraw': 'text-green-500',
-    'canvas': 'text-green-500',  // deprecated: use .excalidraw
-    'kanban': 'text-teal-500',
-    'graph': 'text-violet-500',
-
-    // Database
-    'sql': 'text-orange-500',
-    'db': 'text-orange-500',
-  };
-
-  return colorMap[extension] || 'text-app-muted';
+  return 'text-app-muted';
 }
 
 /**

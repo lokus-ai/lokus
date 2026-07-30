@@ -8,6 +8,7 @@ module.exports = {
         "app-panel": "rgb(var(--panel) / <alpha-value>)",
         "app-border": "rgb(var(--border) / <alpha-value>)",
         "app-text": "rgb(var(--text) / <alpha-value>)",
+        "app-text-secondary": "rgb(var(--text-secondary) / <alpha-value>)",
         "app-muted": "rgb(var(--muted) / <alpha-value>)",
         "app-accent": "rgb(var(--accent) / <alpha-value>)",
         "app-accent-fg": "rgb(var(--accent-fg) / <alpha-value>)",
@@ -16,6 +17,11 @@ module.exports = {
       borderRadius: {
         md: "8px",
         lg: "10px",
+      },
+      fontFamily: {
+        sans: ["var(--font-family)", "sans-serif"],
+        display: ["var(--font-display)", "sans-serif"],
+        mono: ["var(--font-mono)", "monospace"],
       },
       typography: ({ theme }) => ({
         DEFAULT: {

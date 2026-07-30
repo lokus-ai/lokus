@@ -165,6 +165,7 @@ export default function FileContextMenu({
       <ContextMenuTrigger asChild>
         <div
           ref={triggerRef}
+          className="w-full"
           {...wrappedHandlers}
           style={mobile && isPressing ? {
             transform: 'scale(0.97)',

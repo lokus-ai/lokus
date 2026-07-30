@@ -95,6 +95,9 @@ export const useEditorGroupStore = create(
     graphData: null,
     isLoadingGraph: false,
     graphSidebarData: { selectedNodes: [], hoveredNode: null, graphData: { nodes: [], links: [] }, stats: {} },
+    // Bumped after every successful file save — lets views (e.g. the sidebar
+    // graph) refresh data without watching the filesystem.
+    saveVersion: 0,
     allImageFiles: [],
 
     // --- Tab operations ---
@@ -327,6 +330,7 @@ export const useEditorGroupStore = create(
     // Graph actions
     setGraphData: (data) => set({ graphData: data }),
     setLoadingGraph: (bool) => set({ isLoadingGraph: bool }),
+    bumpSaveVersion: () => set((s) => ({ saveVersion: s.saveVersion + 1 })),
     setGraphSidebar: (data) => set((s) => ({ graphSidebarData: { ...s.graphSidebarData, ...data } })),
     setAllImageFiles: (files) => set({ allImageFiles: files }),
 

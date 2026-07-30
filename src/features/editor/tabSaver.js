@@ -77,6 +77,7 @@ export async function saveTab(groupId, path) {
   store.setTabContent(groupId, path, { savedContent: serialized });
   setSavedDoc(groupId, path, state.doc);
   store.markTabDirty(groupId, path, false);
+  store.bumpSaveVersion();
   return true;
 }
 

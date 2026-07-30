@@ -2,13 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Bundled fonts (offline-safe, lives in public/fonts) */
+@font-face {
+  font-family: 'Public Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/PublicSans-var.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 500 700;
+  font-display: swap;
+  src: url('/fonts/SpaceGrotesk-var.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/IBMPlexMono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/IBMPlexMono-500.woff2') format('woff2');
+}
+
 :root {
   color-scheme: light dark;
   --radius: 6px; /* Obsidian uses smaller radius */
 
-  /* Obsidian-inspired Typography */
-  --font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', 'Segoe UI', sans-serif;
-  --font-mono: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+  /* Vellum Typography */
+  --font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', 'Segoe UI', sans-serif;
+  --font-display: 'Space Grotesk', 'Public Sans', -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
   
   /* Obsidian-inspired sizing */
   --text-xs: 11px;
@@ -19,31 +50,31 @@
   --text-2xl: 24px;
 
   /* The new variable for the top bar */
-  --app-titlebar: 24 22 31; /* Lokus Dark titlebar */
+  --app-titlebar: 23 23 26; /* #17171a */
 
-  /* Core theme tokens - Lokus Dark */
-  --bg: 24 22 31;           /* #18161f */
-  --panel: 32 30 41;        /* #201e29 */
-  --panel-secondary: 40 38 51; /* #282633 */
-  --border: 54 51 67;       /* #363343 */
-  --border-hover: 70 67 85; /* #464355 */
-  --text: 224 221 240;      /* #e0ddf0 */
-  --text-secondary: 174 171 192; /* #aeabc0 */
-  --muted: 120 117 142;     /* #78758e */
-  --accent: 224 168 114;    /* #e0a872 */
-  --accent-hover: 212 149 96; /* #d49560 */
+  /* Core theme tokens - Vellum Dark (Obsidian-grade neutral + violet) */
+  --bg: 33 33 36;           /* #212124 — content pane, 10 steps above the strip */
+  --panel: 23 23 26;        /* #17171a */
+  --panel-secondary: 43 43 48; /* #2b2b30 — elevated (chips, cards, tiles) */
+  --border: 53 53 58;       /* #35353a */
+  --border-hover: 79 79 86; /* #4f4f56 */
+  --text: 220 220 225;      /* #dcdce1 */
+  --text-secondary: 139 139 147; /* #8b8b93 */
+  --muted: 126 126 134;     /* #7e7e86 */
+  --accent: 167 139 250;    /* #a78bfa */
+  --accent-hover: 199 182 253; /* #c7b6fd */
   --accent-fg: 255 255 255;
 
   /* Tab colors */
-  --tab-active: 40 38 51;        /* #282633 */
+  --tab-active: 33 33 36;        /* #212124 — active tab melts into the editor */
 
   /* Task status colors */
-  --task-todo: 120 117 142;      /* #78758e */
-  --task-progress: 224 168 114;  /* #e0a872 */
+  --task-todo: 126 126 134;      /* #7e7e86 */
+  --task-progress: 167 139 250;  /* #a78bfa */
   --task-urgent: 235 111 146;    /* #eb6f92 */
   --task-question: 246 193 119;  /* #f6c177 */
   --task-completed: 110 201 143; /* #6ec98f */
-  --task-cancelled: 120 117 142; /* #78758e */
+  --task-cancelled: 126 126 134; /* #7e7e86 */
   --task-delegated: 196 167 231; /* #c4a7e7 */
 
   /* Semantic colors */
@@ -53,24 +84,24 @@
   --info: 140 170 238;      /* #8caaee */
 
   /* Editor colors */
-  --editor-placeholder: 120 117 142; /* #78758e */
+  --editor-placeholder: 126 126 134; /* #7e7e86 */
 
   /* Shadow */
   --shadow: 0 0 0;
 
   /* Canvas colors */
-  --canvas-bg: 32 30 41;            /* #201e29 */
-  --canvas-grid: rgba(224, 221, 240, 0.06);
+  --canvas-bg: 23 23 26;            /* #17171a */
+  --canvas-grid: rgba(220, 220, 225, 0.05);
 
   /* Graph visualization colors */
-  --graph-bg-primary: #18161f;
-  --graph-bg-secondary: #e0a872;
+  --graph-bg-primary: #212124;
+  --graph-bg-secondary: #a78bfa;
   --graph-node-document: #6ec98f;
-  --graph-node-placeholder: #78758e;
+  --graph-node-placeholder: #7e7e86;
   --graph-node-tag: #c4a7e7;
   --graph-node-folder: #f6c177;
-  --graph-link: #363343;
-  --graph-link-hover: #e0a872;
+  --graph-link: #35353a;
+  --graph-link-hover: #a78bfa;
 }
 
 :root[data-theme="light"] {
@@ -129,31 +160,31 @@
 }
 
 :root[data-theme="dark"] {
-  --app-titlebar: 24 22 31; /* #18161f */
+  --app-titlebar: 23 23 26; /* #17171a */
 
-  /* Core theme tokens - Lokus Dark */
-  --bg: 24 22 31;           /* #18161f */
-  --panel: 32 30 41;        /* #201e29 */
-  --panel-secondary: 40 38 51; /* #282633 */
-  --border: 54 51 67;       /* #363343 */
-  --border-hover: 70 67 85; /* #464355 */
-  --text: 224 221 240;      /* #e0ddf0 */
-  --text-secondary: 174 171 192; /* #aeabc0 */
-  --muted: 120 117 142;     /* #78758e */
-  --accent: 224 168 114;    /* #e0a872 */
-  --accent-hover: 212 149 96; /* #d49560 */
+  /* Core theme tokens - Vellum Dark (Obsidian-grade neutral + violet) */
+  --bg: 33 33 36;           /* #212124 — content pane, 10 steps above the strip */
+  --panel: 23 23 26;        /* #17171a */
+  --panel-secondary: 43 43 48; /* #2b2b30 — elevated (chips, cards, tiles) */
+  --border: 53 53 58;       /* #35353a */
+  --border-hover: 79 79 86; /* #4f4f56 */
+  --text: 220 220 225;      /* #dcdce1 */
+  --text-secondary: 139 139 147; /* #8b8b93 */
+  --muted: 126 126 134;     /* #7e7e86 */
+  --accent: 167 139 250;    /* #a78bfa */
+  --accent-hover: 199 182 253; /* #c7b6fd */
   --accent-fg: 255 255 255;
 
   /* Tab colors */
-  --tab-active: 40 38 51;        /* #282633 */
+  --tab-active: 33 33 36;        /* #212124 — active tab melts into the editor */
 
   /* Task status colors */
-  --task-todo: 120 117 142;      /* #78758e */
-  --task-progress: 224 168 114;  /* #e0a872 */
+  --task-todo: 126 126 134;      /* #7e7e86 */
+  --task-progress: 167 139 250;  /* #a78bfa */
   --task-urgent: 235 111 146;    /* #eb6f92 */
   --task-question: 246 193 119;  /* #f6c177 */
   --task-completed: 110 201 143; /* #6ec98f */
-  --task-cancelled: 120 117 142; /* #78758e */
+  --task-cancelled: 126 126 134; /* #7e7e86 */
   --task-delegated: 196 167 231; /* #c4a7e7 */
 
   /* Semantic colors */
@@ -163,24 +194,24 @@
   --info: 140 170 238;      /* #8caaee */
 
   /* Editor colors */
-  --editor-placeholder: 120 117 142; /* #78758e */
+  --editor-placeholder: 126 126 134; /* #7e7e86 */
 
   /* Shadow */
   --shadow: 0 0 0;
 
   /* Canvas colors */
-  --canvas-bg: 32 30 41;            /* #201e29 */
-  --canvas-grid: rgba(224, 221, 240, 0.06);
+  --canvas-bg: 23 23 26;            /* #17171a */
+  --canvas-grid: rgba(220, 220, 225, 0.05);
 
   /* Graph visualization colors */
-  --graph-bg-primary: #18161f;
-  --graph-bg-secondary: #e0a872;
+  --graph-bg-primary: #212124;
+  --graph-bg-secondary: #a78bfa;
   --graph-node-document: #6ec98f;
-  --graph-node-placeholder: #78758e;
+  --graph-node-placeholder: #7e7e86;
   --graph-node-tag: #c4a7e7;
   --graph-node-folder: #f6c177;
-  --graph-link: #363343;
-  --graph-link-hover: #e0a872;
+  --graph-link: #35353a;
+  --graph-link-hover: #a78bfa;
 }
 
 ::selection { background: rgb(var(--accent) / 0.25); }
@@ -323,32 +354,8 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   color: rgb(var(--text));
 }
 
-/* Obsidian File Explorer Styles */
-.obsidian-file-item {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 4px 8px;
-  border-radius: var(--radius);
-  font-size: var(--text-sm);
-  line-height: 1.4;
-  color: rgb(var(--text));
-  cursor: pointer;
-  transition: all 150ms ease;
-  position: relative;
-  border: none;
-  background: transparent;
-  text-align: left;
-}
-
-.obsidian-file-item:hover {
-  background-color: rgb(var(--panel-secondary) / 0.6);
-}
-
-.obsidian-file-item.active {
-  background-color: rgb(var(--accent) / 0.15);
-  color: rgb(var(--accent));
-}
+/* Obsidian File Explorer Styles — canonical block lives in "Enhanced File
+   Tree Styling" below (single source of truth for .obsidian-file-item). */
 
 .obsidian-file-icon {
   width: 16px;
@@ -408,8 +415,17 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   color: rgb(var(--text));
 }
 
+.obsidian-button.icon-only {
+  padding: 6px;
+  min-width: 30px;
+  min-height: 30px;
+  border-radius: 7px;
+  color: rgb(var(--muted));
+}
+
 .obsidian-button.icon-only:hover {
-  background-color: transparent;
+  background-color: rgb(var(--text) / 0.07);
+  color: rgb(var(--text));
 }
 
 .obsidian-button.primary {
@@ -431,7 +447,33 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
 /* Icon-only button variant */
 .obsidian-button.icon-only {
   padding: 6px;
-  min-width: 32px;
+  min-width: 30px;
+}
+
+/* Vellum ribbon buttons (far-left icon strip): no accent tint, no JS hover.
+   Active = subtle raised tile, everything else whispers. */
+.ribbon-button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin: 0 auto;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: rgb(var(--muted));
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.ribbon-button:hover {
+  background-color: rgb(var(--text) / 0.06);
+  color: rgb(var(--text));
+}
+
+.ribbon-button.active {
+  background-color: rgb(var(--text) / 0.08);
+  color: rgb(var(--text));
 }
 
 /* Obsidian Input Styles */
@@ -608,35 +650,32 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   }
 }
 
-/* Responsive tab bar tab styling (theme-aware) */
+/* Responsive tab bar tab styling (theme-aware) — Vellum shape:
+   flat inactive tabs, active tab melts into the content bg, no borders,
+   no lift, no shadow. Separation comes from tone, not lines. */
 .responsive-tab {
   padding-top: 6px;
   padding-bottom: 6px;
-  background-color: rgb(var(--panel));
+  background-color: transparent;
   color: rgb(var(--muted));
-  border-top-left-radius: 8px;
-  border-top-right-radius: 8px;
-  border: 1px solid rgb(var(--border));
-  border-bottom: 1px solid rgb(var(--border));
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-top-left-radius: 9px;
+  border-top-right-radius: 9px;
+  border: none;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
 .responsive-tab:hover {
-  background-color: rgb(var(--panel-secondary) / 0.5);
+  background-color: rgb(var(--text) / 0.05);
   color: rgb(var(--text));
-  transform: translateY(-1px);
-  box-shadow: 0 -1px 4px rgb(var(--shadow) / 0.08);
 }
 
 .responsive-tab-active {
-  background-color: rgb(var(--panel-secondary));
+  background-color: rgb(var(--bg));
   color: rgb(var(--text));
-  border-bottom: 2px solid rgb(var(--panel-secondary));
-  box-shadow: 0 -2px 8px rgb(var(--shadow) / 0.15);
 }
 
 .responsive-tab-active:hover {
-  transform: none;
+  background-color: rgb(var(--bg));
 }
 
 /* Overflow menu button */
@@ -737,43 +776,31 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   opacity: 0.8;
 }
 
-/* Enhanced File Tree Styling */
+/* Enhanced File Tree Styling — Vellum: neutral tiles, no accent tint, no bar */
 .obsidian-file-item {
   display: flex;
   align-items: center;
   width: 100%;
-  padding: 3px 8px;
-  border-radius: var(--radius);
-  font-size: var(--text-sm);
-  line-height: 1.4;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.3;
   color: rgb(var(--text));
   cursor: pointer;
-  transition: all 120ms ease;
+  transition: background-color 120ms ease, color 120ms ease;
   position: relative;
   border: none;
   background: transparent;
   text-align: left;
-  min-height: 24px;
 }
 
 .obsidian-file-item:hover {
-  background-color: rgb(var(--panel-secondary) / 0.5);
+  background-color: rgb(var(--text) / 0.05);
 }
 
 .obsidian-file-item.active {
-  background-color: rgb(var(--accent) / 0.12);
-  color: rgb(var(--accent));
-}
-
-.obsidian-file-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 2px;
-  bottom: 2px;
-  width: 2px;
-  background-color: rgb(var(--accent));
-  border-radius: 0 2px 2px 0;
+  background-color: rgb(var(--text) / 0.08);
+  color: rgb(var(--text));
 }
 
 /* Inline Rename Input - VS Code style */
@@ -1041,13 +1068,13 @@ html {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 28px;
+  height: 24px;
   padding: 0 12px;
   background-color: rgb(var(--panel));
   border-top: 1px solid rgb(var(--border));
-  color: rgb(var(--text-secondary));
-  font-size: var(--text-xs);
-  font-weight: 500;
+  color: rgb(var(--muted));
+  font-size: 11px;
+  font-weight: 400;
   user-select: none;
   flex-shrink: 0;
 }
@@ -1741,7 +1768,7 @@ div:focus-visible,
 }
 
 .app-titlebar {
-  height: 29px;
+  height: 40px;
   width: 100%;
   background-color: rgb(var(--panel));
   border-bottom: 1px solid rgb(var(--border));
@@ -1821,25 +1848,18 @@ div:focus-visible,
   overflow-x: hidden;
 }
 
-/* Indentation Guides - VS Code style vertical lines */
+/* File tree: no indent guides (Vellum/VS Code clean), leaf rows align
+   with folder names (chevron column = 14px + 6px margin). */
 .file-entry-container {
   position: relative;
 }
 
 .file-entry-container::before {
-  content: '';
-  position: absolute;
-  left: calc(var(--level) * 1.25rem + 0.5rem);
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background-color: rgb(var(--border) / 0.3);
-  pointer-events: none;
+  display: none;
 }
 
-/* Hide guide line for root level items */
-.file-entry-container[data-level="0"]::before {
-  display: none;
+.file-leaf {
+  padding-left: 28px !important;
 }
 
 /* Drag Preview Styling */
@@ -1908,7 +1928,7 @@ div:focus-visible,
 
 /* File Count Badge */
 .file-count-badge {
-  margin-left: 4px;
+  margin-left: auto;
   padding: 0 4px;
   font-size: 0.75rem;
   color: rgb(var(--muted));
@@ -2133,11 +2153,9 @@ html, body {
 }
 
 .obsidian-file-item.selected {
-  background: rgba(var(--accent), 0.15) !important;
-  border-left: 1px solid rgb(var(--accent)) !important;
-  padding-left: calc(0.5rem - 2px) !important;
+  background-color: rgb(var(--text) / 0.08) !important;
 }
 
 .obsidian-file-item.selected:hover {
-  background: rgba(var(--accent), 0.25) !important;
+  background-color: rgb(var(--text) / 0.1) !important;
 }

@@ -41,7 +41,6 @@ import RightSidebar from './workspace/RightSidebar';
 import BottomPanel from './workspace/BottomPanel';
 import ModalLayer from './workspace/ModalLayer';
 import ErrorBoundary from '../components/ErrorBoundary';
-import ResponsiveStatusBar from '../components/StatusBar/ResponsiveStatusBar.jsx';
 
 // ---------------------------------------------------------------------------
 // Inner orchestrator — rendered inside context providers
@@ -200,6 +199,8 @@ function WorkspaceInner({ path }) {
       />
 
       <div className="h-full w-full overflow-hidden">
+        {/* Status bar intentionally not rendered (Vellum mock has no bottom bar);
+            ResponsiveStatusBar is kept for a possible return. */}
         <WorkspaceShell
           toolbar={
             <Toolbar
@@ -260,7 +261,7 @@ function WorkspaceInner({ path }) {
             </ErrorBoundary>
           }
           bottomPanel={<BottomPanel workspacePath={path} onResizeStart={handleBottomPanelResizeStart} />}
-          statusBar={<ResponsiveStatusBar workspacePath={path} />}
+          statusBar={null}
         />
       </div>
 

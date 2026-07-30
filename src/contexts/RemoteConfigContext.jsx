@@ -248,8 +248,12 @@ export const RemoteConfigProvider = ({ children }) => {
         let cancelled = false;
         detectExistingUser().then((isExisting) => {
             if (cancelled) return;
-            try { localStorage.setItem(ADVANCED_FEATURES_KEY, isExisting ? 'true' : 'false'); } catch {}
-            setAdvancedFeaturesState(isExisting);
+            // Dev builds always get the full cockpit when undecided — the Simple
+            // default is a product choice for real users, not for developers.
+            // (MODE check keeps vitest on the production default.)
+            const advanced = isExisting || (import.meta.env.DEV && import.meta.env.MODE !== 'test');
+            try { localStorage.setItem(ADVANCED_FEATURES_KEY, advanced ? 'true' : 'false'); } catch {}
+            setAdvancedFeaturesState(advanced);
         });
         return () => { cancelled = true; };
     }, []);

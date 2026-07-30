@@ -18,6 +18,7 @@ export function ResponsiveTabBar({
   activeTab = null,
   onTabClick,
   onTabClose,
+  onNewTab,
   unsavedChanges = new Set(),
   reservedSpace = 0
 }) {
@@ -54,14 +55,14 @@ export function ResponsiveTabBar({
         onKeyDown={(e) => e.key === 'Enter' && onTabClick?.(tab.path)}
         data-tauri-drag-region="false"
         className={`
-          responsive-tab relative flex items-center gap-2 px-4 h-8 text-xs whitespace-nowrap cursor-pointer
-          max-w-[80px] sm:max-w-[100px] md:max-w-[180px]
-          min-w-[60px] sm:min-w-[80px] md:min-w-[120px]
+          responsive-tab relative flex items-center gap-2 px-3 text-[13px] font-medium whitespace-nowrap cursor-pointer
           ${isActive ? 'responsive-tab-active z-10' : 'z-0'}
         `}
         style={{
           pointerEvents: 'auto',
-          marginLeft: index > 0 && isVisible ? '-12px' : '0',
+          marginLeft: index > 0 && isVisible ? '2px' : '0',
+          maxWidth: '240px',
+          minWidth: '140px',
           flexShrink: 1,
         }}
         onMouseEnter={() => !isActive && setHoveredTab(tab.path)}
@@ -69,7 +70,7 @@ export function ResponsiveTabBar({
       >
         <span className="truncate flex-1">{tab.name}</span>
         {hasUnsavedChanges && (
-          <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+          <span className="w-2 h-2 rounded-full bg-app-accent flex-shrink-0" />
         )}
         <span
           role="button"
@@ -176,18 +177,34 @@ export function ResponsiveTabBar({
         width: '100%',
         minWidth: 0,
         display: 'flex',
-        alignItems: 'center',
-        height: '32px',
+        alignItems: 'stretch',
+        paddingTop: '6px',
+        height: '40px',
         overflow: 'hidden'
       }}
     >
       {/* Visible tabs */}
-      <div className="flex items-center" style={{ minWidth: 0 }}>
+      <div className="flex items-stretch" style={{ minWidth: 0 }}>
         {visibleTabs.map((tab, index) => renderTab(tab, index, true))}
       </div>
 
       {/* Overflow menu */}
       {renderOverflowMenu()}
+
+      {/* New tab — sits right after the tabs (Vellum), not at the window edge */}
+      {onNewTab && (
+        <button
+          onClick={onNewTab}
+          title="New Tab"
+          data-tauri-drag-region="false"
+          className="self-center grid place-items-center w-[30px] h-[30px] ml-1 rounded-[7px] bg-transparent text-app-muted hover:bg-[rgb(var(--text)/0.07)] hover:text-app-text transition-colors flex-none"
+          style={{ pointerEvents: 'auto' }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <path d="M8 3.5v9M3.5 8h9" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }

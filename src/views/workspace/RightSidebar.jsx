@@ -1,17 +1,23 @@
 import { useLayoutStore } from '../../stores/layout';
 import { useViewStore } from '../../stores/views';
 import { useEditorGroupStore } from '../../stores/editorGroups';
+import { useFileTreeStore } from '../../stores/fileTree';
 import { getEditor } from '../../stores/editorRegistry';
 import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
+import { lazy, Suspense, useState, useRef } from 'react';
+import { Network } from 'lucide-react';
 import DocumentOutline from '../../components/DocumentOutline.jsx';
 import BacklinksPanel from '../BacklinksPanel.jsx';
 import GraphSidebar from '../../components/GraphSidebar.jsx';
+
+const ProfessionalGraphView = lazy(() =>
+  import('../ProfessionalGraphView').then(m => ({ default: m.ProfessionalGraphView }))
+);
 import VersionHistoryPanel from '../../components/VersionHistoryPanel.jsx';
 import { DailyNotesPanel } from '../../components/DailyNotes/index.js';
 import { AgendaPanel, CalendarWidget } from '../../components/Calendar/index.js';
 import { PanelRegion } from '../../plugins/ui/PanelManager.jsx';
 import { PANEL_POSITIONS } from '../../plugins/api/UIAPI.js';
-import { EditorModeSwitcher } from '../../features/editor';
 
 /**
  * RightSidebar — document outline, backlinks, graph sidebar, version history,
@@ -64,6 +70,32 @@ export default function RightSidebar({
 
   const featureFlags = useFeatureFlags();
 
+  // Live feeds for the embedded graph: file ops come from the file-tree
+  // store, saves from the saveVersion counter (bumped by tabSaver).
+  const fileTree = useFileTreeStore((s) => s.fileTree);
+  const saveVersion = useEditorGroupStore((s) => s.saveVersion);
+
+  // Resizable graph split (default 50/50) — drag the handle between the
+  // graph and the panels below.
+  const [graphPct, setGraphPct] = useState(50);
+  const asideRef = useRef(null);
+  const startGraphResize = (e) => {
+    e.preventDefault();
+    const aside = asideRef.current;
+    if (!aside) return;
+    const rect = aside.getBoundingClientRect();
+    const onMove = (ev) => {
+      const pct = ((ev.clientY - rect.top) / rect.height) * 100;
+      setGraphPct(Math.max(20, Math.min(80, pct)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
   if (!showRight) return null;
 
   const handleOpenCalendarView = (target = null) => {
@@ -87,9 +119,10 @@ export default function RightSidebar({
 
   return (
     <aside
-      className="h-full overflow-y-auto flex flex-col bg-app-bg border-l border-app-border"
+      ref={asideRef}
+      className="h-full overflow-y-auto flex flex-col bg-app-panel border-l border-app-border"
     >
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
         {featureFlags.enable_version_history && showVersionHistory ? (
           <VersionHistoryPanel
             key={`version-${activeFile}-${versionRefreshKey}`}
@@ -135,14 +168,36 @@ export default function RightSidebar({
           />
         ) : (
           <>
-            {/* Editor Mode Switcher */}
-            <EditorModeSwitcher />
+            {/* Graph — resizable top half of the sidebar */}
+            <div className="flex-none border-b border-app-border flex flex-col" style={{ height: `${graphPct}%` }}>
+              <div className="h-[38px] px-3 border-b border-app-border flex items-center flex-none">
+                <h3 className="text-[13px] font-semibold flex items-center gap-2 text-app-text">
+                  <Network className="w-4 h-4" strokeWidth={1.5} />
+                  Graph
+                </h3>
+              </div>
+              <div className="flex-1 min-h-0">
+                <Suspense fallback={<div className="h-full flex items-center justify-center text-app-muted text-xs">Loading graph…</div>}>
+                  <ProfessionalGraphView
+                    workspacePath={workspacePath}
+                    fileTree={fileTree}
+                    focusPath={activeFile}
+                    contentVersion={saveVersion}
+                  />
+                </Suspense>
+              </div>
+            </div>
+
+            {/* Drag handle — resize the graph/outline split */}
+            <div
+              onMouseDown={startGraphResize}
+              className="h-[5px] flex-none cursor-row-resize hover:bg-app-panel-secondary transition-colors"
+            />
 
             {/* Document Outline */}
             <div
               style={{
                 minHeight: '200px',
-                maxHeight: '30%',
                 overflowY: 'auto',
                 borderBottom: '1px solid var(--border)',
               }}

@@ -1,4 +1,4 @@
-import { RefreshCw, FoldVertical } from 'lucide-react';
+import { RefreshCw, FoldVertical, FilePlus, FolderPlus, ChevronsUpDown, Settings } from 'lucide-react';
 import { useViewStore } from '../../stores/views';
 import { useEditorGroupStore } from '../../stores/editorGroups';
 import { useFileTreeStore } from '../../stores/fileTree';
@@ -89,7 +89,7 @@ export default function LeftSidebar({
   // Plugins panel
   if (featureFlags.enable_plugins && showPlugins) {
     return (
-      <aside className="h-full overflow-y-auto flex flex-col bg-app-bg border-r border-app-border">
+      <aside className="h-full overflow-y-auto flex flex-col bg-app-panel border-r border-app-border">
         <div className="flex-1 overflow-hidden">
           <PluginSettings onOpenPluginDetail={onOpenPluginDetail} />
         </div>
@@ -100,7 +100,7 @@ export default function LeftSidebar({
   // Kanban list panel
   if (featureFlags.enable_kanban && showKanban) {
     return (
-      <aside className="h-full overflow-y-auto flex flex-col bg-app-bg border-r border-app-border">
+      <aside className="h-full overflow-y-auto flex flex-col bg-app-panel border-r border-app-border">
         <div className="flex-1 overflow-hidden">
           <KanbanList
             workspacePath={workspacePath}
@@ -115,33 +115,43 @@ export default function LeftSidebar({
 
   // Default: Explorer / file tree
   return (
-    <aside className="h-full overflow-y-auto flex flex-col bg-app-bg border-r border-app-border">
-      {/* Explorer Header */}
-      <div className="h-10 px-4 flex items-center justify-between border-b border-app-border bg-app-panel">
-        <span className="text-xs font-semibold uppercase tracking-wide text-app-muted">
-          Explorer
-        </span>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onRefreshFiles}
-            className="obsidian-button icon-only small"
-            title="Reload Files"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-          <button
-            onClick={closeAllFolders}
-            className="obsidian-button icon-only small"
-            title="Collapse All Folders"
-          >
-            <FoldVertical className="w-4 h-4" />
-          </button>
-        </div>
+    <aside className="h-full overflow-hidden flex flex-col bg-app-panel border-r border-app-border">
+      {/* Explorer Header — icon actions only; the titlebar's bottom
+          border is the separator line above this row */}
+      <div className="h-[34px] px-2 flex items-center justify-end gap-0.5 flex-none">
+        <button
+          onClick={onCreateFile}
+          className="obsidian-button icon-only small"
+          title="New File"
+        >
+          <FilePlus className="w-4 h-4" strokeWidth={1.5} />
+        </button>
+        <button
+          onClick={onCreateFolder}
+          className="obsidian-button icon-only small"
+          title="New Folder"
+        >
+          <FolderPlus className="w-4 h-4" strokeWidth={1.5} />
+        </button>
+        <button
+          onClick={onRefreshFiles}
+          className="obsidian-button icon-only small"
+          title="Reload Files"
+        >
+          <RefreshCw className="w-4 h-4" strokeWidth={1.5} />
+        </button>
+        <button
+          onClick={closeAllFolders}
+          className="obsidian-button icon-only small"
+          title="Collapse All Folders"
+        >
+          <FoldVertical className="w-4 h-4" strokeWidth={1.5} />
+        </button>
       </div>
 
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <div className="p-2 flex-1 overflow-y-auto">
+          <div className="px-2 pt-1 pb-2 flex-1 overflow-y-auto">
             <FileTreeView
               entries={filteredFileTree}
               onFileClick={onFileOpen}
@@ -225,6 +235,28 @@ export default function LeftSidebar({
           <ContextMenuItem onClick={onRefreshFiles}>Refresh</ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+
+      {/* Vault footer — workspace name + preferences (Vellum) */}
+      <div className="h-12 px-3 flex items-center gap-2 border-t border-app-border flex-none">
+        <ChevronsUpDown className="w-4 h-4 text-app-muted flex-none" />
+        <span className="text-[13.5px] font-semibold text-app-text truncate">
+          {workspacePath?.split('/').filter(Boolean).pop() ?? 'Workspace'}
+        </span>
+        <button
+          onClick={async () => {
+            try {
+              const { invoke } = await import('@tauri-apps/api/core');
+              await invoke('open_preferences_window', { workspacePath });
+            } catch (e) {
+              console.error('Failed to open preferences:', e);
+            }
+          }}
+          className="obsidian-button icon-only small ml-auto"
+          title="Settings"
+        >
+          <Settings className="w-4 h-4" strokeWidth={1.5} />
+        </button>
+      </div>
     </aside>
   );
 }

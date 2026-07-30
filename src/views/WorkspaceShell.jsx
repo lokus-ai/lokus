@@ -49,10 +49,10 @@ export default function WorkspaceShell({
   }, [isSplitMode]);
 
   const gridTemplateColumns = [
-    '48px',                                    // icon-sidebar — always visible
-    showLeft  ? `${leftW}px`  : '0px',         // left-sidebar
+    '44px',                                    // icon-sidebar — always visible
+    showLeft  ? `${Math.max(leftW, 200)}px`  : '0px',         // left-sidebar
     '1fr',                                     // main
-    showRight ? `${rightW}px` : '0px',         // right-sidebar
+    showRight ? `${Math.max(rightW, 200)}px` : '0px',         // right-sidebar
   ].join(' ');
 
   const gridTemplateRows = [
