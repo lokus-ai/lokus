@@ -27,7 +27,7 @@ import { generateFileTreeHash } from '../utils/fileTreeUtils.js';
 import { useEditorGroupStore } from '../stores/editorGroups.js';
 import { getColorGroupMatch } from '../core/graph/color-group-matcher.js';
 
-export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile, fileTree = [] }) => {
+export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenFile, fileTree = [], focusPath = null, contentVersion = 0 }) => {
   // Core state
   const [viewMode, setViewMode] = useState('2d'); // '2d', '3d', 'force'
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
@@ -89,6 +89,8 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
 
   // File tree change detection refs
   const prevFileTreeHashRef = useRef(null);
+  const prevContentVersionRef = useRef(0);
+  const prevFocusRef = useRef(null);
   const isInitializedRef = useRef(false);
   const reloadTimerRef = useRef(null);
 
@@ -319,12 +321,16 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         // Generate hash of current fileTree structure
         const currentHash = generateFileTreeHash(fileTree);
 
-        // Skip reload if hash hasn't changed (unless first load)
-        if (isInitializedRef.current && prevFileTreeHashRef.current === currentHash) {
+        // Skip reload if nothing changed (unless first load). contentVersion
+        // bumps on every save, so link edits force a reload even when the
+        // fileTree structure itself is unchanged.
+        const contentChanged = prevContentVersionRef.current !== contentVersion;
+        if (isInitializedRef.current && prevFileTreeHashRef.current === currentHash && !contentChanged) {
           return;
         }
 
         prevFileTreeHashRef.current = currentHash;
+        prevContentVersionRef.current = contentVersion;
         isInitializedRef.current = true;
 
         if (fileTree.length > 0) {
@@ -348,7 +354,22 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
         clearTimeout(reloadTimerRef.current);
       }
     };
-  }, [fileTree, workspacePath, graphDataManager, isVisible]); // Reload when fileTree changes
+  }, [fileTree, workspacePath, graphDataManager, isVisible, contentVersion]); // Reload when fileTree changes
+
+  // Camera glide to the current file: when focusPath changes, smoothly center
+  // and zoom onto its node (600ms animated transition). Retries on graphData
+  // changes if the node wasn't loaded yet.
+  useEffect(() => {
+    const focusId = focusPath ? focusPath.replace(/^\//, '') : null;
+    if (!focusId || prevFocusRef.current === focusId || viewMode !== '2d') return;
+    const node = graphData?.nodes?.find(n => n.id === focusId);
+    if (!node) return; // not loaded yet — retry when graphData updates
+    const fg = forceGraph2DRef.current;
+    if (!fg) return;
+    prevFocusRef.current = focusId;
+    fg.centerAt(node.x, node.y, 600);
+    fg.zoom(1.5, 600);
+  }, [focusPath, graphData, viewMode]);
 
   // Load real workspace data
   const loadWorkspaceData = async (dataManager, workspacePath, providedFileTree = null) => {
@@ -1013,6 +1034,13 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
     };
 
     try {
+      // The graph normalizes ids without the leading slash — compare against
+      // a slash-stripped focusPath so the current file can be highlighted.
+      const focusId = focusPath ? focusPath.replace(/^\//, '') : null;
+      if (focusId && node.id === focusId) {
+        return safeColor(getThemeColor('--accent', DEFAULT_ACCENT));
+      }
+
       if (selectedNodes.includes(node.id)) {
         return safeColor(getThemeColor('--accent', DEFAULT_ACCENT));
       }
@@ -1068,7 +1096,7 @@ export const ProfessionalGraphView = ({ isVisible = true, workspacePath, onOpenF
       // Ultimate fallback
       return DEFAULT_ACCENT;
     }
-  }, [selectedNodes, colorScheme, graphConfig.colorGroups]);
+  }, [selectedNodes, colorScheme, graphConfig.colorGroups, focusPath]);
 
   const getNodeSize = useCallback((node) => {
     let baseSize = node.size || 8;

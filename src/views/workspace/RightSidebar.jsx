@@ -1,6 +1,7 @@
 import { useLayoutStore } from '../../stores/layout';
 import { useViewStore } from '../../stores/views';
 import { useEditorGroupStore } from '../../stores/editorGroups';
+import { useFileTreeStore } from '../../stores/fileTree';
 import { getEditor } from '../../stores/editorRegistry';
 import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
 import { lazy, Suspense } from 'react';
@@ -69,6 +70,11 @@ export default function RightSidebar({
   });
 
   const featureFlags = useFeatureFlags();
+
+  // Live feeds for the embedded graph: file ops come from the file-tree
+  // store, saves from the saveVersion counter (bumped by tabSaver).
+  const fileTree = useFileTreeStore((s) => s.fileTree);
+  const saveVersion = useEditorGroupStore((s) => s.saveVersion);
 
   if (!showRight) return null;
 
@@ -151,7 +157,12 @@ export default function RightSidebar({
               </div>
               <div className="flex-1 min-h-0">
                 <Suspense fallback={<div className="h-full flex items-center justify-center text-app-muted text-xs">Loading graph…</div>}>
-                  <ProfessionalGraphView workspacePath={workspacePath} />
+                  <ProfessionalGraphView
+                    workspacePath={workspacePath}
+                    fileTree={fileTree}
+                    focusPath={activeFile}
+                    contentVersion={saveVersion}
+                  />
                 </Suspense>
               </div>
             </div>
