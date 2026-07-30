@@ -412,8 +412,8 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
     let unlisten = null;
     const setupListener = async () => {
       try {
-        const { listen } = await import('@tauri-apps/api/event');
-        unlisten = await listen('preferences:navigate', (event) => {
+        const { listenWindow } = await import('../core/window/events.js');
+        unlisten = await listenWindow('preferences:navigate', (event) => {
           if (event.payload) {
             setSection(event.payload);
           }

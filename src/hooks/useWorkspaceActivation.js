@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { WorkspaceManager } from "../core/workspace/manager.js";
+import { listenWindow } from "../core/window/events.js";
 
 /**
  * For `ws-*` windows, this hook is responsible for determining the workspace path.
@@ -102,9 +103,12 @@ export function useWorkspaceActivation() {
       );
     } catch {}
     
-    // Listen for workspace activation and force welcome events
+    // Listen for workspace activation and force welcome events.
+    // `workspace:activate` MUST be window-scoped: Rust emits it with
+    // `emit_to(<label>)` at ONE window, and a bare listen() would receive it
+    // in every window (see core/window/events.js).
     const unlistenWorkspacePromise = isTauri
-      ? listen("workspace:activate", async (event) => {
+      ? listenWindow("workspace:activate", async (event) => {
           // A forced-launcher window (?forceWelcome=true with no explicit
           // workspacePath) must never auto-activate a workspace, even if a
           // broadcast `workspace:activate` event reaches it.

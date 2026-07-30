@@ -2,17 +2,19 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 
 // Registry of captured event listeners so tests can fire Tauri events by hand.
-const { listeners, validatePath, getValidatedWorkspacePath, saveWorkspacePath } = vi.hoisted(() => ({
+const { listeners, listenOptions, validatePath, getValidatedWorkspacePath, saveWorkspacePath } = vi.hoisted(() => ({
   listeners: new Map(),
+  listenOptions: new Map(),
   validatePath: vi.fn(),
   getValidatedWorkspacePath: vi.fn(),
   saveWorkspacePath: vi.fn(),
 }))
 
 vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn((name, cb) => {
+  listen: vi.fn((name, cb, options) => {
     listeners.set(name, cb)
-    return Promise.resolve(() => { listeners.delete(name) })
+    listenOptions.set(name, options)
+    return Promise.resolve(() => { listeners.delete(name); listenOptions.delete(name) })
   }),
 }))
 
@@ -35,6 +37,7 @@ function sleep(ms) {
 describe('useWorkspaceActivation', () => {
   beforeEach(() => {
     listeners.clear()
+    listenOptions.clear()
     validatePath.mockReset()
     getValidatedWorkspacePath.mockReset()
     saveWorkspacePath.mockReset().mockResolvedValue(true)
@@ -131,5 +134,19 @@ describe('useWorkspaceActivation', () => {
 
     await sleep(500)
     expect(result.current).toBe(null)
+  })
+
+  it('registers workspace:activate scoped to THIS window, not Any', async () => {
+    // Regression: Rust emits workspace:activate via emit_to(<label>) at ONE
+    // window. A bare listen() (target Any) receives events addressed to other
+    // windows too — every open window used to switch to the newly opened
+    // workspace. In jsdom there is no Tauri metadata, so the label resolves
+    // to the fallback "main".
+    renderHook(() => useWorkspaceActivation())
+
+    await waitFor(() => expect(listenOptions.has('workspace:activate')).toBe(true))
+    expect(listenOptions.get('workspace:activate')).toEqual({
+      target: { kind: 'Window', label: 'main' },
+    })
   })
 })

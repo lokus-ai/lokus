@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { listenWindow } from "../../core/window/events.js";
 import { invoke } from "@tauri-apps/api/core";
 import { useLayoutStore } from "../../stores/layout";
 import { useViewStore } from "../../stores/views";
@@ -60,8 +61,10 @@ export function useWorkspaceEvents({
     };
 
     if (isTauriEnv()) {
-      const un1 = listen('lokus:open-file', (e) => openPath(String(e.payload || ''), true));
-      const un2 = listen('lokus:open-file-new-tab', (e) => openPath(String(e.payload || ''), false));
+      // Window-scoped: the menu emits lokus:open-file at the focused window only,
+      // and JS-side emitters must not leak into other windows either.
+      const un1 = listenWindow('lokus:open-file', (e) => openPath(String(e.payload || ''), true));
+      const un2 = listenWindow('lokus:open-file-new-tab', (e) => openPath(String(e.payload || ''), false));
       return () => { un1.then(u => u()); un2.then(u => u()); };
     } else {
       const onDom1 = (e) => openPath(String(e.detail || ''), true);
@@ -349,7 +352,10 @@ export function useWorkspaceEvents({
 
     const setupFileDropListeners = async () => {
       try {
-        unlistenDrop = await listen('tauri://drag-drop', async (event) => {
+        // Window-scoped: Tauri emits drag events targeted at the window under
+        // the cursor — a bare listen() would copy dropped files into EVERY
+        // open workspace window.
+        unlistenDrop = await listenWindow('tauri://drag-drop', async (event) => {
           if (isCleanedUp) return;
 
           const filePaths = event.payload.paths || event.payload;
@@ -376,12 +382,12 @@ export function useWorkspaceEvents({
           }
         });
 
-        unlistenOver = await listen('tauri://drag-over', () => {
+        unlistenOver = await listenWindow('tauri://drag-over', () => {
           if (isCleanedUp) return;
           useFileTreeStore.getState().setExternalDragActive(true);
         });
 
-        unlistenLeave = await listen('tauri://drag-leave', () => {
+        unlistenLeave = await listenWindow('tauri://drag-leave', () => {
           if (isCleanedUp) return;
           useFileTreeStore.getState().setExternalDragActive(false);
           useFileTreeStore.getState().setHoveredFolder(null);
