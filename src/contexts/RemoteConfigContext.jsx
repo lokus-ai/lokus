@@ -250,7 +250,8 @@ export const RemoteConfigProvider = ({ children }) => {
             if (cancelled) return;
             // Dev builds always get the full cockpit when undecided — the Simple
             // default is a product choice for real users, not for developers.
-            const advanced = isExisting || import.meta.env.DEV;
+            // (MODE check keeps vitest on the production default.)
+            const advanced = isExisting || (import.meta.env.DEV && import.meta.env.MODE !== 'test');
             try { localStorage.setItem(ADVANCED_FEATURES_KEY, advanced ? 'true' : 'false'); } catch {}
             setAdvancedFeaturesState(advanced);
         });
