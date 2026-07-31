@@ -265,11 +265,9 @@ class MarkdownSyntaxConfig {
     this.notifyListeners(category, key, value);
 
     // Auto-save after each change for immediate persistence
-    this.save().then(success => {
-      if (success) {
-      }
-    }).catch(e => {
-    });
+    this.save().then((success) => {
+      if (success) this._broadcast();
+    }).catch(() => { });
   }
 
   getAll() {
@@ -279,6 +277,23 @@ class MarkdownSyntaxConfig {
   reset() {
     this.config = { ...this.defaultConfig };
     this.notifyListeners('reset', null, this.config);
+    // `set()` persists on every write; reset did not, so restoring defaults
+    // looked like it worked and then silently came back on the next launch.
+    this.save()
+      .then((success) => { if (success) this._broadcast(); })
+      .catch((e) => console.error('[markdownSyntaxConfig] Failed to persist reset', e));
+  }
+
+  /**
+   * Tell other windows to reload. This used to live behind the "Save changes"
+   * button in Preferences, which meant a toggle persisted immediately but the
+   * open editor kept using the old markers until you found and pressed Save.
+   * Every write broadcasts now, so the button isn't needed.
+   */
+  _broadcast() {
+    import("@tauri-apps/api/event")
+      .then(({ emit }) => emit("lokus:markdown-config-changed", { config: this.getAll() }))
+      .catch(() => { });
   }
 
   async save() {

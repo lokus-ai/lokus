@@ -86,6 +86,9 @@ class LiveEditorSettings {
     
     this.settings = { ...this.defaultSettings };
     this.listeners = new Set();
+    // Identifies this window so a broadcast echoed back to us is ignored.
+    this._originId = `w${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    this._saveTimer = null;
     this.init();
   }
   
@@ -110,6 +113,67 @@ class LiveEditorSettings {
 
     // Apply initial styles to document root
     this.updateCSSVariables();
+    this._listenForRemote();
+  }
+
+  /**
+   * Editor settings are edited in the Preferences *window* but have to land in
+   * every open workspace window. Each window runs its own instance of this
+   * class writing to its own `document.documentElement`, so without a
+   * cross-window hop a change never leaves the window that made it.
+   *
+   * Mirrors the theme manager: a Tauri event with a plain `window` event
+   * fallback for non-Tauri contexts.
+   */
+  async _listenForRemote() {
+    const applyRemote = (payload) => {
+      // Tauri delivers an emit back to the sender too, so ignore our own.
+      if (!payload || payload.origin === this._originId || !payload.settings) return;
+      this.settings = { ...this.defaultSettings, ...payload.settings };
+      this.updateCSSVariables();
+      this.listeners.forEach((cb) => {
+        try { cb('remote', this.settings, this.settings); } catch { }
+      });
+    };
+
+    try {
+      const { listen } = await import('@tauri-apps/api/event');
+      // listen() rejects asynchronously outside Tauri, so the catch has to be
+      // on the promise — a try/catch around the call never sees it.
+      listen('editor:settings', (e) => applyRemote(e.payload)).catch(() => { });
+    } catch { }
+    try {
+      window.addEventListener('editor:settings', (e) => applyRemote(e.detail));
+    } catch { }
+  }
+
+  /** Push the current settings to other windows and schedule a save. */
+  _broadcast() {
+    const payload = { origin: this._originId, settings: this.settings };
+    import('@tauri-apps/api/event')
+      .then(({ emit }) => emit('editor:settings', payload))
+      .catch(() => { });
+    try {
+      window.dispatchEvent(new CustomEvent('editor:settings', { detail: payload }));
+    } catch { }
+    this._persist();
+  }
+
+  /**
+   * Persist on a debounce. Dragging a slider fires per pixel, so writing on
+   * every change would hammer the config file — but waiting for an explicit
+   * Save means an edit is silently lost if the window closes first.
+   */
+  _persist() {
+    clearTimeout(this._saveTimer);
+    this._saveTimer = setTimeout(async () => {
+      try {
+        const { updateConfig } = await import('../config/store.js');
+        await updateConfig({ editorSettings: this.settings });
+      } catch (err) {
+        console.error('[liveEditorSettings] Failed to persist editor settings', err);
+      }
+    }, 400);
   }
   
   updateCSSVariables() {
@@ -207,7 +271,8 @@ class LiveEditorSettings {
     }
     this.settings[key] = value;
     this.updateCSSVariables();
-    
+    this._broadcast();
+
     // Notify listeners
     this.listeners.forEach(callback => {
       try {
@@ -223,7 +288,8 @@ class LiveEditorSettings {
   updateSettings(newSettings) {
     Object.assign(this.settings, newSettings);
     this.updateCSSVariables();
-    
+    this._broadcast();
+
     // Notify listeners for each changed setting
     this.listeners.forEach(callback => {
       try {
@@ -249,7 +315,8 @@ class LiveEditorSettings {
   reset() {
     this.settings = { ...this.defaultSettings };
     this.updateCSSVariables();
-    
+    this._broadcast();   // reset now persists too — it silently didn't before
+
     // Notify listeners of reset
     this.listeners.forEach(callback => {
       try {

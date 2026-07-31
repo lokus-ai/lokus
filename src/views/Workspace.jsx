@@ -1,5 +1,11 @@
 import { useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+// Side-effect import: constructing the singleton is what applies the editor
+// CSS variables to this window's document root and subscribes it to changes
+// broadcast from the Preferences window. It belongs to the window, not to a
+// mounted editor — a workspace with no note open still needs the variables set
+// for the moment one is opened.
+import '../core/editor/live-settings.js';
 
 // Context providers
 import { FolderScopeProvider, useFolderScope } from '../contexts/FolderScopeContext.jsx';

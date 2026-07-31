@@ -48,7 +48,6 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import TableBubbleMenu from "./TableBubbleMenu.jsx";
 import EditorContextMenu from "../../components/EditorContextMenu.jsx";
 import AISurfaces from "../ai/AISurfaces.jsx";
-import liveEditorSettings from "../../core/editor/live-settings.js";
 import WikiLinkModal from "../../components/WikiLinkModal.jsx";
 import TaskCreationModal from "../../components/TaskCreationModal.jsx";
 import ExportModal from "../../views/ExportModal.jsx";
@@ -674,15 +673,15 @@ const PMEditor = forwardRef(({ plugins, nodeViews, content, onContentChange, edi
   // Page preview state
   const [previewData, setPreviewData] = useState(null);
 
-  // Subscribe to live settings changes for real-time updates
-  const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
-
-  useEffect(() => {
-    const unsubscribe = liveEditorSettings.onSettingsChange((key, value, allSettings) => {
-      setLiveSettings(allSettings);
-    });
-    return unsubscribe;
-  }, []);
+  // Editor styling is driven entirely by CSS custom properties that
+  // liveEditorSettings writes to the document root — React plays no part in
+  // it. This component used to hold the settings in state and re-render on
+  // every change, but nothing ever read that state: it was write-only.
+  //
+  // Harmless while settings only changed inside the Preferences window (which
+  // has no editor). Once changes started broadcasting to workspace windows,
+  // every tweak forced a full Editor re-render and the ProseMirror doc could
+  // come back blank until a reload. No subscription, no re-render, no blanking.
 
   const tagIndexTimeoutRef = useRef(null);
 
