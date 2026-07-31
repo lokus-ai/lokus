@@ -4,51 +4,12 @@ import react from "@vitejs/plugin-react";
 
 const host = process.env.TAURI_DEV_HOST;
 
-/**
- * Stub out mcp-server modules in the browser bundle.
- * The MCP server runs as a separate Node.js process and uses fs/promises,
- * which doesn't exist in the Tauri WebView. This plugin redirects any
- * frontend import of those modules to browser-safe stubs.
- */
-function mcpServerBrowserStub() {
-  const stubMap = {
-    [path.resolve(__dirname, 'src/mcp-server/utils/graphIndex.js')]:
-      path.resolve(__dirname, 'src/core/ai/mcp-graph-stub.js'),
-    [path.resolve(__dirname, 'src/mcp-server/tools/notes.js')]:
-      path.resolve(__dirname, 'src/core/ai/mcp-notes-stub.js'),
-  };
-  return {
-    name: 'mcp-server-browser-stub',
-    enforce: 'pre',
-    resolveId(id, importer) {
-      // Match relative imports that end with the mcp-server path
-      if (id.endsWith('mcp-server/utils/graphIndex.js')) {
-        return stubMap[path.resolve(__dirname, 'src/mcp-server/utils/graphIndex.js')];
-      }
-      if (id.endsWith('mcp-server/tools/notes.js')) {
-        return stubMap[path.resolve(__dirname, 'src/mcp-server/tools/notes.js')];
-      }
-      return null;
-    },
-  };
-}
-
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react(), mcpServerBrowserStub()],
+  plugins: [react()],
   resolve: {
-    // Array form so the graphIndex entry can use a regex `find`.
+    // Array form so entries can use a regex `find`.
     alias: [
-      // graphIndex.js statically imports Node builtins (fs/promises, path), which
-      // cannot resolve in the browser/client bundle and break the production build.
-      // Redirect it to the Tauri-backed entry (real filesystem access via the app's
-      // Rust `invoke` commands, not a dead stub); the Node/MCP-server esbuild bundle
-      // is separate and still uses graphIndex.js. Mechanism adapted from PR #536.
-      // Does not match graphIndex.core.js / graphIndex.tauri.js (different suffixes).
-      {
-        find: /^.*[\\/]graphIndex\.js$/,
-        replacement: path.resolve(__dirname, "./src/mcp-server/utils/graphIndex.tauri.js"),
-      },
       { find: "@", replacement: path.resolve(__dirname, "./src") },
       { find: "jsxgraph/distrib/jsxgraph.css", replacement: path.resolve(__dirname, "node_modules/jsxgraph/distrib/jsxgraph.css") },
       // QA harness only (npm run qa): keep client code that wrongly imports Node

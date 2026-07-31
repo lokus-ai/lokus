@@ -23,15 +23,12 @@ import pluginStateAdapter from "./core/plugins/PluginStateAdapter.js";
 import { AuthProvider } from "./core/auth/AuthContext.jsx";
 import { CalendarProvider } from "./contexts/CalendarContext.jsx";
 import { ScheduleProvider } from "./contexts/ScheduleContext.jsx";
-import { MeetingProvider } from "./contexts/MeetingContext.jsx";
 import { useFeatureFlags } from "./contexts/RemoteConfigContext.jsx";
 import platformService from "./services/platform/PlatformService.js";
 import markdownSyntaxConfig from "./core/markdown/syntax-config.js";
 import editorConfigCache from "./core/editor/config-cache.js";
 // Import workspace manager to expose developer utilities
 import "./core/workspace/manager.js";
-// Import MCP client for stdio-based connections
-import mcpClient from "./core/mcp/client.js";
 // Guard window access in non-Tauri environments
 import { emit } from "@tauri-apps/api/event";
 import * as Sentry from "@sentry/react";
@@ -50,9 +47,6 @@ const LoadingFallback = () => (
 const FeatureGatedProviders = ({ children }) => {
   const featureFlags = useFeatureFlags();
   let content = children;
-  if (featureFlags.enable_meetings) {
-    content = <MeetingProvider>{content}</MeetingProvider>;
-  }
   content = <ScheduleProvider>{content}</ScheduleProvider>;
   if (featureFlags.enable_calendar) {
     content = <CalendarProvider>{content}</CalendarProvider>;
@@ -178,7 +172,6 @@ function App() {
           registerAppShortcuts();
         }
 
-        // MCP client is ready for configuration instructions (no server management needed)
 
         return () => {
           window.removeEventListener('focus', onFocus);

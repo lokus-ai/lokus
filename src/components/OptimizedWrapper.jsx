@@ -30,7 +30,6 @@ export const LazyMathFormula = lazy(() => import('./MathFormulaModal.jsx'));
 export const LazyVersionHistory = lazy(() => import('./VersionHistoryPanel.jsx'));
 export const LazyCalendarView = lazy(() => import('./Calendar/CalendarView.jsx'));
 export const LazyTerminalPanel = lazy(() => import('./TerminalPanel/TerminalPanel.jsx'));
-export const LazyMeetingPanel = lazy(() => import('./meeting/MeetingPanel.jsx'));
 export const LazyImageViewer = lazy(() => import('./ImageViewer/ImageViewerTab.jsx').then(m => ({ default: m.ImageViewerTab })));
 export const LazyOnboarding = lazy(() => import('./onboarding/OnboardingWizard.jsx').then(m => ({ default: m.OnboardingWizard })));
 export const LazyAboutDialog = lazy(() => import('./AboutDialog.jsx'));
@@ -305,7 +304,6 @@ export default {
   LazyVersionHistory,
   LazyCalendarView,
   LazyTerminalPanel,
-  LazyMeetingPanel,
   LazyImageViewer,
   LazyOnboarding,
   LazyAboutDialog,

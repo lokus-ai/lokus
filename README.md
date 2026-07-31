@@ -67,7 +67,6 @@ Most note-taking apps fall into two categories: **powerful but cloud-dependent**
 <td width="50%">
 
 ### Integration
-- MCP server for AI assistants
 - Plugin marketplace
 - Theme customization
 - Keyboard-first design
@@ -206,7 +205,6 @@ lokus/
 - [x] Canvas & database views
 - [x] Template system
 - [x] Plugin marketplace
-- [x] MCP server integration
 - [x] Encrypted cloud sync (Supabase)
 
 ### Next

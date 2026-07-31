@@ -39,9 +39,6 @@ export const PLUGIN_MANIFEST_SCHEMA = {
     'categories',    // Plugin categories (array of strings)
     'preview',       // Preview flag (boolean)
     'qna',           // Q&A support (string or boolean)
-    // MCP-specific fields
-    'mcp',           // MCP configuration (object)
-    'type'           // Plugin type including MCP types (string)
   ],
 
   // Field type definitions
@@ -67,8 +64,6 @@ export const PLUGIN_MANIFEST_SCHEMA = {
     categories: 'array',
     preview: 'boolean',
     qna: ['string', 'boolean'],
-    // MCP-specific types
-    mcp: 'object',
     type: 'string'
   }
 }
@@ -84,12 +79,6 @@ export const VALID_PERMISSIONS = [
   'modify_ui',         // Modify application UI
   'access_settings',   // Access application settings
   'access_vault',      // Access vault/workspace
-  // MCP-specific permissions
-  'mcp:serve',         // Host MCP servers
-  'mcp:connect',       // Connect to MCP servers
-  'mcp:resources',     // Access MCP resources
-  'mcp:tools',         // Execute MCP tools
-  'mcp:prompts',       // Access MCP prompts
   'storage',           // Access storage
   'notifications',     // Show notifications
   'statusBar',         // Access status bar
@@ -108,10 +97,6 @@ export const VALID_ACTIVATION_EVENTS = [
   'onUri:*',            // Activate on URI scheme
   'onWebviewPanel:*',   // Activate on webview panel
   'workspaceContains:*', // Activate when workspace contains pattern
-  // MCP-specific activation events
-  'onMCPServer:*',      // Activate when MCP server is needed
-  'onMCPResource:*',    // Activate when MCP resource is accessed
-  'onMCPTool:*'         // Activate when MCP tool is called
 ]
 
 /**
@@ -127,36 +112,11 @@ export const VALID_CATEGORIES = [
   'Snippet',
   'Keybinding',
   'Extension Pack',
-  // MCP-specific categories
-  'MCP Server',
-  'MCP Client',
   'AI Assistant',
   'Data Provider',
   'Tool Provider',
   'Productivity',
   'Other'
-]
-
-/**
- * Valid MCP plugin types
- */
-export const VALID_MCP_PLUGIN_TYPES = [
-  'mcp-server',
-  'mcp-client',
-  'mcp-hybrid'
-]
-
-/**
- * Valid MCP resource types
- */
-export const VALID_MCP_RESOURCE_TYPES = [
-  'file',
-  'directory',
-  'database',
-  'api',
-  'memory',
-  'web',
-  'custom'
 ]
 
 /**
@@ -210,8 +170,6 @@ export class ManifestValidator {
     // Validate categories
     this.validateCategories(manifest)
 
-    // Validate MCP-specific fields
-    this.validateMCPFields(manifest)
 
     return this.getResult()
   }
@@ -506,280 +464,6 @@ export class ManifestValidator {
           this.addWarning(`Unknown category: ${category}. Valid categories: ${VALID_CATEGORIES.join(', ')}`)
         }
       }
-    }
-  }
-
-  /**
-   * Validate MCP-specific fields
-   */
-  validateMCPFields(manifest) {
-    // Validate plugin type
-    if (manifest.type) {
-      if (typeof manifest.type !== 'string') {
-        this.addError('Plugin type must be a string')
-        return
-      }
-
-      if (VALID_MCP_PLUGIN_TYPES.includes(manifest.type)) {
-        // This is an MCP plugin, validate MCP configuration
-        this.validateMCPConfiguration(manifest)
-      }
-    }
-
-    // Validate MCP configuration if present
-    if (manifest.mcp) {
-      this.validateMCPConfiguration(manifest)
-    }
-  }
-
-  /**
-   * Validate MCP configuration
-   */
-  validateMCPConfiguration(manifest) {
-    const mcpConfig = manifest.mcp
-
-    if (!mcpConfig || typeof mcpConfig !== 'object') {
-      if (manifest.type && VALID_MCP_PLUGIN_TYPES.includes(manifest.type)) {
-        this.addError('MCP plugins must have an mcp configuration object')
-      }
-      return
-    }
-
-    // Validate MCP type
-    if (mcpConfig.type) {
-      if (!VALID_MCP_PLUGIN_TYPES.includes(mcpConfig.type)) {
-        this.addError(`Invalid MCP plugin type: ${mcpConfig.type}. Valid types: ${VALID_MCP_PLUGIN_TYPES.join(', ')}`)
-      }
-    }
-
-    // Validate capabilities
-    if (mcpConfig.capabilities) {
-      this.validateMCPCapabilities(mcpConfig.capabilities)
-    }
-
-    // Validate resource limits
-    if (mcpConfig.memoryLimit && typeof mcpConfig.memoryLimit !== 'number') {
-      this.addError('MCP memoryLimit must be a number')
-    }
-
-    if (mcpConfig.cpuTimeLimit && typeof mcpConfig.cpuTimeLimit !== 'number') {
-      this.addError('MCP cpuTimeLimit must be a number')
-    }
-
-    if (mcpConfig.maxApiCalls && typeof mcpConfig.maxApiCalls !== 'number') {
-      this.addError('MCP maxApiCalls must be a number')
-    }
-
-    // Validate boolean flags
-    const booleanFields = ['enableResourceSubscriptions', 'enableToolExecution', 'enablePromptTemplates', 'requireSignature']
-    for (const field of booleanFields) {
-      if (mcpConfig[field] !== undefined && typeof mcpConfig[field] !== 'boolean') {
-        this.addError(`MCP ${field} must be a boolean`)
-      }
-    }
-
-    // Validate contributes section for MCP-specific contributions
-    if (manifest.contributes && manifest.contributes.mcp) {
-      this.validateMCPContributions(manifest.contributes.mcp)
-    }
-  }
-
-  /**
-   * Validate MCP capabilities
-   */
-  validateMCPCapabilities(capabilities) {
-    if (typeof capabilities !== 'object') {
-      this.addError('MCP capabilities must be an object')
-      return
-    }
-
-    // Validate resources capabilities
-    if (capabilities.resources) {
-      if (typeof capabilities.resources !== 'object') {
-        this.addError('MCP capabilities.resources must be an object')
-      } else {
-        if (capabilities.resources.subscribe !== undefined && typeof capabilities.resources.subscribe !== 'boolean') {
-          this.addError('MCP capabilities.resources.subscribe must be a boolean')
-        }
-        if (capabilities.resources.listChanged !== undefined && typeof capabilities.resources.listChanged !== 'boolean') {
-          this.addError('MCP capabilities.resources.listChanged must be a boolean')
-        }
-      }
-    }
-
-    // Validate tools capabilities
-    if (capabilities.tools) {
-      if (typeof capabilities.tools !== 'object') {
-        this.addError('MCP capabilities.tools must be an object')
-      } else {
-        if (capabilities.tools.listChanged !== undefined && typeof capabilities.tools.listChanged !== 'boolean') {
-          this.addError('MCP capabilities.tools.listChanged must be a boolean')
-        }
-      }
-    }
-
-    // Validate prompts capabilities
-    if (capabilities.prompts) {
-      if (typeof capabilities.prompts !== 'object') {
-        this.addError('MCP capabilities.prompts must be an object')
-      } else {
-        if (capabilities.prompts.listChanged !== undefined && typeof capabilities.prompts.listChanged !== 'boolean') {
-          this.addError('MCP capabilities.prompts.listChanged must be a boolean')
-        }
-      }
-    }
-
-    // Validate logging capabilities
-    if (capabilities.logging) {
-      if (typeof capabilities.logging !== 'object') {
-        this.addError('MCP capabilities.logging must be an object')
-      } else {
-        if (capabilities.logging.enabled !== undefined && typeof capabilities.logging.enabled !== 'boolean') {
-          this.addError('MCP capabilities.logging.enabled must be a boolean')
-        }
-      }
-    }
-  }
-
-  /**
-   * Validate MCP contributions
-   */
-  validateMCPContributions(mcpContributions) {
-    if (typeof mcpContributions !== 'object') {
-      this.addError('MCP contributions must be an object')
-      return
-    }
-
-    // Validate servers
-    if (mcpContributions.servers) {
-      if (!Array.isArray(mcpContributions.servers)) {
-        this.addError('MCP contributes.servers must be an array')
-      } else {
-        for (const [index, server] of mcpContributions.servers.entries()) {
-          this.validateMCPServerContribution(server, index)
-        }
-      }
-    }
-
-    // Validate resources
-    if (mcpContributions.resources) {
-      if (!Array.isArray(mcpContributions.resources)) {
-        this.addError('MCP contributes.resources must be an array')
-      } else {
-        for (const [index, resource] of mcpContributions.resources.entries()) {
-          this.validateMCPResourceContribution(resource, index)
-        }
-      }
-    }
-
-    // Validate tools
-    if (mcpContributions.tools) {
-      if (!Array.isArray(mcpContributions.tools)) {
-        this.addError('MCP contributes.tools must be an array')
-      } else {
-        for (const [index, tool] of mcpContributions.tools.entries()) {
-          this.validateMCPToolContribution(tool, index)
-        }
-      }
-    }
-
-    // Validate prompts
-    if (mcpContributions.prompts) {
-      if (!Array.isArray(mcpContributions.prompts)) {
-        this.addError('MCP contributes.prompts must be an array')
-      } else {
-        for (const [index, prompt] of mcpContributions.prompts.entries()) {
-          this.validateMCPPromptContribution(prompt, index)
-        }
-      }
-    }
-  }
-
-  /**
-   * Validate MCP server contribution
-   */
-  validateMCPServerContribution(server, index) {
-    if (!server.id) {
-      this.addError(`MCP server contribution ${index} must have an id`)
-    }
-
-    if (!server.name) {
-      this.addError(`MCP server contribution ${index} must have a name`)
-    }
-
-    if (server.transport && !['stdio', 'tcp', 'websocket'].includes(server.transport)) {
-      this.addError(`MCP server contribution ${index} has invalid transport: ${server.transport}`)
-    }
-
-    if (server.args && !Array.isArray(server.args)) {
-      this.addError(`MCP server contribution ${index} args must be an array`)
-    }
-
-    if (server.env && typeof server.env !== 'object') {
-      this.addError(`MCP server contribution ${index} env must be an object`)
-    }
-  }
-
-  /**
-   * Validate MCP resource contribution
-   */
-  validateMCPResourceContribution(resource, index) {
-    if (!resource.name) {
-      this.addError(`MCP resource contribution ${index} must have a name`)
-    }
-
-    if (!resource.pattern) {
-      this.addError(`MCP resource contribution ${index} must have a pattern`)
-    }
-
-    if (!resource.type) {
-      this.addError(`MCP resource contribution ${index} must have a type`)
-    } else if (!VALID_MCP_RESOURCE_TYPES.includes(resource.type)) {
-      this.addError(`MCP resource contribution ${index} has invalid type: ${resource.type}`)
-    }
-  }
-
-  /**
-   * Validate MCP tool contribution
-   */
-  validateMCPToolContribution(tool, index) {
-    if (!tool.name) {
-      this.addError(`MCP tool contribution ${index} must have a name`)
-    }
-
-    if (!tool.description) {
-      this.addError(`MCP tool contribution ${index} must have a description`)
-    }
-
-    if (!tool.inputSchema) {
-      this.addError(`MCP tool contribution ${index} must have an inputSchema`)
-    } else if (typeof tool.inputSchema !== 'object') {
-      this.addError(`MCP tool contribution ${index} inputSchema must be an object`)
-    }
-
-    if (!tool.handler) {
-      this.addError(`MCP tool contribution ${index} must have a handler`)
-    }
-  }
-
-  /**
-   * Validate MCP prompt contribution
-   */
-  validateMCPPromptContribution(prompt, index) {
-    if (!prompt.name) {
-      this.addError(`MCP prompt contribution ${index} must have a name`)
-    }
-
-    if (!prompt.description) {
-      this.addError(`MCP prompt contribution ${index} must have a description`)
-    }
-
-    if (!prompt.template) {
-      this.addError(`MCP prompt contribution ${index} must have a template`)
-    }
-
-    if (prompt.arguments && !Array.isArray(prompt.arguments)) {
-      this.addError(`MCP prompt contribution ${index} arguments must be an array`)
     }
   }
 

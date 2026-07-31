@@ -74,61 +74,12 @@ export default function EditorContextMenu({
     ' '
   ) : '';
 
-  // AI surfaces dispatch window events the editor's React layer listens for,
-  // mirroring how the slash /ai command opens the Cmd-K panel. This keeps the
-  // menu decoupled from the editor's onAction handler.
-  const openAICmdK = () => {
-    window.dispatchEvent(new CustomEvent('lokus:open-ai-cmdk', { detail: { view: editor } }));
-  };
-  const runAITransform = (transformId) => {
-    window.dispatchEvent(new CustomEvent('lokus:ai-transform', {
-      detail: { view: editor, transformId },
-    }));
-  };
-
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent className="w-72">
-        {/* AI */}
-        {featureFlags.enable_ai !== false && (
-          <>
-            <ContextMenuItem onClick={openAICmdK}>
-              <Sparkles className="mr-2 h-4 w-4" />
-              Ask AI
-            </ContextMenuItem>
-            <ContextMenuSub>
-              <ContextMenuSubTrigger disabled={!hasSelection}>
-                <Sparkles className="mr-2 h-4 w-4" />
-                AI Transform
-              </ContextMenuSubTrigger>
-              <ContextMenuSubContent className="w-56">
-                <ContextMenuItem onClick={() => runAITransform('rewrite')} disabled={!hasSelection}>
-                  Rewrite
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => runAITransform('simplify')} disabled={!hasSelection}>
-                  Simplify
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => runAITransform('expand')} disabled={!hasSelection}>
-                  Expand
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => runAITransform('grammar')} disabled={!hasSelection}>
-                  Fix grammar
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => runAITransform('tone')} disabled={!hasSelection}>
-                  Change tone…
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => runAITransform('translate')} disabled={!hasSelection}>
-                  Translate…
-                </ContextMenuItem>
-              </ContextMenuSubContent>
-            </ContextMenuSub>
-            <ContextMenuSeparator />
-          </>
-        )}
-
         {/* Basic Editing */}
         <ContextMenuItem
           onClick={() => handleAction('cut')}
