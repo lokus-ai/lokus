@@ -5,7 +5,36 @@ All notable changes to Lokus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.0] - 2026-03-12
+## [1.2.0] - 2026-07-31
+
+### Performance
+- Boot payload cut from 9.10 MB to 1.58 MB. Excalidraw (7 MB) and Sentry (390 KB) no longer load at startup — the canvas arrives when you open one, and crash reporting is not shipped at all unless it is switched on
+- Saves no longer block the UI. On macOS a non-`async` Tauri command runs on the main thread; file writes fsynced there twice, once for the file and once for a redundant `.backup` copy
+- No more "Loading…" on launch. The editor view was lazily loaded behind a separate chunk that only started downloading after the sidebar had painted
+- Bases, Kanban, Canvas, Calendar and Daily Notes are warmed while the app is idle, so the first click opens them instead of showing a spinner
+- The vault crosses the IPC bridge once on workspace open instead of once per markdown file plus a second full read
+- The file tree no longer mounts a full context menu per row — one menu now serves the whole tree, and rows re-render only when their own state changes
+- The sync cache can now register a hit. It compared stored file sizes against a hardcoded `0`, so it re-read and re-hashed the entire vault every five minutes
+- Directory listing runs as a single blocking walk rather than four awaits per entry
+- Search skips `.lokus/`, `.git/` and `node_modules/` instead of walking into them
+- The graph simulation stops when no view is showing it, and the document outline follows editor updates rather than watching the whole editor DOM
+- Dependencies are compiled optimised in development builds
+
+### Graph
+- Rewritten around a single engine shared by every view, replacing three separate implementations. The sidebar preview and the full graph tab now always agree on layout and cost one simulation between them
+- Live updates — a new `[[link]]` slides into place instead of re-exploding the graph, and positions survive filtering
+- Backlinks are resolved from an inverse map with context snippets, instead of scanning the vault
+
+### Interface
+- Vellum design language applied across the app
+- All 14 settings pages rebuilt on one design system, everything visible on a single page rather than hidden behind accordions
+- Editor settings apply live to open windows — no save step, no reload
+- Rewritten workspace launcher with keyboard navigation, type-to-filter and `⌘1`–`⌘9`
+- A Welcome tab stands in when nothing is open, so the tab bar is never an empty strip
+- Resizing a sidebar no longer selects the text in the middle of the window
+
+### Removed
+- The Git and Iroh sync systems, replaced by Sync V2 below
 
 ### Math Graphing System
 - `.graph` file format — JSON-based graph files with expressions, variables, viewport, and settings
@@ -32,7 +61,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-window mutex via localStorage heartbeat
 - Soft delete to `.lokus/trash/` with 30-day cleanup
 
+### Files and Editing
+- Plain `.txt` files open and edit alongside markdown
+- Long-press opens the context menu on touch devices
+- Guest mode is the default on first run, with onboarding wired up
+
 ### Bug Fixes
+- **Version history never worked.** Backups were written under one filename and looked for under another, so no version could be restored and none were ever cleaned up — leaving `.lokus/backups` to grow without bound
+- **Maths did not render offline in reading mode.** It depended on a global that only existed when a stylesheet and script were fetched from a CDN; KaTeX is now bundled with the app
+- Notes could come back blank after changing editor settings
 - Fixed GraphFileManager path resolution — relative paths now resolve against workspace root
 - Fixed `lokus:open-file` event passing object instead of string path
 - Fixed ProseMirror nodeView stale closure — added `update()` method for live attr updates
