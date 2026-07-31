@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { RefreshCw, FoldVertical, FilePlus, FolderPlus, ChevronsUpDown, Settings } from 'lucide-react';
 import { useViewStore } from '../../stores/views';
 import { useEditorGroupStore } from '../../stores/editorGroups';
@@ -17,6 +18,35 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
 } from '../../components/ui/context-menu.jsx';
+
+// These only ever reach into a store with getState(), so they have no reason to
+// be re-created per render. As inline arrows they handed the file tree a fresh
+// identity for every prop on every render, which defeated memoization of the
+// rows underneath it.
+const noop = () => {};
+
+const setRenamingPath = (path) => useFileTreeStore.setState({ renamingPath: path });
+
+const setTagModalFile = (file) => useViewStore.setState({ tagModalFile: file });
+
+const setUseSplitView = (enabled) => {
+  const { focusedGroupId } = useEditorGroupStore.getState();
+  if (enabled && focusedGroupId) {
+    useEditorGroupStore.getState().splitGroup(focusedGroupId, 'horizontal');
+  }
+};
+
+const setRightPaneFile = (path) => {
+  const { focusedGroupId, getAllGroups } = useEditorGroupStore.getState();
+  const rightGroup = getAllGroups().find((g) => g.id !== focusedGroupId) ?? null;
+  if (rightGroup && path) {
+    useEditorGroupStore.getState().addTab(
+      rightGroup.id,
+      { path, name: path.split('/').pop() || path },
+      true,
+    );
+  }
+};
 
 /**
  * LeftSidebar — the resizable left panel.
@@ -72,14 +102,19 @@ export default function LeftSidebar({
     return findGroup(layout)?.activeTab ?? null;
   });
 
-  // File tree state from the dedicated fileTree store
-  const selectedPath = useFileTreeStore((s) => s.selectedPath);
-  const expandedFolders = useFileTreeStore((s) => s.expandedFolders);
+  // Publish the active tab into the file-tree store so rows can read their own
+  // highlight with a per-path selector instead of taking activeFile as a prop.
+  useEffect(() => {
+    useFileTreeStore.getState().setActivePath(activeFile);
+  }, [activeFile]);
+
+  // File tree state from the dedicated fileTree store.
+  // Only what THIS component renders is subscribed to here — selection,
+  // expansion, rename and hover are read by the individual rows instead, so
+  // touching them no longer re-renders the sidebar and the tree beneath it.
   const creatingItem = useFileTreeStore((s) => s.creatingItem);
-  const renamingPath = useFileTreeStore((s) => s.renamingPath);
   const keymap = useFileTreeStore((s) => s.keymap);
   const isExternalDragActive = useFileTreeStore((s) => s.isExternalDragActive);
-  const hoveredFolder = useFileTreeStore((s) => s.hoveredFolder);
 
   if (!showLeft) return null;
 
@@ -158,41 +193,17 @@ export default function LeftSidebar({
               activeFile={activeFile}
               onRefresh={onRefreshFiles}
               data-testid="file-tree"
-              expandedFolders={expandedFolders}
               toggleFolder={toggleFolder}
               creatingItem={creatingItem}
               onCreateConfirm={onConfirmCreate}
-              keymap={keymap}
-              selectedPath={selectedPath}
-              setSelectedPath={(x) => useFileTreeStore.getState().selectEntry(x)}
-              renamingPath={renamingPath}
-              setRenamingPath={(x) => useFileTreeStore.setState({ renamingPath: x })}
+              setRenamingPath={setRenamingPath}
               onViewHistory={onViewHistory}
-              setTagModalFile={(x) => useViewStore.setState({ tagModalFile: x })}
-              setShowTagModal={(v) =>
-                v
-                  ? useViewStore.getState().openPanel('showTagModal')
-                  : useViewStore.getState().closePanel('showTagModal')
-              }
-              setUseSplitView={(x) => {
-                const { focusedGroupId } = useEditorGroupStore.getState();
-                if (x && focusedGroupId) {
-                  useEditorGroupStore.getState().splitGroup(focusedGroupId, 'horizontal');
-                }
-              }}
-              setRightPaneFile={(x) => {
-                const { focusedGroupId, getAllGroups } = useEditorGroupStore.getState();
-                const groups = getAllGroups();
-                const rightGroup = groups.find((g) => g.id !== focusedGroupId) ?? null;
-                if (rightGroup && x) {
-                  useEditorGroupStore.getState().addTab(rightGroup.id, { path: x, name: x.split('/').pop() || x }, true);
-                }
-              }}
-              setRightPaneTitle={() => {}}
-              setRightPaneContent={() => {}}
+              setTagModalFile={setTagModalFile}
+              setUseSplitView={setUseSplitView}
+              setRightPaneFile={setRightPaneFile}
+              setRightPaneTitle={noop}
+              setRightPaneContent={noop}
               isExternalDragActive={isExternalDragActive}
-              hoveredFolder={hoveredFolder}
-              setHoveredFolder={(x) => useFileTreeStore.getState().setHoveredFolder(x)}
               toast={toast}
               onCheckReferences={onCheckReferences}
               workspacePath={workspacePath}

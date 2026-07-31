@@ -120,3 +120,22 @@ objc2-user-notifications = { version = "0.3", features = [
 windows = { version = "0.57", features = ["Win32_Security_Credentials"] }
 
 # Linux uses keyring crate (already in main deps) which handles secret-service internally
+
+# Dependencies are compiled once and then cached, so paying for opt-level 2 on
+# them costs a single slow build and makes every dev run 30-65x faster in the
+# hot paths (serde, flate2, regex). Our own crate stays at opt-level 0 so
+# incremental rebuilds remain fast.
+[profile.dev]
+opt-level = 0
+
+[profile.dev.package."*"]
+opt-level = 2
+
+# `panic = "abort"` is deliberately NOT set: it only changes anything at link
+# time, so it can't be validated without a full release build, and the size it
+# saves isn't worth shipping an unvalidated panic strategy.
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

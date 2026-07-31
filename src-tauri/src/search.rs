@@ -110,11 +110,33 @@ pub async fn search_in_files(
     let mut results = Vec::new();
     let mut total_results = 0;
 
-    // Walk through directory
+    // Walk through directory.
+    //
+    // Excluded directories are pruned with filter_entry so walkdir never
+    // descends into them. The old code walked every file inside `.git/` and
+    // `node_modules/` and only then discarded it by substring match, and it
+    // never excluded `.lokus/` at all — so every backlinks lookup crawled the
+    // app's own backup, trash and cache tree, which is the largest directory
+    // in a mature vault and contains nothing a user ever searches for.
     for entry in WalkDir::new(path)
         .follow_links(false)
         .max_depth(10)
         .into_iter()
+        .filter_entry(|e| {
+            if !e.file_type().is_dir() {
+                return true;
+            }
+            // Always keep the root, even if the workspace itself is called
+            // something like "build".
+            if e.depth() == 0 {
+                return true;
+            }
+            !matches!(
+                e.file_name().to_string_lossy().as_ref(),
+                ".lokus" | ".git" | "node_modules" | "target" | "dist" | "build"
+                    | ".cache" | ".next" | ".vscode" | "__pycache__"
+            )
+        })
         .filter_map(|e| e.ok())
     {
         if total_results >= max_results {
@@ -122,23 +144,9 @@ pub async fn search_in_files(
         }
 
         let file_path = entry.path();
-        
-        // Skip directories
-        if file_path.is_dir() {
-            continue;
-        }
 
-        // Skip build and cache directories
-        let path_str = file_path.to_string_lossy();
-        if path_str.contains("target/") || 
-           path_str.contains("node_modules/") || 
-           path_str.contains(".git/") ||
-           path_str.contains("dist/") ||
-           path_str.contains("build/") ||
-           path_str.contains(".cache/") ||
-           path_str.contains(".next/") ||
-           path_str.contains(".vscode/") ||
-           path_str.contains("__pycache__/") {
+        // Skip directories
+        if !entry.file_type().is_file() {
             continue;
         }
 

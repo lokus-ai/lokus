@@ -59,8 +59,17 @@ export const useGraphStore = create((set, get) => ({
   version: 0,     // bumped on every index mutation — cheap reactivity
   error: null,
 
-  /** Boot the index for a workspace. Idempotent per workspacePath. */
-  async boot(workspacePath, fileTree) {
+  /**
+   * Boot the index for a workspace. Idempotent per workspacePath.
+   *
+   * `contents` is an optional promise of the `{path: text}` map for the
+   * vault's markdown, so a caller that already has to read every file can
+   * hand over its payload instead of making us read the whole vault a second
+   * time. Passing a promise rather than a resolved map matters: boot marks
+   * itself 'booting' synchronously, which is what arms the pendingSaves
+   * replay for the duration of the read.
+   */
+  async boot(workspacePath, fileTree, contents = null) {
     const { workspacePath: current, status } = get();
     if (current === workspacePath && (status === 'ready' || status === 'booting')) return;
 
@@ -75,9 +84,9 @@ export const useGraphStore = create((set, get) => ({
       index.setFiles(all);
 
       if (markdown.length > 0) {
-        const contents = await invoke('read_all_files', { paths: markdown });
+        const byPath = await (contents ?? invoke('read_all_files', { paths: markdown }));
         if (token !== bootToken) return; // a newer workspace took over
-        for (const [path, content] of Object.entries(contents)) {
+        for (const [path, content] of Object.entries(byPath)) {
           if (typeof content === 'string') index.indexContent(path, content);
         }
       }

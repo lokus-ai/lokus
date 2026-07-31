@@ -1,5 +1,4 @@
 use serde::{Serialize, Deserialize};
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::io::{Read, Write};
 use chrono::{DateTime, Utc};
@@ -16,6 +15,16 @@ pub struct FileVersion {
     pub lines: usize,
     pub action: String,
     pub preview: String,
+    /// Name of the .md.gz blob backing this version.
+    ///
+    /// Versions are written as `{timestamp}-{random}.md.gz` so two saves in the
+    /// same millisecond can't collide, but lookup and cleanup used to rebuild
+    /// the name as `{timestamp}.md.gz` — which matched nothing. Restores failed
+    /// and no blob was ever deleted, so `.lokus/backups` grew without bound.
+    /// Recording the real name makes both exact; `None` means a pre-fix entry,
+    /// which we resolve by prefix instead.
+    #[serde(default)]
+    pub file: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -50,7 +59,7 @@ pub struct DiffLine {
 
 // --- Helper Functions ---
 
-fn get_backups_dir(workspace_path: &Path, file_path: &str) -> Result<PathBuf, String> {
+async fn get_backups_dir(workspace_path: &Path, file_path: &str) -> Result<PathBuf, String> {
     let file_name = Path::new(file_path)
         .file_name()
         .ok_or("Invalid file path")?
@@ -62,26 +71,46 @@ fn get_backups_dir(workspace_path: &Path, file_path: &str) -> Result<PathBuf, St
         .join("backups")
         .join(file_name);
 
-    fs::create_dir_all(&backups_dir)
+    tokio::fs::create_dir_all(&backups_dir).await
         .map_err(|e| format!("Failed to create backups directory: {}", e))?;
 
     Ok(backups_dir)
+}
+
+/// The on-disk blob for a version, or `None` if it has gone missing.
+///
+/// New entries carry their filename. Entries written before that field existed
+/// are found by scanning for the `{timestamp}` prefix, which is what the random
+/// collision suffix is appended to.
+async fn resolve_version_path(backups_dir: &Path, version: &FileVersion) -> Option<PathBuf> {
+    if let Some(name) = &version.file {
+        let path = backups_dir.join(name);
+        return if path.exists() { Some(path) } else { None };
+    }
+
+    let dt = DateTime::parse_from_rfc3339(&version.timestamp).ok()?;
+    let prefix = dt.format("%Y-%m-%dT%H-%M-%S%.3f").to_string();
+
+    let mut dir = tokio::fs::read_dir(backups_dir).await.ok()?;
+    while let Ok(Some(entry)) = dir.next_entry().await {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with(&prefix) && name.ends_with(".md.gz") {
+            return Some(entry.path());
+        }
+    }
+    None
 }
 
 fn get_metadata_path(backups_dir: &Path) -> PathBuf {
     backups_dir.join("metadata.json")
 }
 
-fn load_metadata(backups_dir: &Path) -> VersionMetadata {
+async fn load_metadata(backups_dir: &Path) -> VersionMetadata {
     let metadata_path = get_metadata_path(backups_dir);
 
-    if metadata_path.exists() {
-        match fs::read_to_string(&metadata_path) {
-            Ok(content) => match serde_json::from_str(&content) {
-                Ok(metadata) => return metadata,
-                Err(_) => {},
-            },
-            Err(_) => {},
+    if let Ok(content) = tokio::fs::read_to_string(&metadata_path).await {
+        if let Ok(metadata) = serde_json::from_str(&content) {
+            return metadata;
         }
     }
 
@@ -93,12 +122,12 @@ fn load_metadata(backups_dir: &Path) -> VersionMetadata {
     }
 }
 
-fn save_metadata(backups_dir: &Path, metadata: &VersionMetadata) -> Result<(), String> {
+async fn save_metadata(backups_dir: &Path, metadata: &VersionMetadata) -> Result<(), String> {
     let metadata_path = get_metadata_path(backups_dir);
     let json = serde_json::to_string_pretty(metadata)
         .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
 
-    fs::write(&metadata_path, json)
+    tokio::fs::write(&metadata_path, json).await
         .map_err(|e| format!("Failed to write metadata: {}", e))?;
 
     Ok(())
@@ -134,7 +163,7 @@ fn decompress_content(compressed: &[u8]) -> Result<String, String> {
 // --- Tauri Commands ---
 
 #[tauri::command]
-pub fn save_version(
+pub async fn save_version(
     workspace_path: String,
     file_path: String,
     content: String,
@@ -142,19 +171,24 @@ pub fn save_version(
 ) -> Result<FileVersion, String> {
 
     let workspace = Path::new(&workspace_path);
-    let backups_dir = get_backups_dir(workspace, &file_path)?;
+    let backups_dir = get_backups_dir(workspace, &file_path).await?;
 
     // Generate timestamp-based filename with random suffix to prevent collisions
     let timestamp = Utc::now();
     let timestamp_str = timestamp.format("%Y-%m-%dT%H-%M-%S%.3f").to_string();
     let random_suffix: u16 = rand::thread_rng().gen();
-    let version_path = backups_dir.join(format!("{}-{:04x}.md.gz", timestamp_str, random_suffix));
+    let version_name = format!("{}-{:04x}.md.gz", timestamp_str, random_suffix);
+    let version_path = backups_dir.join(&version_name);
 
-    // Compress and save version file
-    let compressed = compress_content(&content)?;
-    fs::write(&version_path, &compressed)
+    // gzip is CPU-bound and content can be up to the 10 MB editor limit, so it
+    // goes to the blocking pool rather than stalling an async worker.
+    let to_compress = content.clone();
+    let compressed = tokio::task::spawn_blocking(move || compress_content(&to_compress))
+        .await
+        .map_err(|e| format!("Compression task failed: {}", e))??;
+
+    tokio::fs::write(&version_path, &compressed).await
         .map_err(|e| format!("Failed to save version: {}", e))?;
-
 
     // Create version info
     let version = FileVersion {
@@ -163,23 +197,23 @@ pub fn save_version(
         lines: content.lines().count(),
         action: action.unwrap_or_else(|| "auto_save".to_string()),
         preview: create_preview(&content, 200),
+        file: Some(version_name),
     };
 
     // Load metadata and add version (protected by file lock)
     let metadata_path = backups_dir.join("metadata.json").to_string_lossy().to_string();
     let op_id = format!("save_version_{}", timestamp_str);
 
-    FileLock::acquire_write_lock(&metadata_path, &op_id)
+    FileLock::acquire_write_lock_async(&metadata_path, &op_id).await
         .map_err(|e| format!("Failed to acquire metadata lock: {}", e))?;
 
-    let result = (|| -> Result<(), String> {
-        let mut metadata = load_metadata(&backups_dir);
-        metadata.file = file_path.clone();
-        metadata.versions.push(version.clone());
-        cleanup_old_versions_internal(&mut metadata, &backups_dir)?;
-        save_metadata(&backups_dir, &metadata)?;
-        Ok(())
-    })();
+    let mut metadata = load_metadata(&backups_dir).await;
+    metadata.file = file_path.clone();
+    metadata.versions.push(version.clone());
+    let result = async {
+        cleanup_old_versions_internal(&mut metadata, &backups_dir).await?;
+        save_metadata(&backups_dir, &metadata).await
+    }.await;
 
     let _ = FileLock::release_write_lock(&metadata_path, &op_id);
     result?;
@@ -188,54 +222,54 @@ pub fn save_version(
 }
 
 #[tauri::command]
-pub fn get_file_versions(
+pub async fn get_file_versions(
     workspace_path: String,
     file_path: String,
 ) -> Result<Vec<FileVersion>, String> {
 
     let workspace = Path::new(&workspace_path);
-    let backups_dir = get_backups_dir(workspace, &file_path)?;
+    let backups_dir = get_backups_dir(workspace, &file_path).await?;
 
-    let metadata = load_metadata(&backups_dir);
+    let metadata = load_metadata(&backups_dir).await;
     Ok(metadata.versions)
 }
 
 #[tauri::command]
-pub fn get_version_content(
+pub async fn get_version_content(
     workspace_path: String,
     file_path: String,
     timestamp: String,
 ) -> Result<String, String> {
 
     let workspace = Path::new(&workspace_path);
-    let backups_dir = get_backups_dir(workspace, &file_path)?;
+    let backups_dir = get_backups_dir(workspace, &file_path).await?;
 
-    // Parse timestamp and find file
-    let dt = DateTime::parse_from_rfc3339(&timestamp)
-        .map_err(|e| format!("Invalid timestamp: {}", e))?;
-    let formatted = dt.format("%Y-%m-%dT%H-%M-%S%.3f").to_string();
-    let version_path = backups_dir.join(format!("{}.md.gz", formatted));
+    let metadata = load_metadata(&backups_dir).await;
+    let version = metadata.versions.iter()
+        .find(|v| v.timestamp == timestamp)
+        .ok_or("Version not found")?;
 
-    if !version_path.exists() {
-        return Err("Version file not found".to_string());
-    }
+    let version_path = resolve_version_path(&backups_dir, version).await
+        .ok_or("Version file not found")?;
 
     // Read and decompress version file
-    let compressed = fs::read(&version_path)
+    let compressed = tokio::fs::read(&version_path).await
         .map_err(|e| format!("Failed to read version: {}", e))?;
-    decompress_content(&compressed)
+    tokio::task::spawn_blocking(move || decompress_content(&compressed))
+        .await
+        .map_err(|e| format!("Decompression task failed: {}", e))?
 }
 
 #[tauri::command]
-pub fn get_diff(
+pub async fn get_diff(
     workspace_path: String,
     file_path: String,
     timestamp1: String,
     timestamp2: String,
 ) -> Result<Vec<DiffLine>, String> {
 
-    let content1 = get_version_content(workspace_path.clone(), file_path.clone(), timestamp1)?;
-    let content2 = get_version_content(workspace_path, file_path, timestamp2)?;
+    let content1 = get_version_content(workspace_path.clone(), file_path.clone(), timestamp1).await?;
+    let content2 = get_version_content(workspace_path, file_path, timestamp2).await?;
 
     // Simple line-by-line diff
     let lines1: Vec<&str> = content1.lines().collect();
@@ -281,17 +315,17 @@ pub fn get_diff(
 }
 
 #[tauri::command]
-pub fn restore_version(
+pub async fn restore_version(
     workspace_path: String,
     file_path: String,
     timestamp: String,
 ) -> Result<String, String> {
 
-    let content = get_version_content(workspace_path.clone(), file_path.clone(), timestamp.clone())?;
+    let content = get_version_content(workspace_path.clone(), file_path.clone(), timestamp.clone()).await?;
 
     // Write content back to original file
     let full_path = Path::new(&workspace_path).join(&file_path);
-    fs::write(&full_path, &content)
+    tokio::fs::write(&full_path, &content).await
         .map_err(|e| format!("Failed to restore version: {}", e))?;
 
     // Save a new version with "restore" action
@@ -300,28 +334,28 @@ pub fn restore_version(
         file_path,
         content.clone(),
         Some(format!("Restored from {}", timestamp)),
-    )?;
+    ).await?;
 
     Ok(content)
 }
 
 #[tauri::command]
-pub fn cleanup_old_versions(
+pub async fn cleanup_old_versions(
     workspace_path: String,
     file_path: String,
 ) -> Result<usize, String> {
 
     let workspace = Path::new(&workspace_path);
-    let backups_dir = get_backups_dir(workspace, &file_path)?;
+    let backups_dir = get_backups_dir(workspace, &file_path).await?;
 
-    let mut metadata = load_metadata(&backups_dir);
-    let removed = cleanup_old_versions_internal(&mut metadata, &backups_dir)?;
-    save_metadata(&backups_dir, &metadata)?;
+    let mut metadata = load_metadata(&backups_dir).await;
+    let removed = cleanup_old_versions_internal(&mut metadata, &backups_dir).await?;
+    save_metadata(&backups_dir, &metadata).await?;
 
     Ok(removed)
 }
 
-fn cleanup_old_versions_internal(
+async fn cleanup_old_versions_internal(
     metadata: &mut VersionMetadata,
     backups_dir: &Path,
 ) -> Result<usize, String> {
@@ -334,40 +368,30 @@ fn cleanup_old_versions_internal(
     // Sort versions by timestamp (newest first)
     metadata.versions.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
 
+    let mut expired: Vec<FileVersion> = Vec::new();
+
     // Keep only max_versions most recent
     if metadata.versions.len() > max_versions {
-        let to_remove = metadata.versions.split_off(max_versions);
-        for version in &to_remove {
-            if let Ok(dt) = DateTime::parse_from_rfc3339(&version.timestamp) {
-                let formatted = dt.format("%Y-%m-%dT%H-%M-%S%.3f").to_string();
-                let version_path = backups_dir.join(format!("{}.md.gz", formatted));
-                if version_path.exists() {
-                    let _ = fs::remove_file(version_path);
-                    removed += 1;
-                }
-            }
-        }
+        expired.extend(metadata.versions.split_off(max_versions));
     }
 
     // Remove versions older than retention_days
-    metadata.versions.retain(|version| {
-        if let Ok(dt) = DateTime::parse_from_rfc3339(&version.timestamp) {
-            let age_days = (now - dt.with_timezone(&Utc)).num_days();
-            if age_days > retention_days {
-                let formatted = dt.format("%Y-%m-%dT%H-%M-%S%.3f").to_string();
-                let version_path = backups_dir.join(format!("{}.md.gz", formatted));
-                if version_path.exists() {
-                    let _ = fs::remove_file(version_path);
-                    removed += 1;
-                }
-                false
-            } else {
-                true
+    let mut kept = Vec::with_capacity(metadata.versions.len());
+    for version in metadata.versions.drain(..) {
+        let too_old = DateTime::parse_from_rfc3339(&version.timestamp)
+            .map(|dt| (now - dt.with_timezone(&Utc)).num_days() > retention_days)
+            .unwrap_or(false);
+        if too_old { expired.push(version); } else { kept.push(version); }
+    }
+    metadata.versions = kept;
+
+    for version in &expired {
+        if let Some(path) = resolve_version_path(backups_dir, version).await {
+            if tokio::fs::remove_file(path).await.is_ok() {
+                removed += 1;
             }
-        } else {
-            true
         }
-    });
+    }
 
     Ok(removed)
 }

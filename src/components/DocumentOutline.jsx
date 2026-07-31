@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { setTextSelection } from '../editor/commands/index.js';
+import { editorAPI } from '../plugins/api/EditorAPI.js';
 
 /**
  * Efficient Document Outline Component
@@ -81,15 +82,15 @@ export default function DocumentOutline({ editor }) {
     // Initial extraction
     updateHeadings();
 
-    // Observe DOM mutations to detect editor content changes
-    // (PM EditorView does not have a TipTap-style .on('update') API)
-    const observer = new MutationObserver(handleUpdate);
-    if (editor.dom) {
-      observer.observe(editor.dom, { childList: true, subtree: true, characterData: true });
-    }
+    // Editor.jsx's dispatchTransaction already calls editorAPI.notifyUpdate()
+    // on every user edit, so we listen for that instead of running a
+    // MutationObserver over the whole ProseMirror subtree with characterData
+    // on — which fired for every keystroke's text mutation and made the
+    // browser build records we then threw away.
+    const off = editorAPI.on('editor-update', handleUpdate);
 
     return () => {
-      observer.disconnect();
+      off();
       if (updateTimeoutRef.current) {
         clearTimeout(updateTimeoutRef.current);
       }

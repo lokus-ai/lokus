@@ -6,10 +6,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Lokus</title>
-    <!-- KaTeX CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" crossorigin="anonymous">
-    <!-- KaTeX JS -->
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
+    <!-- KaTeX is bundled from node_modules (imported by the modules that use it).
+         It used to be fetched from jsdelivr, which broke maths offline and sent a
+         request to a third party on every launch of a local-first, no-telemetry app. -->
     <!-- Excalidraw fonts: self-hosted for offline Tauri support -->
     <script>window.EXCALIDRAW_ASSET_PATH = "/excalidraw-fonts/";</script>
     <style>

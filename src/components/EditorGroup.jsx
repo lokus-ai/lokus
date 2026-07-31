@@ -2,7 +2,6 @@ import React, { useRef, useCallback, useEffect, useLayoutEffect, useState, useMe
 import { invoke } from '@tauri-apps/api/core';
 import { EditorState } from 'prosemirror-state';
 import Editor from '../editor';
-import Canvas from '../views/Canvas';
 import { useEditorGroupStore } from '../stores/editorGroups';
 import { useFileTreeStore } from '../stores/fileTree';
 import { ResponsiveTabBar } from './TabBar/ResponsiveTabBar';
@@ -43,6 +42,10 @@ const isNonEditorPath = (p) =>
 const BasesView = lazy(() => import('../bases/BasesView'));
 const KanbanBoard = lazy(() => import('./KanbanBoard'));
 const MathGraphEditor = lazy(() => import('./MathGraph/MathGraphEditor.jsx'));
+// Excalidraw is ~7 MB — by far the largest thing we ship. A static import here
+// put it (and a modulepreload for it) in the boot payload of every window,
+// whether or not the user ever opens a canvas.
+const Canvas = lazy(() => import('../views/Canvas'));
 
 /**
  * EditorGroup — a single editor pane with its own tabs and ONE persistent
@@ -555,19 +558,21 @@ export default function EditorGroup({
         {/* Excalidraw canvas viewer — rendered for .excalidraw files */}
         {isExcalidrawFile && (
           <div className="flex-1 overflow-hidden h-full">
-            <Canvas
-              canvasPath={activeFile}
-              canvasName={tabs.find(tab => tab.path === activeFile)?.name}
-              onSave={async (canvasData) => {
-                try {
-                  await canvasManager.saveCanvas(activeFile, canvasData);
-                  useEditorGroupStore.getState().markTabDirty(group.id, activeFile, false);
-                } catch { /* ignore */ }
-              }}
-              onChange={() => {
-                useEditorGroupStore.getState().markTabDirty(group.id, activeFile, true);
-              }}
-            />
+            <Suspense fallback={<div className="flex-1 flex items-center justify-center text-app-muted">Loading canvas...</div>}>
+              <Canvas
+                canvasPath={activeFile}
+                canvasName={tabs.find(tab => tab.path === activeFile)?.name}
+                onSave={async (canvasData) => {
+                  try {
+                    await canvasManager.saveCanvas(activeFile, canvasData);
+                    useEditorGroupStore.getState().markTabDirty(group.id, activeFile, false);
+                  } catch { /* ignore */ }
+                }}
+                onChange={() => {
+                  useEditorGroupStore.getState().markTabDirty(group.id, activeFile, true);
+                }}
+              />
+            </Suspense>
           </div>
         )}
 

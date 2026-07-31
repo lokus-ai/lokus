@@ -28,51 +28,85 @@ enum LockType {
     Write,
 }
 
+const LOCK_TIMEOUT: Duration = Duration::from_secs(30);
+const LOCK_RETRY_INTERVAL: Duration = Duration::from_millis(100);
+const STALE_LOCK_AFTER: Duration = Duration::from_secs(300);
+
 impl FileLock {
-    /// Acquire a write lock on a file
-    /// Blocks until lock is available or timeout
-    pub fn acquire_write_lock(path: &str, operation_id: &str) -> Result<(), String> {
-        let timeout = Duration::from_secs(30);
-        let start = Instant::now();
-        
-        loop {
-            {
-                let mut locks = FILE_LOCK_MANAGER.locks.lock()
-                    .map_err(|e| format!("Failed to acquire lock mutex: {}", e))?;
-                
-                // Check if file is already locked
-                if let Some(lock_state) = locks.get(path) {
-                    // Check for stale locks (> 5 minutes old)
-                    if lock_state.locked_at.elapsed() > Duration::from_secs(300) {
-                        locks.remove(path);
-                    } else {
-                        // File is locked
-                        if start.elapsed() > timeout {
-                            return Err(format!(
-                                "Timeout waiting for write lock on {}. Locked by {} for {:?}",
-                                path,
-                                lock_state.locked_by,
-                                lock_state.locked_at.elapsed()
-                            ));
-                        }
-                        drop(locks);
-                        std::thread::sleep(Duration::from_millis(100));
-                        continue;
-                    }
-                }
-                
-                // Acquire write lock
-                locks.insert(path.to_string(), LockState {
-                    locked_by: operation_id.to_string(),
-                    locked_at: Instant::now(),
-                    lock_type: LockType::Write,
-                });
-                
-                return Ok(());
+    /// One non-blocking attempt at the write lock. `Ok(false)` means another
+    /// operation holds it.
+    fn try_acquire_write_lock(path: &str, operation_id: &str) -> Result<bool, String> {
+        let mut locks = FILE_LOCK_MANAGER.locks.lock()
+            .map_err(|e| format!("Failed to acquire lock mutex: {}", e))?;
+
+        if let Some(lock_state) = locks.get(path) {
+            // Break locks left behind by a crashed operation.
+            if lock_state.locked_at.elapsed() > STALE_LOCK_AFTER {
+                locks.remove(path);
+            } else {
+                return Ok(false);
             }
         }
+
+        locks.insert(path.to_string(), LockState {
+            locked_by: operation_id.to_string(),
+            locked_at: Instant::now(),
+            lock_type: LockType::Write,
+        });
+
+        Ok(true)
     }
-    
+
+    fn timeout_error(path: &str) -> String {
+        let held_by = FILE_LOCK_MANAGER.locks.lock().ok()
+            .and_then(|locks| locks.get(path).map(|s| (s.locked_by.clone(), s.locked_at.elapsed())));
+
+        match held_by {
+            Some((who, held)) => format!(
+                "Timeout waiting for write lock on {}. Locked by {} for {:?}",
+                path, who, held
+            ),
+            None => format!("Timeout waiting for write lock on {}", path),
+        }
+    }
+
+    /// Acquire a write lock on a file, parking the OS thread between attempts.
+    ///
+    /// Only safe off the UI thread — prefer [`acquire_write_lock_async`] from a
+    /// `#[tauri::command]`, since a non-`async` command body runs on the main
+    /// thread on macOS and this would freeze the window for the whole wait.
+    #[allow(dead_code)]
+    pub fn acquire_write_lock(path: &str, operation_id: &str) -> Result<(), String> {
+        let start = Instant::now();
+
+        loop {
+            if Self::try_acquire_write_lock(path, operation_id)? {
+                return Ok(());
+            }
+            if start.elapsed() > LOCK_TIMEOUT {
+                return Err(Self::timeout_error(path));
+            }
+            std::thread::sleep(LOCK_RETRY_INTERVAL);
+        }
+    }
+
+    /// Acquire a write lock, yielding to the async runtime between attempts
+    /// instead of blocking a thread.
+    pub async fn acquire_write_lock_async(path: &str, operation_id: &str) -> Result<(), String> {
+        let start = Instant::now();
+
+        loop {
+            if Self::try_acquire_write_lock(path, operation_id)? {
+                return Ok(());
+            }
+            if start.elapsed() > LOCK_TIMEOUT {
+                return Err(Self::timeout_error(path));
+            }
+            tokio::time::sleep(LOCK_RETRY_INTERVAL).await;
+        }
+    }
+
+
     /// Release a write lock on a file
     pub fn release_write_lock(path: &str, operation_id: &str) -> Result<(), String> {
         let mut locks = FILE_LOCK_MANAGER.locks.lock()

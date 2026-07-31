@@ -41,7 +41,12 @@ export default defineConfig(async () => ({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('@excalidraw')) return 'excalidraw-vendor'
+          // Excalidraw is deliberately NOT named here. Forcing it into a
+          // manual chunk made Rollup hoist the entry's shared helpers into
+          // that same chunk, which gave the entry a *static* import of it —
+          // so all 7 MB was modulepreloaded at boot even though Canvas is
+          // lazily imported. Left alone, Rollup puts it in an async chunk
+          // that only loads when a canvas is actually opened.
           if (id.includes('react-dom') || id.includes('react/')) return 'react-vendor'
           if (id.includes('@sentry')) return 'sentry'
         },
